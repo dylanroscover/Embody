@@ -3,11 +3,11 @@ A tool for externalizing your tox files.
 
 
 ## Usage
-Bring "Release/External-Tox-Saver.tox" into your project. It should immediately search for comps with the tag EXTERNALTOX. 
+Bring "Release/Externalizer.tox" into your project. It should immediately search for comps with the tag 'tox'. 
 If this is the first time you've opened it, you can start externalizing your tox files.
 
 ### Externalizing Tox Files
-Set the 'Comp to Externalize' parameter to the path of your comp, then hit Externalize.
+Save your project (ctrl-s).
 
 This will build a new directory in your project's folder to mirror your network. It will also create a "Backup" folder.
 Anytime this saves a tox, it saves the primary file as well as incrementally saves the tox into the backup folder.
@@ -25,3 +25,7 @@ There's a timer that triggers the AutoSaveNow method which incrementally saves a
 
 # Issues
 There seems to be a bug with the comp class' dirty member. Once you save it it doesn't seem to actually make dirty False. Until that is fixed this will just keep saving everything that has changed within your entire session.
+
+# Contributors
+
+Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and added onto by me.
