@@ -1,5 +1,6 @@
 # Externalizer
 ### A tool for externalizing your tox and dat (python) files in TouchDesigner. 
+#### TouchDesigner 2021.15800 Win 10 x64
 
 ## Overview
 This component provides simple and reliable externalization for TouchDesigner projects.
