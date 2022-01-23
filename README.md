@@ -1,6 +1,7 @@
 # :printer: Externalizer
 ### A tool for externalizing your tox and dat (python) files in TouchDesigner. 
 #### :floppy_disk: TouchDesigner 2021.15800 Win 10 x64
+#### :floppy_disk: Current version 3.0.1
 
 ## :notebook_with_decorative_cover: Overview
 This component provides simple and reliable externalization for TouchDesigner projects.
@@ -14,13 +15,13 @@ The default Tags for Toxes and DATs are 'tox' and 'dat' strings, respectively. T
 To initialize, add your specified Tag(s) to any supported OP type, set your externalization Folder, and pulse the Initialize button. This will search your entire project for COMPs matching the tags and externalize them with a folder structure matching that of your TouchDesigner project network.
 
 The following OPs are supported:
--COMP
--Text DAT (including callbacks)
--Table DAT
--Execute DAT
--Parameter Execute DAT
--Panel Execute DAT
--OP Execute DAT
+- COMP
+- Text DAT (including callbacks)
+- Table DAT
+- Execute DAT
+- Parameter Execute DAT
+- Panel Execute DAT
+- OP Execute DAT
 
 Note: if no tags are specified, all project COMPs and DATs that can be externalized, will be added. Fair warning that this may stall systems with complex projects.
 
@@ -33,7 +34,19 @@ To reset ('unexternalize') completely, pulse the Reset button.
 Note: this will also delete all externalized files and any empty folders that result. To reinstate them, pulse the Initialize button again.
 
 ## :keyboard: Keyboard Shorcuts
-To view a list of all externalized ops and their metadata, invoke the shortcut `ctrl-alt-e`.
+- `ctrl-alt-e` : View a list of all externalized operators and 
+their metadata.
+
+- `ctrl-alt-t` : Add an externalization tag automatically based
+on the current op selected (supports all COMP and saveable 
+DAT operators).
+
+- `ctrl-alt-n` : Add a 'no children' tag automatically based
+on the current op selected (supports COMP operators only).
 
 ## :man_juggling: Contributors
-Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked, added onto and eventually almost completely refactored by me.
+Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked, added onto and eventually almost completely refactored by me. Inspired by Elburz and Matthew Ragan's externalization work.
+
+## Version History
+- 3.0.1 - Added keyboard shortcuts, subtraction for list elements, init and minor bug fixes 
+- 3.0.0 - Initial release
