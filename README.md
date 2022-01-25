@@ -15,13 +15,13 @@ Externalizer uses a tag-based approach to identify which operators in your proje
 1. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Externalizer will add the correct tag you specified in the Setup custom par page.
 
 > The following OPs are supported:
-- COMP
-- Text DAT (including callbacks)
-- Table DAT
-- Execute DAT
-- Parameter Execute DAT
-- Panel Execute DAT
-- OP Execute DAT
+> - COMP
+> - Text DAT (including callbacks)
+> - Table DAT
+> - Execute DAT
+> - Parameter Execute DAT
+> - Panel Execute DAT
+> - OP Execute DAT
 
 2. Set your externalization Folder, or use the default `lib` (relative to your project file, the `project.folder` folder)
 
