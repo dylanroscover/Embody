@@ -4,12 +4,14 @@
 #### :floppy_disk: Current version 3.0.2
 
 ## :notebook_with_decorative_cover: Overview
-This component provides simple yet robust externalization for TouchDesigner projects.
+Externalizer provides simple yet robust externalization for TouchDesigner projects. It uses a tag-based approach to identify which operators in your project should be externalized, versus ones that should not. It includes a lister and keyboard shortcuts for management and smooth production implementation.
+
+<img src='https://raw.githubusercontent.com/dylanroscover/Externalizer/main/screenshot1.jpg' width='700'>
 
 ## :page_with_curl: Defaults
 By default this component will open in Disabled mode and have no effect on your project. The default externalization Folder is `lib`, which must reside in a folder relative to your project toe (inside `project.folder`).
 
-Externalizer uses a tag-based approach to identify which operators in your project should be externalized, versus ones that should not. The default Tags for Toxes and DATs are `'tox'` and `'dat'` strings, respectively. The default tag for not creating folders for each tox (in which their children can go into) is `'nochildren'`. Externalizer automatically uses the same folder structure as your network for externalizing files.
+The default Tags for Toxes and DATs are `'tox'` and `'dat'` strings, respectively. The default tag for not creating folders for each tox (in which their children can go into) is `'nochildren'`. Externalizer automatically uses the same folder structure as your network for externalizing files.
 
 ## :label: Getting Started
 1. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Externalizer will add the correct tag you specified in the Setup custom par page.
