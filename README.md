@@ -1,7 +1,7 @@
 # :printer: Externalizer
 ### A tool for externalizing your tox and dat (python) files in TouchDesigner. 
-#### :floppy_disk: TouchDesigner 2021.15800 Win 10 x64
-#### :floppy_disk: Current version 3.0.2
+#### :floppy_disk: TouchDesigner 2022.25370 (Windows)
+#### :floppy_disk: Current version 3.0.3
 
 ## :notebook_with_decorative_cover: Overview
 Externalizer provides simple yet robust externalization for TouchDesigner projects. It uses a tag-based approach to identify which operators in your project should be externalized, versus ones that should not. It includes a lister and keyboard shortcuts for management and smooth production implementation.
