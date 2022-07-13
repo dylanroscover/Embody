@@ -1,7 +1,7 @@
 # :printer: Embody
-### A tool for externalizing your tox and dat (python) files in TouchDesigner. 
+### Externalize your tox and dat (python) files in TouchDesigner. 
 #### :floppy_disk: TouchDesigner 2022.25370 (Windows)
-#### :floppy_disk: Current version 3.0.4
+#### :floppy_disk: Current version 3.0.5
 
 ## :notebook_with_decorative_cover: Overview
 Embody provides simple yet robust externalization for TouchDesigner projects. It uses a tag-based approach to identify which operators in your project should be externalized, versus ones that should not. It includes a lister and keyboard shortcuts for management and smooth production implementation.
