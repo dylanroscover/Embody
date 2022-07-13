@@ -64,6 +64,7 @@ DAT operators).
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked, added onto and eventually almost completely refactored by me. Inspired by Elburz's and Matthew Ragan's externalization work.
 
 ## Version History
+- 3.0.5 - Tweaked reset function so externalization folder is created
 - 3.0.4 - Updated versioning system
 - 3.0.3 - Updated to TouchDesigner 2022 release 
 - 3.0.2 - Added Manager UI (ctrl-alt-e), clarified command syntax and added deletion mechanisms
