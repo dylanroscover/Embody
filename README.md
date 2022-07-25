@@ -1,6 +1,6 @@
 # :printer: Embody
 ### Externalize TouchDesigner toxes and DATs 
-#### :floppy_disk: TouchDesigner 2022.25370 (Windows)
+#### :floppy_disk: TouchDesigner 2022.26590 (Windows)
 #### :floppy_disk: BETA version 4.0.0
 
 ## :notebook_with_decorative_cover: Overview
