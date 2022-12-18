@@ -6,7 +6,7 @@
 ## :notebook_with_decorative_cover: Overview
 Embody provides simple yet robust externalization for TouchDesigner projects. It uses a tag-based approach to identify which operators in your project should be externalized, and in which format. It includes a lister, contextual tagging menu, and keyboard shortcuts for a pleasant UX.
 
-<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg' width='700'>
+<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
 ## :page_with_curl: Defaults
 By default this component will open in Disabled mode and have no effect on your project. The default externalization Folder is `lib`, which should reside in a folder relative to your project toe (inside `project.folder`).
