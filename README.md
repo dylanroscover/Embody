@@ -1,4 +1,4 @@
-# :printer: Embody
+# :label: Embody
 ### Externalize TouchDesigner components and scripts 
 #### :floppy_disk: TouchDesigner 2022.31030 (Windows)
 #### :floppy_disk: BETA version 4.1.xxx
