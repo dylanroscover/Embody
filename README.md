@@ -1,10 +1,12 @@
 # :printer: Embody
-### Externalize TouchDesigner toxes and DATs 
+### Externalize TouchDesigner components and scripts 
 #### :floppy_disk: TouchDesigner 2022.31030 (Windows)
 #### :floppy_disk: BETA version 4.1.xxx
 
 ## :notebook_with_decorative_cover: Overview
-Embody provides simple yet robust externalization for TouchDesigner projects. It uses a tag-based approach to identify which operators in your project should be externalized, and in which format. It includes a lister, contextual tagging menu, and keyboard shortcuts for a pleasant UX.
+Embody provides simple yet robust externalization for TouchDesigner projects. Any COMP or DAT operator in your project can be tagged with the tap of a simple shortcut (pressing `y` twice) to automatically externalize it. 
+
+Embody includes a manager UI which lists your externalized files and info about them. Simply drag and drop Embody from the `/release` folder into your project to get started!
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
