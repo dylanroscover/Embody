@@ -1,7 +1,7 @@
 # :printer: Embody
 ### Externalize TouchDesigner toxes and DATs 
-#### :floppy_disk: TouchDesigner 2022.26590 (Windows)
-#### :floppy_disk: BETA version 4.0.0
+#### :floppy_disk: TouchDesigner 2022.31030 (Windows)
+#### :floppy_disk: BETA version 4.1.xxx
 
 ## :notebook_with_decorative_cover: Overview
 Embody provides simple yet robust externalization for TouchDesigner projects. It uses a tag-based approach to identify which operators in your project should be externalized, and in which format. It includes a lister, contextual tagging menu, and keyboard shortcuts for a pleasant UX.
@@ -70,9 +70,7 @@ To reset ('unexternalize') completely, pulse the Reset button.
 	- Initialize/Update
 	- Open the custom pars as a floating panel window (Pars)
 
-- `t - t` : Add an externalization tag automatically based on the current op selected (supports all COMP and saveable DAT operators).
-
-- `ctrl - alt - n` : Add a 'no children' tag automatically based on the current op selected (supports COMP operators only).
+- `y - y` : Add an externalization tag automatically based on the current op selected (supports all COMP and saveable DAT operators).
 
 - `ctrl - alt - u` : Initialize/update. If Embody is not enabled, will initialize so any detected tags become externalized and get saved. If it is enabled, will update so any detected changes ('dirty' COMPs) are saved out.
 
@@ -80,8 +78,8 @@ To reset ('unexternalize') completely, pulse the Reset button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked, added onto and eventually almost completely refactored by me. Inspired by Elburz's and Matthew Ragan's externalization work.
 
 ## Version History
-- 4.0.0 - Added support for various web (json/xml/html), shader (glsl/frag/vert), text (txt/md/rtf) and table (csv/dat) file formats, various bug fixes and parameter simplifications/cleanups/improvements 
-
+- 4.1.0 - Better cleanup and moving of files/folders, removed nochildren tag, improved keyboard shortcuts, numerous bug fixes
+- 4.0.0 - Added support for various web (json/xml/html), shader (glsl/frag/vert), text (txt/md/rtf) and table (csv/dat) file formats, various bug fixes and parameter simplifications/cleanups/improvements
 - 3.0.5 - Tweaked reset function so externalization folder is created
 - 3.0.4 - Updated versioning system
 - 3.0.3 - Updated to TouchDesigner 2022 release 
