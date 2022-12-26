@@ -1,7 +1,7 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts 
 #### :floppy_disk: TouchDesigner 2022.31030 (Windows)
-#### :floppy_disk: version 4.2.17
+#### :floppy_disk: version 4.2.18
 ## :notebook_with_decorative_cover: Overview
 Embody provides simple yet robust externalization for TouchDesigner projects. Any COMP or DAT operator in your project can be tagged with the tap of a simple shortcut (pressing `y` twice) to automatically externalize it. 
 
