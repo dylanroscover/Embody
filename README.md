@@ -27,9 +27,7 @@ The following OPs are supported:
 > - OP Execute DAT
 
 The following file formats are supported:
-> COMPs
 > - .tox
-> DATs
 > - .py
 > - .json
 > - .xml
