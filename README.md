@@ -1,8 +1,7 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts 
 #### :floppy_disk: TouchDesigner 2022.31030 (Windows)
-#### :floppy_disk: BETA version 4.1.xxx
-
+#### :floppy_disk: version <function version at 0x0000023B587341F0>
 ## :notebook_with_decorative_cover: Overview
 Embody provides simple yet robust externalization for TouchDesigner projects. Any COMP or DAT operator in your project can be tagged with the tap of a simple shortcut (pressing `y` twice) to automatically externalize it. 
 
@@ -61,7 +60,7 @@ As you work, Embody will keep your external toxes updated. Every time you save y
 
 
 ## :label: Resetting
-To reset ('unexternalize') completely, pulse the Reset button.
+To reset ('unexternalize') completely, pulse the Disable button.
 
 > Note: this will also delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any empty folders that result. To reinstate them, pulse the Initialize button again.
 
@@ -77,9 +76,10 @@ To reset ('unexternalize') completely, pulse the Reset button.
 - `ctrl - alt - u` : Initialize/update. If Embody is not enabled, will initialize so any detected tags become externalized and get saved. If it is enabled, will update so any detected changes ('dirty' COMPs) are saved out.
 
 ## :man_juggling: Contributors
-Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked, added onto and eventually almost completely refactored by me. Inspired by Elburz's and Matthew Ragan's externalization work.
+Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and eventually almost completely refactored by yours truly. Inspired by Elburz's and Matthew Ragan's externalization work.
 
 ## Version History
+- 4.2.0 - UI fixes, path cleanup and switchover to absolute project path setup
 - 4.1.0 - Better cleanup and moving of files/folders, removed nochildren tag, improved keyboard shortcuts, numerous bug fixes
 - 4.0.0 - Added support for various web (json/xml/html), shader (glsl/frag/vert), text (txt/md/rtf) and table (csv/dat) file formats, various bug fixes and parameter simplifications/cleanups/improvements
 - 3.0.5 - Tweaked reset function so externalization folder is created
