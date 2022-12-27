@@ -1,15 +1,17 @@
 # :label: Embody
-### Externalize TouchDesigner components and scripts 
+### Externalize TouchDesigner components and scripts
+
+<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
+
 #### :floppy_disk: TouchDesigner 2022.31030 (Windows)
 #### :floppy_disk: version 4.2.75
+
 ## :notebook_with_decorative_cover: Overview
 TouchDesigner stores project networks in a binary format, `.toe` (TouchDesigner environment file). For collaborative and source control workflows, this format has significant limitations. One can always save external `.tox` (TouchDesigner external component) files of any COMP in their network, as well as a plethora of text-based formats of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these processes can quickly become repetitive and cumbersome to maintain as your network grows.
 
 Embody is a management system for creating and maintaining comprehensive externalizations throughout your toe  network. Any COMP or DAT operators (OPs) in your project can be tagged for externalizing with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then whenever you save your project (`ctrl-s` or `ctrl-alt-u` to avoid editing the toe), Embody will automatically externalize the OPs to a folder structure that matches your network, and keep them updated as you iterate.
 
 Simply drag and drop Embody from the `/release` folder into your project to get started!
-
-<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
 ## :page_with_curl: Defaults
 On creation Embody will prompt you to either re-initialize itself or keep it's last saved state. Typically you will want to re-init it for new networks. The default externalization Folder is `lib`, which usually resides in a folder relative to your project toe (inside `project.folder`). This can be set to any folder you want. When changed, Embody disables itself, removes it's previous externalization folder, and creates the new externalization folder structure.
