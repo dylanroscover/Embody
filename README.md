@@ -1,21 +1,23 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts 
 #### :floppy_disk: TouchDesigner 2022.31030 (Windows)
-#### :floppy_disk: version 4.2.59
+#### :floppy_disk: version 4.2.75
 ## :notebook_with_decorative_cover: Overview
-Embody provides simple yet robust externalization for TouchDesigner projects. Any COMP or DAT operator in your project can be tagged with the tap of a simple shortcut (pressing `y` twice) to automatically externalize it. 
+TouchDesigner stores project networks in a binary format, `.toe` (TouchDesigner environment file). For collaborative and source control workflows, this format has significant limitations. One can always save external `.tox` (TouchDesigner external component) files of any COMP in their network, as well as a plethora of text-based formats of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these processes can quickly become repetitive and cumbersome to maintain as your network grows.
 
-Embody includes a manager UI which lists your externalized files and info about them. Simply drag and drop Embody from the `/release` folder into your project to get started!
+Embody is a management system for creating and maintaining comprehensive externalizations throughout your toe  network. Any COMP or DAT operators (OPs) in your project can be tagged for externalizing with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then whenever you save your project (`ctrl-s` or `ctrl-alt-u` to avoid editing the toe), Embody will automatically externalize the OPs to a folder structure that matches your network, and keep them updated as you iterate.
+
+Simply drag and drop Embody from the `/release` folder into your project to get started!
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
 ## :page_with_curl: Defaults
-By default this component will open in Disabled mode and have no effect on your project. The default externalization Folder is `lib`, which should reside in a folder relative to your project toe (inside `project.folder`).
+On creation Embody will prompt you to either re-initialize itself or keep it's last saved state. Typically you will want to re-init it for new networks. The default externalization Folder is `lib`, which usually resides in a folder relative to your project toe (inside `project.folder`). This can be set to any folder you want. When changed, Embody disables itself, removes it's previous externalization folder, and creates the new externalization folder structure.
 
-Embody automatically uses the same folder structure as your network for externalizing files.
+Embody replicates your toe network structure for its external files. Each COMP in your toe network is treated as a folder. So if you externalize COMP `base2`, which exists inside of COMP `base1`, the external file path will be: `lib/base1/base2.tox`. Only COMPs that contain externalizations will be created as folders.
 
 ## :label: Getting Started
-1. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Embody will add the correct tag you specified in the Setup custom par page.
+1. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Embody will add the correct tag you specified in the Setup custom par page. Multiple OPs may be selected at a time.
 
 The following OPs are supported:
 > - COMP
@@ -41,7 +43,7 @@ The following file formats are supported:
 > - .csv
 > - .dat
 
-2. Set your externalization Folder, or use the default `lib` (relative to your project file, the `project.folder` folder)
+2. Set your externalization folder, or use the default `lib` (relative to your project file, inside the `project.folder` folder)
 
 3. Pulse the `Enable/Update` button. 
 
@@ -77,7 +79,7 @@ To reset ('unexternalize') completely, pulse the Disable button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and eventually almost completely refactored by yours truly. Inspired by Elburz's and Matthew Ragan's externalization work.
 
 ## Version History
-- 4.2.0 - UI fixes, path cleanup and switchover to absolute project path setup
+- 4.2.0 - UI fixes, path cleanup, init fixes, folder switching fixes, switchover to absolute project path setup
 - 4.1.0 - Better cleanup and moving of files/folders, removed nochildren tag, improved keyboard shortcuts, numerous bug fixes
 - 4.0.0 - Added support for various web (json/xml/html), shader (glsl/frag/vert), text (txt/md/rtf) and table (csv/dat) file formats, various bug fixes and parameter simplifications/cleanups/improvements
 - 3.0.5 - Tweaked reset function so externalization folder is created
