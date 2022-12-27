@@ -1,10 +1,9 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts
-
-<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
-
 #### :floppy_disk: TouchDesigner 2022.31030 (Windows)
 #### :floppy_disk: version 4.2.75
+
+<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
 ## :notebook_with_decorative_cover: Overview
 TouchDesigner stores project networks in a binary format, `.toe` (TouchDesigner environment file). For collaborative and source control workflows, this format has significant limitations. One can always save external `.tox` (TouchDesigner external component) files of any COMP in their network, as well as a plethora of text-based formats of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these processes can quickly become repetitive and cumbersome to maintain as your network grows.
