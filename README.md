@@ -64,7 +64,7 @@ As you work, Embody will keep your external toxes updated. Every time you save y
 ## :label: Resetting
 To reset ('unexternalize') completely, pulse the Disable button.
 
-> Note: this will also delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any empty folders that result. To reinstate them, pulse the Initialize button again.
+> Note: this can also delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any empty folders that result. To reinstate them, pulse the Enable button again.
 
 ## :keyboard: Keyboard Shorcuts
 - `ctrl - alt - e` :  Open the Manager, a lister of all externalized operators and their metadata. Inside this floating panel window you are able to delete externalizations and trigger basic commands, including:
