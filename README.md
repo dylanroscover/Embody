@@ -9,7 +9,7 @@
 ## :notebook_with_decorative_cover: Overview
 TouchDesigner stores project networks in a binary format, `.toe` (TouchDesigner environment file). For collaborative and source control workflows, this format has significant limitations. One can always save external `.tox` (TouchDesigner external component) files of any COMP in their network, as well as a plethora of text-based formats of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these processes can quickly become repetitive and cumbersome to maintain as your network grows.
 
-Embody is a management system for creating and maintaining comprehensive externalizations throughout your toe  network. Any COMP or DAT operators (OPs) in your project can be tagged for externalizing with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then whenever you save your project (`ctrl-s` or `ctrl-alt-u` to avoid editing the toe), Embody will automatically externalize the OPs to a folder structure that matches your network, and keep them updated as you iterate.
+Embody is a management system for creating and maintaining comprehensive externalizations throughout your toe  network. Any COMP or DAT operators (OPs) in your project can be tagged for externalizing with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then whenever you save your project (`ctrl - s` or `ctrl - shift - u` to avoid editing the toe), Embody will automatically externalize the OPs to a folder structure that matches your network, and keep them updated as you iterate.
 
 Simply drag and drop Embody from the `/release` folder into your project to get started!
 
@@ -56,9 +56,9 @@ This will search your entire project for COMPs and DATs matching the tags and ex
 ## :label: Workflow
 As you work, Embody will keep your external toxes updated. Every time you save your project (`ctrl - s`), Embody checks to see if COMPs have been updated. If they have, it autosaves the dirty (modified) ones. DATs are automatically synchronized by TouchDesigner (if their Sync to File parameter is enabled).
 
-> If `ctrl - s` isn't your thing, all good. `ctrl - alt - u` can be used in its place to update only dirty COMPs as you work. This is the same as pulsing the Initialize/Update button in the Setup page.
+> If `ctrl - s` isn't your thing, all good. `ctrl - shift - u` can be used in its place to update only dirty COMPs as you work. This is the same as pulsing the Initialize/Update button in the Setup page.
 
-> If you want to see which COMPs are dirty, you can press `ctrl - alt - e` to bring up the Manager GUI. In it is a list of all externalized operators and their dirty status (if they are a COMP type). If you keep the Manager open while working, press the Refresh button to get the latest dirty status at any time, and then press the Update button to save out just the dirty COMPs.
+> If you want to see which COMPs are dirty, you can press `ctrl - shift - e` to bring up the Manager GUI. In it is a list of all externalized operators and their dirty status (if they are a COMP type). If you keep the Manager open while working, press the Refresh button to get the latest dirty status at any time, and then press the Update button to save out just the dirty COMPs.
 
 
 ## :label: Resetting
@@ -67,7 +67,7 @@ To reset ('unexternalize') completely, pulse the Disable button.
 > Note: this can also delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any empty folders that result. To reinstate them, pulse the Enable button again.
 
 ## :keyboard: Keyboard Shorcuts
-- `ctrl - alt - e` :  Open the Manager, a lister of all externalized operators and their metadata. Inside this floating panel window you are able to delete externalizations and trigger basic commands, including:
+- `ctrl - shift - e` :  Open the Manager, a lister of all externalized operators and their metadata. Inside this floating panel window you are able to delete externalizations and trigger basic commands, including:
 	- Reset
 	- Refresh
 	- Initialize/Update
@@ -75,7 +75,7 @@ To reset ('unexternalize') completely, pulse the Disable button.
 
 - `y - y` : Add an externalization tag automatically based on the current op selected (supports all COMP and saveable DAT operators).
 
-- `ctrl - alt - u` : Initialize/update. If Embody is not enabled, will initialize so any detected tags become externalized and get saved. If it is enabled, will update so any detected changes ('dirty' COMPs) are saved out.
+- `ctrl - shift - u` : Initialize/update. If Embody is not enabled, will initialize so any detected tags become externalized and get saved. If it is enabled, will update so any detected changes ('dirty' COMPs) are saved out.
 
 ## :man_juggling: Contributors
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and eventually almost completely refactored by yours truly. Inspired by Elburz's and Matthew Ragan's externalization work.
@@ -87,6 +87,6 @@ Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked 
 - 3.0.5 - Tweaked reset function so externalization folder is created
 - 3.0.4 - Updated versioning system
 - 3.0.3 - Updated to TouchDesigner 2022 release 
-- 3.0.2 - Added Manager UI (ctrl-alt-e), clarified command syntax and added deletion mechanisms
+- 3.0.2 - Added Manager UI, clarified command syntax and added deletion mechanisms
 - 3.0.1 - Added keyboard shortcuts, subtraction for list elements, init and minor bug fixes 
 - 3.0.0 - Initial release
