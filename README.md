@@ -6,11 +6,13 @@
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
 ## :notebook_with_decorative_cover: Overview
-TouchDesigner stores project networks in a binary format, `.toe` (TouchDesigner environment file). For collaborative and source control workflows, this format has significant limitations. One can always save external `.tox` (TouchDesigner external component) files of any COMP in their network, as well as a plethora of text-based formats of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these processes can quickly become repetitive and cumbersome to maintain as your network grows.
+TouchDesigner stores projects in a binary format, `.toe` (TOuch Environment). For collaborative and source control workflows, this format can have significant limitations.
 
-Embody is a management system for creating and maintaining comprehensive externalizations throughout your toe  network. Any COMP or DAT operators (OPs) in your project can be tagged for externalizing with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then whenever you save your project (`ctrl - s` or `ctrl - shift - u` to avoid editing the toe), Embody will automatically externalize the OPs to a folder structure that matches your network, and keep them updated as you iterate.
+To overcome these limitations, developers may save external `.tox` (TOuch eXternal component) files of COMPs in their network, as well as a plethora of text-based formats of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these techniques can quickly become repetitive and cumbersome to implement maintain as your network grows.
 
-Simply drag and drop Embody from the `/release` folder into your project to get started!
+Embody is a management system for creating and maintaining comprehensive externalizations throughout your project. Any COMP or DAT operators (OPs) in your project can be tagged for externalization, with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then, whenever you save your project (`ctrl - s` or `ctrl - shift - u` to avoid versioning up the toe), Embody will externalize the OPs to files in a folder structure that matches your project network, and keep them updated as you iterate.
+
+Simply drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project toe to get started!
 
 ## :page_with_curl: Defaults
 On creation Embody will prompt you to either re-initialize itself or keep it's last saved state. Typically you will want to re-init it for new networks. The default externalization Folder is `lib`, which usually resides in a folder relative to your project toe (inside `project.folder`). This can be set to any folder you want. When changed, Embody disables itself, removes it's previous externalization folder, and creates the new externalization folder structure.
