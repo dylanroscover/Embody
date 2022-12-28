@@ -23,37 +23,37 @@ Embody replicates your toe network structure for its external files. Each COMP i
 1. Download, drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project toe
 2. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Embody will add the correct tag you specified in the Setup custom par page. Multiple OPs may be selected and tagged together.
 
-The following OPs are supported:
-> - COMP
-> - Text DAT (including callbacks)
-> - Table DAT
-> - Execute DAT
-> - Parameter Execute DAT
-> - Panel Execute DAT
-> - OP Execute DAT
+	The following OPs are supported:
+	> - COMP
+	> - Text DAT (including callbacks)
+	> - Table DAT
+	> - Execute DAT
+	> - Parameter Execute DAT
+	> - Panel Execute DAT
+	> - OP Execute DAT
 
-The following file formats are supported:
-> - .tox
-> - .py
-> - .json
-> - .xml
-> - .html
-> - .glsl
-> - .frag
-> - .vert
-> - .txt
-> - .md
-> - .rtf
-> - .csv
-> - .dat
+	The following file formats are supported:
+	> - .tox
+	> - .py
+	> - .json
+	> - .xml
+	> - .html
+	> - .glsl
+	> - .frag
+	> - .vert
+	> - .txt
+	> - .md
+	> - .rtf
+	> - .csv
+	> - .dat
 
 3. Set your externalization folder, or use the default `lib` (relative to your project file, inside the `project.folder` folder)
 
-4. Pulse the `Enable/Update` button. 
+4. Pulse the `Enable/Update` button
 
-This will search your entire project for COMPs and DATs matching the tags and externalize them with a folder structure matching that of your TouchDesigner project network.
+	This will search your entire project for COMPs and DATs matching the tags and externalize them with a folder structure matching that of your TouchDesigner project network.
 
-> Note: if no tags are specified, all project COMPs and DATs that can be externalized, will be added. Fair warning that this may stall systems with complex projects.
+	> Note: if no tags are specified, all project COMPs and DATs that can be externalized, will be added. Fair warning that this may stall systems with complex projects.
 
 ## :label: Workflow
 As you work, Embody will keep your external toxes updated. Every time you save your project (`ctrl - s`), Embody checks to see if COMPs have been updated. If they have, it autosaves the dirty (modified) ones. DATs are automatically synchronized by TouchDesigner (if their Sync to File parameter is enabled).
