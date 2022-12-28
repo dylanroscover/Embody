@@ -15,16 +15,16 @@ To overcome these limitations, developers may save external `.tox` (TOuch eXtern
 ### Automated Externalization
 Embody is a management system for creating and maintaining comprehensive externalizations throughout your project. Any COMP or DAT operators (OPs) in your project can be tagged for externalization, with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then, whenever you save your project (`ctrl - s` or `ctrl - shift - u` to avoid versioning up the toe), Embody will externalize the OPs to files in a folder structure that matches your project network, and keep them updated as you iterate.
 
+Each COMP in your toe network is treated as a folder. So if you externalize COMP `base2`, which exists inside of COMP `base1`, the external file path will be: `lib/base1/base2.tox`. Only COMPs that contain externalizations will be created as folders.
+
 Simply drag-and-drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project toe to get started!
-
-## :page_with_curl: Defaults
-On creation Embody will prompt you to either re-initialize itself or keep it's last saved state. Typically you will want to re-init it for new networks. The default externalization Folder is `lib`, which usually resides in a folder relative to your project toe (inside `project.folder`). This can be set to any folder you want. When changed, Embody disables itself, removes it's previous externalization folder, and creates the new externalization folder structure.
-
-Embody replicates your toe network structure for its external files. Each COMP in your toe network is treated as a folder. So if you externalize COMP `base2`, which exists inside of COMP `base1`, the external file path will be: `lib/base1/base2.tox`. Only COMPs that contain externalizations will be created as folders.
 
 ## :label: Getting Started
 1. Download, drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project toe
-2. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Embody will add the correct tag you specified in the Setup custom par page. Multiple OPs may be selected and tagged together.
+
+2. On creation, Embody will prompt you to either re-initialize itself or keep it's last saved state. Typically you will want to re-init it for new networks. The default externalization Folder is `lib`, which usually resides in a folder relative to your project toe (inside `project.folder`). This can be set to any folder you want. When the folder is moved, Embody disables itself, removes it's previous externalization folder, and re-creates the externalization folder structure.
+
+3. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Embody will add the correct tag you specified in the Setup custom par page. Multiple OPs may be selected and tagged together.
 
 	The following OPs are supported:
 	> - COMP
@@ -50,9 +50,7 @@ Embody replicates your toe network structure for its external files. Each COMP i
 	> - .csv
 	> - .dat
 
-3. Set your externalization folder, or use the default `lib` (relative to your project file, inside the `project.folder` folder)
-
-4. Pulse the `Enable/Update` button
+4. Pulse the `Enable/Update` button (or press `ctrl - shift - u`)
 
 	This will search your entire project for COMPs and DATs matching the tags and externalize them with a folder structure matching that of your TouchDesigner project network.
 
