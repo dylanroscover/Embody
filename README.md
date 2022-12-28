@@ -6,10 +6,13 @@
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
 ## :notebook_with_decorative_cover: Overview
-TouchDesigner stores projects in a binary format, `.toe` (TOuch Environment). For collaborative and source control workflows, this format can have significant limitations.
+### Internalization
+TouchDesigner stores projects in a binary file format, `.toe` (TOuch Environment). For collaborative and source control workflows, this file format can have significant limitations.
 
-To overcome these limitations, developers may save external `.tox` (TOuch eXternal component) files of COMPs in their network, as well as a plethora of text-based formats of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these techniques can quickly become repetitive and cumbersome to implement maintain as your network grows.
+### Manual Externalization
+To overcome these limitations, developers may save external `.tox` (TOuch eXternal component) files of COMPs in their network, as well as a plethora of text-based files of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these techniques can quickly become repetitive and cumbersome to implement maintain as your network grows.
 
+### Automated Externalization
 Embody is a management system for creating and maintaining comprehensive externalizations throughout your project. Any COMP or DAT operators (OPs) in your project can be tagged for externalization, with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then, whenever you save your project (`ctrl - s` or `ctrl - shift - u` to avoid versioning up the toe), Embody will externalize the OPs to files in a folder structure that matches your project network, and keep them updated as you iterate.
 
 Simply drag-and-drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project toe to get started!
