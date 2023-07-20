@@ -1,7 +1,7 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts
-#### :floppy_disk: TouchDesigner 2022.32660 (Windows)
-#### :floppy_disk: version 4.2.95
+#### :floppy_disk: TouchDesigner 2022.33910 (Windows)
+#### :floppy_disk: version 4.2.98
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
@@ -84,6 +84,7 @@ To reset ('unexternalize') completely, pulse the Disable button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and eventually almost completely refactored by yours truly. Inspired by Elburz's and Matthew Ragan's externalization work.
 
 ## Version History
+- 4.2.98 - Added handling for Cloners/Replicants via two new Custom Parameters (Externalize Child Clones/Replicants)
 - 4.2.0 - UI fixes, path cleanup, init fixes, folder switching fixes, switchover to absolute project path setup
 - 4.1.0 - Better cleanup and moving of files/folders, removed nochildren tag, improved keyboard shortcuts, numerous bug fixes
 - 4.0.0 - Added support for various web (json/xml/html), shader (glsl/frag/vert), text (txt/md/rtf) and table (csv/dat) file formats, various bug fixes and parameter simplifications/cleanups/improvements
