@@ -1,7 +1,7 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts
-#### :floppy_disk: TouchDesigner 2022.33910 (Windows)
-#### :floppy_disk: version 4.2.98
+#### :floppy_disk: TouchDesigner 2023.11290 (Windows)
+#### :floppy_disk: version 4.2.100
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
@@ -76,7 +76,7 @@ To reset ('unexternalize') completely, pulse the Disable button.
 	- Initialize/Update
 	- Open the custom pars as a floating panel window (Pars)
 
-- `y - y` : Add an externalization tag automatically based on the current op selected (supports all COMP and saveable DAT operators).
+- `rShift - rShift` : Add an externalization tag automatically based on the current op selected (supports all COMP and saveable DAT operators) by pressing right shift key twice in succession.
 
 - `ctrl - shift - u` : Initialize/update. If Embody is not enabled, will initialize so any detected tags become externalized and get saved. If it is enabled, will update so any detected changes ('dirty' COMPs) are saved out.
 
@@ -84,6 +84,7 @@ To reset ('unexternalize') completely, pulse the Disable button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and eventually almost completely refactored by yours truly. Inspired by Elburz's and Matthew Ragan's externalization work.
 
 ## Version History
+- 4.2.101 - Fixed keyboard shortcut bug for adding tags, updated to TouchDesigner 2023
 - 4.2.98 - Added handling for Cloners/Replicants via two new Custom Parameters (Externalize Child Clones/Replicants)
 - 4.2.0 - UI fixes, path cleanup, init fixes, folder switching fixes, switchover to absolute project path setup
 - 4.1.0 - Better cleanup and moving of files/folders, removed nochildren tag, improved keyboard shortcuts, numerous bug fixes
