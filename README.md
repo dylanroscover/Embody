@@ -1,7 +1,7 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts
 #### :floppy_disk: TouchDesigner 2023.11600 (Windows)
-#### :floppy_disk: version 4.3.44
+#### :floppy_disk: version 4.3.45
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
