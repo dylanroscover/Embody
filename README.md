@@ -3,7 +3,7 @@
 #### :floppy_disk: TouchDesigner 2023.11760 (Windows)
 #### :floppy_disk: version 4.3.48
 
-<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
+<img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot2.jpg'>
 
 ## :notebook_with_decorative_cover: Overview
 ### Internalization
