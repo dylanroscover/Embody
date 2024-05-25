@@ -1,7 +1,7 @@
 # :label: Embody
 ### Externalize TouchDesigner components and scripts
-#### :floppy_disk: TouchDesigner 2023.11600 (Windows)
-#### :floppy_disk: version 4.3.45
+#### :floppy_disk: TouchDesigner 2023.11760 (Windows)
+#### :floppy_disk: version 4.3.48
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot1.jpg'>
 
@@ -84,6 +84,7 @@ To reset ('unexternalize') completely, pulse the Disable button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and eventually almost completely refactored by yours truly. Inspired by Elburz's and Matthew Ragan's externalization work.
 
 ## Version History
+- 4.3.48 - Added handling for duplicate OP tox/file paths (usually occurred after copying/pasting an OP in a network)
 - 4.3.43 - Switched to UTC, add Save/Table DAT btns, toggle keyboard shortcuts, refactor tagging, add filter, better externaltox handling
 - 4.2.101 - Fixed keyboard shortcut bug for adding tags, updated to TouchDesigner 2023
 - 4.2.98 - Added handling for Cloners/Replicants via two new Custom Parameters (Externalize Child Clones/Replicants)
