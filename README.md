@@ -26,7 +26,7 @@ To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://gi
 2. **Initialize Embody**: Upon creation, choose to re-initialize or keep the last saved state. Typically, re-initialize for new networks. The default externalization folder is `lib` within your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure.
 
 3. **Tag Operators for Externalization**:
-    - Select an operator and press `ctrl + alt + t` to add the externalization tag.
+    - Select an operator and press `lshift` twice to add the externalization tag desired.
     - Supported OP types:
         - COMP
         - Text DAT (including callbacks)
@@ -49,7 +49,7 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 
 > Use `ctrl + shift + u` as an alternative to update only dirty COMPs.
 
-> To view dirty COMPs, press `ctrl + shift + e` to open the Manager GUI, listing all externalized operators and their status. Refresh and update as needed.
+> To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh and update as needed.
 
 ## :label: Resetting
 To completely reset and remove externalizations, pulse the Disable button.
@@ -58,7 +58,7 @@ To completely reset and remove externalizations, pulse the Disable button.
 
 ## :keyboard: Keyboard Shortcuts
 - `ctrl + shift + e` : Open the Manager to view and manage externalized operators.
-- `rShift + rShift` : Tag the current selected operator by pressing the right shift key twice.
+- `lshift + lshift` : Tag the current selected operator by pressing the right shift key twice.
 - `ctrl + shift + u` : Initialize/update externalizations.
 
 ## :man_juggling: Contributors
