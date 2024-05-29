@@ -14,7 +14,7 @@ TouchDesigner stores projects in a `.toe` (TOuch Environment) binary file, which
 Developers often save external `.tox` (TOuch eXternal component) files and various text-based DATs (e.g., `.py`, `.glsl`, `.json`). This process is repetitive and hard to manage in larger networks.
 
 ### Automated Externalization
-**Embody** automates the externalization of COMPs and DATs in your project. Tag any COMP or DAT operator by selecting it and pressing `y` twice. Upon saving your project (`ctrl + s` or `ctrl + shift + u`), Embody externalizes tagged operators to a folder structure mirroring your project network.
+**Embody** automates the externalization of COMPs and DATs in your project. Tag any COMP or DAT operator by selecting it and pressing `lshift` twice in a row. Upon saving your project (`ctrl + s` or `ctrl + shift + u`), Embody externalizes tagged operators to a folder structure mirroring your project network.
 
 For instance, externalizing `base2` within `base1` results in the path: `lib/base1/base2.tox`.
 
