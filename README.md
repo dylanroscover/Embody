@@ -1,99 +1,80 @@
+
 # :label: Embody
-### Externalize TouchDesigner components and scripts
+### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2023.11760 (Windows)
-#### :floppy_disk: version 4.3.48
+#### :floppy_disk: Version 4.3.48
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot2.jpg'>
 
 ## :notebook_with_decorative_cover: Overview
 ### Internalization
-TouchDesigner stores projects in a binary file format, `.toe` (TOuch Environment). For collaborative and source control workflows, this file format can have significant limitations.
+TouchDesigner stores projects in a `.toe` (TOuch Environment) binary file, which poses limitations for collaborative workflows, especially when merging changes.
 
 ### Manual Externalization
-To overcome these limitations, developers may save external `.tox` (TOuch eXternal component) files of COMPs in their network, as well as a plethora of text-based files of DATs in their network (such as `.py`, `.glsl` and `.json`). However, these techniques can quickly become repetitive and cumbersome to implement maintain as your network grows.
+Developers often save external `.tox` (TOuch eXternal component) files and various text-based DATs (e.g., `.py`, `.glsl`, `.json`). This process is repetitive and hard to manage in larger networks.
 
 ### Automated Externalization
-Embody is a management system for creating and maintaining comprehensive externalizations throughout your project. Any COMP or DAT operators (OPs) in your project can be tagged for externalization, with the tap of a simple shortcut (pressing `y` twice while the OPs are selected). Then, whenever you save your project (`ctrl - s` or `ctrl - shift - u` to avoid versioning up the toe), Embody will externalize the OPs to files in a folder structure that matches your project network, and keep them updated as you iterate.
+**Embody** automates the externalization of COMPs and DATs in your project. Tag any COMP or DAT operator by selecting it and pressing `y` twice. Upon saving your project (`ctrl + s` or `ctrl + shift + u`), Embody externalizes tagged operators to a folder structure mirroring your project network.
 
-Each COMP in your toe network is treated as a folder. So if you externalize COMP `base2`, which exists inside of COMP `base1`, the external file path will be: `lib/base1/base2.tox`. Only COMPs that contain externalizations will be created as folders.
+For instance, externalizing `base2` within `base1` results in the path: `lib/base1/base2.tox`.
 
-Simply drag-and-drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project toe to get started!
+To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project.
 
 ## :label: Getting Started
-1. Download, drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project toe
+1. **Download and Add Embody**: Drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project.
 
-2. On creation, Embody will prompt you to either re-initialize itself or keep it's last saved state. Typically you will want to re-init it for new networks. The default externalization Folder is `lib`, which usually resides in a folder relative to your project toe (inside `project.folder`). This can be set to any folder you want. When the folder is moved, Embody disables itself, removes it's previous externalization folder, and re-creates the externalization folder structure.
+2. **Initialize Embody**: Upon creation, choose to re-initialize or keep the last saved state. Typically, re-initialize for new networks. The default externalization folder is `lib` within your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure.
 
-3. Add an externalization tag to any supported OP type. The simplest way to do this is to select your current operator (the green box around it, not yellow) and press `ctrl - alt - t`, and Embody will add the correct tag you specified in the Setup custom par page. Multiple OPs may be selected and tagged together.
+3. **Tag Operators for Externalization**:
+    - Select an operator and press `ctrl + alt + t` to add the externalization tag.
+    - Supported OP types:
+        - COMP
+        - Text DAT (including callbacks)
+        - Table DAT
+        - Execute DAT
+        - Parameter Execute DAT
+        - Panel Execute DAT
+        - OP Execute DAT
+    - Supported file formats:
+        - .tox, .py, .json, .xml, .html, .glsl, .frag, .vert, .txt, .md, .rtf, .csv, .dat
 
-	The following OPs are supported:
-	> - COMP
-	> - Text DAT (including callbacks)
-	> - Table DAT
-	> - Execute DAT
-	> - Parameter Execute DAT
-	> - Panel Execute DAT
-	> - OP Execute DAT
+4. **Enable/Update Externalizations**:
+    - Pulse the `Enable/Update` button or press `ctrl + shift + u`.
+    - Embody externalizes tagged COMPs and DATs, matching your project network structure.
 
-	The following file formats are supported:
-	> - .tox
-	> - .py
-	> - .json
-	> - .xml
-	> - .html
-	> - .glsl
-	> - .frag
-	> - .vert
-	> - .txt
-	> - .md
-	> - .rtf
-	> - .csv
-	> - .dat
-
-4. Pulse the `Enable/Update` button (or press `ctrl - shift - u`)
-
-	This will search your entire project for COMPs and DATs matching the tags and externalize them with a folder structure matching that of your TouchDesigner project network.
-
-	> Note: if no tags are specified, all project COMPs and DATs that can be externalized, will be added. Fair warning that this may stall systems with complex projects.
+    > Note: If no tags are specified, all externalizable COMPs and DATs will be externalized, which might slow down complex projects.
 
 ## :label: Workflow
-As you work, Embody will keep your external toxes updated. Every time you save your project (`ctrl - s`), Embody checks to see if COMPs have been updated. If they have, it autosaves the dirty (modified) ones. DATs are automatically synchronized by TouchDesigner (if their Sync to File parameter is enabled).
+Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autosaves modified (dirty) COMPs. DATs synchronize automatically if their Sync to File parameter is enabled.
 
-> If `ctrl - s` isn't your thing, all good. `ctrl - shift - u` can be used in its place to update only dirty COMPs as you work. This is the same as pulsing the Initialize/Update button in the Setup page.
+> Use `ctrl + shift + u` as an alternative to update only dirty COMPs.
 
-> If you want to see which COMPs are dirty, you can press `ctrl - shift - e` to bring up the Manager GUI. In it is a list of all externalized operators and their dirty status (if they are a COMP type). If you keep the Manager open while working, press the Refresh button to get the latest dirty status at any time, and then press the Update button to save out just the dirty COMPs.
-
+> To view dirty COMPs, press `ctrl + shift + e` to open the Manager GUI, listing all externalized operators and their status. Refresh and update as needed.
 
 ## :label: Resetting
-To reset ('unexternalize') completely, pulse the Disable button.
+To completely reset and remove externalizations, pulse the Disable button.
 
-> Note: this can also delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any empty folders that result. To reinstate them, pulse the Enable button again.
+> Note: This can delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any resulting empty folders. To reinstate, pulse the Enable button.
 
-## :keyboard: Keyboard Shorcuts
-- `ctrl - shift - e` :  Open the Manager, a lister of all externalized operators and their metadata. Inside this floating panel window you are able to delete externalizations and trigger basic commands, including:
-	- Reset
-	- Refresh
-	- Initialize/Update
-	- Open the custom pars as a floating panel window (Pars)
-
-- `rShift - rShift` : Add an externalization tag automatically based on the current op selected (supports all COMP and saveable DAT operators) by pressing right shift key twice in succession.
-
-- `ctrl - shift - u` : Initialize/update. If Embody is not enabled, will initialize so any detected tags become externalized and get saved. If it is enabled, will update so any detected changes ('dirty' COMPs) are saved out.
+## :keyboard: Keyboard Shortcuts
+- `ctrl + shift + e` : Open the Manager to view and manage externalized operators.
+- `rShift + rShift` : Tag the current selected operator by pressing the right shift key twice.
+- `ctrl + shift + u` : Initialize/update externalizations.
 
 ## :man_juggling: Contributors
-Originally developed by [Tim Franklin](https://github.com/franklin113/). Forked and eventually almost completely refactored by yours truly. Inspired by Elburz's and Matthew Ragan's externalization work.
+Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored by Dylan Roscover, inspired by Elburz's and Matthew Ragan's work.
 
 ## Version History
-- 4.3.48 - Added handling for duplicate OP tox/file paths (usually occurred after copying/pasting an OP in a network)
-- 4.3.43 - Switched to UTC, add Save/Table DAT btns, toggle keyboard shortcuts, refactor tagging, add filter, better externaltox handling
-- 4.2.101 - Fixed keyboard shortcut bug for adding tags, updated to TouchDesigner 2023
-- 4.2.98 - Added handling for Cloners/Replicants via two new Custom Parameters (Externalize Child Clones/Replicants)
-- 4.2.0 - UI fixes, path cleanup, init fixes, folder switching fixes, switchover to absolute project path setup
-- 4.1.0 - Better cleanup and moving of files/folders, removed nochildren tag, improved keyboard shortcuts, numerous bug fixes
-- 4.0.0 - Added support for various web (json/xml/html), shader (glsl/frag/vert), text (txt/md/rtf) and table (csv/dat) file formats, various bug fixes and parameter simplifications/cleanups/improvements
-- 3.0.5 - Tweaked reset function so externalization folder is created
-- 3.0.4 - Updated versioning system
-- 3.0.3 - Updated to TouchDesigner 2022 release 
-- 3.0.2 - Added Manager UI, clarified command syntax and added deletion mechanisms
-- 3.0.1 - Added keyboard shortcuts, subtraction for list elements, init and minor bug fixes 
-- 3.0.0 - Initial release
+- **4.3.48**: Handling for duplicate OP tox/file paths.
+- **4.3.43**: Switched to UTC, added Save/Table DAT buttons, refactored tagging, better externaltox handling.
+- **4.2.101**: Fixed keyboard shortcut bug, updated to TouchDesigner 2023.
+- **4.2.98**: Added handling for Cloners/Replicants.
+- **4.2.0**: UI fixes, path cleanup, folder switching fixes.
+- **4.1.0**: Improved file/folder management, bug fixes.
+- **4.0.0**: Added support for various file formats, parameter improvements.
+- **3.0.5**: Tweaked reset function.
+- **3.0.4**: Updated versioning system.
+- **3.0.3**: Updated to TouchDesigner 2022.
+- **3.0.2**: Added Manager UI, clarified commands, added deletion mechanisms.
+- **3.0.1**: Added keyboard shortcuts, minor bug fixes.
+- **3.0.0**: Initial release.
