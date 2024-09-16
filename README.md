@@ -2,7 +2,7 @@
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2023.11880 (Windows/macOS)
-#### :floppy_disk: version 4.3.133
+#### :floppy_disk: version 4.3.134
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot2.jpg'>
 
@@ -65,6 +65,7 @@ To completely reset and remove externalizations, pulse the Disable button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored by Dylan Roscover, inspired by Elburz's and Matthew Ragan's work.
 
 ## Version History
+- **4.3.134**: Adding missing reference to list COMP
 - **4.3.133**: Fixed externalizations folder button on macOS, fixed filter display, added clear button to filter UI
 - **4.3.128**: Fixed abs path bug, added support for macOS Finder and keyboard shortcuts
 - **4.3.122**: Separated logic/data for easier Embody updates, bug fix for checking for duplicate OPs
