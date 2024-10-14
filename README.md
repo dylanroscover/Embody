@@ -2,7 +2,7 @@
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2023.11880 (Windows/macOS)
-#### :floppy_disk: version 4.3.134
+#### :floppy_disk: version 4.4.74
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot2.jpg'>
 
@@ -11,10 +11,10 @@
 TouchDesigner stores projects in a `.toe` (TOuch Environment) binary file, which poses limitations for collaborative workflows, especially when merging changes.
 
 ### Manual Externalization
-Developers often save external `.tox` (TOuch eXternal component) files and various text-based DATs (e.g., `.py`, `.glsl`, `.json`). This process is repetitive and hard to manage in larger networks.
+Developers often save external `.tox` (TOuch eXternal component) files and various text-based DATs (e.g., `.py`, `.glsl`, `.json`). This process is repetitive and can become difficult to manage in larger networks.
 
 ### Automated Externalization
-**Embody** automates the externalization of COMPs and DATs in your project. Tag any COMP or DAT operator by selecting it and pressing `lshift` twice in a row. Upon saving your project (`ctrl + s` or `ctrl + shift + u`), Embody externalizes tagged operators to a folder structure mirroring your project network.
+**Embody** automates the externalization of COMPs and DATs in your project. Tag any COMP or DAT operator by selecting it and pressing `lctrl` twice in a row. Upon saving your project (`ctrl + s` or `ctrl + shift + u`), Embody externalizes tagged operators to a folder structure mirroring your project network.
 
 For instance, externalizing `base2` within `base1` results in the path: `lib/base1/base2.tox`.
 
@@ -26,15 +26,18 @@ To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://gi
 2. **Initialize Embody**: Upon creation, choose to re-initialize or keep the last saved state. Typically, re-initialize for new networks. The default externalization folder is `lib` within your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure.
 
 3. **Tag Operators for Externalization**:
-    - Select an operator and press `lshift` twice to add the externalization tag desired.
+    - Select an operator and press `lctrl` twice to add the externalization tag desired.
     - Supported OP types:
-        - COMP
-        - Text DAT (including callbacks)
+        - All COMPs except engine, time and annotate
+        - Text DAT
         - Table DAT
         - Execute DAT
         - Parameter Execute DAT
-        - Panel Execute DAT
+        - Parameter Group Execute DAT
+        - CHOP Execute DAT
+        - DAT Execute DAT
         - OP Execute DAT
+        - Panel Execute DAT
     - Supported file formats:
         - .tox, .py, .json, .xml, .html, .glsl, .frag, .vert, .txt, .md, .rtf, .csv, .dat
 
@@ -52,9 +55,9 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 > To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh and update as needed.
 
 ## :label: Resetting
-To completely reset and remove externalizations, pulse the Disable button.
+To completely reset and remove externalizations, pulse the `Disable` button.
 
-> Note: This can delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any resulting empty folders. To reinstate, pulse the Enable button.
+> Note: This can delete all externalized files, their path parameters (`externaltox` and `syncfile`), and any resulting empty folders. To reinstate, pulse the `Enable/Update` button.
 
 ## :keyboard: Keyboard Shortcuts
 - `ctrl + shift + e` : Open the Manager to view and manage externalized operators.
@@ -62,9 +65,15 @@ To completely reset and remove externalizations, pulse the Disable button.
 - `ctrl + shift + u` : Initialize/update externalizations.
 
 ## :man_juggling: Contributors
-Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored by Dylan Roscover, inspired by Elburz's and Matthew Ragan's work.
+Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
+- **4.4.74**:
+    - Added feature for externalizating full project automatically
+    - Support for handling deletion and re-creation (redo) of COMPs/DATs
+    - Support for renaming COMPs and DATs
+    - Support for moving COMPs/DATs
+    - Various small bug fixes and feature improvements
 - **4.3.134**: Adding missing reference to list COMP
 - **4.3.133**: Fixed externalizations folder button on macOS, fixed filter display, added clear button to filter UI
 - **4.3.128**: Fixed abs path bug, added support for macOS Finder and keyboard shortcuts
