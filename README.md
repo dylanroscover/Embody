@@ -1,8 +1,8 @@
 
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
-#### :floppy_disk: TouchDesigner 2023.11880 (Windows/macOS)
-#### :floppy_disk: version 4.4.74
+#### :floppy_disk: TouchDesigner 2023.12000 (Windows/macOS)
+#### :floppy_disk: version 4.4.104
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/master/img/screenshot2.jpg'>
 
@@ -68,6 +68,7 @@ To completely reset and remove externalizations, pulse the `Disable` button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
+- **4.4.99**: Added TreeLister, improved Tagger stability, color theme updates 
 - **4.4.74**:
     - Added feature for externalizating full project automatically
     - Support for handling deletion and re-creation (redo) of COMPs/DATs
