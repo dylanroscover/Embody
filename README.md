@@ -68,7 +68,7 @@ To completely reset and remove externalizations, pulse the `Disable` button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
-- **4.4.99**: Added TreeLister, improved Tagger stability, color theme updates 
+- **4.4.104**: Added TreeLister, improved Tagger stability, color theme updates 
 - **4.4.74**:
     - Added feature for externalizating full project automatically
     - Support for handling deletion and re-creation (redo) of COMPs/DATs
