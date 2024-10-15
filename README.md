@@ -61,7 +61,7 @@ To completely reset and remove externalizations, pulse the `Disable` button.
 
 ## :keyboard: Keyboard Shortcuts
 - `ctrl + shift + e` : Open the Manager to view and manage externalized operators.
-- `lctrl + lctrl` : Tag the current selected operator by pressing the right control key twice.
+- `lctrl + lctrl` : Tag the current selected operator by pressing the left control key twice.
 - `ctrl + shift + u` : Initialize/update externalizations.
 
 ## :man_juggling: Contributors
