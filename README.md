@@ -18,10 +18,10 @@ Developers often save external `.tox` (TOuch eXternal component) files and vario
 
 For instance, externalizing `base2` within `base1` results in the path: `{project.folder}/base1/base2.tox`.
 
-To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project.
+To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/main/release) folder into your project.
 
 ## :label: Getting Started
-1. **Download and Add Embody**: Drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project.
+1. **Download and Add Embody**: Drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/main/release) folder into your project.
 
 2. **Initialize Embody**: Upon creation, choose to re-initialize or keep the last saved state. Typically, re-initialize for new networks. The default externalization folder is `lib` within your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure.
 
