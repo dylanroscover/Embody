@@ -14,9 +14,9 @@ TouchDesigner stores projects in a `.toe` (TOuch Environment) binary file, which
 Developers often save external `.tox` (TOuch eXternal component) files and various text-based DATs (e.g., `.py`, `.glsl`, `.json`). This process is repetitive and can become difficult to manage in larger networks.
 
 ### Automated Externalization
-**Embody** automates the externalization of COMPs and DATs in your project. Tag any COMP or DAT operator by selecting it and pressing `lctrl` twice in a row. Upon saving your project (`ctrl + s` or `ctrl + shift + u`), Embody externalizes tagged operators to a folder structure mirroring your project network.
+**Embody** automates the externalization of COMPs and DATs in your project. Tag any COMP or DAT operator by selecting it and pressing `lctrl` twice in a row. Upon saving your project (`ctrl + s`) or updating Embody (`ctrl + shift + u`), Embody externalizes tagged operators to a folder structure mirroring your project network, and keeps them updated.
 
-For instance, externalizing `base2` within `base1` results in the path: `lib/base1/base2.tox`.
+For instance, externalizing `base2` within `base1` results in the path: `{project.folder}/base1/base2.tox`.
 
 To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/master/release) folder into your project.
 
@@ -52,7 +52,7 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 
 > Use `ctrl + shift + u` as an alternative to update only dirty COMPs.
 
-> To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh and update as needed.
+> To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh to get the latest dirties and update as needed.
 
 ## :label: Resetting
 To completely reset and remove externalizations, pulse the `Disable` button.
