@@ -23,7 +23,7 @@ To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://gi
 ## :label: Getting Started
 1. **Download and Add Embody**: Drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/main/release) folder into your project.
 
-2. **Initialize Embody**: Upon creation, choose to re-initialize or keep the last saved state. Typically, re-initialize for new networks. The default externalization folder is `lib` within your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure.
+2. **Initialize Embody**: Upon creation, choose to re-initialize or keep the last saved state. Typically, re-initialize for new networks. The default externalization folder is the root of your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure.
 
 3. **Tag Operators for Externalization**:
     - Select an operator and press `lctrl` twice to add the externalization tag desired.
