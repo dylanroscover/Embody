@@ -1,2 +1,0 @@
-print(parent().selectedChildren)
-asdf
