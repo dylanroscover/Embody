@@ -2,7 +2,7 @@
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2023.12000 (Windows/macOS)
-#### :floppy_disk: version 4.4.125
+#### :floppy_disk: version 4.4.126
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/refs/heads/main/img/screenshot2.jpg'>
 
@@ -68,6 +68,7 @@ To completely reset and remove externalizations, pulse the `Disable` button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
+- **4.4.126**: Clean up Save and dirtyHandler methods, auto set enableexternaltox par to ensure saves
 - **4.4.125**: Bug fix for handling empty externalTimeStamp value
 - **4.4.124**: More bug fixes with file handling
 - **4.4.119**: mouseinCHOP chopexecDAT optimization
