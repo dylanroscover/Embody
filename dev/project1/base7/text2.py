@@ -1,0 +1,2 @@
+print(parent().selectedChildren)
+asdf

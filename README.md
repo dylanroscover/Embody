@@ -2,7 +2,7 @@
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2023.12000 (Windows/macOS)
-#### :floppy_disk: version 4.4.128
+#### :floppy_disk: version 4.5.1
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/refs/heads/main/img/screenshot2.jpg'>
 
@@ -68,6 +68,7 @@ To completely reset and remove externalizations, pulse the `Disable` button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
+- **4.5.1**: Add tsv support, add Clone tag for shared external paths, handle drag and dropped COMP auto-populated externaltox pars, detect dirty COMP par changes
 - **4.4.128**: Add support for COMPs with empty/error prone clone expressions (such as rollovers in Probe)
 - **4.4.127**: Added textport warning for when timeline is paused
 - **4.4.126**: Clean up Save and dirtyHandler methods, auto set enableexternaltox par to ensure saves
