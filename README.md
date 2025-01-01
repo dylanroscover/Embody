@@ -39,7 +39,7 @@ To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://gi
         - OP Execute DAT
         - Panel Execute DAT
     - Supported file formats:
-        - .tox, .py, .json, .xml, .html, .glsl, .frag, .vert, .txt, .md, .rtf, .csv, .dat
+        - .tox, .py, .json, .xml, .html, .glsl, .frag, .vert, .txt, .md, .rtf, .csv, .tsv, .dat
 
 4. **Enable/Update Externalizations**:
     - Pulse the `Enable/Update` button or press `ctrl + shift + u`.
