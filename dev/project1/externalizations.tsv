@@ -28,6 +28,8 @@ path	type	rel_file_path	timestamp	dirty
 /project1/base3_rename8	base	project1\base3_rename8.tox	2025-01-03 23:34:40 UTC	False
 /text_root	text	text_root.py	2025-01-04 00:28:04 UTC	
 /container_another	container	container_another.tox	2025-01-04 00:28:13 UTC	False
-/project1/base7/text2	text	project1\base7\text2.py	2025-01-04 04:58:34 UTC	
-/project1/base6/text2	text	project1\base6\text2.py	2025-01-04 04:58:34 UTC	
-/project1/base1/text2	text	project1\base1\text2.py	2025-01-04 04:58:34 UTC	
+/project1/base7/text2	text	project1/base7/text2.py	2025-01-04 04:58:34 UTC	
+/project1/base6/text2	text	project1/base6/text2.py	2025-01-04 04:58:34 UTC	
+/project1/base1/text2	text	project1/base1/text2.py	2025-01-04 04:58:34 UTC	
+/project1/text9	text	text9.txt	2025-01-04 08:11:39 UTC	
+/project1/base3	base	base3.tox	2025-01-04 08:12:46 UTC	False
