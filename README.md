@@ -70,7 +70,11 @@ Originally developed by [Tim Franklin](https://github.com/franklin113/). Refacto
 ## Version History
 - **4.5.19**: Allow master clones with clone pars to be externalized, Setup menu cleanup
 - **4.5.17**: Bug fixes, smaller minimized window footprint
-- **4.5.2**: Add tsv support, add Clone tag for shared external paths, handle drag and dropped COMP auto-populated externaltox pars, detect dirty COMP par changes
+- **4.5.2**: 
+    - Add tsv support
+    - Add Clone tag for shared external paths
+    - Handle drag and dropped COMP auto-populated externaltox pars
+    - Detect dirty COMP par changes
 - **4.4.128**: Add support for COMPs with empty/error prone clone expressions (such as rollovers in Probe)
 - **4.4.127**: Added textport warning for when timeline is paused
 - **4.4.126**: Clean up Save and dirtyHandler methods, auto set enableexternaltox par to ensure saves
