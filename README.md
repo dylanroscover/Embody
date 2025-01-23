@@ -57,7 +57,7 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 ## :label: Features
 - Adds and updates `Build Number`, `Touch Build` and `Build Date` parameters in an `About` page to any externalized COMP, for robust version tracking.
 - Prompts whether to reference or clone an operator when a duplicate file path is detected.
-- Prevents clones and their children from being externalized
+- Prevents clones and replicants (and their children) from being externalized
 - Can externalize the entire project in one click with the `Externalize Full Project` pulse.
 - Isolated data/logic pattern with an `externalizations` tableDAT outside of Embody for easy updating and management.
 - UTC timestamps for synchronized international workflows.
