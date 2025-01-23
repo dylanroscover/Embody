@@ -23,7 +23,7 @@ To get started, drag-and-drop the Embody `.tox` from the [`/release`](https://gi
 ## :label: Getting Started
 1. **Download and Add Embody**: Drag and drop the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/main/release) folder into your project.
 
-2. **Initialize Embody**: Upon creation, choose to re-initialize or keep the last saved state. Typically, re-initialize for new networks. The default externalization folder is the root of your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure.
+2. **Initialize Embody**: Upon creation, choose to initialize or keep the last saved state. Typically, use initialize for new projects, or keep the saved state if you're updating Embody from an older version. The default externalization folder is the root of your project folder. This can be customized. Moving the folder disables Embody, which then recreates the folder structure in the new location and removes the old one entirely.
 
 3. **Tag Operators for Externalization**:
     - Select an operator and press `lctrl` twice to add the externalization tag desired.
@@ -52,7 +52,15 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 
 > Use `ctrl + shift + u` as an alternative to update only dirty COMPs.
 
-> To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh to get the latest dirties and update as needed.
+> To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh to get the latest dirties and update as needed. Changing any COMP parameter will also mark that COMP as dirty.
+
+## :label: Features
+- Adds and updates `Build Number`, `Touch Build` and `Build Date` parameters in an About page to any externalized COMP, for robust version tracking.
+- Prompts whether to reference or clone an operator when a duplicate file path is detected.
+- Prevents clones and their children from being externalized
+- Can externalize the entire project in one click with the `Externalize Full Project` pulse.
+- Isolated data/logic pattern with an `externalizations` tableDAT outside of Embody for easy updating and management.
+- UTC timestamps for synchronized international workflows.
 
 ## :label: Resetting
 To completely reset and remove externalizations, pulse the `Disable` button.
