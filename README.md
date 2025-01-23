@@ -55,7 +55,7 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 > To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh to get the latest dirties and update as needed. Changing any COMP parameter will also mark that COMP as dirty.
 
 ## :label: Features
-- Adds and updates `Build Number`, `Touch Build` and `Build Date` parameters in an About page to any externalized COMP, for robust version tracking.
+- Adds and updates `Build Number`, `Touch Build` and `Build Date` parameters in an `About` page to any externalized COMP, for robust version tracking.
 - Prompts whether to reference or clone an operator when a duplicate file path is detected.
 - Prevents clones and their children from being externalized
 - Can externalize the entire project in one click with the `Externalize Full Project` pulse.
