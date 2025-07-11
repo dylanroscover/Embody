@@ -2,7 +2,7 @@
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2023.12230 (Windows/macOS)
-#### :floppy_disk: version 4.7.5
+#### :floppy_disk: version 4.7.6
 
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/refs/heads/main/img/screenshot.png'>
 
@@ -76,6 +76,7 @@ To completely reset and remove externalizations, pulse the `Disable` button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
+- **4.7.6**: Build save increment bug fix
 - **4.7.5**:
     - ui.rolloverOp refactor
     - Restore handling of dnd COMP auto-populated externaltox pars
