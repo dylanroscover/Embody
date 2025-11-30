@@ -4,6 +4,8 @@
 #### :floppy_disk: TouchDesigner 2023.12230 (Windows/macOS)
 #### :floppy_disk: version 4.7.6
 
+[YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s)
+
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/refs/heads/main/img/screenshot.png'>
 
 ## :notebook_with_decorative_cover: Overview
