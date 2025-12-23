@@ -1,8 +1,8 @@
 
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
-#### :floppy_disk: TouchDesigner 2023.12230 (Windows/macOS)
-#### :floppy_disk: version 4.7.6
+#### :floppy_disk: TouchDesigner 2025.32050 (Windows/macOS)
+#### :floppy_disk: version 4.7.11
 
 [YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s)
 
@@ -78,6 +78,7 @@ To completely reset and remove externalizations, pulse the `Disable` button.
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
+- **4.7.11**: fix: cross-platform path handling + code cleanup
 - **4.7.6**: Build save increment bug fix
 - **4.7.5**:
     - ui.rolloverOp refactor
