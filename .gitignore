@@ -3,3 +3,7 @@ Backup
 External-Tox-Saver_V2.*.toe
 .DS_Store
 **/.DS_Store
+.venv/
+dev_vEnv/
+.mcp.json
+nul
