@@ -6,4 +6,5 @@ External-Tox-Saver_V2.*.toe
 .venv/
 dev_vEnv/
 .mcp.json
+.claude/
 nul
