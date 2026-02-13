@@ -5,7 +5,7 @@ Tests getTags, applyTagToOperator, isOpEligibleToBeExternalized,
 isOpProcessable, isInsideClone, isClone, isReplicant.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
@@ -103,3 +103,31 @@ class TestTagManagement(EmbodyTestCase):
     def test_isReplicant_regular_op_false(self):
         comp = self.sandbox.create(baseCOMP, 'no_replicator')
         self.assertFalse(self.embody_ext.isReplicant(comp))
+
+    # --- isOpEligibleToBeExternalized edge cases (BUG 2 regression) ---
+
+    def test_isOpEligible_tagged_dat_is_eligible(self):
+        """A DAT with a valid tag should be eligible (regression for BUG 2 fix)."""
+        dat = self.sandbox.create(textDAT, 'tagged_dat')
+        py_tag = self.embody.par.Pytag.val
+        dat.tags.add(py_tag)
+        self.assertTrue(self.embody_ext.isOpEligibleToBeExternalized(dat))
+
+    def test_isOpEligible_tagged_dat_with_file_set(self):
+        """A tagged DAT with file already set should still be eligible."""
+        dat = self.sandbox.create(textDAT, 'file_dat')
+        py_tag = self.embody.par.Pytag.val
+        dat.tags.add(py_tag)
+        dat.par.file = 'some/path.py'
+        self.assertTrue(self.embody_ext.isOpEligibleToBeExternalized(dat))
+
+    def test_isOpEligible_comp_with_existing_externaltox(self):
+        """A COMP with existing externaltox should still be eligible."""
+        comp = self.sandbox.create(baseCOMP, 'ext_comp')
+        comp.par.externaltox = 'existing/path.tox'
+        self.assertTrue(self.embody_ext.isOpEligibleToBeExternalized(comp))
+
+    def test_isOpEligible_untagged_dat_not_eligible(self):
+        """A DAT without any Embody tag should not be eligible."""
+        dat = self.sandbox.create(textDAT, 'untagged')
+        self.assertFalse(self.embody_ext.isOpEligibleToBeExternalized(dat))

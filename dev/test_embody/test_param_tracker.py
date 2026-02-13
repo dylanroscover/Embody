@@ -4,7 +4,7 @@ Test suite: ParameterTracker class in EmbodyExt.
 Tests captureParameters, compareParameters, updateParamStore, removeComp.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

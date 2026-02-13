@@ -4,7 +4,7 @@ Test suite: MCP code execution handler in ClaudiusExt.
 Tests _execute_python with various code patterns.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

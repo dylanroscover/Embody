@@ -708,9 +708,7 @@ class TDNExt:
 
 		# Color (only if non-default)
 		color = tuple(target.color)
-		if not self._colorsDiffer(color, DEFAULT_COLOR):
-			pass  # skip default color
-		else:
+		if self._colorsDiffer(color, DEFAULT_COLOR):
 			data['color'] = [round(c, 4) for c in color]
 
 		# Comment
@@ -1306,20 +1304,32 @@ class TDNExt:
 				continue
 
 			if 'position' in op_def:
-				pos = op_def['position']
-				target.nodeX = pos[0]
-				target.nodeY = pos[1]
+				try:
+					pos = op_def['position']
+					target.nodeX = pos[0]
+					target.nodeY = pos[1]
+				except Exception as e:
+					self._log(f'Failed to set position on {target.path}: {e}', 'DEBUG')
 
 			if 'size' in op_def:
-				size = op_def['size']
-				target.nodeWidth = size[0]
-				target.nodeHeight = size[1]
+				try:
+					size = op_def['size']
+					target.nodeWidth = size[0]
+					target.nodeHeight = size[1]
+				except Exception as e:
+					self._log(f'Failed to set size on {target.path}: {e}', 'DEBUG')
 
 			if 'color' in op_def:
-				target.color = tuple(op_def['color'])
+				try:
+					target.color = tuple(op_def['color'])
+				except Exception as e:
+					self._log(f'Failed to set color on {target.path}: {e}', 'DEBUG')
 
 			if 'comment' in op_def:
-				target.comment = op_def['comment']
+				try:
+					target.comment = op_def['comment']
+				except Exception as e:
+					self._log(f'Failed to set comment on {target.path}: {e}', 'DEBUG')
 
 			# Recurse
 			children = op_def.get('children', [])
@@ -1558,8 +1568,7 @@ class TDNExt:
 	# HELPERS
 	# =========================================================================
 
-	@staticmethod
-	def _isPaletteClone(target):
+	def _isPaletteClone(self, target):
 		"""Check if a COMP is a palette clone (cloned from /sys/)."""
 		if not target.isCOMP:
 			return False
@@ -1644,16 +1653,10 @@ class TDNExt:
 	def _getClaudiusVersion(self):
 		"""Get the Claudius version string."""
 		try:
-			return self.ownerComp.ext.Claudius.CLAUDIUS_VERSION
+			return self.ownerComp.op('ClaudiusExt').module.CLAUDIUS_VERSION
 		except Exception as e:
-			self._log(f'Could not get Claudius version from ext: {e}', 'DEBUG')
-			try:
-				# Fallback: check the module-level constant
-				import importlib
-				return '1.0.0'
-			except Exception as e2:
-				self._log(f'Claudius version fallback failed: {e2}', 'DEBUG')
-				return 'unknown'
+			self._log(f'Could not get Claudius version: {e}', 'DEBUG')
+			return 'unknown'
 
 	def _resolveOutputPath(self, output_file, root_op):
 		"""Resolve the output file path, saving into the externalizations folder."""

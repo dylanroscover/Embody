@@ -8,3 +8,9 @@ dev_vEnv/
 .mcp.json
 .claude/
 nul
+__pycache__/
+dev/TDImportCache/
+dev/logs/
+dev/embody/unit_tests/test_sandbox/
+dev/embody/unit_tests/results.tsv
+extglob.FullName

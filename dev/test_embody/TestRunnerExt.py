@@ -1,14 +1,17 @@
-"""
+﻿"""
 Embody Test Framework — Test Runner Extension
 
 Provides test discovery, execution, and reporting for the Embody project.
 Lives at /embody/unit_tests as a TD extension.
 
 Usage:
-    op('/embody/unit_tests').RunTests()                              # Run all (synchronous)
-    op('/embody/unit_tests').RunTests(suite_name='test_path_utils')  # Run one suite
-    op('/embody/unit_tests').RunTestsDeferred()                      # Run all (one suite per frame)
-    op('/embody/unit_tests').GetResults()                            # Get results dict
+    op.unit_tests.RunTests()                              # Run all (non-blocking, one test per frame)
+    op.unit_tests.RunTests(suite_name='test_path_utils')  # Run one suite (non-blocking)
+    op.unit_tests.RunTests(delay_frames=5)                # Run all (one test every 5 frames)
+    op.unit_tests.RunTestsSync()                          # Run all (synchronous, blocks TD)
+    op.unit_tests.RunTestsDeferred()                      # Run all (one suite per frame)
+    op.unit_tests.RunTestsDeferredPerTest()                # Run all (one test per frame)
+    op.unit_tests.GetResults()                            # Get results dict
 """
 
 from __future__ import annotations
@@ -169,11 +172,11 @@ class EmbodyTestCase:
 # TEST RUNNER EXTENSION
 # =============================================================================
 
-class TestRunner:
+class TestRunnerExt:
     """
     Test runner extension for /embody/unit_tests.
 
-    Discovers test suites in child textDATs (names starting with 'test_'),
+    Discovers test suites by loading .py files from dev/test_embody/,
     runs them with sandbox isolation, and reports results.
     """
 
@@ -190,9 +193,31 @@ class TestRunner:
     # PROMOTED METHODS
     # =========================================================================
 
-    def RunTests(self, suite_name=None, test_name=None):
+    def RunTests(self, suite_name=None, test_name=None, delay_frames=1):
+        """
+        Run test suites non-blocking (one test per frame).
+
+        This is the default entry point. Tests are spread across frames
+        to keep TD's cook cycle responsive. Results are available via
+        GetResults() after completion.
+
+        Args:
+            suite_name:   Run only this suite (e.g., 'test_path_utils').
+            test_name:    Run only this test method within the suite.
+            delay_frames: Frames between each test (default 1).
+        """
+        self.RunTestsDeferredPerTest(
+            suite_name=suite_name,
+            test_name=test_name,
+            delay_frames=delay_frames,
+        )
+
+    def RunTestsSync(self, suite_name=None, test_name=None):
         """
         Run test suites synchronously (all in one frame).
+
+        Blocks TD until all tests complete. Use for MCP or when
+        you need immediate results.
 
         Args:
             suite_name: Run only this suite (e.g., 'test_path_utils').
@@ -221,7 +246,7 @@ class TestRunner:
         self._reportSummary()
         return self._getSummary()
 
-    def RunTestsDeferred(self, suite_name=None, test_name=None):
+    def RunTestsDeferred(self, suite_name=None, test_name=None, delay_frames=1):
         """
         Run test suites across multiple frames (one suite per frame).
 
@@ -229,8 +254,9 @@ class TestRunner:
         separate frame, keeping TD's cook cycle responsive.
 
         Args:
-            suite_name: Run only this suite (e.g., 'test_path_utils').
-            test_name:  Run only this test method within the suite.
+            suite_name:   Run only this suite (e.g., 'test_path_utils').
+            test_name:    Run only this test method within the suite.
+            delay_frames: Frames between each suite (default 1).
         """
         if self._running:
             self._log('Tests already running', 'WARNING')
@@ -238,6 +264,7 @@ class TestRunner:
 
         self._running = True
         self._results = []
+        self._delay_frames = delay_frames
         self._initResultsTable()
 
         suites = self._discoverTestSuites(suite_name)
@@ -252,7 +279,65 @@ class TestRunner:
         self._deferred_test_filter = test_name
 
         # Schedule the first suite on the next frame
-        run('args[0]()', self._runNextDeferredSuite, delayFrames=1)
+        run('args[0]()', self._runNextDeferredSuite, delayFrames=self._delay_frames)
+
+    def RunTestsDeferredPerTest(self, suite_name=None, test_name=None, delay_frames=1):
+        """
+        Run tests across multiple frames (one test method per frame).
+
+        Like RunTestsDeferred but more granular — each individual test
+        method gets its own frame instead of running all methods in a
+        suite synchronously. Useful for heavy test suites.
+
+        Args:
+            suite_name:   Run only this suite (e.g., 'test_create_all_tops').
+            test_name:    Run only this test method within the suite.
+            delay_frames: Frames between each test (default 1).
+        """
+        if self._running:
+            self._log('Tests already running', 'WARNING')
+            return
+
+        self._running = True
+        self._results = []
+        self._delay_frames = delay_frames
+        self._initResultsTable()
+
+        suites = self._discoverTestSuites(suite_name)
+        self._log(f'Discovered {len(suites)} test suite(s) [deferred-per-test]')
+
+        if not suites:
+            self._running = False
+            self._reportSummary()
+            return
+
+        # Build a flat queue — no sandbox/instance creation yet (deferred to first test)
+        self._deferred_per_test_queue = []
+        for suite_class, module_name in suites:
+            methods = sorted(
+                m for m in dir(suite_class)
+                if m.startswith('test_') and callable(getattr(suite_class, m, None))
+            )
+            if test_name:
+                methods = [m for m in methods if m == test_name]
+            if methods:
+                self._deferred_per_test_queue.append({
+                    'suite_class': suite_class,
+                    'module_name': module_name,
+                    'methods': methods,
+                    'sandbox': None,
+                    'instance': None,
+                    'method_index': 0,
+                    'setup_done': False,
+                })
+
+        if not self._deferred_per_test_queue:
+            self._running = False
+            self._reportSummary()
+            return
+
+        # Schedule the first test
+        run('args[0]()', self._runNextDeferredTest, delayFrames=self._delay_frames)
 
     def RunSuite(self, suite_name):
         """Run a single test suite by name."""
@@ -277,11 +362,9 @@ class TestRunner:
         self._runSuite(suite_class, module_name, self._deferred_test_filter)
 
         if self._deferred_queue:
-            # Schedule the next suite on the next frame
-            run('args[0]()', self._runNextDeferredSuite, delayFrames=1)
+            run('args[0]()', self._runNextDeferredSuite, delayFrames=self._delay_frames)
         else:
-            # All done — finalize on next frame
-            run('args[0]()', self._finalizeDeferredRun, delayFrames=1)
+            run('args[0]()', self._finalizeDeferredRun, delayFrames=self._delay_frames)
 
     def _finalizeDeferredRun(self):
         """Called after all deferred suites have completed."""
@@ -289,32 +372,175 @@ class TestRunner:
         self._deferred_test_filter = None
         self._reportSummary()
 
+    def _runNextDeferredTest(self):
+        """Run the next individual test method in the per-test deferred queue."""
+        if not self._deferred_per_test_queue:
+            self._finalizeDeferredPerTestRun()
+            return
+
+        entry = self._deferred_per_test_queue[0]
+        module_name = entry['module_name']
+
+        # Lazy init: create sandbox and instance on first access
+        if entry['instance'] is None:
+            entry['sandbox'] = self._createSandbox(module_name)
+            try:
+                entry['instance'] = entry['suite_class'](
+                    sandbox=entry['sandbox'],
+                    embody=op.Embody,
+                    runner=self,
+                )
+            except Exception as e:
+                self._addResult(module_name, 'INIT', 'ERROR', str(e))
+                self._destroySandbox(entry['sandbox'])
+                self._deferred_per_test_queue.pop(0)
+                if self._deferred_per_test_queue:
+                    run('args[0]()', self._runNextDeferredTest, delayFrames=self._delay_frames)
+                else:
+                    run('args[0]()', self._finalizeDeferredPerTestRun, delayFrames=self._delay_frames)
+                return
+
+        instance = entry['instance']
+
+        # Run suite-level setup once
+        if not entry['setup_done']:
+            entry['setup_done'] = True
+            if hasattr(instance, 'setUpSuite'):
+                try:
+                    instance.setUpSuite()
+                except Exception as e:
+                    self._addResult(module_name, 'setUpSuite', 'ERROR', str(e))
+                    # Skip entire suite
+                    self._destroySandbox(entry['sandbox'])
+                    self._deferred_per_test_queue.pop(0)
+                    run('args[0]()', self._runNextDeferredTest, delayFrames=self._delay_frames)
+                    return
+
+        # Run the current test method
+        idx = entry['method_index']
+        if idx < len(entry['methods']):
+            method_name = entry['methods'][idx]
+            self._runTest(instance, module_name, method_name)
+            entry['method_index'] = idx + 1
+
+        # Check if this suite is done
+        if entry['method_index'] >= len(entry['methods']):
+            # Suite-level teardown
+            if hasattr(instance, 'tearDownSuite'):
+                try:
+                    instance.tearDownSuite()
+                except Exception as e:
+                    self._addResult(module_name, 'tearDownSuite', 'ERROR', str(e))
+            self._destroySandbox(entry['sandbox'])
+            self._deferred_per_test_queue.pop(0)
+
+        # Schedule the next test
+        if self._deferred_per_test_queue:
+            run('args[0]()', self._runNextDeferredTest, delayFrames=self._delay_frames)
+        else:
+            run('args[0]()', self._finalizeDeferredPerTestRun, delayFrames=self._delay_frames)
+
+    def _finalizeDeferredPerTestRun(self):
+        """Called after all per-test deferred tests have completed."""
+        self._running = False
+        self._deferred_per_test_queue = []
+        self._reportSummary()
+
     # =========================================================================
     # TEST DISCOVERY
     # =========================================================================
 
     def _discoverTestSuites(self, filter_name=None):
-        """Find all test DATs and extract test classes."""
+        """
+        Discover test suites by loading .py files from dev/test_embody/.
+
+        This replaces the old approach of scanning child DATs, allowing us to
+        keep test files on disk without cluttering the network with individual
+        textDAT nodes.
+        """
+        import os
+        import importlib.util
+        import sys
+
         suites = []
 
-        for child in sorted(self.ownerComp.children, key=lambda c: c.name):
-            if child.family != 'DAT':
+        # Get the test directory path
+        test_dir = project.folder + '/test_embody'
+        if not os.path.isdir(test_dir):
+            self._addResult('DISCOVERY', 'ERROR', 'ERROR',
+                          f'Test directory not found: {test_dir}')
+            return suites
+
+        # Scan for test_*.py files
+        for filename in sorted(os.listdir(test_dir)):
+            if not filename.startswith('test_') or not filename.endswith('.py'):
                 continue
-            if not child.name.startswith('test_'):
-                continue
-            if filter_name and child.name != filter_name:
+
+            module_name = filename[:-3]  # Remove .py extension
+
+            if filter_name and module_name != filter_name:
                 continue
 
             try:
-                mod = child.module
+                # Load module from file
+                module_path = os.path.join(test_dir, filename)
+                spec = importlib.util.spec_from_file_location(module_name, module_path)
+                if spec is None or spec.loader is None:
+                    self._addResult(module_name, 'DISCOVERY', 'ERROR',
+                                  f'Failed to load module spec: {module_path}')
+                    continue
+
+                mod = importlib.util.module_from_spec(spec)
+
+                # Inject TouchDesigner globals into the module namespace
+                # (these are available in DATs automatically but not in importlib-loaded modules)
+
+                # Core TD functions
+                td_global_names = [
+                    'op', 'parent', 'root', 'iop', 'rop', 'ipar',
+                    'project', 'ui', 'me', 'panel', 'app', 'args', 'ext',
+                ]
+                for name in td_global_names:
+                    try:
+                        mod.__dict__[name] = globals()[name]
+                    except KeyError:
+                        pass  # Skip globals that don't exist in this context
+
+                # Inject all td module contents (operator types, TD classes, etc.)
+                import td
+                for name in dir(td):
+                    if not name.startswith('_'):
+                        mod.__dict__[name] = getattr(td, name)
+
+                # Inject test framework base classes so tests don't need to import them
+                mod.__dict__['EmbodyTestCase'] = EmbodyTestCase
+                mod.__dict__['SkipTest'] = SkipTest
+
+                # Inject common TD enums
+                try:
+                    mod.__dict__['ParMode'] = td.ParMode
+                except AttributeError:
+                    pass  # ParMode not available in this TD version
+
+                # Add to sys.modules so cross-module imports work
+                sys.modules[module_name] = mod
+
+                # Execute the module (now it has access to TD globals)
+                spec.loader.exec_module(mod)
+
+                # Extract test classes (same logic as before)
                 for attr_name in dir(mod):
                     obj = getattr(mod, attr_name)
                     if (isinstance(obj, type) and
                             obj is not EmbodyTestCase and
                             any(m.startswith('test_') for m in dir(obj))):
-                        suites.append((obj, child.name))
+                        suites.append((obj, module_name))
+
             except Exception as e:
-                self._addResult(child.name, 'DISCOVERY', 'ERROR', str(e))
+                import traceback
+                tb = traceback.format_exc()
+                self._addResult(module_name, 'DISCOVERY', 'ERROR',
+                              f'{type(e).__name__}: {e}\n{tb}')
 
         return suites
 

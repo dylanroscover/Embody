@@ -5,7 +5,7 @@ Tests normalizeAllPaths, checkOpsForContinuity, createExternalizationsTable.
 Note: We don't test the full Update() cycle as it modifies files on disk.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

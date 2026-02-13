@@ -4,7 +4,7 @@ Test suite: MCP connection handlers in ClaudiusExt.
 Tests _connect_operators, _disconnect_operator, _get_connections.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

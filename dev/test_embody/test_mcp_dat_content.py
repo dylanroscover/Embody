@@ -4,7 +4,7 @@ Test suite: MCP DAT content handlers in ClaudiusExt.
 Tests _get_dat_content and _set_dat_content.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

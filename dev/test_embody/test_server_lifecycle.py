@@ -6,7 +6,7 @@ Tests status parameters, port configuration, running flag,
 Does NOT start/stop the actual server (avoids port conflicts).
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

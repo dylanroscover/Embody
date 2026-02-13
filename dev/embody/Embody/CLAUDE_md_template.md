@@ -15,6 +15,36 @@ Current version: **v5.0.32** for TouchDesigner 2025.32050.
 - When working with TouchDesigner parameters, prefer `par.name` for parameter identification.
 - **Toggle parameters** use `0`/`1` (not `"True"`/`"False"`). When setting a toggle via `set_parameter`, pass `value="0"` or `value="1"`.
 
+### POPs — GPU-Accelerated Point Operators
+
+POPs (**Point Operators**) are a new operator family in TouchDesigner 2025 that process 3D geometry data on the GPU. They are analogous to SOPs but GPU-accelerated, enabling high-performance operations on points, primitives, and vertices. POPs output data via the Render TOP or to external systems (DMX, LED, lasers).
+
+**Key differences from SOPs:**
+- All computation runs on the GPU — data downloads to CPU are explicit and can stall the pipeline
+- Use `delayed=True` on data access methods (`numPoints()`, `points()`, `bounds()`) to avoid GPU stalls
+- POP-specific attributes: `pointAttributes`, `primAttributes`, `vertAttributes`, `dimension`
+- Use `reallocate()` to force GPU buffer reallocation
+
+**Common POP types** (90+ available): `gridPOP`, `noisePOP`, `transformPOP`, `particlePOP`, `spherePOP`, `linePOP`, `mergePOP`, `nullPOP`, `selectPOP`, `mathPOP`, `cachePOP`, `fileinPOP`, `glslPOP`, `deletePOP`, `sortPOP`, `copyPOP`, `switchPOP`, `feedbackPOP`, `trailPOP`, `sprinklePOP`
+
+**Python type names** follow the same convention as other families: `gridPOP`, `noisePOP`, etc. Use these with `create_operator` or `parent.create(gridPOP, 'grid1')`.
+
+```python
+# Creating a POP
+grid = parent.create(gridPOP, 'grid1')
+
+# GPU-safe data access (avoid stalls with delayed=True)
+n = pop_op.numPoints(delayed=True)  # Non-blocking, returns previous frame's result
+pts = pop_op.points('P')             # Download point positions (blocks GPU)
+bounds = pop_op.bounds(delayed=True)  # Non-blocking bounds query
+
+# Checking attributes
+attrs = pop_op.pointAttributes  # Set of point attribute names
+```
+
+- Docs: https://docs.derivative.ca/POP
+- Python class: https://docs.derivative.ca/POP_Class
+
 ### `run()` — Delayed Code Execution
 
 The `run()` function is essential for deferring Python execution in TouchDesigner. Use it whenever code needs to execute after a delay or at end-of-frame (e.g., after a cook cycle completes, after UI updates, or to avoid reentrancy issues).
@@ -152,6 +182,26 @@ Without this, TD raises "Cannot use an extension during its initialization" duri
 
 TD parameters and CHOP channels auto-cast in expression contexts but remain TD objects internally. When passing values to standard Python functions, explicitly convert with `int()`, `float()`, or `str()` to avoid type-mismatch bugs. Use `repr()` to reveal the actual type if uncertain.
 
+### Creating Python Files for TouchDesigner
+
+When creating Python files that will be used in TouchDesigner (scripts, extensions, test files, callbacks), you must **ALWAYS** create the textDAT in TouchDesigner first, then externalize it using Embody. **Never** manually set the `file` and `syncfile` parameters — that is what Embody automates.
+
+**Workflow:**
+1. Create the textDAT in TouchDesigner (via MCP `create_operator` or in the TD UI)
+2. Write the Python code into the DAT (via MCP `set_dat_content` or edit in TD)
+3. Tag the DAT for externalization using Embody (`tag_for_externalization` MCP tool or `Ctrl+Shift+T` in TD)
+4. Save the externalization (`save_externalization` or `Ctrl+Shift+U`) — Embody writes the `.py` file to disk
+
+Embody handles all the file path management, `file` parameter configuration, `syncfile` toggling, and tracking in `externalizations.tsv`. **This is the whole reason Embody exists** — never bypass it with manual file parameter setup.
+
+```python
+# Example: creating a test file via MCP
+# 1. create_operator(parent_path='/embody/unit_tests', op_type='textDAT', name='test_my_feature')
+# 2. set_dat_content(op_path='/embody/unit_tests/test_my_feature', text='...python code...')
+# 3. tag_for_externalization(op_path='/embody/unit_tests/test_my_feature')
+# 4. save_externalization(op_path='/embody/unit_tests/test_my_feature')
+```
+
 ## Approach Guidelines
 
 - Before editing a file, verify it is the ACTUAL file responsible for rendering the UI element in question. Grep for the specific component/text/class being displayed and trace the render path before making changes.
@@ -254,7 +304,9 @@ op.Embody.ext.Claudius.Stop()
 
 ## Code Conventions
 
-- **Logging**: Use `op.Embody.Log(message, level)` from anywhere in the project. Levels: `'DEBUG'`, `'INFO'`, `'WARNING'`, `'ERROR'`, `'SUCCESS'`. Convenience methods: `op.Embody.Debug(msg)`, `op.Embody.Info(msg)`, `op.Embody.Warn(msg)`, `op.Embody.Error(msg)`. Logs go to: FIFO DAT (TD UI), textport (if `Print` par enabled), file (if `Logtofile` par enabled), and ring buffer (MCP access via `get_logs` tool + auto-piggybacked on all MCP tool responses in the `_logs` field)
+- **Extension naming**: Extension classes and their source DATs must follow the `NameExt` convention (e.g., `EmbodyExt`, `ClaudiusExt`, `TDNExt`, `TestRunnerExt`). The class name should match the DAT name.
+- **Renaming operators**: To rename a TD operator, ONLY rename the operator itself — via MCP `rename_operator` or inside TouchDesigner. **NEVER** rename the externalized file on disk, **NEVER** manually update the `file`/`externaltox` parameter, and **NEVER** edit the externalizations table. Embody's `checkOpsForContinuity` handles everything automatically: it detects the stale path in the table, `_findMovedOp` matches the renamed operator by its file parameter, then `updateMovedOp` renames the file on disk, updates the `file`/`externaltox` parameter, and updates the table row — all in one step.
+- **Logging**: Use `op.Embody.Log(message, level)` from anywhere in the project. Levels: `'DEBUG'`, `'INFO'`, `'WARNING'`, `'ERROR'`, `'SUCCESS'`. Convenience methods: `op.Embody.Debug(msg)`, `op.Embody.Info(msg)`, `op.Embody.Warn(msg)`, `op.Embody.Error(msg)`. Logs go to: FIFO DAT (TD UI), textport (if `Print` par enabled), log file (enabled by default), and ring buffer (MCP access via `get_logs` tool + auto-piggybacked on all MCP tool responses in the `_logs` field). **File logging** is enabled by default — logs are written to `dev/logs/<project_name>_YYMMDD.log` with automatic rotation at 10 MB (`_001.log`, `_002.log`, etc.). The ring buffer and piggybacked logs are limited in size; **always read the log file on disk for the complete picture**.
 - **Paths**: Always use forward slashes (`/`) for cross-platform compatibility — never backslashes
 - **File safety**: Only delete files tracked by Embody (`isTrackedFile()`, `safeDeleteFile()`). Never delete untracked files
 - **Directory cleanup**: Use `rmdir()` only (fails on non-empty dirs) — never `shutil.rmtree()`
@@ -296,6 +348,7 @@ op.Embody.ext.Claudius.Stop()
   - https://docs.derivative.ca/Par_Class — parameter class
   - https://docs.derivative.ca/Tdu_Module — TD utility module
   - https://docs.derivative.ca/Thread_Manager — Thread Manager for Python threading in TD (accessed via `op.TDResources.ThreadManager`)
+  - https://docs.derivative.ca/POP_Class — POP (Point Operator) class — GPU-accelerated geometry
   - https://docs.derivative.ca/Extensions — Extensions system (lifecycle, promotion, `onDestroyTD`, `onInitTD`, `StorageManager`)
 
 ## Claudius MCP Server Setup
@@ -330,7 +383,7 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `create_operator` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`) |
+| `create_operator` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
 | `delete_operator` | `op_path` | Delete an operator |
 | `copy_operator` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
@@ -445,6 +498,8 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 **Auto-piggybacked logs**: Every MCP tool response includes a `_logs` field with up to 20 log entries generated since the previous tool call. Use this to monitor operations in real-time without needing to call `get_logs` separately.
 
+**Log files on disk**: File logging is enabled by default. Logs are written to `dev/logs/<project_name>_YYMMDD.log` (e.g., `dev/logs/Embody-5.31_260212.log`). Files rotate at 10 MB with numbered suffixes (`_001`, `_002`, etc.). The ring buffer (200 entries) and piggybacked logs (20 per response) are insufficient for operations that generate many log entries (e.g., test runs, bulk externalizations). **Always read the log file after significant MCP operations** to catch errors that may have been evicted from the ring buffer.
+
 ## Common Workflows
 
 ### Creating an Operator and Verifying It
@@ -502,6 +557,8 @@ There is no automated test suite. Changes are verified by:
 12. Binding the MCP server to `0.0.0.0` instead of `127.0.0.1`
 13. Editing `externalizations.tsv` directly instead of using Embody's tracking API
 14. Importing or calling TouchDesigner modules in worker thread code (`ClaudiusMCPServer` class)
+15. Renaming externalized files on disk (`git mv`, manual rename) or manually updating `file`/`externaltox` parameters after a rename — Embody handles all of this automatically via `checkOpsForContinuity`. Only rename the operator itself (via MCP `rename_operator` or inside TD)
+16. Not following the `NameExt` convention for extension class names and their source DATs (e.g., `EmbodyExt`, `ClaudiusExt`, `TestRunnerExt`)
 
 ## Important Rules
 
@@ -516,3 +573,4 @@ There is no automated test suite. Changes are verified by:
 9. **Always check for errors after creating operators** — call `get_node_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
 10. **CLAUDE.md and CLAUDE_md_template.md must ALWAYS be kept in sync.** The template at `dev/embody/Embody/CLAUDE_md_template.md` generates per-project CLAUDE.md files. Any documentation changes must be applied to both files.
 11. **Favor annotations over OP comments** — when documenting operators or groups of operators in the network, always use `create_annotation` (annotate mode with a title bar) instead of setting the `comment` property on individual operators. Annotations are more visible, support rich text, and can visually group related operators. Reserve OP comments for brief inline notes only.
+12. **Always analyze log files after MCP operations** — after running tests, bulk externalizations, or any multi-step MCP workflow, read the log file at `dev/logs/` to verify no errors occurred. The piggybacked `_logs` field and `get_logs` ring buffer only hold a limited window — errors from earlier in the operation may have been evicted. Grep the log file for `ERROR` and `WARNING` entries and resolve any issues before reporting success.

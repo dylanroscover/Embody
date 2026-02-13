@@ -7,7 +7,7 @@ Tests safeDeleteFile, isTrackedFile, getTrackedFilePaths.
 import os
 from pathlib import Path
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

@@ -5,7 +5,7 @@ Tests _get_op_flags, _set_op_flags, _get_op_position,
 _set_op_position, _layout_children.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

@@ -5,7 +5,7 @@ Tests ExportNetwork, ImportNetwork, max_depth, DAT content,
 clear_first, format validation, and round-trip fidelity.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

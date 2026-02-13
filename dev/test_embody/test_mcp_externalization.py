@@ -5,7 +5,7 @@ Tests _tag_for_externalization, _remove_externalization_tag,
 _get_externalizations, _get_externalization_status.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

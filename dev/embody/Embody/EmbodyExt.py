@@ -47,6 +47,12 @@ class EmbodyExt:
         self._log_buffer = deque(maxlen=200)
         self._log_counter = 0
         self._fifo = self.my.op('fifo1')
+
+        # Enable file logging by default
+        if not self.my.par.Logfolder.eval():
+            self.my.par.Logfolder = 'logs'
+        if not self.my.par.Logtofile:
+            self.my.par.Logtofile = True
         
         # Supported operator types for DAT externalization
         self.supported_dat_types = [
@@ -243,6 +249,18 @@ class EmbodyExt:
         Forward slashes work on Windows, macOS, and Linux.
         """
         return str(path_str).replace('\\', '/') if path_str else path_str
+
+    def _safeSyncFile(self, op_path, value):
+        """Set syncfile on an operator if it still exists."""
+        o = op(op_path)
+        if o:
+            o.par.syncfile = value
+
+    def _safeAllowCooking(self, op_path, value):
+        """Set allowCooking on an operator if it still exists."""
+        o = op(op_path)
+        if o:
+            o.allowCooking = value
 
     def getExternalPath(self, oper: OP) -> str:
         """Get the normalized external file path from an operator."""
@@ -675,7 +693,8 @@ class EmbodyExt:
 
         # Clear externalizations table
         if self.Externalizations:
-            run(f"op('{self.Externalizations}').clear(keepFirstRow=True)", delayFrames=10)
+            ext_path = str(self.Externalizations)
+            run(lambda: op(ext_path).clear(keepFirstRow=True) if op(ext_path) else None, delayFrames=10)
 
         self.my.par.Status = 'Disabled'
         self.updateEnableButtonLabel('Enable')
@@ -952,12 +971,7 @@ class EmbodyExt:
         if not has_tag:
             return False
             
-        return (
-            oper.par.file.eval() == '' or
-            "File not found for sync" in oper.warnings() or
-            (has_tag and oper.par.file.eval()) or
-            oper.par.file.eval() != ''
-        )
+        return True
 
     def isOpProcessable(self, oper: OP) -> bool:
         """Check if operator should be processed (not clone/replicant/local)."""
@@ -1199,7 +1213,7 @@ class EmbodyExt:
 
         if "Cannot load external tox from path" in oper.scriptErrors():
             oper.allowCooking = False
-            run(f"op('{oper}').allowCooking = True", delayFrames=1)
+            run(lambda: self._safeAllowCooking(str(oper), True), delayFrames=1)
 
     def _setupDatForExternalization(self, oper, rel_file_path, save_file_path):
         """Configure a DAT for externalization."""
@@ -1209,8 +1223,9 @@ class EmbodyExt:
             oper.par.file = self.normalizePath(oper.par.file.eval())
         
         oper.par.syncfile = True
-        run(f"op('{oper}').par.syncfile = False", delayFrames=1)
-        run(f"op('{oper}').par.syncfile = True", delayFrames=2)
+        op_path = str(oper)
+        run(lambda: self._safeSyncFile(op_path, False), delayFrames=1)
+        run(lambda: self._safeSyncFile(op_path, True), delayFrames=2)
         oper.par.file.readOnly = True
         
         save_path_str = str(save_file_path)
@@ -1874,12 +1889,15 @@ class EmbodyExt:
         elif is_clone or other_references:
             self.Log(f"Preserved file '{normalized_path}' (still in use)", "INFO")
 
-        # Remove from table
+        # Remove from table (if row exists)
         try:
             self.Externalizations.deleteRow(op_path)
             self.Log(f"Removed '{op_path}' from table", "SUCCESS")
         except Exception as e:
-            self.Log(f"Error removing from table", "ERROR", str(e))
+            if 'Index invalid or out of range' in str(e):
+                self.Debug(f"No table row for '{op_path}' — already removed or never added")
+            else:
+                self.Log(f"Error removing from table", "ERROR", str(e))
 
     def _checkFileReferences(self, op_path, normalized_path):
         """Check if any other operators reference a file path."""
@@ -2205,4 +2223,4 @@ class ParameterTracker:
         self.param_store = {}
         for comp in embody.getExternalizedOps(COMP):
             self.updateParamStore(comp)
-            embody.log(f"Initialized tracking for {comp.path}", "INFO")
+            embody.Log(f"Initialized tracking for {comp.path}", "INFO")

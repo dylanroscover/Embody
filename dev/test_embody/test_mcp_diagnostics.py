@@ -5,7 +5,7 @@ Tests _get_td_info, _get_node_errors, _exec_node_method,
 _get_td_classes, _get_td_class_details, _get_module_help.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

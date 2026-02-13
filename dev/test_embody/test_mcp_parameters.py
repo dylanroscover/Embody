@@ -4,7 +4,7 @@ Test suite: MCP parameter handlers in ClaudiusExt.
 Tests _set_parameter and _get_parameter with various modes.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

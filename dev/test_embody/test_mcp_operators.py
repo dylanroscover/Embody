@@ -5,7 +5,7 @@ Tests _create_operator, _delete_operator, _get_operator, _copy_operator,
 _rename_operator, _query_network, _find_children, _cook_operator.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 

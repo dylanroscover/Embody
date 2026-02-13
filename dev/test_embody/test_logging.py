@@ -4,7 +4,7 @@ Test suite: Logging system in EmbodyExt.
 Tests Log, Debug, Info, Warn, Error methods and ring buffer behavior.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
@@ -20,7 +20,13 @@ class TestLogging(EmbodyTestCase):
     def test_log_appends_to_buffer(self):
         initial_len = len(self.embody_ext._log_buffer)
         self.embody_ext.Log('buffer test', 'INFO')
-        self.assertEqual(len(self.embody_ext._log_buffer), initial_len + 1)
+        new_len = len(self.embody_ext._log_buffer)
+        if initial_len < self.embody_ext._log_buffer.maxlen:
+            self.assertEqual(new_len, initial_len + 1)
+        else:
+            # Buffer is full — length stays at maxlen, newest entry is appended
+            self.assertEqual(new_len, self.embody_ext._log_buffer.maxlen)
+        self.assertEqual(self.embody_ext._log_buffer[-1]['message'], 'buffer test')
 
     def test_log_buffer_entry_structure(self):
         self.embody_ext.Log('structure test', 'WARNING')

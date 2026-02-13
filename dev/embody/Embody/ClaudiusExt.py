@@ -1388,7 +1388,7 @@ class ClaudiusExt:
         if not test_comp.extensionsReady:
             return {'error': 'Test framework extension not ready'}
         try:
-            return test_comp.RunTests(
+            return test_comp.RunTestsSync(
                 suite_name=suite_name, test_name=test_name)
         except Exception as e:
             return {'error': f'Test run failed: {e}'}

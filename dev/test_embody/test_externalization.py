@@ -5,11 +5,26 @@ Tests handleAddition, handleSubtraction, _setupCompForExternalization,
 _setupDatForExternalization, _addToTable, setupBuildParameters, getOpPaths.
 """
 
-runner_mod = op('TestRunner').module
+import os
+from pathlib import Path
+
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
 class TestExternalization(EmbodyTestCase):
+
+    def setUp(self):
+        self._test_dir = Path(project.folder) / 'test_embody' / '_test_temp'
+        self._test_dir.mkdir(parents=True, exist_ok=True)
+
+    def tearDown(self):
+        for f in self._test_dir.glob('*'):
+            try:
+                f.unlink()
+            except OSError:
+                pass
+        super().tearDown()
 
     # --- getOpPaths ---
 
@@ -58,18 +73,20 @@ class TestExternalization(EmbodyTestCase):
 
     def test_setupComp_sets_externaltox(self):
         comp = self.sandbox.create(baseCOMP, 'setup_comp')
+        rel_path = 'test_embody/_test_temp/setup_comp.tox'
         self.embody_ext._setupCompForExternalization(
-            comp, 'test/setup_comp.tox',
-            str(self.embody_ext.buildAbsolutePath('test/setup_comp.tox'))
+            comp, rel_path,
+            str(self.embody_ext.buildAbsolutePath(rel_path))
         )
         result = comp.par.externaltox.eval()
         self.assertIn('setup_comp.tox', result)
 
     def test_setupComp_enables_externaltox(self):
         comp = self.sandbox.create(baseCOMP, 'enable_test')
+        rel_path = 'test_embody/_test_temp/enable_test.tox'
         self.embody_ext._setupCompForExternalization(
-            comp, 'test/enable_test.tox',
-            str(self.embody_ext.buildAbsolutePath('test/enable_test.tox'))
+            comp, rel_path,
+            str(self.embody_ext.buildAbsolutePath(rel_path))
         )
         self.assertTrue(comp.par.enableexternaltox.eval())
 
@@ -77,9 +94,10 @@ class TestExternalization(EmbodyTestCase):
 
     def test_setupDat_sets_file(self):
         dat = self.sandbox.create(textDAT, 'setup_dat')
+        rel_path = 'test_embody/_test_temp/setup_dat.py'
         self.embody_ext._setupDatForExternalization(
-            dat, 'test/setup_dat.py',
-            str(self.embody_ext.buildAbsolutePath('test/setup_dat.py'))
+            dat, rel_path,
+            str(self.embody_ext.buildAbsolutePath(rel_path))
         )
         result = dat.par.file.eval()
         self.assertIn('setup_dat.py', result)

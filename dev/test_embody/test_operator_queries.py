@@ -4,7 +4,7 @@ Test suite: Operator query methods in EmbodyExt.
 Tests getExternalizedOps, getOpsToExternalize, getOpsByPar.
 """
 
-runner_mod = op('TestRunner').module
+runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
