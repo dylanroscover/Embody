@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: MCP diagnostics and introspection handlers in ClaudiusExt.
 
 Tests _get_td_info, _get_node_errors, _exec_node_method,
@@ -80,9 +80,11 @@ class TestMCPDiagnostics(EmbodyTestCase):
 
     # --- _get_module_help ---
 
-    def test_get_module_help_td(self):
-        result = self.claudius._get_module_help(module_name='td')
+    def test_get_module_help_td_attr(self):
+        # Use 'OP' to test the hasattr(td, name) path — fast unlike 'td' (7s)
+        result = self.claudius._get_module_help(module_name='OP')
         self.assertDictHasKey(result, 'helpText')
+        self.assertIn('OP', result['helpText'])
 
     def test_get_module_help_tdu(self):
         result = self.claudius._get_module_help(module_name='td.tdu')

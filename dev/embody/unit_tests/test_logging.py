@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: Logging system in EmbodyExt.
 
 Tests Log, Debug, Info, Warn, Error methods and ring buffer behavior.

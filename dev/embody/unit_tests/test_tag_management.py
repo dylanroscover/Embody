@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: Tag management methods in EmbodyExt.
 
 Tests getTags, applyTagToOperator, isOpEligibleToBeExternalized,

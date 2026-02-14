@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: Deletion and cleanup — RemoveListerRow, stale rows, file references.
 
 Tests operator deletion, stale row handling, and the RemoveListerRow method:

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: Tag lifecycle — TagSetter toggle, re-tag cycles, applyTagToOperator edge cases.
 
 Tests higher-level tag workflows:

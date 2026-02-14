@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: CRUD operations — handleAddition/handleSubtraction end-to-end.
 
 Tests the full externalization pipeline: adding operators to tracking,

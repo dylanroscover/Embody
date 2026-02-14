@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: Rename and move lifecycle — operator rename/move detection and table updates.
 
 Tests the continuity system that tracks operators across renames and moves:

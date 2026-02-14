@@ -15,7 +15,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 class TestExternalization(EmbodyTestCase):
 
     def setUp(self):
-        self._test_dir = Path(project.folder) / 'test_embody' / '_test_temp'
+        self._test_dir = Path(project.folder) / 'embody' / 'unit_tests' / '_test_temp'
         self._test_dir.mkdir(parents=True, exist_ok=True)
 
     def tearDown(self):
@@ -73,7 +73,7 @@ class TestExternalization(EmbodyTestCase):
 
     def test_setupComp_sets_externaltox(self):
         comp = self.sandbox.create(baseCOMP, 'setup_comp')
-        rel_path = 'test_embody/_test_temp/setup_comp.tox'
+        rel_path = 'embody/unit_tests/_test_temp/setup_comp.tox'
         self.embody_ext._setupCompForExternalization(
             comp, rel_path,
             str(self.embody_ext.buildAbsolutePath(rel_path))
@@ -83,7 +83,7 @@ class TestExternalization(EmbodyTestCase):
 
     def test_setupComp_enables_externaltox(self):
         comp = self.sandbox.create(baseCOMP, 'enable_test')
-        rel_path = 'test_embody/_test_temp/enable_test.tox'
+        rel_path = 'embody/unit_tests/_test_temp/enable_test.tox'
         self.embody_ext._setupCompForExternalization(
             comp, rel_path,
             str(self.embody_ext.buildAbsolutePath(rel_path))
@@ -94,7 +94,7 @@ class TestExternalization(EmbodyTestCase):
 
     def test_setupDat_sets_file(self):
         dat = self.sandbox.create(textDAT, 'setup_dat')
-        rel_path = 'test_embody/_test_temp/setup_dat.py'
+        rel_path = 'embody/unit_tests/_test_temp/setup_dat.py'
         self.embody_ext._setupDatForExternalization(
             dat, rel_path,
             str(self.embody_ext.buildAbsolutePath(rel_path))

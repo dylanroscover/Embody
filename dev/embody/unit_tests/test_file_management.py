@@ -47,7 +47,7 @@ class TestFileManagement(EmbodyTestCase):
 
     def test_safeDeleteFile_force_on_temp_file(self):
         # Create a temp file and force-delete it
-        temp_dir = Path(project.folder) / 'test_embody' / '_test_temp'
+        temp_dir = Path(project.folder) / 'embody' / 'unit_tests' / '_test_temp'
         temp_dir.mkdir(parents=True, exist_ok=True)
         temp_file = temp_dir / 'delete_me.txt'
         temp_file.write_text('test')

@@ -1,7 +1,7 @@
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2025.32050 (Windows/macOS)
-#### :floppy_disk: version 5.0.56
+#### :floppy_disk: version 5.0.59
 
 [YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s)
 

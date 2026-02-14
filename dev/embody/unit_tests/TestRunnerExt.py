@@ -176,7 +176,7 @@ class TestRunnerExt:
     """
     Test runner extension for /embody/unit_tests.
 
-    Discovers test suites by loading .py files from dev/test_embody/,
+    Discovers test suites by loading .py files from dev/embody/unit_tests/,
     runs them with sandbox isolation, and reports results.
     """
 
@@ -452,11 +452,10 @@ class TestRunnerExt:
 
     def _discoverTestSuites(self, filter_name=None):
         """
-        Discover test suites by loading .py files from dev/test_embody/.
+        Discover test suites by loading .py files from dev/embody/unit_tests/.
 
-        This replaces the old approach of scanning child DATs, allowing us to
-        keep test files on disk without cluttering the network with individual
-        textDAT nodes.
+        Loads externalized test .py files from disk via importlib, injecting
+        TD globals and EmbodyTestCase into each module before execution.
         """
         import os
         import importlib.util
@@ -465,7 +464,7 @@ class TestRunnerExt:
         suites = []
 
         # Get the test directory path
-        test_dir = project.folder + '/test_embody'
+        test_dir = project.folder + '/embody/unit_tests'
         if not os.path.isdir(test_dir):
             self._addResult('DISCOVERY', 'ERROR', 'ERROR',
                           f'Test directory not found: {test_dir}')

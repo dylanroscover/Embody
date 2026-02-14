@@ -53,7 +53,8 @@ class ClaudiusMCPServer:
         self.mcp = FastMCP("Claudius", host="127.0.0.1", port=port, stateless_http=True)
         self._register_tools()
 
-    def _execute_in_td(self, operation: str, params: dict) -> dict:
+    def _execute_in_td(self, operation: str, params: dict,
+                       timeout: float = 30.0) -> dict:
         """Queue operation to main thread and wait for response"""
         with self.lock:
             request_id = self.request_counter
@@ -70,8 +71,8 @@ class ClaudiusMCPServer:
         })
 
         # Wait for response (with timeout)
-        if not event.wait(timeout=30.0):
-            result = {'error': 'Operation timed out after 30 seconds'}
+        if not event.wait(timeout=timeout):
+            result = {'error': f'Operation timed out after {timeout} seconds'}
         else:
             result = self.pending_requests[request_id].get('result', {'error': 'No result'})
 
@@ -84,9 +85,14 @@ class ClaudiusMCPServer:
             try:
                 response = self.response_queue.get_nowait()
             except Exception as e:
-                # Catches queue.Empty (or NameError if module recompiled
-                # and old bytecode still references `Empty` from globals).
-                if not isinstance(e, Empty):
+                # queue.Empty is expected (no more responses). After module
+                # recompilation the `Empty` name may no longer resolve, so
+                # fall back to checking the class name as a string.
+                try:
+                    expected = isinstance(e, Empty)
+                except NameError:
+                    expected = type(e).__name__ == 'Empty'
+                if not expected:
                     print(f'[Claudius][WARNING] check_responses unexpected error: {e}')
                 break
             request_id = response['id']
@@ -983,7 +989,7 @@ class ClaudiusMCPServer:
             return self._execute_in_td('run_tests', {
                 'suite_name': suite_name,
                 'test_name': test_name,
-            })
+            }, timeout=300.0)
 
     def run(self) -> None:
         """Run the MCP server (blocking) with graceful shutdown support"""
@@ -1002,8 +1008,8 @@ class ClaudiusMCPServer:
                     self.check_responses()
                     time.sleep(0.01)
                 except Exception as e:
-                    # Module recompiled or server shutting down
-                    print(f'[Claudius][WARNING] response_checker exiting: {e}')
+                    if not self.shutdown_event.is_set():
+                        print(f'[Claudius][WARNING] response_checker exiting: {e}')
                     break
 
         Thread(target=response_checker, daemon=True).start()
@@ -1089,6 +1095,7 @@ class ClaudiusExt:
         self.response_queue: Queue = Queue()  # Main -> Worker thread
         self.current_task: Optional[Any] = None
         self._last_served_log_id: int = 0
+        self._pending_test_request_id: Optional[int] = None
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -1224,17 +1231,48 @@ class ClaudiusExt:
 
     # === Thread Manager Callbacks (run on main thread) ===
 
+    def _send_response(self, request_id, result):
+        """Send a response back to the worker thread with piggybacked logs."""
+        log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
+        if log_buffer:
+            recent = [e for e in log_buffer
+                      if e['id'] > self._last_served_log_id]
+            if recent:
+                result['_logs'] = recent[-20:]
+                self._last_served_log_id = recent[-1]['id']
+
+        self.response_queue.put({
+            'id': request_id,
+            'result': result
+        })
+
     def _onRefresh(self):
         """
         RefreshHook - Called every frame on main thread while task is running.
-        Polls request_queue for operations queued by the worker thread.
+        Polls request_queue for operations queued by the worker thread,
+        and checks for completed deferred test runs.
         """
+        # Poll for completed deferred test run
+        if self._pending_test_request_id is not None:
+            test_comp = op.unit_tests
+            if test_comp and test_comp.extensionsReady:
+                runner = getattr(test_comp.ext, 'TestRunner', None)
+                if runner and not runner._running:
+                    result = runner._getSummary()
+                    self._send_response(self._pending_test_request_id, result)
+                    self._pending_test_request_id = None
+
+        # Process new requests from the worker thread
         while True:
             try:
                 info = self.request_queue.get_nowait()
             except Exception as e:
                 # queue.Empty — no more pending requests this frame
-                if not isinstance(e, Empty):
+                try:
+                    expected = isinstance(e, Empty)
+                except NameError:
+                    expected = type(e).__name__ == 'Empty'
+                if not expected:
                     self._log(f'Unexpected error reading request queue: {e}', 'WARNING')
                 break
 
@@ -1248,23 +1286,16 @@ class ClaudiusExt:
 
             self._log(f'Processing: {operation}')
 
-            # Execute the operation
+            # Store request_id for deferred operations
+            self._current_request_id = request_id
+
             result = self._execute_operation(operation, params)
 
-            # Piggyback recent log entries on the response
-            log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
-            if log_buffer:
-                recent = [e for e in log_buffer
-                          if e['id'] > self._last_served_log_id]
-                if recent:
-                    result['_logs'] = recent[-20:]
-                    self._last_served_log_id = recent[-1]['id']
+            # Deferred operations return None — response sent later via polling
+            if result is None:
+                continue
 
-            # Send result back to worker thread
-            self.response_queue.put({
-                'id': request_id,
-                'result': result
-            })
+            self._send_response(request_id, result)
 
     def _onServerSuccess(self, returnValue=None):
         """SuccessHook - Called when the thread task completes successfully"""
@@ -1381,15 +1412,24 @@ class ClaudiusExt:
     # --- Testing ---
 
     def _run_tests(self, suite_name=None, test_name=None):
-        """Run Embody test suites via /embody/unit_tests extension."""
-        test_comp = op('/embody/unit_tests')
+        """Run Embody test suites via /embody/unit_tests extension (deferred).
+
+        Starts tests with RunTestsDeferredPerTest (one test per frame) to
+        avoid freezing TD. Returns None to signal deferred response —
+        _onRefresh polls for completion and sends the result.
+        """
+        if self._pending_test_request_id is not None:
+            return {'error': 'Tests already running'}
+        test_comp = op.unit_tests
         if not test_comp:
-            return {'error': 'Test framework not found at /embody/unit_tests'}
+            return {'error': 'Test framework not found (op.unit_tests)'}
         if not test_comp.extensionsReady:
             return {'error': 'Test framework extension not ready'}
         try:
-            return test_comp.RunTestsSync(
+            test_comp.RunTestsDeferredPerTest(
                 suite_name=suite_name, test_name=test_name)
+            self._pending_test_request_id = self._current_request_id
+            return None  # Deferred — _onRefresh sends response when done
         except Exception as e:
             return {'error': f'Test run failed: {e}'}
 
