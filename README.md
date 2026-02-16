@@ -61,7 +61,7 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 Embody tracks all parameter values on externalized COMPs. When any parameter changes (not just network edits), that COMP is automatically marked as dirty with a "Par" indicator. This ensures parameter tweaks are never lost, even if the COMP's network hasn't changed.
 
 ### Cross-Platform Compatibility
-Embody normalizes all file paths to use forward slashes (`/`), which work on Windows, macOS, and Linux. This allows teams on mixed platforms to collaborate without path-related merge conflicts.
+Embody normalizes all file paths to use forward slashes (`/`), which work on both Windows and macOS. This allows teams on mixed platforms to collaborate without path-related merge conflicts.
 
 ## :label: Features
 - Adds and updates `Build Number`, `Touch Build` and `Build Date` parameters in an `About` page to any externalized COMP, for robust version tracking.

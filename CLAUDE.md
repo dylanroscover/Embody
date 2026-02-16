@@ -218,9 +218,7 @@ Embody/
 │   └── TDN.md                            # TDN network format documentation
 ├── dev/
 │   ├── Embody-5.31.toe                    # Active development project
-│   ├── requirements.txt                   # MCP dependencies (mcp, pywin32)
-│   ├── TDPyEnvManagerContext.json         # Python 3.11 vEnv config
-│   ├── dev_vEnv/                          # Python virtual environment
+│   ├── .venv/                             # Python virtual environment (auto-created)
 │   ├── Backup/                            # Versioned .toe backups
 │   └── embody/
 │       ├── externalizations.tsv           # Externalization tracking table (managed by Embody)
@@ -353,8 +351,7 @@ op.Embody.ext.Claudius.Stop()
 ## Claudius MCP Server Setup
 
 ### Prerequisites
-1. Python 3.11 vEnv configured via TDPyEnvManager (see `dev/TDPyEnvManagerContext.json`)
-2. Install dependencies: `pip install -r dev/requirements.txt` (mcp>=1.2.0, pywin32>=306)
+Embody auto-installs all dependencies (mcp>=1.2.0, pywin32>=306 on Windows) via uv when Claudius is first enabled. The virtual environment is created at `dev/.venv/` and dependencies are installed automatically.
 
 ### Enabling the Server
 1. Open the Embody `.toe` project in TouchDesigner

@@ -1063,12 +1063,12 @@ class ClaudiusMCPServer:
             # The IOCP proactor can permanently kill the listener socket on server restarts
             # with "WinError 64: The specified network name is no longer available" during
             # accept(). SelectorEventLoop handles TCP reliably without IOCP quirks.
-            if sys.platform == 'win32':
+            if sys.platform.startswith('win'):
                 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             asyncio.run(uvi_server.serve())
         finally:
             self.running = False
-            if sys.platform == 'win32':
+            if sys.platform.startswith('win'):
                 asyncio.set_event_loop_policy(None)
 
 

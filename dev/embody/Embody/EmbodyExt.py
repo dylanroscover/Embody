@@ -105,7 +105,7 @@ class EmbodyExt:
         venv_dir = os.path.join(project_dir, '.venv')
 
         # Platform-aware paths
-        if sys.platform == 'win32':
+        if sys.platform.startswith('win'):
             python_exe = os.path.join(app.binFolder, 'python.exe')
             site_packages = os.path.join(venv_dir, 'Lib', 'site-packages')
             venv_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
@@ -117,13 +117,13 @@ class EmbodyExt:
 
         # Dependencies — pywin32 is Windows-only
         deps = ['mcp>=1.2.0']
-        if sys.platform == 'win32':
+        if sys.platform.startswith('win'):
             deps.append('pywin32>=306')
 
         # Fast path: if deps already installed, just add to sys.path
         if os.path.isdir(os.path.join(site_packages, 'mcp')):
             self._addSitePackages(site_packages)
-            if sys.platform == 'win32':
+            if sys.platform.startswith('win'):
                 self._fixPywin32Dlls(site_packages)
             return
 
@@ -148,7 +148,7 @@ class EmbodyExt:
             )
 
             self._addSitePackages(site_packages)
-            if sys.platform == 'win32':
+            if sys.platform.startswith('win'):
                 self._fixPywin32Dlls(site_packages)
             self.Log('Python environment ready', 'SUCCESS')
 
@@ -181,7 +181,7 @@ class EmbodyExt:
             return uv
 
         # Search common --user install locations (platform-specific)
-        if sys.platform == 'win32':
+        if sys.platform.startswith('win'):
             appdata = os.environ.get('APPDATA', '')
             if appdata:
                 candidates = glob(os.path.join(appdata, 'Python', 'Python*', 'Scripts', 'uv.exe'))
@@ -189,7 +189,7 @@ class EmbodyExt:
                     if os.path.isfile(candidate):
                         return candidate
         else:
-            # macOS / Linux: check common user-local bin directories
+            # macOS: check common user-local bin directories
             home = os.path.expanduser('~')
             mac_candidates = (
                 glob(os.path.join(home, 'Library', 'Python', '3.*', 'bin', 'uv'))
@@ -205,7 +205,7 @@ class EmbodyExt:
     def _addSitePackages(self, site_packages):
         """Add venv site-packages (and pywin32 subdirs on Windows) to sys.path."""
         paths = [site_packages]
-        if sys.platform == 'win32':
+        if sys.platform.startswith('win'):
             paths.append(os.path.join(site_packages, 'win32'))
             paths.append(os.path.join(site_packages, 'win32', 'lib'))
         for p in paths:
@@ -246,7 +246,7 @@ class EmbodyExt:
     def normalizePath(self, path_str: Union[str, Path, None]) -> str:
         """
         Normalize path separators to forward slashes for cross-platform compatibility.
-        Forward slashes work on Windows, macOS, and Linux.
+        Forward slashes work on both Windows and macOS.
         """
         return str(path_str).replace('\\', '/') if path_str else path_str
 
@@ -2009,21 +2009,33 @@ class EmbodyExt:
     def OpenSaveFolder(self) -> None:
         """Open externalization folder in file browser."""
         save_folder = str(Path(self.getSaveFolder()).resolve())
-        
-        if sys.platform.startswith('darwin'):
-            subprocess.call(['open', save_folder])
-        elif sys.platform.startswith('win'):
-            os.startfile(save_folder)
+
+        try:
+            if sys.platform.startswith('darwin'):
+                result = subprocess.call(['open', save_folder])
+                if result != 0:
+                    self.Log(f'Failed to open folder: {save_folder}', 'WARNING')
+            elif sys.platform.startswith('win'):
+                os.startfile(save_folder)
+        except Exception as e:
+            self.Log(f'Failed to open folder: {e}', 'ERROR')
 
     def OpenSaveFile(self, rel_file_path: str) -> None:
         """Open file location in file browser."""
         filepath = str(self.buildAbsolutePath(self.normalizePath(rel_file_path)).resolve())
-        
-        if sys.platform.startswith('darwin'):
-            subprocess.call(['open', '-R', filepath])
-        elif sys.platform.startswith('win'):
-            filepath = filepath.replace('/', '\\')
-            subprocess.call(['explorer', '/select,', filepath])
+
+        try:
+            if sys.platform.startswith('darwin'):
+                result = subprocess.call(['open', '-R', filepath])
+                if result != 0:
+                    self.Log(f'Failed to open file location: {filepath}', 'WARNING')
+            elif sys.platform.startswith('win'):
+                filepath = filepath.replace('/', '\\')
+                result = subprocess.call(['explorer', '/select,', filepath])
+                if result != 0:
+                    self.Log(f'Failed to open file location: {filepath}', 'WARNING')
+        except Exception as e:
+            self.Log(f'Failed to open file location: {e}', 'ERROR')
 
     def OpenTable(self) -> None:
         """Open externalizations table viewer."""
