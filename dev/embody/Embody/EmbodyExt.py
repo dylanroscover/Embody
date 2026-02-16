@@ -105,12 +105,12 @@ class EmbodyExt:
         venv_dir = os.path.join(project_dir, '.venv')
 
         # Platform-aware paths
+        # Use sys.executable to get the current Python interpreter (cross-platform)
+        python_exe = sys.executable
         if sys.platform.startswith('win'):
-            python_exe = os.path.join(app.binFolder, 'python.exe')
             site_packages = os.path.join(venv_dir, 'Lib', 'site-packages')
             venv_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
         else:
-            python_exe = os.path.join(app.binFolder, 'python3')
             py_ver = f'python{sys.version_info.major}.{sys.version_info.minor}'
             site_packages = os.path.join(venv_dir, 'lib', py_ver, 'site-packages')
             venv_python = os.path.join(venv_dir, 'bin', 'python')
