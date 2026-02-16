@@ -28,7 +28,7 @@ class TestOperatorQueries(EmbodyTestCase):
 
     def test_getExternalizedOps_dat_has_entries(self):
         dats = self.embody_ext.getExternalizedOps(DAT)
-        # At minimum, EmbodyExt.py and ClaudiusExt.py should be externalized
+        # At minimum, EmbodyExt.py and EnvoyExt.py should be externalized
         self.assertGreater(len(dats), 0)
 
     # --- getOpsByPar ---

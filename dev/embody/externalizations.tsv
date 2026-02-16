@@ -7,7 +7,7 @@ path	type	rel_file_path	timestamp	dirty	build	touch_build
 /embody/Embody/execute	execute	embody/Embody/execute.py	2026-01-08 05:22:31 UTC			
 /embody/Embody/chopexec_exit_tagger	chopexec	embody/Embody/chopexec_exit_tagger.py	2026-01-08 05:22:31 UTC			
 /embody/Embody/EmbodyExt	text	embody/Embody/EmbodyExt.py	2026-01-08 05:22:31 UTC			
-/embody/Embody/ClaudiusExt	text	embody/Embody/ClaudiusExt.py	2026-01-08 05:27:44 UTC			
+/embody/Embody/EnvoyExt	text	embody/Embody/EnvoyExt.py	2026-02-16 06:25:59 UTC			
 /embody/Embody/TDNExt	text	embody/Embody/TDNExt.py	2026-02-09 04:35:17 UTC			
 /embody/Embody/text_claud_md	text	embody/Embody/CLAUDE_md_template.md	2026-02-10 05:01:34 UTC			
 /embody/execute_src_ctrl	execute	embody/execute_src_ctrl.py	2026-02-11 05:29:38 UTC			

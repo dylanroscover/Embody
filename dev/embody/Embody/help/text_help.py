@@ -1,31 +1,41 @@
 '''
-Embody v4
+Embody v5
 ===============
 
-Embody provides simple yet robust file externalization for 
-TouchDesigner projects. Any COMP or DAT operator(s) in your 
+Embody provides robust automated externalization for
+TouchDesigner projects. Any COMP or DAT operator(s) in your
 project can be tagged by pressing left control twice in a row
-while selected (left click) to automatically externalize it.
+while selected to automatically externalize it to a version-
+control-friendly file (.tox, .py, .json, etc.).
 
-Embody includes a manager UI which lists your externalized
-files and info about them. Simply drag and drop Embody from 
-the /release folder into your project to get started!
+Simply drag and drop the Embody .tox from the /release folder
+into your project to get started!
+
+Getting Started
+---------------
+1. Add the Embody .tox to your project
+2. Tag operators for externalization (lctrl-lctrl)
+3. Press ctrl-shift-u to initialize/update
+4. Save your project (ctrl-s) to autosave dirty COMPs
 
 The default Tags are listed on the Tags page. These can be
 customized, but please do so before you enable Embody.
 
-To enable (initialize), add your specified Tag(s) to any 
-supported OP, set your externalization Folder, and pulse the 
-Enable/Update button. This will search your entire project for 
-COMPs matching the tags and externalize them with a folder structure matching 
-that of your TouchDesigner project network.
+To enable (initialize), add your specified Tag(s) to any
+supported OP, set your externalization Folder, and pulse the
+Enable/Update button. Embody will search your entire project
+for tagged operators and externalize them with a folder
+structure mirroring your TouchDesigner network.
 
-You may also search your full project for all supported OPs 
-(most DATs and COMPs) and add them all automatically via the 
-"Externalize Full Project" button.
+You may also externalize all supported OPs in one step via
+the "Externalize Full Project" button.
 
-The following OPs are supported:
+Supported Operators
+-------------------
+COMPs:
 - All COMPs except engine, time and annotate
+
+DATs:
 - Text DAT
 - Table DAT
 - Execute DAT
@@ -36,54 +46,74 @@ The following OPs are supported:
 - OP Execute DAT
 - Panel Execute DAT
 
-The following file formats are supported:
-COMPs
-- .tox
-DATs
-- .py
-- .json
-- .xml
-- .html
-- .glsl
-- .frag
-- .vert
-- .txt
-- .md
-- .rtf
-- .csv
-- .tsv
-- .dat
+Supported File Formats
+----------------------
+COMPs: .tox
+DATs:  .py, .json, .xml, .html, .glsl, .frag, .vert,
+       .txt, .md, .rtf, .csv, .tsv, .dat
 
-As you work, Embody will keep your external toxes updated.
+Workflow
+--------
+As you work, Embody keeps your external files updated.
 Every time you save your project (ctrl-s), Embody checks
-to see if COMPs have been updated. If they have, it autosaves 
-the dirty (modified) ones. DATs are automatically synchronized 
-by TouchDesigner (if their Sync to File parameter is enabled).
-You may also update Embody via ctrl-shift-u.
+for modified ('dirty') COMPs and autosaves them. DATs are
+automatically synchronized by TouchDesigner via their Sync
+to File parameter.
 
-To reset ('unexternalize') completely, pulse the Disable button.
+Embody also tracks parameter changes on externalized COMPs.
+When any parameter is modified, the COMP is marked dirty
+with a "Par" indicator, ensuring parameter tweaks are never
+lost.
 
-Note: this will also delete all externalized files and any 
-empty folders that result. To reinstate them, pulse the
-Enable/Update button again.
+All file paths are normalized to forward slashes for cross-
+platform compatibility between Windows and macOS.
+
+To reset ('unexternalize'), pulse the Disable button. This
+deletes only files tracked by Embody. Untracked files in
+the externalization folder are preserved.
+
+Envoy (MCP Server)
+---------------------
+Embody includes Envoy, an MCP (Model Context Protocol)
+server that enables AI coding assistants to interact with TouchDesigner
+programmatically. When enabled, Envoy lets you:
+
+- Create, modify, connect, and query operators
+- Read and write DAT content
+- Manage Embody externalizations
+- Execute Python code in TouchDesigner
+- Export/import networks via the TDN format
+
+To enable: toggle the Envoyenable parameter ON. The server
+starts on port 9876 by default and auto-creates a .mcp.json
+file in your git repo root for AI coding assistants to discover.
+
+TDN Network Format
+------------------
+Embody can export and import TouchDesigner networks as human-
+readable .tdn JSON files. This captures operators, parameters,
+connections, and layout in a diffable format.
+
+Use ctrl-shift-e to export the full project, or ctrl-alt-e
+to export just the current network.
+
+Manager UI
+----------
+Press ctrl-shift-o to open the Manager, a TreeLister of all
+externalized operators and their metadata. From here you can:
+- View dirty state and build info for each operator
+- Navigate to any operator by clicking
+- Open file locations in your system file browser
+- Refresh, filter, and search externalizations
+- Trigger Initialize/Update or Reset
 
 Keyboard Shortcuts
-ctrl-shift-e : Open the manager, a lister of all externalized 
-operators and their metadata. Inside this floating panel 
-window you are able to delete externalizations and trigger 
-basic commands, including:
-- Reset
-- Refresh
-- Initialize/Update
-- Open the custom pars as a floating panel window (Pars)
-
-lctrl-lctrl : Add an externalization tag automatically based
-on the current op selected (supports all COMP and saveable 
-DAT operators).
-
-ctrl-shift-u: Initialize/update. If Embody is not enabled, 
-will initialize so any detected tags become externalized 
-and get saved. If it is enabled, will update so any detected 
-changes ('dirty' COMPs) are saved out.
+------------------
+ctrl-shift-o :   Open the Manager UI
+lctrl-lctrl :    Tag the selected operator for externalization
+ctrl-shift-u :   Initialize/update all externalizations
+ctrl-alt-u :     Save only the current COMP you are inside
+ctrl-shift-e :   Export the full project network to .tdn
+ctrl-alt-e :     Export the current network to .tdn
 
 '''

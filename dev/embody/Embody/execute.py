@@ -12,9 +12,9 @@ def init():
 
 def onStart():
 	init()
-	# On project open, silently extract CLAUDE.md if Claudius is
+	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
-	run(f"op('{parent.Embody}').ext.Embody._upgradeClaudius()", delayFrames=30)
+	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
 	return
 
 def onCreate():

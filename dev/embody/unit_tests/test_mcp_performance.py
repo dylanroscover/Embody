@@ -1,5 +1,5 @@
 """
-Test suite: MCP performance monitoring in ClaudiusExt.
+Test suite: MCP performance monitoring in EnvoyExt.
 
 Tests _get_op_performance.
 """
@@ -16,7 +16,7 @@ class TestMCPPerformance(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.claudius = self.embody.ext.Claudius
+        self.envoy = self.embody.ext.Envoy
 
     # =========================================================================
     # _get_op_performance
@@ -25,7 +25,7 @@ class TestMCPPerformance(EmbodyTestCase):
     def test_basic_return_structure(self):
         """_get_op_performance should return a dict with performance fields."""
         comp = self.sandbox.create(baseCOMP, 'perf_comp')
-        result = self.claudius._get_op_performance(op_path=comp.path)
+        result = self.envoy._get_op_performance(op_path=comp.path)
         self.assertDictHasKey(result, 'path')
         self.assertDictHasKey(result, 'cpuCookTime')
         self.assertDictHasKey(result, 'gpuCookTime')
@@ -34,7 +34,7 @@ class TestMCPPerformance(EmbodyTestCase):
     def test_has_memory_fields(self):
         """_get_op_performance should include memory fields."""
         comp = self.sandbox.create(baseCOMP, 'mem_comp')
-        result = self.claudius._get_op_performance(op_path=comp.path)
+        result = self.envoy._get_op_performance(op_path=comp.path)
         self.assertDictHasKey(result, 'cpuMemory')
         self.assertDictHasKey(result, 'gpuMemory')
 
@@ -42,7 +42,7 @@ class TestMCPPerformance(EmbodyTestCase):
         """_get_op_performance with include_children should add children fields."""
         comp = self.sandbox.create(baseCOMP, 'parent_perf')
         comp.create(baseCOMP, 'child_perf')
-        result = self.claudius._get_op_performance(
+        result = self.envoy._get_op_performance(
             op_path=comp.path, include_children=True
         )
         self.assertDictHasKey(result, 'childrenCPUCookTime')
@@ -53,10 +53,10 @@ class TestMCPPerformance(EmbodyTestCase):
     def test_without_include_children(self):
         """_get_op_performance without include_children should omit children fields."""
         comp = self.sandbox.create(baseCOMP, 'no_children')
-        result = self.claudius._get_op_performance(op_path=comp.path)
+        result = self.envoy._get_op_performance(op_path=comp.path)
         self.assertFalse('childrenCPUCookTime' in result)
 
     def test_nonexistent_op(self):
         """_get_op_performance on nonexistent op should return error."""
-        result = self.claudius._get_op_performance(op_path='/nonexistent/op')
+        result = self.envoy._get_op_performance(op_path='/nonexistent/op')
         self.assertDictHasKey(result, 'error')

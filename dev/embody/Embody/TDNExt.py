@@ -5,7 +5,7 @@ Exports and imports TouchDesigner networks as human-readable JSON files.
 Only non-default properties are stored, keeping the output minimal.
 
 This extension lives on the Embody COMP and is callable via:
-  - MCP tools (export_network / import_network) through Claudius
+  - MCP tools (export_network / import_network) through Envoy
   - TD UI (keyboard shortcut Ctrl+Shift+N, pulse parameters)
   - Direct Python: op.Embody.ext.TDN.ExportNetwork(...)
 """
@@ -146,7 +146,7 @@ class TDNExt:
 			tdn = {
 				'format': 'tdn',
 				'version': TDN_VERSION,
-				'generator': f'Claudius/{self._getClaudiusVersion()}',
+				'generator': f'Envoy/{self._getEnvoyVersion()}',
 				'td_build': f'{app.version}.{app.build}',
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
@@ -285,7 +285,7 @@ class TDNExt:
 
 		# Collect metadata now (needs TD access)
 		metadata = {
-			'generator': f'Claudius/{self._getClaudiusVersion()}',
+			'generator': f'Envoy/{self._getEnvoyVersion()}',
 			'td_build': f'{app.version}.{app.build}',
 			'project_name': project.name.removesuffix('.toe'),
 			'project_folder': str(project.folder),
@@ -1650,12 +1650,12 @@ class TDNExt:
 
 		return first_par.name
 
-	def _getClaudiusVersion(self):
-		"""Get the Claudius version string."""
+	def _getEnvoyVersion(self):
+		"""Get the Envoy version string."""
 		try:
-			return self.ownerComp.op('ClaudiusExt').module.CLAUDIUS_VERSION
+			return self.ownerComp.op('EnvoyExt').module.ENVOY_VERSION
 		except Exception as e:
-			self._log(f'Could not get Claudius version: {e}', 'DEBUG')
+			self._log(f'Could not get Envoy version: {e}', 'DEBUG')
 			return 'unknown'
 
 	def _resolveOutputPath(self, output_file, root_op):

@@ -1,5 +1,5 @@
 ﻿"""
-Test suite: MCP annotation tools in ClaudiusExt.
+Test suite: MCP annotation tools in EnvoyExt.
 
 Tests _create_annotation, _get_annotations, _set_annotation, _get_enclosed_ops.
 """
@@ -16,7 +16,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.claudius = self.embody.ext.Claudius
+        self.envoy = self.embody.ext.Envoy
         self.workspace = self.sandbox.create(baseCOMP, 'ann_workspace')
 
     # =========================================================================
@@ -25,7 +25,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_default_mode(self):
         """_create_annotation with default mode should create an annotate annotation."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path
         )
         self.assertTrue(result.get('success'))
@@ -33,7 +33,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_comment_mode(self):
         """_create_annotation with comment mode should succeed."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             mode='comment'
         )
@@ -41,7 +41,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_networkbox_mode(self):
         """_create_annotation with networkbox mode should succeed."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             mode='networkbox'
         )
@@ -53,7 +53,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_with_text(self):
         """_create_annotation should set body text."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             text='Hello annotation'
         )
@@ -63,7 +63,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_with_title(self):
         """_create_annotation should set title text."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             title='My Title'
         )
@@ -73,7 +73,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_with_position(self):
         """_create_annotation should set x/y position."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             x=100, y=200
         )
@@ -83,7 +83,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_with_size(self):
         """_create_annotation should set width/height."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             width=500, height=300
         )
@@ -93,7 +93,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_with_name(self):
         """_create_annotation should rename the annotation."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             name='my_note'
         )
@@ -102,7 +102,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_with_color(self):
         """_create_annotation should set background color."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             color=[0.8, 0.2, 0.1]
         )
@@ -116,7 +116,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_invalid_mode(self):
         """_create_annotation with invalid mode should return error."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             mode='invalid_mode'
         )
@@ -124,7 +124,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_create_annotation_invalid_parent(self):
         """_create_annotation with nonexistent parent should return error."""
-        result = self.claudius._create_annotation(
+        result = self.envoy._create_annotation(
             parent_path='/nonexistent/path'
         )
         self.assertDictHasKey(result, 'error')
@@ -135,7 +135,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_get_annotations_returns_list(self):
         """_get_annotations should return a dict with annotations list."""
-        result = self.claudius._get_annotations(
+        result = self.envoy._get_annotations(
             parent_path=self.workspace.path
         )
         self.assertDictHasKey(result, 'annotations')
@@ -143,11 +143,11 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_get_annotations_finds_created(self):
         """_get_annotations should find an annotation we just created."""
-        self.claudius._create_annotation(
+        self.envoy._create_annotation(
             parent_path=self.workspace.path,
             text='findme'
         )
-        result = self.claudius._get_annotations(
+        result = self.envoy._get_annotations(
             parent_path=self.workspace.path
         )
         self.assertGreater(result['count'], 0)
@@ -156,7 +156,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_get_annotations_invalid_parent(self):
         """_get_annotations with nonexistent parent should return error."""
-        result = self.claudius._get_annotations(
+        result = self.envoy._get_annotations(
             parent_path='/nonexistent/path'
         )
         self.assertDictHasKey(result, 'error')
@@ -167,11 +167,11 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_set_annotation_modify_text(self):
         """_set_annotation should modify body text."""
-        create_result = self.claudius._create_annotation(
+        create_result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             text='original'
         )
-        result = self.claudius._set_annotation(
+        result = self.envoy._set_annotation(
             op_path=create_result['path'],
             text='modified'
         )
@@ -180,11 +180,11 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_set_annotation_modify_title(self):
         """_set_annotation should modify title text."""
-        create_result = self.claudius._create_annotation(
+        create_result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             title='old title'
         )
-        result = self.claudius._set_annotation(
+        result = self.envoy._set_annotation(
             op_path=create_result['path'],
             title='new title'
         )
@@ -193,7 +193,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_set_annotation_nonexistent(self):
         """_set_annotation on nonexistent path should return error."""
-        result = self.claudius._set_annotation(
+        result = self.envoy._set_annotation(
             op_path='/nonexistent/ann',
             text='test'
         )
@@ -206,12 +206,12 @@ class TestMCPAnnotations(EmbodyTestCase):
     def test_get_enclosed_ops_annotation(self):
         """_get_enclosed_ops on an annotation should return enclosed_ops list."""
         # Create a networkbox large enough to enclose something
-        create_result = self.claudius._create_annotation(
+        create_result = self.envoy._create_annotation(
             parent_path=self.workspace.path,
             mode='networkbox',
             x=-500, y=-500, width=2000, height=2000
         )
-        result = self.claudius._get_enclosed_ops(
+        result = self.envoy._get_enclosed_ops(
             op_path=create_result['path']
         )
         self.assertTrue(result.get('is_annotation'))
@@ -219,7 +219,7 @@ class TestMCPAnnotations(EmbodyTestCase):
 
     def test_get_enclosed_ops_nonexistent(self):
         """_get_enclosed_ops on nonexistent path should return error."""
-        result = self.claudius._get_enclosed_ops(
+        result = self.envoy._get_enclosed_ops(
             op_path='/nonexistent/path'
         )
         self.assertDictHasKey(result, 'error')

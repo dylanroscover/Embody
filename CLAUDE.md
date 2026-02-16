@@ -1,12 +1,10 @@
-# Embody + Claudius
+# Embody + Envoy
 
 ## Project Overview
 
 **Embody** is a TouchDesigner extension that automates externalization of COMP and DAT operators to version-control-friendly files (.tox, .py, .json, .xml, etc.). It solves the problem of TouchDesigner's binary .toe files being impossible to diff/merge in git.
 
-**Claudius** is an MCP (Model Context Protocol) server embedded inside Embody that lets Claude Code create, modify, connect, and query TouchDesigner operators programmatically — plus manage Embody externalizations.
-
-Current version: **v5.0.32** for TouchDesigner 2025.32050.
+**Envoy** is an MCP (Model Context Protocol) server embedded inside Embody that lets Claude Code create, modify, connect, and query TouchDesigner operators programmatically — plus manage Embody externalizations.
 
 ## TouchDesigner Development
 
@@ -217,14 +215,14 @@ Embody/
 ├── docs/
 │   └── TDN.md                            # TDN network format documentation
 ├── dev/
-│   ├── Embody-5.31.toe                    # Active development project
+│   ├── Embody-5.61.toe                    # Active development project
 │   ├── .venv/                             # Python virtual environment (auto-created)
 │   ├── Backup/                            # Versioned .toe backups
 │   └── embody/
 │       ├── externalizations.tsv           # Externalization tracking table (managed by Embody)
 │       └── Embody/                        # Main extension source
 │           ├── EmbodyExt.py               # Core externalization engine (~2,200 lines)
-│           ├── ClaudiusExt.py             # MCP server extension (~2,500 lines)
+│           ├── EnvoyExt.py             # MCP server extension (~2,500 lines)
 │           ├── TDNExt.py                  # TDN network format export/import (~1,500 lines)
 │           ├── CLAUDE_md_template.md      # Template for generating per-project CLAUDE.md
 │           ├── execute.py                 # Project lifecycle callbacks
@@ -235,7 +233,7 @@ Embody/
 │           └── help/
 │               └── text_help.py           # Help text
 └── release/
-    └── Embody-v5.0.32.tox                # Latest release build
+    └── Embody-v*.tox                     # Latest release build
 ```
 
 ## Architecture
@@ -251,33 +249,51 @@ TouchDesigner projects are binary `.toe` files. Embody externalizes tagged opera
 
 **Important**: Edits to `.py` files in `dev/embody/Embody/` are read by TD when the project loads or the DAT syncs. Changes made inside TD are written out to these files on save. This bidirectional sync is the core of the system.
 
-### Claudius MCP Architecture
+### Envoy MCP Architecture
 
-Claudius uses a dual-thread design:
+Envoy uses a dual-thread design:
 
 - **Worker thread**: Runs the MCP server (FastMCP with Streamable HTTP transport via uvicorn) — no TouchDesigner imports allowed
-- **Main thread**: Executes all TD operations via `ClaudiusExt._onRefresh()` callback
+- **Main thread**: Executes all TD operations via `EnvoyExt._onRefresh()` callback
 - **Communication**: `threading.Event` + `Queue` for request/response between threads
 - **Thread management**: Uses `op.TDResources.ThreadManager` (TDTask pattern)
 - **Graceful shutdown**: `shutdown_event` (threading.Event) signals uvicorn to exit cleanly
-- **Version**: `CLAUDIUS_VERSION` constant tracks server version for compatibility
+- **Version**: `ENVOY_VERSION` constant tracks server version for compatibility
 
 ## Architecture Notes
 
-- **Stateless HTTP transport**: Claudius uses `stateless_http=True` because TD's single-threaded model means concurrent sessions would queue on the same main-thread execution path anyway. Stateless mode simplifies the implementation and avoids session management overhead.
+- **Stateless HTTP transport**: Envoy uses `stateless_http=True` because TD's single-threaded model means concurrent sessions would queue on the same main-thread execution path anyway. Stateless mode simplifies the implementation and avoids session management overhead.
 - **30-second operation timeout**: `_execute_in_td()` times out at 30 seconds. This prevents indefinite hangs if the main thread is blocked (e.g., modal dialog), while allowing enough time for heavy operations like `.tox` saves. If a TD operation takes longer, the MCP tool returns a timeout error — the operation may need to be broken into smaller steps.
-- **127.0.0.1 binding**: Security requirement to prevent DNS rebinding attacks. Claudius must never bind to `0.0.0.0` or be accessible from the network.
+- **127.0.0.1 binding**: Security requirement to prevent DNS rebinding attacks. Envoy must never bind to `0.0.0.0` or be accessible from the network.
 - **Standalone thread**: The MCP server runs as a `standalone=True` TDTask because it is long-lived (runs for the entire session), unlike pool tasks which are meant for short-lived work units.
 - **Queue-based cross-thread communication**: Uses `threading.Event` + `Queue` rather than locks because TD's cook cycle is frame-based — the main thread can only process requests once per frame via the RefreshHook.
 
 ### Graceful Shutdown Sequence
 
-1. `ClaudiusExt.Stop()` is called (from UI toggle, `onExit`, or project close)
+1. `EnvoyExt.Stop()` is called (from UI toggle, `onExit`, or project close)
 2. `shutdown_event.set()` signals the worker thread's uvicorn server to stop
 3. Uvicorn completes its shutdown (stops accepting connections, drains existing)
 4. Worker thread's target function returns
 5. `SuccessHook` or `ExceptHook` fires on the main thread for cleanup
 6. Port is released and available for rebinding
+
+### TDN Network Format
+
+TDN (TouchDesigner Network) is a JSON-based format for representing TD operator networks as human-readable, diffable text. It is implemented in `TDNExt.py` and exposed via MCP tools (`export_network`, `import_network`) and keyboard shortcuts.
+
+**Key design decisions:**
+- **Non-default only**: Only parameters whose values differ from defaults are exported, keeping files minimal
+- **7-phase import**: Operators are created first, then custom parameters, parameter values, flags, connections, DAT content, and positions — in that specific order to satisfy dependencies
+- **Relative source references**: Connections reference siblings by name only, falling back to full paths for cross-network references
+- **Palette clone detection**: COMPs cloned from `/sys/` are marked but their children are not exported (TD recreates them automatically)
+- **Per-COMP split mode**: Large networks can be exported as one `.tdn` file per COMP, creating a git-friendly directory structure
+
+**File format**: JSON with `.tdn` extension. Full specification: [`docs/TDN.md`](docs/TDN.md)
+
+**Export modes:**
+- `Ctrl+Shift+E` — export entire project to a single `.tdn` file
+- `Ctrl+Alt+E` — export the current COMP to a `.tdn` file
+- `export_network` MCP tool — programmatic export with options for root path, depth, DAT content inclusion, and per-COMP splitting
 
 ## Extension Referencing Conventions
 
@@ -294,26 +310,26 @@ op.Embody.ext.Embody.getExternalizedOps()
 op.Embody.ext.Embody.isOpEligibleToBeExternalized(someOp)
 op.Embody.ext.Embody.safeDeleteFile(path)
 
-# Claudius-specific extensions
-op.Embody.ext.Claudius.Start()
-op.Embody.ext.Claudius.Stop()
+# Envoy-specific extensions
+op.Embody.ext.Envoy.Start()
+op.Embody.ext.Envoy.Stop()
 ```
 
 ## Code Conventions
 
-- **Extension naming**: Extension classes and their source DATs must follow the `NameExt` convention (e.g., `EmbodyExt`, `ClaudiusExt`, `TDNExt`, `TestRunnerExt`). The class name should match the DAT name.
+- **Extension naming**: Extension classes and their source DATs must follow the `NameExt` convention (e.g., `EmbodyExt`, `EnvoyExt`, `TDNExt`, `TestRunnerExt`). The class name should match the DAT name.
 - **Renaming operators**: To rename a TD operator, ONLY rename the operator itself — via MCP `rename_operator` or inside TouchDesigner. **NEVER** rename the externalized file on disk, **NEVER** manually update the `file`/`externaltox` parameter, and **NEVER** edit the externalizations table. Embody's `checkOpsForContinuity` handles everything automatically: it detects the stale path in the table, `_findMovedOp` matches the renamed operator by its file parameter, then `updateMovedOp` renames the file on disk, updates the `file`/`externaltox` parameter, and updates the table row — all in one step.
 - **Logging**: Use `op.Embody.Log(message, level)` from anywhere in the project. Levels: `'DEBUG'`, `'INFO'`, `'WARNING'`, `'ERROR'`, `'SUCCESS'`. Convenience methods: `op.Embody.Debug(msg)`, `op.Embody.Info(msg)`, `op.Embody.Warn(msg)`, `op.Embody.Error(msg)`. Logs go to: FIFO DAT (TD UI), textport (if `Print` par enabled), log file (enabled by default), and ring buffer (MCP access via `get_logs` tool + auto-piggybacked on all MCP tool responses in the `_logs` field). **File logging** is enabled by default — logs are written to `dev/logs/<project_name>_YYMMDD.log` with automatic rotation at 10 MB (`_001.log`, `_002.log`, etc.). The ring buffer and piggybacked logs are limited in size; **always read the log file on disk for the complete picture**.
 - **Paths**: Always use forward slashes (`/`) for cross-platform compatibility — never backslashes
 - **File safety**: Only delete files tracked by Embody (`isTrackedFile()`, `safeDeleteFile()`). Never delete untracked files
 - **Directory cleanup**: Use `rmdir()` only (fails on non-empty dirs) — never `shutil.rmtree()`
 - **Error handling**: Wrap TD operations in try/except, return `{'error': str(e)}` dicts in MCP handlers
-- **Thread safety**: Never import or call TouchDesigner modules in worker thread code (`ClaudiusMCPServer` class)
+- **Thread safety**: Never import or call TouchDesigner modules in worker thread code (`EnvoyMCPServer` class)
 - **Table management**: The `externalizations.tsv` is managed exclusively by Embody — never edit it directly
-- **No `hasattr` for known parameters**: Embody's custom parameters (e.g., `Claudiusenable`, `Claudiusport`, `Claudiusstatus`) are static and locked in the `.toe` — they always exist. Do not wrap access in `hasattr(self.ownerComp.par, ...)` checks. Just use them directly (e.g., `self.ownerComp.par.Claudiusstatus = 'Running'`)
-- **MCP error types**: Claudius handles two error categories: (1) Protocol errors (JSON-RPC level) for unknown tools, invalid arguments, or server errors — FastMCP handles these automatically. (2) Tool execution errors returned in tool results via `{'error': str(e)}` dicts — these indicate the tool ran but encountered a problem (missing operator, invalid path, etc.). Always return structured error information rather than raising exceptions in tool handlers.
+- **No `hasattr` for known parameters**: Embody's custom parameters (e.g., `Envoyenable`, `Envoyport`, `Envoystatus`) are static and locked in the `.toe` — they always exist. Do not wrap access in `hasattr(self.ownerComp.par, ...)` checks. Just use them directly (e.g., `self.ownerComp.par.Envoystatus = 'Running'`)
+- **MCP error types**: Envoy handles two error categories: (1) Protocol errors (JSON-RPC level) for unknown tools, invalid arguments, or server errors — FastMCP handles these automatically. (2) Tool execution errors returned in tool results via `{'error': str(e)}` dicts — these indicate the tool ran but encountered a problem (missing operator, invalid path, etc.). Always return structured error information rather than raising exceptions in tool handlers.
 - **MCP input validation**: All tool handlers must validate inputs before passing to TD operations. Check that `op_path` is a valid path format, verify operators exist before operating on them, validate parameter names, and sanitize string inputs passed to `eval()` or `exec()`.
-- **Localhost binding**: Claudius must bind to `127.0.0.1`, never `0.0.0.0`. Binding to all interfaces would expose the MCP server to the local network and enable DNS rebinding attacks from malicious websites.
+- **Localhost binding**: Envoy must bind to `127.0.0.1`, never `0.0.0.0`. Binding to all interfaces would expose the MCP server to the local network and enable DNS rebinding attacks from malicious websites.
 - **Tool signatures are MCP schema**: FastMCP generates tool definitions from function signatures and docstrings in `_register_tools()`. Changing parameter names, type hints, or docstrings changes the tool's public MCP interface. Treat these as API contracts — changes may break client integrations.
 
 ## File Editing Impact
@@ -321,7 +337,7 @@ op.Embody.ext.Claudius.Stop()
 | File | Impact | Notes |
 |------|--------|-------|
 | `EmbodyExt.py` | HIGH | Core engine. Changes affect all externalization behavior. |
-| `ClaudiusExt.py` | HIGH | MCP server. Two distinct sections: `ClaudiusMCPServer` (worker thread, no TD imports) and `ClaudiusExt` (main thread, TD access). Tool signature changes break client API. |
+| `EnvoyExt.py` | HIGH | MCP server. Two distinct sections: `EnvoyMCPServer` (worker thread, no TD imports) and `EnvoyExt` (main thread, TD access). Tool signature changes break client API. |
 | `TDNExt.py` | MEDIUM | Network export/import. Changes affect `.tdn` format compatibility. |
 | `execute.py` | LOW | Project lifecycle callbacks (`onStart`, `onProjectPreSave`, etc.). Rarely needs changes. |
 | `parexec.py` | MEDIUM | Fires on every parameter change. Performance-sensitive. |
@@ -329,7 +345,8 @@ op.Embody.ext.Claudius.Stop()
 | `timer_callbacks.py` | LOW | Double-press detection logic. |
 | `chopexec_exit_tagger.py` | LOW | CHOP exit handler for tagging. |
 | `externalizations.tsv` | NEVER EDIT | Managed exclusively by Embody. Manual edits corrupt tracking. |
-| `CLAUDE_md_template.md` | MEDIUM | Template for per-project CLAUDE.md. Must be kept in sync with root CLAUDE.md. |
+| `CLAUDE_md_template.md` | MEDIUM | Template for per-project CLAUDE.md. Must be kept in sync with root CLAUDE.md and text_help.py. |
+| `help/text_help.py` | LOW | Help text displayed in Embody UI. Must be kept in sync with CLAUDE.md and CLAUDE_md_template.md for shortcuts, features, and supported formats. |
 
 ## TouchDesigner Documentation
 
@@ -347,19 +364,20 @@ op.Embody.ext.Claudius.Stop()
   - https://docs.derivative.ca/Thread_Manager — Thread Manager for Python threading in TD (accessed via `op.TDResources.ThreadManager`)
   - https://docs.derivative.ca/POP_Class — POP (Point Operator) class — GPU-accelerated geometry
   - https://docs.derivative.ca/Extensions — Extensions system (lifecycle, promotion, `onDestroyTD`, `onInitTD`, `StorageManager`)
+  - [`docs/TDN.md`](docs/TDN.md) — TDN network format specification (JSON schema for TD network export/import)
 
-## Claudius MCP Server Setup
+## Envoy MCP Server Setup
 
 ### Prerequisites
-Embody auto-installs all dependencies (mcp>=1.2.0, pywin32>=306 on Windows) via uv when Claudius is first enabled. The virtual environment is created at `dev/.venv/` and dependencies are installed automatically.
+Embody auto-installs all dependencies (mcp>=1.2.0, pywin32>=306 on Windows) via uv when Envoy is first enabled. The virtual environment is created at `dev/.venv/` and dependencies are installed automatically.
 
 ### Enabling the Server
 1. Open the Embody `.toe` project in TouchDesigner
-2. Toggle the `Claudiusenable` parameter ON in the Embody COMP
+2. Toggle the `Envoyenable` parameter ON in the Embody COMP
 3. Server starts on configured port (default: 9876)
 
 ### Changing the Port
-Changing the `Claudiusport` parameter while the server is running will automatically:
+Changing the `Envoyport` parameter while the server is running will automatically:
 1. Stop the server on the old port
 2. Restart on the new port (after a 2-frame delay for clean shutdown)
 3. Update `.mcp.json` with the new port
@@ -367,13 +385,13 @@ Changing the `Claudiusport` parameter while the server is running will automatic
 If the server is not running, changing the port simply updates the parameter value.
 
 ### Connecting Claude Code
-Claudius auto-creates a `.mcp.json` file in the git repo root on startup. This works with both the Claude Code CLI and the VS Code extension. Just start a new Claude Code session after Claudius is running.
+Envoy auto-creates a `.mcp.json` file in the git repo root on startup. This works with both the Claude Code CLI and the VS Code extension. Just start a new Claude Code session after Envoy is running.
 
 If you need to configure manually, create `.mcp.json` in the project root:
 ```json
 {
   "mcpServers": {
-    "claudius": {
+    "envoy": {
       "type": "http",
       "url": "http://localhost:9876/mcp"
     }
@@ -459,7 +477,7 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_td_info` | _(none)_ | Get TD version, build, OS, and Claudius version |
+| `get_td_info` | _(none)_ | Get TD version, build, OS, and Envoy version |
 | `get_op_errors` | `op_path`, `recurse?` | Get error messages for an operator and its children |
 | `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`) |
 | `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
@@ -512,8 +530,8 @@ If you need to configure manually, create `.mcp.json` in the project root:
 3. `get_op_errors` with `recurse=true` to check for errors
 4. If connecting: `connect_ops` then `get_op_errors` again
 
-### Adding a New MCP Tool to Claudius
-1. Add the tool function inside `_register_tools()` in `ClaudiusExt.py`
+### Adding a New MCP Tool to Envoy
+1. Add the tool function inside `_register_tools()` in `EnvoyExt.py`
 2. Add a corresponding handler case in `_onRefresh()` for the TD operation
 3. Update the MCP Tool Reference table in `CLAUDE.md`
 4. Update `CLAUDE_md_template.md` to match
@@ -539,11 +557,11 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 ## Testing
 
-Embody has a comprehensive automated test suite with **26 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
+Embody has a comprehensive automated test suite with **27 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
 
 ### Test Coverage
 
-**Core Embody (12 suites):**
+**Core Embody (13 suites):**
 - `test_externalization.py` — externalization lifecycle
 - `test_crud_operators.py` — create, read, update, delete operations
 - `test_file_management.py` — file I/O, path handling, cleanup
@@ -558,7 +576,7 @@ Embody has a comprehensive automated test suite with **26 test files** covering 
 - `test_operator_queries.py` — operator discovery and queries
 - `test_logging.py` — logging system
 
-**MCP Tools (9 suites):**
+**MCP Tools (11 suites):**
 - `test_mcp_operators.py` — create, delete, copy, rename, query, find
 - `test_mcp_parameters.py` — get/set parameters, modes, expressions
 - `test_mcp_dat_content.py` — DAT text and table operations
@@ -576,7 +594,7 @@ Embody has a comprehensive automated test suite with **26 test files** covering 
 - `test_tdn_helpers.py` — TDN utility functions
 
 **Infrastructure (1 suite):**
-- `test_server_lifecycle.py` — Claudius MCP server start/stop
+- `test_server_lifecycle.py` — Envoy MCP server start/stop
 
 ### Test Framework Features
 
@@ -617,7 +635,7 @@ results = op.unit_tests.GetResults()
 
 **Via MCP:**
 ```python
-# Using Claudius MCP tool
+# Using Envoy MCP tool
 mcp.run_tests(suite_name='test_path_utils')  # Run one suite
 mcp.run_tests()                              # Run all suites
 ```
@@ -680,7 +698,7 @@ class TestMyFeature(EmbodyTestCase):
 **Verification strategy:**
 1. **Unit tests** (automated) — test all business logic, MCP tools, and utilities
 2. **Manual TD testing** — verify UI interactions, keyboard shortcuts, visual behavior
-3. **MCP verification** — use Claudius tools to verify state (e.g., `get_externalizations`, `get_op_errors`)
+3. **MCP verification** — use Envoy tools to verify state (e.g., `get_externalizations`, `get_op_errors`)
 4. **File inspection** — confirm externalized files in `dev/embody/` match expectations
 5. **Log analysis** — after test runs, check `dev/logs/` for errors (see Important Rule #12)
 
@@ -699,9 +717,9 @@ class TestMyFeature(EmbodyTestCase):
 11. Changing MCP tool function signatures without considering API compatibility
 12. Binding the MCP server to `0.0.0.0` instead of `127.0.0.1`
 13. Editing `externalizations.tsv` directly instead of using Embody's tracking API
-14. Importing or calling TouchDesigner modules in worker thread code (`ClaudiusMCPServer` class)
+14. Importing or calling TouchDesigner modules in worker thread code (`EnvoyMCPServer` class)
 15. Renaming externalized files on disk (`git mv`, manual rename) or manually updating `file`/`externaltox` parameters after a rename — Embody handles all of this automatically via `checkOpsForContinuity`. Only rename the operator itself (via MCP `rename_op` or inside TD)
-16. Not following the `NameExt` convention for extension class names and their source DATs (e.g., `EmbodyExt`, `ClaudiusExt`, `TestRunnerExt`)
+16. Not following the `NameExt` convention for extension class names and their source DATs (e.g., `EmbodyExt`, `EnvoyExt`, `TestRunnerExt`)
 
 ## Important Rules
 
@@ -711,9 +729,9 @@ class TestMyFeature(EmbodyTestCase):
 4. **Always use forward slashes** in file paths for cross-platform compatibility
 5. **Always consult the TD wiki** before writing or modifying TouchDesigner Python code — confirm API behavior even if you're confident
 6. **Binary files** (`.toe`, `.tox`) cannot be read or diffed — work with the externalized `.py` files instead
-7. **Thread boundary**: `ClaudiusMCPServer` (worker thread) must never import or call TouchDesigner modules. All TD access goes through `_execute_in_td()` → main thread
+7. **Thread boundary**: `EnvoyMCPServer` (worker thread) must never import or call TouchDesigner modules. All TD access goes through `_execute_in_td()` → main thread
 8. **Safe deletion only**: Never delete files outside Embody's tracking. Use `safeDeleteFile()` / `isTrackedFile()`
 9. **Always check for errors after creating operators** — call `get_op_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
-10. **CLAUDE.md and CLAUDE_md_template.md must ALWAYS be kept in sync.** The template at `dev/embody/Embody/CLAUDE_md_template.md` generates per-project CLAUDE.md files. Any documentation changes must be applied to both files.
+10. **CLAUDE.md, CLAUDE_md_template.md, and text_help.py must ALWAYS be kept in sync.** The template at `dev/embody/Embody/CLAUDE_md_template.md` generates per-project CLAUDE.md files. The help text at `dev/embody/Embody/help/text_help.py` is displayed in the Embody UI. Any documentation changes (keyboard shortcuts, supported formats, features, workflow) must be applied to all three files.
 11. **Favor annotations over OP comments** — when documenting operators or groups of operators in the network, always use `create_annotation` (annotate mode with a title bar) instead of setting the `comment` property on individual operators. Annotations are more visible, support rich text, and can visually group related operators. Reserve OP comments for brief inline notes only.
 12. **Always analyze log files after MCP operations** — after running tests, bulk externalizations, or any multi-step MCP workflow, read the log file at `dev/logs/` to verify no errors occurred. The piggybacked `_logs` field and `get_logs` ring buffer only hold a limited window — errors from earlier in the operation may have been evicted. Grep the log file for `ERROR` and `WARNING` entries and resolve any issues before reporting success.

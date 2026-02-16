@@ -23,7 +23,7 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 	ctrl_or_cmd = ctrl or cmd
 
 	# view externalizations
-	if state and key == 'm' and ctrl_or_cmd and lShift:
+	if state and key == 'o' and ctrl_or_cmd and lShift:
 		parent.Embody.Manager('open')
 
 	# add tox/dat tag

@@ -1,7 +1,7 @@
 ﻿"""
-Claudius - MCP Server for TouchDesigner
+Envoy - MCP Server for TouchDesigner
 
-Enables Claude Code to interact with TouchDesigner via the Model Context Protocol.
+Enables AI coding assistants to interact with TouchDesigner via the Model Context Protocol.
 Supports creating, destroying, editing operators and their parameters.
 
 Architecture:
@@ -11,8 +11,8 @@ Architecture:
 
 Usage:
 1. Embody auto-installs dependencies via uv on init (see EmbodyExt._setupEnvironment)
-2. Enable Claudius via the Claudiusenable parameter
-3. Connect Claude Code: Claudius auto-creates .mcp.json in the project root on startup
+2. Enable Envoy via the Envoyenable parameter
+3. Connect AI assistant: Envoy auto-creates .mcp.json in the project root on startup
 """
 
 from __future__ import annotations
@@ -25,9 +25,9 @@ import sys
 import time
 import asyncio
 
-CLAUDIUS_VERSION = "1.3.0"
+ENVOY_VERSION = "1.3.0"
 
-class ClaudiusMCPServer:
+class EnvoyMCPServer:
     """
     MCP Server that runs in a worker thread.
 
@@ -50,7 +50,7 @@ class ClaudiusMCPServer:
 
         # Import mcp only when server is instantiated (in worker thread)
         from mcp.server.fastmcp import FastMCP
-        self.mcp = FastMCP("Claudius", host="127.0.0.1", port=port, stateless_http=True)
+        self.mcp = FastMCP("Envoy", host="127.0.0.1", port=port, stateless_http=True)
         self._register_tools()
 
     def _execute_in_td(self, operation: str, params: dict,
@@ -93,7 +93,7 @@ class ClaudiusMCPServer:
                 except NameError:
                     expected = type(e).__name__ == 'Empty'
                 if not expected:
-                    print(f'[Claudius][WARNING] check_responses unexpected error: {e}')
+                    print(f'[Envoy][WARNING] check_responses unexpected error: {e}')
                 break
             request_id = response['id']
             if request_id in self.pending_requests:
@@ -312,10 +312,10 @@ class ClaudiusMCPServer:
         @self.mcp.tool()
         def get_td_info() -> dict:
             """
-            Get information about the TouchDesigner environment and Claudius server.
+            Get information about the TouchDesigner environment and Envoy server.
 
             Returns:
-                Dict with TD version, build, OS info, and Claudius/Embody versions
+                Dict with TD version, build, OS info, and Envoy/Embody versions
             """
             return self._execute_in_td('get_td_info', {})
 
@@ -1009,7 +1009,7 @@ class ClaudiusMCPServer:
                     time.sleep(0.01)
                 except Exception as e:
                     if not self.shutdown_event.is_set():
-                        print(f'[Claudius][WARNING] response_checker exiting: {e}')
+                        print(f'[Envoy][WARNING] response_checker exiting: {e}')
                     break
 
         Thread(target=response_checker, daemon=True).start()
@@ -1076,11 +1076,11 @@ class ClaudiusMCPServer:
 # MAIN THREAD CODE (TouchDesigner Extension)
 # ============================================================
 
-class ClaudiusExt:
+class EnvoyExt:
     """
-    Claudius - MCP Server Extension for TouchDesigner
+    Envoy - MCP Server Extension for TouchDesigner
 
-    Enables Claude Code to create, modify, and connect operators
+    Enables AI coding assistants to create, modify, and connect operators
     via the Model Context Protocol.
 
     This extension manages:
@@ -1108,40 +1108,40 @@ class ClaudiusExt:
         #   - COMP attributes aren't supported on td.containerCOMP
         #   - Module-level vars reset on recompile
         #   - sys attributes persist across recompiles and are never pickled
-        _registry = getattr(sys, '_claudius_shutdown_events', {})
+        _registry = getattr(sys, '_envoy_shutdown_events', {})
         prev_event = _registry.get(self.ownerComp.path)
         if prev_event is not None and isinstance(prev_event, Event):
             prev_event.set()
 
         # Clean up stale Event from .store() if present (not picklable)
-        if self.ownerComp.fetch('claudius_shutdown_event', None) is not None:
-            self.ownerComp.unstore('claudius_shutdown_event')
+        if self.ownerComp.fetch('envoy_shutdown_event', None) is not None:
+            self.ownerComp.unstore('envoy_shutdown_event')
 
         self.shutdown_event = Event()
         _registry[self.ownerComp.path] = self.shutdown_event
-        sys._claudius_shutdown_events = _registry
-        self.ownerComp.store('claudius_running', False)
+        sys._envoy_shutdown_events = _registry
+        self.ownerComp.store('envoy_running', False)
 
         # Defer auto-start so all init/recompile cycles finish first.
         # parexec.py also calls Start() on parameter change, but the
         # COMP-stored running flag prevents duplicate launches.
-        if self.ownerComp.par.Claudiusenable.eval():
-            self.ownerComp.par.Claudiusstatus = 'Starting...'
-            run(f"op('{self.ownerComp.path}').ext.Claudius.Start()",
+        if self.ownerComp.par.Envoyenable.eval():
+            self.ownerComp.par.Envoystatus = 'Starting...'
+            run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
                 delayFrames=30)
 
     # === Server Lifecycle ===
 
     def Start(self, _retries_left: int = 10) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
-        if self.ownerComp.fetch('claudius_running', False):
+        if self.ownerComp.fetch('envoy_running', False):
             self._log('Server already running', 'WARNING')
             return
 
         # Ensure Python environment is ready (idempotent fast path if already installed)
         op.Embody.ext.Embody._setupEnvironment()
 
-        port = self.ownerComp.par.Claudiusport.eval()
+        port = self.ownerComp.par.Envoyport.eval()
 
         # Check if port is available, retrying if old server is still shutting down
         import socket
@@ -1153,23 +1153,23 @@ class ClaudiusExt:
                 if _retries_left > 0:
                     if _retries_left == 10:
                         self._log(f'Port {port} in use, waiting for previous server to release...')
-                        self.ownerComp.par.Claudiusstatus = 'Waiting for port...'
-                    run(f"op('{self.ownerComp.path}').ext.Claudius.Start(_retries_left={_retries_left - 1})",
+                        self.ownerComp.par.Envoystatus = 'Waiting for port...'
+                    run(f"op('{self.ownerComp.path}').ext.Envoy.Start(_retries_left={_retries_left - 1})",
                         delayFrames=15)
                     return
                 self._log(f'Port {port} is still in use after retries. Restart TouchDesigner to free it.', 'ERROR')
-                self.ownerComp.par.Claudiusstatus = f'Error: port {port} in use'
+                self.ownerComp.par.Envoystatus = f'Error: port {port} in use'
                 return
 
         if _retries_left < 10:
             self._log(f'Port {port} became available after ~{(10 - _retries_left) * 0.25:.1f}s')
 
-        self.ownerComp.store('claudius_running', True)
+        self.ownerComp.store('envoy_running', True)
         self.shutdown_event.clear()
-        self._log(f'Starting Claudius MCP server on port {port}')
+        self._log(f'Starting Envoy MCP server on port {port}')
 
         # Update status
-        self.ownerComp.par.Claudiusstatus = 'Starting...'
+        self.ownerComp.par.Envoystatus = 'Starting...'
 
         # Create and enqueue a TDTask
         self.current_task = self.ThreadManager.TDTask(
@@ -1182,27 +1182,27 @@ class ClaudiusExt:
         self.ThreadManager.EnqueueTask(self.current_task, standalone=True)
 
         # Update status
-        self.ownerComp.par.Claudiusstatus = f'Running on port {port}'
+        self.ownerComp.par.Envoystatus = f'Running on port {port}'
 
-        # Auto-configure Claude Code MCP connection
-        self._configureClaude(port)
+        # Auto-configure MCP client connection
+        self._configureMCPClient(port)
 
         # Ensure CLAUDE.md exists in project/repo root
-        op.Embody.ext.Embody._upgradeClaudius()
+        op.Embody.ext.Embody._upgradeEnvoy()
 
     def Stop(self) -> None:
         """Stop MCP server"""
-        if not self.ownerComp.fetch('claudius_running', False):
-            self._log('Claudius disabled')
-            self.ownerComp.par.Claudiusstatus = 'Disabled'
+        if not self.ownerComp.fetch('envoy_running', False):
+            self._log('Envoy disabled')
+            self.ownerComp.par.Envoystatus = 'Disabled'
             return
 
-        self._log('Stopping Claudius MCP server')
-        self.ownerComp.store('claudius_running', False)
+        self._log('Stopping Envoy MCP server')
+        self.ownerComp.store('envoy_running', False)
         self.shutdown_event.set()  # Signal uvicorn to exit
 
         # Update status
-        self.ownerComp.par.Claudiusstatus = 'Disabled'
+        self.ownerComp.par.Envoystatus = 'Disabled'
 
     # === Thread Manager Target (runs in worker thread) ===
 
@@ -1218,7 +1218,7 @@ class ClaudiusExt:
             request_queue.put(data)
 
         try:
-            server = ClaudiusMCPServer(
+            server = EnvoyMCPServer(
                 request_queue=None,  # Not used, we use InfoQueue
                 response_queue=response_queue,
                 add_to_refresh_queue=add_to_refresh,
@@ -1300,16 +1300,16 @@ class ClaudiusExt:
     def _onServerSuccess(self, returnValue=None):
         """SuccessHook - Called when the thread task completes successfully"""
         self._log('Server thread completed')
-        self.ownerComp.store('claudius_running', False)
+        self.ownerComp.store('envoy_running', False)
         self.current_task = None
-        self.ownerComp.par.Claudiusstatus = 'Stopped'
+        self.ownerComp.par.Envoystatus = 'Stopped'
 
     def _onServerError(self, error):
         """ExceptHook - Called when the thread task errors"""
         self._log(f'Server error: {error}', 'ERROR')
-        self.ownerComp.store('claudius_running', False)
+        self.ownerComp.store('envoy_running', False)
         self.current_task = None
-        self.ownerComp.par.Claudiusstatus = f'Error: {error}'
+        self.ownerComp.par.Envoystatus = f'Error: {error}'
 
     # === Operation Routing ===
 
@@ -1827,7 +1827,7 @@ class ClaudiusExt:
     # === Introspection & Diagnostics (Main Thread Only) ===
 
     def _get_td_info(self) -> dict:
-        """Get TouchDesigner environment and Claudius server info"""
+        """Get TouchDesigner environment and Envoy server info"""
         try:
             import td as _td
             version = _td.app.version
@@ -1837,7 +1837,7 @@ class ClaudiusExt:
                 'version': f'{version}.{build}',
                 'osName': _td.app.osName,
                 'osVersion': _td.app.osVersion,
-                'claudiusVersion': CLAUDIUS_VERSION,
+                'envoyVersion': ENVOY_VERSION,
             }
         except Exception as e:
             return {'error': f'Failed to get TD info: {e}'}
@@ -2896,9 +2896,9 @@ class ClaudiusExt:
 
     # === Utility Methods ===
 
-    def _configureClaude(self, port):
-        """Auto-configure Claude Code by writing .mcp.json in the project root.
-        Works with both the CLI and the VS Code extension.
+    def _configureMCPClient(self, port):
+        """Auto-configure MCP client by writing .mcp.json in the project root.
+        Works with both CLIs and IDE extensions.
         Idempotent — safe to call on every start."""
         from pathlib import Path
         url = f'http://localhost:{port}/mcp'
@@ -2930,28 +2930,28 @@ class ClaudiusExt:
                     pass
 
             servers = config.get('mcpServers', {})
-            existing = servers.get('claudius', {})
+            existing = servers.get('envoy', {})
 
             # Only write if the entry is missing or the URL changed
             if existing.get('url') == url and existing.get('type') == 'http':
-                self._log('Claude Code .mcp.json already configured')
+                self._log('MCP .mcp.json already configured')
                 return
 
-            servers['claudius'] = {
+            servers['envoy'] = {
                 'type': 'http',
                 'url': url
             }
             config['mcpServers'] = servers
             mcp_file.write_text(
                 json.dumps(config, indent=2) + '\n', encoding='utf-8')
-            self._log(f'Wrote Claude Code config to {mcp_file}')
+            self._log(f'Wrote MCP config to {mcp_file}')
 
         except Exception as e:
-            self._log(f'Could not auto-configure Claude Code: {e}', 'WARNING')
+            self._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
 
     def _log(self, message: str, level: str = 'INFO'):
         """Log a message via Embody's centralized logger."""
         try:
             op.Embody.Log(message, level, _depth=2)
         except Exception:
-            print(f'[Claudius][{level}] {message}')
+            print(f'[Envoy][{level}] {message}')

@@ -1,10 +1,11 @@
 # :label: Embody
 ### Externalize TouchDesigner Components and Scripts
 #### :floppy_disk: TouchDesigner 2025.32050 (Windows/macOS)
-#### :floppy_disk: version 5.0.61
+#### :floppy_disk: version 5.0.71
 
 [YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s)
 
+<!-- TODO: Replace screenshot with current v5.x Manager UI -->
 <img src='https://raw.githubusercontent.com/dylanroscover/Embody/refs/heads/main/img/screenshot.png'>
 
 ## :notebook_with_decorative_cover: Overview
@@ -55,7 +56,7 @@ Embody keeps your external toxes updated. Saving your project (`ctrl + s`) autos
 
 > Use `ctrl + alt + u` to save only the COMP you're currently working inside of (useful for large projects).
 
-> To view dirty COMPs, press `ctrl + shift + e` to open the Manager UI, listing all externalized operators and their status. Refresh to get the latest dirties and update as needed.
+> To view dirty COMPs, press `ctrl + shift + o` to open the Manager UI, listing all externalized operators and their status. Refresh to get the latest dirties and update as needed.
 
 ### Parameter Change Detection
 Embody tracks all parameter values on externalized COMPs. When any parameter changes (not just network edits), that COMP is automatically marked as dirty with a "Par" indicator. This ensures parameter tweaks are never lost, even if the COMP's network hasn't changed.
@@ -74,7 +75,7 @@ Embody normalizes all file paths to use forward slashes (`/`), which work on bot
 - Automatic parameter change detection marks COMPs dirty when any parameter is modified.
 
 ## :label: Manager UI
-Press `ctrl + shift + e` to open the Manager window, which provides:
+Press `ctrl + shift + o` to open the Manager window, which provides:
 
 - **TreeLister View**: Hierarchical view of all externalized operators organized by path.
 - **Status Indicators**: Shows dirty state for each operator (network changes or parameter changes marked as "Par").
@@ -84,6 +85,114 @@ Press `ctrl + shift + e` to open the Manager window, which provides:
   - Open file location in your system file browser
   - Refresh to update dirty states
   - Filter/search through externalized operators
+
+## :robot_face: Envoy MCP Server
+
+Embody includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server that lets AI coding assistants interact with TouchDesigner programmatically. With Envoy running, an MCP-compatible client can create operators, set parameters, wire connections, export networks, manage externalizations, and more — all through natural language conversation.
+
+Envoy works with any MCP client, including [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), and others that support the MCP protocol.
+
+### Prerequisites & Setup
+
+Embody automatically installs all dependencies when Envoy is first enabled. No manual setup required.
+
+1. **Enable Envoy**: Toggle the `Envoyenable` parameter on the Embody COMP
+2. **Server starts**: Envoy runs on `localhost:9876` (configurable via `Envoyport`)
+3. **Auto-configuration**: Envoy creates a `.mcp.json` file in your git repo root automatically
+4. **Connect your MCP client**: Start a new Claude Code session (or any MCP client) — it picks up the `.mcp.json` automatically
+
+### What Can Envoy Do?
+
+Envoy exposes 40+ MCP tools organized into categories:
+
+| Category | Examples |
+|----------|---------|
+| **Operator Management** | Create, delete, copy, rename, query operators |
+| **Parameters** | Get/set values, expressions, bind expressions |
+| **Connections** | Wire operators together, disconnect inputs |
+| **DAT Content** | Read/write text and table data |
+| **Extensions** | Create TD extensions with proper boilerplate |
+| **Annotations** | Create network boxes, comments, annotate groups |
+| **Diagnostics** | Check errors, get performance data, introspect API |
+| **Embody Integration** | Tag, save, query externalizations |
+| **TDN Export/Import** | Export/import network snapshots as JSON |
+| **Code Execution** | Run arbitrary Python in TouchDesigner |
+
+For the complete tool reference, see the [CLAUDE.md](CLAUDE.md) file.
+
+### Configuring the Port
+
+Change the `Envoyport` parameter on the Embody COMP. If the server is running, it automatically restarts on the new port and updates `.mcp.json`.
+
+### CLAUDE.md Auto-Generation
+
+When Envoy starts, it generates a `CLAUDE.md` file in your project root. This file provides Claude Code with context about TouchDesigner development patterns, the MCP tool reference, testing conventions, and project-specific guidance.
+
+## :page_facing_up: TDN Network Format
+
+TDN (TouchDesigner Network) is a JSON-based file format for exporting TouchDesigner operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in git, making it easy to review changes to your network structure.
+
+### Exporting a Network
+
+- **Entire project**: Press `ctrl + shift + e` to export all operators to a `.tdn` file
+- **Current COMP only**: Press `ctrl + alt + e` to export just the COMP you're working inside
+- **Via Envoy**: Use the `export_network` MCP tool for programmatic export
+
+TDN files store only non-default parameter values, keeping the output minimal. DAT content (scripts, tables) can optionally be included.
+
+### Importing a Network
+
+Use the `import_network` Envoy MCP tool to recreate a network from a `.tdn` file. The import process handles operator creation, custom parameters, parameter values, flags, wiring, DAT content, and positioning in the correct order.
+
+### Per-COMP Export Mode
+
+For large projects, TDN supports splitting the export into one file per COMP, creating a directory structure that mirrors your TouchDesigner network hierarchy.
+
+### Full Specification
+
+See [docs/TDN.md](docs/TDN.md) for the complete format specification including all field definitions, value serialization rules, and import process details.
+
+## :test_tube: Test Framework
+
+Embody includes a comprehensive automated test suite with **27 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+
+### Running Tests
+
+From the TouchDesigner textport:
+```python
+# Run all tests (non-blocking, one test per frame)
+op.unit_tests.RunTests()
+
+# Run a specific suite
+op.unit_tests.RunTests(suite_name='test_path_utils')
+```
+
+Via Envoy MCP: use the `run_tests` tool.
+
+### Test Coverage
+
+- **13 core suites**: Externalization lifecycle, file management, tagging, rename/move, delete cleanup, path utilities, parameter tracking, logging
+- **11 MCP tool suites**: Operators, parameters, DAT content, connections, annotations, extensions, diagnostics, flags/position, code execution, externalization, performance
+- **2 TDN suites**: Export/import, helper functions
+- **1 infrastructure suite**: Server lifecycle
+
+## :wood: Logging
+
+Embody provides a multi-destination logging system:
+
+- **File logging** (default): Logs are written to `dev/logs/<project_name>_YYMMDD.log`. Files auto-rotate at 10 MB.
+- **FIFO DAT**: Recent log entries are visible in TouchDesigner's network editor.
+- **Textport**: Enable the `Print` parameter to echo logs to the textport.
+- **Ring buffer**: The most recent 200 entries are accessible via the Envoy `get_logs` MCP tool.
+
+Log levels: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `SUCCESS`.
+
+Use from anywhere in your project:
+```python
+op.Embody.Log('Something happened', 'INFO')
+op.Embody.Warn('Check this out')
+op.Embody.Error('Something broke')
+```
 
 ## :label: Externalizations Table
 Embody maintains an `externalizations` tableDAT outside the Embody component with the following columns:
@@ -130,10 +239,12 @@ Options when disabling:
 ## :keyboard: Keyboard Shortcuts
 | Shortcut | Action |
 |----------|--------|
-| `ctrl + shift + e` | Open the Manager to view and manage externalized operators |
-| `lctrl + lctrl` | Tag the current selected operator (press left control twice) |
+| `lctrl + lctrl` | Tag the selected operator for externalization (press left control twice) |
 | `ctrl + shift + u` | Initialize/update all externalizations |
 | `ctrl + alt + u` | Save only the current COMP you're working inside |
+| `ctrl + shift + o` | Open the Manager UI |
+| `ctrl + shift + e` | Export entire project network to `.tdn` file |
+| `ctrl + alt + e` | Export current COMP network to `.tdn` file |
 
 ## :wrench: Troubleshooting
 
@@ -149,6 +260,12 @@ For verbose path logging and troubleshooting, enable debug mode by setting `debu
 Originally developed by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
 
 ## Version History
+- **5.0.66**: Current release — rename Claudius to Envoy, doc consistency fixes
+- **5.0.64**: Previous release
+- **5.0.61**: Rename MCP tools for consistency, add auto-restart on port change, expand testing documentation
+- **5.0.59**: Migrate tests to externalized DATs, add deferred test runner (one test per frame)
+- **5.0.56**: Rewrite test runner, fix `run()` safety, add 6 new test suites, update documentation
+- **5.0**: Major release — add Envoy MCP server (40+ tools for Claude Code integration), TDN network format (JSON export/import), comprehensive test framework (26 suites), structured logging system, CLAUDE.md auto-generation, cross-platform macOS support
 - **4.7.14**: Safe file deletion - Embody now only deletes files it created. Untracked files in the externalization folder are preserved during disable/migration operations.
 - **4.7.11**: Cross-platform path handling (forward slashes on all platforms) + code cleanup
 - **4.7.6**: Build save increment bug fix

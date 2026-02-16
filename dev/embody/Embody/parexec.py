@@ -17,18 +17,18 @@ def onValueChange(par, prev):
 		if not par:
 			parent.Embody.MissingExternalizationsPar()
 
-	elif par.name == 'Claudiusenable':
+	elif par.name == 'Envoyenable':
 		if par.eval():
-			parent.Embody.ext.Claudius.Start()
+			parent.Embody.ext.Envoy.Start()
 		else:
-			parent.Embody.ext.Claudius.Stop()
+			parent.Embody.ext.Envoy.Stop()
 
-	elif par.name == 'Claudiusport':
+	elif par.name == 'Envoyport':
 		# Auto-restart server on port change if currently enabled
-		if parent.Embody.par.Claudiusenable.eval():
-			parent.Embody.ext.Claudius.Stop()
+		if parent.Embody.par.Envoyenable.eval():
+			parent.Embody.ext.Envoy.Stop()
 			# Delay restart to ensure clean shutdown
-			run("parent.Embody.ext.Claudius.Start()", delayFrames=2)
+			run("parent.Embody.ext.Envoy.Start()", delayFrames=2)
 
 	elif par.name == 'Embeddatsintdns':
 		parent.Embody.ext.TDN.ReexportAllTDNs()

@@ -1,5 +1,5 @@
 """
-Test suite: MCP externalization integration handlers in ClaudiusExt.
+Test suite: MCP externalization integration handlers in EnvoyExt.
 
 Tests _tag_for_externalization, _remove_externalization_tag,
 _get_externalizations, _get_externalization_status.
@@ -13,21 +13,21 @@ class TestMCPExternalization(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.claudius = self.embody.ext.Claudius
+        self.envoy = self.embody.ext.Envoy
 
     # --- _get_externalizations ---
 
     def test_get_externalizations_returns_list(self):
-        result = self.claudius._get_externalizations()
+        result = self.envoy._get_externalizations()
         self.assertDictHasKey(result, 'externalizations')
         self.assertIsInstance(result['externalizations'], list)
 
     def test_get_externalizations_has_entries(self):
-        result = self.claudius._get_externalizations()
+        result = self.envoy._get_externalizations()
         self.assertGreater(len(result['externalizations']), 0)
 
     def test_get_externalizations_entry_structure(self):
-        result = self.claudius._get_externalizations()
+        result = self.envoy._get_externalizations()
         if result['externalizations']:
             entry = result['externalizations'][0]
             self.assertDictHasKey(entry, 'path')
@@ -37,13 +37,13 @@ class TestMCPExternalization(EmbodyTestCase):
 
     def test_get_externalization_status_existing(self):
         # Use Embody itself as a known externalized op
-        result = self.claudius._get_externalization_status(
+        result = self.envoy._get_externalization_status(
             op_path=self.embody.path)
         # Should return some status info
         self.assertNotIn('error', result)
 
     def test_get_externalization_status_nonexistent(self):
-        result = self.claudius._get_externalization_status(
+        result = self.envoy._get_externalization_status(
             op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
 
@@ -51,11 +51,11 @@ class TestMCPExternalization(EmbodyTestCase):
 
     def test_tag_for_externalization_comp(self):
         comp = self.sandbox.create(baseCOMP, 'tag_ext_comp')
-        result = self.claudius._tag_for_externalization(op_path=comp.path)
+        result = self.envoy._tag_for_externalization(op_path=comp.path)
         self.assertTrue(result.get('success'))
 
     def test_tag_for_externalization_nonexistent(self):
-        result = self.claudius._tag_for_externalization(
+        result = self.envoy._tag_for_externalization(
             op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
 
@@ -64,12 +64,12 @@ class TestMCPExternalization(EmbodyTestCase):
     def test_remove_externalization_tag(self):
         comp = self.sandbox.create(baseCOMP, 'untag_comp')
         # Tag it first
-        self.claudius._tag_for_externalization(op_path=comp.path)
+        self.envoy._tag_for_externalization(op_path=comp.path)
         # Now remove
-        result = self.claudius._remove_externalization_tag(op_path=comp.path)
+        result = self.envoy._remove_externalization_tag(op_path=comp.path)
         self.assertTrue(result.get('success'))
 
     def test_remove_externalization_tag_nonexistent(self):
-        result = self.claudius._remove_externalization_tag(
+        result = self.envoy._remove_externalization_tag(
             op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')

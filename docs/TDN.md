@@ -36,7 +36,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 {
   "format": "tdn",
   "version": "1.0",
-  "generator": "Claudius/1.0.0",
+  "generator": "Envoy/1.0.0",
   "td_build": "2025.32050",
   "exported_at": "2025-02-09T12:34:56Z",
   "root": "/",
@@ -51,7 +51,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
 | `version` | string | Yes | Format version. Currently `"1.0"`. |
-| `generator` | string | Yes | Tool that produced the file (e.g., `"Claudius/1.0.0"`). |
+| `generator` | string | Yes | Tool that produced the file (e.g., `"Envoy/1.0.0"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
 | `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-09T12:34:56Z"`). |
 | `root` | string | Yes | The COMP path that was exported (e.g., `"/"` for the entire project). |
@@ -553,7 +553,7 @@ A realistic `.tdn` file demonstrating all major features:
 {
   "format": "tdn",
   "version": "1.0",
-  "generator": "Claudius/1.0.0",
+  "generator": "Envoy/1.0.0",
   "td_build": "2025.32050",
   "exported_at": "2025-02-09T14:30:00Z",
   "root": "/",
