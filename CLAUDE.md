@@ -26,7 +26,7 @@ POPs (**Point Operators**) are a new operator family in TouchDesigner 2025 that 
 
 **Common POP types** (90+ available): `gridPOP`, `noisePOP`, `transformPOP`, `particlePOP`, `spherePOP`, `linePOP`, `mergePOP`, `nullPOP`, `selectPOP`, `mathPOP`, `cachePOP`, `fileinPOP`, `glslPOP`, `deletePOP`, `sortPOP`, `copyPOP`, `switchPOP`, `feedbackPOP`, `trailPOP`, `sprinklePOP`
 
-**Python type names** follow the same convention as other families: `gridPOP`, `noisePOP`, etc. Use these with `create_operator` or `parent.create(gridPOP, 'grid1')`.
+**Python type names** follow the same convention as other families: `gridPOP`, `noisePOP`, etc. Use these with `create_op` or `parent.create(gridPOP, 'grid1')`.
 
 ```python
 # Creating a POP
@@ -186,7 +186,7 @@ TD parameters and CHOP channels auto-cast in expression contexts but remain TD o
 When creating Python files that will be used in TouchDesigner (scripts, extensions, test files, callbacks), you must **ALWAYS** create the textDAT in TouchDesigner first, then externalize it using Embody. **Never** manually set the `file` and `syncfile` parameters — that is what Embody automates.
 
 **Workflow:**
-1. Create the textDAT in TouchDesigner (via MCP `create_operator` or in the TD UI)
+1. Create the textDAT in TouchDesigner (via MCP `create_op` or in the TD UI)
 2. Write the Python code into the DAT (via MCP `set_dat_content` or edit in TD)
 3. Tag the DAT for externalization using Embody (`tag_for_externalization` MCP tool or `Ctrl+Shift+T` in TD)
 4. Save the externalization (`save_externalization` or `Ctrl+Shift+U`) — Embody writes the `.py` file to disk
@@ -195,7 +195,7 @@ Embody handles all the file path management, `file` parameter configuration, `sy
 
 ```python
 # Example: creating a test file via MCP
-# 1. create_operator(parent_path='/embody/unit_tests', op_type='textDAT', name='test_my_feature')
+# 1. create_op(parent_path='/embody/unit_tests', op_type='textDAT', name='test_my_feature')
 # 2. set_dat_content(op_path='/embody/unit_tests/test_my_feature', text='...python code...')
 # 3. tag_for_externalization(op_path='/embody/unit_tests/test_my_feature')
 # 4. save_externalization(op_path='/embody/unit_tests/test_my_feature')
@@ -358,6 +358,14 @@ Embody auto-installs all dependencies (mcp>=1.2.0, pywin32>=306 on Windows) via 
 2. Toggle the `Claudiusenable` parameter ON in the Embody COMP
 3. Server starts on configured port (default: 9876)
 
+### Changing the Port
+Changing the `Claudiusport` parameter while the server is running will automatically:
+1. Stop the server on the old port
+2. Restart on the new port (after a 2-frame delay for clean shutdown)
+3. Update `.mcp.json` with the new port
+
+If the server is not running, changing the port simply updates the parameter value.
+
 ### Connecting Claude Code
 Claudius auto-creates a `.mcp.json` file in the git repo root on startup. This works with both the Claude Code CLI and the VS Code extension. Just start a new Claude Code session after Claudius is running.
 
@@ -379,15 +387,15 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `create_operator` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
+| `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
-| `delete_operator` | `op_path` | Delete an operator |
-| `copy_operator` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
-| `rename_operator` | `op_path`, `new_name` | Rename an operator |
-| `get_operator` | `op_path` | Get full operator info (type, family, parameters, inputs, outputs, children) |
+| `delete_op` | `op_path` | Delete an operator |
+| `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
+| `rename_op` | `op_path`, `new_name` | Rename an operator |
+| `get_op` | `op_path` | Get full operator info (type, family, parameters, inputs, outputs, children) |
 | `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container. Set `include_utility=True` to include annotations |
 | `find_children` | `op_path`, `name?`, `type?`, `depth?`, `tags?`, `text?`, `comment?`, `include_utility?` | Advanced search using TD's `findChildren` — filter by name pattern, type, depth, tags, text content, or comment. Set `include_utility=True` to include annotations |
-| `cook_operator` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
+| `cook_op` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
 
 ### Parameter Control
 
@@ -410,12 +418,12 @@ If you need to configure manually, create `.mcp.json` in the project root:
 | `get_op_flags` | `op_path` | Get all flags: bypass, lock, display, render, viewer, current, expose, selected, allowCooking |
 | `set_op_flags` | `op_path`, `bypass?`, `lock?`, `display?`, `render?`, `viewer?`, `current?`, `expose?`, `allowCooking?`, `selected?` | Set one or more flags on an operator |
 
-### Node Positioning & Layout
+### Operator Positioning & Layout
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_op_position` | `op_path` | Get node position, size, color, and comment |
-| `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set node position, size, color (`[r,g,b]` floats 0-1), or comment |
+| `get_op_position` | `op_path` | Get operator position, size, color, and comment |
+| `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set operator position, size, color (`[r,g,b]` floats 0-1), or comment |
 | `layout_children` | `op_path` | Auto-layout all children in a COMP |
 
 ### Annotations
@@ -437,8 +445,8 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `connect_operators` | `source_path`, `dest_path`, `source_index?`, `dest_index?`, `comp?` | Wire two operators together. Set `comp=True` for COMP connectors (top/bottom) |
-| `disconnect_operator` | `op_path`, `input_index?`, `comp?` | Disconnect an operator's input. Set `comp=True` for COMP connectors (top/bottom) |
+| `connect_ops` | `source_path`, `dest_path`, `source_index?`, `dest_index?`, `comp?` | Wire two operators together. Set `comp=True` for COMP connectors (top/bottom) |
+| `disconnect_op` | `op_path`, `input_index?`, `comp?` | Disconnect an operator's input. Set `comp=True` for COMP connectors (top/bottom) |
 | `get_connections` | `op_path` | Get all input/output connections (includes COMP connections for COMPs) |
 
 ### Code Execution
@@ -452,8 +460,8 @@ If you need to configure manually, create `.mcp.json` in the project root:
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_td_info` | _(none)_ | Get TD version, build, OS, and Claudius version |
-| `get_node_errors` | `op_path`, `recurse?` | Get error messages for an operator and its children |
-| `exec_node_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`) |
+| `get_op_errors` | `op_path`, `recurse?` | Get error messages for an operator and its children |
+| `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`) |
 | `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |
 | `get_module_help` | `module_name` | Get Python help text for a module (supports dotted names like `td.tdu`) |
@@ -462,9 +470,9 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 | Prompt | Parameters | Description |
 |--------|-----------|-------------|
-| `search_node` | `node_name`, `node_type?` | Guide for searching nodes by name |
-| `check_node_errors` | `node_path` | Guide for inspecting and resolving node errors |
-| `connect_nodes` | _(none)_ | Guide for wiring nodes together |
+| `search_op` | `op_name`, `op_type?` | Guide for searching operators by name |
+| `check_op_errors` | `op_path` | Guide for inspecting and resolving operator errors |
+| `connect_ops` | _(none)_ | Guide for wiring operators together |
 | `create_extension_guide` | _(none)_ | Guide for creating TD extensions with proper patterns |
 
 ### Embody Integration
@@ -500,9 +508,9 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 ### Creating an Operator and Verifying It
 1. `query_network` on the target parent to confirm it exists
-2. `create_operator` with the desired type and name
-3. `get_node_errors` with `recurse=true` to check for errors
-4. If connecting: `connect_operators` then `get_node_errors` again
+2. `create_op` with the desired type and name
+3. `get_op_errors` with `recurse=true` to check for errors
+4. If connecting: `connect_ops` then `get_op_errors` again
 
 ### Adding a New MCP Tool to Claudius
 1. Add the tool function inside `_register_tools()` in `ClaudiusExt.py`
@@ -511,11 +519,11 @@ If you need to configure manually, create `.mcp.json` in the project root:
 4. Update `CLAUDE_md_template.md` to match
 5. Test via MCP Inspector or Claude Code
 
-### Debugging a Node Error
-1. `get_node_errors` with `recurse=true` on the suspected node
-2. `get_operator` to inspect parameters and connections
+### Debugging an Operator Error
+1. `get_op_errors` with `recurse=true` on the suspected operator
+2. `get_op` to inspect parameters and connections
 3. `get_connections` to verify input/output wiring
-4. `get_dat_content` if the node is a DAT with script errors
+4. `get_dat_content` if the operator is a DAT with script errors
 
 ### Externalizing an Operator
 1. `tag_for_externalization` on the operator (auto-detects type)
@@ -531,11 +539,150 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 ## Testing
 
-There is no automated test suite. Changes are verified by:
+Embody has a comprehensive automated test suite with **26 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
 
-1. **Manual TD testing**: Open the `.toe` in TouchDesigner and exercise the feature (tag operators, externalize, rename, etc.)
-2. **MCP-based verification**: Use Claudius MCP tools to verify state — e.g., call `get_externalizations` to confirm an operator was tracked, or `get_operator` to check parameter values
-3. **File inspection**: Check that externalized files in `dev/embody/` reflect expected content
+### Test Coverage
+
+**Core Embody (12 suites):**
+- `test_externalization.py` — externalization lifecycle
+- `test_crud_operators.py` — create, read, update, delete operations
+- `test_file_management.py` — file I/O, path handling, cleanup
+- `test_tag_management.py` — tagging operators for externalization
+- `test_tag_lifecycle.py` — tag application and removal
+- `test_rename_move_lifecycle.py` — rename and move tracking
+- `test_delete_cleanup.py` — deletion and file cleanup
+- `test_duplicate_handling.py` — duplicate operator handling
+- `test_update_sync.py` — sync between .toe and externalized files
+- `test_path_utils.py` — path normalization and utilities
+- `test_param_tracker.py` — parameter change tracking
+- `test_operator_queries.py` — operator discovery and queries
+- `test_logging.py` — logging system
+
+**MCP Tools (9 suites):**
+- `test_mcp_operators.py` — create, delete, copy, rename, query, find
+- `test_mcp_parameters.py` — get/set parameters, modes, expressions
+- `test_mcp_dat_content.py` — DAT text and table operations
+- `test_mcp_connections.py` — wiring operators together
+- `test_mcp_annotations.py` — creating and managing annotations
+- `test_mcp_extensions.py` — extension creation and setup
+- `test_mcp_diagnostics.py` — error checking, performance, info
+- `test_mcp_flags_position.py` — operator flags and positioning
+- `test_mcp_code_execution.py` — executing Python in TD
+- `test_mcp_externalization.py` — Embody integration via MCP
+- `test_mcp_performance.py` — performance monitoring
+
+**TDN Format (2 suites):**
+- `test_tdn_export_import.py` — network export/import
+- `test_tdn_helpers.py` — TDN utility functions
+
+**Infrastructure (1 suite):**
+- `test_server_lifecycle.py` — Claudius MCP server start/stop
+
+### Test Framework Features
+
+The test runner (`TestRunnerExt`) provides:
+
+- **Sandbox isolation** — each suite gets a fresh baseCOMP for test fixtures
+- **Standard assertions** — 20+ assertion methods (assertEqual, assertTrue, assertIn, assertIsInstance, etc.)
+- **Lifecycle hooks** — setUp/tearDown per test, setUpSuite/tearDownSuite per suite
+- **Three execution modes:**
+  - `RunTestsSync()` — synchronous, all tests in one frame (blocks TD, use for MCP)
+  - `RunTestsDeferred()` — one suite per frame (keeps TD responsive)
+  - `RunTestsDeferredPerTest()` — one test per frame (default, best for heavy suites)
+- **Deferred execution** — uses `run()` with `delayFrames` to spread tests across frames
+- **Results tracking** — table DAT with pass/fail/error/skip counts and durations
+- **Dynamic module loading** — loads externalized `.py` test files with TD globals injected
+- **Skip support** — `self.skip(reason)` to conditionally skip tests
+
+### Running Tests
+
+**From TouchDesigner:**
+```python
+# Run all tests (one test per frame, non-blocking)
+op.unit_tests.RunTests()
+
+# Run a specific suite
+op.unit_tests.RunTests(suite_name='test_path_utils')
+
+# Run a specific test method
+op.unit_tests.RunTests(suite_name='test_path_utils', test_name='test_normalizePath_backslashes_converted')
+
+# Run synchronously (blocks TD until complete)
+op.unit_tests.RunTestsSync()
+
+# Get results
+results = op.unit_tests.GetResults()
+# Returns: {'total': 156, 'passed': 156, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
+```
+
+**Via MCP:**
+```python
+# Using Claudius MCP tool
+mcp.run_tests(suite_name='test_path_utils')  # Run one suite
+mcp.run_tests()                              # Run all suites
+```
+
+**Test file location:** `dev/embody/unit_tests/test_*.py` (externalized, version-controlled)
+
+### What Cannot Be Unit Tested
+
+Some areas require manual testing or integration testing:
+
+1. **UI interactions** — clicking, dragging, network editor, pane navigation
+2. **Cross-session persistence** — requires closing/reopening the `.toe` file
+3. **Keyboard shortcuts** — actual key press detection and OS integration
+4. **Modal dialogs** — file pickers, user prompts, confirmation dialogs
+5. **Undo/redo** — TouchDesigner's undo system behavior
+6. **Graphics rendering** — visual output validation of TOPs
+7. **Real-time performance** — sustained load, frame-rate stability
+8. **External hardware** — MIDI, OSC, DMX, serial I/O
+9. **Thread Manager under extreme load** — concurrent thread pool saturation (basic lifecycle is tested)
+
+### Writing New Tests
+
+Create a new test file in `dev/embody/unit_tests/`:
+
+```python
+"""Test suite: description of what this tests."""
+
+# Base class is auto-injected by the test runner
+class TestMyFeature(EmbodyTestCase):
+
+    def test_something(self):
+        """Test description."""
+        # Create test fixtures in self.sandbox
+        op = self.sandbox.create(baseCOMP, 'test_op')
+
+        # Access Embody extension
+        result = self.embody_ext.someMethod(op)
+
+        # Assertions
+        self.assertEqual(result, expected_value)
+        self.assertTrue(op.valid)
+        self.assertIn('foo', result)
+
+    def setUp(self):
+        """Called before each test (optional)."""
+        pass
+
+    def tearDown(self):
+        """Called after each test (auto-destroys sandbox children)."""
+        super().tearDown()  # Important: cleans up sandbox
+```
+
+**Key objects injected:**
+- `self.sandbox` — baseCOMP for creating temporary operators
+- `self.embody` — reference to `op.Embody`
+- `self.embody_ext` — direct access to `op.Embody.ext.Embody`
+- `self.runner` — TestRunnerExt instance
+- All TD globals (`op`, `parent`, `root`, etc.) and operator types are available
+
+**Verification strategy:**
+1. **Unit tests** (automated) — test all business logic, MCP tools, and utilities
+2. **Manual TD testing** — verify UI interactions, keyboard shortcuts, visual behavior
+3. **MCP verification** — use Claudius tools to verify state (e.g., `get_externalizations`, `get_op_errors`)
+4. **File inspection** — confirm externalized files in `dev/embody/` match expectations
+5. **Log analysis** — after test runs, check `dev/logs/` for errors (see Important Rule #12)
 
 ## Common Mistakes to Avoid
 
@@ -553,7 +700,7 @@ There is no automated test suite. Changes are verified by:
 12. Binding the MCP server to `0.0.0.0` instead of `127.0.0.1`
 13. Editing `externalizations.tsv` directly instead of using Embody's tracking API
 14. Importing or calling TouchDesigner modules in worker thread code (`ClaudiusMCPServer` class)
-15. Renaming externalized files on disk (`git mv`, manual rename) or manually updating `file`/`externaltox` parameters after a rename — Embody handles all of this automatically via `checkOpsForContinuity`. Only rename the operator itself (via MCP `rename_operator` or inside TD)
+15. Renaming externalized files on disk (`git mv`, manual rename) or manually updating `file`/`externaltox` parameters after a rename — Embody handles all of this automatically via `checkOpsForContinuity`. Only rename the operator itself (via MCP `rename_op` or inside TD)
 16. Not following the `NameExt` convention for extension class names and their source DATs (e.g., `EmbodyExt`, `ClaudiusExt`, `TestRunnerExt`)
 
 ## Important Rules
@@ -566,7 +713,7 @@ There is no automated test suite. Changes are verified by:
 6. **Binary files** (`.toe`, `.tox`) cannot be read or diffed — work with the externalized `.py` files instead
 7. **Thread boundary**: `ClaudiusMCPServer` (worker thread) must never import or call TouchDesigner modules. All TD access goes through `_execute_in_td()` → main thread
 8. **Safe deletion only**: Never delete files outside Embody's tracking. Use `safeDeleteFile()` / `isTrackedFile()`
-9. **Always check for errors after creating operators** — call `get_node_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
+9. **Always check for errors after creating operators** — call `get_op_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
 10. **CLAUDE.md and CLAUDE_md_template.md must ALWAYS be kept in sync.** The template at `dev/embody/Embody/CLAUDE_md_template.md` generates per-project CLAUDE.md files. Any documentation changes must be applied to both files.
 11. **Favor annotations over OP comments** — when documenting operators or groups of operators in the network, always use `create_annotation` (annotate mode with a title bar) instead of setting the `comment` property on individual operators. Annotations are more visible, support rich text, and can visually group related operators. Reserve OP comments for brief inline notes only.
 12. **Always analyze log files after MCP operations** — after running tests, bulk externalizations, or any multi-step MCP workflow, read the log file at `dev/logs/` to verify no errors occurred. The piggybacked `_logs` field and `get_logs` ring buffer only hold a limited window — errors from earlier in the operation may have been evicted. Grep the log file for `ERROR` and `WARNING` entries and resolve any issues before reporting success.

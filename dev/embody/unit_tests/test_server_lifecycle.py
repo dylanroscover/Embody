@@ -62,13 +62,13 @@ class TestServerLifecycle(EmbodyTestCase):
     def test_execute_operation_with_params(self):
         comp = self.sandbox.create(baseCOMP, 'routing_test')
         result = self.claudius._execute_operation(
-            'get_operator', {'op_path': comp.path})
+            'get_op', {'op_path': comp.path})
         self.assertNotIn('error', result)
 
     def test_execute_operation_handler_error(self):
         # Passing invalid params should return error, not crash
         result = self.claudius._execute_operation(
-            'get_operator', {'op_path': '/nonexistent_lifecycle_test'})
+            'get_op', {'op_path': '/nonexistent_lifecycle_test'})
         self.assertDictHasKey(result, 'error')
 
     # --- Log piggybacking ---

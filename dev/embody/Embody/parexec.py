@@ -23,6 +23,13 @@ def onValueChange(par, prev):
 		else:
 			parent.Embody.ext.Claudius.Stop()
 
+	elif par.name == 'Claudiusport':
+		# Auto-restart server on port change if currently enabled
+		if parent.Embody.par.Claudiusenable.eval():
+			parent.Embody.ext.Claudius.Stop()
+			# Delay restart to ensure clean shutdown
+			run("parent.Embody.ext.Claudius.Start()", delayFrames=2)
+
 	elif par.name == 'Embeddatsintdns':
 		parent.Embody.ext.TDN.ReexportAllTDNs()
 

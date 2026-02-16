@@ -104,7 +104,7 @@ class ClaudiusMCPServer:
         """Register all MCP tools"""
 
         @self.mcp.tool()
-        def create_operator(parent_path: str, op_type: str, name: str = None) -> dict:
+        def create_op(parent_path: str, op_type: str, name: str = None) -> dict:
             """
             Create a new operator in TouchDesigner.
 
@@ -116,14 +116,14 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with path, name, and type of created operator
             """
-            return self._execute_in_td('create_operator', {
+            return self._execute_in_td('create_op', {
                 'parent_path': parent_path,
                 'op_type': op_type,
                 'name': name
             })
 
         @self.mcp.tool()
-        def delete_operator(op_path: str) -> dict:
+        def delete_op(op_path: str) -> dict:
             """
             Delete an operator.
 
@@ -133,10 +133,10 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with success status
             """
-            return self._execute_in_td('delete_operator', {'op_path': op_path})
+            return self._execute_in_td('delete_op', {'op_path': op_path})
 
         @self.mcp.tool()
-        def get_operator(op_path: str) -> dict:
+        def get_op(op_path: str) -> dict:
             """
             Get detailed information about an operator.
 
@@ -146,7 +146,7 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with operator info including type, family, parameters, inputs, outputs
             """
-            return self._execute_in_td('get_operator', {'op_path': op_path})
+            return self._execute_in_td('get_op', {'op_path': op_path})
 
         @self.mcp.tool()
         def set_parameter(op_path: str, par_name: str, value: str = None,
@@ -194,7 +194,7 @@ class ClaudiusMCPServer:
             })
 
         @self.mcp.tool()
-        def connect_operators(source_path: str, dest_path: str,
+        def connect_ops(source_path: str, dest_path: str,
                              source_index: int = 0, dest_index: int = 0,
                              comp: bool = False) -> dict:
             """
@@ -210,7 +210,7 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with success status
             """
-            return self._execute_in_td('connect_operators', {
+            return self._execute_in_td('connect_ops', {
                 'source_path': source_path,
                 'dest_path': dest_path,
                 'source_index': source_index,
@@ -219,7 +219,7 @@ class ClaudiusMCPServer:
             })
 
         @self.mcp.tool()
-        def disconnect_operator(op_path: str, input_index: int = 0,
+        def disconnect_op(op_path: str, input_index: int = 0,
                                 comp: bool = False) -> dict:
             """
             Disconnect an operator's input.
@@ -232,7 +232,7 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with success status
             """
-            return self._execute_in_td('disconnect_operator', {
+            return self._execute_in_td('disconnect_op', {
                 'op_path': op_path,
                 'input_index': input_index,
                 'comp': comp
@@ -262,7 +262,7 @@ class ClaudiusMCPServer:
             })
 
         @self.mcp.tool()
-        def copy_operator(source_path: str, dest_parent: str, new_name: str = None) -> dict:
+        def copy_op(source_path: str, dest_parent: str, new_name: str = None) -> dict:
             """
             Copy an operator to a new location.
 
@@ -274,7 +274,7 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with path to new operator
             """
-            return self._execute_in_td('copy_operator', {
+            return self._execute_in_td('copy_op', {
                 'source_path': source_path,
                 'dest_parent': dest_parent,
                 'new_name': new_name
@@ -320,7 +320,7 @@ class ClaudiusMCPServer:
             return self._execute_in_td('get_td_info', {})
 
         @self.mcp.tool()
-        def get_node_errors(op_path: str, recurse: bool = True) -> dict:
+        def get_op_errors(op_path: str, recurse: bool = True) -> dict:
             """
             Get error messages for an operator and optionally its children.
             Useful for debugging TD networks.
@@ -332,17 +332,17 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with error count and structured error list
             """
-            return self._execute_in_td('get_node_errors', {
+            return self._execute_in_td('get_op_errors', {
                 'op_path': op_path,
                 'recurse': recurse
             })
 
         @self.mcp.tool()
-        def exec_node_method(op_path: str, method: str,
+        def exec_op_method(op_path: str, method: str,
                             args: list = None, kwargs: dict = None) -> dict:
             """
             Call a method on a TouchDesigner operator.
-            Example: exec_node_method("/project1/table1", "appendRow", args=[["a", "b", "c"]])
+            Example: exec_op_method("/project1/table1", "appendRow", args=[["a", "b", "c"]])
 
             Args:
                 op_path: Path to the operator
@@ -353,7 +353,7 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with method result
             """
-            return self._execute_in_td('exec_node_method', {
+            return self._execute_in_td('exec_op_method', {
                 'op_path': op_path,
                 'method': method,
                 'args': args or [],
@@ -406,22 +406,22 @@ class ClaudiusMCPServer:
         # === MCP Prompts ===
 
         @self.mcp.prompt()
-        def search_node(node_name: str, node_type: str = None) -> str:
-            """Search for a node by name in the TouchDesigner project."""
-            msg = f'Use the "query_network" and "get_operator" tools to search for nodes named "{node_name}" in the TouchDesigner project.'
-            if node_type:
-                msg += f' Filter by type: {node_type}.'
+        def search_op(op_name: str, op_type: str = None) -> str:
+            """Search for an operator by name in the TouchDesigner project."""
+            msg = f'Use the "query_network" and "get_op" tools to search for operators named "{op_name}" in the TouchDesigner project.'
+            if op_type:
+                msg += f' Filter by type: {op_type}.'
             return msg
 
         @self.mcp.prompt()
-        def check_node_errors(node_path: str) -> str:
-            """Check a node and its children for errors in TouchDesigner."""
-            return f'Use the "get_node_errors" tool to inspect "{node_path}" and its children for error messages. If errors are found, examine the affected nodes\' parameters and connections to resolve them.'
+        def check_op_errors(op_path: str) -> str:
+            """Check an operator and its children for errors in TouchDesigner."""
+            return f'Use the "get_op_errors" tool to inspect "{op_path}" and its children for error messages. If errors are found, examine the affected operators\' parameters and connections to resolve them.'
 
         @self.mcp.prompt()
-        def connect_nodes() -> str:
-            """Guide for connecting nodes in TouchDesigner."""
-            return 'Use the "connect_operators" tool to wire nodes together. First use "query_network" to find the nodes, then "get_connections" to see existing wiring, then "connect_operators" with the source and destination paths.'
+        def connect_ops() -> str:
+            """Guide for connecting operators in TouchDesigner."""
+            return 'Use the "connect_ops" tool to wire operators together. First use "query_network" to find the operators, then "get_connections" to see existing wiring, then "connect_ops" with the source and destination paths.'
 
         @self.mcp.prompt()
         def create_extension_guide() -> str:
@@ -437,7 +437,7 @@ class ClaudiusMCPServer:
                 '   - Lowercase methods need: op.CompName.ext.ClassName.method()\n'
                 '   - Store the owner as self.ownerComp\n\n'
                 '3. TD auto-reinitializes extensions when their source DATs change.\n'
-                '   To force a reinit: exec_node_method on the COMP, method="initializeExtensions".\n'
+                '   To force a reinit: exec_op_method on the COMP, method="initializeExtensions".\n'
                 '   Implement onDestroyTD(self) for clean teardown of old instances.\n'
                 '   Use onInitTD(self) for post-init setup needing a fully-cooked network.\n\n'
                 '4. Common patterns:\n'
@@ -710,7 +710,7 @@ class ClaudiusMCPServer:
         # === Operator Management Tools (Extended) ===
 
         @self.mcp.tool()
-        def rename_operator(op_path: str, new_name: str) -> dict:
+        def rename_op(op_path: str, new_name: str) -> dict:
             """
             Rename an operator.
 
@@ -721,13 +721,13 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with success status and new path
             """
-            return self._execute_in_td('rename_operator', {
+            return self._execute_in_td('rename_op', {
                 'op_path': op_path,
                 'new_name': new_name
             })
 
         @self.mcp.tool()
-        def cook_operator(op_path: str, force: bool = True,
+        def cook_op(op_path: str, force: bool = True,
                          recurse: bool = False) -> dict:
             """
             Cook (evaluate) an operator.
@@ -740,7 +740,7 @@ class ClaudiusMCPServer:
             Returns:
                 Dict with success status
             """
-            return self._execute_in_td('cook_operator', {
+            return self._execute_in_td('cook_op', {
                 'op_path': op_path,
                 'force': force,
                 'recurse': recurse
@@ -1316,15 +1316,15 @@ class ClaudiusExt:
     def _execute_operation(self, operation: str, params: dict) -> dict:
         """Route operation to appropriate handler"""
         handlers = {
-            'create_operator': self._create_operator,
-            'delete_operator': self._delete_operator,
-            'get_operator': self._get_operator,
+            'create_op': self._create_op,
+            'delete_op': self._delete_op,
+            'get_op': self._get_op,
             'set_parameter': self._set_parameter,
             'get_parameter': self._get_parameter,
-            'connect_operators': self._connect_operators,
-            'disconnect_operator': self._disconnect_operator,
+            'connect_ops': self._connect_ops,
+            'disconnect_op': self._disconnect_op,
             'query_network': self._query_network,
-            'copy_operator': self._copy_operator,
+            'copy_op': self._copy_op,
             'get_connections': self._get_connections,
             'execute_python': self._execute_python,
             # DAT content
@@ -1333,19 +1333,19 @@ class ClaudiusExt:
             # Operator flags
             'get_op_flags': self._get_op_flags,
             'set_op_flags': self._set_op_flags,
-            # Node positioning & layout
+            # Operator positioning & layout
             'get_op_position': self._get_op_position,
             'set_op_position': self._set_op_position,
             'layout_children': self._layout_children,
             # Extended operator management
-            'rename_operator': self._rename_operator,
-            'cook_operator': self._cook_operator,
+            'rename_op': self._rename_op,
+            'cook_op': self._cook_op,
             'find_children': self._find_children,
             'get_op_performance': self._get_op_performance,
             # Introspection & diagnostics
             'get_td_info': self._get_td_info,
-            'get_node_errors': self._get_node_errors,
-            'exec_node_method': self._exec_node_method,
+            'get_op_errors': self._get_op_errors,
+            'exec_op_method': self._exec_op_method,
             'get_td_classes': self._get_td_classes,
             'get_td_class_details': self._get_td_class_details,
             'get_module_help': self._get_module_help,
@@ -1435,7 +1435,7 @@ class ClaudiusExt:
 
     # --- Operator Management ---
 
-    def _create_operator(self, parent_path: str, op_type: str, name: str = None) -> dict:
+    def _create_op(self, parent_path: str, op_type: str, name: str = None) -> dict:
         """Create an operator"""
         parent = op(parent_path)
         if not parent:
@@ -1460,7 +1460,7 @@ class ClaudiusExt:
         except Exception as e:
             return {'error': f'Failed to create operator: {e}'}
 
-    def _delete_operator(self, op_path: str) -> dict:
+    def _delete_op(self, op_path: str) -> dict:
         """Delete an operator"""
         target = op(op_path)
         if not target:
@@ -1473,7 +1473,7 @@ class ClaudiusExt:
         except Exception as e:
             return {'error': f'Failed to delete operator: {e}'}
 
-    def _get_operator(self, op_path: str) -> dict:
+    def _get_op(self, op_path: str) -> dict:
         """Get operator information"""
         target = op(op_path)
         if not target:
@@ -1612,7 +1612,7 @@ class ClaudiusExt:
         except Exception as e:
             return {'error': f'Failed to get parameter: {e}'}
 
-    def _connect_operators(self, source_path: str, dest_path: str,
+    def _connect_ops(self, source_path: str, dest_path: str,
                           source_index: int = 0, dest_index: int = 0,
                           comp: bool = False) -> dict:
         """Connect two operators"""
@@ -1653,7 +1653,7 @@ class ClaudiusExt:
         except Exception as e:
             return {'error': f'Failed to connect: {e}'}
 
-    def _disconnect_operator(self, op_path: str, input_index: int = 0,
+    def _disconnect_op(self, op_path: str, input_index: int = 0,
                             comp: bool = False) -> dict:
         """Disconnect an operator's input"""
         target = op(op_path)
@@ -1722,7 +1722,7 @@ class ClaudiusExt:
             'operators': operators
         }
 
-    def _copy_operator(self, source_path: str, dest_parent: str, new_name: str = None) -> dict:
+    def _copy_op(self, source_path: str, dest_parent: str, new_name: str = None) -> dict:
         """Copy an operator"""
         source = op(source_path)
         dest = op(dest_parent)
@@ -1842,7 +1842,7 @@ class ClaudiusExt:
         except Exception as e:
             return {'error': f'Failed to get TD info: {e}'}
 
-    def _get_node_errors(self, op_path: str, recurse: bool = True) -> dict:
+    def _get_op_errors(self, op_path: str, recurse: bool = True) -> dict:
         """Get error messages for an operator and its children"""
         target = op(op_path)
         if not target:
@@ -1895,7 +1895,7 @@ class ClaudiusExt:
             'errors': all_errors,
         }
 
-    def _exec_node_method(self, op_path: str, method: str,
+    def _exec_op_method(self, op_path: str, method: str,
                           args: list = None, kwargs: dict = None) -> dict:
         """Call a method on a TD operator"""
         target = op(op_path)
@@ -2486,7 +2486,7 @@ class ClaudiusExt:
 
     # === Extended Operator Management (Main Thread Only) ===
 
-    def _rename_operator(self, op_path: str, new_name: str) -> dict:
+    def _rename_op(self, op_path: str, new_name: str) -> dict:
         """Rename an operator"""
         target = op(op_path)
         if not target:
@@ -2504,7 +2504,7 @@ class ClaudiusExt:
         except Exception as e:
             return {'error': f'Failed to rename: {e}'}
 
-    def _cook_operator(self, op_path: str, force: bool = True,
+    def _cook_op(self, op_path: str, force: bool = True,
                       recurse: bool = False) -> dict:
         """Cook an operator"""
         target = op(op_path)

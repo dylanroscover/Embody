@@ -1,7 +1,7 @@
 ﻿"""
 Test suite: MCP diagnostics and introspection handlers in ClaudiusExt.
 
-Tests _get_td_info, _get_node_errors, _exec_node_method,
+Tests _get_td_info, _get_op_errors, _exec_op_method,
 _get_td_classes, _get_td_class_details, _get_module_help.
 """
 
@@ -25,38 +25,38 @@ class TestMCPDiagnostics(EmbodyTestCase):
         result = self.claudius._get_td_info()
         self.assertDictHasKey(result, 'osName')
 
-    # --- _get_node_errors ---
+    # --- _get_op_errors ---
 
-    def test_get_node_errors_clean_op(self):
+    def test_get_op_errors_clean_op(self):
         comp = self.sandbox.create(baseCOMP, 'clean_comp')
-        result = self.claudius._get_node_errors(
+        result = self.claudius._get_op_errors(
             op_path=comp.path, recurse=False)
         self.assertDictHasKey(result, 'errorCount')
         self.assertEqual(result['errorCount'], 0)
 
-    def test_get_node_errors_recursive(self):
+    def test_get_op_errors_recursive(self):
         comp = self.sandbox.create(baseCOMP, 'parent_comp')
         comp.create(baseCOMP, 'child_comp')
-        result = self.claudius._get_node_errors(
+        result = self.claudius._get_op_errors(
             op_path=comp.path, recurse=True)
         self.assertDictHasKey(result, 'errorCount')
 
-    def test_get_node_errors_nonexistent(self):
-        result = self.claudius._get_node_errors(
+    def test_get_op_errors_nonexistent(self):
+        result = self.claudius._get_op_errors(
             op_path='/nonexistent', recurse=False)
         self.assertDictHasKey(result, 'error')
 
-    # --- _exec_node_method ---
+    # --- _exec_op_method ---
 
-    def test_exec_node_method_cook(self):
+    def test_exec_op_method_cook(self):
         comp = self.sandbox.create(baseCOMP, 'method_test')
-        result = self.claudius._exec_node_method(
+        result = self.claudius._exec_op_method(
             op_path=comp.path, method='cook', args=[], kwargs={'force': True})
         self.assertNotIn('error', result)
 
-    def test_exec_node_method_nonexistent_method(self):
+    def test_exec_op_method_nonexistent_method(self):
         comp = self.sandbox.create(baseCOMP, 'bad_method')
-        result = self.claudius._exec_node_method(
+        result = self.claudius._exec_op_method(
             op_path=comp.path, method='nonExistentMethod123')
         self.assertDictHasKey(result, 'error')
 
