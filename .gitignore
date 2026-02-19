@@ -14,3 +14,8 @@ dev/logs/
 dev/embody/unit_tests/test_sandbox/
 dev/embody/unit_tests/results.tsv
 extglob.FullName
+
+# Embody / Envoy (auto-managed)
+*.lck
+CrashAutoSave*
+.plan.md

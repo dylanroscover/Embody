@@ -1,4 +1,4 @@
-# me - this DAT
+﻿# me - this DAT
 # par - the Par object that has changed
 # val - the current value
 # prev - the previous value
@@ -29,6 +29,12 @@ def onValueChange(par, prev):
 			parent.Embody.ext.Envoy.Stop()
 			# Delay restart to ensure clean shutdown
 			run("parent.Embody.ext.Envoy.Start()", delayFrames=2)
+
+	# UI color pars changed â€” reload list theme
+	elif 'color' in par.name.lower():
+		list_comp = op('list/list1')
+		if list_comp:
+			list_comp.reset()
 
 	elif par.name == 'Embeddatsintdns':
 		parent.Embody.ext.TDN.ReexportAllTDNs()

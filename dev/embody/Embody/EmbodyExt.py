@@ -1,4 +1,4 @@
-"""
+﻿"""
 Embody - Automatic TOX and DAT Externalization for TouchDesigner
 
 Embody automatically creates, maintains and updates tox and DAT file
@@ -36,7 +36,13 @@ class EmbodyExt:
 
     def __init__(self, ownerComp: COMP) -> None:
         self.my = ownerComp
-        self.lister = self.my.op('list/treeLister')
+
+        # Suppress TD ThreadManager's benign "fallback strategy" warning that
+        # fires on every standalone EnqueueTask call (used by Envoy and TDN).
+        import logging
+        logging.getLogger('TDAppLogger.threadManager_logger').setLevel(logging.ERROR)
+
+        self.lister = self.my.op('list/list1')
         self.tagging_menu_window = self.my.op('window_tagging_menu')
         self.tagger = self.my.op('tagger')
         self.root = op('/')
@@ -115,17 +121,28 @@ class EmbodyExt:
             site_packages = os.path.join(venv_dir, 'lib', py_ver, 'site-packages')
             venv_python = os.path.join(venv_dir, 'bin', 'python')
 
-        # Dependencies — pywin32 is Windows-only
-        deps = ['mcp>=1.2.0']
+        # Dependencies - pywin32 is Windows-only
+        # Bump MCP_MIN_VERSION when a new release is tested and verified
+        MCP_MIN_VERSION = '1.26.0'
+        deps = [f'mcp>={MCP_MIN_VERSION}']
         if sys.platform.startswith('win'):
             deps.append('pywin32>=306')
 
-        # Fast path: if deps already installed, just add to sys.path
+        # Fast path: if deps already installed and version sufficient, just add to sys.path
         if os.path.isdir(os.path.join(site_packages, 'mcp')):
             self._addSitePackages(site_packages)
             if sys.platform.startswith('win'):
                 self._fixPywin32Dlls(site_packages)
-            return
+            # Check installed version meets minimum
+            try:
+                from importlib.metadata import version as pkg_version
+                installed = pkg_version('mcp')
+                if tuple(int(x) for x in installed.split('.')) >= tuple(int(x) for x in MCP_MIN_VERSION.split('.')):
+                    self._checkMCPUpdate(installed)
+                    return
+                self.Log(f'MCP {installed} installed, upgrading to >={MCP_MIN_VERSION}...')
+            except Exception:
+                return  # Can't determine version, assume OK
 
         try:
             uv = self._findOrInstallUv(python_exe)
@@ -165,7 +182,7 @@ class EmbodyExt:
             return uv
 
         # Install uv via pip --user (avoids needing admin for Program Files)
-        self.Log('uv not found — installing via pip...')
+        self.Log('uv not found - installing via pip...')
         try:
             subprocess.run(
                 [python_exe, '-m', 'pip', 'install', '--user', 'uv'],
@@ -199,7 +216,7 @@ class EmbodyExt:
                 if os.path.isfile(candidate):
                     return candidate
 
-        self.Log('Could not find uv after install — is Python user Scripts on PATH?', 'ERROR')
+        self.Log('Could not find uv after install - is Python user Scripts on PATH?', 'ERROR')
         return None
 
     def _addSitePackages(self, site_packages):
@@ -224,6 +241,34 @@ class EmbodyExt:
                 dst = os.path.join(dst_dir, dll)
                 if not os.path.exists(dst):
                     shutil.copy2(src, dst)
+
+    def _checkMCPUpdate(self, installed: str):
+        """Check PyPI for a newer MCP version in a background thread. Logs a
+        notice if an update is available - never blocks the main thread."""
+        import threading
+
+        def _check():
+            try:
+                import urllib.request
+                import json
+                req = urllib.request.Request(
+                    'https://pypi.org/pypi/mcp/json',
+                    headers={'Accept': 'application/json'}
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    data = json.loads(resp.read())
+                latest = data['info']['version']
+                if tuple(int(x) for x in latest.split('.')) > tuple(int(x) for x in installed.split('.')):
+                    self.Log(
+                        f'MCP update available: {installed} -> {latest}. '
+                        f'Update MCP_MIN_VERSION in EmbodyExt._setupEnvironment() '
+                        f'and delete dev/.venv to upgrade.',
+                        'WARNING'
+                    )
+            except Exception:
+                pass  # Network unavailable, not critical
+
+        threading.Thread(target=_check, daemon=True).start()
 
     # ==========================================================================
     # PROPERTIES
@@ -413,7 +458,7 @@ class EmbodyExt:
 
     def _extractClaudeMd(self):
         """Extract the embedded CLAUDE.md template to the project/repo root."""
-        template_dat = self.my.op('text_claude_md')
+        template_dat = self.my.op('text_claude')
         if not template_dat:
             self.Log('CLAUDE.md template DAT not found inside Embody', 'WARNING')
             return None
@@ -762,8 +807,10 @@ class EmbodyExt:
             'Disable Embody?\nOnly files created by Embody will be deleted.\n'
             '(Non-Embody files in the folder will be preserved)',
             buttons=['No', 'Yes, keep Tags', 'Yes, remove Tags'])
-        if choice:
-            self.Disable(self.ExternalizationsFolder, choice - 1)
+        if choice == 1:
+            self.Disable(self.ExternalizationsFolder, False)
+        elif choice == 2:
+            self.Disable(self.ExternalizationsFolder, True)
 
     def UpdateHandler(self) -> None:
         """Enable/Update handler - main entry point for initialization."""
@@ -880,7 +927,8 @@ class EmbodyExt:
         """Refresh Embody state and UI."""
         self.cleanupAllDuplicateRows()
         self.updateDirtyStates(self.ExternalizationsFolder)
-        self.lister.par.Refresh.pulse()
+        self.my.op('list/inject_parents').cook(force=True)
+        self.lister.reset()
         self.checkOpsForContinuity(self.ExternalizationsFolder)
         
         if self.my.par.Detectduplicatepaths:
@@ -1042,10 +1090,32 @@ class EmbodyExt:
             self.Externalizations[opPath, 'dirty'] = False
 
             self.Log(f"Saved {opPath}", "SUCCESS")
+
+            # Re-export sibling TDN if one exists
+            tdn_rel_path = self._getTDNPathForComp(opPath)
+            if tdn_rel_path:
+                try:
+                    tdn_ext = self.ownerComp.ext.TDN
+                    abs_path = str(self.buildAbsolutePath(tdn_rel_path))
+                    tdn_ext.ExportNetwork(root_path=opPath, output_file=abs_path)
+                    self.Log(f"Re-exported TDN for {opPath}", "SUCCESS")
+                except Exception as e:
+                    self.Log(f"Failed to re-export TDN for {opPath}: {e}", "WARNING")
         except Exception as e:
             self.Log("Save failed", "ERROR", str(e))
 
         #self.Refresh()
+
+    def _getTDNPathForComp(self, op_path: str) -> Optional[str]:
+        """Return the rel_file_path for a TDN entry matching op_path, or None."""
+        table = self.Externalizations
+        if not table:
+            return None
+        for i in range(1, table.numRows):
+            if (table[i, 'path'].val == op_path
+                    and table[i, 'type'].val == 'tdn'):
+                return table[i, 'rel_file_path'].val
+        return None
 
     def SaveCurrentComp(self) -> None:
         """Save only the COMP we're currently working inside of (Ctrl/Cmd+Alt+U)."""
@@ -1288,28 +1358,37 @@ class EmbodyExt:
     def checkOpsForContinuity(self, externalizationsFolder: str) -> None:
         """Check for renamed, moved, or missing operators and update accordingly."""
         self._checkExternalToxPar()
-        
+
         try:
             rows_to_check = []
             for i in range(1, self.Externalizations.numRows):
                 row_path = self.Externalizations[i, 'path'].val
                 if row_path:
                     rel_file_path = self.normalizePath(self.Externalizations[i, 'rel_file_path'].val)
-                    rows_to_check.append((row_path, rel_file_path))
+                    row_type = self.Externalizations[i, 'type'].val
+                    rows_to_check.append((row_path, rel_file_path, row_type))
 
             processed_ops = set()
 
-            for old_op_path, rel_file_path in rows_to_check:
+            for old_op_path, rel_file_path, row_type in rows_to_check:
                 if old_op_path in processed_ops:
                     continue
 
+                # TDN entries are supplementary exports alongside a TOX —
+                # they don't set externaltox/file, so just verify the op exists
+                if row_type == 'tdn':
+                    if not op(old_op_path):
+                        self.Log(f"Operator for TDN entry '{old_op_path}' no longer exists", "WARNING")
+                        self.RemoveTDNEntry(old_op_path)
+                    continue
+
                 existing_op = op(old_op_path)
-                
+
                 if existing_op:
                     # Verify this is actually the SAME operator (not a different one at same path)
                     # by checking if externaltox matches what we expect
                     current_ext_path = self.getExternalPath(existing_op)
-                    
+
                     if current_ext_path == rel_file_path:
                         # Same operator, just update timestamp
                         self._updateOpTimestamp(existing_op)
@@ -1401,11 +1480,13 @@ class EmbodyExt:
     def _handleMissingOperator(self, old_op_path, old_rel_file_path):
         """Handle an operator that no longer exists."""
         self.cleanupDuplicateRows(old_op_path)
-        
-        # Truly missing - remove from table
+
+        # Truly missing - remove the specific row from the table
         self.Log(f"Operator '{old_op_path}' no longer exists!", "WARNING")
+        normalized = self.normalizePath(old_rel_file_path)
         for i in range(1, self.Externalizations.numRows):
-            if self.Externalizations[i, 'path'].val == old_op_path:
+            if (self.Externalizations[i, 'path'].val == old_op_path
+                    and self.normalizePath(self.Externalizations[i, 'rel_file_path'].val) == normalized):
                 self.RemoveListerRow(old_op_path, old_rel_file_path)
                 break
 
@@ -1511,33 +1592,51 @@ class EmbodyExt:
             self.cleanupDuplicateRows(path)
 
     def cleanupDuplicateRows(self, path: str) -> Optional[int]:
-        """Remove duplicate rows for a path, keeping most recent."""
-        row_indices = []
-        timestamps = []
-        
+        """Remove duplicate rows for a path, keeping most recent per type.
+
+        A COMP can legitimately have both a TOX row and a TDN row — these are
+        different externalization types, not duplicates. Only rows with the
+        same path AND same type are true duplicates.
+        """
+        type_groups = {}
+
         for i in range(1, self.Externalizations.numRows):
             if self.Externalizations[i, 'path'].val == path:
-                row_indices.append(i)
+                row_type = self.Externalizations[i, 'type'].val
+                if row_type not in type_groups:
+                    type_groups[row_type] = {'indices': [], 'timestamps': []}
+                type_groups[row_type]['indices'].append(i)
                 try:
                     ts_str = self.Externalizations[i, 'timestamp'].val
                     timestamp = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S UTC") if ts_str else datetime.min
                 except (ValueError, TypeError) as e:
                     self.Log(f"Failed to parse timestamp for row {i}: {e}", "DEBUG")
                     timestamp = datetime.min
-                timestamps.append(timestamp)
-        
-        if len(row_indices) <= 1:
-            return row_indices[0] if row_indices else None
-        
-        most_recent = timestamps.index(max(timestamps))
-        row_to_keep = row_indices[most_recent]
-        
-        for i in sorted(row_indices, reverse=True):
-            if i != row_to_keep:
-                self.Externalizations.deleteRow(i)
-                self.Log(f"Removed duplicate row {i} for {path}", "INFO")
-        
-        return row_to_keep
+                type_groups[row_type]['timestamps'].append(timestamp)
+
+        kept_row = None
+        rows_to_delete = []
+
+        for type_key, group in type_groups.items():
+            indices = group['indices']
+            timestamps = group['timestamps']
+            if len(indices) <= 1:
+                if indices:
+                    kept_row = indices[0]
+                continue
+            most_recent = timestamps.index(max(timestamps))
+            row_to_keep = indices[most_recent]
+            kept_row = row_to_keep
+            for i in indices:
+                if i != row_to_keep:
+                    rows_to_delete.append(i)
+
+        for i in sorted(rows_to_delete, reverse=True):
+            row_type = self.Externalizations[i, 'type'].val
+            self.Externalizations.deleteRow(i)
+            self.Log(f"Removed duplicate row {i} for {path} (type={row_type})", "INFO")
+
+        return kept_row
 
     def checkForDuplicates(self) -> None:
         """Check for and handle duplicate external file paths."""
@@ -1888,15 +1987,21 @@ class EmbodyExt:
         elif is_clone or other_references:
             self.Log(f"Preserved file '{normalized_path}' (still in use)", "INFO")
 
-        # Remove from table (if row exists)
-        try:
-            self.Externalizations.deleteRow(op_path)
-            self.Log(f"Removed '{op_path}' from table", "SUCCESS")
-        except Exception as e:
-            if 'Index invalid or out of range' in str(e):
-                self.Debug(f"No table row for '{op_path}' — already removed or never added")
-            else:
-                self.Log(f"Error removing from table", "ERROR", str(e))
+        # Remove from table — match on both path and rel_file_path to avoid
+        # deleting sibling rows (e.g. a TDN row when removing the TOX row)
+        removed = False
+        for i in range(1, self.Externalizations.numRows):
+            if (self.Externalizations[i, 'path'].val == op_path
+                    and self.normalizePath(self.Externalizations[i, 'rel_file_path'].val) == normalized_path):
+                try:
+                    self.Externalizations.deleteRow(i)
+                    self.Log(f"Removed '{op_path}' from table", "SUCCESS")
+                    removed = True
+                except Exception as e:
+                    self.Log(f"Error removing from table", "ERROR", str(e))
+                break
+        if not removed:
+            self.Debug(f"No table row for '{op_path}' with file '{normalized_path}' - already removed or never added")
 
     def _checkFileReferences(self, op_path, normalized_path):
         """Check if any other operators reference a file path."""
@@ -1914,6 +2019,61 @@ class EmbodyExt:
                 return True
         
         return False
+
+    def RemoveTDNEntry(self, op_path: str) -> None:
+        """Remove a TDN export entry and delete the .tdn file from disk."""
+        table = self.Externalizations
+        if not table:
+            self.Log("Missing Externalization tableDAT", "ERROR")
+            return
+
+        # Find the TDN row by scanning for type='tdn' match
+        tdn_row = None
+        rel_file_path = None
+        for i in range(1, table.numRows):
+            if table[i, 'path'].val == op_path and table[i, 'type'].val == 'tdn':
+                tdn_row = i
+                rel_file_path = table[i, 'rel_file_path'].val
+                break
+
+        if tdn_row is None:
+            self.Log(f"No TDN entry found for '{op_path}'", "WARNING")
+            return
+
+        # Deferred file deletion
+        if rel_file_path:
+            normalized = self.normalizePath(rel_file_path)
+            full_path = self.buildAbsolutePath(normalized).resolve()
+
+            def delete_tdn():
+                try:
+                    if full_path.is_file() and full_path.suffix.lower() == '.tdn':
+                        full_path.unlink()
+                        self.Log(f"Removed TDN file: {normalized}", "SUCCESS")
+                        # Clean up empty parent dirs (bounded by project.folder)
+                        p = full_path.parent
+                        while p.exists() and p != Path(project.folder):
+                            try:
+                                if not any(p.iterdir()):
+                                    p.rmdir()
+                                    p = p.parent
+                                else:
+                                    break
+                            except OSError:
+                                break
+                except Exception as e:
+                    self.Log(f"Error removing TDN file: {e}", "ERROR")
+
+            run(delete_tdn, delayFrames=5)
+
+        # Remove table row by index (not by path, to avoid hitting the tox row)
+        try:
+            table.deleteRow(tdn_row)
+            self.Log(f"Removed TDN entry for '{op_path}'", "SUCCESS")
+        except Exception as e:
+            self.Log(f"Error removing TDN row: {e}", "ERROR")
+
+        self.lister.reset()
 
     # ==========================================================================
     # FILE UTILITIES
@@ -1973,6 +2133,18 @@ class EmbodyExt:
     # ==========================================================================
     # UI HELPERS
     # ==========================================================================
+
+    def DirtyCount(self) -> int:
+        """Return the number of dirty externalized operators."""
+        table = self.Externalizations
+        if not table:
+            return 0
+        count = 0
+        for i in range(1, table.numRows):
+            val = str(table[i, 'dirty'].val)
+            if val and val not in ('', 'False', 'Clean', 'Saved'):
+                count += 1
+        return count
 
     def Manager(self, action: str) -> None:
         """Open or close the manager window."""

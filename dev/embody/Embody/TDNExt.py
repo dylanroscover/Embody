@@ -105,6 +105,11 @@ class TDNExt:
 	def __init__(self, ownerComp: 'COMP') -> None:
 		self.ownerComp: 'COMP' = ownerComp
 		self._export_state: Optional[dict[str, Any]] = None
+		# Per-OPType caches for export performance.
+		# Built-in parameter defaults and exportable names are stable per type,
+		# so we cache them to avoid repeated Python-to-C++ bridge calls.
+		self._defaults_cache: dict[str, dict[str, Any]] = {}
+		self._exportable_cache: dict[str, set[str]] = {}
 
 	# =========================================================================
 	# PROMOTED METHODS (uppercase — callable directly on op.Embody)
@@ -141,12 +146,16 @@ class TDNExt:
 		}
 
 		try:
+			self._defaults_cache.clear()
+			self._exportable_cache.clear()
 			operators = self._exportChildren(root_op, options, depth=0)
 
+			build_num = self._getBuildNumber(root_op)
 			tdn = {
 				'format': 'tdn',
 				'version': TDN_VERSION,
-				'generator': f'Envoy/{self._getEnvoyVersion()}',
+				'build': build_num,
+				'generator': f'Embody/{self._getEmbodyVersion()}',
 				'td_build': f'{app.version}.{app.build}',
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
@@ -165,12 +174,9 @@ class TDNExt:
 				export_mode = self.ownerComp.par.Tdnexportmode.eval()
 
 				if export_mode == 'percomp':
-					ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
-					if ext_folder:
-						base_folder = str(Path(project.folder) / ext_folder)
-						Path(base_folder).mkdir(parents=True, exist_ok=True)
-					else:
-						base_folder = str(project.folder)
+					# Use project folder as base — TD paths already contain
+					# the full hierarchy (e.g., embody/Embody/help)
+					base_folder = str(project.folder)
 
 					before_tdn = TDNExt._collectExistingTDNFiles(
 						base_folder, root_path)
@@ -205,17 +211,15 @@ class TDNExt:
 					root_file = str(Path(base_folder) / root_rel)
 					result['file'] = root_file
 					result['files'] = written_files
-					self._trackTDNExport(root_path, root_file)
+					self._trackTDNExport(root_path, root_file,
+						build_num=build_num,
+						touch_build=f'{app.version}.{app.build}')
 					self._log(
 						f'Exported network to {len(written_files)} '
 						f'.tdn files', 'SUCCESS')
 				else:
-					ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
-					if ext_folder:
-						scan_folder = str(
-							Path(project.folder) / ext_folder)
-					else:
-						scan_folder = str(project.folder)
+					# Scan from project folder — TDN paths mirror TD hierarchy
+					scan_folder = str(project.folder)
 					before_tdn = TDNExt._collectExistingTDNFiles(
 						scan_folder, root_path)
 
@@ -233,7 +237,9 @@ class TDNExt:
 							'INFO')
 
 					result['file'] = filepath
-					self._trackTDNExport(root_path, filepath)
+					self._trackTDNExport(root_path, filepath,
+						build_num=build_num,
+						touch_build=f'{app.version}.{app.build}')
 					self._log(
 						f'Exported network to {filepath}', 'SUCCESS')
 
@@ -272,11 +278,12 @@ class TDNExt:
 			self._log(f'{root_path} is not a COMP', 'ERROR')
 			return
 
+		# Clear per-OPType caches for fresh export
+		self._defaults_cache.clear()
+		self._exportable_cache.clear()
+
 		# Phase 1: Collect all operator paths (fast tree walk, single frame)
 		op_paths = self._collectAllPaths(root_op, max_depth)
-		if not op_paths:
-			self._log(f'No operators to export in {root_path}', 'WARNING')
-			return
 
 		# Resolve output path now (needs TD access)
 		resolved_path = None
@@ -285,8 +292,9 @@ class TDNExt:
 
 		# Collect metadata now (needs TD access)
 		metadata = {
-			'generator': f'Envoy/{self._getEnvoyVersion()}',
+			'generator': f'Embody/{self._getEmbodyVersion()}',
 			'td_build': f'{app.version}.{app.build}',
+			'build': self._getBuildNumber(root_op),
 			'project_name': project.name.removesuffix('.toe'),
 			'project_folder': str(project.folder),
 			'ext_folder': self.ownerComp.ext.Embody.ExternalizationsFolder,
@@ -301,10 +309,19 @@ class TDNExt:
 
 		done_event = Event()
 
+		# Pre-collect existing .tdn files on the main thread.
+		# rglob/scandir suffers extreme GIL contention when called from a
+		# background thread (~30s vs ~70ms), so we do it here.
+		before_tdn = set()
+		if resolved_path:
+			proj_folder = metadata['project_folder']
+			before_tdn = TDNExt._collectExistingTDNFiles(
+				proj_folder, root_path)
+
 		self._export_state = {
 			'paths': op_paths,
 			'index': 0,
-			'batch_size': 50,
+			'batch_size': 200,
 			'results': {},
 			'options': {
 				'include_dat_content': include_dat_content,
@@ -314,6 +331,7 @@ class TDNExt:
 			'output_file': resolved_path,
 			'export_mode': export_mode,
 			'metadata': metadata,
+			'before_tdn': before_tdn,
 			'done_event': done_event,
 			'done': False,
 			'error': None,
@@ -324,8 +342,16 @@ class TDNExt:
 		state = self._export_state
 
 		def worker():
-			"""Worker thread: wait for batches to finish, then write file."""
-			done_event.wait()
+			"""Worker thread: wait for batches, then assemble and write file.
+
+			File scanning (rglob) is done on the main thread before this
+			starts — scandir suffers extreme GIL contention from bg threads.
+			"""
+			done_event.wait(timeout=300)  # 5 minute safety timeout
+
+			if not done_event.is_set():
+				state['error'] = 'Export timed out (5 minutes)'
+				raise RuntimeError(state['error'])
 
 			if state['error']:
 				raise RuntimeError(state['error'])
@@ -337,6 +363,7 @@ class TDNExt:
 			tdn = {
 				'format': 'tdn',
 				'version': TDN_VERSION,
+				'build': state['metadata'].get('build'),
 				'generator': state['metadata']['generator'],
 				'td_build': state['metadata']['td_build'],
 				'exported_at': datetime.now(timezone.utc).strftime(
@@ -362,22 +389,12 @@ class TDNExt:
 			if state['output_file']:
 				from pathlib import Path
 				export_mode = state.get('export_mode', 'perproject')
+				# Use pre-collected .tdn files (collected on main thread
+				# to avoid GIL contention with rglob/scandir)
+				before_tdn = state.get('before_tdn', set())
+				base_folder = state['metadata']['project_folder']
 
 				if export_mode == 'percomp':
-					ext_folder = state['metadata'].get(
-						'ext_folder', '')
-					proj_folder = state['metadata']['project_folder']
-					if ext_folder:
-						base_folder = str(
-							Path(proj_folder) / ext_folder)
-						Path(base_folder).mkdir(
-							parents=True, exist_ok=True)
-					else:
-						base_folder = proj_folder
-
-					before_tdn = TDNExt._collectExistingTDNFiles(
-						base_folder, state['root_path'])
-
 					proj_name = state['metadata']['project_name']
 					per_comp_files = TDNExt._splitPerComp(
 						operators, state['root_path'],
@@ -414,17 +431,6 @@ class TDNExt:
 						'cleaned_up': len(stale) if stale else 0,
 					}
 				else:
-					ext_folder = state['metadata'].get(
-						'ext_folder', '')
-					proj_folder = state['metadata']['project_folder']
-					if ext_folder:
-						scan_folder = str(
-							Path(proj_folder) / ext_folder)
-					else:
-						scan_folder = proj_folder
-					before_tdn = TDNExt._collectExistingTDNFiles(
-						scan_folder, state['root_path'])
-
 					json_str = json.dumps(
 						tdn, indent='\t', ensure_ascii=False) + '\n'
 					Path(state['output_file']).write_text(
@@ -432,7 +438,7 @@ class TDNExt:
 
 					stale = TDNExt._cleanupStaleTDNFiles(
 						before_tdn, [state['output_file']],
-						scan_folder)
+						base_folder)
 
 					state['result'] = {
 						'success': True,
@@ -455,7 +461,12 @@ class TDNExt:
 			ExceptHook=self._onExportError,
 			RefreshHook=self._onExportRefresh,
 		)
-		thread_manager.EnqueueTask(task, standalone=True)
+		thread = thread_manager.EnqueueTask(task, standalone=True)
+		if thread is None:
+			self._log(
+				'Thread Manager at capacity — export queued but may be '
+				'delayed. Try restarting Envoy to free stale threads.',
+				'WARNING')
 
 		self._log(
 			f'Exporting {len(op_paths)} operators from {root_path}...',
@@ -467,24 +478,30 @@ class TDNExt:
 		if state is None or state['done']:
 			return
 
-		paths = state['paths']
-		idx = state['index']
-		batch_end = min(idx + state['batch_size'], len(paths))
+		try:
+			paths = state['paths']
+			idx = state['index']
+			batch_end = min(idx + state['batch_size'], len(paths))
 
-		for i in range(idx, batch_end):
-			try:
-				target_op = op(paths[i])
-				if target_op:
-					op_data = self._exportSingleOp(
-						target_op, state['options'], depth=0, recurse=False)
-					if op_data:
-						state['results'][paths[i]] = op_data
-			except Exception as e:
-				self._log(f'Error exporting {paths[i]}: {e}', 'WARNING')
+			for i in range(idx, batch_end):
+				try:
+					target_op = op(paths[i])
+					if target_op:
+						op_data = self._exportSingleOp(
+							target_op, state['options'], depth=0, recurse=False)
+						if op_data:
+							state['results'][paths[i]] = op_data
+				except Exception as e:
+					self._log(f'Error exporting {paths[i]}: {e}', 'WARNING')
 
-		state['index'] = batch_end
+			state['index'] = batch_end
 
-		if batch_end >= len(paths):
+			if batch_end >= len(paths):
+				state['done'] = True
+				state['done_event'].set()
+		except Exception as e:
+			self._log(f'Export batch failed: {e}', 'ERROR')
+			state['error'] = str(e)
 			state['done'] = True
 			state['done_event'].set()
 
@@ -499,7 +516,9 @@ class TDNExt:
 			elif result.get('file'):
 				msg += f" to {result['file']}"
 			if result.get('file'):
-				self._trackTDNExport(state['root_path'], result['file'])
+				self._trackTDNExport(state['root_path'], result['file'],
+					build_num=state['metadata'].get('build'),
+					touch_build=state['metadata'].get('td_build'))
 			self._log(msg, 'SUCCESS')
 			if result.get('cleaned_up'):
 				self._log(
@@ -507,6 +526,7 @@ class TDNExt:
 					'INFO')
 
 		self._export_state = None
+		self._refreshList()
 
 		# Chain next re-export if queue active
 		if getattr(self, '_reexport_queue', None):
@@ -517,6 +537,16 @@ class TDNExt:
 		self._log(f'Export failed: {e}', 'ERROR')
 		self._export_state = None
 		self._reexport_queue = None
+		self._refreshList()
+
+	def _refreshList(self):
+		"""Recook the list data source and reset the list COMP."""
+		inject = self.ownerComp.op('list/inject_parents')
+		lister = self.ownerComp.op('list/list1')
+		if inject:
+			inject.cook(force=True)
+		if lister:
+			lister.reset()
 
 	def ReexportAllTDNs(self) -> None:
 		"""Re-export all tracked TDN files with current toggle setting."""
@@ -573,6 +603,24 @@ class TDNExt:
 
 		# Accept full .tdn document or just the operators array
 		if isinstance(tdn, dict) and 'operators' in tdn:
+			# Version compatibility checks
+			tdn_version = tdn.get('version', '1.0')
+			if tdn_version != TDN_VERSION:
+				self._log(
+					f'TDN version mismatch: file is v{tdn_version}, '
+					f'current is v{TDN_VERSION}', 'WARNING')
+
+			source_td = tdn.get('td_build', '')
+			current_td = f'{app.version}.{app.build}'
+			if source_td and source_td != current_td:
+				self._log(
+					f'TDN exported from TD {source_td} '
+					f'(current: {current_td})', 'INFO')
+
+			build_num = tdn.get('build')
+			if build_num is not None:
+				self._log(f'Importing TDN build {build_num}', 'INFO')
+
 			op_defs = tdn['operators']
 		elif isinstance(tdn, list):
 			op_defs = tdn
@@ -754,34 +802,65 @@ class TDNExt:
 
 		return data
 
-	def _exportBuiltinParams(self, target):
-		"""Export non-default built-in parameter values."""
-		params = {}
+	def _buildParCache(self, target):
+		"""Build per-OPType cache of exportable parameter names and defaults.
 
+		On the first operator of each OPType, we iterate all parameters and
+		record which are exportable (non-custom, non-readOnly, non-skip) and
+		their default values. Subsequent operators of the same type skip all
+		those per-parameter attribute checks (isCustom, readOnly, style) and
+		default lookups — replacing ~4 Python-to-C++ bridge calls per parameter
+		with a single Python dict lookup.
+		"""
+		op_type = target.OPType
+		exportable = {}
+		defaults = {}
 		for p in target.pars():
+			if p.isCustom or p.readOnly:
+				continue
 			if p.name in SKIP_PARAMS:
-				continue
-			# Only built-in params here; custom pars handled separately
-			if p.isCustom:
-				continue
-			if p.readOnly:
 				continue
 			if p.style in SKIP_BUILTIN_STYLES:
 				continue
+			exportable[p.name] = True
+			defaults[p.name] = p.default
+		self._exportable_cache[op_type] = exportable
+		self._defaults_cache[op_type] = defaults
+
+	def _exportBuiltinParams(self, target):
+		"""Export non-default built-in parameter values.
+
+		Uses per-OPType caching to avoid redundant cross-bridge calls for
+		isCustom, readOnly, style, and default on every parameter. For 412
+		operators with ~100 params each, this eliminates ~160,000 bridge calls.
+		"""
+		op_type = target.OPType
+		if op_type not in self._exportable_cache:
+			self._buildParCache(target)
+
+		exportable = self._exportable_cache[op_type]
+		defaults = self._defaults_cache[op_type]
+		params = {}
+
+		for p in target.pars():
+			name = p.name
+			if name not in exportable:
+				continue
 
 			try:
-				if p.mode == ParMode.EXPRESSION:
-					params[p.name] = {'expr': p.expr}
-				elif p.mode == ParMode.BIND:
-					params[p.name] = {'bind': p.bindExpr}
-				elif p.mode == ParMode.CONSTANT:
-					current = p.eval()
-					default = p.default
+				mode = p.mode
+				if mode == ParMode.EXPRESSION:
+					params[name] = {'expr': p.expr}
+				elif mode == ParMode.BIND:
+					params[name] = {'bind': p.bindExpr}
+				elif mode == ParMode.CONSTANT:
+					current = p.val
+					default = defaults.get(name)
 					if self._valuesDiffer(current, default):
-						params[p.name] = self._serializeValue(current)
+						params[name] = self._serializeValue(current)
 				# Skip EXPORT mode (set by the exporter op, not importable)
 			except Exception as e:
-				self._log(f'Error reading param {p.name} on {target.path}: {e}', 'DEBUG')
+				self._log(f'Error reading param {name} on {target.path}: {e}', 'DEBUG')
 
 		return params
 
@@ -1650,42 +1729,64 @@ class TDNExt:
 
 		return first_par.name
 
-	def _getEnvoyVersion(self):
-		"""Get the Envoy version string."""
+	def _getEmbodyVersion(self):
+		"""Get the Embody version string from the ownerComp's Version parameter."""
 		try:
-			return self.ownerComp.op('EnvoyExt').module.ENVOY_VERSION
-		except Exception as e:
-			self._log(f'Could not get Envoy version: {e}', 'DEBUG')
+			return str(self.ownerComp.par.Version.eval())
+		except Exception:
 			return 'unknown'
 
+	def _getBuildNumber(self, root_op):
+		"""Get build number for a COMP from its Build custom par or the externalizations table."""
+		if hasattr(root_op.par, 'Build'):
+			try:
+				return int(root_op.par.Build.eval())
+			except (ValueError, TypeError):
+				pass
+		# Fall back to table
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if table:
+				for i in range(1, table.numRows):
+					if (table[i, 'path'].val == root_op.path
+							and table[i, 'type'].val == 'tdn'):
+						try:
+							return int(table[i, 'build'].val)
+						except (ValueError, TypeError):
+							pass
+		except Exception:
+			pass
+		return None
+
 	def _resolveOutputPath(self, output_file, root_op):
-		"""Resolve the output file path, saving into the externalizations folder."""
+		"""Resolve the output file path, matching the operator's TD path structure."""
 		from pathlib import Path
 
 		if output_file == 'auto':
 			project_dir = Path(project.folder)
-			# Use .toe project name when exporting from root
+
 			if root_op.path == '/':
+				# Root export: place in externalizations folder if configured
 				safe_name = project.name.removesuffix('.toe')
+				try:
+					ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
+					if ext_folder:
+						out_dir = project_dir / ext_folder
+						out_dir.mkdir(parents=True, exist_ok=True)
+						return str(out_dir / f'{safe_name}.tdn')
+				except Exception as e:
+					self._log(f'Could not resolve externalizations folder: {e}', 'WARNING')
+				return str(project_dir / f'{safe_name}.tdn')
 			else:
-				safe_name = root_op.name.replace('/', '_')
-
-			# Use the Embody externalizations folder if configured
-			try:
-				ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
-				if ext_folder:
-					out_dir = project_dir / ext_folder
-					out_dir.mkdir(parents=True, exist_ok=True)
-					return str(out_dir / f'{safe_name}.tdn')
-			except Exception as e:
-				self._log(f'Could not resolve externalizations folder: {e}', 'WARNING')
-
-			# Fallback to project directory
-			return str(project_dir / f'{safe_name}.tdn')
+				# Non-root: use full TD path to mirror operator hierarchy
+				rel_path = root_op.path.lstrip('/') + '.tdn'
+				out_path = project_dir / rel_path
+				out_path.parent.mkdir(parents=True, exist_ok=True)
+				return str(out_path)
 
 		return str(output_file)
 
-	def _trackTDNExport(self, root_path, file_path):
+	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None):
 		"""Add/update a TDN entry in the externalizations table."""
 		try:
 			embody_ext = self.ownerComp.ext.Embody
@@ -1699,17 +1800,22 @@ class TDNExt:
 			timestamp = datetime.now(timezone.utc).strftime(
 				'%Y-%m-%d %H:%M:%S UTC')
 
+			build_str = str(build_num) if build_num is not None else ''
+			tb_str = str(touch_build) if touch_build is not None else ''
+
 			# Update existing row if found
 			for i in range(1, table.numRows):
 				if (table[i, 'path'].val == root_path
 						and table[i, 'type'].val == 'tdn'):
 					table[i, 'rel_file_path'] = rel_path
 					table[i, 'timestamp'] = timestamp
+					table[i, 'build'] = build_str
+					table[i, 'touch_build'] = tb_str
 					return
 
 			# Add new row
 			table.appendRow(
-				[root_path, 'tdn', rel_path, timestamp, '', '', ''])
+				[root_path, 'tdn', rel_path, timestamp, '', build_str, tb_str])
 		except Exception as e:
 			self._log(f'Failed to track TDN export: {e}', 'WARNING')
 

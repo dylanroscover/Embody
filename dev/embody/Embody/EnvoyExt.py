@@ -1001,8 +1001,38 @@ class EnvoyMCPServer:
         logging.getLogger("mcp.server.streamable_http").setLevel(logging.WARNING)
         logging.getLogger("mcp.server.streamable_http_manager").setLevel(logging.WARNING)
 
+        # Suppress "Stateless session crashed" noise from MCP SDK race condition:
+        # In stateless mode, terminate() closes streams while background tasks may
+        # still try to send_log_message → ClosedResourceError. This is cosmetic —
+        # the server recovers immediately. Filter these out instead of escalating
+        # the log level (which would hide real errors).
+        import anyio
+
+        class _DisconnectCrashFilter(logging.Filter):
+            def filter(self, record):
+                if record.exc_info and record.exc_info[1]:
+                    exc = record.exc_info[1]
+                    if self._is_disconnect(exc):
+                        return False
+                return True
+
+            @staticmethod
+            def _is_disconnect(exc):
+                if isinstance(exc, (anyio.BrokenResourceError,
+                                    anyio.ClosedResourceError)):
+                    return True
+                if isinstance(exc, BaseExceptionGroup):
+                    return all(_DisconnectCrashFilter._is_disconnect(e)
+                              for e in exc.exceptions)
+                return False
+
+        logging.getLogger("mcp.server.streamable_http_manager").addFilter(
+            _DisconnectCrashFilter()
+        )
+
         # Response checker is pure Python (no TD objects), so a plain thread is fine
         def response_checker():
+            import time  # local import survives DAT recompilation
             while self.running and not self.shutdown_event.is_set():
                 try:
                     self.check_responses()
@@ -1021,8 +1051,6 @@ class EnvoyMCPServer:
         # When a VS Code tab closes while the MCP server is still sending responses,
         # anyio raises BrokenResourceError which propagates as nested ExceptionGroups.
         # The server recovers fine (new clients connect immediately), so suppress the noise.
-        import anyio
-
         def _is_client_disconnect(exc):
             if isinstance(exc, (anyio.BrokenResourceError, anyio.ClosedResourceError)):
                 return True
@@ -1047,7 +1075,7 @@ class EnvoyMCPServer:
             starlette_app,
             host="127.0.0.1",
             port=self.port,
-            log_level="info",
+            log_level="warning",
         )
         uvi_server = uvicorn.Server(config)
 
@@ -1094,6 +1122,7 @@ class EnvoyExt:
         self.request_queue: Queue = Queue()   # Worker -> Main thread
         self.response_queue: Queue = Queue()  # Main -> Worker thread
         self.current_task: Optional[Any] = None
+        self._server_gen: int = 0  # Generation counter for stale callback detection
         self._last_served_log_id: int = 0
         self._pending_test_request_id: Optional[int] = None
 
@@ -1132,11 +1161,92 @@ class EnvoyExt:
 
     # === Server Lifecycle ===
 
+    def onDestroyTD(self):
+        """Signal server shutdown when extension reinitializes.
+
+        TD calls this on the OLD instance before the new one initializes.
+        Only signals the shutdown event here — actual Thread Manager cleanup
+        is deferred to _cleanupStaleThreads() in Start(), because modifying
+        system COMP state (thread.clean(), Runningthreads parameter) during
+        extension reinit can crash TD if triggered by a save-time file sync.
+        """
+        self.shutdown_event.set()
+
+    def _cleanupStaleThreads(self) -> None:
+        """Remove stale Envoy threads from the Thread Manager.
+
+        Safety net called from Start() before creating the new server thread.
+        Primary cleanup happens in onDestroyTD(). This catches edge cases:
+        - onDestroyTD didn't run (project load, first init)
+        - Multiple rapid reinits
+        """
+        try:
+            tm_ext = self.ThreadManager.ext.ThreadManagerExt
+        except Exception:
+            return
+
+        # Log Thread Manager state before cleanup
+        thread_info = []
+        for t in tm_ext.Threads:
+            task = getattr(t, 'TDTask', None)
+            target = getattr(task, 'target', None) if task else None
+            name = getattr(target, '__name__', '?') if target else 'None'
+            thread_info.append(
+                f'{t.name}({name}, pool={t.InPool}, alive={t.is_alive()})')
+        if thread_info:
+            self._log(
+                f'Thread Manager pre-cleanup: {len(thread_info)} threads: '
+                f'{"; ".join(thread_info)}', 'DEBUG')
+
+        cleaned = 0
+        for thread in list(tm_ext.Threads):
+            task = getattr(thread, 'TDTask', None)
+            if task is None:
+                continue
+            target = getattr(task, 'target', None)
+            if target is None or getattr(target, '__name__', '') != '_runServer':
+                continue
+
+            # Skip pool workers — shutdown_event handles their cleanup via
+            # workLoop. Calling clean() would destroy the worker permanently.
+            if thread.InPool:
+                self._log(
+                    'Skipping pool-worker _runServer '
+                    '(shutdown_event handles it)', 'DEBUG')
+                continue
+
+            # All standalone _runServer threads here are stale:
+            # onDestroyTD already cleaned the previous instance's thread,
+            # and self.current_task is None (new task not created yet).
+            thread.clean()
+            with tm_ext.ManagerCondition:
+                if task in tm_ext.Tasks:
+                    tm_ext.Tasks.remove(task)
+            cleaned += 1
+
+        if cleaned:
+            # CRITICAL: sync the Runningthreads parameter so EnqueueTask
+            # sees the actual thread count, not the stale pre-cleanup value.
+            self.ThreadManager.par.Runningthreads.val = len(tm_ext.Threads)
+            self._log(
+                f'Cleaned {cleaned} stale Envoy thread(s) — '
+                f'{len(tm_ext.Threads)} threads remain '
+                f'(capacity: {tm_ext.MaxNumberOfThreads.eval()})', 'DEBUG')
+
     def Start(self, _retries_left: int = 10) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
         if self.ownerComp.fetch('envoy_running', False):
-            self._log('Server already running', 'WARNING')
+            self._log('Server already running (duplicate Start ignored)', 'DEBUG')
             return
+
+        # On first call (not port retry), check for git repo
+        if _retries_left == 10:
+            git_root = self._checkOrInitGitRepo()
+            if git_root is None:
+                return  # User cancelled
+            self.ownerComp.store('_git_root', git_root)
+        else:
+            git_root = self.ownerComp.fetch('_git_root', 'no-git')
 
         # Ensure Python environment is ready (idempotent fast path if already installed)
         op.Embody.ext.Embody._setupEnvironment()
@@ -1165,36 +1275,88 @@ class EnvoyExt:
             self._log(f'Port {port} became available after ~{(10 - _retries_left) * 0.25:.1f}s')
 
         self.ownerComp.store('envoy_running', True)
-        self.shutdown_event.clear()
+
+        # Create a FRESH Event for this server instance.  Don't clear() the old
+        # one — it must stay set so the previous thread's shutdown_monitor sees it.
+        self.shutdown_event = Event()
+        _registry = getattr(sys, '_envoy_shutdown_events', {})
+        _registry[self.ownerComp.path] = self.shutdown_event
+        sys._envoy_shutdown_events = _registry
+
+        self._server_gen += 1
+        gen = self._server_gen
+
         self._log(f'Starting Envoy MCP server on port {port}')
 
         # Update status
         self.ownerComp.par.Envoystatus = 'Starting...'
 
+        # Wrap hooks with generation guard so stale callbacks from a previous
+        # server thread don't corrupt the running server's state.
+        # Two checks: (1) instance identity — detects extension reinit (Update,
+        # recompile) where a NEW EnvoyExt instance replaced us; (2) generation
+        # counter — detects rapid Start() calls on the SAME instance.
+        def guarded_success(returnValue=None, _gen=gen):
+            try:
+                if self.ownerComp.ext.Envoy is not self:
+                    self._log('Stale server thread from previous init (ignored)', 'DEBUG')
+                    return
+            except Exception:
+                return
+            if self._server_gen != _gen:
+                self._log('Stale server thread exited (ignored)', 'DEBUG')
+                return
+            self._onServerSuccess(returnValue)
+
+        def guarded_error(error, _gen=gen):
+            try:
+                if self.ownerComp.ext.Envoy is not self:
+                    self._log(f'Stale server error from previous init (ignored): {error}', 'DEBUG')
+                    return
+            except Exception:
+                return
+            if self._server_gen != _gen:
+                self._log(f'Stale server error (ignored): {error}', 'DEBUG')
+                return
+            self._onServerError(error)
+
+        # Free Thread Manager slots occupied by stale Envoy threads
+        self._cleanupStaleThreads()
+
         # Create and enqueue a TDTask
         self.current_task = self.ThreadManager.TDTask(
             target=self._runServer,
             args=(port, self.request_queue, self.response_queue, self.shutdown_event),
-            SuccessHook=self._onServerSuccess,
-            ExceptHook=self._onServerError,
+            SuccessHook=guarded_success,
+            ExceptHook=guarded_error,
             RefreshHook=self._onRefresh
         )
-        self.ThreadManager.EnqueueTask(self.current_task, standalone=True)
+        thread = self.ThreadManager.EnqueueTask(
+            self.current_task, standalone=True)
+
+        if thread is None:
+            self._log(
+                'Thread Manager at capacity — Envoy task queued for pool '
+                'execution instead of standalone thread.', 'WARNING')
 
         # Update status
         self.ownerComp.par.Envoystatus = f'Running on port {port}'
 
-        # Auto-configure MCP client connection
-        self._configureMCPClient(port)
-
-        # Ensure CLAUDE.md exists in project/repo root
-        op.Embody.ext.Embody._upgradeEnvoy()
+        # Auto-configure git repo (MCP client, .gitignore, CLAUDE.md)
+        if git_root != 'no-git':
+            self._configureMCPClient(port)
+            self._configureGitignore(git_root)
+            op.Embody.ext.Embody._upgradeEnvoy()
 
     def Stop(self) -> None:
         """Stop MCP server"""
         if not self.ownerComp.fetch('envoy_running', False):
             self._log('Envoy disabled')
-            self.ownerComp.par.Envoystatus = 'Disabled'
+            # Only set 'Disabled' if hooks haven't already set a more
+            # specific status (e.g. 'Stopped' or 'Error: ...')
+            current = str(self.ownerComp.par.Envoystatus.eval())
+            if not current.startswith(('Stopped', 'Error')):
+                self.ownerComp.par.Envoystatus = 'Disabled'
             return
 
         self._log('Stopping Envoy MCP server')
@@ -1252,6 +1414,14 @@ class EnvoyExt:
         Polls request_queue for operations queued by the worker thread,
         and checks for completed deferred test runs.
         """
+        # Guard: bail if this RefreshHook fires on a stale instance
+        # (e.g., thread wasn't cleaned yet after extension reinit)
+        try:
+            if self.ownerComp.ext.Envoy is not self:
+                return
+        except Exception:
+            return
+
         # Poll for completed deferred test run
         if self._pending_test_request_id is not None:
             test_comp = op.unit_tests
@@ -1302,7 +1472,12 @@ class EnvoyExt:
         self._log('Server thread completed')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
-        self.ownerComp.par.Envoystatus = 'Stopped'
+        if self.ownerComp.par.Envoyenable.eval():
+            # Server stopped unexpectedly while still enabled —
+            # turn off the toggle so toolbar UI stays in sync
+            self.ownerComp.par.Envoystatus = 'Stopped'
+            self.ownerComp.par.Envoyenable = False
+        # If Envoyenable is already off, Stop() set the status — don't overwrite
 
     def _onServerError(self, error):
         """ExceptHook - Called when the thread task errors"""
@@ -1310,6 +1485,9 @@ class EnvoyExt:
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
         self.ownerComp.par.Envoystatus = f'Error: {error}'
+        if self.ownerComp.par.Envoyenable.eval():
+            # Turn off the toggle so toolbar UI stays in sync
+            self.ownerComp.par.Envoyenable = False
 
     # === Operation Routing ===
 
@@ -2948,6 +3126,88 @@ class EnvoyExt:
 
         except Exception as e:
             self._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
+
+    def _checkOrInitGitRepo(self):
+        """Check for a git repo. If missing, prompt user to initialize one.
+        Returns the git root Path, or None if user cancelled."""
+        from pathlib import Path
+        import subprocess
+
+        project_dir = Path(project.folder)
+
+        # Walk up looking for .git
+        for parent in [project_dir] + list(project_dir.parents):
+            if (parent / '.git').exists():
+                return parent
+
+        # No git repo found — prompt user
+        choice = ui.messageBox(
+            'Envoy — Git Repository Recommended',
+            'Envoy auto-configures .mcp.json, .gitignore, and CLAUDE.md\n'
+            'in your git repository root. No git repository was found.\n\n'
+            f'Initialize a git repo in:\n  {project_dir}\n\n'
+            'You can also create one manually and re-enable Envoy.',
+            buttons=['Cancel', 'Initialize Git', 'Start Without Git'])
+
+        if choice == 0:  # Cancel
+            self.ownerComp.par.Envoyenable = False
+            self._log('Envoy cancelled — no git repository.', 'INFO')
+            return None
+
+        if choice == 1:  # Initialize Git
+            try:
+                subprocess.run(
+                    ['git', 'init', str(project_dir)],
+                    check=True, capture_output=True, text=True)
+                self._log(f'Initialized git repo in {project_dir}', 'SUCCESS')
+                return project_dir
+            except Exception as e:
+                self._log(f'Failed to initialize git repo: {e}', 'ERROR')
+                # Fall through to start-without-git
+
+        # choice == 2 or git init failed — start without git
+        self._log('Starting Envoy without git repo — auto-config skipped.', 'WARNING')
+        return 'no-git'
+
+    def _configureGitignore(self, git_root):
+        """Ensure .gitignore in the git root contains entries for
+        Embody/Envoy auto-generated files.
+        Idempotent — only appends missing entries, preserves all existing content."""
+        MANAGED_ENTRIES = [
+            '.venv/',
+            '.mcp.json',
+            '.claude/',
+            '__pycache__/',
+            '*.lck',
+            '.DS_Store',
+        ]
+
+        try:
+            gitignore = git_root / '.gitignore'
+
+            existing_content = ''
+            existing_lines = set()
+            if gitignore.exists():
+                existing_content = gitignore.read_text(encoding='utf-8')
+                existing_lines = {line.strip() for line in existing_content.splitlines()}
+
+            missing = [e for e in MANAGED_ENTRIES if e not in existing_lines]
+
+            if not missing:
+                self._log('.gitignore already configured')
+                return
+
+            block = '\n# Embody / Envoy (auto-managed)\n'
+            block += '\n'.join(missing) + '\n'
+
+            if existing_content and not existing_content.endswith('\n'):
+                block = '\n' + block
+
+            gitignore.write_text(existing_content + block, encoding='utf-8')
+            self._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
+
+        except Exception as e:
+            self._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
 
     def _log(self, message: str, level: str = 'INFO'):
         """Log a message via Embody's centralized logger."""

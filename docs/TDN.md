@@ -36,7 +36,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
 {
   "format": "tdn",
   "version": "1.0",
-  "generator": "Envoy/1.0.0",
+  "build": 1,
+  "generator": "Embody/5.0.79",
   "td_build": "2025.32050",
   "exported_at": "2025-02-09T12:34:56Z",
   "root": "/",
@@ -51,7 +52,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
 | `version` | string | Yes | Format version. Currently `"1.0"`. |
-| `generator` | string | Yes | Tool that produced the file (e.g., `"Envoy/1.0.0"`). |
+| `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
+| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.79"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
 | `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-09T12:34:56Z"`). |
 | `root` | string | Yes | The COMP path that was exported (e.g., `"/"` for the entire project). |
@@ -491,6 +493,8 @@ renderer.tdn                         # /renderer's children
 
 Per-COMP files include `"export_mode": "percomp"` in their top-level metadata.
 
+> **Note:** The `import_network` tool operates on a single `.tdn` document. When importing per-COMP files, the caller must load and resolve `tdn_ref` references — either by importing each file separately into its target COMP, or by reassembling the full `children` hierarchy before import.
+
 ---
 
 ## Value Serialization
@@ -543,6 +547,16 @@ Importing a `.tdn` file reconstructs the network in seven sequential phases. Thi
 
 The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
 
+### Version Compatibility
+
+When importing a full `.tdn` document, the importer checks the metadata fields for compatibility:
+
+- **`version`**: Compared against the current TDN format version. A warning is logged if they differ, indicating the file may use a newer or older schema.
+- **`td_build`**: Compared against the running TouchDesigner version. An informational message is logged if they differ, since operator types and parameter defaults may vary between TD builds.
+- **`build`**: Logged for informational purposes, identifying which save iteration is being imported.
+
+These checks are non-blocking — the import always proceeds regardless of mismatches.
+
 ---
 
 ## Complete Example
@@ -553,7 +567,8 @@ A realistic `.tdn` file demonstrating all major features:
 {
   "format": "tdn",
   "version": "1.0",
-  "generator": "Envoy/1.0.0",
+  "build": 3,
+  "generator": "Embody/5.0.79",
   "td_build": "2025.32050",
   "exported_at": "2025-02-09T14:30:00Z",
   "root": "/",
