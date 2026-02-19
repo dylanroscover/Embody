@@ -7,6 +7,7 @@ TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDe
 File extension: `.tdn`
 MIME type: `application/json`
 Encoding: UTF-8
+JSON Schema: [`tdn.schema.json`](tdn.schema.json)
 
 ---
 
@@ -24,7 +25,10 @@ Encoding: UTF-8
 - [Value Serialization](#value-serialization)
 - [System Exclusions](#system-exclusions)
 - [Import Process](#import-process)
+- [Round-Trip Guarantees](#round-trip-guarantees)
+- [Error Handling](#error-handling)
 - [Complete Example](#complete-example)
+- [Changelog](#changelog)
 
 ---
 
@@ -559,6 +563,64 @@ These checks are non-blocking — the import always proceeds regardless of misma
 
 ---
 
+## Round-Trip Guarantees
+
+For most networks, export → import → re-export produces identical `.tdn` output. The format is designed to be stable across round-trips, with a few documented exceptions.
+
+### Preserved
+
+- Operator names, types, and hierarchy
+- Non-default parameter values (constant, expression, and bind modes)
+- Custom parameter definitions (all fields, all styles)
+- Flags, connections, positions, sizes, colors, comments, tags
+- DAT text and table content (byte-for-byte when `include_dat_content` is `true`)
+- Float values (stable after the first export — see below)
+
+### Known Exceptions
+
+**Palette clones** — On first export, a palette-cloned COMP is marked `"palette_clone": true` and its children are skipped. After import, TouchDesigner materializes the children from the clone source. A subsequent re-export will include those children as regular operators. This means the second export is larger than the first.
+
+**Color tolerance** — Colors within `0.01` per channel of the default gray `[0.545, 0.545, 0.545]` are treated as default and not exported. A color of `[0.55, 0.55, 0.55]` survives; `[0.546, 0.546, 0.546]` is dropped.
+
+**Float precision** — Values are rounded to 10 decimal places on first export. This can change the last digits of very precise values (e.g., `3.14159265358979` → `3.1415926536`). After that first rounding, subsequent exports are stable.
+
+### Intentionally Excluded
+
+The following are never exported and are not considered a loss:
+
+- **Export-mode parameters** — set by the exporting operator, not the parameter itself
+- **Pulse / Momentary / Header styles** — no persistent state
+- **Read-only parameters** — cannot be set on import
+- **Embody-managed parameters** (`file`, `syncfile`, `externaltox`, etc.) — managed by the externalization system
+
+---
+
+## Error Handling
+
+TDN import is **best-effort** — individual failures should not abort the entire operation. This section describes the expected behavior for developers working with TDN files.
+
+### Unknown Fields
+
+Developers should ignore unknown fields when parsing TDN documents. This ensures forward compatibility — a file exported by a newer version of Embody can still be imported by an older version, with unrecognized fields silently skipped.
+
+### Failure Modes
+
+| Situation | Expected behavior |
+|-----------|-------------------|
+| Unknown field in any object | Ignore it. |
+| Missing required field (`name`, `type`) on an operator | Skip that operator, log an error. |
+| Missing connection source (operator not found) | Skip that connection, log a warning. |
+| Unrecognized custom parameter `style` | Skip that parameter definition, log a warning. |
+| Unrecognized flag name | Ignore it. |
+| Invalid parameter value type | Attempt type coercion; if impossible, skip with a warning. |
+| Version mismatch (`version`, `td_build`) | Log a warning, proceed with import. |
+
+### General Principle
+
+Log warnings for anything skipped so the developer can inspect the result. Never abort an entire import because a single operator, parameter, or connection failed — the partial result is more useful than no result.
+
+---
+
 ## Complete Example
 
 A realistic `.tdn` file demonstrating all major features:
@@ -677,3 +739,11 @@ A realistic `.tdn` file demonstrating all major features:
   ]
 }
 ```
+
+---
+
+## Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2025-02-09 | Initial release. |
