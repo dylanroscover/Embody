@@ -100,6 +100,14 @@ op.TDResources.ThreadManager.EnqueueTask(task, standalone=True)
 - Docs: https://docs.derivative.ca/Thread_Manager
 - API: https://docs.derivative.ca/ThreadManager_Ext
 
+### Pull-Based Cook Model
+
+TouchDesigner uses a **pull-based** cook system — operators only cook when something downstream demands their output (a visible viewer, an output device, or an explicit `cook()` call). Changing a parameter makes the node "dirty" but does NOT trigger an immediate cook. This means downstream operators may not reflect parameter changes until the next frame or until explicitly pulled.
+
+- **Always-cook operators**: Output nodes (Movie File Out TOP, Audio Device Out CHOP, etc.) and Render TOPs cook every frame regardless
+- **Performance implication**: Nodes with no viewer and no downstream output skip cooking entirely — minimize visible viewers to reduce load
+- Docs: https://docs.derivative.ca/Cook
+
 ### Parameter Access Patterns
 
 Always use `.eval()` to get a parameter's current runtime value, regardless of its mode (constant, expression, export, bind). Using `.val` only returns the constant-mode value, which may differ from the actual runtime value.
@@ -115,6 +123,10 @@ value = op('geo1').par.tx.val
 op('geo1').par.tx = 5
 op('geo1').par.tx.val = 5  # Also implicitly sets mode to constant
 
+# CAUTION: Setting .val implicitly switches mode to CONSTANT.
+# If the par was in expression mode, the expression is now GONE:
+op('geo1').par.tx.val = 5  # Silently kills any active expression
+
 # Menu parameters accept both string name and index:
 op('geo1').par.xord = 'trs'   # by name
 op('geo1').par.xord = 5       # by index
@@ -123,6 +135,38 @@ op('geo1').par.xord = 5       # by index
 me.par.tx.eval().hex()  # CORRECT
 me.par.tx.hex()         # WRONG — parameter objects don't have .hex()
 ```
+
+### Creating Custom Parameters
+
+Custom parameters are created via `appendCustomPage()` on COMPs. All `append*` methods return a **ParGroup** (tuple-like), not a single Par — always index with `[0]` for single-value parameters.
+
+```python
+page = comp.appendCustomPage('Controls')
+pg = page.appendFloat('Speed', label='Speed')  # Returns ParGroup, NOT Par
+p = pg[0]                                       # Get the actual Par
+p.default = 0.5
+p.normMin = 0; p.normMax = 2    # Slider range
+p.min = 0; p.clampMin = True    # Hard clamp
+
+# Other append methods:
+page.appendInt('Count')
+page.appendToggle('Active')
+page.appendStr('Label')
+page.appendMenu('Mode')        # Creates EMPTY menu — must set .menuNames/.menuLabels separately
+page.appendPulse('Reset')
+page.appendRGB('Color')        # Creates Color1r, Color1g, Color1b
+page.appendXYZ('Pos')          # Creates Pos1, Pos2, Pos3
+page.appendOP('Target')
+page.appendFile('Path')
+
+# Cleanup:
+comp.destroyCustomPars()       # Remove ALL custom pars
+par.Speed.destroy()            # Remove a single custom par
+```
+
+**Naming rule:** First letter MUST be uppercase, rest lowercase/numbers. No underscores. TD enforces this.
+
+- Docs: https://docs.derivative.ca/Custom_Parameters
 
 ### `op()` vs `opex()`
 
@@ -135,9 +179,21 @@ node.par.tx = 5  # AttributeError: 'NoneType' has no attribute 'par'
 
 # opex() raises an exception immediately:
 node = opex('/nonexistent/path')  # Raises tdError with clear message
+
+# ops() returns a LIST of all matching operators (supports wildcards):
+all_noises = ops('noise*')  # [noise1, noise2, noise3, ...]
 ```
 
 Use `op()` only when `None` is an acceptable/expected result (e.g., checking if an operator exists).
+
+### `debug()` vs `print()`
+
+Use `debug()` instead of `print()` for debugging. It automatically prefixes output with the source DAT name and line number, making it far easier to trace in complex networks with many scripts.
+
+```python
+debug('value is', x)  # Output: "myScript line 42: value is 42" (with source info)
+print('value is', x)  # Output: "value is 42" (no source info)
+```
 
 ### Module-Level Code Hazard
 
@@ -164,6 +220,32 @@ class MyExt:
 
 TouchDesigner searches for DATs with a matching name before checking `sys.path`. A DAT named `json` will shadow Python's stdlib `json` module. A DAT named `os` will shadow the `os` module. Name DATs carefully to avoid conflicts with Python built-ins.
 
+### `mod()` for Module Access
+
+The `mod` object accesses DAT modules without `import` statements — essential in parameter expressions where `import` is not allowed.
+
+```python
+# In a parameter expression (import not available):
+mod.utils.myFunction()
+
+# In a script (three methods, decreasing performance):
+import utils                         # Fastest — cached after first import
+m = mod.utils; m.func()              # OK — cache the reference
+mod.utils.func()                     # Slowest — re-resolves DAT lookup every call
+
+# Access by path (works outside search path):
+mod('/project1/utils').myFunction()
+
+# Direct module property on any DAT:
+op('myDat').module.myFunction()
+```
+
+**Gotchas:**
+- `mod.name` re-resolves the DAT lookup every call — cache it in a variable for loops
+- No package support — `import mypackage.submodule` does not work with DATs
+- Search priority: current component first, then `local/modules` walking up the hierarchy
+- Docs: https://docs.derivative.ca/MOD_Class
+
 ### `extensionsReady` Guard Pattern
 
 Parameter expressions that reference extension-promoted attributes must guard against initialization timing:
@@ -175,9 +257,118 @@ parent().MyExtensionProperty if parent().extensionsReady else 0
 
 Without this, TD raises "Cannot use an extension during its initialization" during the compile phase. For post-init logic that depends on other extensions or the network being fully cooked, use `onInitTD(self)`.
 
+### Operator Storage
+
+Every operator has a persistent `.storage` dictionary. Use `store()` / `fetch()` for data that should survive project saves. Prefer this over Python globals or external files.
+
+```python
+op('base1').store('count', 42)
+val = op('base1').fetch('count', 0)  # 0 is the default if key missing
+op('base1').unstore('count')
+
+# storeStartupValue — restored on every project load (factory defaults)
+op('base1').storeStartupValue('version', 1)
+```
+
+**Gotchas:**
+- `fetch()` searches UP the parent hierarchy by default — pass `search=False` for local-only: `op('base1').fetch('key', 0, search=False)`
+- `store()` triggers dependent operator recooks — it is NOT a passive dict assignment
+- Cannot store TD operator references — store `op.path` strings instead
+- For mutable objects (lists, dicts), use `DependList`/`DependDict` from `TDStoreTools` or call `.modified()` on the Dependency wrapper to trigger updates
+- Docs: https://docs.derivative.ca/Storage
+
+### `tdu.Dependency` for Reactive Values
+
+`tdu.Dependency` wraps a value so that parameter expressions automatically recook when it changes. Essential for extension properties that drive expressions.
+
+```python
+dep = tdu.Dependency(0)
+dep.val = 5          # CORRECT — triggers dependent expression recooks
+dep = 5              # WRONG — destroys the Dependency object, silently breaks all expressions
+
+# Read without creating a dependency (avoids circular re-evaluation):
+current = dep.peekVal
+
+# Mutable contents require manual notification:
+dep.val = [1, 2, 3]
+dep.val.append(4)    # Does NOT trigger update
+dep.modified()       # Required — notifies all dependents
+```
+
+See also: `TDFunctions.createProperty()` for creating dependable properties on extension classes. Docs: https://docs.derivative.ca/Dependency_Class
+
 ### Explicit Type Conversion
 
 TD parameters and CHOP channels auto-cast in expression contexts but remain TD objects internally. When passing values to standard Python functions, explicitly convert with `int()`, `float()`, or `str()` to avoid type-mismatch bugs. Use `repr()` to reveal the actual type if uncertain.
+
+### `tdu` Utility Functions
+
+The `tdu` module provides commonly-needed utilities. Use these instead of writing custom implementations.
+
+```python
+tdu.clamp(val, min, max)              # Standard clamp
+tdu.remap(val, fromMin, fromMax, toMin, toMax)  # Linear remap between ranges
+tdu.rand(seed)                        # Deterministic random in [0.0, 1.0)
+tdu.base('noise3')                    # 'noise' — extract base name
+tdu.digits('noise3')                  # 3 — extract trailing digits
+tdu.validName('my op!')               # 'my_op_' — sanitize for operator names
+tdu.match('noise*', ['noise1', 'c1']) # ['noise1'] — wildcard filtering
+tdu.expand('A[1-3]')                  # ['A1', 'A2', 'A3'] — range expansion
+tdu.tryExcept(expr, fallback)         # Inline try/except for parameter expressions
+```
+
+### DAT Cell and Text Behavior
+
+All DAT cells are internally **strings**. Cell objects auto-cast to numbers in expression contexts, but `.val` always returns a string.
+
+```python
+n = op('table1')
+n[1,2] + 1          # Works: auto-cast to number (e.g., 4)
+n[1,2].val + 1      # TypeError: str + int
+n[1,2] + n[1,2]     # 6 (numeric addition via auto-cast)
+n[1,2].val + n[1,2].val  # "33" (string concatenation)
+```
+
+**DAT text access:**
+- `dat.text` — tab/newline delimited; **strips multi-line cell content**. Use `dat.csv` for cells containing newlines
+- `dat.jsonObject` — parses DAT content as JSON and returns a Python dict directly (no `json.loads()` needed)
+- `dat.module` — access DAT contents as a Python module: `op('myDat').module.myFunc()`
+- `dat.write(content)` — **appends** (does not overwrite)
+- Docs: https://docs.derivative.ca/DAT_Class
+
+### CHOP Channel Access
+
+```python
+ch = op('noise1')['chan1']    # Get channel by name — NO wildcard support
+chs = op('noise1').chans('tx*')  # Use .chans() for pattern matching
+val = ch.eval()               # Current value (channels also auto-cast to float in expressions)
+
+# Per-sample access:
+ch[0], ch[10]                 # Sample by index
+ch.evalFrame(30)              # Sample at specific frame
+ch.evalSeconds(1.5)           # Sample at specific time
+
+# NumPy integration:
+arr = op('noise1').numpyArray()  # Shape: (numChans, numSamples)
+```
+
+- Docs: https://docs.derivative.ca/Channel_Class
+
+### TOP Pixel Access
+
+`TOP.sample(x, y)` downloads the **entire texture** from GPU to CPU to read a single pixel — extremely expensive. Never use in loops or per-frame callbacks.
+
+```python
+# For single pixel (debugging only):
+r, g, b, a = op('noise1').sample(x=0.5, y=0.5)
+
+# For batch access (still downloads, but once):
+arr = op('noise1').numpyArray()  # Indexed as [height, width, channels] — NOT [width, height]
+```
+
+### Pre-Installed Python Packages
+
+These packages are available in TouchDesigner without installation: `numpy`, `cv2` (OpenCV), `requests`, `yaml` (PyYAML), `cryptography`, `attrs`. The following stdlib modules are auto-imported (no `import` needed): `math`, `re`, `sys`, `collections`, `enum`, `inspect`, `traceback`, `warnings`.
 
 ### Creating Python Files for TouchDesigner
 
@@ -364,6 +555,13 @@ op.Embody.ext.Envoy.Stop()
   - https://docs.derivative.ca/Thread_Manager — Thread Manager for Python threading in TD (accessed via `op.TDResources.ThreadManager`)
   - https://docs.derivative.ca/POP_Class — POP (Point Operator) class — GPU-accelerated geometry
   - https://docs.derivative.ca/Extensions — Extensions system (lifecycle, promotion, `onDestroyTD`, `onInitTD`, `StorageManager`)
+  - https://docs.derivative.ca/Storage — Operator storage system (store/fetch/unstore)
+  - https://docs.derivative.ca/Dependency_Class — Dependency class for reactive values
+  - https://docs.derivative.ca/MOD_Class — Module on Demand (mod) for DAT module access
+  - https://docs.derivative.ca/Custom_Parameters — Custom parameter creation API
+  - https://docs.derivative.ca/Cook — Cook cycle (pull-based evaluation model)
+  - https://docs.derivative.ca/DAT_Class — DAT class (text, table, cell access)
+  - https://docs.derivative.ca/Channel_Class — CHOP channel class
   - [`docs/TDN.md`](docs/TDN.md) — TDN network format specification (JSON schema for TD network export/import)
 
 ## Envoy MCP Server Setup
@@ -720,6 +918,15 @@ class TestMyFeature(EmbodyTestCase):
 14. Importing or calling TouchDesigner modules in worker thread code (`EnvoyMCPServer` class)
 15. Renaming externalized files on disk (`git mv`, manual rename) or manually updating `file`/`externaltox` parameters after a rename — Embody handles all of this automatically via `checkOpsForContinuity`. Only rename the operator itself (via MCP `rename_op` or inside TD)
 16. Not following the `NameExt` convention for extension class names and their source DATs (e.g., `EmbodyExt`, `EnvoyExt`, `TestRunnerExt`)
+17. Setting `.val` on a parameter in expression mode — silently switches to constant mode and destroys the expression
+18. Using `print()` instead of `debug()` — loses source DAT name and line number context
+19. Using `changeType()` without capturing the return value — the original operator reference becomes invalid. Always: `new_op = old_op.changeType(waveCHOP)`
+20. Using `COMP.copy()` for multiple connected operators — connections between them are lost. Use `copyOPs([list])` to preserve inter-operator wiring
+21. Calling `addError()`/`addWarning()` outside a cook callback — silently does nothing. Use `addScriptError()` from extension methods
+22. Using `TOP.sample()` in loops or per-frame callbacks — downloads the entire texture from GPU every call. Use `numpyArray()` for batch access
+23. Using `fetch()` without `search=False` when local-only lookup is intended — by default it searches up the parent hierarchy, which may return a parent's value instead
+24. Calling `mod.moduleName.func()` in a loop without caching — re-resolves the DAT lookup every call. Cache: `m = mod.moduleName; m.func()`
+25. Assigning directly to a `tdu.Dependency` object (`dep = 5`) instead of its value (`dep.val = 5`) — destroys the Dependency, silently breaking all dependent expressions
 
 ## Important Rules
 
