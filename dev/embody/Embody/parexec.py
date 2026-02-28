@@ -82,7 +82,9 @@ def onPulse(par):
 		file_path = parent.Embody.par.Tdnfile.eval()
 		target = parent.Embody.par.Networkpath.eval()
 		target_path = str(target) if target else '/'
-		parent.Embody.ext.TDN.ImportNetworkFromFile(file_path, target_path)
+		clear_first = getattr(parent.Embody.ext.Embody, '_import_clear_first', False)
+		parent.Embody.ext.TDN.ImportNetworkFromFile(file_path, target_path, clear_first=clear_first)
+		parent.Embody.ext.Embody._import_clear_first = False
 
 	return
 

@@ -17,6 +17,8 @@ JSON Schema: [`tdn.schema.json`](tdn.schema.json)
 - [Operator Object](#operator-object)
 - [Built-in Parameters](#built-in-parameters)
 - [Custom Parameters](#custom-parameters)
+- [Type Defaults](#type-defaults)
+- [Parameter Templates](#parameter-templates)
 - [Flags](#flags)
 - [Connections](#connections)
 - [DAT Content](#dat-content)
@@ -41,13 +43,15 @@ A `.tdn` file is a JSON object with the following top-level fields:
   "format": "tdn",
   "version": "1.0",
   "build": 1,
-  "generator": "Embody/5.0.79",
+  "generator": "Embody/5.0.93",
   "td_build": "2025.32050",
-  "exported_at": "2025-02-09T12:34:56Z",
-  "root": "/",
+  "exported_at": "2025-02-19T12:34:56Z",
+  "network_path": "/",
   "options": {
     "include_dat_content": true
   },
+  "type_defaults": { ... },
+  "par_templates": { ... },
   "operators": [ ... ]
 }
 ```
@@ -57,12 +61,14 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
 | `version` | string | Yes | Format version. Currently `"1.0"`. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
-| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.79"`). |
+| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.93"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
-| `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-09T12:34:56Z"`). |
-| `root` | string | Yes | The COMP path that was exported (e.g., `"/"` for the entire project). |
+| `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). |
+| `network_path` | string | Yes | The COMP path represented by this file (e.g., `"/"` for the entire project). |
 | `options` | object | Yes | Export settings used when generating this file. |
 | `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |
+| `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
+| `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
 | `operators` | array | Yes | Array of [operator objects](#operator-object). |
 
 In [per-COMP export mode](#per-comp-export-mode), an additional field is present:
@@ -87,8 +93,8 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
   "comment": "Primary noise source",
   "tags": ["audio", "generator"],
   "parameters": { ... },
-  "custom_pars": [ ... ],
-  "flags": { ... },
+  "custom_pars": { ... },
+  "flags": [ ... ],
   "inputs": [ ... ],
   "comp_inputs": [ ... ],
   "dat_content": "...",
@@ -105,14 +111,14 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 |-------|------|----------|------------------------|
 | `name` | string | Yes | Always included. The operator's name. |
 | `type` | string | Yes | Always included. TouchDesigner operator type (e.g., `"baseCOMP"`, `"noiseTOP"`, `"textDAT"`, `"waveCHOP"`). |
-| `position` | `[x, y]` | Yes | Always included. Node tile position in the network editor. |
+| `position` | `[x, y]` | No | Omitted when `[0, 0]` (default). Included only for operators not at the origin. |
 | `size` | `[width, height]` | No | Only if different from the default `[200, 100]`. |
 | `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]` (tolerance: 0.01 per channel). RGB values are floats from 0.0 to 1.0, rounded to 4 decimal places. |
 | `comment` | string | No | Only if non-empty. Annotation text on the node. |
 | `tags` | array of strings | No | Only if the operator has tags. |
-| `parameters` | object | No | Only if there are non-default [built-in parameters](#built-in-parameters). |
-| `custom_pars` | array | No | Only if the operator has [custom parameters](#custom-parameters). All custom parameters are always included. |
-| `flags` | object | No | Only if any [flags](#flags) differ from their defaults. |
+| `parameters` | object | No | Only if there are non-default [built-in parameters](#built-in-parameters) (after [type_defaults](#type-defaults) are factored out). |
+| `custom_pars` | object | No | Only if the operator has [custom parameters](#custom-parameters). Dict keyed by page name. |
+| `flags` | array | No | Only if any [flags](#flags) differ from their defaults. |
 | `inputs` | array | No | Only if the operator has [operator-level connections](#operator-connections). |
 | `comp_inputs` | array | No | Only if the operator has [COMP-level connections](#comp-connections). COMPs only. |
 | `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true`. See [DAT Content](#dat-content). |
@@ -121,11 +127,25 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
 | `tdn_ref` | string | No | Only in [per-COMP export mode](#per-comp-export-mode). Replaces `children` with a path to a separate `.tdn` file. |
 
+### Compact Formatting
+
+Short arrays and objects (≤80 characters when inlined) are written on a single line:
+
+```json
+"position": [200, -100],
+"size": [300, 150],
+"color": [0.2, 0.6, 0.9],
+"tags": ["audio", "generator"],
+"inputs": ["noise1"]
+```
+
+Longer arrays remain multi-line. This dramatically reduces file size while maintaining readability.
+
 ---
 
 ## Built-in Parameters
 
-The `parameters` object maps parameter names to their values. Only built-in (non-custom) parameters whose current value differs from their default are included.
+The `parameters` object maps parameter names to their values. Only built-in (non-custom) parameters whose current value differs from their default are included. Parameters shared unanimously across all operators of a type are factored into [type_defaults](#type-defaults) instead.
 
 ### Parameter Modes
 
@@ -140,21 +160,33 @@ Parameters can be in one of three exportable modes:
 }
 ```
 
-**Expression** — a Python expression that TouchDesigner evaluates each frame:
+**Expression** — prefixed with `=`. A Python expression that TouchDesigner evaluates each frame:
 ```json
 "parameters": {
-  "tx": { "expr": "absTime.frame * 0.1" }
+  "tx": "=absTime.frame * 0.1",
+  "resizecomp": "=me"
 }
 ```
 
-**Bind** — a reference expression that binds this parameter to another:
+**Bind** — prefixed with `~`. A reference expression that binds this parameter to another:
 ```json
 "parameters": {
-  "tx": { "bind": "op('controller').par.posx" }
+  "tx": "~op('controller').par.posx"
 }
 ```
 
 A fourth mode, **Export**, exists in TouchDesigner but is not stored in TDN. Export mode is set by the exporting operator, not the parameter itself, and cannot be meaningfully imported.
+
+### Escaping
+
+Constant string values that literally start with `=` or `~` are escaped by doubling the prefix:
+
+| Stored value | Meaning |
+|-------------|---------|
+| `"=foo"` | Expression: `foo` |
+| `"==foo"` | Constant string: `"=foo"` |
+| `"~bar"` | Bind expression: `bar` |
+| `"~~bar"` | Constant string: `"~bar"` |
 
 ### Skipped Parameters
 
@@ -188,33 +220,71 @@ A constant parameter is included only if its current value differs from its defa
 
 ## Custom Parameters
 
-The `custom_pars` array contains definitions for all custom parameters on an operator. Unlike built-in parameters, custom parameters are **always fully exported** (including their definitions, ranges, and current values) because the importer must recreate them from scratch.
+The `custom_pars` object maps page names to arrays of parameter definitions. Unlike built-in parameters, custom parameters are **always fully exported** (including their definitions, ranges, and current values) because the importer must recreate them from scratch.
 
 > **Note:** Only COMPs can have custom parameters in TouchDesigner.
 
-### Custom Parameter Object
+### Page-Grouped Format
+
+Custom parameters are grouped by page name. Each page contains an array of parameter definitions:
 
 ```json
-{
-  "name": "Speed",
-  "label": "Movement Speed",
-  "page": "Controls",
-  "style": "Float",
-  "default": 5,
-  "max": 10,
-  "clampMin": true,
-  "startSection": true,
-  "value": 3.5
+"custom_pars": {
+  "Controls": [
+    {
+      "name": "Speed",
+      "style": "Float",
+      "default": 1,
+      "max": 10,
+      "clampMin": true,
+      "normMax": 5,
+      "value": 2.5
+    },
+    {
+      "name": "Mode",
+      "style": "Menu",
+      "menuNames": ["linear", "ease", "bounce"],
+      "menuLabels": ["Linear", "Ease In/Out", "Bounce"],
+      "value": 1
+    }
+  ],
+  "About": [
+    {
+      "name": "Build",
+      "style": "Int",
+      "label": "Build Number",
+      "readOnly": true,
+      "value": 14
+    }
+  ]
 }
 ```
 
-Unlike built-in parameters, custom parameter definitions use a minimal representation — fields are only included when they differ from standard defaults. This keeps the output compact while retaining all information needed to reconstruct the parameter.
+The page name is the dict key — individual parameter definitions do not include a `"page"` field.
+
+### Template References
+
+When a page's parameter definitions match a [parameter template](#parameter-templates), the page is stored as a template reference with value overrides:
+
+```json
+"custom_pars": {
+  "About": {
+    "$t": "about",
+    "Build": 14,
+    "Date": "2026-02-19 16:09:43 UTC",
+    "Touchbuild": "2025.32050"
+  }
+}
+```
+
+The `$t` field names the template. Other keys are parameter value overrides (parameter name → current value). See [Parameter Templates](#parameter-templates).
+
+### Custom Parameter Definition
 
 | Field | Type | Condition | Description |
 |-------|------|-----------|-------------|
 | `name` | string | Always | Base name of the parameter. For multi-component parameters, this is the group name without any suffix (e.g., `"Pos"` for a group of `Posx`, `Posy`, `Posz`). |
 | `label` | string | If different from `name` | Display label shown in the parameter dialog. Omitted when the label matches the parameter name. |
-| `page` | string | Always | Name of the custom parameter page (e.g., `"Custom"`). |
 | `style` | string | Always | Parameter style. See [Supported Styles](#supported-styles). |
 | `size` | integer | Multi-component `Float`/`Int` only | Number of components when > 1 (e.g., `3` for a 3-component float). |
 | `default` | any | If non-standard | Default value. Omitted when the default is a standard value (`0`, `0.0`, `""`, or `false`). |
@@ -229,7 +299,7 @@ Unlike built-in parameters, custom parameter definitions use a minimal represent
 | `menuSource` | string | Dynamically populated menus | DAT path or expression that populates the menu. When present, `menuNames`/`menuLabels` are omitted. |
 | `startSection` | boolean | If `true` | Whether this parameter starts a new visual section. |
 | `readOnly` | boolean | If `true` | Whether the parameter is read-only. |
-| `value` | any | Single-component, if non-default | Current value. Can be a constant, `{"expr": "..."}`, or `{"bind": "..."}`. Omitted when the value equals the default. |
+| `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default. |
 | `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults. |
 
 ### Supported Styles
@@ -313,68 +383,187 @@ This creates three parameters: `Weight1`, `Weight2`, `Weight3`.
 
 ---
 
+## Type Defaults
+
+The `type_defaults` section hoists properties that are shared unanimously across **all** operators of a given type into a single location, removing them from individual operators. Supported properties: `parameters`, `flags`, `size`, `color`, and `tags`.
+
+```json
+"type_defaults": {
+  "containerCOMP": {
+    "parameters": {
+      "borderover": false,
+      "reloadbuiltin": false,
+      "resizecomp": "=me",
+      "repocomp": "=me"
+    },
+    "flags": ["viewer"],
+    "size": [300, 150]
+  },
+  "textDAT": {
+    "parameters": {
+      "language": "text"
+    },
+    "flags": ["viewer"],
+    "size": [130, 90],
+    "color": [0.67, 0.67, 0.67],
+    "tags": ["source"]
+  }
+}
+```
+
+### Unanimity Rule
+
+A property enters `type_defaults` **only** if:
+1. The operator type appears 2+ times in the export
+2. The property is present on **every** operator of that type
+3. The property has the **same value** across all operators of that type
+
+This eliminates the need for a "reset to default" marker — if a property is in `type_defaults`, every operator of that type has it.
+
+### Import Behavior
+
+On import, `type_defaults` are merged into each operator before the relevant import phase. `parameters` use dict-level merge (operator-specific keys override individual defaults). `flags`, `size`, `color`, and `tags` use whole-value replacement (the operator either has its own value or inherits entirely from type_defaults):
+
+```
+effective_params = type_defaults[op_type].parameters | operator.parameters
+effective_flags  = operator.flags  ?? type_defaults[op_type].flags
+effective_size   = operator.size   ?? type_defaults[op_type].size
+effective_color  = operator.color  ?? type_defaults[op_type].color
+effective_tags   = operator.tags   ?? type_defaults[op_type].tags
+```
+
+### When Type Defaults are Omitted
+
+- If no types have 2+ operators with shared properties, the `type_defaults` key is absent
+- Single-instance operator types never contribute to type_defaults
+
+---
+
+## Parameter Templates
+
+The `par_templates` section extracts custom parameter page definitions that repeat across 2+ operators into named, reusable templates.
+
+```json
+"par_templates": {
+  "about": [
+    {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true},
+    {"name": "Date", "style": "Str", "label": "Build Date", "readOnly": true},
+    {"name": "Touchbuild", "style": "Str", "label": "Touch Build", "readOnly": true}
+  ]
+}
+```
+
+Templates contain parameter definitions **without values** — they define the structure (name, style, label, ranges, etc.) of a page's parameters.
+
+### Template References
+
+Operators reference templates via `$t` in their `custom_pars`:
+
+```json
+"custom_pars": {
+  "About": {
+    "$t": "about",
+    "Build": 14,
+    "Date": "2026-02-19 16:09:43 UTC",
+    "Touchbuild": "2025.32050"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `$t` | Template name (matches a key in `par_templates`) |
+| Other keys | Value overrides: parameter name → current value |
+
+### Import Behavior
+
+On import, `$t` references are resolved before Phase 2 (create custom parameters). Each template reference is expanded back into a full array of parameter definitions, with value overrides applied:
+
+```json
+// Resolved from template + overrides:
+"About": [
+  {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true, "value": 14},
+  {"name": "Date", "style": "Str", "label": "Build Date", "readOnly": true, "value": "2026-02-19 16:09:43 UTC"},
+  {"name": "Touchbuild", "style": "Str", "label": "Touch Build", "readOnly": true, "value": "2025.32050"}
+]
+```
+
+### Template Naming
+
+Template names are derived from the page name (lowercased, spaces replaced with underscores). Collision suffixes (`_2`, `_3`) are added if multiple distinct page definitions share the same page name.
+
+### When Templates are Omitted
+
+- If no page definition appears on 2+ operators, the `par_templates` key is absent
+- Pages unique to a single operator are always stored inline
+
+---
+
 ## Flags
 
-The `flags` object contains boolean toggles that control operator behavior. Only flags differing from their defaults are included.
+The `flags` array contains string names of flags whose values differ from their defaults.
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `bypass` | boolean | `false` | Operator is skipped in the processing chain. Input passes through unchanged. |
-| `lock` | boolean | `false` | DAT content is locked and will not update when the operator recooks. |
-| `display` | boolean | `false` | Marks this operator as the display output of its network (the "blue flag"). |
-| `render` | boolean | `false` | Marks this operator for rendering (the "purple flag"). |
-| `viewer` | boolean | `false` | Shows the operator's viewer on its node tile in the network editor. |
-| `expose` | boolean | `true` | Whether the node is visible in the network editor. Set to `false` to hide it. |
-| `allowCooking` | boolean | `true` | Whether the COMP and its children are allowed to cook. **COMPs only** — this flag is not exported for non-COMP operators. |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `bypass` | `false` | Operator is skipped in the processing chain. |
+| `lock` | `false` | DAT content is locked and will not update. |
+| `display` | `false` | Marks this operator as the display output (blue flag). |
+| `render` | `false` | Marks this operator for rendering (purple flag). |
+| `viewer` | `false` | Shows the operator's viewer on its node tile. |
+| `expose` | `true` | Whether the node is visible in the network editor. |
+| `allowCooking` | `true` | Whether the COMP is allowed to cook. **COMPs only.** |
 
-Example — a bypassed operator with its viewer shown:
+### Format
+
+Flags that default to `false` are listed by name when set to `true`:
 ```json
-"flags": {
-  "bypass": true,
-  "viewer": true
-}
+"flags": ["viewer", "display"]
+```
+
+Flags that default to `true` use a `-` prefix when set to `false`:
+```json
+"flags": ["-expose"]
+```
+
+Combined example — viewer on, cooking disabled:
+```json
+"flags": ["viewer", "-allowCooking"]
 ```
 
 ---
 
 ## Connections
 
-TouchDesigner operators have two kinds of connections. TDN stores both.
+TouchDesigner operators have two kinds of connections. TDN stores both as string arrays where array position equals the input index.
 
 ### Operator Connections
 
-Standard wiring between operators (left/right connectors in the network editor). Stored in the `inputs` array:
+Standard wiring between operators (left/right connectors). Stored in the `inputs` array:
 
 ```json
-"inputs": [
-  { "index": 0, "source": "noise1" },
-  { "index": 1, "source": "/project/other/transform1" }
-]
+"inputs": ["noise1"]
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `index` | integer | Input connector index on the destination operator (0-based). |
-| `source` | string | Reference to the source operator. |
+Multi-input example — `noise1` at index 0, nothing at index 1, `level1` at index 2:
+```json
+"inputs": ["noise1", null, "level1"]
+```
 
 ### COMP Connections
 
 COMP-level wiring (top/bottom connectors). Only applicable to COMPs. Stored in the `comp_inputs` array:
 
 ```json
-"comp_inputs": [
-  { "index": 0, "source": "container1" }
-]
+"comp_inputs": ["container1"]
 ```
-
-Same field structure as operator connections.
 
 ### Source Resolution
 
-The `source` field uses **relative naming** when possible:
+Each string element references the source operator:
 
 - If the source operator is a **sibling** (same parent), only the operator **name** is stored (e.g., `"noise1"`).
 - If the source is in a **different parent**, the full **path** is stored (e.g., `"/project/other/transform1"`).
+- `null` means no connection at that index.
 
 On import, the source is resolved by first looking for a sibling with that name, then falling back to interpreting it as a full path.
 
@@ -435,24 +624,22 @@ COMPs can contain child operators. These are stored in the `children` array, whi
 {
   "name": "container1",
   "type": "baseCOMP",
-  "position": [0, 0],
   "children": [
     {
       "name": "noise1",
-      "type": "noiseTOP",
-      "position": [0, 0]
+      "type": "noiseTOP"
     },
     {
       "name": "null1",
       "type": "nullTOP",
       "position": [300, 0],
-      "inputs": [
-        { "index": 0, "source": "noise1" }
-      ]
+      "inputs": ["noise1"]
     }
   ]
 }
 ```
+
+Note that `container1` omits `position` (defaults to `[0, 0]`) and `noise1` also omits `position`. Only `null1` at `[300, 0]` includes its position.
 
 Nesting is recursive — COMPs inside COMPs can have their own `children`. The optional `max_depth` export parameter limits recursion depth (`null` means unlimited).
 
@@ -474,7 +661,6 @@ A COMP's `children` array is replaced by a `tdn_ref` string pointing to a separa
 {
   "name": "controller",
   "type": "baseCOMP",
-  "position": [0, 0],
   "tdn_ref": "controller.tdn"
 }
 ```
@@ -512,7 +698,7 @@ All parameter and content values are converted to JSON-safe types using these ru
 | `int` | number | Stored as-is. |
 | `float` | number (int) | If the value is a whole number (and fits in 53-bit integer range), it is converted to an integer. E.g., `1.0` becomes `1`. |
 | `float` | number (float) | Rounded to 10 decimal places to eliminate floating-point noise. |
-| `str` | string | Stored as-is. |
+| `str` | string | Stored as-is (with `=`/`~` [escaping](#escaping) applied for parameter values). |
 | `list` / `tuple` | array | Each element is recursively serialized. |
 | Any other type | string | Converted via `str()`. |
 
@@ -537,17 +723,18 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 ## Import Process
 
-Importing a `.tdn` file reconstructs the network in seven sequential phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
+Importing a `.tdn` file reconstructs the network in a pre-phase plus seven sequential phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
 
 | Phase | Action | Details |
 |-------|--------|---------|
+| Pre | **Resolve templates and defaults** | If `par_templates` is present, `$t` references in `custom_pars` are expanded to full definitions with value overrides. If `type_defaults` is present, shared properties are merged into each operator (`parameters` via dict merge, `flags`/`size`/`color`/`tags` via whole-value injection; operator-specific values take precedence). |
 | 1 | **Create operators** | All operators are created depth-first. COMPs are created first so their children can be placed inside them. |
 | 2 | **Create custom parameters** | Custom parameter definitions are created on COMPs (pages, types, ranges, menu entries, defaults). |
-| 3 | **Set parameter values** | Both built-in and custom parameter values are applied (constants, expressions, and bind expressions). |
-| 4 | **Set flags** | Operator flags (bypass, lock, display, etc.) are applied. |
-| 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). |
+| 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. |
+| 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
+| 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
-| 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. |
+| 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. Missing position defaults to `[0, 0]`. |
 
 The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
 
@@ -575,6 +762,7 @@ For most networks, export → import → re-export produces identical `.tdn` out
 - Flags, connections, positions, sizes, colors, comments, tags
 - DAT text and table content (byte-for-byte when `include_dat_content` is `true`)
 - Float values (stable after the first export — see below)
+- Type defaults and parameter templates (re-computed on each export)
 
 ### Known Exceptions
 
@@ -583,6 +771,8 @@ For most networks, export → import → re-export produces identical `.tdn` out
 **Color tolerance** — Colors within `0.01` per channel of the default gray `[0.545, 0.545, 0.545]` are treated as default and not exported. A color of `[0.55, 0.55, 0.55]` survives; `[0.546, 0.546, 0.546]` is dropped.
 
 **Float precision** — Values are rounded to 10 decimal places on first export. This can change the last digits of very precise values (e.g., `3.14159265358979` → `3.1415926536`). After that first rounding, subsequent exports are stable.
+
+**Type defaults recomputation** — Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the JSON structure may differ.
 
 ### Intentionally Excluded
 
@@ -614,6 +804,8 @@ Developers should ignore unknown fields when parsing TDN documents. This ensures
 | Unrecognized flag name | Ignore it. |
 | Invalid parameter value type | Attempt type coercion; if impossible, skip with a warning. |
 | Version mismatch (`version`, `td_build`) | Log a warning, proceed with import. |
+| Unknown `$t` template reference | Log a warning, skip that page. |
+| Missing `type_defaults` entry for a type | No-op (operator uses its own properties). |
 
 ### General Principle
 
@@ -630,60 +822,72 @@ A realistic `.tdn` file demonstrating all major features:
   "format": "tdn",
   "version": "1.0",
   "build": 3,
-  "generator": "Embody/5.0.79",
+  "generator": "Embody/5.0.93",
   "td_build": "2025.32050",
-  "exported_at": "2025-02-09T14:30:00Z",
-  "root": "/",
+  "exported_at": "2026-02-19T14:30:00Z",
+  "network_path": "/",
   "options": {
     "include_dat_content": true
+  },
+  "type_defaults": {
+    "baseCOMP": {
+      "parameters": {
+        "resizecomp": "=me",
+        "repocomp": "=me"
+      }
+    }
+  },
+  "par_templates": {
+    "about": [
+      {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true},
+      {"name": "Version", "style": "Str", "label": "Version", "readOnly": true}
+    ]
   },
   "operators": [
     {
       "name": "controller",
       "type": "baseCOMP",
-      "position": [0, 0],
       "color": [0.2, 0.4, 0.8],
       "comment": "Main controller",
       "tags": ["core"],
-      "custom_pars": [
-        {
-          "name": "Speed",
-          "page": "Controls",
-          "style": "Float",
-          "default": 1,
-          "max": 10,
-          "clampMin": true,
-          "normMax": 5,
-          "value": 2.5
-        },
-        {
-          "name": "Mode",
-          "page": "Controls",
-          "style": "Menu",
-          "menuNames": ["linear", "ease", "bounce"],
-          "menuLabels": ["Linear", "Ease In/Out", "Bounce"],
-          "value": 1
-        },
-        {
-          "name": "Color",
-          "page": "Controls",
-          "style": "RGB",
-          "clampMin": true,
-          "clampMax": true,
-          "values": [1, 0.5, 0]
+      "custom_pars": {
+        "Controls": [
+          {
+            "name": "Speed",
+            "style": "Float",
+            "default": 1,
+            "max": 10,
+            "clampMin": true,
+            "normMax": 5,
+            "value": 2.5
+          },
+          {
+            "name": "Mode",
+            "style": "Menu",
+            "menuNames": ["linear", "ease", "bounce"],
+            "menuLabels": ["Linear", "Ease In/Out", "Bounce"],
+            "value": 1
+          },
+          {
+            "name": "Color",
+            "style": "RGB",
+            "clampMin": true,
+            "clampMax": true,
+            "values": [1, 0.5, 0]
+          }
+        ],
+        "About": {
+          "$t": "about",
+          "Build": 3,
+          "Version": "1.0.0"
         }
-      ],
-      "flags": {
-        "viewer": true
       },
-      "comp_inputs": [
-        { "index": 0, "source": "renderer" }
-      ],
+      "flags": ["viewer"],
+      "comp_inputs": ["renderer"],
       "children": [
         {
           "name": "noise1",
           "type": "noiseTOP",
-          "position": [0, 0],
           "parameters": {
             "type": "sparse",
             "amp": 0.8,
@@ -698,14 +902,10 @@ A realistic `.tdn` file demonstrating all major features:
           "type": "levelTOP",
           "position": [300, 0],
           "parameters": {
-            "opacity": { "expr": "parent().par.Speed / 10" }
+            "opacity": "=parent().par.Speed / 10"
           },
-          "inputs": [
-            { "index": 0, "source": "noise1" }
-          ],
-          "flags": {
-            "display": true
-          }
+          "inputs": ["noise1"],
+          "flags": ["display"]
         },
         {
           "name": "config",
@@ -717,9 +917,7 @@ A realistic `.tdn` file demonstrating all major features:
             ["fps", "60"]
           ],
           "dat_content_format": "table",
-          "flags": {
-            "lock": true
-          }
+          "flags": ["lock"]
         },
         {
           "name": "script1",
@@ -734,11 +932,27 @@ A realistic `.tdn` file demonstrating all major features:
       "name": "renderer",
       "type": "baseCOMP",
       "position": [500, 0],
-      "size": [300, 150]
+      "size": [300, 150],
+      "custom_pars": {
+        "About": {
+          "$t": "about",
+          "Build": 1,
+          "Version": "0.9.0"
+        }
+      }
     }
   ]
 }
 ```
+
+Key observations:
+- **`type_defaults`**: Both `baseCOMP`s share `resizecomp` and `repocomp` expressions, so those are hoisted out of individual operators. Shared flags, size, color, and tags are also hoisted
+- **`par_templates`**: The "About" page definition is shared between `controller` and `renderer`, with different values
+- **Expression shorthand**: `"=parent().par.Speed / 10"` instead of `{"expr": "..."}`
+- **Flags as arrays**: `["viewer"]`, `["display"]`, `["lock"]`
+- **Simplified connections**: `["noise1"]` instead of `[{"index": 0, "source": "noise1"}]`
+- **Optional position**: `noise1` at `[0, 0]` omits `position`; `controller` at `[0, 0]` also omits it
+- **Compact formatting**: Arrays like `[300, 0]`, `[0.2, 0.4, 0.8]`, `["core"]` are inline
 
 ---
 
@@ -746,4 +960,5 @@ A realistic `.tdn` file demonstrating all major features:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0 | 2025-02-09 | Initial release. |
+| 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact JSON formatting. |
+| 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |

@@ -1,8 +1,8 @@
-﻿"""
+"""
 List COMP callbacks for Embody Manager UI.
 
 Renders the externalization tree with expand/collapse, rollover
-highlights, and clickable Tox/TDN/Delete buttons. All styling
+highlights, and clickable Strategy/Delete buttons. All styling
 is pure Python — no TOP textures needed.
 
 me   - this callbacks DAT
@@ -14,21 +14,19 @@ COL_EXPANDO = 0
 COL_PATH = 1
 COL_TYPE = 2
 COL_FILE = 3
-COL_TIMESTAMP = 4
-COL_TOX = 5
-COL_TDN = 6
-COL_BUILD = 7
-COL_TOUCH_BUILD = 8
-COL_DELETE = 9
+COL_STRATEGY = 4
+COL_BUILD = 5
+COL_TIMESTAMP = 6
+COL_DELETE = 7
 
-NUM_COLS = 10
+NUM_COLS = 8
 
 HEADER_LABELS = [
 	'', 'Network Path', '', 'External File Path',
-	'Timestamp', 'Tox', 'TDN', 'Build', 'Touch Build', 'Del',
+	'Strategy', 'Build', 'Timestamp', 'Del',
 ]
-COL_WIDTHS    = [0, 0, 80, 200, 190, 42, 42, 50, 82, 36]
-COL_STRETCHES = [False, True, False, True, False, False, False, False, False, False]
+COL_WIDTHS    = [0, 0, 80, 200, 70, 50, 190, 36]
+COL_STRETCHES = [False, True, False, True, False, False, False, False]
 TEXT_PAD_X = 6  # horizontal padding for left-justified cells
 
 
@@ -87,10 +85,19 @@ def _load_theme():
 	# Comp state button — slightly brighter than row bg for subtle visibility
 	comp_bg = _brighten(row, 0.08)
 
-	# Dirty state — desaturated red, stands out without being garish
-	dirty = (0.55, 0.18, 0.18, 1.0)
-	# Parameter change — warm orange, distinct from both saved green and dirty red
-	par_change = (0.60, 0.38, 0.12, 1.0)
+	# State colors from Embody parameters
+	dirty_raw = _par4('Dirtycolor')
+	dirty = _composite(dirty_raw, row) if dirty_raw[3] < 1.0 else dirty_raw
+
+	par_change_raw = _par4('Dirtyparcolor')
+	par_change = _composite(par_change_raw, row) if par_change_raw[3] < 1.0 else par_change_raw
+
+	tdn_saved_raw = _par4('Tdnsavedcolor')
+	tdn_saved = _composite(tdn_saved_raw, row) if tdn_saved_raw[3] < 1.0 else tdn_saved_raw
+
+	# TDN exporting — warm shift from TDN saved blue
+	tdn_amber = (tdn_saved[0] + 0.12, max(0, tdn_saved[1] - 0.02),
+	             max(0, tdn_saved[2] - 0.04), 1.0)
 
 	# Subtle column separator — just visible enough to delineate columns
 	border = _brighten(row, 0.04)
@@ -112,6 +119,10 @@ def _load_theme():
 		'dirty_roll': _brighten(dirty, 0.08),
 		'par_change': par_change,
 		'par_change_roll': _brighten(par_change, 0.08),
+		'tdn_saved': tdn_saved,
+		'tdn_saved_roll': _brighten(tdn_saved, 0.08),
+		'tdn_amber': tdn_amber,
+		'tdn_amber_roll': _brighten(tdn_amber, 0.08),
 		'border': border,
 	})
 
@@ -131,6 +142,29 @@ def _row_bg(row):
 	return _t['row'] if row % 2 == 0 else _t['row_alt']
 
 
+def _strategy_style(state):
+	"""Return (text, bgColor, textColor) for a strategy_state value."""
+	if state == 'TOX_Saved':
+		return ('TOX', _t['saved'], None)
+	elif state == 'TOX_Dirty':
+		return ('TOX', _t['dirty'], None)
+	elif state == 'TOX_ParChange':
+		return ('TOX Par', _t['par_change'], None)
+	elif state == 'TDN_Saved':
+		return ('TDN', _t['tdn_saved'], None)
+	elif state == 'TDN_Dirty':
+		return ('TDN', _t['dirty'], None)
+	elif state == 'TDN_ParChange':
+		return ('TDN Par', _t['par_change'], None)
+	elif state == 'TDN_Exporting':
+		return ('...', _t['tdn_amber'], None)
+	elif state == 'Comp':
+		return ('', _t['comp'], None)
+	elif state == 'DAT_Saved':
+		return ('', None, None)  # DATs show strategy text in _apply_cell
+	return ('', None, None)
+
+
 def _apply_cell(attribs, row, col, data, highlight=False):
 	"""Style a single data cell. Used by onInitCell and rollover restore."""
 	_ensure_theme()
@@ -144,7 +178,7 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		attribs.bgColor = bg
 
 	elif col == COL_PATH:
-		name = path.rsplit('/', 1)[-1] if path else ''
+		name = (path.rsplit('/', 1)[-1] or path) if path else ''
 		hc = data[row, 'has_children'].val == '1'
 		if hc:
 			expanded = parent.Embody.fetch('expanded_paths', set())
@@ -167,46 +201,22 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		attribs.textOffsetX = TEXT_PAD_X
 		attribs.bgColor = bg
 
-	elif col == COL_TIMESTAMP:
-		attribs.text = data[row, 'timestamp'].val
-		attribs.textJustify = JustifyType.CENTERLEFT
-		attribs.textOffsetX = TEXT_PAD_X
-		attribs.bgColor = bg
+	elif col == COL_STRATEGY:
+		st = data[row, 'strategy_state'].val
+		strategy = data[row, 'strategy'].val
+		text, st_bg, st_text = _strategy_style(st)
 
-	elif col == COL_TOX:
-		st = data[row, 'tox_state'].val
-		if st == 'Dirty':
-			attribs.text = 'TOX'
-			attribs.bgColor = _t['dirty']
-			attribs.textColor = (1.0, 1.0, 1.0, 1.0)
-		elif st == 'ParChange':
-			attribs.text = 'Par'
-			attribs.bgColor = _t['par_change']
-			attribs.textColor = (1.0, 1.0, 1.0, 1.0)
-		elif st == 'Saved':
-			attribs.text = 'TOX'
-			attribs.bgColor = _t['saved']
-		elif st == 'Comp':
-			attribs.text = 'TOX'
-			attribs.bgColor = _t['comp']
-		else:
-			attribs.text = ''
+		if st == 'DAT_Saved':
+			# Show the file extension as the strategy label
+			attribs.text = strategy
 			attribs.bgColor = bg
-		attribs.textJustify = JustifyType.CENTER
-
-	elif col == COL_TDN:
-		st = data[row, 'tdn_state'].val
-		if st == 'Saved':
-			attribs.text = 'TDN'
-			attribs.bgColor = _t['saved']
-		elif st == 'Comp':
-			attribs.text = 'TDN'
-			attribs.bgColor = _t['comp']
-		elif st == 'Exporting':
-			attribs.text = '...'
-			attribs.bgColor = _t['amber']
+		elif st_bg:
+			attribs.text = text
+			attribs.bgColor = st_bg
+			if st_text:
+				attribs.textColor = st_text
 		else:
-			attribs.text = ''
+			attribs.text = text
 			attribs.bgColor = bg
 		attribs.textJustify = JustifyType.CENTER
 
@@ -215,18 +225,19 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		attribs.textJustify = JustifyType.CENTER
 		attribs.bgColor = bg
 
-	elif col == COL_TOUCH_BUILD:
-		attribs.text = data[row, 'touch_build'].val
+	elif col == COL_TIMESTAMP:
+		attribs.text = data[row, 'timestamp'].val
 		attribs.textJustify = JustifyType.CENTERLEFT
 		attribs.textOffsetX = TEXT_PAD_X
 		attribs.bgColor = bg
 
 	elif col == COL_DELETE:
 		has_ext = bool(data[row, 'rel_file_path'].val
-					   or data[row, 'tox_state'].val == 'Saved'
-					   or data[row, 'tdn_state'].val == 'Saved')
+					   or data[row, 'strategy_state'].val.startswith('TOX')
+					   or data[row, 'strategy_state'].val.startswith('TDN'))
 		if has_ext:
-			attribs.text = 'X'
+			attribs.text = '×'
+			attribs.fontSizeX = 12
 			attribs.textColor = _t['text_dim']
 		else:
 			attribs.text = ''
@@ -307,53 +318,40 @@ def onRollover(comp, row, col, coords, prevRow, prevCol, prevCoords):
 	if row <= 0 or row >= data.numRows or col < 0:
 		return
 
-	# Cell-specific rollover effects
-	if col == COL_TOX:
-		st = data[row, 'tox_state'].val
-		if st == 'Dirty':
-			comp.cellAttribs[row, col].text = 'Save'
+	# Cell-specific rollover effects on Strategy column
+	if col == COL_STRATEGY:
+		st = data[row, 'strategy_state'].val
+		if st in ('TOX_Dirty', 'TDN_Dirty'):
+			comp.cellAttribs[row, col].text = '...'
 			comp.cellAttribs[row, col].bgColor = _t['dirty_roll']
-			comp.cellAttribs[row, col].textColor = (1.0, 1.0, 1.0, 1.0)
-		elif st == 'ParChange':
-			comp.cellAttribs[row, col].text = 'Save'
+		elif st in ('TOX_ParChange', 'TDN_ParChange'):
+			comp.cellAttribs[row, col].text = '...'
 			comp.cellAttribs[row, col].bgColor = _t['par_change_roll']
-			comp.cellAttribs[row, col].textColor = (1.0, 1.0, 1.0, 1.0)
-		elif st == 'Saved':
-			comp.cellAttribs[row, col].text = 'Upd'
+		elif st == 'TOX_Saved':
+			comp.cellAttribs[row, col].text = '...'
 			comp.cellAttribs[row, col].bgColor = _t['saved_roll']
+		elif st == 'TDN_Saved':
+			comp.cellAttribs[row, col].text = '...'
+			comp.cellAttribs[row, col].bgColor = _t['tdn_saved_roll']
 		elif st == 'Comp':
-			comp.cellAttribs[row, col].text = 'New'
+			comp.cellAttribs[row, col].text = 'Tag'
 			comp.cellAttribs[row, col].bgColor = _t['comp_roll']
-	elif col == COL_TDN:
-		st = data[row, 'tdn_state'].val
-		if st == 'Saved':
-			comp.cellAttribs[row, col].text = 'Upd'
-			comp.cellAttribs[row, col].bgColor = _t['saved_roll']
-		elif st == 'Comp':
-			comp.cellAttribs[row, col].text = 'New'
-			comp.cellAttribs[row, col].bgColor = _t['comp_roll']
-		elif st == 'Exporting':
-			comp.cellAttribs[row, col].bgColor = _t['amber_roll']
+		elif st == 'TDN_Exporting':
+			comp.cellAttribs[row, col].bgColor = _t['tdn_amber_roll']
+	elif col == COL_TYPE:
+		# Brighten to hint that clicking opens the network editor
+		comp.cellAttribs[row, col].bgColor = _brighten(_t['select'], 0.04)
+	elif col == COL_FILE:
+		# Brighten to hint that clicking reveals the file
+		if data[row, 'rel_file_path'].val:
+			comp.cellAttribs[row, col].bgColor = _brighten(_t['select'], 0.04)
 	elif col == COL_DELETE:
 		has_ext = bool(data[row, 'rel_file_path'].val
-					   or data[row, 'tox_state'].val == 'Saved'
-					   or data[row, 'tdn_state'].val == 'Saved')
+					   or data[row, 'strategy_state'].val.startswith('TOX')
+					   or data[row, 'strategy_state'].val.startswith('TDN'))
 		if has_ext:
 			comp.cellAttribs[row, col].textColor = _t['text']
 			comp.cellAttribs[row, col].bgColor = _t['select']
-
-
-def _hasTDNExport(op_path):
-	"""Check if a TDN export exists in the externalizations table."""
-	if not op_path:
-		return False
-	table = parent.Embody.ext.Embody.Externalizations
-	if not table:
-		return False
-	for i in range(1, table.numRows):
-		if table[i, 'path'].val == op_path and table[i, 'type'].val == 'tdn':
-			return True
-	return False
 
 
 def onSelect(comp, startRow, startCol, startCoords,
@@ -404,60 +402,47 @@ def onSelect(comp, startRow, startCol, startCoords,
 		if rel_fp:
 			parent.Embody.OpenSaveFile(rel_fp)
 
-	elif col == COL_TOX:
-		st = data[row, 'tox_state'].val
+	elif col == COL_STRATEGY:
+		st = data[row, 'strategy_state'].val
 		oper = op(path)
-		if st == 'Comp' and oper:
-			parent.Embody.ext.Embody.applyTagToOperator(oper, 'tox')
-			parent.Embody.Update()
-		elif st in ('Saved', 'Dirty', 'ParChange'):
-			parent.Embody.Save(path)
-			parent.Embody.Refresh()
 
-	elif col == COL_TDN:
-		st = data[row, 'tdn_state'].val
-		if st == 'Exporting':
+		if st == 'TDN_Exporting':
 			return
-		oper = op(path)
-		if oper and oper.family == 'COMP':
-			parent.Embody.ext.TDN.ExportNetworkAsync(
-				root_path=path, output_file='auto')
-			# Recook data source to pick up Exporting state, then reset list
-			run("op('{}').cook(force=True); op('{}').reset()".format(
-				op('inject_parents').path, comp.path), delayFrames=1)
+
+		if st == 'Comp' and oper:
+			# Unexternalized COMP — open tagger for strategy choice
+			parent.Embody.ext.Embody.rolloverOp = oper
+			parent.Embody.op('tagger/switch_family').par.index = 2
+			run(lambda: parent.Embody.ext.Embody.SetupTaggerTagMode(oper), delayFrames=1)
+			run(f"op('{parent.Embody.op('window_tagging_menu')}').par.winopen.pulse()",
+				delayFrames=2)
+		elif (st.startswith('TOX_') or st.startswith('TDN_')) and oper:
+			# Already tagged COMP — open manage menu with Switch/Save
+			parent.Embody.ext.Embody.rolloverOp = oper
+			parent.Embody.op('tagger/switch_family').par.index = 2
+			run(lambda s=st: parent.Embody.ext.Embody.SetupTaggerManageMode(oper, s),
+				delayFrames=1)
+			run(f"op('{parent.Embody.op('window_tagging_menu')}').par.winopen.pulse()",
+				delayFrames=2)
 
 	elif col == COL_DELETE:
 		rel_fp = data[row, 'rel_file_path'].val
-		if not rel_fp and data[row, 'tox_state'].val != 'Saved' \
-				and data[row, 'tdn_state'].val != 'Saved':
+		st = data[row, 'strategy_state'].val
+		if not rel_fp and not st.startswith('TOX') and not st.startswith('TDN'):
 			return
 		oper = op(path)
-		is_comp = oper is not None and oper.family == 'COMP'
-		has_tdn = _hasTDNExport(path) if is_comp else False
-		if has_tdn:
-			result = ui.messageBox(
-				'Remove',
-				'This COMP has both an externalization (.tox) and a TDN '
-				'export (.tdn).\nWhat would you like to remove?\n\n'
-				'Operator: ' + path,
-				buttons=['Cancel', 'Remove Tox', 'Remove TDN', 'Remove Both'])
-			if result == 1:
-				parent.Embody.RemoveListerRow(path, rel_fp)
-			elif result == 2:
+		result = ui.messageBox(
+			'Remove',
+			'Remove this externalization?\n\n'
+			'This will delete the external file from disk, clear the\n'
+			"operator's externalization tags, and remove the tracking\n"
+			'entry. This cannot be undone.\n\n'
+			'Operator: ' + path,
+			buttons=['Cancel', 'Remove'])
+		if result == 1:
+			if st.startswith('TDN'):
 				parent.Embody.RemoveTDNEntry(path)
-			elif result == 3:
-				parent.Embody.RemoveListerRow(path, rel_fp)
-				parent.Embody.RemoveTDNEntry(path)
-		else:
-			result = ui.messageBox(
-				'Remove',
-				'Remove this externalization?\n\n'
-				'This will delete the external file from disk, clear the\n'
-				"operator's externalization tags, and remove the tracking\n"
-				'entry. This cannot be undone.\n\n'
-				'Operator: ' + path,
-				buttons=['Cancel', 'Remove'])
-			if result == 1:
+			else:
 				parent.Embody.RemoveListerRow(path, rel_fp)
 
 

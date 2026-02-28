@@ -6,11 +6,9 @@
 # Make sure the corresponding toggle is enabled in the Parameter Execute DAT.
 
 def onValueChange(par, prev):
-	# use par.eval() to get current value
-
-	# set filter cols
-	op.EmbodyTreeLister.par.Filtercols = '3 4 5 6'
-
+	# Recook inject_parents so it re-reads filter text and rebuilds visible rows
+	parent.Embody.op('list/inject_parents').cook(force=True)
+	parent.Embody.op('list/list1').par.reset.pulse()
 	return
 
 # Called at end of frame with complete list of individual parameter changes.

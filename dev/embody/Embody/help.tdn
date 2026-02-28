@@ -1,0 +1,22 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 15,
+	"generator": "Embody/5.0.100",
+	"td_build": "099.2025.32050",
+	"exported_at": "2026-02-22T00:25:08Z",
+	"network_path": "/embody/Embody/help",
+	"options": {
+		"include_dat_content": false
+	},
+	"operators": [
+		{
+			"name": "text_help",
+			"type": "textDAT",
+			"flags": ["viewer"],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["txt"]
+		}
+	]
+}

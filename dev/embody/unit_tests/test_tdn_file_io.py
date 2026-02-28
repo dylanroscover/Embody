@@ -17,7 +17,6 @@ class TestTDNFileIO(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.tdn = self.embody.ext.TDN
 		self._temp_dir = tempfile.mkdtemp(prefix='tdn_test_')
 		self._auto_files = []
 
@@ -41,7 +40,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_splitPerComp_root_creates_project_named_file(self):
 		"""Root export (/) should create <project_name>.tdn as root file."""
 		ops = [{'name': 'a', 'type': 'textDAT'}]
-		files = self.tdn._splitPerComp(ops, '/', 'MyProj', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'MyProj', self._temp_dir)
 		root = str(Path(self._temp_dir) / 'MyProj.tdn')
 		self.assertIn(root, files)
 
@@ -49,7 +48,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""COMPs with children should get their own .tdn file."""
 		ops = [{'name': 'c', 'type': 'baseCOMP', 'children': [
 			{'name': 'x', 'type': 'textDAT'}]}]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		self.assertIn(str(Path(self._temp_dir) / 'c.tdn'), files)
 
 	def test_splitPerComp_leaf_ops_stay_in_parent(self):
@@ -58,7 +57,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			{'name': 'a', 'type': 'textDAT'},
 			{'name': 'b', 'type': 'noiseTOP'},
 		]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		self.assertLen(list(files.keys()), 1)
 		root = str(Path(self._temp_dir) / 'P.tdn')
 		names = [o['name'] for o in files[root]]
@@ -70,7 +69,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		ops = [{'name': 'o', 'type': 'baseCOMP', 'children': [
 			{'name': 'i', 'type': 'baseCOMP', 'children': [
 				{'name': 'leaf', 'type': 'textDAT'}]}]}]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		inner = str(Path(self._temp_dir) / 'o' / 'i.tdn')
 		self.assertIn(inner, files)
 
@@ -78,7 +77,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""When base is project folder and root is /embody/Embody, paths must not double-nest."""
 		ops = [{'name': 'help', 'type': 'baseCOMP', 'children': [
 			{'name': 'text_help', 'type': 'textDAT'}]}]
-		files = self.tdn._splitPerComp(
+		files = self.embody.ext.TDN._splitPerComp(
 			ops, '/embody/Embody', 'P', self._temp_dir)
 		expected = str(Path(self._temp_dir) / 'embody' / 'Embody' / 'help.tdn')
 		self.assertIn(expected, files)
@@ -96,7 +95,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Parent entries should have tdn_ref instead of children."""
 		ops = [{'name': 'c', 'type': 'baseCOMP', 'children': [
 			{'name': 'x', 'type': 'textDAT'}]}]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		root = str(Path(self._temp_dir) / 'P.tdn')
 		entry = files[root][0]
 		self.assertNotIn('children', entry)
@@ -108,7 +107,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		ops = [{'name': 'o', 'type': 'baseCOMP', 'children': [
 			{'name': 'i', 'type': 'baseCOMP', 'children': [
 				{'name': 'leaf', 'type': 'textDAT'}]}]}]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		outer_file = str(Path(self._temp_dir) / 'o.tdn')
 		inner_entry = [o for o in files[outer_file] if o['name'] == 'i'][0]
 		self.assertEqual(inner_entry['tdn_ref'], 'o/i.tdn')
@@ -117,7 +116,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Non-root export (/embody) root file should be embody.tdn."""
 		ops = [{'name': 'Embody', 'type': 'baseCOMP', 'children': [
 			{'name': 'Ext', 'type': 'textDAT'}]}]
-		files = self.tdn._splitPerComp(
+		files = self.embody.ext.TDN._splitPerComp(
 			ops, '/embody', 'P', self._temp_dir)
 		root = str(Path(self._temp_dir) / 'embody.tdn')
 		self.assertIn(root, files)
@@ -129,7 +128,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		ops = [{'name': 'c', 'type': 'baseCOMP', 'position': [10, 20],
 				'color': [1, 0, 0], 'parameters': {'tx': 5},
 				'children': [{'name': 'x', 'type': 'textDAT'}]}]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		root = str(Path(self._temp_dir) / 'P.tdn')
 		entry = files[root][0]
 		self.assertEqual(entry['position'], [10, 20])
@@ -144,7 +143,7 @@ class TestTDNFileIO(EmbodyTestCase):
 				{'name': 'inner', 'type': 'textDAT'}]},
 			{'name': 'leaf2', 'type': 'noiseTOP'},
 		]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		root = str(Path(self._temp_dir) / 'P.tdn')
 		names = [o['name'] for o in files[root]]
 		self.assertIn('leaf1', names)
@@ -156,7 +155,7 @@ class TestTDNFileIO(EmbodyTestCase):
 
 	def test_splitPerComp_empty_operators(self):
 		"""Empty operator list should still produce a root file."""
-		files = self.tdn._splitPerComp([], '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp([], '/', 'P', self._temp_dir)
 		root = str(Path(self._temp_dir) / 'P.tdn')
 		self.assertIn(root, files)
 		self.assertEqual(len(files[root]), 0)
@@ -167,7 +166,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			{'name': 'b', 'type': 'baseCOMP', 'children': [
 				{'name': 'c', 'type': 'baseCOMP', 'children': [
 					{'name': 'd', 'type': 'textDAT'}]}]}]}]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		self.assertIn(str(Path(self._temp_dir) / 'a.tdn'), files)
 		self.assertIn(str(Path(self._temp_dir) / 'a' / 'b.tdn'), files)
 		self.assertIn(str(Path(self._temp_dir) / 'a' / 'b' / 'c.tdn'), files)
@@ -180,7 +179,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			{'name': 'comp_b', 'type': 'baseCOMP', 'children': [
 				{'name': 'y', 'type': 'textDAT'}]},
 		]
-		files = self.tdn._splitPerComp(ops, '/', 'P', self._temp_dir)
+		files = self.embody.ext.TDN._splitPerComp(ops, '/', 'P', self._temp_dir)
 		self.assertIn(str(Path(self._temp_dir) / 'comp_a.tdn'), files)
 		self.assertIn(str(Path(self._temp_dir) / 'comp_b.tdn'), files)
 
@@ -193,14 +192,14 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub = Path(self._temp_dir, 'sub')
 		sub.mkdir()
 		Path(sub, 'b.tdn').write_text('{}')
-		result = self.tdn._collectExistingTDNFiles(self._temp_dir)
+		result = self.embody.ext.TDN._collectExistingTDNFiles(self._temp_dir)
 		self.assertLen(result, 2)
 
 	def test_collectExisting_ignores_non_tdn(self):
 		Path(self._temp_dir, 'a.tdn').write_text('{}')
 		Path(self._temp_dir, 'b.json').write_text('{}')
 		Path(self._temp_dir, 'c.py').write_text('')
-		result = self.tdn._collectExistingTDNFiles(self._temp_dir)
+		result = self.embody.ext.TDN._collectExistingTDNFiles(self._temp_dir)
 		self.assertLen(result, 1)
 
 	def test_collectExisting_root_returns_all(self):
@@ -208,7 +207,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub = Path(self._temp_dir, 'embody')
 		sub.mkdir()
 		Path(sub, 'b.tdn').write_text('{}')
-		result = self.tdn._collectExistingTDNFiles(self._temp_dir, '/')
+		result = self.embody.ext.TDN._collectExistingTDNFiles(self._temp_dir, '/')
 		self.assertLen(result, 2)
 
 	def test_collectExisting_scoped_to_prefix(self):
@@ -217,7 +216,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		embody.mkdir()
 		Path(embody, 'Embody.tdn').write_text('{}')
 		Path(self._temp_dir, 'other.tdn').write_text('{}')
-		result = self.tdn._collectExistingTDNFiles(
+		result = self.embody.ext.TDN._collectExistingTDNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 1)
 
@@ -229,7 +228,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub = Path(embody, 'Embody')
 		sub.mkdir()
 		Path(sub, 'help.tdn').write_text('{}')
-		result = self.tdn._collectExistingTDNFiles(
+		result = self.embody.ext.TDN._collectExistingTDNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 2)
 
@@ -241,22 +240,22 @@ class TestTDNFileIO(EmbodyTestCase):
 		ctrl = Path(self._temp_dir, 'controller')
 		ctrl.mkdir()
 		Path(ctrl, 'main.tdn').write_text('{}')
-		result = self.tdn._collectExistingTDNFiles(
+		result = self.embody.ext.TDN._collectExistingTDNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 1)
 
 	def test_collectExisting_nonexistent_dir(self):
-		result = self.tdn._collectExistingTDNFiles('/nonexistent_tdn_xyz')
+		result = self.embody.ext.TDN._collectExistingTDNFiles('/nonexistent_tdn_xyz')
 		self.assertLen(result, 0)
 
 	def test_collectExisting_empty_dir(self):
-		result = self.tdn._collectExistingTDNFiles(self._temp_dir)
+		result = self.embody.ext.TDN._collectExistingTDNFiles(self._temp_dir)
 		self.assertLen(result, 0)
 
 	def test_collectExisting_exact_match_prefix(self):
 		"""File matching the exact prefix (embody.tdn for /embody) should be found."""
 		Path(self._temp_dir, 'embody.tdn').write_text('{}')
-		result = self.tdn._collectExistingTDNFiles(
+		result = self.embody.ext.TDN._collectExistingTDNFiles(
 			self._temp_dir, '/embody')
 		self.assertLen(result, 1)
 
@@ -270,7 +269,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		Path(stale).write_text('{}')
 		kept = str(Path(self._temp_dir, 'kept.tdn'))
 		Path(kept).write_text('{}')
-		deleted = self.tdn._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDN._cleanupStaleTDNFiles(
 			{stale, kept}, [kept], self._temp_dir)
 		self.assertIn(stale, deleted)
 		self.assertFalse(Path(stale).exists())
@@ -279,7 +278,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_cleanup_keeps_written_files(self):
 		written = str(Path(self._temp_dir, 'new.tdn'))
 		Path(written).write_text('{}')
-		deleted = self.tdn._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDN._cleanupStaleTDNFiles(
 			{written}, [written], self._temp_dir)
 		self.assertLen(deleted, 0)
 		self.assertTrue(Path(written).exists())
@@ -288,7 +287,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Should refuse to delete non-.tdn files."""
 		non_tdn = str(Path(self._temp_dir, 'data.json'))
 		Path(non_tdn).write_text('{}')
-		deleted = self.tdn._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDN._cleanupStaleTDNFiles(
 			{non_tdn}, [], self._temp_dir)
 		self.assertLen(deleted, 0)
 		self.assertTrue(Path(non_tdn).exists())
@@ -299,7 +298,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		try:
 			outside = str(Path(other_dir, 'x.tdn'))
 			Path(outside).write_text('{}')
-			deleted = self.tdn._cleanupStaleTDNFiles(
+			deleted = self.embody.ext.TDN._cleanupStaleTDNFiles(
 				{outside}, [], self._temp_dir)
 			self.assertLen(deleted, 0)
 			self.assertTrue(Path(outside).exists())
@@ -313,7 +312,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		sub.mkdir(parents=True)
 		stale = str(sub / 'old.tdn')
 		Path(stale).write_text('{}')
-		self.tdn._cleanupStaleTDNFiles({stale}, [], self._temp_dir)
+		self.embody.ext.TDN._cleanupStaleTDNFiles({stale}, [], self._temp_dir)
 		self.assertFalse(sub.exists())
 		self.assertFalse(sub.parent.exists())
 
@@ -324,13 +323,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		stale = str(sub / 'old.tdn')
 		Path(stale).write_text('{}')
 		Path(sub / 'keep.txt').write_text('data')
-		self.tdn._cleanupStaleTDNFiles({stale}, [], self._temp_dir)
+		self.embody.ext.TDN._cleanupStaleTDNFiles({stale}, [], self._temp_dir)
 		self.assertFalse(Path(stale).exists())
 		self.assertTrue(sub.exists())
 
 	def test_cleanup_empty_before_set(self):
 		"""No-op when before set is empty."""
-		deleted = self.tdn._cleanupStaleTDNFiles(set(), [], self._temp_dir)
+		deleted = self.embody.ext.TDN._cleanupStaleTDNFiles(set(), [], self._temp_dir)
 		self.assertLen(deleted, 0)
 
 	def test_cleanup_multiple_stale_files(self):
@@ -340,7 +339,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			f = str(Path(self._temp_dir, f'stale_{i}.tdn'))
 			Path(f).write_text('{}')
 			stale_files.add(f)
-		deleted = self.tdn._cleanupStaleTDNFiles(
+		deleted = self.embody.ext.TDN._cleanupStaleTDNFiles(
 			stale_files, [], self._temp_dir)
 		self.assertLen(deleted, 5)
 		for f in stale_files:
@@ -353,7 +352,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_resolve_auto_nonroot_mirrors_td_path(self):
 		"""Auto-resolved path for non-root COMP should mirror TD hierarchy."""
 		child = self.sandbox.create(baseCOMP, 'res_child')
-		resolved = self.tdn._resolveOutputPath('auto', child)
+		resolved = self.embody.ext.TDN._resolveOutputPath('auto', child)
 		expected_suffix = child.path.lstrip('/') + '.tdn'
 		self.assertTrue(
 			resolved.replace('\\', '/').endswith(expected_suffix),
@@ -363,7 +362,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Deeply nested auto-resolved path should mirror full TD path."""
 		outer = self.sandbox.create(baseCOMP, 'ro')
 		inner = outer.create(baseCOMP, 'ri')
-		resolved = self.tdn._resolveOutputPath('auto', inner)
+		resolved = self.embody.ext.TDN._resolveOutputPath('auto', inner)
 		expected_suffix = inner.path.lstrip('/') + '.tdn'
 		self.assertTrue(
 			resolved.replace('\\', '/').endswith(expected_suffix),
@@ -372,7 +371,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_resolve_auto_root_uses_project_name(self):
 		"""Root export should use the .toe project name."""
 		root_op = op('/')
-		resolved = self.tdn._resolveOutputPath('auto', root_op)
+		resolved = self.embody.ext.TDN._resolveOutputPath('auto', root_op)
 		proj_name = project.name.removesuffix('.toe')
 		self.assertTrue(
 			resolved.replace('\\', '/').endswith(f'{proj_name}.tdn'),
@@ -380,13 +379,13 @@ class TestTDNFileIO(EmbodyTestCase):
 
 	def test_resolve_explicit_path_returned_as_is(self):
 		"""Explicit path should be returned unchanged."""
-		resolved = self.tdn._resolveOutputPath('/tmp/custom.tdn', op('/'))
+		resolved = self.embody.ext.TDN._resolveOutputPath('/tmp/custom.tdn', op('/'))
 		self.assertEqual(resolved, '/tmp/custom.tdn')
 
 	def test_resolve_auto_nonroot_starts_with_project_folder(self):
 		"""Auto-resolved path should be under project folder."""
 		child = self.sandbox.create(baseCOMP, 'pf_check')
-		resolved = self.tdn._resolveOutputPath('auto', child)
+		resolved = self.embody.ext.TDN._resolveOutputPath('auto', child)
 		proj_folder = str(project.folder).replace('\\', '/')
 		self.assertTrue(
 			resolved.replace('\\', '/').startswith(proj_folder),
@@ -395,7 +394,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_resolve_auto_nonroot_no_double_ext_folder(self):
 		"""Non-root auto resolve should not prepend ext_folder to TD path."""
 		child = self.sandbox.create(baseCOMP, 'dbl_check')
-		resolved = self.tdn._resolveOutputPath('auto', child)
+		resolved = self.embody.ext.TDN._resolveOutputPath('auto', child)
 		normalized = resolved.replace('\\', '/')
 		# The path should contain the TD path exactly once
 		td_segment = child.path.lstrip('/')
@@ -414,7 +413,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_export_file_is_valid_json(self):
 		self.sandbox.create(baseCOMP, 'json_check')
 		fp = str(Path(self._temp_dir) / 'valid.tdn')
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		self.assertTrue(Path(fp).exists())
@@ -427,7 +426,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.sandbox.create(textDAT, 'op_b')
 		self.sandbox.create(noiseTOP, 'op_c')
 		fp = str(Path(self._temp_dir) / 'all.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
@@ -441,7 +440,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		for i in range(25):
 			self.sandbox.create(baseCOMP, f'c_{i}')
 		fp = str(Path(self._temp_dir) / 'trunc.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			content = f.read()
@@ -454,7 +453,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		dat = self.sandbox.create(textDAT, 'dc')
 		dat.text = 'Exported content check'
 		fp = str(Path(self._temp_dir) / 'dc.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
@@ -471,7 +470,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		tbl.appendRow(['x', '1'])
 		tbl.appendRow(['y', '2'])
 		fp = str(Path(self._temp_dir) / 'tbl.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
@@ -488,13 +487,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		dat = self.sandbox.create(textDAT, 'rt_b')
 		dat.text = 'via file'
 		fp = str(Path(self._temp_dir) / 'rt.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
 			tdn_data = json.load(f)
 		target = self.sandbox.create(baseCOMP, 'rt_target')
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=target.path, tdn=tdn_data)
 		self.assertTrue(result.get('success'))
 		names = [c.name for c in target.children]
@@ -504,7 +503,7 @@ class TestTDNFileIO(EmbodyTestCase):
 
 	def test_export_result_has_file_path(self):
 		fp = str(Path(self._temp_dir) / 'rp.tdn')
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertEqual(result.get('file'), fp)
 
@@ -512,7 +511,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Export to explicit path with pre-created dirs should succeed."""
 		fp = str(Path(self._temp_dir) / 'a' / 'b' / 'c' / 'test.tdn')
 		Path(fp).parent.mkdir(parents=True, exist_ok=True)
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		self.assertTrue(Path(fp).exists())
@@ -520,7 +519,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_export_file_has_metadata(self):
 		"""Exported file should contain version, generator, td_build."""
 		fp = str(Path(self._temp_dir) / 'meta.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
@@ -536,13 +535,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		dst = self.sandbox.create(levelTOP, 'dst')
 		src.outputConnectors[0].connect(dst.inputConnectors[0])
 		fp = str(Path(self._temp_dir) / 'conn.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'dst'][0]
 		self.assertIn('inputs', entry)
-		self.assertEqual(entry['inputs'][0]['source'], 'src')
+		self.assertEqual(entry['inputs'][0], 'src')
 
 	def test_export_file_preserves_custom_pars(self):
 		"""Custom parameters should be in the exported file."""
@@ -551,13 +550,15 @@ class TestTDNFileIO(EmbodyTestCase):
 		page.appendFloat('Myfloat', label='My Float')
 		comp.par.Myfloat = 3.14
 		fp = str(Path(self._temp_dir) / 'cp.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'cp'][0]
 		self.assertIn('custom_pars', entry)
-		par_names = [p['name'] for p in entry['custom_pars']]
+		par_names = []
+		for page_name, page_pars in entry['custom_pars'].items():
+			par_names.extend([p['name'] for p in page_pars])
 		self.assertIn('Myfloat', par_names)
 
 	def test_export_file_preserves_nested_structure(self):
@@ -566,7 +567,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		b = a.create(baseCOMP, 'lb')
 		b.create(textDAT, 'lc')
 		fp = str(Path(self._temp_dir) / 'nested.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
@@ -582,13 +583,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		comp = self.sandbox.create(baseCOMP, 'flagged')
 		comp.bypass = True
 		fp = str(Path(self._temp_dir) / 'flags.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'flagged'][0]
 		self.assertIn('flags', entry)
-		self.assertTrue(entry['flags'].get('bypass'))
+		self.assertIn('bypass', entry['flags'])
 
 	def test_export_file_preserves_position(self):
 		"""Operator position should be in the exported file."""
@@ -596,7 +597,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		comp.nodeX = 500
 		comp.nodeY = 300
 		fp = str(Path(self._temp_dir) / 'pos.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
@@ -608,7 +609,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		comp = self.sandbox.create(baseCOMP, 'colored')
 		comp.color = (1.0, 0.0, 0.0)
 		fp = str(Path(self._temp_dir) / 'color.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
@@ -624,7 +625,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		comp.tags.add('mytag')
 		comp.tags.add('another')
 		fp = str(Path(self._temp_dir) / 'tags.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
@@ -640,16 +641,16 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_importFromFile_basic(self):
 		self.sandbox.create(baseCOMP, 'fic')
 		fp = str(Path(self._temp_dir) / 'imp.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		target = self.sandbox.create(baseCOMP, 'fit')
-		result = self.tdn.ImportNetworkFromFile(
+		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path=fp, target_path=target.path)
 		self.assertTrue(result.get('success'))
 		self.assertIn('fic', [c.name for c in target.children])
 
 	def test_importFromFile_nonexistent(self):
-		result = self.tdn.ImportNetworkFromFile(
+		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path='/nonexistent/xyz.tdn',
 			target_path=self.sandbox.path)
 		self.assertIsNone(result)
@@ -657,12 +658,12 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_importFromFile_invalid_json(self):
 		bad = str(Path(self._temp_dir) / 'bad.tdn')
 		Path(bad).write_text('{{{invalid')
-		result = self.tdn.ImportNetworkFromFile(
+		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path=bad, target_path=self.sandbox.path)
 		self.assertIsNone(result)
 
 	def test_importFromFile_empty_string_path(self):
-		result = self.tdn.ImportNetworkFromFile(
+		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path='', target_path=self.sandbox.path)
 		self.assertIsNone(result)
 
@@ -672,10 +673,10 @@ class TestTDNFileIO(EmbodyTestCase):
 		dst = self.sandbox.create(levelTOP, 'wire_dst')
 		src.outputConnectors[0].connect(dst.inputConnectors[0])
 		fp = str(Path(self._temp_dir) / 'wire_rt.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		target = self.sandbox.create(baseCOMP, 'wire_target')
-		self.tdn.ImportNetworkFromFile(
+		self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path=fp, target_path=target.path)
 		imported_dst = target.op('wire_dst')
 		self.assertIsNotNone(imported_dst)
@@ -692,7 +693,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		for i in range(n):
 			self.sandbox.create(baseCOMP, f'b{i}')
 		fp = str(Path(self._temp_dir) / 'bulk.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
@@ -704,7 +705,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		text = '\n'.join(f'Line {i}' for i in range(1000))
 		dat.text = text
 		fp = str(Path(self._temp_dir) / 'big.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
@@ -718,7 +719,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		utext = 'Hello \u4e16\u754c caf\u00e9 na\u00efve \u03a9\u2248\u00e7'
 		dat.text = utext
 		fp = str(Path(self._temp_dir) / 'uni.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
@@ -729,7 +730,7 @@ class TestTDNFileIO(EmbodyTestCase):
 	def test_export_empty_comp_valid_file(self):
 		"""Empty COMP should produce a valid .tdn with zero operators."""
 		fp = str(Path(self._temp_dir) / 'empty.tdn')
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
@@ -741,7 +742,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		dat = self.sandbox.create(textDAT, 'enc')
 		dat.text = '\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8'
 		fp = str(Path(self._temp_dir) / 'enc.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'rb') as f:
@@ -756,7 +757,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Exporting to an existing file should overwrite it."""
 		fp = str(Path(self._temp_dir) / 'overwrite.tdn')
 		Path(fp).write_text('old content that is not json')
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
@@ -767,7 +768,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		"""Exported JSON should be indented (human-readable)."""
 		self.sandbox.create(baseCOMP, 'indent_check')
 		fp = str(Path(self._temp_dir) / 'indent.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			content = f.read()
@@ -782,7 +783,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		dat = self.sandbox.create(textDAT, 'no_content')
 		dat.text = 'should not appear'
 		fp = str(Path(self._temp_dir) / 'no_dc.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=False)
 		with open(fp, 'r', encoding='utf-8') as f:
@@ -797,7 +798,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.sandbox.create(noiseTOP, 'my_top')
 		self.sandbox.create(waveCHOP, 'my_chop')
 		fp = str(Path(self._temp_dir) / 'families.tdn')
-		self.tdn.ExportNetwork(
+		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)

@@ -1181,13 +1181,13 @@ class EnvoyExt:
         - Multiple rapid reinits
         """
         try:
-            tm_ext = self.ThreadManager.ext.ThreadManagerExt
+            self.ThreadManager.ext.ThreadManagerExt
         except Exception:
             return
 
         # Log Thread Manager state before cleanup
         thread_info = []
-        for t in tm_ext.Threads:
+        for t in self.ThreadManager.ext.ThreadManagerExt.Threads:
             task = getattr(t, 'TDTask', None)
             target = getattr(task, 'target', None) if task else None
             name = getattr(target, '__name__', '?') if target else 'None'
@@ -1199,7 +1199,7 @@ class EnvoyExt:
                 f'{"; ".join(thread_info)}', 'DEBUG')
 
         cleaned = 0
-        for thread in list(tm_ext.Threads):
+        for thread in list(self.ThreadManager.ext.ThreadManagerExt.Threads):
             task = getattr(thread, 'TDTask', None)
             if task is None:
                 continue
@@ -1219,19 +1219,21 @@ class EnvoyExt:
             # onDestroyTD already cleaned the previous instance's thread,
             # and self.current_task is None (new task not created yet).
             thread.clean()
-            with tm_ext.ManagerCondition:
-                if task in tm_ext.Tasks:
-                    tm_ext.Tasks.remove(task)
+            with self.ThreadManager.ext.ThreadManagerExt.ManagerCondition:
+                if task in self.ThreadManager.ext.ThreadManagerExt.Tasks:
+                    self.ThreadManager.ext.ThreadManagerExt.Tasks.remove(task)
             cleaned += 1
 
         if cleaned:
             # CRITICAL: sync the Runningthreads parameter so EnqueueTask
             # sees the actual thread count, not the stale pre-cleanup value.
-            self.ThreadManager.par.Runningthreads.val = len(tm_ext.Threads)
+            self.ThreadManager.par.Runningthreads.val = len(
+                self.ThreadManager.ext.ThreadManagerExt.Threads)
             self._log(
                 f'Cleaned {cleaned} stale Envoy thread(s) — '
-                f'{len(tm_ext.Threads)} threads remain '
-                f'(capacity: {tm_ext.MaxNumberOfThreads.eval()})', 'DEBUG')
+                f'{len(self.ThreadManager.ext.ThreadManagerExt.Threads)}'
+                f' threads remain '
+                f'(capacity: {self.ThreadManager.ext.ThreadManagerExt.MaxNumberOfThreads.eval()})', 'DEBUG')
 
     def Start(self, _retries_left: int = 10) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
@@ -1267,7 +1269,7 @@ class EnvoyExt:
                     run(f"op('{self.ownerComp.path}').ext.Envoy.Start(_retries_left={_retries_left - 1})",
                         delayFrames=15)
                     return
-                self._log(f'Port {port} is still in use after retries. Restart TouchDesigner to free it.', 'ERROR')
+                self._log(f'Port {port} is still in use after retries. Restart TouchDesigner to free it, or switch port via the Port parameter on Embody.', 'ERROR')
                 self.ownerComp.par.Envoystatus = f'Error: port {port} in use'
                 return
 
@@ -3051,10 +3053,9 @@ class EnvoyExt:
     def _export_network(self, root_path='/', include_dat_content=True,
                        output_file=None, max_depth=None):
         """Delegate to TDN extension for network export."""
-        tdn_ext = getattr(self.ownerComp.ext, 'TDN', None)
-        if not tdn_ext:
+        if not getattr(self.ownerComp.ext, 'TDN', None):
             return {'error': 'TDN extension not loaded on Embody COMP'}
-        return tdn_ext.ExportNetwork(
+        return self.ownerComp.ext.TDN.ExportNetwork(
             root_path=root_path,
             include_dat_content=include_dat_content,
             output_file=output_file,
@@ -3063,10 +3064,9 @@ class EnvoyExt:
 
     def _import_network(self, target_path, tdn, clear_first=False):
         """Delegate to TDN extension for network import."""
-        tdn_ext = getattr(self.ownerComp.ext, 'TDN', None)
-        if not tdn_ext:
+        if not getattr(self.ownerComp.ext, 'TDN', None):
             return {'error': 'TDN extension not loaded on Embody COMP'}
-        return tdn_ext.ImportNetwork(
+        return self.ownerComp.ext.TDN.ImportNetwork(
             target_path=target_path,
             tdn=tdn,
             clear_first=clear_first,
@@ -3112,7 +3112,7 @@ class EnvoyExt:
 
             # Only write if the entry is missing or the URL changed
             if existing.get('url') == url and existing.get('type') == 'http':
-                self._log('MCP .mcp.json already configured')
+                self._log('MCP .mcp.json already configured', 'DEBUG')
                 return
 
             servers['envoy'] = {
@@ -3194,7 +3194,7 @@ class EnvoyExt:
             missing = [e for e in MANAGED_ENTRIES if e not in existing_lines]
 
             if not missing:
-                self._log('.gitignore already configured')
+                self._log('.gitignore already configured', 'DEBUG')
                 return
 
             block = '\n# Embody / Envoy (auto-managed)\n'

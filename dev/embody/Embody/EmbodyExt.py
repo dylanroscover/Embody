@@ -46,6 +46,7 @@ class EmbodyExt:
         self.tagging_menu_window = self.my.op('window_tagging_menu')
         self.tagger = self.my.op('tagger')
         self.root = op('/')
+        self._tagger_mode = 'tag'  # 'tag' or 'manage'
         
         # Logging configuration
         self.header = 'Embody >'
@@ -91,6 +92,10 @@ class EmbodyExt:
 
         # Parameter tracker for detecting COMP changes
         self.param_tracker = ParameterTracker(self.my)
+
+        # Network fingerprints for TDN COMPs — used instead of oper.dirty
+        # (which is always True when externaltox is empty)
+        self._tdn_fingerprints = {}
 
         # Set up Python environment (uv + venv) for Envoy dependencies
         # Only install if Envoy is enabled (user opted in during Verify)
@@ -524,13 +529,13 @@ class EmbodyExt:
             externalizations_dat.nodeY = self.my.nodeY
             externalizations_dat.dock = self.my
             externalizations_dat.color = (
-                self.my.par.Dattagcolorr, 
-                self.my.par.Dattagcolorg, 
+                self.my.par.Dattagcolorr,
+                self.my.par.Dattagcolorg,
                 self.my.par.Dattagcolorb
             )
             externalizations_dat.clear()
             externalizations_dat.appendRow([
-                'path', 'type', 'rel_file_path', 'timestamp', 
+                'path', 'type', 'strategy', 'rel_file_path', 'timestamp',
                 'dirty', 'build', 'touch_build'
             ])
             externalizations_dat.tags = [self.my.par.Tsvtag.eval()]
@@ -540,6 +545,58 @@ class EmbodyExt:
             self.Log(f"Reset '{table_name}' tableDAT", "INFO")
         
         self.my.par.Externalizations.val = externalizations_dat
+
+    def _migrateTableSchema(self) -> None:
+        """Migrate externalizations table to include 'strategy' column.
+
+        Adds the strategy column if missing, populates it from existing data,
+        and removes legacy TDN companion rows (replaced by strategy='tdn' on
+        the COMP's primary row).
+        """
+        table = self.Externalizations
+        if not table or table.numRows < 1:
+            return
+
+        headers = [table[0, c].val for c in range(table.numCols)]
+        if 'strategy' in headers:
+            return  # Already migrated
+
+        # Insert strategy column after 'type' (index 2)
+        type_idx = headers.index('type') if 'type' in headers else 1
+        strategy_col = type_idx + 1
+        table.insertCol('', strategy_col)
+        table[0, strategy_col] = 'strategy'
+
+        # Collect TDN companion rows to remove (iterate backwards for safe deletion)
+        rows_to_delete = []
+        for i in range(1, table.numRows):
+            row_type = table[i, 'type'].val
+            rel_path = table[i, 'rel_file_path'].val
+
+            if row_type == 'tdn':
+                # Legacy TDN companion row — mark for deletion
+                rows_to_delete.append(i)
+                continue
+
+            # Determine strategy from context
+            oper = op(table[i, 'path'].val)
+            if oper and oper.family == 'COMP':
+                table[i, 'strategy'] = 'tox'
+            elif rel_path:
+                ext = rel_path.rsplit('.', 1)[-1] if '.' in rel_path else ''
+                table[i, 'strategy'] = ext
+            else:
+                table[i, 'strategy'] = row_type
+
+        # Delete legacy TDN companion rows (reverse order to preserve indices)
+        for i in reversed(rows_to_delete):
+            table.deleteRow(i)
+
+        count = len(rows_to_delete)
+        if count:
+            self.Log(f'Schema migration: added strategy column, removed {count} legacy TDN row(s)', 'SUCCESS')
+        else:
+            self.Log('Schema migration: added strategy column', 'SUCCESS')
 
     def Verify(self) -> None:
         """Verify Embody instance and prompt for initialization."""
@@ -765,7 +822,6 @@ class EmbodyExt:
                     try:
                         # rmdir() only succeeds if directory is empty - this is safe
                         comp_path.rmdir()
-                        self.Log(f"Removed empty directory: {comp_path}", "INFO")
                     except OSError:
                         # Directory not empty - this is expected and safe to ignore
                         pass
@@ -778,7 +834,6 @@ class EmbodyExt:
                 folder_path = Path(folder)
                 if folder_path.is_dir():
                     folder_path.rmdir()  # Only succeeds if empty
-                    self.Log(f"Removed empty directory: {folder}", "INFO")
         except OSError:
             # Directory not empty - this is expected and safe
             pass
@@ -827,6 +882,9 @@ class EmbodyExt:
             except FileExistsError:
                 pass
 
+        # Migrate table schema if needed (adds strategy column)
+        self._migrateTableSchema()
+
         # Normalize paths for cross-platform compatibility
         self.normalizeAllPaths()
         run(f"op('{self.my}').Update()", delayFrames=1)
@@ -860,16 +918,28 @@ class EmbodyExt:
     # MAIN UPDATE LOOP
     # ==========================================================================
 
-    def Update(self) -> None:
-        """Main update method - process additions, subtractions, and dirty ops."""
+    def Update(self, suppress_refresh: bool = False) -> None:
+        """Main update method - process additions, subtractions, and dirty ops.
+
+        Args:
+            suppress_refresh: If True, skip the delayed Refresh pulse. Used by
+                onProjectPreSave() to prevent the continuity check from firing
+                during the TDN strip/restore window.
+        """
         if self.my.par.Status != 'Enabled':
             return
 
-        # Check for parameter changes
-        for comp in self.getExternalizedOps(COMP):
+        # Check for parameter changes on TOX-strategy COMPs
+        for comp in self.getExternalizedOps(COMP, strategy='tox'):
             if self.param_tracker.compareParameters(comp):
                 self.Externalizations[comp.path, 'dirty'] = 'Par'
                 self.Save(comp.path)
+
+        # Check for parameter changes on TDN-strategy COMPs
+        for comp in self.getExternalizedOps(COMP, strategy='tdn'):
+            if self.param_tracker.compareParameters(comp):
+                self.Externalizations[comp.path, 'dirty'] = 'Par'
+                self.SaveTDN(comp.path)
 
         # Check for duplicates
         if self.my.par.Detectduplicatepaths:
@@ -888,7 +958,7 @@ class EmbodyExt:
             and set(all_tags).intersection(oper.tags)
             and self.isOpProcessable(oper)
         ]
-        
+
         subtractions = [
             oper for oper in externalized_ops
             if not set(all_tags).intersection(oper.tags)
@@ -899,25 +969,26 @@ class EmbodyExt:
 
         # Process changes
         additions.sort(key=lambda x: (self.Externalizations.path in x.path, x.path), reverse=True)
-        
+
         for oper in additions:
             self.handleAddition(oper)
         for oper in subtractions:
             self.handleSubtraction(oper)
 
-        # Handle dirty COMPs
+        # Handle dirty COMPs (TOX + TDN)
         dirties = self.dirtyHandler(True)
 
         # Report results
         self._reportResults(dirties, additions, subtractions)
-        run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
+        if not suppress_refresh:
+            run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
         self.updateEnableButtonLabel('Update')
 
     def _reportResults(self, dirties, additions, subtractions):
         """Report update results to log."""
         plural = any(len(lst) > 1 for lst in [dirties, additions, subtractions])
         if dirties:
-            self.Log(f"Saved {dirties} tox{'es' if plural else ''}", "SUCCESS")
+            self.Log(f"Saved {len(dirties)} externalization{'s' if plural else ''}", "SUCCESS")
         if additions:
             self.Log(f"Added {len(additions)} operator{'s' if plural else ''} in total", "SUCCESS")
         if subtractions:
@@ -934,7 +1005,7 @@ class EmbodyExt:
         if self.my.par.Detectduplicatepaths:
             self.checkForDuplicates()
         
-        self.Log("Refreshed", "INFO")
+        self.Debug("Refreshed")
         
         if not me.time.play:
             self.Log("ALERT! TIMELINE IS PAUSED. RESUME FOR EMBODY TO FUNCTION", "ERROR")
@@ -944,25 +1015,54 @@ class EmbodyExt:
     # ==========================================================================
 
     def getTags(self, selection: Optional[str] = None) -> list[str]:
-        """Get all Embody tags, optionally filtered by type."""
+        """Get all Embody tags, optionally filtered by type.
+
+        Args:
+            selection: 'tox' for TOX tag only, 'tdn' for TDN tag only,
+                       'comp' for both COMP tags, 'DAT' for DAT tags only,
+                       None for all tags.
+        """
         tags = [par.val for par in self.my.pars('*tag')]
         if selection == 'tox':
             return [t for t in tags if t == self.my.par.Toxtag.val]
+        elif selection == 'tdn':
+            return [t for t in tags if t == self.my.par.Tdntag.val]
+        elif selection == 'comp':
+            comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdntag.val}
+            return [t for t in tags if t in comp_tags]
         elif selection == 'DAT':
-            return [t for t in tags if t != self.my.par.Toxtag.val]
+            comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdntag.val}
+            return [t for t in tags if t not in comp_tags]
         return tags
 
-    def getExternalizedOps(self, opFamily: type) -> list[OP]:
-        """Get all externalized operators of a given family from the table."""
+    def getExternalizedOps(self, opFamily: type, strategy: Optional[str] = None) -> list[OP]:
+        """Get all externalized operators of a given family from the table.
+
+        Args:
+            opFamily: COMP or DAT
+            strategy: Optional filter — 'tox', 'tdn', or None for all.
+        """
         if not self.Externalizations:
             return []
-            
+
         family_str = 'COMP' if opFamily == COMP else 'DAT'
+        has_strategy_col = 'strategy' in [
+            self.Externalizations[0, c].val
+            for c in range(self.Externalizations.numCols)
+        ]
         ops = []
-        
+
         for i in range(1, self.Externalizations.numRows):
-            if self.Externalizations[i, 'type'].val == 'tdn':
-                continue
+            # Filter by strategy if requested
+            if has_strategy_col and strategy:
+                row_strategy = self.Externalizations[i, 'strategy'].val
+                if row_strategy != strategy:
+                    continue
+            elif not has_strategy_col:
+                # Legacy table without strategy column — skip TDN rows
+                if self.Externalizations[i, 'type'].val == 'tdn':
+                    continue
+
             path = self.Externalizations[i, 'path'].val
             oper = op(path)
             if oper and oper.family == family_str:
@@ -973,18 +1073,33 @@ class EmbodyExt:
 
     def getOpsToExternalize(self, opFamily: type) -> list[OP]:
         """Get all operators marked for externalization."""
-        tags = self.getTags('tox' if opFamily == COMP else 'DAT')
-        return self.root.findChildren(
-            type=opFamily,
-            tags=tags,
-            parName='externaltox' if opFamily == COMP else 'file',
-            key=lambda x: (
-                self.isOpEligibleToBeExternalized(x) and
-                not x.path.startswith('/local/') and
-                x.path != '/local' and
-                x.type != 'engine'
-            )
+        base_filter = lambda x: (
+            self.isOpEligibleToBeExternalized(x) and
+            not x.path.startswith('/local/') and
+            x.path != '/local' and
+            x.type != 'engine'
         )
+
+        if opFamily == COMP:
+            # TOX-tagged COMPs (have externaltox parameter)
+            tox_tags = self.getTags('tox')
+            tox_ops = self.root.findChildren(
+                type=COMP, tags=tox_tags, parName='externaltox',
+                key=base_filter
+            )
+            # TDN-tagged COMPs (no externaltox needed)
+            tdn_tags = self.getTags('tdn')
+            tdn_ops = self.root.findChildren(
+                type=COMP, tags=tdn_tags,
+                key=base_filter
+            )
+            return tox_ops + tdn_ops
+        else:
+            tags = self.getTags('DAT')
+            return self.root.findChildren(
+                type=DAT, tags=tags, parName='file',
+                key=base_filter
+            )
 
     def getOpsByPar(self, opFamily: type) -> list[OP]:
         """Get operators that have external paths set."""
@@ -1058,7 +1173,7 @@ class EmbodyExt:
     # ==========================================================================
 
     def Save(self, opPath: str) -> None:
-        """Save an externalized operator and update tracking."""
+        """Save a TOX-strategy COMP and update tracking."""
         try:
             oper = op(opPath)
             oper.par.enableexternaltox = True
@@ -1068,10 +1183,10 @@ class EmbodyExt:
                 new_build = oper.par.Build.val + 1
                 oper.par.Build = new_build
                 self.Externalizations[opPath, 'build'] = str(new_build)
-                    
+
             if hasattr(oper.par, 'Date'):
                 oper.par.Date.val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-                    
+
             if hasattr(oper.par, 'Touchbuild'):
                 oper.par.Touchbuild = app.build
                 self.Externalizations[opPath, 'touch_build'] = app.build
@@ -1090,31 +1205,119 @@ class EmbodyExt:
             self.Externalizations[opPath, 'dirty'] = False
 
             self.Log(f"Saved {opPath}", "SUCCESS")
-
-            # Re-export sibling TDN if one exists
-            tdn_rel_path = self._getTDNPathForComp(opPath)
-            if tdn_rel_path:
-                try:
-                    tdn_ext = self.ownerComp.ext.TDN
-                    abs_path = str(self.buildAbsolutePath(tdn_rel_path))
-                    tdn_ext.ExportNetwork(root_path=opPath, output_file=abs_path)
-                    self.Log(f"Re-exported TDN for {opPath}", "SUCCESS")
-                except Exception as e:
-                    self.Log(f"Failed to re-export TDN for {opPath}: {e}", "WARNING")
         except Exception as e:
             self.Log("Save failed", "ERROR", str(e))
 
-        #self.Refresh()
+    def SaveTDN(self, opPath: str) -> None:
+        """Save a TDN-strategy COMP by re-exporting its .tdn file."""
+        try:
+            oper = op(opPath)
+            if not oper:
+                self.Log(f"Operator not found: {opPath}", "ERROR")
+                return
 
-    def _getTDNPathForComp(self, op_path: str) -> Optional[str]:
-        """Return the rel_file_path for a TDN entry matching op_path, or None."""
+            # Get the TDN file path from the table
+            rel_path = self._getStrategyFilePath(opPath, 'tdn')
+            if not rel_path:
+                self.Log(f"No TDN entry found for {opPath}", "ERROR")
+                return
+
+            # Update build info
+            if hasattr(oper.par, 'Build'):
+                new_build = oper.par.Build.val + 1
+                oper.par.Build = new_build
+                self.Externalizations[opPath, 'build'] = str(new_build)
+
+            if hasattr(oper.par, 'Date'):
+                oper.par.Date.val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+            if hasattr(oper.par, 'Touchbuild'):
+                oper.par.Touchbuild = app.build
+                self.Externalizations[opPath, 'touch_build'] = app.build
+
+            # Export TDN
+            abs_path = str(self.buildAbsolutePath(rel_path))
+            result = self.my.ext.TDN.ExportNetwork(
+                root_path=opPath, output_file=abs_path)
+
+            if result.get('success'):
+                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                self.Externalizations[opPath, 'timestamp'] = timestamp
+                self.param_tracker.updateParamStore(oper)
+                self.Externalizations[opPath, 'dirty'] = ''
+                # Snapshot the network structure so _isTDNDirty returns False
+                self._storeTDNFingerprint(oper)
+                self.Log(f"Exported TDN for {opPath}", "SUCCESS")
+            else:
+                self.Log(f"TDN export failed for {opPath}: {result.get('error')}", "ERROR")
+        except Exception as e:
+            self.Log(f"SaveTDN failed for {opPath}", "ERROR", str(e))
+
+    @staticmethod
+    def _computeTDNFingerprint(comp) -> tuple:
+        """Compute a hashable fingerprint of a TDN COMP's network structure.
+
+        Used instead of oper.dirty for TDN COMPs (which always reads True
+        because externaltox is empty). Captures all visual and metadata
+        properties that a TDN export records: name, type, position, size,
+        color, tags, flags, comment, and connections.
+        """
+        parts = []
+        for c in sorted(comp.children, key=lambda c: c.name):
+            color = tuple(round(v, 4) for v in c.color)
+            tags = tuple(sorted(c.tags))
+            flags = (c.bypass, c.lock, c.display, c.render,
+                     c.viewer, c.current, c.expose)
+            parts.append((
+                c.name, c.type,
+                c.nodeX, c.nodeY, c.nodeWidth, c.nodeHeight,
+                color, tags, flags, c.comment,
+            ))
+            for i, conn in enumerate(c.inputConnectors):
+                for link in conn.connections:
+                    parts.append((c.name, 'in', i, link.owner.name))
+        return tuple(parts)
+
+    def _isTDNDirty(self, comp) -> bool:
+        """Check if a TDN COMP's network has changed since last export."""
+        current = self._computeTDNFingerprint(comp)
+        stored = self._tdn_fingerprints.get(comp.path)
+        if stored is None:
+            # No stored fingerprint — assume clean (just initialized)
+            self._tdn_fingerprints[comp.path] = current
+            return False
+        return current != stored
+
+    def _storeTDNFingerprint(self, comp) -> None:
+        """Snapshot the TDN COMP's network structure after export."""
+        self._tdn_fingerprints[comp.path] = self._computeTDNFingerprint(comp)
+
+    def _getStrategyFilePath(self, op_path: str, strategy: str) -> Optional[str]:
+        """Return the rel_file_path for a given operator + strategy, or None."""
         table = self.Externalizations
         if not table:
             return None
+        has_strategy_col = table[0, 'strategy'] is not None
         for i in range(1, table.numRows):
-            if (table[i, 'path'].val == op_path
-                    and table[i, 'type'].val == 'tdn'):
-                return table[i, 'rel_file_path'].val
+            if table[i, 'path'].val == op_path:
+                if has_strategy_col and table[i, 'strategy'].val == strategy:
+                    return table[i, 'rel_file_path'].val
+                elif not has_strategy_col:
+                    return table[i, 'rel_file_path'].val
+        return None
+
+    def _getCompStrategy(self, comp: OP) -> Optional[str]:
+        """Determine if a COMP uses 'tox' or 'tdn' strategy from the table."""
+        table = self.Externalizations
+        if not table:
+            return None
+        if table[0, 'strategy'] is None:
+            return 'tox'  # Legacy table without strategy column
+        for i in range(1, table.numRows):
+            if table[i, 'path'].val == comp.path:
+                s = table[i, 'strategy'].val
+                if s in ('tox', 'tdn'):
+                    return s
         return None
 
     def SaveCurrentComp(self) -> None:
@@ -1135,41 +1338,73 @@ class EmbodyExt:
         
         # Check if this COMP is externalized
         comp_path = current_comp.path
-        
-        for i in range(1, self.Externalizations.numRows):
-            if self.Externalizations[i, 'type'].val == 'tdn':
-                continue
-            if self.Externalizations[i, 'path'].val == comp_path:
-                self.Save(comp_path)
-                return
+        match = self._findExternalizedComp(comp_path)
+        if match:
+            self._saveByStrategy(*match)
+            return
 
         # Check if any parent is externalized
         parent_comp = current_comp.parent()
         while parent_comp:
-            for i in range(1, self.Externalizations.numRows):
-                if self.Externalizations[i, 'type'].val == 'tdn':
-                    continue
-                if self.Externalizations[i, 'path'].val == parent_comp.path:
-                    self.Save(parent_comp.path)
-                    return
+            match = self._findExternalizedComp(parent_comp.path)
+            if match:
+                self._saveByStrategy(*match)
+                return
             parent_comp = parent_comp.parent()
-        
+
         self.Log(f"No externalized COMP found at or above '{comp_path}'", "WARNING")
 
+    def _findExternalizedComp(self, comp_path: str) -> Optional[tuple[str, str]]:
+        """Find a COMP in the externalizations table and return (path, strategy)."""
+        has_strategy_col = self.Externalizations[0, 'strategy'] is not None
+        for i in range(1, self.Externalizations.numRows):
+            if self.Externalizations[i, 'path'].val == comp_path:
+                if has_strategy_col:
+                    s = self.Externalizations[i, 'strategy'].val
+                    if s in ('tox', 'tdn'):
+                        return (comp_path, s)
+                else:
+                    return (comp_path, 'tox')
+        return None
+
+    def _saveByStrategy(self, op_path: str, strategy: str) -> None:
+        """Save a COMP using the appropriate strategy."""
+        if strategy == 'tdn':
+            self.SaveTDN(op_path)
+        else:
+            self.Save(op_path)
+
     def dirtyHandler(self, update: bool) -> list[str]:
-        """Check and optionally update dirty COMPs."""
+        """Check and optionally update dirty COMPs (both TOX and TDN)."""
         updates = []
-        for oper in self.getExternalizedOps(COMP):
+
+        # TOX-strategy COMPs
+        for oper in self.getExternalizedOps(COMP, strategy='tox'):
             dirty = oper.dirty
             try:
-                self.Externalizations[oper.path, 'dirty'] = dirty
+                # Preserve 'Par' dirty state when oper.dirty is False —
+                # parameter changes are tracked independently from TD's
+                # native dirty flag and should only be cleared on Save.
+                if dirty or str(self.Externalizations[oper.path, 'dirty'].val) != 'Par':
+                    self.Externalizations[oper.path, 'dirty'] = dirty
             except Exception as e:
                 self.Log(f"Failed to update dirty state for {oper.path}: {e}", "DEBUG")
-                pass
-
             if dirty and update:
                 self.Save(oper.path)
                 updates.append(oper.path)
+
+        # TDN-strategy COMPs — use network fingerprint instead of oper.dirty
+        # (oper.dirty is always True when externaltox is empty)
+        for oper in self.getExternalizedOps(COMP, strategy='tdn'):
+            dirty = self._isTDNDirty(oper)
+            if dirty:
+                try:
+                    self.Externalizations[oper.path, 'dirty'] = 'True'
+                except Exception as e:
+                    self.Log(f"Failed to update dirty state for {oper.path}: {e}", "DEBUG")
+                if update:
+                    self.SaveTDN(oper.path)
+                    updates.append(oper.path)
 
         return updates
 
@@ -1179,6 +1414,15 @@ class EmbodyExt:
         param_changes = []
 
         for oper in self.getExternalizedOps(COMP) + self.getExternalizedOps(DAT):
+            # TDN-strategy COMPs don't use externaltox — their rel_file_path
+            # is managed by _handleTDNAddition / _addToTable, not the par.
+            # Skip them here to avoid overwriting the .tdn path with "".
+            if oper.family == 'COMP' and self._getCompStrategy(oper) == 'tdn':
+                if self.param_tracker.compareParameters(oper):
+                    param_changes.append(oper.path)
+                    self.Externalizations[oper.path, 'dirty'] = 'Par'
+                continue
+
             current_path = self.getExternalPath(oper)
             try:
                 table_path = self.normalizePath(self.Externalizations[oper.path, 'rel_file_path'].val)
@@ -1211,9 +1455,14 @@ class EmbodyExt:
 
     def handleAddition(self, oper: OP) -> None:
         """Process a newly tagged operator for externalization."""
+        # Route TDN-tagged COMPs to the TDN handler
+        if oper.family == 'COMP' and self.my.par.Tdntag.val in oper.tags:
+            self._handleTDNAddition(oper)
+            return
+
         abs_folder_path, save_file_path, rel_directory, rel_file_path = \
             self.getOpPaths(oper, self.my.par.Folder.val)
-        
+
         if save_file_path is None:
             self.Log(f"Could not generate paths for {oper.path}", "ERROR")
             return
@@ -1228,22 +1477,78 @@ class EmbodyExt:
         dirty = ''
         build_num = ''
         touch_build = ''
+        strategy = ''
 
         if oper.family == 'COMP':
+            strategy = 'tox'
             self._setupCompForExternalization(oper, rel_file_path, save_file_path)
             dirty = oper.dirty
             build_num = int(oper.par.Build.eval()) if hasattr(oper.par, 'Build') else 1
             touch_build = str(oper.par.Touchbuild.eval()) if hasattr(oper.par, 'Touchbuild') else app.build
             self.param_tracker.updateParamStore(oper)
         else:  # DAT
+            ext = str(save_file_path).rsplit('.', 1)[-1] if '.' in str(save_file_path) else ''
+            strategy = ext
             self._setupDatForExternalization(oper, rel_file_path, save_file_path)
 
         # Add to table
-        self._addToTable(oper, rel_file_path, timestamp, dirty, build_num, touch_build)
+        self._addToTable(oper, rel_file_path, timestamp, dirty, build_num, touch_build, strategy)
         self.Log(f"Added '{oper.path}'", "SUCCESS")
 
+    def _handleTDNAddition(self, oper: OP) -> None:
+        """Process a newly TDN-tagged COMP for externalization."""
+        rel_path = self._buildTDNRelPath(oper)
+        abs_path = self.buildAbsolutePath(rel_path)
+
+        # Create directory
+        try:
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            self.Log(f"Error creating directory {abs_path.parent}", "ERROR", str(e))
+
+        # Setup build parameters
+        build_page = next((p for p in oper.customPages if p.name == 'Build Info'), None)
+        if not build_page:
+            build_page = oper.appendCustomPage('About')
+
+        current_build = 1
+        if hasattr(oper.par, 'Build'):
+            current_build = oper.par.Build.eval()
+        self.setupBuildParameters(oper, build_page, current_build, app.build)
+
+        # Export TDN
+        result = self.my.ext.TDN.ExportNetwork(
+            root_path=oper.path, output_file=str(abs_path))
+
+        if result.get('success'):
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            build_num = int(oper.par.Build.eval()) if hasattr(oper.par, 'Build') else 1
+            touch_build = str(oper.par.Touchbuild.eval()) if hasattr(oper.par, 'Touchbuild') else app.build
+            self.param_tracker.updateParamStore(oper)
+            self._addToTable(oper, str(rel_path), timestamp, False,
+                             build_num, touch_build, 'tdn')
+            self.Log(f"Added TDN '{oper.path}'", "SUCCESS")
+        else:
+            self.Log(f"TDN export failed for {oper.path}: {result.get('error')}", "ERROR")
+
+    def _buildTDNRelPath(self, oper: OP) -> Path:
+        """Generate a relative .tdn file path for a COMP."""
+        ext_folder = self.ExternalizationsFolder
+        parent_path = str(oper.parent().path).strip('/')
+        parts = [p for p in parent_path.split('/') if p]
+
+        path_parts = []
+        if ext_folder:
+            path_parts.append(ext_folder)
+        path_parts.extend(parts)
+
+        filename = oper.name + '.tdn'
+        if path_parts:
+            return Path('/'.join(path_parts)) / filename
+        return Path(filename)
+
     def _setupCompForExternalization(self, oper, rel_file_path, save_file_path):
-        """Configure a COMP for externalization."""
+        """Configure a COMP for TOX externalization."""
         # Setup build info page
         build_page = next((p for p in oper.customPages if p.name == 'Build Info'), None)
         if not build_page:
@@ -1303,21 +1608,34 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f"Failed to save DAT {oper.path}", "ERROR", f"Path: {save_path_str}, Error: {e}")
 
-    def _addToTable(self, oper, rel_file_path, timestamp, dirty, build_num, touch_build):
+    def _addToTable(self, oper, rel_file_path, timestamp, dirty,
+                     build_num, touch_build, strategy: str = ''):
         """Add or update operator entry in externalizations table."""
         normalized_path = self.normalizePath(rel_file_path)
-        
-        # Check if row exists
+
+        has_strategy_col = self.Externalizations[0, 'strategy'] is not None
+
+        # Check if row already exists for this operator + strategy
         for row in range(1, self.Externalizations.numRows):
             if self.Externalizations[row, 'path'] == oper.path:
+                if has_strategy_col:
+                    row_strategy = self.Externalizations[row, 'strategy'].val
+                    if row_strategy != strategy:
+                        continue
                 self.Externalizations[row, 'rel_file_path'] = normalized_path
                 return
-        
+
         # Add new row
-        self.Externalizations.appendRow([
-            oper.path, oper.type, normalized_path, timestamp, 
-            dirty, build_num, touch_build
-        ])
+        if has_strategy_col:
+            self.Externalizations.appendRow([
+                oper.path, oper.type, strategy, normalized_path, timestamp,
+                dirty, build_num, touch_build
+            ])
+        else:
+            self.Externalizations.appendRow([
+                oper.path, oper.type, normalized_path, timestamp,
+                dirty, build_num, touch_build
+            ])
 
     def handleSubtraction(self, oper: OP) -> None:
         """Process removal of an operator from externalization."""
@@ -1361,25 +1679,42 @@ class EmbodyExt:
 
         try:
             rows_to_check = []
+            tdn_comp_paths = set()
+            headers = [self.Externalizations[0, c].val
+                       for c in range(self.Externalizations.numCols)]
+            has_strategy = 'strategy' in headers
             for i in range(1, self.Externalizations.numRows):
                 row_path = self.Externalizations[i, 'path'].val
                 if row_path:
                     rel_file_path = self.normalizePath(self.Externalizations[i, 'rel_file_path'].val)
                     row_type = self.Externalizations[i, 'type'].val
-                    rows_to_check.append((row_path, rel_file_path, row_type))
+                    strategy = (self.Externalizations[i, 'strategy'].val
+                                if has_strategy else '')
+                    rows_to_check.append((row_path, rel_file_path, row_type, strategy))
+                    # Collect TDN COMP paths so we can skip their children
+                    is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
+                    if is_tdn:
+                        tdn_comp_paths.add(row_path)
 
             processed_ops = set()
 
-            for old_op_path, rel_file_path, row_type in rows_to_check:
+            for old_op_path, rel_file_path, row_type, strategy in rows_to_check:
                 if old_op_path in processed_ops:
                     continue
 
-                # TDN entries are supplementary exports alongside a TOX —
-                # they don't set externaltox/file, so just verify the op exists
-                if row_type == 'tdn':
+                # TDN-strategy COMPs don't set externaltox/file — just verify the op exists
+                is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
+                if is_tdn:
                     if not op(old_op_path):
                         self.Log(f"Operator for TDN entry '{old_op_path}' no longer exists", "WARNING")
-                        self.RemoveTDNEntry(old_op_path)
+                        self._removeTDNStrategy(old_op_path)
+                    continue
+
+                # Skip operators inside TDN-strategy COMPs — their lifecycle
+                # is managed by TDN import/export, not individual externalization.
+                # Without this, the strip/restore save cycle would cause the
+                # continuity check to delete files for temporarily-missing children.
+                if any(old_op_path.startswith(tdn_path + '/') for tdn_path in tdn_comp_paths):
                     continue
 
                 existing_op = op(old_op_path)
@@ -1538,7 +1873,11 @@ class EmbodyExt:
             self.Externalizations[row_index, 'timestamp'] = timestamp
             self.Externalizations.cook(force=True)
             self.cleanupDuplicateRows(new_op.path)
-            
+
+            # Update parameter tracking: remove stale old path, baseline new path
+            self.param_tracker.removeComp(old_op_path)
+            self.param_tracker.updateParamStore(new_op)
+
             self.Log(f"Updated table row for '{new_op.path}'", "SUCCESS")
 
         except Exception as e:
@@ -1562,13 +1901,11 @@ class EmbodyExt:
                 try:
                     if old_folder.exists() and not any(old_folder.iterdir()):
                         old_folder.rmdir()
-                        self.Log(f"Removed empty directory: {old_folder}", "INFO")
-                        
+
                         current_dir = old_folder.parent
                         while current_dir.exists() and current_dir != Path(project.folder):
                             if not any(current_dir.iterdir()):
                                 current_dir.rmdir()
-                                self.Log(f"Removed empty parent: {current_dir}", "INFO")
                                 current_dir = current_dir.parent
                             else:
                                 break
@@ -1735,6 +2072,9 @@ class EmbodyExt:
         self.rolloverOp = oper
 
         # Validation
+        if oper is None:
+            return
+
         if oper.type == 'engine':
             ui.messageBox('Embody Error', f"'{oper.type}' type not supported.", buttons=['Ok'])
             return
@@ -1756,99 +2096,395 @@ class EmbodyExt:
                 buttons=['Ok'])
             return
 
-        run(lambda: self.SetupTagger(oper), delayFrames=1)
+        run(lambda: self.SetupTaggerTagMode(oper), delayFrames=1)
         run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
 
     def SetupTagger(self, oper: OP) -> None:
-        """Configure tagger button colors based on operator tags."""
+        """Configure tagger button colors."""
         params = self.tagger.op('tags')
-        
+
         for i in range(1, params.numRows):
             button = self.tagger.op(f'button{i}')
             if button:
-                # Reset color
                 button.par.colorr = self.my.par.Taggingmenucolorr
                 button.par.colorg.expr = self._alternateColor('parent.Embody.par.Taggingmenucolorg')
                 button.par.colorb = self.my.par.Taggingmenucolorb
-                
-                # Highlight active tags
-                tag_value = params[i, 'value'].val
-                if tag_value in oper.tags:
-                    if oper.family == 'COMP':
-                        button.par.colorr = self.my.par.Toxtagcolorr
-                        button.par.colorg.expr = self._alternateColor('parent.Embody.par.Toxtagcolorg')
-                        button.par.colorb = self.my.par.Toxtagcolorb
-                    else:
-                        button.par.colorr = self.my.par.Dattagcolorr
-                        button.par.colorg.expr = self._alternateColor('parent.Embody.par.Dattagcolorg')
-                        button.par.colorb = self.my.par.Dattagcolorb
 
     def _alternateColor(self, color_ref):
         """Generate alternating color expression."""
         return f'{color_ref} if me.digits % 2 else {color_ref} - 0.05'
 
+    def SetupTaggerManageMode(self, oper: OP, strategy_state: str) -> None:
+        """Configure tagger for manage mode on an already-tagged COMP.
+
+        Shows Switch/Remove buttons for tox/tdn plus Save.
+        """
+        self._tagger_mode = 'manage'
+        self.rolloverOp = oper
+
+        # Ensure switch is set to COMP tags (tox/tdn only)
+        switch = self.tagger.op('switch_family')
+        if switch:
+            switch.par.index = 2
+
+        # Keep replicated tag buttons visible and highlight active tag
+        self.SetupTagger(oper)
+
+        # Set dynamic labels on tag buttons based on current strategy
+        is_tox = strategy_state.startswith('TOX_')
+        tox_btn = self.tagger.op('button1')
+        tdn_btn = self.tagger.op('button2')
+        if tox_btn:
+            tox_btn.par.display = True
+            tox_btn.par.label = 'Remove tox' if is_tox else 'Switch to tox'
+        if tdn_btn:
+            tdn_btn.par.display = True
+            tdn_btn.par.label = 'Remove tdn' if not is_tox else 'Switch to tdn'
+
+        # Hide any extra DAT-tag buttons (safety net for replicator timing)
+        for i in range(3, 16):
+            btn = self.tagger.op(f'button{i}')
+            if btn:
+                btn.par.display = False
+
+        # Show Save button
+        btn_save = self.tagger.op('btn_save')
+        if btn_save:
+            btn_save.par.display = True
+            btn_save.par.label = 'Save tox' if is_tox else 'Save tdn'
+            btn_save.par.colorr = self.my.par.Taggingmenucolorr.eval()
+            btn_save.par.colorg = self.my.par.Taggingmenucolorg.eval()
+            btn_save.par.colorb = self.my.par.Taggingmenucolorb.eval()
+
+        # Hide Remove button (use Remove tox/tdn buttons instead)
+        btn_remove = self.tagger.op('btn_remove')
+        if btn_remove:
+            btn_remove.par.display = False
+
+        # Show Open file button with platform-specific label
+        btn_openfile = self.tagger.op('btn_openfile')
+        strategy = 'tdn' if strategy_state.startswith('TDN') else 'tox'
+        rel_fp = self._getStrategyFilePath(oper.path, strategy) or ''
+        self.tagger.store('manage_file_path', rel_fp)
+        if btn_openfile:
+            btn_openfile.par.display = bool(rel_fp)
+            label = 'Reveal in Finder' if sys.platform.startswith('darwin') else 'Reveal in Explorer'
+            btn_openfile.par.label = label
+
+        # Update header text
+        title = self.tagger.op('header/text1')
+        if title:
+            title.par.text = 'Actions'
+
+        # Update height: header + 2 tag buttons + Save (+ Open file if applicable)
+        visible_count = 4 + (1 if rel_fp else 0)
+        self.tagger.store('visible_count', visible_count)
+
+    def SetupTaggerTagMode(self, oper: OP) -> None:
+        """Restore tagger to tag selection mode, then set up colors."""
+        self._tagger_mode = 'tag'
+
+        # Hide manage buttons
+        btn_save = self.tagger.op('btn_save')
+        btn_remove = self.tagger.op('btn_remove')
+        btn_openfile = self.tagger.op('btn_openfile')
+        if btn_save:
+            btn_save.par.display = False
+        if btn_remove:
+            btn_remove.par.display = False
+        if btn_openfile:
+            btn_openfile.par.display = False
+
+        # Find if operator already has an Embody tag
+        tags = self.tagger.op('tags')
+        existing_tag = None
+        existing_tag_index = None
+        for i in range(1, tags.numRows):
+            tag_val = tags[i, 'value'].val
+            if tag_val in oper.tags:
+                existing_tag = tag_val
+                existing_tag_index = i
+                break
+
+        # Mutual exclusivity: if already tagged, only show Remove for
+        # the active tag. If untagged, show all Add options.
+        visible_count = 0
+        for i in range(1, tags.numRows):
+            btn = self.tagger.op(f'button{i}')
+            if btn:
+                tag_val = tags[i, 'value'].val
+                if existing_tag is not None:
+                    if i == existing_tag_index:
+                        btn.par.display = True
+                        btn.par.label = f'Remove {tag_val}'
+                        visible_count += 1
+                    else:
+                        btn.par.display = False
+                else:
+                    btn.par.display = True
+                    btn.par.label = f'Add {tag_val}'
+                    visible_count += 1
+
+        # Restore header text
+        title = self.tagger.op('header/text1')
+        if title:
+            title.par.text = 'Externalize'
+
+        # Update height to match visible button count (+1 for header row)
+        self.tagger.store('visible_count', visible_count + 1)
+
+        # Delegate to existing color setup
+        self.SetupTagger(oper)
+
     def TagSetter(self, oper: OP, tag: str) -> bool:
-        """Toggle a tag on an operator."""
+        """Toggle a tag on an operator. Enforces mutual exclusivity."""
         color = self._getTagColor(oper, tag)
         if color is None:
             return False
 
         if tag not in oper.tags:
+            # Enforce mutual exclusivity: only one tag at a time
+            if oper.family == 'COMP':
+                tox_tag = self.my.par.Toxtag.val
+                tdn_tag = self.my.par.Tdntag.val
+                other_tag = tdn_tag if tag == tox_tag else tox_tag
+                if other_tag in oper.tags:
+                    self._removeCompStrategy(oper, other_tag)
+            elif oper.family == 'DAT':
+                # Remove any existing DAT tag before adding the new one
+                dat_tags = self.getTags('DAT')
+                for existing in list(oper.tags):
+                    if existing in dat_tags:
+                        oper.tags.remove(existing)
+                        rel_file_path = self.getExternalPath(oper)
+                        self.RemoveListerRow(oper.path, rel_file_path)
+                        oper.par.file = ''
+                        oper.par.file.readOnly = False
+                        break
+
             oper.tags.add(tag)
             oper.color = color
         else:
             oper.tags.remove(tag)
             self.resetOpColor(oper)
-            rel_file_path = self.getExternalPath(oper)
-            self.RemoveListerRow(oper.path, rel_file_path)
-            
+
             if oper.family == 'COMP':
-                oper.par.externaltox = ''
-                oper.par.externaltox.readOnly = False
+                if tag == self.my.par.Toxtag.val:
+                    rel_file_path = self.getExternalPath(oper)
+                    self.RemoveListerRow(oper.path, rel_file_path)
+                    oper.par.externaltox = ''
+                    oper.par.externaltox.readOnly = False
+                elif tag == self.my.par.Tdntag.val:
+                    self._removeTDNStrategy(oper.path)
             elif oper.family == 'DAT':
+                rel_file_path = self.getExternalPath(oper)
+                self.RemoveListerRow(oper.path, rel_file_path)
                 oper.par.file = ''
                 oper.par.file.readOnly = False
-        
+
         return True
+
+    def _removeCompStrategy(self, oper: OP, tag: str) -> None:
+        """Remove a COMP strategy tag and clean up its externalization."""
+        oper.tags.discard(tag)
+        if tag == self.my.par.Toxtag.val:
+            rel_file_path = self.getExternalPath(oper)
+            self.RemoveListerRow(oper.path, rel_file_path)
+            oper.par.externaltox = ''
+            oper.par.externaltox.readOnly = False
+        elif tag == self.my.par.Tdntag.val:
+            self._removeTDNStrategy(oper.path)
+
+    def _removeTDNStrategy(self, op_path: str) -> None:
+        """Remove TDN strategy entry from table and delete .tdn file."""
+        table = self.Externalizations
+        if not table:
+            return
+        if table[0, 'strategy'] is None:
+            return  # Legacy table without strategy column — no TDN entries
+        for i in range(1, table.numRows):
+            if (table[i, 'path'].val == op_path
+                    and table[i, 'strategy'].val == 'tdn'):
+                rel_path = table[i, 'rel_file_path'].val
+                if rel_path:
+                    full_path = self.buildAbsolutePath(
+                        self.normalizePath(rel_path)).resolve()
+                    def _delete(fp=full_path, rp=rel_path, opp=op_path):
+                        try:
+                            if fp.is_file() and fp.suffix.lower() == '.tdn':
+                                fp.unlink()
+                                self.Log(f'Removed TDN externalization for {opp} ({rp})', 'SUCCESS')
+                        except Exception as e:
+                            self.Log(f'Error removing TDN file: {e}', 'ERROR')
+                    run(_delete, delayFrames=5)
+                table.deleteRow(i)
+                return
 
     def _getTagColor(self, oper, tag):
         """Get appropriate color for tag on operator, or None if invalid."""
         if oper.family == 'COMP':
             if tag == self.my.par.Toxtag.val:
                 return (self.my.par.Toxtagcolorr, self.my.par.Toxtagcolorg, self.my.par.Toxtagcolorb)
-            self.Log("TOX tags can only be applied to COMPs", "ERROR")
+            elif tag == self.my.par.Tdntag.val:
+                return (self.my.par.Tdntagcolorr, self.my.par.Tdntagcolorg, self.my.par.Tdntagcolorb)
+            self.Log("Use TOX or TDN tag for COMPs", "ERROR")
             return None
         elif oper.family == 'DAT':
             if tag in self.getTags('DAT') and oper.type in self.supported_dat_types:
                 return (self.my.par.Dattagcolorr, self.my.par.Dattagcolorg, self.my.par.Dattagcolorb)
             self.Log("DAT tags can only be applied to supported DAT types", "ERROR")
             return None
-        
+
         self.Log("Tags can only be applied to COMPs or DATs", "ERROR")
         return None
 
     def applyTagToOperator(self, oper: OP, tag: str) -> bool:
-        """Apply a tag to an operator."""
+        """Apply a tag to an operator. Enforces mutual exclusivity."""
         color = self._getTagColor(oper, tag)
         if color is None:
             return False
 
         if tag not in oper.tags:
+            # Enforce mutual exclusivity: only one tag at a time
+            if oper.family == 'COMP':
+                tox_tag = self.my.par.Toxtag.val
+                tdn_tag = self.my.par.Tdntag.val
+                other_tag = tdn_tag if tag == tox_tag else tox_tag
+                if other_tag in oper.tags:
+                    self._removeCompStrategy(oper, other_tag)
+            elif oper.family == 'DAT':
+                dat_tags = self.getTags('DAT')
+                for existing in list(oper.tags):
+                    if existing in dat_tags:
+                        oper.tags.remove(existing)
+                        rel_file_path = self.getExternalPath(oper)
+                        self.RemoveListerRow(oper.path, rel_file_path)
+                        oper.par.file = ''
+                        oper.par.file.readOnly = False
+                        self.Log(f"Removed existing '{existing}' tag from '{oper.path}' (replaced by '{tag}')", "INFO")
+                        break
+
             oper.tags.add(tag)
             oper.color = color
             self.Log(f"Tag '{tag}' applied to '{oper.path}'", "SUCCESS")
-            
-            if oper.family == 'COMP' and oper.par.externaltox.eval():
-                rel_file_path = self.normalizePath(oper.par.externaltox.eval())
-                timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-                self.Externalizations.appendRow([oper.path, oper.type, rel_file_path, timestamp, oper.dirty])
-                self.Log(f"Added existing externalization to table", "SUCCESS")
-        
+
+            if oper.family == 'COMP' and tag == self.my.par.Toxtag.val:
+                if oper.par.externaltox.eval():
+                    rel_file_path = self.normalizePath(oper.par.externaltox.eval())
+                    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+                    self.Externalizations.appendRow([
+                        oper.path, oper.type, 'tox', rel_file_path,
+                        timestamp, oper.dirty, '', ''
+                    ])
+                    self.Log(f"Added existing TOX externalization to table", "SUCCESS")
+            elif oper.family == 'COMP' and tag == self.my.par.Tdntag.val:
+                self._handleTDNAddition(oper)
+
         return True
 
     def TagExiter(self) -> None:
-        """Close tagging menu."""
+        """Close tagging menu and reset mode."""
+        self._tagger_mode = 'tag'
         self.tagging_menu_window.par.winclose.pulse()
+
+    def HandleStrategySwitch(self, oper: OP) -> None:
+        """Switch a COMP between TOX and TDN strategies."""
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+
+        if tox_tag in oper.tags:
+            self.applyTagToOperator(oper, tdn_tag)
+        elif tdn_tag in oper.tags:
+            self.applyTagToOperator(oper, tox_tag)
+
+        self.ExternalizeImmediate(oper)
+        self.Refresh()
+
+    def HandleStrategySave(self, oper: OP) -> None:
+        """Save the current strategy for a COMP."""
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+
+        if tox_tag in oper.tags:
+            self.Save(oper.path)
+        elif tdn_tag in oper.tags:
+            self.SaveTDN(oper.path)
+
+        self.Refresh()
+
+    def HandleStrategyRemove(self, oper: OP) -> None:
+        """Remove externalization from a COMP with confirmation dialog."""
+        result = ui.messageBox(
+            'Remove',
+            'Remove this externalization?\n\n'
+            'This will delete the external file from disk, clear the\n'
+            "operator's externalization tags, and remove the tracking\n"
+            'entry. This cannot be undone.\n\n'
+            'Operator: ' + oper.path,
+            buttons=['Cancel', 'Remove'])
+
+        if result == 1:
+            tox_tag = self.my.par.Toxtag.val
+            tdn_tag = self.my.par.Tdntag.val
+
+            if tdn_tag in oper.tags:
+                self.RemoveTDNEntry(oper.path)
+                oper.tags.discard(tdn_tag)
+            elif tox_tag in oper.tags:
+                rel_fp = self.getExternalPath(oper)
+                self.RemoveListerRow(oper.path, rel_fp)
+                oper.tags.discard(tox_tag)
+                oper.par.externaltox = ''
+                oper.par.externaltox.readOnly = False
+
+            self.resetOpColor(oper)
+            self.Refresh()
+
+    def ExternalizeImmediate(self, oper: OP) -> None:
+        """Immediately externalize a single tagged operator.
+
+        If already tracked with the current strategy, re-saves the file.
+        If not yet tracked, initializes tracking + saves via handleAddition().
+        Avoids the full Update() scan of all dirty operators.
+        """
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+
+        is_tox = tox_tag in oper.tags
+        is_tdn = tdn_tag in oper.tags
+        is_dat = (not is_tox and not is_tdn
+                  and oper.family == 'DAT'
+                  and any(t in oper.tags for t in self.getTags('DAT')))
+
+        if not is_tox and not is_tdn and not is_dat:
+            return
+
+        # Determine strategy for table lookup
+        if is_tox:
+            strategy = 'tox'
+        elif is_tdn:
+            strategy = 'tdn'
+        else:
+            # DAT strategy is the tag value itself (py, json, xml, etc.)
+            dat_tags = self.getTags('DAT')
+            strategy = next((t for t in dat_tags if t in oper.tags), 'py')
+
+        # Check if already tracked with this strategy
+        table = self.Externalizations
+        for i in range(1, table.numRows):
+            if (table[i, 'path'].val == oper.path
+                    and table[i, 'strategy'].val == strategy):
+                # Already tracked — just re-save
+                if is_tox:
+                    self.Save(oper.path)
+                elif is_tdn:
+                    self.SaveTDN(oper.path)
+                else:
+                    self.Save(oper.path)
+                return
+
+        # Not tracked — full initialization (creates tracking entry + saves file)
+        self.handleAddition(oper)
 
     # ==========================================================================
     # PROJECT-WIDE EXTERNALIZATION
@@ -1964,15 +2600,13 @@ class EmbodyExt:
                 try:
                     if full_path.is_file():
                         full_path.unlink()
-                        self.Log(f"Removed tracked file: {normalized_path}", "INFO")
-                        
+
                         # Clean up empty parent directories
                         parent_dir = full_path.parent
                         while parent_dir.exists() and parent_dir != Path(project.folder):
                             try:
                                 if not any(parent_dir.iterdir()):
                                     parent_dir.rmdir()
-                                    self.Log(f"Removed empty directory: {parent_dir}", "INFO")
                                     parent_dir = parent_dir.parent
                                 else:
                                     break
@@ -1995,7 +2629,7 @@ class EmbodyExt:
                     and self.normalizePath(self.Externalizations[i, 'rel_file_path'].val) == normalized_path):
                 try:
                     self.Externalizations.deleteRow(i)
-                    self.Log(f"Removed '{op_path}' from table", "SUCCESS")
+                    self.Log(f"Removed '{op_path}'", "SUCCESS")
                     removed = True
                 except Exception as e:
                     self.Log(f"Error removing from table", "ERROR", str(e))
@@ -2021,59 +2655,157 @@ class EmbodyExt:
         return False
 
     def RemoveTDNEntry(self, op_path: str) -> None:
-        """Remove a TDN export entry and delete the .tdn file from disk."""
+        """Remove a TDN strategy entry and delete the .tdn file from disk."""
+        self._removeTDNStrategy(op_path)
+        self.lister.reset()
+
+    # ==========================================================================
+    # TDN RECONSTRUCTION ON START
+    # ==========================================================================
+
+    def ReconstructTDNComps(self) -> None:
+        """Reconstruct all TDN-strategy COMPs from .tdn files on project open."""
+        if not self.my.par.Tdncreateonstart.eval():
+            return
+
+        tdn_comps = self._getTDNStrategyComps()
+        if not tdn_comps:
+            return
+
+        self.Log(f'Reconstructing {len(tdn_comps)} TDN COMP(s)...', 'INFO')
+        errors_total = 0
+
+        for comp_path, rel_tdn_path in tdn_comps:
+            comp = op(comp_path)
+            if comp is None:
+                self.Log(f'COMP {comp_path} not found, skipping', 'WARNING')
+                continue
+
+            abs_path = self.buildAbsolutePath(rel_tdn_path)
+            if not abs_path.is_file():
+                self.Log(f'TDN file not found: {rel_tdn_path}', 'WARNING')
+                continue
+
+            try:
+                import json
+                tdn_doc = json.loads(abs_path.read_text(encoding='utf-8'))
+            except Exception as e:
+                self.Log(f'Failed to read TDN for {comp_path}: {e}', 'ERROR')
+                errors_total += 1
+                continue
+
+            # Import from TDN (phases 1-7 + phase 8 file-link restore)
+            result = self.my.ext.TDN.ImportNetwork(
+                target_path=comp_path,
+                tdn=tdn_doc,
+                clear_first=True,
+                restore_file_links=True,
+            )
+
+            if result.get('error'):
+                self.Log(f'Reconstruction failed for {comp_path}: {result["error"]}', 'ERROR')
+                errors_total += 1
+                continue
+
+            created = result.get('created_count', 0)
+            restored = result.get('restored_file_links', 0)
+            msg = f'Reconstructed {comp_path} ({created} ops'
+            if restored:
+                msg += f', {restored} file links'
+            msg += ')'
+            self.Log(msg, 'SUCCESS')
+
+            # Phase E: Post-reconstruction error checking
+            comp_errors = self._verifyReconstructedComp(comp)
+            if comp_errors:
+                errors_total += len(comp_errors)
+
+        # Build report
+        self._logReconstructionReport(tdn_comps, errors_total)
+
+    def _getTDNStrategyComps(self) -> list[tuple[str, str]]:
+        """Get all TDN-strategy COMPs from the externalizations table.
+
+        Returns list of (comp_path, rel_tdn_path) tuples.
+        Never includes Embody itself, its ancestors, or its descendants —
+        reconstructing or stripping anything inside Embody would be
+        self-destruction.
+        """
         table = self.Externalizations
         if not table:
-            self.Log("Missing Externalization tableDAT", "ERROR")
-            return
-
-        # Find the TDN row by scanning for type='tdn' match
-        tdn_row = None
-        rel_file_path = None
+            return []
+        if table[0, 'strategy'] is None:
+            return []  # Legacy table without strategy column — no TDN entries
+        embody_path = self.my.path  # e.g. /embody/Embody — skip regardless of location
+        result = []
         for i in range(1, table.numRows):
-            if table[i, 'path'].val == op_path and table[i, 'type'].val == 'tdn':
-                tdn_row = i
-                rel_file_path = table[i, 'rel_file_path'].val
-                break
+            if table[i, 'strategy'].val == 'tdn':
+                comp_path = table[i, 'path'].val
+                # Never include Embody, its ancestors, or its descendants
+                if (comp_path == embody_path
+                        or embody_path.startswith(comp_path + '/')
+                        or comp_path.startswith(embody_path + '/')):
+                    continue
+                result.append((
+                    comp_path,
+                    table[i, 'rel_file_path'].val,
+                ))
+        return result
 
-        if tdn_row is None:
-            self.Log(f"No TDN entry found for '{op_path}'", "WARNING")
-            return
+    def StripCompChildren(self, comp: OP) -> int:
+        """Remove children from a TDN-strategy COMP (for smaller .toe).
 
-        # Deferred file deletion
-        if rel_file_path:
-            normalized = self.normalizePath(rel_file_path)
-            full_path = self.buildAbsolutePath(normalized).resolve()
+        Returns the number of children destroyed.
+        """
+        children = list(comp.children)
+        count = len(children)
+        for child in children:
+            try:
+                child.destroy()
+            except Exception as e:
+                self.Log(f'Failed to destroy {child.path}: {e}', 'WARNING')
+        if count:
+            self.Log(f'Stripped {count} children from {comp.path}', 'INFO')
+        return count
 
-            def delete_tdn():
-                try:
-                    if full_path.is_file() and full_path.suffix.lower() == '.tdn':
-                        full_path.unlink()
-                        self.Log(f"Removed TDN file: {normalized}", "SUCCESS")
-                        # Clean up empty parent dirs (bounded by project.folder)
-                        p = full_path.parent
-                        while p.exists() and p != Path(project.folder):
-                            try:
-                                if not any(p.iterdir()):
-                                    p.rmdir()
-                                    p = p.parent
-                                else:
-                                    break
-                            except OSError:
-                                break
-                except Exception as e:
-                    self.Log(f"Error removing TDN file: {e}", "ERROR")
+    def _verifyReconstructedComp(self, comp) -> list[str]:
+        """Check a reconstructed COMP for TD errors (broken connections, scripts, etc.).
 
-            run(delete_tdn, delayFrames=5)
-
-        # Remove table row by index (not by path, to avoid hitting the tox row)
+        Returns list of error strings found.
+        """
+        errors = []
         try:
-            table.deleteRow(tdn_row)
-            self.Log(f"Removed TDN entry for '{op_path}'", "SUCCESS")
+            for child in comp.findChildren(depth=-1):
+                if child.errors:
+                    for err in child.errors.split('\n'):
+                        err = err.strip()
+                        if err:
+                            errors.append(f'{child.path}: {err}')
+                if child.warnings:
+                    for warn in child.warnings.split('\n'):
+                        warn = warn.strip()
+                        if warn:
+                            self.Log(f'Warning in {child.path}: {warn}', 'WARNING')
         except Exception as e:
-            self.Log(f"Error removing TDN row: {e}", "ERROR")
+            self.Log(f'Error checking {comp.path}: {e}', 'WARNING')
 
-        self.lister.reset()
+        for err in errors:
+            self.Log(f'Reconstruction error: {err}', 'ERROR')
+
+        return errors
+
+    def _logReconstructionReport(self, tdn_comps, errors_total) -> None:
+        """Log a summary report after TDN reconstruction."""
+        count = len(tdn_comps)
+        if errors_total:
+            self.Log(
+                f'TDN reconstruction complete: {count} COMP(s), '
+                f'{errors_total} error(s) detected',
+                'WARNING')
+        else:
+            self.Log(
+                f'TDN reconstruction complete: {count} COMP(s) rebuilt successfully',
+                'SUCCESS')
 
     # ==========================================================================
     # FILE UTILITIES
@@ -2135,12 +2867,31 @@ class EmbodyExt:
     # ==========================================================================
 
     def DirtyCount(self) -> int:
-        """Return the number of dirty externalized operators."""
+        """Return the number of dirty externalized operators.
+
+        Checks live oper.dirty for COMPs (TD's native dirty flag updates
+        immediately when a COMP is modified, but the Externalizations table
+        is only refreshed during Refresh/Update). Falls back to the cached
+        table value for DATs and 'Par' (parameter change) state.
+        """
         table = self.Externalizations
         if not table:
             return 0
         count = 0
         for i in range(1, table.numRows):
+            op_path = str(table[i, 'path'].val)
+            oper = op(op_path)
+            if oper and oper.valid and oper.family == 'COMP':
+                if oper.dirty:
+                    count += 1
+                    continue
+                # Check table for 'Par' state (parameter changes detected
+                # during Refresh, not reflected in oper.dirty)
+                val = str(table[i, 'dirty'].val)
+                if val == 'Par':
+                    count += 1
+                continue
+            # For DATs or missing operators, use cached table value
             val = str(table[i, 'dirty'].val)
             if val and val not in ('', 'False', 'Clean', 'Saved'):
                 count += 1
@@ -2217,23 +2968,78 @@ class EmbodyExt:
         self.Log("Missing Externalization tableDAT - required for operation", "ERROR")
 
     def ImportTDNFromDialog(self) -> None:
-        """Open file dialog and import selected .tdn file."""
+        """Open file dialog and import selected .tdn file.
+
+        Auto-detects the target COMP from the file's location relative to
+        project.folder using Embody's bijective naming convention. If the
+        target exists and has children, prompts Replace/Keep Both/Cancel.
+        Falls back to Current Network/Project Root dialog when the target
+        cannot be inferred.
+        """
         path = ui.chooseFile(fileTypes=['tdn'], title='Import TDN File')
         if not path:
             return
-        target = ui.messageBox('Import TDN',
-            f'Import into which network?\n\nFile: {path}',
-            buttons=['Current Network', 'Project Root', 'Cancel'])
-        if target == 0:
-            pane = ui.panes.current
-            network_path = pane.owner.path if pane and pane.owner else '/'
-        elif target == 1:
-            network_path = '/'
-        else:
-            return
-        self.ownerComp.par.Tdnfile = str(path)
-        self.ownerComp.par.Networkpath = network_path
-        self.ownerComp.par.Importtdn.pulse()
+
+        clear_first = False
+        network_path = self._inferTargetFromPath(str(path))
+
+        if network_path:
+            target_comp = op(network_path)
+            if target_comp and hasattr(target_comp, 'create'):
+                child_count = len(target_comp.children)
+                if child_count > 0:
+                    choice = ui.messageBox('Import TDN',
+                        f'Target: {network_path}\n'
+                        f'Contains {child_count} operator{"s" if child_count != 1 else ""}.\n\n'
+                        f'Existing contents will be replaced.',
+                        buttons=['Replace', 'Keep Both', 'Cancel'])
+                    if choice == 0:
+                        clear_first = True
+                    elif choice == 1:
+                        clear_first = False
+                    else:
+                        return
+                # else: empty target, import silently
+            else:
+                network_path = None  # COMP doesn't exist, fall through
+
+        if not network_path:
+            choice = ui.messageBox('Import TDN',
+                f'Import into which network?\n\nFile: {path}',
+                buttons=['Current Network', 'Project Root', 'Cancel'])
+            if choice == 0:
+                pane = ui.panes.current
+                network_path = pane.owner.path if pane and pane.owner else '/'
+            elif choice == 1:
+                network_path = '/'
+            else:
+                return
+
+        self._import_clear_first = clear_first
+        self.my.par.Tdnfile = str(path)
+        self.my.par.Networkpath = network_path
+        self.my.par.Importtdn.pulse()
+
+    def _inferTargetFromPath(self, file_path: str) -> Optional[str]:
+        """Derive a TD COMP path from a .tdn file's location relative to project.folder.
+
+        Uses Embody's bijective naming convention:
+            {project.folder}/embody/base1.tdn → /embody/base1
+
+        Returns the TD path string, or None if the file is outside the project.
+        """
+        try:
+            rel = Path(file_path).relative_to(project.folder)
+        except ValueError:
+            return None  # File is outside project folder
+        stem = str(rel).replace('\\', '/').removesuffix('.tdn')
+        if not stem:
+            return None
+        # Check if this is a project-root export (filename matches project name)
+        project_name = project.name.removesuffix('.toe')
+        if stem == project_name:
+            return '/'
+        return '/' + stem
 
     # ==========================================================================
     # LOGGING
@@ -2262,19 +3068,33 @@ class EmbodyExt:
         if 'self' in caller_locals and hasattr(caller_locals['self'], '__class__'):
             ext = caller_locals['self']
             caller_info = f"{ext.__class__.__name__}"
-            if hasattr(ext, 'my'):
-                caller_info += f"@{ext.my.name}"
         elif 'me' in caller_locals:
             caller_info = f"{caller_locals['me'].path}"
         else:
             frame_info = inspect.getframeinfo(frame)
             caller_info = f"{os.path.basename(frame_info.filename)}:{frame_info.lineno}"
 
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        time_str = datetime.now().strftime("%H:%M:%S")
         current_frame = absTime.frame
 
+        # Append structured entry to ring buffer for MCP access (all levels)
+        self._log_counter += 1
+        self._log_buffer.append({
+            'id': self._log_counter,
+            'timestamp': datetime.now().isoformat(),
+            'frame': current_frame,
+            'level': level,
+            'source': caller_info,
+            'message': message,
+            'details': details,
+        })
+
+        # Skip DEBUG output to FIFO/textport/file unless Verbose is enabled
+        if level == 'DEBUG' and not self.my.par.Verbose:
+            return
+
         # Structured log entry string
-        log_entry = f"{timestamp} | {current_frame:8} | {level:7} | [{caller_info:30}] | {message}"
+        log_entry = f"{time_str} {current_frame:>7} {level:<7} {caller_info}: {message}"
         if details:
             log_entry += f"\n    Details: {details}"
 
@@ -2292,18 +3112,6 @@ class EmbodyExt:
                 self._write_log_to_file(log_entry)
             except Exception as e:
                 print(f"Error writing to log file: {e}")
-
-        # Append structured entry to ring buffer for MCP access
-        self._log_counter += 1
-        self._log_buffer.append({
-            'id': self._log_counter,
-            'timestamp': datetime.now().isoformat(),
-            'frame': current_frame,
-            'level': level,
-            'source': caller_info,
-            'message': message,
-            'details': details,
-        })
 
     def Debug(self, msg: str) -> None:
         """Log a DEBUG level message."""
@@ -2384,6 +3192,7 @@ class ParameterTracker:
                 params[par.name] = {
                     'value': par.eval(),
                     'expr': par.expr if par.expr else None,
+                    'bindExpr': par.bindExpr if par.bindExpr else None,
                     'mode': par.mode
                 }
         return params
@@ -2411,6 +3220,7 @@ class ParameterTracker:
                 return True
             if (stored[name]['value'] != current[name]['value'] or
                 stored[name]['expr'] != current[name]['expr'] or
+                stored[name].get('bindExpr') != current[name].get('bindExpr') or
                 stored[name]['mode'] != current[name]['mode']):
                 return True
         

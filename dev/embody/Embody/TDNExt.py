@@ -150,6 +150,12 @@ class TDNExt:
 			self._exportable_cache.clear()
 			operators = self._exportChildren(root_op, options, depth=0)
 
+			# Post-processing optimizations
+			type_defaults = TDNExt._compute_type_defaults(operators)
+			if type_defaults:
+				TDNExt._strip_type_defaults(operators, type_defaults)
+			par_templates, operators = TDNExt._extract_par_templates(operators)
+
 			build_num = self._getBuildNumber(root_op)
 			tdn = {
 				'format': 'tdn',
@@ -159,12 +165,16 @@ class TDNExt:
 				'td_build': f'{app.version}.{app.build}',
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
-				'root': root_path,
+				'network_path': root_path,
 				'options': {
 					'include_dat_content': include_dat_content,
 				},
-				'operators': operators,
 			}
+			if type_defaults:
+				tdn['type_defaults'] = type_defaults
+			if par_templates:
+				tdn['par_templates'] = par_templates
+			tdn['operators'] = operators
 
 			result = {'success': True, 'tdn': tdn}
 
@@ -192,8 +202,7 @@ class TDNExt:
 						comp_tdn['export_mode'] = 'percomp'
 						Path(fpath).parent.mkdir(parents=True, exist_ok=True)
 						Path(fpath).write_text(
-							json.dumps(comp_tdn, indent='\t',
-									   ensure_ascii=False) + '\n',
+							TDNExt._compact_json_dumps(comp_tdn),
 							encoding='utf-8')
 						written_files.append(fpath)
 
@@ -225,8 +234,7 @@ class TDNExt:
 
 					filepath = self._resolveOutputPath(output_file, root_op)
 					Path(filepath).write_text(
-						json.dumps(tdn, indent='\t',
-								   ensure_ascii=False) + '\n',
+						TDNExt._compact_json_dumps(tdn),
 						encoding='utf-8')
 
 					stale = TDNExt._cleanupStaleTDNFiles(
@@ -360,6 +368,12 @@ class TDNExt:
 			operators = TDNExt._assembleHierarchy(
 				state['results'], state['root_path'])
 
+			# Post-processing optimizations
+			type_defaults = TDNExt._compute_type_defaults(operators)
+			if type_defaults:
+				TDNExt._strip_type_defaults(operators, type_defaults)
+			par_templates, operators = TDNExt._extract_par_templates(operators)
+
 			tdn = {
 				'format': 'tdn',
 				'version': TDN_VERSION,
@@ -368,13 +382,17 @@ class TDNExt:
 				'td_build': state['metadata']['td_build'],
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
-				'root': state['root_path'],
+				'network_path': state['root_path'],
 				'options': {
 					'include_dat_content':
 						state['options']['include_dat_content'],
 				},
-				'operators': operators,
 			}
+			if type_defaults:
+				tdn['type_defaults'] = type_defaults
+			if par_templates:
+				tdn['par_templates'] = par_templates
+			tdn['operators'] = operators
 
 			# Count total operators
 			def count_ops(ops):
@@ -408,8 +426,7 @@ class TDNExt:
 						Path(fpath).parent.mkdir(
 							parents=True, exist_ok=True)
 						Path(fpath).write_text(
-							json.dumps(comp_tdn, indent='\t',
-									   ensure_ascii=False) + '\n',
+							TDNExt._compact_json_dumps(comp_tdn),
 							encoding='utf-8')
 						written_files.append(fpath)
 
@@ -431,10 +448,9 @@ class TDNExt:
 						'cleaned_up': len(stale) if stale else 0,
 					}
 				else:
-					json_str = json.dumps(
-						tdn, indent='\t', ensure_ascii=False) + '\n'
 					Path(state['output_file']).write_text(
-						json_str, encoding='utf-8')
+						TDNExt._compact_json_dumps(tdn),
+						encoding='utf-8')
 
 					stale = TDNExt._cleanupStaleTDNFiles(
 						before_tdn, [state['output_file']],
@@ -551,14 +567,20 @@ class TDNExt:
 	def ReexportAllTDNs(self) -> None:
 		"""Re-export all tracked TDN files with current toggle setting."""
 		try:
-			embody_ext = self.ownerComp.ext.Embody
-			table = embody_ext.Externalizations
+			table = self.ownerComp.ext.Embody.Externalizations
 			if not table:
 				return
 
 			tdn_entries = []
+			headers = [table[0, c].val for c in range(table.numCols)]
+			has_strategy = 'strategy' in headers
 			for i in range(1, table.numRows):
-				if table[i, 'type'].val == 'tdn':
+				is_tdn = False
+				if has_strategy:
+					is_tdn = table[i, 'strategy'].val == 'tdn'
+				else:
+					is_tdn = table[i, 'type'].val == 'tdn'
+				if is_tdn:
 					root_path = table[i, 'path'].val
 					if op(root_path):
 						tdn_entries.append(root_path)
@@ -583,7 +605,8 @@ class TDNExt:
 		root_path = self._reexport_queue.pop(0)
 		self.ExportNetworkAsync(root_path=root_path, output_file='auto')
 
-	def ImportNetwork(self, target_path: str, tdn: Union[dict[str, Any], list[dict[str, Any]]], clear_first: bool = False) -> dict[str, Any]:
+	def ImportNetwork(self, target_path: str, tdn: Union[dict[str, Any], list[dict[str, Any]]],
+					  clear_first: bool = False, restore_file_links: bool = False) -> dict[str, Any]:
 		"""
 		Import a .tdn network into a COMP, recreating all operators.
 
@@ -591,6 +614,9 @@ class TDNExt:
 			target_path: Destination COMP path to import into
 			tdn: The .tdn dict (full document or just the 'operators' list)
 			clear_first: Delete all existing children before importing
+			restore_file_links: Re-establish file/syncfile parameters on DATs
+				that are tracked in the externalizations table (used during
+				TDN reconstruction on project open)
 
 		Returns:
 			dict with 'success', 'created_count', 'created_paths' or 'error'
@@ -619,7 +645,7 @@ class TDNExt:
 
 			build_num = tdn.get('build')
 			if build_num is not None:
-				self._log(f'Importing TDN build {build_num}', 'INFO')
+				self._log(f'Importing TDN build {build_num} into {target_path}', 'DEBUG')
 
 			op_defs = tdn['operators']
 		elif isinstance(tdn, list):
@@ -633,6 +659,15 @@ class TDNExt:
 					child.destroy()
 				except Exception as e:
 					self._log(f'Failed to destroy {child.path}: {e}', 'WARNING')
+
+		# Pre-phase: Resolve templates and merge type defaults
+		if isinstance(tdn, dict):
+			par_templates = tdn.get('par_templates', {})
+			type_defaults = tdn.get('type_defaults', {})
+			if par_templates:
+				TDNExt._resolve_par_templates(op_defs, par_templates)
+			if type_defaults:
+				TDNExt._merge_type_defaults(op_defs, type_defaults)
 
 		try:
 			created = []
@@ -658,27 +693,46 @@ class TDNExt:
 			# Phase 7: Set positions (last)
 			self._setPositions(dest, op_defs)
 
+			# Phase 8: Restore file links on externalized DATs
+			restored_count = 0
+			if restore_file_links:
+				restored_count = self._restoreFileLinks(dest)
+
+			# Cleanup temporary operator references from Phase 1
+			def _cleanupRefs(defs):
+				for d in defs:
+					d.pop('_created_op', None)
+					children = d.get('children', [])
+					if children:
+						_cleanupRefs(children)
+			_cleanupRefs(op_defs)
+
 			self._log(
 				f'Imported {len(created)} operators into {target_path}',
 				'SUCCESS')
-			return {
+			result = {
 				'success': True,
 				'destination': target_path,
 				'created_count': len(created),
 				'created_paths': created,
 			}
+			if restored_count:
+				result['restored_file_links'] = restored_count
+			return result
 
 		except Exception as e:
 			self._log(f'Import failed: {e}', 'ERROR')
 			return {'error': f'Import failed: {e}'}
 
-	def ImportNetworkFromFile(self, file_path: str, target_path: str = '/') -> Optional[dict[str, Any]]:
+	def ImportNetworkFromFile(self, file_path: str, target_path: str = '/',
+							   clear_first: bool = False) -> Optional[dict[str, Any]]:
 		"""
 		Load a .tdn JSON file from disk and import it into a COMP.
 
 		Args:
 			file_path: Path to the .tdn file on disk
 			target_path: Destination COMP path (default '/')
+			clear_first: Delete all existing children before importing
 		"""
 		if not file_path:
 			self._log('No TDN file specified', 'WARNING')
@@ -700,7 +754,7 @@ class TDNExt:
 			return
 
 		self._log(f'Importing from {file_path} into {target_path}...', 'INFO')
-		return self.ImportNetwork(target_path, tdn_data)
+		return self.ImportNetwork(target_path, tdn_data, clear_first=clear_first)
 
 	# =========================================================================
 	# EXPORT INTERNALS
@@ -747,8 +801,9 @@ class TDNExt:
 		if flags:
 			data['flags'] = flags
 
-		# Position
-		data['position'] = [target.nodeX, target.nodeY]
+		# Position (omit if at origin [0, 0])
+		if target.nodeX != 0 or target.nodeY != 0:
+			data['position'] = [target.nodeX, target.nodeY]
 
 		# Size (only if non-default)
 		if (target.nodeWidth, target.nodeHeight) != DEFAULT_NODE_SIZE:
@@ -850,9 +905,9 @@ class TDNExt:
 			try:
 				mode = p.mode
 				if mode == ParMode.EXPRESSION:
-					params[name] = {'expr': p.expr}
+					params[name] = '=' + p.expr
 				elif mode == ParMode.BIND:
-					params[name] = {'bind': p.bindExpr}
+					params[name] = '~' + p.bindExpr
 				elif mode == ParMode.CONSTANT:
 					current = p.val
 					default = defaults.get(name)
@@ -865,14 +920,19 @@ class TDNExt:
 		return params
 
 	def _exportCustomPars(self, target):
-		"""Export ALL custom parameters with full definitions."""
-		if not hasattr(target, 'customPages'):
-			return []
+		"""Export ALL custom parameters grouped by page.
 
-		custom_pars = []
+		Returns a dict keyed by page name, where each value is a list of
+		parameter definitions (without the 'page' field — the key IS the page).
+		"""
+		if not hasattr(target, 'customPages'):
+			return {}
+
+		pages_dict = {}
 		seen_names = set()
 
 		for page in target.customPages:
+			page_pars = []
 			for p in page.pars:
 				if p.name in seen_names:
 					continue
@@ -888,12 +948,15 @@ class TDNExt:
 				for gp in group:
 					seen_names.add(gp.name)
 
-				# Export the group as a single definition
+				# Export the group as a single definition (without page)
 				par_def = self._exportCustomParGroup(page, group)
 				if par_def:
-					custom_pars.append(par_def)
+					page_pars.append(par_def)
 
-		return custom_pars
+			if page_pars:
+				pages_dict[page.name] = page_pars
+
+		return pages_dict
 
 	# Standard defaults TD assigns to newly created custom parameters
 	_STANDARD_DEFAULTS = {0, 0.0, '', False}
@@ -906,7 +969,6 @@ class TDNExt:
 
 		par_def = {
 			'name': base_name,
-			'page': page.name,
 			'style': style,
 		}
 
@@ -987,9 +1049,9 @@ class TDNExt:
 		"""Get current value/expr/bind for a parameter. Returns serialized form."""
 		try:
 			if p.mode == ParMode.EXPRESSION:
-				return {'expr': p.expr}
+				return '=' + p.expr
 			elif p.mode == ParMode.BIND:
-				return {'bind': p.bindExpr}
+				return '~' + p.bindExpr
 			elif p.mode == ParMode.CONSTANT:
 				return self._serializeValue(p.eval())
 			return None
@@ -998,44 +1060,79 @@ class TDNExt:
 			return None
 
 	def _exportFlags(self, target):
-		"""Export flags that differ from defaults."""
-		flags = {}
+		"""Export flags that differ from defaults as a string array.
+
+		Flags with a default of False are listed by name when True.
+		Flags with a default of True are listed with a '-' prefix when False.
+		Example: ['viewer', 'display'] or ['-expose']
+		"""
+		flags = []
 		for flag_name, default_val in DEFAULT_FLAGS.items():
 			if flag_name == 'allowCooking' and not target.isCOMP:
 				continue
 			try:
 				actual = getattr(target, flag_name)
 				if actual != default_val:
-					flags[flag_name] = actual
+					if default_val:
+						# True-default flag set to False: use '-' prefix
+						flags.append('-' + flag_name)
+					else:
+						flags.append(flag_name)
 			except Exception as e:
 				self._log(f'Error reading flag {flag_name} on {target.path}: {e}', 'DEBUG')
 		return flags
 
 	def _exportConnections(self, target):
-		"""Export operator (left/right) input connections as sibling refs."""
+		"""Export operator (left/right) input connections as a string array.
+
+		Array position = input index. Entries are source operator names
+		(sibling) or full paths (cross-network). Null entries for gaps.
+		Example: ['noise1'] or ['noise1', null, 'level1']
+		"""
 		inputs = []
+		max_index = -1
+		conn_map = {}
 		for i, inp in enumerate(target.inputs):
 			if inp is not None:
 				# Use sibling name if same parent, otherwise full path
 				if inp.parent() == target.parent():
-					inputs.append({'index': i, 'source': inp.name})
+					conn_map[i] = inp.name
 				else:
-					inputs.append({'index': i, 'source': inp.path})
+					conn_map[i] = inp.path
+				max_index = i
+
+		if max_index < 0:
+			return []
+
+		# Build array with nulls for gaps
+		for i in range(max_index + 1):
+			inputs.append(conn_map.get(i))
+
 		return inputs
 
 	def _exportCompConnections(self, target):
-		"""Export COMP (top/bottom) input connections."""
+		"""Export COMP (top/bottom) input connections as a string array."""
 		inputs = []
+		max_index = -1
+		conn_map = {}
 		try:
 			for i, connector in enumerate(target.inputCOMPConnectors):
 				for conn in connector.connections:
 					source = conn.owner
 					if source.parent() == target.parent():
-						inputs.append({'index': i, 'source': source.name})
+						conn_map[i] = source.name
 					else:
-						inputs.append({'index': i, 'source': source.path})
+						conn_map[i] = source.path
+					max_index = i
 		except Exception as e:
 			self._log(f'Error exporting COMP connections on {target.path}: {e}', 'DEBUG')
+
+		if max_index < 0:
+			return []
+
+		for i in range(max_index + 1):
+			inputs.append(conn_map.get(i))
+
 		return inputs
 
 	def _exportDATContent(self, target):
@@ -1067,8 +1164,24 @@ class TDNExt:
 	# IMPORT INTERNALS
 	# =========================================================================
 
+	def _resolveOp(self, parent, op_def):
+		"""Get the actual created operator for an op_def.
+
+		Uses the stored reference from Phase 1 if available (handles
+		auto-renamed operators correctly), falls back to name lookup.
+		"""
+		created = op_def.get('_created_op')
+		if created and created.valid:
+			return created
+		return parent.op(op_def.get('name', ''))
+
 	def _createOps(self, parent, op_defs, created):
-		"""Phase 1: Create all operators depth-first."""
+		"""Phase 1: Create all operators depth-first.
+
+		Stores a reference to each created operator in op_def['_created_op']
+		so that Phases 2-7 can resolve the correct operator even when TD
+		auto-renamed it due to name conflicts.
+		"""
 		for op_def in op_defs:
 			name = op_def.get('name')
 			op_type = op_def.get('type')
@@ -1078,6 +1191,11 @@ class TDNExt:
 			try:
 				new_op = parent.create(op_type, name)
 				created.append(new_op.path)
+				op_def['_created_op'] = new_op
+				if new_op.name != name:
+					self._log(
+						f'Operator "{name}" renamed to "{new_op.name}" '
+						f'(name conflict)', 'WARNING')
 			except Exception as e:
 				self._log(
 					f'Failed to create {op_type} "{name}": {e}', 'WARNING')
@@ -1091,20 +1209,41 @@ class TDNExt:
 	def _createCustomPars(self, parent, op_defs):
 		"""Phase 2: Create custom parameters on all operators."""
 		for op_def in op_defs:
-			target = parent.op(op_def.get('name', ''))
+			target = self._resolveOp(parent, op_def)
 			if not target:
 				continue
 
-			custom_pars = op_def.get('custom_pars', [])
+			custom_pars = op_def.get('custom_pars', {})
 			if custom_pars and target.isCOMP:
-				self._createCustomParsOnOp(target, custom_pars)
+				# Normalize to flat list with page info
+				flat_defs = self._flattenCustomPars(custom_pars)
+				self._createCustomParsOnOp(target, flat_defs)
 
 			# Recurse
 			children = op_def.get('children', [])
-			if children:
-				child_comp = parent.op(op_def['name'])
-				if child_comp and child_comp.isCOMP:
-					self._createCustomPars(child_comp, children)
+			if children and target.isCOMP:
+				self._createCustomPars(target, children)
+
+	@staticmethod
+	def _flattenCustomPars(custom_pars):
+		"""Normalize custom_pars to a flat list with 'page' on each def.
+
+		Accepts:
+		  - Dict keyed by page name (v1.0 format): {'About': [...], 'Controls': [...]}
+		  - Legacy flat array with 'page' on each def: [{'name': ..., 'page': ...}]
+		"""
+		if isinstance(custom_pars, list):
+			return custom_pars
+		if isinstance(custom_pars, dict):
+			flat = []
+			for page_name, page_defs in custom_pars.items():
+				if isinstance(page_defs, list):
+					for par_def in page_defs:
+						d = dict(par_def)
+						d['page'] = page_name
+						flat.append(d)
+			return flat
+		return []
 
 	def _createCustomParsOnOp(self, target, custom_par_defs):
 		"""Create custom parameters on a single operator."""
@@ -1136,6 +1275,27 @@ class TDNExt:
 					f'Unknown par style "{style}" for {par_name}', 'WARNING')
 				continue
 
+			# Multi-component styles: strip first suffix from par name
+			# (e.g., 'Tintr' → 'Tint' for RGB, 'Posx' → 'Pos' for XYZ)
+			actual_par_name = par_name
+			suffixes = STYLE_SUFFIXES.get(style, [])
+			if suffixes:
+				first_suffix = suffixes[0]
+				if par_name.endswith(first_suffix):
+					actual_par_name = par_name[:-len(first_suffix)]
+
+				# TD reports 'RGBA' for both RGB (3) and RGBA (4),
+				# 'XYZW' for both XYZ (3) and XYZW (4). Infer from
+				# the values array length.
+				values_count = len(par_def.get('values', []))
+				if style == 'RGBA' and values_count <= 3:
+					method_name = 'appendRGB'
+				elif style == 'XYZW':
+					if values_count <= 2:
+						method_name = 'appendXY'
+					elif values_count <= 3:
+						method_name = 'appendXYZ'
+
 			append_method = getattr(page, method_name, None)
 			if not append_method:
 				self._log(
@@ -1151,17 +1311,17 @@ class TDNExt:
 				if size and style in ('Float', 'Int'):
 					kwargs['size'] = size
 
-				append_method(par_name, **kwargs)
+				append_method(actual_par_name, **kwargs)
 
 				# Set properties on the created parameter(s)
 				par = getattr(target.par, par_name, None)
-				if not par:
+				if par is None:
 					# Try with first suffix (e.g., Posx for XYZ)
 					suffixes = STYLE_SUFFIXES.get(style, [])
 					if suffixes:
 						par = getattr(
 							target.par, par_name + suffixes[0], None)
-				if not par:
+				if par is None:
 					continue
 
 				# Numeric range
@@ -1211,7 +1371,7 @@ class TDNExt:
 	def _setParameters(self, parent, op_defs):
 		"""Phase 3: Set parameter values on all operators."""
 		for op_def in op_defs:
-			target = parent.op(op_def.get('name', ''))
+			target = self._resolveOp(parent, op_def)
 			if not target:
 				continue
 
@@ -1220,7 +1380,9 @@ class TDNExt:
 				self._setParValue(target, par_name, value)
 
 			# Custom parameter values
-			for par_def in op_def.get('custom_pars', []):
+			flat_defs = TDNExt._flattenCustomPars(
+				op_def.get('custom_pars', {}))
+			for par_def in flat_defs:
 				par_name = par_def.get('name', '')
 				style = par_def.get('style', '')
 
@@ -1234,11 +1396,23 @@ class TDNExt:
 				if 'values' in par_def:
 					suffixes = STYLE_SUFFIXES.get(style, [])
 					values = par_def['values']
-					if suffixes and len(values) == len(suffixes):
-						for suffix, val in zip(suffixes, values):
+
+					if suffixes:
+						# Strip first suffix from par_name to get base
+						# (e.g., 'Tintr' → 'Tint' for RGBA)
+						base_name = par_name
+						first_suffix = suffixes[0]
+						if par_name.endswith(first_suffix):
+							base_name = par_name[:-len(first_suffix)]
+
+						# TD reports 'RGBA' for both RGB and RGBA;
+						# use values count to pick correct suffixes
+						actual_suffixes = suffixes[:len(values)]
+
+						for suffix, val in zip(actual_suffixes, values):
 							if val is not None:
 								self._setParValue(
-									target, par_name + suffix, val)
+									target, base_name + suffix, val)
 					elif style in ('Float', 'Int') and len(values) > 1:
 						# Numeric multi-component: suffix is 1, 2, 3...
 						for i, val in enumerate(values):
@@ -1248,19 +1422,40 @@ class TDNExt:
 
 			# Recurse
 			children = op_def.get('children', [])
-			if children:
-				child_comp = parent.op(op_def['name'])
-				if child_comp and child_comp.isCOMP:
-					self._setParameters(child_comp, children)
+			if children and target.isCOMP:
+				self._setParameters(target, children)
 
 	def _setParValue(self, target, par_name, value):
-		"""Set a single parameter value (constant, expression, or bind)."""
+		"""Set a single parameter value (constant, expression, or bind).
+
+		Expression shorthand: strings starting with '=' are expressions,
+		strings starting with '~' are bind expressions. Use '==' or '~~'
+		to escape a literal leading '=' or '~'.
+		"""
 		par = getattr(target.par, par_name, None)
-		if not par:
+		if par is None:
 			return
 
 		try:
-			if isinstance(value, dict):
+			if isinstance(value, str):
+				if value.startswith('='):
+					if value.startswith('=='):
+						# Escaped literal '='
+						par.val = value[1:]
+					else:
+						par.expr = value[1:]
+						par.mode = ParMode.EXPRESSION
+				elif value.startswith('~'):
+					if value.startswith('~~'):
+						# Escaped literal '~'
+						par.val = value[1:]
+					else:
+						par.bindExpr = value[1:]
+						par.mode = ParMode.BIND
+				else:
+					par.val = value
+			elif isinstance(value, dict):
+				# Legacy v1.0 format support
 				if 'expr' in value:
 					par.expr = value['expr']
 					par.mode = ParMode.EXPRESSION
@@ -1274,82 +1469,115 @@ class TDNExt:
 				f'Failed to set {par_name} on {target.path}: {e}', 'WARNING')
 
 	def _setFlags(self, parent, op_defs):
-		"""Phase 4: Set operator flags."""
+		"""Phase 4: Set operator flags.
+
+		Accepts array format: ['viewer', '-expose'] where '-' prefix means False.
+		Also accepts legacy dict format: {'viewer': true} for compatibility.
+		"""
 		for op_def in op_defs:
-			target = parent.op(op_def.get('name', ''))
+			target = self._resolveOp(parent, op_def)
 			if not target:
 				continue
 
-			for flag_name, value in op_def.get('flags', {}).items():
-				try:
-					setattr(target, flag_name, value)
-				except Exception as e:
-					self._log(f'Failed to set flag {flag_name} on {target.path}: {e}', 'DEBUG')
+			flags_data = op_def.get('flags', [])
+			if isinstance(flags_data, list):
+				for entry in flags_data:
+					try:
+						if entry.startswith('-'):
+							setattr(target, entry[1:], False)
+						else:
+							setattr(target, entry, True)
+					except Exception as e:
+						self._log(f'Failed to set flag {entry} on {target.path}: {e}', 'DEBUG')
+			elif isinstance(flags_data, dict):
+				# Legacy dict format
+				for flag_name, value in flags_data.items():
+					try:
+						setattr(target, flag_name, value)
+					except Exception as e:
+						self._log(f'Failed to set flag {flag_name} on {target.path}: {e}', 'DEBUG')
 
 			# Recurse
 			children = op_def.get('children', [])
-			if children:
-				child_comp = parent.op(op_def['name'])
-				if child_comp and child_comp.isCOMP:
-					self._setFlags(child_comp, children)
+			if children and target.isCOMP:
+				self._setFlags(target, children)
 
 	def _wireConnections(self, parent, op_defs):
-		"""Phase 5: Wire all connections."""
+		"""Phase 5: Wire all connections.
+
+		Accepts string array format: ['noise1', null, 'level1'] where
+		position = input index. Also accepts legacy dict format for compat.
+		"""
 		for op_def in op_defs:
-			target = parent.op(op_def.get('name', ''))
+			target = self._resolveOp(parent, op_def)
 			if not target:
 				continue
 
 			# Operator connections (left/right)
-			for conn in op_def.get('inputs', []):
-				source_ref = conn.get('source')
-				dest_index = conn.get('index', 0)
-				if not source_ref:
-					continue
-
-				# Resolve source (sibling name or full path)
-				source = parent.op(source_ref)
-				if not source:
-					source = op(source_ref)  # Try full path
-				if source:
-					try:
-						source.outputConnectors[0].connect(
-							target.inputConnectors[dest_index])
-					except Exception as e:
-						self._log(
-							f'Failed to connect {source_ref} -> '
-							f'{target.name}[{dest_index}]: {e}', 'WARNING')
+			self._wireConnectionList(
+				parent, target, op_def.get('inputs', []), comp=False)
 
 			# COMP connections (top/bottom)
-			for conn in op_def.get('comp_inputs', []):
-				source_ref = conn.get('source')
-				dest_index = conn.get('index', 0)
-				if not source_ref:
-					continue
-
-				source = parent.op(source_ref)
-				if not source:
-					source = op(source_ref)
-				if source and hasattr(source, 'outputCOMPConnectors'):
-					try:
-						source.outputCOMPConnectors[0].connect(
-							target.inputCOMPConnectors[dest_index])
-					except Exception as e:
-						self._log(
-							f'Failed to connect COMP {source_ref} -> '
-							f'{target.name}[{dest_index}]: {e}', 'WARNING')
+			self._wireConnectionList(
+				parent, target, op_def.get('comp_inputs', []), comp=True)
 
 			# Recurse
 			children = op_def.get('children', [])
-			if children:
-				child_comp = parent.op(op_def['name'])
-				if child_comp and child_comp.isCOMP:
-					self._wireConnections(child_comp, children)
+			if children and target.isCOMP:
+				self._wireConnections(target, children)
+
+	def _wireConnectionList(self, parent, target, conn_list, comp=False):
+		"""Wire a list of connections (operator or COMP level).
+
+		conn_list can be:
+		  - String array: ['source1', null, 'source2'] (position = index)
+		  - Legacy dict array: [{'index': 0, 'source': 'name'}]
+		"""
+		for i, entry in enumerate(conn_list):
+			# Determine source_ref and dest_index
+			if entry is None:
+				continue
+			if isinstance(entry, str):
+				source_ref = entry
+				dest_index = i
+			elif isinstance(entry, dict):
+				# Legacy format
+				source_ref = entry.get('source')
+				dest_index = entry.get('index', 0)
+				if not source_ref:
+					continue
+			else:
+				continue
+
+			# Resolve source (sibling name or full path)
+			source = parent.op(source_ref)
+			if not source:
+				source = op(source_ref)  # Try full path
+
+			if not source:
+				self._log(
+					f'Connection source not found: {source_ref} -> '
+					f'{target.name}[{dest_index}]', 'WARNING')
+				continue
+
+			try:
+				if comp:
+					if hasattr(source, 'outputCOMPConnectors'):
+						source.outputCOMPConnectors[0].connect(
+							target.inputCOMPConnectors[dest_index])
+				else:
+					source.outputConnectors[0].connect(
+						target.inputConnectors[dest_index])
+			except Exception as e:
+				kind = 'COMP ' if comp else ''
+				self._log(
+					f'Failed to connect {kind}{source_ref} -> '
+					f'{target.name}[{dest_index}]: {e}', 'WARNING')
 
 	def _setDATContent(self, parent, op_defs):
 		"""Phase 6: Set DAT text/table content."""
 		for op_def in op_defs:
-			target = parent.op(op_def.get('name', ''))
+			target = self._resolveOp(parent, op_def)
 			if not target:
 				continue
 
@@ -1370,25 +1598,22 @@ class TDNExt:
 
 			# Recurse
 			children = op_def.get('children', [])
-			if children:
-				child_comp = parent.op(op_def['name'])
-				if child_comp and child_comp.isCOMP:
-					self._setDATContent(child_comp, children)
+			if children and target.isCOMP:
+				self._setDATContent(target, children)
 
 	def _setPositions(self, parent, op_defs):
 		"""Phase 7: Set positions (last, since creation can shift things)."""
 		for op_def in op_defs:
-			target = parent.op(op_def.get('name', ''))
+			target = self._resolveOp(parent, op_def)
 			if not target:
 				continue
 
-			if 'position' in op_def:
-				try:
-					pos = op_def['position']
-					target.nodeX = pos[0]
-					target.nodeY = pos[1]
-				except Exception as e:
-					self._log(f'Failed to set position on {target.path}: {e}', 'DEBUG')
+			pos = op_def.get('position', [0, 0])
+			try:
+				target.nodeX = pos[0]
+				target.nodeY = pos[1]
+			except Exception as e:
+				self._log(f'Failed to set position on {target.path}: {e}', 'DEBUG')
 
 			if 'size' in op_def:
 				try:
@@ -1410,12 +1635,91 @@ class TDNExt:
 				except Exception as e:
 					self._log(f'Failed to set comment on {target.path}: {e}', 'DEBUG')
 
+			if 'tags' in op_def:
+				try:
+					for tag in op_def['tags']:
+						target.tags.add(tag)
+				except Exception as e:
+					self._log(f'Failed to set tags on {target.path}: {e}', 'DEBUG')
+
 			# Recurse
 			children = op_def.get('children', [])
-			if children:
-				child_comp = parent.op(op_def['name'])
-				if child_comp and child_comp.isCOMP:
-					self._setPositions(child_comp, children)
+			if children and target.isCOMP:
+				self._setPositions(target, children)
+
+	def _restoreFileLinks(self, dest) -> int:
+		"""Phase 8: Restore file/syncfile parameters on externalized DATs.
+
+		After TDN reconstruction, DATs that were previously externalized need
+		their `file` parameter re-established so TD can sync content from disk.
+		Looks up each DAT in the externalizations table and restores the link.
+
+		Args:
+			dest: The reconstructed COMP operator
+
+		Returns:
+			Number of DATs whose file links were restored.
+		"""
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if not table or table.numRows < 2:
+				return 0
+		except Exception as e:
+			self._log(f'Cannot restore file links: {e}', 'WARNING')
+			return 0
+
+		# Build lookup: op_path -> rel_file_path for DATs under dest
+		dest_prefix = dest.path.rstrip('/') + '/'
+		file_map = {}  # {op_path: rel_file_path}
+		headers = [table[0, c].val for c in range(table.numCols)]
+		has_strategy = 'strategy' in headers
+
+		for i in range(1, table.numRows):
+			row_path = table[i, 'path'].val
+			if not row_path.startswith(dest_prefix):
+				continue
+
+			# Skip COMP entries (TOX/TDN strategies)
+			row_type = table[i, 'type'].val
+			if has_strategy:
+				strategy = table[i, 'strategy'].val
+				if strategy in ('tox', 'tdn'):
+					continue
+			else:
+				if row_type in ('base', 'container', 'window',
+								'opviewer', 'replicator', 'tdn'):
+					continue
+
+			rel_path = table[i, 'rel_file_path'].val
+			if rel_path:
+				file_map[row_path] = rel_path
+
+		if not file_map:
+			return 0
+
+		restored = 0
+		for op_path, rel_path in file_map.items():
+			dat = op(op_path)
+			if not dat or dat.family != 'DAT':
+				continue
+
+			try:
+				normalized = self.ownerComp.ext.Embody.normalizePath(rel_path)
+				dat.par.file = normalized
+				dat.par.file.readOnly = True
+				dat.par.syncfile = True
+				restored += 1
+			except Exception as e:
+				self._log(
+					f'Failed to restore file link on {op_path}: {e}',
+					'WARNING')
+
+		if restored:
+			self._log(
+				f'Restored file links on {restored} DAT(s) in {dest.path}',
+				'INFO')
+
+		return restored
 
 	# =========================================================================
 	# ASYNC EXPORT HELPERS
@@ -1670,7 +1974,11 @@ class TDNExt:
 		return False
 
 	def _serializeValue(self, val):
-		"""Convert a parameter value to a JSON-safe type."""
+		"""Convert a parameter value to a JSON-safe type.
+
+		Strings starting with '=' or '~' are escaped with a double prefix
+		to avoid collision with the expression/bind shorthand.
+		"""
 		if val is None:
 			return ''
 		if isinstance(val, bool):
@@ -1685,6 +1993,9 @@ class TDNExt:
 				return int(rounded)
 			return rounded
 		if isinstance(val, str):
+			# Escape strings that start with = or ~ to avoid shorthand collision
+			if val.startswith('=') or val.startswith('~'):
+				return val[0] + val
 			return val
 		if isinstance(val, (list, tuple)):
 			return [self._serializeValue(v) for v in val]
@@ -1729,6 +2040,366 @@ class TDNExt:
 
 		return first_par.name
 
+	# =========================================================================
+	# POST-PROCESSING OPTIMIZATIONS
+	# =========================================================================
+
+	@staticmethod
+	def _compact_json_dumps(data):
+		"""Serialize to JSON with tab indentation, inlining short arrays/objects.
+
+		Short arrays (<=80 chars when inlined) are collapsed to single lines.
+		This includes position, size, color, tags, connection arrays, and
+		custom parameter value arrays.
+		"""
+		import re
+		raw = json.dumps(data, indent='\t', ensure_ascii=False)
+
+		def try_compact(match):
+			content = match.group(0)
+			# Remove internal newlines and tabs
+			compacted = re.sub(r'\s*\n\s*', ' ', content)
+			compacted = re.sub(r'\[\s+', '[', compacted)
+			compacted = re.sub(r'\s+\]', ']', compacted)
+			compacted = re.sub(r'\{\s+', '{', compacted)
+			compacted = re.sub(r'\s+\}', '}', compacted)
+			compacted = re.sub(r',\s+', ', ', compacted)
+			if len(compacted) <= 80:
+				return compacted
+			return content
+
+		# Compact arrays of simple values (numbers, short strings, booleans, null)
+		raw = re.sub(
+			r'\[\s*\n\s*(?:(?:-?\d+(?:\.\d+)?|"[^"\n]{0,50}"|true|false|null)'
+			r'(?:,\s*\n\s*(?:-?\d+(?:\.\d+)?|"[^"\n]{0,50}"|true|false|null))*'
+			r')\s*\n\s*\]',
+			try_compact, raw)
+
+		return raw + '\n'
+
+	@staticmethod
+	def _compute_type_defaults(operators):
+		"""Find per-type properties shared by ALL operators of that type.
+
+		A property enters type_defaults ONLY if present on every single
+		operator of that type with the same value. This eliminates the need
+		for a 'reset to default' marker.
+
+		Supported properties: parameters, flags, size, color, tags.
+
+		Returns dict: {op_type: {'parameters': {...}, 'flags': [...], ...}}
+		"""
+		from collections import Counter, defaultdict
+
+		type_counts = Counter()
+		# {op_type: {(par_name, val_json): count}}
+		type_par_counts = defaultdict(lambda: Counter())
+		# {op_type: {json_key: count}} for atomic properties
+		type_flags_counts = defaultdict(lambda: Counter())
+		type_size_counts = defaultdict(lambda: Counter())
+		type_color_counts = defaultdict(lambda: Counter())
+		type_tags_counts = defaultdict(lambda: Counter())
+
+		def walk(ops):
+			for op_data in ops:
+				op_type = op_data.get('type', '')
+				type_counts[op_type] += 1
+				for pname, pval in op_data.get('parameters', {}).items():
+					key = (pname, json.dumps(pval, sort_keys=True))
+					type_par_counts[op_type][key] += 1
+				if 'flags' in op_data:
+					type_flags_counts[op_type][json.dumps(sorted(op_data['flags']))] += 1
+				if 'size' in op_data:
+					type_size_counts[op_type][json.dumps(op_data['size'])] += 1
+				if 'color' in op_data:
+					type_color_counts[op_type][json.dumps(op_data['color'])] += 1
+				if 'tags' in op_data:
+					type_tags_counts[op_type][json.dumps(sorted(op_data['tags']))] += 1
+				if 'children' in op_data:
+					walk(op_data['children'])
+
+		walk(operators)
+
+		result = {}
+		for op_type, count in type_counts.items():
+			if count < 2:
+				continue
+
+			type_default = {}
+
+			# Parameters (dict-level merge on import)
+			unanimous = {}
+			for (pname, pval_json), pcount in type_par_counts[op_type].items():
+				if pcount == count:
+					unanimous[pname] = json.loads(pval_json)
+			if unanimous:
+				type_default['parameters'] = unanimous
+
+			# Atomic properties (whole-value replacement on import)
+			for prop, counter in [
+				('flags', type_flags_counts),
+				('size', type_size_counts),
+				('color', type_color_counts),
+				('tags', type_tags_counts),
+			]:
+				prop_counter = counter[op_type]
+				if len(prop_counter) == 1:
+					val_json, val_count = next(iter(prop_counter.items()))
+					if val_count == count:
+						type_default[prop] = json.loads(val_json)
+
+			if type_default:
+				result[op_type] = type_default
+
+		return result
+
+	@staticmethod
+	def _strip_type_defaults(operators, type_defaults):
+		"""Remove properties from operators that match their type_defaults.
+
+		Strips parameters (per-key), flags, size, color, and tags (whole-value).
+		Modifies operators in-place.
+		"""
+		def walk(ops):
+			for op_data in ops:
+				op_type = op_data.get('type', '')
+				td = type_defaults.get(op_type, {})
+
+				# Parameters (per-key stripping)
+				td_params = td.get('parameters', {})
+				if td_params and 'parameters' in op_data:
+					for pname in list(op_data['parameters'].keys()):
+						if pname in td_params:
+							pval = op_data['parameters'][pname]
+							if json.dumps(pval, sort_keys=True) == json.dumps(td_params[pname], sort_keys=True):
+								del op_data['parameters'][pname]
+					if not op_data['parameters']:
+						del op_data['parameters']
+
+				# Atomic properties (whole-value stripping)
+				if 'flags' in td and 'flags' in op_data:
+					if sorted(op_data['flags']) == sorted(td['flags']):
+						del op_data['flags']
+				if 'size' in td and 'size' in op_data:
+					if op_data['size'] == td['size']:
+						del op_data['size']
+				if 'color' in td and 'color' in op_data:
+					if op_data['color'] == td['color']:
+						del op_data['color']
+				if 'tags' in td and 'tags' in op_data:
+					if sorted(op_data['tags']) == sorted(td['tags']):
+						del op_data['tags']
+
+				if 'children' in op_data:
+					walk(op_data['children'])
+
+		walk(operators)
+
+	@staticmethod
+	def _merge_type_defaults(op_defs, type_defaults):
+		"""Merge type_defaults into operator defs for import.
+
+		Parameters use dict-level merge (operator keys override individual
+		defaults). Flags, size, color, and tags use whole-value replacement
+		(operator either has its own or inherits entirely from type_defaults).
+
+		Modifies in-place.
+		"""
+		if not type_defaults:
+			return
+
+		def walk(ops):
+			for op_def in ops:
+				op_type = op_def.get('type', '')
+				td = type_defaults.get(op_type, {})
+				if not td:
+					if 'children' in op_def:
+						walk(op_def['children'])
+					continue
+
+				# Parameters (dict-level merge)
+				td_params = td.get('parameters', {})
+				if td_params:
+					if 'parameters' not in op_def:
+						op_def['parameters'] = {}
+					merged = dict(td_params)
+					merged.update(op_def['parameters'])
+					op_def['parameters'] = merged
+
+				# Atomic properties (whole-value, op-specific wins)
+				for prop in ('flags', 'size', 'color', 'tags'):
+					if prop in td and prop not in op_def:
+						op_def[prop] = list(td[prop])
+
+				if 'children' in op_def:
+					walk(op_def['children'])
+
+		walk(op_defs)
+
+	@staticmethod
+	def _extract_par_templates(operators):
+		"""Extract repeated custom parameter page definitions into templates.
+
+		Groups by page: if the same page definition (all par defs sans values)
+		appears on 2+ operators, it becomes a named template.
+
+		Returns (par_templates_dict, operators) — operators modified in-place.
+		"""
+		from collections import defaultdict
+
+		def def_key(par_def):
+			"""Hashable key from a par definition, excluding value/values."""
+			return json.dumps(
+				{k: v for k, v in par_def.items() if k not in ('value', 'values')},
+				sort_keys=True)
+
+		def page_key(page_defs):
+			"""Hashable key for a page's full definition set."""
+			return json.dumps([def_key(p) for p in page_defs], sort_keys=True)
+
+		# Pass 1: count occurrences of each page definition
+		page_counts = defaultdict(int)
+
+		def count_walk(ops):
+			for op_data in ops:
+				cp = op_data.get('custom_pars', {})
+				if isinstance(cp, dict):
+					for page_name, page_defs in cp.items():
+						if isinstance(page_defs, list):
+							pk = page_key(page_defs)
+							page_counts[pk] += 1
+				if 'children' in op_data:
+					count_walk(op_data['children'])
+
+		count_walk(operators)
+
+		# Build templates for pages appearing 2+ times
+		templates = {}
+		key_to_name = {}
+		name_seen = defaultdict(int)
+
+		# Sort by key for deterministic naming
+		for pk in sorted(page_counts.keys()):
+			count = page_counts[pk]
+			if count < 2:
+				continue
+			defs_json_list = json.loads(pk)
+			# Reconstruct the actual definitions
+			defs = [json.loads(d) for d in defs_json_list]
+
+			# Derive name from first par's page (which we don't have here,
+			# so use the template content to build a name)
+			# Since we don't store page in the def, we'll name by content hash
+			# Actually, let's find the page name from operators
+			template_name = None
+			# We'll set name during replacement pass when we see the page key
+			key_to_name[pk] = defs  # Store defs temporarily
+
+		if not key_to_name:
+			return {}, operators
+
+		# Pass 2: replace inline definitions with template references
+		# Also collect page names for template naming
+		pk_to_page_name = {}
+
+		def replace_walk(ops):
+			for op_data in ops:
+				cp = op_data.get('custom_pars', {})
+				if isinstance(cp, dict):
+					for page_name in list(cp.keys()):
+						page_defs = cp[page_name]
+						if not isinstance(page_defs, list):
+							continue
+						pk = page_key(page_defs)
+						if pk not in key_to_name:
+							continue
+
+						# Record page name for this template
+						if pk not in pk_to_page_name:
+							pk_to_page_name[pk] = page_name
+
+						# Build template reference with value overrides
+						ref = {'$t': pk}  # Placeholder, will replace with real name
+						for par_def in page_defs:
+							pname = par_def.get('name', '')
+							if 'value' in par_def:
+								ref[pname] = par_def['value']
+							elif 'values' in par_def:
+								ref[pname] = par_def['values']
+						cp[page_name] = ref
+				if 'children' in op_data:
+					replace_walk(op_data['children'])
+
+		replace_walk(operators)
+
+		# Assign template names from collected page names
+		final_templates = {}
+		pk_to_final_name = {}
+		for pk, defs in key_to_name.items():
+			page_name = pk_to_page_name.get(pk, 'custom')
+			base_name = page_name.lower().replace(' ', '_')
+			name_seen[base_name] += 1
+			if name_seen[base_name] > 1:
+				template_name = f'{base_name}_{name_seen[base_name]}'
+			else:
+				template_name = base_name
+			final_templates[template_name] = defs
+			pk_to_final_name[pk] = template_name
+
+		# Replace placeholder pk in $t references with real names
+		def finalize_walk(ops):
+			for op_data in ops:
+				cp = op_data.get('custom_pars', {})
+				if isinstance(cp, dict):
+					for page_name, page_val in cp.items():
+						if isinstance(page_val, dict) and '$t' in page_val:
+							pk = page_val['$t']
+							if pk in pk_to_final_name:
+								page_val['$t'] = pk_to_final_name[pk]
+				if 'children' in op_data:
+					finalize_walk(op_data['children'])
+
+		finalize_walk(operators)
+
+		return final_templates, operators
+
+	@staticmethod
+	def _resolve_par_templates(op_defs, par_templates):
+		"""Resolve $t template references in custom_pars back to full definitions.
+
+		Modifies op_defs in-place.
+		"""
+		if not par_templates:
+			return
+
+		def walk(ops):
+			for op_def in ops:
+				cp = op_def.get('custom_pars', {})
+				if isinstance(cp, dict):
+					for page_name, page_val in list(cp.items()):
+						if isinstance(page_val, dict) and '$t' in page_val:
+							template_name = page_val['$t']
+							template_defs = par_templates.get(template_name, [])
+							if not template_defs:
+								continue
+							# Reconstruct full definitions with value overrides
+							resolved = []
+							for par_def in template_defs:
+								merged = dict(par_def)
+								pname = par_def.get('name', '')
+								if pname in page_val:
+									override = page_val[pname]
+									if isinstance(override, list):
+										merged['values'] = override
+									else:
+										merged['value'] = override
+								resolved.append(merged)
+							cp[page_name] = resolved
+				if 'children' in op_def:
+					walk(op_def['children'])
+
+		walk(op_defs)
+
 	def _getEmbodyVersion(self):
 		"""Get the Embody version string from the ownerComp's Version parameter."""
 		try:
@@ -1747,9 +2418,17 @@ class TDNExt:
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if table:
+				headers = [table[0, c].val for c in range(table.numCols)]
+				has_strategy = 'strategy' in headers
 				for i in range(1, table.numRows):
-					if (table[i, 'path'].val == root_op.path
-							and table[i, 'type'].val == 'tdn'):
+					if table[i, 'path'].val != root_op.path:
+						continue
+					is_tdn = False
+					if has_strategy:
+						is_tdn = table[i, 'strategy'].val == 'tdn'
+					else:
+						is_tdn = table[i, 'type'].val == 'tdn'
+					if is_tdn:
 						try:
 							return int(table[i, 'build'].val)
 						except (ValueError, TypeError):
@@ -1789,13 +2468,12 @@ class TDNExt:
 	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None):
 		"""Add/update a TDN entry in the externalizations table."""
 		try:
-			embody_ext = self.ownerComp.ext.Embody
-			table = embody_ext.Externalizations
+			table = self.ownerComp.ext.Embody.Externalizations
 			if not table:
 				return
 
 			from pathlib import Path
-			rel_path = embody_ext.normalizePath(
+			rel_path = self.ownerComp.ext.Embody.normalizePath(
 				str(Path(file_path).relative_to(project.folder)))
 			timestamp = datetime.now(timezone.utc).strftime(
 				'%Y-%m-%d %H:%M:%S UTC')
@@ -1803,29 +2481,46 @@ class TDNExt:
 			build_str = str(build_num) if build_num is not None else ''
 			tb_str = str(touch_build) if touch_build is not None else ''
 
-			# Update existing row if found
+			# Check for strategy column (new schema)
+			headers = [table[0, c].val for c in range(table.numCols)]
+			has_strategy = 'strategy' in headers
+
+			# Update existing row if found — check strategy='tdn' or type='tdn'
 			for i in range(1, table.numRows):
-				if (table[i, 'path'].val == root_path
-						and table[i, 'type'].val == 'tdn'):
+				row_path = table[i, 'path'].val
+				if row_path != root_path:
+					continue
+				is_tdn_row = False
+				if has_strategy and table[i, 'strategy'].val == 'tdn':
+					is_tdn_row = True
+				elif table[i, 'type'].val == 'tdn':
+					is_tdn_row = True
+				if is_tdn_row:
 					table[i, 'rel_file_path'] = rel_path
 					table[i, 'timestamp'] = timestamp
+					table[i, 'dirty'] = ''
 					table[i, 'build'] = build_str
 					table[i, 'touch_build'] = tb_str
 					return
 
-			# Add new row
-			table.appendRow(
-				[root_path, 'tdn', rel_path, timestamp, '', build_str, tb_str])
+			# Add new row (schema-aware)
+			if has_strategy:
+				# Determine COMP type
+				target = op(root_path)
+				comp_type = target.type if target else 'base'
+				table.appendRow([root_path, comp_type, 'tdn', rel_path,
+								 timestamp, '', build_str, tb_str])
+			else:
+				table.appendRow([root_path, 'tdn', rel_path, timestamp,
+								 '', build_str, tb_str])
 		except Exception as e:
 			self._log(f'Failed to track TDN export: {e}', 'WARNING')
 
 	def _log(self, message, level='INFO'):
 		"""Log via Embody's centralized logger."""
 		try:
-			embody_ext = self.ownerComp.ext.Embody
-			if hasattr(embody_ext, 'Log'):
-				embody_ext.Log(message, level, _depth=2)
-				return
+			self.ownerComp.ext.Embody.Log(message, level, _depth=2)
+			return
 		except Exception:
 			pass  # Fallback below handles this — avoid recursion in logger
 		# Fallback if Embody ext unavailable

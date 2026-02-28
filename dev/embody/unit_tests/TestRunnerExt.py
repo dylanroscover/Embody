@@ -472,10 +472,10 @@ class TestRunnerExt:
 
         # Scan for test_*.py files
         for filename in sorted(os.listdir(test_dir)):
-            if not filename.startswith('test_') or not filename.endswith('.py'):
+            if not filename.startswith('test_') or not (filename.endswith('.py') or filename.endswith('.txt')):
                 continue
 
-            module_name = filename[:-3]  # Remove .py extension
+            module_name = filename.rsplit('.', 1)[0]  # Remove .py or .txt extension
 
             if filter_name and module_name != filter_name:
                 continue
@@ -483,7 +483,12 @@ class TestRunnerExt:
             try:
                 # Load module from file
                 module_path = os.path.join(test_dir, filename)
-                spec = importlib.util.spec_from_file_location(module_name, module_path)
+                if filename.endswith('.txt'):
+                    from importlib.machinery import SourceFileLoader
+                    loader = SourceFileLoader(module_name, module_path)
+                    spec = importlib.util.spec_from_file_location(module_name, module_path, loader=loader)
+                else:
+                    spec = importlib.util.spec_from_file_location(module_name, module_path)
                 if spec is None or spec.loader is None:
                     self._addResult(module_name, 'DISCOVERY', 'ERROR',
                                   f'Failed to load module spec: {module_path}')

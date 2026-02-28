@@ -77,3 +77,33 @@ class TestParameterTracker(EmbodyTestCase):
     def test_removeComp_nonexistent_no_error(self):
         # Removing a path that doesn't exist should not raise
         self.tracker.removeComp('/nonexistent/comp/path')
+
+    # --- bindExpr tracking ---
+
+    def test_captureParameters_includes_bindExpr(self):
+        comp = self.sandbox.create(baseCOMP, 'bindexpr_capture')
+        result = self.tracker.captureParameters(comp)
+        for name, entry in result.items():
+            self.assertDictHasKey(entry, 'bindExpr')
+
+    def test_compareParameters_detects_bindExpr_change(self):
+        # Create two comps so we can bind one's param to the other
+        source = self.sandbox.create(geometryCOMP, 'bind_source')
+        target = self.sandbox.create(geometryCOMP, 'bind_target')
+        # Set up a bind expression on target
+        target.par.tx.bindExpr = f"op('{source.path}').par.tx"
+        self.tracker.updateParamStore(target)
+        # Change the bind expression to a different source
+        target.par.tx.bindExpr = f"op('{source.path}').par.ty"
+        self.assertTrue(self.tracker.compareParameters(target))
+
+    # --- rename tracking ---
+
+    def test_removeComp_clears_old_path_for_rename(self):
+        comp = self.sandbox.create(baseCOMP, 'rename_old')
+        old_path = comp.path
+        self.tracker.updateParamStore(comp)
+        self.assertIn(old_path, self.tracker.param_store)
+        # Simulate rename cleanup: remove old path
+        self.tracker.removeComp(old_path)
+        self.assertNotIn(old_path, self.tracker.param_store)

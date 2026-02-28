@@ -87,7 +87,8 @@ def onProjectPreSave():
     # save out component
     save_path = Path(project.folder).parents[0] / 'release' / f"{comp.name}-v{new_version}.tox"
     comp.save(str(save_path))
-    print(f'saved {save_path}')
+    rel_path = Path('release') / f"{comp.name}-v{new_version}.tox"
+    comp.Log(f'saved {rel_path}', 'INFO')
 
 def onProjectPostSave():
     return

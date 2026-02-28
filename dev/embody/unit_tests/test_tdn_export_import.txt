@@ -32,7 +32,7 @@ class TestTDNExportImport(EmbodyTestCase):
         self.assertDictHasKey(tdn, 'format')
         self.assertEqual(tdn['format'], 'tdn')
         self.assertDictHasKey(tdn, 'version')
-        self.assertDictHasKey(tdn, 'root')
+        self.assertDictHasKey(tdn, 'network_path')
 
     def test_export_includes_children(self):
         self.sandbox.create(baseCOMP, 'child_a')
@@ -184,3 +184,120 @@ class TestTDNExportImport(EmbodyTestCase):
         self.assertIsNotNone(imported_parent)
         nested = imported_parent.op('rt_nested_child')
         self.assertIsNotNone(nested)
+
+    # --- Import: clear_first behavior ---
+
+    def test_import_clear_first_removes_existing_then_imports(self):
+        """clear_first should destroy existing children before importing new ones."""
+        target = self.sandbox.create(baseCOMP, 'cf_target')
+        target.create(textDAT, 'old_dat')
+        tdn = {'operators': [
+            {'name': 'new_dat', 'type': 'textDAT'}
+        ]}
+        result = self.tdn.ImportNetwork(
+            target_path=target.path, tdn=tdn, clear_first=True)
+        self.assertTrue(result.get('success'))
+        child_names = [c.name for c in target.children]
+        self.assertNotIn('old_dat', child_names)
+        self.assertIn('new_dat', child_names)
+
+    def test_import_without_clear_keeps_existing(self):
+        """Without clear_first, existing children should remain."""
+        target = self.sandbox.create(baseCOMP, 'merge_target')
+        target.create(textDAT, 'existing_dat')
+        tdn = {'operators': [
+            {'name': 'added_dat', 'type': 'textDAT'}
+        ]}
+        result = self.tdn.ImportNetwork(
+            target_path=target.path, tdn=tdn, clear_first=False)
+        self.assertTrue(result.get('success'))
+        child_names = [c.name for c in target.children]
+        self.assertIn('existing_dat', child_names)
+        self.assertIn('added_dat', child_names)
+
+    # --- Import: merge-mode operator tracking ---
+
+    def test_import_merge_mode_renamed_op_gets_correct_position(self):
+        """When TD auto-renames a conflicting operator, position should
+        apply to the imported op, not the pre-existing one."""
+        target = self.sandbox.create(baseCOMP, 'pos_target')
+        # Create pre-existing operator
+        existing = target.create(textDAT, 'text1')
+        existing.nodeX = 100
+        existing.nodeY = 100
+        # Import a TDN that also defines 'text1' at a different position
+        tdn = {'operators': [
+            {'name': 'text1', 'type': 'textDAT', 'position': [300, 400]}
+        ]}
+        result = self.tdn.ImportNetwork(
+            target_path=target.path, tdn=tdn, clear_first=False)
+        self.assertTrue(result.get('success'))
+        # The pre-existing operator should keep its original position
+        self.assertEqual(existing.nodeX, 100)
+        self.assertEqual(existing.nodeY, 100)
+        # The imported op (auto-renamed) should be at the TDN position
+        created_path = result['created_paths'][0]
+        imported_op = op(created_path)
+        self.assertIsNotNone(imported_op)
+        self.assertEqual(imported_op.nodeX, 300)
+        self.assertEqual(imported_op.nodeY, 400)
+
+    def test_import_merge_mode_renamed_op_gets_correct_params(self):
+        """When TD auto-renames, parameters should apply to the imported op."""
+        target = self.sandbox.create(baseCOMP, 'par_target')
+        existing = target.create(textDAT, 'text1')
+        existing.par.language = 'python'
+        tdn = {'operators': [
+            {'name': 'text1', 'type': 'textDAT',
+             'parameters': {'language': 'glsl'}}
+        ]}
+        result = self.tdn.ImportNetwork(
+            target_path=target.path, tdn=tdn, clear_first=False)
+        self.assertTrue(result.get('success'))
+        # Pre-existing should keep its parameter
+        self.assertEqual(existing.par.language.eval(), 'python')
+        # Imported should have the TDN parameter
+        created_path = result['created_paths'][0]
+        imported_op = op(created_path)
+        self.assertEqual(imported_op.par.language.eval(), 'glsl')
+
+    def test_import_merge_mode_logs_rename_warning(self):
+        """When an operator is auto-renamed, a warning should be logged."""
+        target = self.sandbox.create(baseCOMP, 'warn_target')
+        target.create(textDAT, 'text1')
+        tdn = {'operators': [
+            {'name': 'text1', 'type': 'textDAT'}
+        ]}
+        self.tdn.ImportNetwork(
+            target_path=target.path, tdn=tdn, clear_first=False)
+        # Check that the imported op has a different name
+        child_names = [c.name for c in target.children]
+        self.assertEqual(len(child_names), 2)
+
+    # --- Import: position round-trip ---
+
+    def test_import_preserves_positions(self):
+        """Positions from TDN should be applied correctly."""
+        target = self.sandbox.create(baseCOMP, 'posrt_target')
+        tdn = {'operators': [
+            {'name': 'pos_op', 'type': 'textDAT',
+             'position': [250, 175]}
+        ]}
+        self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        imported = target.op('pos_op')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.nodeX, 250)
+        self.assertEqual(imported.nodeY, 175)
+
+    def test_import_preserves_size(self):
+        """Size from TDN should be applied correctly."""
+        target = self.sandbox.create(baseCOMP, 'sizert_target')
+        tdn = {'operators': [
+            {'name': 'size_op', 'type': 'textDAT',
+             'position': [0, 0], 'size': [300, 150]}
+        ]}
+        self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        imported = target.op('size_op')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.nodeWidth, 300)
+        self.assertEqual(imported.nodeHeight, 150)

@@ -4,7 +4,7 @@
   "title": "TDN (TouchDesigner Network)",
   "description": "JSON schema for TDN v1.0 — a human-readable format for representing TouchDesigner operator networks.",
   "type": "object",
-  "required": ["format", "version", "generator", "td_build", "exported_at", "root", "options", "operators"],
+  "required": ["format", "version", "generator", "td_build", "exported_at", "network_path", "options", "operators"],
   "additionalProperties": false,
   "properties": {
     "format": {
@@ -21,7 +21,7 @@
     },
     "generator": {
       "type": "string",
-      "description": "Tool that produced the file (e.g., \"Embody/5.0.79\")."
+      "description": "Tool that produced the file (e.g., \"Embody/5.0.93\")."
     },
     "td_build": {
       "type": "string",
@@ -32,9 +32,9 @@
       "format": "date-time",
       "description": "ISO 8601 UTC timestamp of export."
     },
-    "root": {
+    "network_path": {
       "type": "string",
-      "description": "The COMP path that was exported (e.g., \"/\" for the entire project)."
+      "description": "The COMP path represented by this file (e.g., \"/\" for the entire project)."
     },
     "options": {
       "type": "object",
@@ -52,6 +52,53 @@
       "enum": ["percomp"],
       "description": "Present in per-COMP export mode. Indicates this file is part of a split export."
     },
+    "type_defaults": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/parameterValue" },
+            "description": "Parameter values shared unanimously by all operators of this type."
+          },
+          "flags": {
+            "$ref": "#/$defs/flagsArray",
+            "description": "Flags shared unanimously by all operators of this type."
+          },
+          "size": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Node tile size [width, height] shared unanimously by all operators of this type."
+          },
+          "color": {
+            "type": "array",
+            "items": { "type": "number", "minimum": 0, "maximum": 1 },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Node color [r, g, b] shared unanimously by all operators of this type."
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Operator tags shared unanimously by all operators of this type."
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Per-type shared properties (parameters, flags, size, color, tags). Only types with 2+ operators and unanimous values are included."
+    },
+    "par_templates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/customParameterDef" },
+        "description": "Array of parameter definitions (without values) for this template."
+      },
+      "description": "Reusable custom parameter page definitions. Referenced by $t in operator custom_pars."
+    },
     "operators": {
       "type": "array",
       "items": { "$ref": "#/$defs/operator" },
@@ -61,7 +108,7 @@
 
   "$defs": {
     "parameterValue": {
-      "description": "A parameter value: constant (string, number, boolean), expression object, or bind object.",
+      "description": "A parameter value: constant (string, number, boolean), expression ('=...'), bind ('~...'), or legacy dict format.",
       "oneOf": [
         { "type": "string" },
         { "type": "number" },
@@ -73,7 +120,7 @@
           "properties": {
             "expr": {
               "type": "string",
-              "description": "Python expression evaluated by TouchDesigner each frame."
+              "description": "Legacy format: Python expression evaluated by TouchDesigner each frame."
             }
           }
         },
@@ -84,14 +131,25 @@
           "properties": {
             "bind": {
               "type": "string",
-              "description": "Bind expression referencing another parameter."
+              "description": "Legacy format: Bind expression referencing another parameter."
             }
           }
         }
       ]
     },
 
-    "connection": {
+    "connectionArray": {
+      "description": "Array of source operator references. Position equals input index. null for empty slots.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string", "description": "Source operator — sibling name or full path." },
+          { "type": "null", "description": "No connection at this index." }
+        ]
+      }
+    },
+
+    "legacyConnection": {
       "type": "object",
       "required": ["index", "source"],
       "additionalProperties": false,
@@ -108,54 +166,35 @@
       }
     },
 
-    "flags": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "Operator flags. Only flags differing from their defaults are included.",
-      "properties": {
-        "bypass": {
-          "type": "boolean",
-          "default": false,
-          "description": "Operator is skipped in the processing chain."
-        },
-        "lock": {
-          "type": "boolean",
-          "default": false,
-          "description": "DAT content is locked from updating on recook."
-        },
-        "display": {
-          "type": "boolean",
-          "default": false,
-          "description": "Marks this operator as the display output (blue flag)."
-        },
-        "render": {
-          "type": "boolean",
-          "default": false,
-          "description": "Marks this operator for rendering (purple flag)."
-        },
-        "viewer": {
-          "type": "boolean",
-          "default": false,
-          "description": "Shows the operator's viewer on its node tile."
-        },
-        "expose": {
-          "type": "boolean",
-          "default": true,
-          "description": "Whether the node is visible in the network editor."
-        },
-        "allowCooking": {
-          "type": "boolean",
-          "default": true,
-          "description": "Whether the COMP and its children are allowed to cook. COMPs only."
-        }
+    "flagsArray": {
+      "description": "Array of flag name strings. Names without prefix set the flag to true; names with '-' prefix set to false.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^-?(bypass|lock|display|render|viewer|expose|allowCooking)$"
       }
     },
 
-    "customParameter": {
+    "legacyFlags": {
       "type": "object",
-      "required": ["name", "page", "style"],
       "additionalProperties": false,
-      "description": "Full definition of a custom parameter, including range, menu entries, and current value.",
+      "description": "Legacy format: flags as object with boolean values.",
+      "properties": {
+        "bypass": { "type": "boolean" },
+        "lock": { "type": "boolean" },
+        "display": { "type": "boolean" },
+        "render": { "type": "boolean" },
+        "viewer": { "type": "boolean" },
+        "expose": { "type": "boolean" },
+        "allowCooking": { "type": "boolean" }
+      }
+    },
+
+    "customParameterDef": {
+      "type": "object",
+      "required": ["name", "style"],
+      "additionalProperties": false,
+      "description": "Definition of a custom parameter (structure, range, etc.). Used in par_templates and inline page arrays.",
       "properties": {
         "name": {
           "type": "string",
@@ -164,10 +203,6 @@
         "label": {
           "type": "string",
           "description": "Display label. Omitted when it matches the name."
-        },
-        "page": {
-          "type": "string",
-          "description": "Custom parameter page name."
         },
         "style": {
           "type": "string",
@@ -190,67 +225,63 @@
         "default": {
           "description": "Default value. Omitted when it equals a standard default (0, 0.0, \"\", or false)."
         },
-        "min": {
-          "type": "number",
-          "description": "Minimum value. Omitted when 0."
-        },
-        "max": {
-          "type": "number",
-          "description": "Maximum value. Omitted when 1."
-        },
-        "clampMin": {
-          "type": "boolean",
-          "description": "Whether the value is clamped to min."
-        },
-        "clampMax": {
-          "type": "boolean",
-          "description": "Whether the value is clamped to max."
-        },
-        "normMin": {
-          "type": "number",
-          "description": "Normalized range minimum (for slider UI). Omitted when 0."
-        },
-        "normMax": {
-          "type": "number",
-          "description": "Normalized range maximum (for slider UI). Omitted when 1."
-        },
-        "menuNames": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Internal names for each menu option."
-        },
-        "menuLabels": {
-          "type": "array",
-          "items": { "type": "string" },
-          "description": "Display labels for each menu option. Omitted when they match menuNames."
-        },
-        "menuSource": {
-          "type": "string",
-          "description": "DAT path or expression that dynamically populates the menu."
-        },
-        "startSection": {
-          "type": "boolean",
-          "description": "Whether this parameter starts a new visual section."
-        },
-        "readOnly": {
-          "type": "boolean",
-          "description": "Whether the parameter is read-only."
-        },
+        "min": { "type": "number", "description": "Minimum value. Omitted when 0." },
+        "max": { "type": "number", "description": "Maximum value. Omitted when 1." },
+        "clampMin": { "type": "boolean", "description": "Whether the value is clamped to min." },
+        "clampMax": { "type": "boolean", "description": "Whether the value is clamped to max." },
+        "normMin": { "type": "number", "description": "Normalized range minimum. Omitted when 0." },
+        "normMax": { "type": "number", "description": "Normalized range maximum. Omitted when 1." },
+        "menuNames": { "type": "array", "items": { "type": "string" }, "description": "Internal names for each menu option." },
+        "menuLabels": { "type": "array", "items": { "type": "string" }, "description": "Display labels for each menu option." },
+        "menuSource": { "type": "string", "description": "DAT path or expression that dynamically populates the menu." },
+        "startSection": { "type": "boolean", "description": "Whether this parameter starts a new visual section." },
+        "readOnly": { "type": "boolean", "description": "Whether the parameter is read-only." },
         "value": {
           "$ref": "#/$defs/parameterValue",
-          "description": "Current value for single-component parameters. Omitted when it equals the default."
+          "description": "Current value for single-component parameters."
         },
         "values": {
           "type": "array",
           "items": { "$ref": "#/$defs/parameterValue" },
-          "description": "Current values for multi-component parameters. Omitted when all equal their defaults."
+          "description": "Current values for multi-component parameters."
         }
+      }
+    },
+
+    "templateReference": {
+      "type": "object",
+      "required": ["$t"],
+      "description": "Reference to a par_template with value overrides. $t names the template; other keys are parameter name to value overrides.",
+      "properties": {
+        "$t": {
+          "type": "string",
+          "description": "Template name (matches a key in par_templates)."
+        }
+      },
+      "additionalProperties": { "$ref": "#/$defs/parameterValue" }
+    },
+
+    "customParsPageGrouped": {
+      "type": "object",
+      "description": "Custom parameters grouped by page name. Each page is either an array of parameter definitions or a template reference.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": { "$ref": "#/$defs/customParameterDef" },
+            "description": "Inline parameter definitions for this page."
+          },
+          {
+            "$ref": "#/$defs/templateReference",
+            "description": "Template reference with value overrides."
+          }
+        ]
       }
     },
 
     "operator": {
       "type": "object",
-      "required": ["name", "type", "position"],
+      "required": ["name", "type"],
       "additionalProperties": false,
       "description": "A TouchDesigner operator with its non-default properties.",
       "properties": {
@@ -267,7 +298,7 @@
           "items": { "type": "number" },
           "minItems": 2,
           "maxItems": 2,
-          "description": "Node tile position [x, y] in the network editor."
+          "description": "Node tile position [x, y]. Omitted when [0, 0] (default)."
         },
         "size": {
           "type": "array",
@@ -281,7 +312,7 @@
           "items": { "type": "number", "minimum": 0, "maximum": 1 },
           "minItems": 3,
           "maxItems": 3,
-          "description": "Node color [r, g, b] as floats 0.0–1.0. Default: [0.545, 0.545, 0.545]."
+          "description": "Node color [r, g, b] as floats 0.0-1.0. Default: [0.545, 0.545, 0.545]."
         },
         "comment": {
           "type": "string",
@@ -295,25 +326,39 @@
         "parameters": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/parameterValue" },
-          "description": "Non-default built-in parameter values."
+          "description": "Non-default built-in parameter values. Expressions use '=' prefix, binds use '~' prefix."
         },
         "custom_pars": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/customParameter" },
-          "description": "Custom parameter definitions (COMPs only)."
+          "oneOf": [
+            { "$ref": "#/$defs/customParsPageGrouped" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/customParameterDef" },
+              "description": "Legacy format: flat array of custom parameter definitions with 'page' field."
+            }
+          ],
+          "description": "Custom parameter definitions (COMPs only). Preferred format: page-grouped object."
         },
         "flags": {
-          "$ref": "#/$defs/flags"
+          "oneOf": [
+            { "$ref": "#/$defs/flagsArray" },
+            { "$ref": "#/$defs/legacyFlags" }
+          ],
+          "description": "Operator flags. Preferred format: string array. Legacy format: object with boolean values."
         },
         "inputs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/connection" },
-          "description": "Operator-level input connections (left/right wires)."
+          "oneOf": [
+            { "$ref": "#/$defs/connectionArray" },
+            { "type": "array", "items": { "$ref": "#/$defs/legacyConnection" } }
+          ],
+          "description": "Operator-level input connections. Preferred format: string array. Legacy format: object array."
         },
         "comp_inputs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/connection" },
-          "description": "COMP-level input connections (top/bottom wires). COMPs only."
+          "oneOf": [
+            { "$ref": "#/$defs/connectionArray" },
+            { "type": "array", "items": { "$ref": "#/$defs/legacyConnection" } }
+          ],
+          "description": "COMP-level input connections. Preferred format: string array. Legacy format: object array."
         },
         "dat_content": {
           "oneOf": [

@@ -474,7 +474,15 @@ TDN (TouchDesigner Network) is a JSON-based format for representing TD operator 
 
 **Key design decisions:**
 - **Non-default only**: Only parameters whose values differ from defaults are exported, keeping files minimal
-- **7-phase import**: Operators are created first, then custom parameters, parameter values, flags, connections, DAT content, and positions — in that specific order to satisfy dependencies
+- **Expression shorthand**: Expressions use `=` prefix (e.g., `"=me.digits"`), bind expressions use `~` prefix — no wrapper objects
+- **Type defaults**: Parameters shared unanimously across all operators of a type are hoisted into a top-level `type_defaults` section
+- **Parameter templates**: Identical custom parameter page definitions across 2+ operators are extracted into a `par_templates` section and referenced via `$t`
+- **Compact JSON**: Short arrays (position, size, color, tags, connections) are inlined to single lines
+- **Flags as arrays**: `["viewer", "display"]` instead of `{"viewer": true, "display": true}`; `-` prefix for negated true-defaults
+- **Page-grouped custom pars**: `custom_pars` is a dict keyed by page name, not a flat array with `"page"` on every entry
+- **Simplified connections**: `["noise1"]` instead of `[{"index": 0, "source": "noise1"}]`; array position equals input index
+- **Optional position**: Operators at `[0, 0]` omit the `position` field entirely
+- **Pre-phase + 7-phase import**: Templates and type defaults are resolved first, then operators are created, custom parameters, parameter values, flags, connections, DAT content, and positions — in that specific order to satisfy dependencies
 - **Relative source references**: Connections reference siblings by name only, falling back to full paths for cross-network references
 - **Palette clone detection**: COMPs cloned from `/sys/` are marked but their children are not exported (TD recreates them automatically)
 - **Per-COMP split mode**: Large networks can be exported as one `.tdn` file per COMP, creating a git-friendly directory structure
@@ -522,6 +530,7 @@ op.Embody.ext.Envoy.Stop()
 - **MCP input validation**: All tool handlers must validate inputs before passing to TD operations. Check that `op_path` is a valid path format, verify operators exist before operating on them, validate parameter names, and sanitize string inputs passed to `eval()` or `exec()`.
 - **Localhost binding**: Envoy must bind to `127.0.0.1`, never `0.0.0.0`. Binding to all interfaces would expose the MCP server to the local network and enable DNS rebinding attacks from malicious websites.
 - **Tool signatures are MCP schema**: FastMCP generates tool definitions from function signatures and docstrings in `_register_tools()`. Changing parameter names, type hints, or docstrings changes the tool's public MCP interface. Treat these as API contracts — changes may break client integrations.
+- **Never cache extension references in variables**: Always call extension methods directly inline — never store an extension reference in a local variable. Extension instances can become stale after TD reinitializes them (e.g., when an externalized `.py` changes on disk), and a cached reference will silently call methods on the dead old instance. Always use the full path every time: `self.ownerComp.ext.Embody.SomeMethod()`, `parent.Embody.ext.TDN.ExportNetwork()`, etc. The one exception is `getattr()` existence checks (e.g., `getattr(self.ownerComp.ext, 'TDN', None)`) where you guard with `if not ... return` and immediately call the live reference.
 
 ## File Editing Impact
 
@@ -927,18 +936,21 @@ class TestMyFeature(EmbodyTestCase):
 23. Using `fetch()` without `search=False` when local-only lookup is intended — by default it searches up the parent hierarchy, which may return a parent's value instead
 24. Calling `mod.moduleName.func()` in a loop without caching — re-resolves the DAT lookup every call. Cache: `m = mod.moduleName; m.func()`
 25. Assigning directly to a `tdu.Dependency` object (`dep = 5`) instead of its value (`dep.val = 5`) — destroys the Dependency, silently breaking all dependent expressions
+26. Caching extension references in local variables (`ext = self.ownerComp.ext.Embody`) — the reference goes stale when TD reinitializes the extension. Always call inline: `self.ownerComp.ext.Embody.Method()`
 
 ## Important Rules
 
-1. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure before creating or referencing operators. Projects may have `/project1`, children directly under `/`, or custom names.
-2. **Default to the current network** — when a user asks to create an operator without specifying a location, create it in the **current network**. Use `execute_python` with `result = ui.panes.current.owner.path` to determine the active network pane.
-3. **Never edit `externalizations.tsv` directly** — it is managed exclusively by Embody's tracking system
-4. **Always use forward slashes** in file paths for cross-platform compatibility
-5. **Always consult the TD wiki** before writing or modifying TouchDesigner Python code — confirm API behavior even if you're confident
-6. **Binary files** (`.toe`, `.tox`) cannot be read or diffed — work with the externalized `.py` files instead
-7. **Thread boundary**: `EnvoyMCPServer` (worker thread) must never import or call TouchDesigner modules. All TD access goes through `_execute_in_td()` → main thread
-8. **Safe deletion only**: Never delete files outside Embody's tracking. Use `safeDeleteFile()` / `isTrackedFile()`
-9. **Always check for errors after creating operators** — call `get_op_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
-10. **CLAUDE.md, text_claude.md, and text_help.py must ALWAYS be kept in sync.** The template at `dev/embody/Embody/text_claude.md` generates per-project CLAUDE.md files. The help text at `dev/embody/Embody/help/text_help.py` is displayed in the Embody UI. Any documentation changes (keyboard shortcuts, supported formats, features, workflow) must be applied to all three files.
-11. **Favor annotations over OP comments** — when documenting operators or groups of operators in the network, always use `create_annotation` (annotate mode with a title bar) instead of setting the `comment` property on individual operators. Annotations are more visible, support rich text, and can visually group related operators. Reserve OP comments for brief inline notes only.
-12. **Always analyze log files after MCP operations** — after running tests, bulk externalizations, or any multi-step MCP workflow, read the log file at `dev/logs/` to verify no errors occurred. The piggybacked `_logs` field and `get_logs` ring buffer only hold a limited window — errors from earlier in the operation may have been evicted. Grep the log file for `ERROR` and `WARNING` entries and resolve any issues before reporting success.
+1. **ALWAYS use Envoy MCP tools to inspect and modify anything inside TouchDesigner** — Envoy gives you full access to ALL operators, parameters, widget properties, and network state inside the live TD session. NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." Use `get_op`, `set_parameter`, `get_parameter`, `execute_python`, `query_network`, `export_network`, and other MCP tools to read and modify anything. This is the entire point of the Envoy MCP server. If you need to change a widget color, read a parameter expression, or inspect a component's children — use the MCP tools. The filesystem is for externalized `.py` files; MCP is for everything else in the live TD environment.
+2. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure before creating or referencing operators. Projects may have `/project1`, children directly under `/`, or custom names.
+3. **Default to the current network** — when a user asks to create an operator without specifying a location, create it in the **current network**. Use `execute_python` with `result = ui.panes.current.owner.path` to determine the active network pane.
+4. **Never edit `externalizations.tsv` directly** — it is managed exclusively by Embody's tracking system
+5. **Always use forward slashes** in file paths for cross-platform compatibility
+6. **Always consult the TD wiki** before writing or modifying TouchDesigner Python code — confirm API behavior even if you're confident
+7. **Binary files** (`.toe`, `.tox`) cannot be read or diffed as files on disk — use MCP tools to inspect their contents in the live TD session, and work with externalized `.py` files for version-controlled code
+8. **Thread boundary**: `EnvoyMCPServer` (worker thread) must never import or call TouchDesigner modules. All TD access goes through `_execute_in_td()` → main thread
+9. **Safe deletion only**: Never delete files outside Embody's tracking. Use `safeDeleteFile()` / `isTrackedFile()`
+10. **Always check for errors after creating operators** — call `get_op_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
+11. **CLAUDE.md, text_claude.md, and text_help.py must ALWAYS be kept in sync.** The template at `dev/embody/Embody/text_claude.md` generates per-project CLAUDE.md files. The help text at `dev/embody/Embody/help/text_help.py` is displayed in the Embody UI. Any documentation changes (keyboard shortcuts, supported formats, features, workflow) must be applied to all three files.
+12. **Favor annotations over OP comments** — when documenting operators or groups of operators in the network, always use `create_annotation` (annotate mode with a title bar) instead of setting the `comment` property on individual operators. Annotations are more visible, support rich text, and can visually group related operators. Reserve OP comments for brief inline notes only.
+13. **Always analyze log files after MCP operations** — after running tests, bulk externalizations, or any multi-step MCP workflow, read the log file at `dev/logs/` to verify no errors occurred. The piggybacked `_logs` field and `get_logs` ring buffer only hold a limited window — errors from earlier in the operation may have been evicted. Grep the log file for `ERROR` and `WARNING` entries and resolve any issues before reporting success.
+14. **Always update unit tests when modifying project code.** When changing any extension file (EmbodyExt.py, EnvoyExt.py, TDNExt.py, etc.), check whether existing unit tests assert against the changed behavior — if so, update those assertions to match the new code. Never leave tests asserting against a format or API that no longer exists. Run the relevant test suite after changes to confirm all tests pass.

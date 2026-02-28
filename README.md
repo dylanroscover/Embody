@@ -318,17 +318,17 @@ op.Embody.Error('Something broke')
 
 ## 🧪 Test Framework
 
-Embody includes a comprehensive automated test suite with **27 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **28 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ### ▶️ Running Tests
 
-From the TouchDesigner textport:
 ```python
-# Run all tests (non-blocking, one test per frame)
-op.unit_tests.RunTests()
-
-# Run a specific suite
-op.unit_tests.RunTests(suite_name='test_path_utils')
+op.unit_tests.RunTests()                              # All tests, one per frame (non-blocking)
+op.unit_tests.RunTests(suite_name='test_path_utils')   # Single suite
+op.unit_tests.RunTests(suite_name='...', test_name='test_foo')  # Single test
+op.unit_tests.RunTestsSync()                           # All in one frame (blocks TD)
+op.unit_tests.RunTestsDeferred()                       # One suite per frame
+op.unit_tests.GetResults()                             # Get last run results
 ```
 
 Via Envoy MCP: use the `run_tests` tool.
@@ -337,7 +337,7 @@ Via Envoy MCP: use the `run_tests` tool.
 
 - **13 core suites**: Externalization lifecycle, file management, tagging, rename/move, delete cleanup, path utilities, parameter tracking, logging
 - **11 MCP tool suites**: Operators, parameters, DAT content, connections, annotations, extensions, diagnostics, flags/position, code execution, externalization, performance
-- **2 TDN suites**: Export/import, helper functions
+- **3 TDN suites**: Export/import, helper functions, reconstruction round-trip
 - **1 infrastructure suite**: Server lifecycle
 
 ---
