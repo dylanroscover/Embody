@@ -22,7 +22,6 @@ TDN_VERSION = '1.0'
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
 	'externaltox', 'enableexternaltox', 'reloadtox',
-	'file', 'syncfile',
 	'reinitextensions', 'savebackup',
 	'savecustom', 'reloadcustom',
 	'pageindex',  # UI state (visible parameter page tab), not config
@@ -116,7 +115,8 @@ class TDNExt:
 	# =========================================================================
 
 	def ExportNetwork(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
-					  output_file: Optional[str] = None, max_depth: Optional[int] = None) -> dict[str, Any]:
+					  output_file: Optional[str] = None, max_depth: Optional[int] = None,
+					  cleanup_protected: Optional[list[str]] = None) -> dict[str, Any]:
 		"""
 		Export a TouchDesigner network to .tdn JSON format.
 
@@ -126,6 +126,9 @@ class TDNExt:
 			output_file: File path to write JSON to. 'auto' generates a name.
 						 None returns the dict without writing to disk.
 			max_depth: Maximum recursion depth (None = unlimited)
+			cleanup_protected: List of absolute .tdn file paths that must NOT
+				be deleted by stale-file cleanup. Used by SaveTDN to protect
+				.tdn files belonging to other independently-tracked TDN COMPs.
 
 		Returns:
 			dict with 'success' and 'tdn' keys, or 'error' key on failure
@@ -176,80 +179,43 @@ class TDNExt:
 				tdn['par_templates'] = par_templates
 			tdn['operators'] = operators
 
+			# Root-level annotations
+			annotations = self._exportAnnotations(root_op)
+			if annotations:
+				tdn['annotations'] = annotations
+
 			result = {'success': True, 'tdn': tdn}
 
 			# Write to file if requested
 			if output_file:
 				from pathlib import Path
-				export_mode = self.ownerComp.par.Tdnexportmode.eval()
 
-				if export_mode == 'percomp':
-					# Use project folder as base — TD paths already contain
-					# the full hierarchy (e.g., embody/Embody/help)
-					base_folder = str(project.folder)
+				# Scan from project folder — TDN paths mirror TD hierarchy
+				scan_folder = str(project.folder)
+				before_tdn = TDNExt._collectExistingTDNFiles(
+					scan_folder, root_path)
 
-					before_tdn = TDNExt._collectExistingTDNFiles(
-						base_folder, root_path)
+				filepath = self._resolveOutputPath(output_file, root_op)
+				Path(filepath).write_text(
+					TDNExt._compact_json_dumps(tdn),
+					encoding='utf-8')
 
-					per_comp_files = TDNExt._splitPerComp(
-						operators, root_path,
-						project.name.removesuffix('.toe'), base_folder)
-
-					written_files = []
-					for fpath, comp_ops in per_comp_files.items():
-						comp_tdn = dict(tdn)
-						comp_tdn['operators'] = comp_ops
-						comp_tdn['export_mode'] = 'percomp'
-						Path(fpath).parent.mkdir(parents=True, exist_ok=True)
-						Path(fpath).write_text(
-							TDNExt._compact_json_dumps(comp_tdn),
-							encoding='utf-8')
-						written_files.append(fpath)
-
-					stale = TDNExt._cleanupStaleTDNFiles(
-						before_tdn, written_files, base_folder)
-					if stale:
-						self._log(
-							f'Cleaned up {len(stale)} stale .tdn file(s)',
-							'INFO')
-
-					if root_path == '/':
-						root_rel = project.name.removesuffix('.toe') + '.tdn'
-					else:
-						root_rel = root_path.lstrip('/') + '.tdn'
-					root_file = str(Path(base_folder) / root_rel)
-					result['file'] = root_file
-					result['files'] = written_files
-					self._trackTDNExport(root_path, root_file,
-						build_num=build_num,
-						touch_build=f'{app.version}.{app.build}')
+				protected = [filepath]
+				if cleanup_protected:
+					protected.extend(cleanup_protected)
+				stale = TDNExt._cleanupStaleTDNFiles(
+					before_tdn, protected, scan_folder)
+				if stale:
 					self._log(
-						f'Exported network to {len(written_files)} '
-						f'.tdn files', 'SUCCESS')
-				else:
-					# Scan from project folder — TDN paths mirror TD hierarchy
-					scan_folder = str(project.folder)
-					before_tdn = TDNExt._collectExistingTDNFiles(
-						scan_folder, root_path)
+						f'Cleaned up {len(stale)} stale .tdn file(s)',
+						'INFO')
 
-					filepath = self._resolveOutputPath(output_file, root_op)
-					Path(filepath).write_text(
-						TDNExt._compact_json_dumps(tdn),
-						encoding='utf-8')
-
-					stale = TDNExt._cleanupStaleTDNFiles(
-						before_tdn, [filepath], scan_folder)
-					if stale:
-						self._log(
-							f'Cleaned up {len(stale)} stale .tdn file(s)',
-							'INFO')
-
-					result['file'] = filepath
-					self._trackTDNExport(root_path, filepath,
-						build_num=build_num,
-						touch_build=f'{app.version}.{app.build}')
-					self._log(
-						f'Exported network to {filepath}', 'SUCCESS')
+				result['file'] = filepath
+				self._trackTDNExport(root_path, filepath,
+					build_num=build_num,
+					touch_build=f'{app.version}.{app.build}')
+				self._log(
+					f'Exported network to {filepath}', 'SUCCESS')
 
 			return result
 
@@ -312,9 +278,6 @@ class TDNExt:
 		if include_dat_content is None:
 			include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
 
-		# Resolve export mode now (needs TD access)
-		export_mode = self.ownerComp.par.Tdnexportmode.eval()
-
 		done_event = Event()
 
 		# Pre-collect existing .tdn files on the main thread.
@@ -337,7 +300,6 @@ class TDNExt:
 			},
 			'root_path': root_path,
 			'output_file': resolved_path,
-			'export_mode': export_mode,
 			'metadata': metadata,
 			'before_tdn': before_tdn,
 			'done_event': done_event,
@@ -368,6 +330,11 @@ class TDNExt:
 			operators = TDNExt._assembleHierarchy(
 				state['results'], state['root_path'])
 
+			# Attach annotations to assembled hierarchy (pure Python dicts)
+			ann_results = state.get('annotation_results', {})
+			TDNExt._attachAnnotations(
+				operators, state['root_path'], ann_results)
+
 			# Post-processing optimizations
 			type_defaults = TDNExt._compute_type_defaults(operators)
 			if type_defaults:
@@ -394,6 +361,11 @@ class TDNExt:
 				tdn['par_templates'] = par_templates
 			tdn['operators'] = operators
 
+			# Root-level annotations
+			root_anns = ann_results.get(state['root_path'])
+			if root_anns:
+				tdn['annotations'] = root_anns
+
 			# Count total operators
 			def count_ops(ops):
 				n = len(ops)
@@ -406,62 +378,25 @@ class TDNExt:
 			# Write to file (file I/O is fine in worker thread)
 			if state['output_file']:
 				from pathlib import Path
-				export_mode = state.get('export_mode', 'perproject')
 				# Use pre-collected .tdn files (collected on main thread
 				# to avoid GIL contention with rglob/scandir)
 				before_tdn = state.get('before_tdn', set())
 				base_folder = state['metadata']['project_folder']
 
-				if export_mode == 'percomp':
-					proj_name = state['metadata']['project_name']
-					per_comp_files = TDNExt._splitPerComp(
-						operators, state['root_path'],
-						proj_name, base_folder)
+				Path(state['output_file']).write_text(
+					TDNExt._compact_json_dumps(tdn),
+					encoding='utf-8')
 
-					written_files = []
-					for fpath, comp_ops in per_comp_files.items():
-						comp_tdn = dict(tdn)
-						comp_tdn['operators'] = comp_ops
-						comp_tdn['export_mode'] = 'percomp'
-						Path(fpath).parent.mkdir(
-							parents=True, exist_ok=True)
-						Path(fpath).write_text(
-							TDNExt._compact_json_dumps(comp_tdn),
-							encoding='utf-8')
-						written_files.append(fpath)
+				stale = TDNExt._cleanupStaleTDNFiles(
+					before_tdn, [state['output_file']],
+					base_folder)
 
-					stale = TDNExt._cleanupStaleTDNFiles(
-						before_tdn, written_files, base_folder)
-
-					root_path = state['root_path']
-					if root_path == '/':
-						root_rel = proj_name + '.tdn'
-					else:
-						root_rel = root_path.lstrip('/') + '.tdn'
-					root_file = str(
-						Path(base_folder) / root_rel)
-					state['result'] = {
-						'success': True,
-						'op_count': op_count,
-						'file': root_file,
-						'files': written_files,
-						'cleaned_up': len(stale) if stale else 0,
-					}
-				else:
-					Path(state['output_file']).write_text(
-						TDNExt._compact_json_dumps(tdn),
-						encoding='utf-8')
-
-					stale = TDNExt._cleanupStaleTDNFiles(
-						before_tdn, [state['output_file']],
-						base_folder)
-
-					state['result'] = {
-						'success': True,
-						'op_count': op_count,
-						'file': state['output_file'],
-						'cleaned_up': len(stale) if stale else 0,
-					}
+				state['result'] = {
+					'success': True,
+					'op_count': op_count,
+					'file': state['output_file'],
+					'cleaned_up': len(stale) if stale else 0,
+				}
 			else:
 				state['result'] = {
 					'success': True,
@@ -513,6 +448,20 @@ class TDNExt:
 			state['index'] = batch_end
 
 			if batch_end >= len(paths):
+				# Collect annotations on main thread before signaling worker
+				ann_results = {}
+				root_op = op(state['root_path'])
+				if root_op:
+					root_anns = self._exportAnnotations(root_op)
+					if root_anns:
+						ann_results[state['root_path']] = root_anns
+				for path, data in state['results'].items():
+					target_op = op(path)
+					if target_op and target_op.isCOMP:
+						comp_anns = self._exportAnnotations(target_op)
+						if comp_anns:
+							ann_results[path] = comp_anns
+				state['annotation_results'] = ann_results
 				state['done'] = True
 				state['done_event'].set()
 		except Exception as e:
@@ -659,6 +608,16 @@ class TDNExt:
 					child.destroy()
 				except Exception as e:
 					self._log(f'Failed to destroy {child.path}: {e}', 'WARNING')
+			# Also destroy utility operators (annotations) which .children skips
+			try:
+				for u_op in dest.findChildren(depth=1, includeUtility=True):
+					if u_op.type == 'annotate':
+						try:
+							u_op.destroy()
+						except Exception as e:
+							self._log(f'Failed to destroy annotation {u_op.path}: {e}', 'WARNING')
+			except Exception:
+				pass
 
 		# Pre-phase: Resolve templates and merge type defaults
 		if isinstance(tdn, dict):
@@ -692,6 +651,16 @@ class TDNExt:
 
 			# Phase 7: Set positions (last)
 			self._setPositions(dest, op_defs)
+
+			# Phase 7a: Create annotations
+			ann_created = []
+			if isinstance(tdn, dict):
+				top_anns = tdn.get('annotations', [])
+				if top_anns:
+					self._createAnnotationsFromList(
+						dest, top_anns, ann_created)
+			self._importNestedAnnotations(dest, op_defs, ann_created)
+			created.extend(ann_created)
 
 			# Phase 8: Restore file links on externalized DATs
 			restored_count = 0
@@ -844,9 +813,13 @@ class TDNExt:
 		# Recurse into COMP children (sync mode only)
 		# Skip children of palette clones — they come from /sys/ and
 		# don't need to be stored (TD recreates them from the clone source)
+		# Skip children of COMPs with their own TDN tag — those are
+		# managed by their own .tdn file to avoid redundant nesting
 		if recurse and hasattr(target, 'children'):
 			if self._isPaletteClone(target):
 				data['palette_clone'] = True
+			elif self._hasTDNTag(target):
+				pass  # Child's network managed by its own .tdn file
 			else:
 				max_depth = options.get('max_depth')
 				if max_depth is None or depth < max_depth:
@@ -854,6 +827,9 @@ class TDNExt:
 						target, options, depth + 1)
 					if children:
 						data['children'] = children
+					comp_annotations = self._exportAnnotations(target)
+					if comp_annotations:
+						data['annotations'] = comp_annotations
 
 		return data
 
@@ -861,7 +837,7 @@ class TDNExt:
 		"""Build per-OPType cache of exportable parameter names and defaults.
 
 		On the first operator of each OPType, we iterate all parameters and
-		record which are exportable (non-custom, non-readOnly, non-skip) and
+		record which are exportable (non-custom, non-readOnly except `file`, non-skip) and
 		their default values. Subsequent operators of the same type skip all
 		those per-parameter attribute checks (isCustom, readOnly, style) and
 		default lookups — replacing ~4 Python-to-C++ bridge calls per parameter
@@ -871,7 +847,9 @@ class TDNExt:
 		exportable = {}
 		defaults = {}
 		for p in target.pars():
-			if p.isCustom or p.readOnly:
+			if p.isCustom:
+				continue
+			if p.readOnly and p.name != 'file':
 				continue
 			if p.name in SKIP_PARAMS:
 				continue
@@ -1081,6 +1059,57 @@ class TDNExt:
 			except Exception as e:
 				self._log(f'Error reading flag {flag_name} on {target.path}: {e}', 'DEBUG')
 		return flags
+
+	def _exportAnnotations(self, parent_op):
+		"""Export annotations (comment, networkbox, annotate) from a COMP.
+
+		Returns a list of annotation dicts. Only non-default properties
+		are included to keep .tdn files compact.
+		"""
+		try:
+			annotations = parent_op.findChildren(
+				type=annotateCOMP, depth=1, includeUtility=True)
+		except Exception:
+			return []
+
+		if not annotations:
+			return []
+
+		result = []
+		for ann in sorted(annotations, key=lambda a: a.name):
+			data = {'name': ann.name}
+
+			mode = ann.par.Mode.eval()
+			data['mode'] = mode
+
+			title = ann.par.Titletext.eval()
+			if title:
+				data['title'] = title
+
+			body = ann.par.Bodytext.eval()
+			if body:
+				data['text'] = body
+
+			if ann.nodeX != 0 or ann.nodeY != 0:
+				data['position'] = [ann.nodeX, ann.nodeY]
+
+			data['size'] = [ann.nodeWidth, ann.nodeHeight]
+
+			color = (
+				ann.par.Backcolorr.eval(),
+				ann.par.Backcolorg.eval(),
+				ann.par.Backcolorb.eval(),
+			)
+			if self._colorsDiffer(color, DEFAULT_COLOR):
+				data['color'] = [round(c, 4) for c in color]
+
+			opacity = ann.par.Opacity.eval()
+			if abs(opacity - 1.0) > 1e-6:
+				data['opacity'] = round(opacity, 4)
+
+			result.append(data)
+
+		return result
 
 	def _exportConnections(self, target):
 		"""Export operator (left/right) input connections as a string array.
@@ -1647,6 +1676,74 @@ class TDNExt:
 			if children and target.isCOMP:
 				self._setPositions(target, children)
 
+	def _createAnnotationsFromList(self, parent, annotations_data, created):
+		"""Phase 7a: Create annotations in a COMP from an annotations array.
+
+		Args:
+			parent: The COMP to create annotations in
+			annotations_data: List of annotation dicts from the .tdn
+			created: List to append created annotation paths to
+		"""
+		for ann_def in annotations_data:
+			try:
+				ann = parent.create(annotateCOMP)
+				ann.utility = True  # Match TD UI behavior
+
+				mode = ann_def.get('mode', 'annotate')
+				ann.par.Mode = mode
+
+				name = ann_def.get('name')
+				if name:
+					ann.name = name
+
+				title = ann_def.get('title', '')
+				if title:
+					ann.par.Titletext = title
+
+				text = ann_def.get('text', '')
+				if text:
+					ann.par.Bodytext = text
+
+				pos = ann_def.get('position', [0, 0])
+				ann.nodeX = pos[0]
+				ann.nodeY = pos[1]
+
+				size = ann_def.get('size')
+				if size:
+					ann.nodeWidth = size[0]
+					ann.nodeHeight = size[1]
+
+				color = ann_def.get('color')
+				if color:
+					ann.par.Backcolorr = color[0]
+					ann.par.Backcolorg = color[1]
+					ann.par.Backcolorb = color[2]
+
+				opacity = ann_def.get('opacity')
+				if opacity is not None:
+					ann.par.Opacity = opacity
+
+				created.append(ann.path)
+			except Exception as e:
+				self._log(
+					f'Failed to create annotation '
+					f'"{ann_def.get("name", "?")}": {e}', 'WARNING')
+
+	def _importNestedAnnotations(self, parent, op_defs, created):
+		"""Recursively create annotations from nested COMP data."""
+		for op_def in op_defs:
+			target = self._resolveOp(parent, op_def)
+			if not target or not target.isCOMP:
+				continue
+
+			ann_data = op_def.get('annotations', [])
+			if ann_data:
+				self._createAnnotationsFromList(target, ann_data, created)
+
+			children = op_def.get('children', [])
+			if children:
+				self._importNestedAnnotations(target, children, created)
+
 	def _restoreFileLinks(self, dest) -> int:
 		"""Phase 8: Restore file/syncfile parameters on externalized DATs.
 
@@ -1777,71 +1874,30 @@ class TDNExt:
 
 		return operators
 
+	@staticmethod
+	def _attachAnnotations(operators, root_path, annotation_results):
+		"""Attach annotation data from the main-thread collection to
+		the assembled operator hierarchy (pure Python, no TD access).
+
+		Args:
+			operators: Assembled operator list (from _assembleHierarchy)
+			root_path: TD root path of the export
+			annotation_results: {parent_path: [annotation_dicts]} from main thread
+		"""
+		def _attach_recursive(ops, parent_path):
+			for op_data in ops:
+				op_path = parent_path.rstrip('/') + '/' + op_data['name']
+				anns = annotation_results.get(op_path)
+				if anns:
+					op_data['annotations'] = anns
+				children = op_data.get('children', [])
+				if children:
+					_attach_recursive(children, op_path)
+		_attach_recursive(operators, root_path)
+
 	# =========================================================================
 	# PER-COMP SPLIT
 	# =========================================================================
-
-	@staticmethod
-	def _splitPerComp(operators, root_path, project_name, project_folder):
-		"""Split a nested hierarchy into per-COMP .tdn files.
-
-		Each COMP with children gets its own .tdn file. The parent's entry
-		replaces 'children' with a 'tdn_ref' pointing to the child file.
-
-		Args:
-			operators: Assembled hierarchy (list of operator dicts)
-			root_path: The export root path (e.g., '/')
-			project_name: The .toe project name (for root file naming)
-			project_folder: Absolute path to project directory
-
-		Returns:
-			dict of {abs_filepath: operators_list}
-		"""
-		from pathlib import Path
-
-		base_dir = Path(project_folder)
-		files = {}  # {abs_filepath: operators_list}
-
-		def comp_rel_path(td_path):
-			"""Convert a TD COMP path to a .tdn relative path."""
-			if td_path == '/':
-				return project_name + '.tdn'
-			return td_path.lstrip('/') + '.tdn'
-
-		def process(ops, current_td_path):
-			"""Process operators, extracting COMP children into separate files."""
-			processed = []
-			for op_data in ops:
-				if 'children' in op_data:
-					# Build this COMP's TD path
-					comp_td_path = current_td_path.rstrip('/') + '/' + op_data['name']
-					child_rel = comp_rel_path(comp_td_path)
-
-					# Recursively process the children
-					child_ops = process(op_data['children'], comp_td_path)
-
-					# Store child file
-					child_abs = str(base_dir / child_rel)
-					files[child_abs] = child_ops
-
-					# Replace children with tdn_ref in parent
-					op_copy = dict(op_data)
-					del op_copy['children']
-					op_copy['tdn_ref'] = child_rel
-					processed.append(op_copy)
-				else:
-					processed.append(op_data)
-			return processed
-
-		# Process root level operators
-		root_ops = process(operators, root_path)
-
-		# Store root file
-		root_rel = comp_rel_path(root_path)
-		root_abs = str(base_dir / root_rel)
-		files[root_abs] = root_ops
-
-		return files
 
 	# =========================================================================
 	# STALE FILE CLEANUP
@@ -1972,6 +2028,13 @@ class TDNExt:
 		except Exception as e:
 			self._log(f'Error checking palette clone status for {target.path}: {e}', 'DEBUG')
 		return False
+
+	def _hasTDNTag(self, target):
+		"""Check if a COMP has its own TDN externalization tag."""
+		if not target.isCOMP:
+			return False
+		tdn_tag = self.ownerComp.par.Tdntag.val
+		return tdn_tag in target.tags
 
 	def _serializeValue(self, val):
 		"""Convert a parameter value to a JSON-safe type.

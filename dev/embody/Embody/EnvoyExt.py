@@ -1413,8 +1413,7 @@ class EnvoyExt:
     def _onRefresh(self):
         """
         RefreshHook - Called every frame on main thread while task is running.
-        Polls request_queue for operations queued by the worker thread,
-        and checks for completed deferred test runs.
+        Polls request_queue for operations queued by the worker thread.
         """
         # Guard: bail if this RefreshHook fires on a stale instance
         # (e.g., thread wasn't cleaned yet after extension reinit)
@@ -1423,16 +1422,6 @@ class EnvoyExt:
                 return
         except Exception:
             return
-
-        # Poll for completed deferred test run
-        if self._pending_test_request_id is not None:
-            test_comp = op.unit_tests
-            if test_comp and test_comp.extensionsReady:
-                runner = getattr(test_comp.ext, 'TestRunner', None)
-                if runner and not runner._running:
-                    result = runner._getSummary()
-                    self._send_response(self._pending_test_request_id, result)
-                    self._pending_test_request_id = None
 
         # Process new requests from the worker thread
         while True:
@@ -1458,12 +1447,13 @@ class EnvoyExt:
 
             self._log(f'Processing: {operation}')
 
-            # Store request_id for deferred operations
+            # Store request_id so deferred handlers can capture it
             self._current_request_id = request_id
 
             result = self._execute_operation(operation, params)
 
-            # Deferred operations return None — response sent later via polling
+            # Deferred operations (e.g. run_tests) return None —
+            # response will be sent later via _pollTestCompletion
             if result is None:
                 continue
 
@@ -1595,8 +1585,8 @@ class EnvoyExt:
         """Run Embody test suites via /embody/unit_tests extension (deferred).
 
         Starts tests with RunTestsDeferredPerTest (one test per frame) to
-        avoid freezing TD. Returns None to signal deferred response —
-        _onRefresh polls for completion and sends the result.
+        keep TD responsive. Uses TD's run() to poll for completion and
+        send the response back to the worker thread.
         """
         if self._pending_test_request_id is not None:
             return {'error': 'Tests already running'}
@@ -1609,9 +1599,28 @@ class EnvoyExt:
             test_comp.RunTestsDeferredPerTest(
                 suite_name=suite_name, test_name=test_name)
             self._pending_test_request_id = self._current_request_id
-            return None  # Deferred — _onRefresh sends response when done
+            # Poll for completion using TD's run() — reliable main-thread
+            # scheduling that doesn't depend on RefreshHook/InfoQueue.
+            run('args[0]()', self._pollTestCompletion, delayFrames=5)
+            return None  # Deferred — _pollTestCompletion sends response
         except Exception as e:
             return {'error': f'Test run failed: {e}'}
+
+    def _pollTestCompletion(self):
+        """Check if deferred test run has finished; reschedule if not."""
+        if self._pending_test_request_id is None:
+            return  # Already handled or cancelled
+        test_comp = op.unit_tests
+        if not test_comp or not test_comp.extensionsReady:
+            run('args[0]()', self._pollTestCompletion, delayFrames=5)
+            return
+        runner = getattr(test_comp.ext, 'TestRunnerExt', None)
+        if runner and not runner._running:
+            result = runner._getSummary()
+            self._send_response(self._pending_test_request_id, result)
+            self._pending_test_request_id = None
+        else:
+            run('args[0]()', self._pollTestCompletion, delayFrames=5)
 
     # --- Operator Management ---
 
@@ -2798,12 +2807,7 @@ class EnvoyExt:
                 if target.family == 'COMP':
                     tag_type = 'tox'
                 elif target.family == 'DAT':
-                    if target.OPType in ['textDAT', 'executeDAT', 'parexecDAT']:
-                        tag_type = 'py'
-                    elif target.OPType == 'tableDAT':
-                        tag_type = 'tsv'
-                    else:
-                        tag_type = 'txt'
+                    tag_type = op.Embody.ext.Embody._inferDATTagValue(target)
                 else:
                     return {'error': f'Cannot externalize {target.family} operators'}
 

@@ -47,11 +47,6 @@
         }
       }
     },
-    "export_mode": {
-      "type": "string",
-      "enum": ["percomp"],
-      "description": "Present in per-COMP export mode. Indicates this file is part of a split export."
-    },
     "type_defaults": {
       "type": "object",
       "additionalProperties": {
@@ -103,6 +98,11 @@
       "type": "array",
       "items": { "$ref": "#/$defs/operator" },
       "description": "Array of operator objects."
+    },
+    "annotations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/annotation" },
+      "description": "Array of annotation objects for the root network."
     }
   },
 
@@ -279,6 +279,59 @@
       }
     },
 
+    "annotation": {
+      "type": "object",
+      "required": ["name", "mode", "size"],
+      "additionalProperties": false,
+      "description": "A visual annotation (comment, network box, or annotate panel) in the network editor.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Annotation operator name."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["annotate", "comment", "networkbox"],
+          "description": "Annotation display mode."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title bar text. Only for annotate and networkbox modes."
+        },
+        "text": {
+          "type": "string",
+          "description": "Body text content."
+        },
+        "position": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Position [x, y]. Omitted when [0, 0]."
+        },
+        "size": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Size [width, height]. Always included."
+        },
+        "color": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Background color [r, g, b] as floats 0.0-1.0."
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Background opacity. Omitted when 1.0."
+        }
+      }
+    },
+
     "operator": {
       "type": "object",
       "required": ["name", "type"],
@@ -383,14 +436,15 @@
           "items": { "$ref": "#/$defs/operator" },
           "description": "Child operators (COMPs only, excluding palette clones)."
         },
+        "annotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/annotation" },
+          "description": "Annotations within this COMP (COMPs only)."
+        },
         "palette_clone": {
           "type": "boolean",
           "const": true,
           "description": "true if this COMP is cloned from the TD palette (/sys/). Children are not exported."
-        },
-        "tdn_ref": {
-          "type": "string",
-          "description": "In per-COMP export mode, path to a separate .tdn file containing children."
         }
       }
     }

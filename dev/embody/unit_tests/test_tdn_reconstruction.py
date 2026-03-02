@@ -1841,16 +1841,17 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def test_P05_continuity_check_still_catches_real_missing_ops(self):
 		"""Operators NOT inside TDN COMPs should still be caught as missing."""
-		# Create a standalone DAT (not inside a TDN COMP)
-		orphan = self.sandbox.create(textDAT, 'orphan_dat')
-		orphan_path = orphan.path
-		orphan_rel = f'embody/orphan_dat.txt'
+		# Use a fake path that is NOT inside any TDN-strategy COMP.
+		# The sandbox itself is a TDN COMP, so paths inside it are skipped
+		# by the continuity check. Use a path under /embody/Embody which is
+		# excluded from TDN strategy.
+		orphan_path = '/embody/Embody/__test_orphan_dat'
+		orphan_rel = 'embody/orphan_dat.txt'
 
 		self._addTableRow(orphan_path, 'text', 'txt', orphan_rel)
 
 		try:
-			# Destroy the operator
-			orphan.destroy()
+			# The operator doesn't exist at this path
 			self.assertIsNone(op(orphan_path))
 
 			# Run continuity check — should detect it as missing

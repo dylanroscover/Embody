@@ -23,7 +23,7 @@ JSON Schema: [`tdn.schema.json`](tdn.schema.json)
 - [Connections](#connections)
 - [DAT Content](#dat-content)
 - [Children and Hierarchy](#children-and-hierarchy)
-- [Per-COMP Export Mode](#per-comp-export-mode)
+- [Annotations](#annotations)
 - [Value Serialization](#value-serialization)
 - [System Exclusions](#system-exclusions)
 - [Import Process](#import-process)
@@ -52,7 +52,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
   },
   "type_defaults": { ... },
   "par_templates": { ... },
-  "operators": [ ... ]
+  "operators": [ ... ],
+  "annotations": [ ... ]
 }
 ```
 
@@ -70,12 +71,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
 | `operators` | array | Yes | Array of [operator objects](#operator-object). |
-
-In [per-COMP export mode](#per-comp-export-mode), an additional field is present:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `export_mode` | string | `"percomp"` — indicates this file is part of a split export. |
+| `annotations` | array | No | Array of [annotation objects](#annotation-object). Only present if the root COMP contains annotations. |
 
 ---
 
@@ -100,8 +96,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
   "dat_content": "...",
   "dat_content_format": "text",
   "children": [ ... ],
-  "palette_clone": true,
-  "tdn_ref": "path/to/children.tdn"
+  "palette_clone": true
 }
 ```
 
@@ -124,8 +119,8 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true`. See [DAT Content](#dat-content). |
 | `dat_content_format` | string | No | `"text"` or `"table"`. Present whenever `dat_content` is present. |
 | `children` | array | No | Only for COMPs with child operators (excluding palette clones). Contains nested operator objects. See [Children and Hierarchy](#children-and-hierarchy). |
+| `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
-| `tdn_ref` | string | No | Only in [per-COMP export mode](#per-comp-export-mode). Replaces `children` with a path to a separate `.tdn` file. |
 
 ### Compact Formatting
 
@@ -190,14 +185,15 @@ Constant string values that literally start with `=` or `~` are escaped by doubl
 
 ### Skipped Parameters
 
-The following built-in parameters are never exported, as they are managed by the externalization system or are not meaningful outside a live project:
+The following built-in parameters are never exported, as they are internal actions or not meaningful outside a live project:
 
 **By name:**
 - `externaltox`, `enableexternaltox`, `reloadtox`
-- `file`, `syncfile`
 - `reinitextensions`, `savebackup`
 - `savecustom`, `reloadcustom`
 - `pageindex`
+
+> **Note:** `file` and `syncfile` parameters ARE exported when non-default, so that TDN files are self-contained for externalized DATs. This ensures file references survive import into a different project.
 
 **By style:**
 - `Pulse` — action buttons (fire-once, no persistent state)
@@ -304,7 +300,7 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 
 ### Supported Styles
 
-All 25 parameter styles recognized by TDN:
+All 32 parameter styles recognized by TDN:
 
 | Style | Category | Description |
 |-------|----------|-------------|
@@ -641,7 +637,7 @@ COMPs can contain child operators. These are stored in the `children` array, whi
 
 Note that `container1` omits `position` (defaults to `[0, 0]`) and `noise1` also omits `position`. Only `null1` at `[300, 0]` includes its position.
 
-Nesting is recursive — COMPs inside COMPs can have their own `children`. The optional `max_depth` export parameter limits recursion depth (`null` means unlimited).
+Nesting is recursive — COMPs inside COMPs can have their own `children`. The optional `max_depth` export parameter limits recursion depth (`null` means unlimited). COMPs may also contain an `annotations` array alongside `children` — see [Annotations](#annotations).
 
 ### Palette Clones
 
@@ -649,41 +645,61 @@ COMPs that are cloned from the TouchDesigner palette (i.e., their `clone` parame
 
 ---
 
-## Per-COMP Export Mode
+## Annotations
 
-In per-COMP mode, the network is split into multiple `.tdn` files instead of one monolithic file. Each COMP that has children gets its own file.
-
-### How it Works
-
-A COMP's `children` array is replaced by a `tdn_ref` string pointing to a separate file:
+Annotations are visual documentation elements in TouchDesigner networks (comments, network boxes, and annotate panels). They are stored in an `annotations` array at the top level (for root-level annotations) and optionally on each COMP operator (for nested annotations).
 
 ```json
 {
-  "name": "controller",
-  "type": "baseCOMP",
-  "tdn_ref": "controller.tdn"
+  "operators": [ ... ],
+  "annotations": [
+    {
+      "name": "annot_core",
+      "mode": "annotate",
+      "title": "Core Tests",
+      "text": "Unit tests for core functionality",
+      "position": [-70, -300],
+      "size": [1070, 660],
+      "color": [0.5, 0.5, 0.5],
+      "opacity": 0.8
+    }
+  ]
 }
 ```
 
-The referenced file is a full `.tdn` document with its own metadata headers and an `operators` array containing what would have been the `children`.
+For nested COMPs, `annotations` appears alongside `children`:
 
-### File Naming
-
-- **Root file**: `{project_name}.tdn` (when exporting from `/`) or `{comp_path}.tdn`
-- **Child files**: `{comp_td_path}.tdn` where the TD path is stripped of the leading `/`
-
-Example file tree for a project named `MyProject`:
-
+```json
+{
+  "name": "container1",
+  "type": "baseCOMP",
+  "children": [ ... ],
+  "annotations": [
+    {
+      "name": "annot1",
+      "mode": "comment",
+      "text": "Signal processing chain"
+    }
+  ]
+}
 ```
-MyProject.tdn                        # root operators
-controller.tdn                       # /controller's children
-controller/engine.tdn                # /controller/engine's children
-renderer.tdn                         # /renderer's children
-```
 
-Per-COMP files include `"export_mode": "percomp"` in their top-level metadata.
+### Annotation Object
 
-> **Note:** The `import_network` tool operates on a single `.tdn` document. When importing per-COMP files, the caller must load and resolve `tdn_ref` references — either by importing each file separately into its target COMP, or by reassembling the full `children` hierarchy before import.
+| Field | Type | Required | Condition for inclusion |
+|-------|------|----------|------------------------|
+| `name` | string | Yes | Always included. The annotation operator's name. |
+| `mode` | string | Yes | Always included. One of `"annotate"`, `"comment"`, or `"networkbox"`. |
+| `title` | string | No | Only if non-empty. Title bar text (for `annotate` and `networkbox` modes). |
+| `text` | string | No | Only if non-empty. Body text content. |
+| `position` | `[x, y]` | No | Omitted when `[0, 0]` (default). |
+| `size` | `[width, height]` | Yes | Always included — annotations have no standard default size. |
+| `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]`. Background color. |
+| `opacity` | number | No | Only if different from `1.0`. Background opacity (0.0 to 1.0). |
+
+### Import Behavior
+
+Annotations are created during Phase 7a (after operator positions, before file link restoration). Each annotation is created as an `annotateCOMP` with `utility=True` (matching TD's native behavior — annotations are utility operators hidden from `.children`).
 
 ---
 
@@ -735,6 +751,7 @@ Importing a `.tdn` file reconstructs the network in a pre-phase plus seven seque
 | 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
 | 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. Missing position defaults to `[0, 0]`. |
+| 7a | **Create annotations** | Annotations are created from the `annotations` array (top-level and per-COMP). Each annotation is created as an `annotateCOMP` with `utility=True`, then its mode, title, body text, position, size, color, and opacity are set. |
 
 The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
 
@@ -760,6 +777,7 @@ For most networks, export → import → re-export produces identical `.tdn` out
 - Non-default parameter values (constant, expression, and bind modes)
 - Custom parameter definitions (all fields, all styles)
 - Flags, connections, positions, sizes, colors, comments, tags
+- Annotations (mode, title, body text, position, size, color, opacity)
 - DAT text and table content (byte-for-byte when `include_dat_content` is `true`)
 - Float values (stable after the first export — see below)
 - Type defaults and parameter templates (re-computed on each export)
@@ -781,7 +799,7 @@ The following are never exported and are not considered a loss:
 - **Export-mode parameters** — set by the exporting operator, not the parameter itself
 - **Pulse / Momentary / Header styles** — no persistent state
 - **Read-only parameters** — cannot be set on import
-- **Embody-managed parameters** (`file`, `syncfile`, `externaltox`, etc.) — managed by the externalization system
+- **COMP externalization parameters** (`externaltox`, `enableexternaltox`, `reloadtox`) — COMP `.tox` externalization is managed separately by Embody
 
 ---
 
@@ -962,3 +980,4 @@ Key observations:
 |---------|------|---------|
 | 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact JSON formatting. |
 | 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |
+| 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDN exports. Pre-save now auto-exports current state before stripping TDN COMPs. |

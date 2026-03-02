@@ -6,6 +6,72 @@
 
 **Envoy** is an MCP (Model Context Protocol) server embedded inside Embody that lets Claude Code create, modify, connect, and query TouchDesigner operators programmatically — plus manage Embody externalizations.
 
+## Network Layout Conventions
+
+Clean, readable operator networks are critical. Every operator placed via MCP must follow these layout rules — messy networks are never acceptable.
+
+### Grid and Spacing
+
+- **200-unit grid**: All operator positions must snap to multiples of 200 (e.g., `x=0, 200, 400, …` and `y=0, -200, -400, …`). Never place operators at arbitrary coordinates.
+- **300 units horizontal** between connected operators in a chain (signal flow spacing).
+- **400+ units vertical** between unrelated groups or parallel chains. Groups must have clear visual separation — never let different functional groups touch or overlap.
+
+### Signal Flow
+
+- **Left to right**: Inputs on the left, outputs on the right. Every chain of connected operators should flow horizontally left-to-right.
+- **Branches split vertically**: When a signal branches (one output feeding multiple downstream operators), the branches fan out vertically from the branch point, each continuing left-to-right.
+
+### Grouping and Annotations
+
+- **Every logical group gets an annotation**: Use `create_annotation` (annotate mode with a title) around each cluster of related operators. Not just major sections — every distinct functional group.
+- **Annotations must enclose their operators**: An annotation is a visual container — it must fully surround all operators it describes. After placing operators in a group, calculate the annotation's position and size to encompass them with padding (~100 units on each side). Use `get_op_position` on all operators in the group to find the bounding box, then `set_annotation` or `create_annotation` with `x`, `y`, `width`, `height` that cover the full extent plus padding. An annotation that sits beside or above its operators instead of around them is wrong.
+- **Spatial proximity for sub-groups**: Within an annotation group, related operators should be near each other with consistent internal spacing.
+- **Clear group boundaries**: Leave at least 400 units between the edges of annotation groups.
+
+### Operator Placement Rules
+
+- **Never rely on `layout()`**: TD's built-in `COMP.layout()` method arranges children with no awareness of relationships, producing overlapping, unreadable layouts. Claude must calculate and set explicit `x, y` positions using `set_op_position`. `layout()` may be used sparingly as a starting point for throwaway or temporary networks, but production networks must always have intentional, explicit positioning.
+- **New operators go near related operators**: When adding an operator to an existing network, place it adjacent to the operator(s) it relates to — not at `[0, 0]` and not at the bottom of the network.
+- **Scan before placing**: Before placing new operators, use `get_op_position` on nearby operators to understand the existing layout, then calculate positions that maintain the grid and spacing conventions.
+- **Align rows and columns**: Operators at the same stage in a chain should share the same X coordinate. Parallel chains should share the same Y coordinate. Use consistent alignment, not approximate eyeballing.
+
+### Positioning Strategy for MCP Operations
+
+When creating operators via MCP:
+
+1. **Single operator**: Use `get_op_position` on the parent/related operator, calculate the new position at a grid-snapped offset (typically +300 horizontally for a downstream connection, or +/-400 vertically for a parallel chain), then `set_op_position`.
+2. **Multiple operators in a chain**: Calculate all positions upfront based on chain length × 300 horizontal spacing, place them all, then connect.
+3. **Bulk creation (10+ operators)**: Calculate a grid layout based on logical grouping, set all positions explicitly, then add annotations around each group.
+4. **Adding to existing networks**: Read positions of existing operators first, find open space that maintains the grid, and place new operators without disrupting the existing layout.
+
+### Y-Axis Convention
+
+TouchDesigner's Y-axis increases upward. New rows of operators should go **downward** (decreasing Y) from existing ones. The first/primary chain is at the top (highest Y), with secondary chains below.
+
+### Annotation Coordinate Model
+
+Annotations (`annotateCOMP`) use `nodeX`/`nodeY` as their **bottom-left corner**, with `nodeWidth`/`nodeHeight` extending **rightward and upward**:
+
+- Annotation rectangle covers: X from `nodeX` to `nodeX + nodeWidth`, Y from `nodeY` to `nodeY + nodeHeight`
+- The title bar renders at the **top** of this rectangle (highest Y)
+- An operator at `[op_x, op_y]` with size `[op_w, op_h]` is enclosed when its entire tile fits inside the annotation's rectangle
+
+**To enclose a group of operators:**
+1. Find the bounding box of all operators: `min_x`, `max_x`, `min_y`, `max_y` (where max includes operator width/height: `max_x = max(op_x + op_w)`, `max_y = max(op_y + op_h)`)
+2. Add padding: 70 units on left/right/bottom, **170 units on top** (to leave room for the title bar and body text)
+3. Set: `nodeX = min_x - 70`, `nodeY = min_y - 70`
+4. Set: `nodeWidth = max_x - min_x + 140`, `nodeHeight = max_y - min_y + 240` (70 bottom + 170 top)
+
+**Top padding rule**: The title bar and body text render at the **top** of the annotation rectangle. Without extra top padding (~170 units), operators in the first row will overlap the text. Always add more space above the highest operator row than below the lowest.
+
+**Common mistake**: Setting `nodeY` to a value above the operators (e.g., `nodeY = max_op_y + offset`) — this places the annotation's bottom edge above the operators, so they appear below/outside the annotation. The `nodeY` must be **below** (less than) the lowest operator's Y position.
+
+**`annotateCOMP` quirks:**
+- `utility` property: `True` when created via TD UI (hidden from `.children`, only found with `findChildren(includeUtility=True)`); `False` when created programmatically (appears in `.children`). When creating annotations programmatically, set `ann.utility = True` to match TD UI behavior.
+- `.type` returns `'annotate'` (not `'annotateCOMP'`)
+- `findChildren(type=annotateCOMP)` requires the class object, not the string `'annotateCOMP'`
+- Cannot be reliably renamed after creation — TD may ignore name assignments
+
 ## TouchDesigner Development
 
 - TouchDesigner **auto-reinitializes extensions** when their source DATs change (including externalized `.py` files synced from disk). However, old extension instances may linger in memory due to Python garbage collection issues (circular references, cached callbacks, etc.). To ensure clean teardown, implement `onDestroyTD(self)` in your extension class — TD calls it on the old instance before reinitializing. For post-init setup that needs a fully-cooked network, use `onInitTD(self)` (called at end of the frame the extension initialized). See: https://docs.derivative.ca/Extensions#Gotcha:_extensions_staying_in_memory_-_Solution:_onDestroyTD
@@ -406,7 +472,7 @@ Embody/
 ├── docs/
 │   └── TDN.md                            # TDN network format documentation
 ├── dev/
-│   ├── Embody-5.61.toe                    # Active development project
+│   ├── Embody-5.140.toe                    # Active development project
 │   ├── .venv/                             # Python virtual environment (auto-created)
 │   ├── Backup/                            # Versioned .toe backups
 │   └── embody/
@@ -422,7 +488,7 @@ Embody/
 │           ├── timer_callbacks.py         # Timer callbacks (double-press detection)
 │           ├── chopexec_exit_tagger.py    # CHOP exit handler
 │           └── help/
-│               └── text_help.py           # Help text
+│               └── text_help.txt           # Help text
 └── release/
     └── Embody-v*.tox                     # Latest release build
 ```
@@ -485,7 +551,6 @@ TDN (TouchDesigner Network) is a JSON-based format for representing TD operator 
 - **Pre-phase + 7-phase import**: Templates and type defaults are resolved first, then operators are created, custom parameters, parameter values, flags, connections, DAT content, and positions — in that specific order to satisfy dependencies
 - **Relative source references**: Connections reference siblings by name only, falling back to full paths for cross-network references
 - **Palette clone detection**: COMPs cloned from `/sys/` are marked but their children are not exported (TD recreates them automatically)
-- **Per-COMP split mode**: Large networks can be exported as one `.tdn` file per COMP, creating a git-friendly directory structure
 
 **File format**: JSON with `.tdn` extension. Full specification: [`docs/TDN.md`](docs/TDN.md)
 
@@ -517,7 +582,7 @@ op.Embody.ext.Envoy.Stop()
 ## Code Conventions
 
 - **Extension naming**: Extension classes and their source DATs must follow the `NameExt` convention (e.g., `EmbodyExt`, `EnvoyExt`, `TDNExt`, `TestRunnerExt`). The class name should match the DAT name.
-- **Renaming operators**: To rename a TD operator, ONLY rename the operator itself — via MCP `rename_operator` or inside TouchDesigner. **NEVER** rename the externalized file on disk, **NEVER** manually update the `file`/`externaltox` parameter, and **NEVER** edit the externalizations table. Embody's `checkOpsForContinuity` handles everything automatically: it detects the stale path in the table, `_findMovedOp` matches the renamed operator by its file parameter, then `updateMovedOp` renames the file on disk, updates the `file`/`externaltox` parameter, and updates the table row — all in one step.
+- **Renaming operators**: To rename a TD operator, ONLY rename the operator itself — via MCP `rename_op` or inside TouchDesigner. **NEVER** rename the externalized file on disk, **NEVER** manually update the `file`/`externaltox` parameter, and **NEVER** edit the externalizations table. Embody's `checkOpsForContinuity` handles everything automatically: it detects the stale path in the table, `_findMovedOp` matches the renamed operator by its file parameter, then `updateMovedOp` renames the file on disk, updates the `file`/`externaltox` parameter, and updates the table row — all in one step.
 - **Logging**: Use `op.Embody.Log(message, level)` from anywhere in the project. Levels: `'DEBUG'`, `'INFO'`, `'WARNING'`, `'ERROR'`, `'SUCCESS'`. Convenience methods: `op.Embody.Debug(msg)`, `op.Embody.Info(msg)`, `op.Embody.Warn(msg)`, `op.Embody.Error(msg)`. Logs go to: FIFO DAT (TD UI), textport (if `Print` par enabled), log file (enabled by default), and ring buffer (MCP access via `get_logs` tool + auto-piggybacked on all MCP tool responses in the `_logs` field). **File logging** is enabled by default — logs are written to `dev/logs/<project_name>_YYMMDD.log` with automatic rotation at 10 MB (`_001.log`, `_002.log`, etc.). The ring buffer and piggybacked logs are limited in size; **always read the log file on disk for the complete picture**.
 - **Paths**: Always use forward slashes (`/`) for cross-platform compatibility — never backslashes
 - **File safety**: Only delete files tracked by Embody (`isTrackedFile()`, `safeDeleteFile()`). Never delete untracked files
@@ -545,8 +610,8 @@ op.Embody.ext.Envoy.Stop()
 | `timer_callbacks.py` | LOW | Double-press detection logic. |
 | `chopexec_exit_tagger.py` | LOW | CHOP exit handler for tagging. |
 | `externalizations.tsv` | NEVER EDIT | Managed exclusively by Embody. Manual edits corrupt tracking. |
-| `text_claude.md` | MEDIUM | Template for per-project CLAUDE.md. Must be kept in sync with root CLAUDE.md and text_help.py. |
-| `help/text_help.py` | LOW | Help text displayed in Embody UI. Must be kept in sync with CLAUDE.md and text_claude.md for shortcuts, features, and supported formats. |
+| `text_claude.md` | MEDIUM | Template for per-project CLAUDE.md. Must be kept in sync with root CLAUDE.md and text_help.txt. |
+| `help/text_help.txt` | LOW | Help text displayed in Embody UI. Must be kept in sync with CLAUDE.md and text_claude.md for shortcuts, features, and supported formats. |
 
 ## TouchDesigner Documentation
 
@@ -717,7 +782,7 @@ If you need to configure manually, create `.mcp.json` in the project root:
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Export network to `.tdn` JSON (non-default properties only) |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
 
-**Keyboard shortcut**: `Ctrl+Shift+E` exports the current network to a `.tdn` file.
+**Keyboard shortcut**: `Ctrl+Shift+E` exports the entire project network to a `.tdn` file.
 
 ### Logging
 
@@ -764,44 +829,46 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 ## Testing
 
-Embody has a comprehensive automated test suite with **27 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
+Embody has a comprehensive automated test suite with **29 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
 
 ### Test Coverage
 
 **Core Embody (13 suites):**
-- `test_externalization.py` — externalization lifecycle
-- `test_crud_operators.py` — create, read, update, delete operations
-- `test_file_management.py` — file I/O, path handling, cleanup
-- `test_tag_management.py` — tagging operators for externalization
-- `test_tag_lifecycle.py` — tag application and removal
-- `test_rename_move_lifecycle.py` — rename and move tracking
-- `test_delete_cleanup.py` — deletion and file cleanup
-- `test_duplicate_handling.py` — duplicate operator handling
-- `test_update_sync.py` — sync between .toe and externalized files
-- `test_path_utils.py` — path normalization and utilities
-- `test_param_tracker.py` — parameter change tracking
-- `test_operator_queries.py` — operator discovery and queries
-- `test_logging.py` — logging system
+- `test_externalization` — externalization lifecycle
+- `test_crud_operators` — create, read, update, delete operations
+- `test_file_management` — file I/O, path handling, cleanup
+- `test_tag_management` — tagging operators for externalization
+- `test_tag_lifecycle` — tag application and removal
+- `test_rename_move_lifecycle` — rename and move tracking
+- `test_delete_cleanup` — deletion and file cleanup
+- `test_duplicate_handling` — duplicate operator handling
+- `test_update_sync` — sync between .toe and externalized files
+- `test_path_utils` — path normalization and utilities
+- `test_param_tracker` — parameter change tracking
+- `test_operator_queries` — operator discovery and queries
+- `test_logging` — logging system
 
 **MCP Tools (11 suites):**
-- `test_mcp_operators.py` — create, delete, copy, rename, query, find
-- `test_mcp_parameters.py` — get/set parameters, modes, expressions
-- `test_mcp_dat_content.py` — DAT text and table operations
-- `test_mcp_connections.py` — wiring operators together
-- `test_mcp_annotations.py` — creating and managing annotations
-- `test_mcp_extensions.py` — extension creation and setup
-- `test_mcp_diagnostics.py` — error checking, performance, info
-- `test_mcp_flags_position.py` — operator flags and positioning
-- `test_mcp_code_execution.py` — executing Python in TD
-- `test_mcp_externalization.py` — Embody integration via MCP
-- `test_mcp_performance.py` — performance monitoring
+- `test_mcp_operators` — create, delete, copy, rename, query, find
+- `test_mcp_parameters` — get/set parameters, modes, expressions
+- `test_mcp_dat_content` — DAT text and table operations
+- `test_mcp_connections` — wiring operators together
+- `test_mcp_annotations` — creating and managing annotations
+- `test_mcp_extensions` — extension creation and setup
+- `test_mcp_diagnostics` — error checking, performance, info
+- `test_mcp_flags_position` — operator flags and positioning
+- `test_mcp_code_execution` — executing Python in TD
+- `test_mcp_externalization` — Embody integration via MCP
+- `test_mcp_performance` — performance monitoring
 
-**TDN Format (2 suites):**
-- `test_tdn_export_import.py` — network export/import
-- `test_tdn_helpers.py` — TDN utility functions
+**TDN Format (4 suites):**
+- `test_tdn_export_import` — network export/import
+- `test_tdn_helpers` — TDN utility functions
+- `test_tdn_reconstruction` — reconstruction round-trip fidelity
+- `test_tdn_file_io` — TDN file output, per-comp splitting, stale cleanup
 
 **Infrastructure (1 suite):**
-- `test_server_lifecycle.py` — Envoy MCP server start/stop
+- `test_server_lifecycle` — Envoy MCP server start/stop
 
 ### Test Framework Features
 
@@ -937,6 +1004,7 @@ class TestMyFeature(EmbodyTestCase):
 24. Calling `mod.moduleName.func()` in a loop without caching — re-resolves the DAT lookup every call. Cache: `m = mod.moduleName; m.func()`
 25. Assigning directly to a `tdu.Dependency` object (`dep = 5`) instead of its value (`dep.val = 5`) — destroys the Dependency, silently breaking all dependent expressions
 26. Caching extension references in local variables (`ext = self.ownerComp.ext.Embody`) — the reference goes stale when TD reinitializes the extension. Always call inline: `self.ownerComp.ext.Embody.Method()`
+27. Creating operators without setting explicit positions — all new operators default to `[0, 0]` and stack on top of each other. After creating operators (via MCP `create_op`, `execute_python`, or `import_network`), ALWAYS use `set_op_position` to place them on the 200-unit grid with proper spacing (see Network Layout Conventions). Never rely on `layout()` for production networks — it produces unreadable layouts with no logical grouping. `layout()` is acceptable only as a fallback for temporary/throwaway networks.
 
 ## Important Rules
 
@@ -950,7 +1018,7 @@ class TestMyFeature(EmbodyTestCase):
 8. **Thread boundary**: `EnvoyMCPServer` (worker thread) must never import or call TouchDesigner modules. All TD access goes through `_execute_in_td()` → main thread
 9. **Safe deletion only**: Never delete files outside Embody's tracking. Use `safeDeleteFile()` / `isTrackedFile()`
 10. **Always check for errors after creating operators** — call `get_op_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
-11. **CLAUDE.md, text_claude.md, and text_help.py must ALWAYS be kept in sync.** The template at `dev/embody/Embody/text_claude.md` generates per-project CLAUDE.md files. The help text at `dev/embody/Embody/help/text_help.py` is displayed in the Embody UI. Any documentation changes (keyboard shortcuts, supported formats, features, workflow) must be applied to all three files.
+11. **CLAUDE.md, text_claude.md, and text_help.txt must ALWAYS be kept in sync.** The template at `dev/embody/Embody/text_claude.md` generates per-project CLAUDE.md files. The help text at `dev/embody/Embody/help/text_help.txt` is displayed in the Embody UI. Any documentation changes (keyboard shortcuts, supported formats, features, workflow) must be applied to all three files.
 12. **Favor annotations over OP comments** — when documenting operators or groups of operators in the network, always use `create_annotation` (annotate mode with a title bar) instead of setting the `comment` property on individual operators. Annotations are more visible, support rich text, and can visually group related operators. Reserve OP comments for brief inline notes only.
 13. **Always analyze log files after MCP operations** — after running tests, bulk externalizations, or any multi-step MCP workflow, read the log file at `dev/logs/` to verify no errors occurred. The piggybacked `_logs` field and `get_logs` ring buffer only hold a limited window — errors from earlier in the operation may have been evicted. Grep the log file for `ERROR` and `WARNING` entries and resolve any issues before reporting success.
 14. **Always update unit tests when modifying project code.** When changing any extension file (EmbodyExt.py, EnvoyExt.py, TDNExt.py, etc.), check whether existing unit tests assert against the changed behavior — if so, update those assertions to match the new code. Never leave tests asserting against a format or API that no longer exists. Run the relevant test suite after changes to confirm all tests pass.

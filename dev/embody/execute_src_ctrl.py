@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-comp = op('Embody')
+comp = op.Embody
 readme = Path(project.folder).parents[0] / 'README.md'
 
 def version(version):
@@ -63,7 +63,7 @@ def onDeviceChange():
 
 def onProjectPreSave():
     # set page for component
-    comp.currentPage = 'Setup'
+    comp.currentPage = 'Embody'
 
     build = project.saveBuild
     old_version = comp.par.Version.val

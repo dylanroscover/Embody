@@ -1,75 +1,92 @@
 path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build
-/embody/externalizations	table	tsv	embody/externalizations.tsv	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_update_sync	text	txt	embody/unit_tests/test_update_sync.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_tdn_helpers	text	txt	embody/unit_tests/test_tdn_helpers.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_tdn_export_import	text	txt	embody/unit_tests/test_tdn_export_import.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_tag_management	text	txt	embody/unit_tests/test_tag_management.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_tag_lifecycle	text	txt	embody/unit_tests/test_tag_lifecycle.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_server_lifecycle	text	txt	embody/unit_tests/test_server_lifecycle.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_sandbox	base	tox	embody/unit_tests/test_sandbox.tox	2026-02-19 16:09:43 UTC	False	1	2025.32050
-/embody/unit_tests/test_rename_move_lifecycle	text	txt	embody/unit_tests/test_rename_move_lifecycle.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_path_utils	text	txt	embody/unit_tests/test_path_utils.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_param_tracker	text	txt	embody/unit_tests/test_param_tracker.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_operator_queries	text	txt	embody/unit_tests/test_operator_queries.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_performance	text	txt	embody/unit_tests/test_mcp_performance.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_parameters	text	txt	embody/unit_tests/test_mcp_parameters.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_operators	text	txt	embody/unit_tests/test_mcp_operators.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_flags_position	text	txt	embody/unit_tests/test_mcp_flags_position.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_externalization	text	txt	embody/unit_tests/test_mcp_externalization.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_extensions	text	txt	embody/unit_tests/test_mcp_extensions.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_diagnostics	text	txt	embody/unit_tests/test_mcp_diagnostics.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_dat_content	text	txt	embody/unit_tests/test_mcp_dat_content.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_connections	text	txt	embody/unit_tests/test_mcp_connections.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_code_execution	text	txt	embody/unit_tests/test_mcp_code_execution.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_mcp_annotations	text	txt	embody/unit_tests/test_mcp_annotations.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_logging	text	txt	embody/unit_tests/test_logging.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_file_management	text	txt	embody/unit_tests/test_file_management.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_externalization	text	txt	embody/unit_tests/test_externalization.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_duplicate_handling	text	txt	embody/unit_tests/test_duplicate_handling.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_delete_cleanup	text	txt	embody/unit_tests/test_delete_cleanup.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/test_crud_operators	text	txt	embody/unit_tests/test_crud_operators.txt	2026-02-19 16:09:43 UTC			
-/embody/unit_tests/results	table	tsv	embody/unit_tests/results.tsv	2026-02-19 16:09:43 UTC			
-/embody/execute_src_ctrl	execute	py	embody/execute_src_ctrl.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/window_tagging_menu	window	tox	embody/Embody/window_tagging_menu.tox	2026-02-21 22:27:00 UTC	Par	10	2025.32050
-/embody/Embody/window_manager	window	tox	embody/Embody/window_manager.tox	2026-02-19 16:09:43 UTC	False	1	2025.32050
-/embody/Embody/toolbar/parexec1	parexec	py	embody/Embody/toolbar/parexec1.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_right/valueParExec6	parexec	py	embody/Embody/toolbar/container_right/valueParExec6.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_right/valueParExec5	parexec	py	embody/Embody/toolbar/container_right/valueParExec5.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_right/valueParExec	parexec	py	embody/Embody/toolbar/container_right/valueParExec.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_right	container	tox	embody/Embody/toolbar/container_right.tox	2026-02-22 02:15:07 UTC	Par	5	2025.32050
-/embody/Embody/toolbar/container_left/valueParExec_importTdn	parexec	py	embody/Embody/toolbar/container_left/valueParExec_importTdn.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_left/valueParExec_exportTdn	parexec	py	embody/Embody/toolbar/container_left/valueParExec_exportTdn.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_left/valueParExec_envoyToggle	parexec	py	embody/Embody/toolbar/container_left/valueParExec_envoyToggle.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_left/valueParExec6	parexec	py	embody/Embody/toolbar/container_left/valueParExec6.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_left/valueParExec5	parexec	py	embody/Embody/toolbar/container_left/valueParExec5.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_left/valueParExec4	parexec	py	embody/Embody/toolbar/container_left/valueParExec4.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_left/valueParExec3	parexec	py	embody/Embody/toolbar/container_left/valueParExec3.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/toolbar/container_left	container	tox	embody/Embody/toolbar/container_left.tox	2026-02-19 16:09:43 UTC	False	3	2025.32050
-/embody/Embody/toolbar	container	tox	embody/Embody/toolbar.tox	2026-02-19 16:09:43 UTC	False	2	2025.32050
-/embody/Embody/timer_callbacks	text	py	embody/Embody/timer_callbacks.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/text_claude	text	md	embody/Embody/text_claude.md	2026-02-19 16:09:43 UTC			
-/embody/Embody/tagger/replicator1_callbacks	text	py	embody/Embody/tagger/replicator1_callbacks.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/tagger/replicator1	replicator	tox	embody/Embody/tagger/replicator1.tox	2026-02-19 16:09:43 UTC	False	1	2025.32050
-/embody/Embody/tagger/header/text1_callbacks	text	py	embody/Embody/tagger/header/text1_callbacks.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/tagger/header/text1	text	tox	embody/Embody/tagger/header/text1.tox	2026-02-28 03:36:07 UTC	False	3	2025.32050
-/embody/Embody/tagger/header	container	tox	embody/Embody/tagger/header.tox	2026-02-28 03:13:13 UTC	False	2	2025.32050
-/embody/Embody/tagger	container	tox	embody/Embody/tagger.tox	2026-02-28 03:36:08 UTC	False	10	2025.32050
-/embody/Embody/parexec	parexec	py	embody/Embody/parexec.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/manager	container	tox	embody/Embody/manager.tox	2026-02-22 02:15:07 UTC	Par	5	2025.32050
-/embody/Embody/list/list_callbacks	text	py	embody/Embody/list/list_callbacks.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/list/inject_parents_callbacks	text	py	embody/Embody/list/inject_parents_callbacks.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/keyboardin_callbacks	text	txt	embody/Embody/keyboardin_callbacks.txt	2026-02-19 16:09:43 UTC			
-/embody/Embody/fifo1_callbacks	text	py	embody/Embody/fifo1_callbacks.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/execute	execute	py	embody/Embody/execute.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/chopexec_exit_tagger	chopexec	py	embody/Embody/chopexec_exit_tagger.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/EnvoyExt	text	py	embody/Embody/EnvoyExt.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/EmbodyExt	text	py	embody/Embody/EmbodyExt.py	2026-02-19 16:09:43 UTC			
-/embody/Embody/TDNExt	text	py	embody/Embody/TDNExt.py	2026-02-19 16:11:38 UTC			
-/embody/Embody/list	container	tox	embody/Embody/list.tox	2026-02-28 03:36:08 UTC	False	26	2025.32050
-/embody/unit_tests/test_tdn_file_io	text	py	embody/unit_tests/test_tdn_file_io.py	2026-02-19 16:53:27 UTC			
-/embody/unit_tests/test_tdn_reconstruction	text	py	embody/unit_tests/test_tdn_reconstruction.py	2026-02-21 19:37:40 UTC			
-/embody/unit_tests/TestRunnerExt	text	py	embody/unit_tests/TestRunnerExt.py	2026-02-22 00:08:13 UTC			
-/embody/Embody/help	opviewer	tdn	embody/Embody/help.tdn	2026-02-22 00:25:08 UTC		15	099.2025.32050
-/embody/Embody/help/text_help	text	txt	embody/Embody/help/text_help.txt	2026-02-22 00:49:44 UTC			
-/embody/base1/text1	text	py	embody/base1/text1.py	2026-02-27 21:36:06 UTC			
-/embody/base1	base	tdn	embody/base1.tdn	2026-02-28 03:13:13 UTC		33	099.2025.32050
+/embody/externalizations	table	tsv	embody/externalizations.tsv	2026-03-02 05:01:26 UTC			
+/perform	window	tdn	perform.tdn	2026-03-02 05:01:26 UTC		1	099.2025.32280
+/embody/unit_tests/test_update_sync	text	py	embody/unit_tests/test_update_sync.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_tdn_reconstruction	text	py	embody/unit_tests/test_tdn_reconstruction.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_tdn_helpers	text	py	embody/unit_tests/test_tdn_helpers.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_tdn_file_io	text	py	embody/unit_tests/test_tdn_file_io.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_tdn_export_import	text	py	embody/unit_tests/test_tdn_export_import.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_tag_management	text	py	embody/unit_tests/test_tag_management.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_tag_lifecycle	text	py	embody/unit_tests/test_tag_lifecycle.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_server_lifecycle	text	py	embody/unit_tests/test_server_lifecycle.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-03-02 06:05:33 UTC		13	099.2025.32280
+/embody/unit_tests/test_rename_move_lifecycle	text	py	embody/unit_tests/test_rename_move_lifecycle.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_path_utils	text	py	embody/unit_tests/test_path_utils.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_param_tracker	text	py	embody/unit_tests/test_param_tracker.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_operator_queries	text	py	embody/unit_tests/test_operator_queries.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_mcp_performance	text	py	embody/unit_tests/test_mcp_performance.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_mcp_parameters	text	py	embody/unit_tests/test_mcp_parameters.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_mcp_operators	text	py	embody/unit_tests/test_mcp_operators.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_mcp_flags_position	text	py	embody/unit_tests/test_mcp_flags_position.py	2026-03-02 05:01:26 UTC			
+/embody/unit_tests/test_mcp_externalization	text	py	embody/unit_tests/test_mcp_externalization.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_mcp_extensions	text	py	embody/unit_tests/test_mcp_extensions.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_mcp_diagnostics	text	py	embody/unit_tests/test_mcp_diagnostics.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_mcp_dat_content	text	py	embody/unit_tests/test_mcp_dat_content.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_mcp_connections	text	py	embody/unit_tests/test_mcp_connections.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_mcp_code_execution	text	py	embody/unit_tests/test_mcp_code_execution.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_mcp_annotations	text	py	embody/unit_tests/test_mcp_annotations.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_logging	text	py	embody/unit_tests/test_logging.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_file_management	text	py	embody/unit_tests/test_file_management.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_externalization	text	py	embody/unit_tests/test_externalization.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_duplicate_handling	text	py	embody/unit_tests/test_duplicate_handling.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_delete_cleanup	text	py	embody/unit_tests/test_delete_cleanup.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_custom_parameters	text	py	embody/unit_tests/test_custom_parameters.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/test_crud_operators	text	py	embody/unit_tests/test_crud_operators.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/results	table	tsv	embody/unit_tests/results.tsv	2026-03-02 05:01:27 UTC			
+/embody/unit_tests/TestRunnerExt	text	py	embody/unit_tests/TestRunnerExt.py	2026-03-02 05:01:27 UTC			
+/embody/unit_tests	base	tdn	embody/unit_tests.tdn	2026-03-02 06:52:16 UTC		9	099.2025.32280
+/embody/tdn_tests	base	tdn	embody/tdn_tests.tdn	2026-03-02 06:52:16 UTC		44	099.2025.32280
+/embody/execute_src_ctrl	execute	py	embody/execute_src_ctrl.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/window_tagging_menu	window	tdn	embody/Embody/window_tagging_menu.tdn	2026-03-02 05:01:27 UTC	Par	20	099.2025.32280
+/embody/Embody/window_manager	window	tdn	embody/Embody/window_manager.tdn	2026-03-02 05:01:27 UTC	Par	3	099.2025.32280
+/embody/Embody/toolbar/parexec1	parexec	py	embody/Embody/toolbar/parexec1.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_right/valueParExec6	parexec	py	embody/Embody/toolbar/container_right/valueParExec6.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_right/valueParExec5	parexec	py	embody/Embody/toolbar/container_right/valueParExec5.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_right/valueParExec	parexec	py	embody/Embody/toolbar/container_right/valueParExec.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_right	container	tdn	embody/Embody/toolbar/container_right.tdn	2026-03-02 05:01:27 UTC	Par	8	099.2025.32280
+/embody/Embody/toolbar/container_left/valueParExec_importTdn	parexec	py	embody/Embody/toolbar/container_left/valueParExec_importTdn.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left/valueParExec_exportTdn	parexec	py	embody/Embody/toolbar/container_left/valueParExec_exportTdn.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left/valueParExec_exportCompTdn	parexec	py	embody/Embody/toolbar/container_left/valueParExec_exportCompTdn.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left/valueParExec_envoyToggle	parexec	py	embody/Embody/toolbar/container_left/valueParExec_envoyToggle.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left/valueParExec6	parexec	py	embody/Embody/toolbar/container_left/valueParExec6.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left/valueParExec5	parexec	py	embody/Embody/toolbar/container_left/valueParExec5.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left/valueParExec4	parexec	py	embody/Embody/toolbar/container_left/valueParExec4.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left/valueParExec3	parexec	py	embody/Embody/toolbar/container_left/valueParExec3.py	2026-03-02 05:01:27 UTC			
+/embody/Embody/toolbar/container_left	container	tdn	embody/Embody/toolbar/container_left.tdn	2026-03-02 05:01:28 UTC		4	099.2025.32280
+/embody/Embody/toolbar	container	tdn	embody/Embody/toolbar.tdn	2026-03-02 05:01:28 UTC		2	099.2025.32280
+/embody/Embody/timer_callbacks	text	py	embody/Embody/timer_callbacks.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/text_claude	text	md	embody/Embody/text_claude.md	2026-03-02 05:01:28 UTC			
+/embody/Embody/tagger/replicator1_callbacks	text	py	embody/Embody/tagger/replicator1_callbacks.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/tagger/replicator1	replicator	tdn	embody/Embody/tagger/replicator1.tdn	2026-03-02 05:01:28 UTC		1	099.2025.32280
+/embody/Embody/tagger/header/text1_callbacks	text	py	embody/Embody/tagger/header/text1_callbacks.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/tagger/header/text1	text	tdn	embody/Embody/tagger/header/text1.tdn	2026-03-02 05:01:28 UTC	Par	3	099.2025.32280
+/embody/Embody/tagger/header	container	tdn	embody/Embody/tagger/header.tdn	2026-03-02 05:01:28 UTC		2	099.2025.32280
+/embody/Embody/tagger	container	tdn	embody/Embody/tagger.tdn	2026-03-02 05:01:28 UTC	Par	12	099.2025.32280
+/embody/Embody/parexec	parexec	py	embody/Embody/parexec.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/manager	container	tdn	embody/Embody/manager.tdn	2026-03-02 05:01:28 UTC	Par	9	099.2025.32280
+/embody/Embody/list/list_callbacks	text	py	embody/Embody/list/list_callbacks.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/list/list1	list	tdn	embody/Embody/list/list1.tdn	2026-03-02 06:52:16 UTC		21	099.2025.32280
+/embody/Embody/list/inject_parents_callbacks	text	py	embody/Embody/list/inject_parents_callbacks.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/list	container	tdn	embody/Embody/list.tdn	2026-03-02 05:01:28 UTC	Par	29	099.2025.32280
+/embody/Embody/keyboardin_callbacks	text	py	embody/Embody/keyboardin_callbacks.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/help/text_help	text	py	embody/Embody/help/text_help.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/help	opviewer	tdn	embody/Embody/help.tdn	2026-03-02 05:01:28 UTC		15	099.2025.32280
+/embody/Embody/fifo1_callbacks	text	py	embody/Embody/fifo1_callbacks.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/execute	execute	py	embody/Embody/execute.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/chopexec_exit_tagger	chopexec	py	embody/Embody/chopexec_exit_tagger.py	2026-03-02 05:01:28 UTC			
+/embody/Embody/TDNExt	text	py	embody/Embody/TDNExt.py	2026-03-02 05:01:29 UTC			
+/embody/Embody/EnvoyExt	text	py	embody/Embody/EnvoyExt.py	2026-03-02 05:01:29 UTC			
+/embody/Embody/EmbodyExt	text	py	embody/Embody/EmbodyExt.py	2026-03-02 05:01:29 UTC			
+/embody/Embody	container	tdn	embody/Embody.tdn	2026-03-02 06:05:32 UTC	Par	51	099.2025.32280
+/embody	container	tdn	embody.tdn	2026-03-02 06:52:16 UTC		10	099.2025.32280
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/auto_exec	execute	py	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/auto_exec.py	2026-03-02 05:01:54 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/explicit_txt	text	txt	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/explicit_txt.txt	2026-03-02 05:01:54 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp	base	tox	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp.tox	2026-03-02 05:01:58 UTC	False	1	2025.32280
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/auto_tsv	table	tsv	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/auto_tsv.tsv	2026-03-02 05:01:55 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/auto_py	text	py	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/auto_py.py	2026-03-02 05:01:55 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_glsl	text	glsl	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_glsl.glsl	2026-03-02 05:01:55 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_json	text	json	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_json.json	2026-03-02 05:01:56 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_txt	text	py	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_txt.py	2026-03-02 05:01:56 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_py	text	py	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_py.py	2026-03-02 05:01:56 UTC			
+/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_xml	text	xml	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/lang_xml.xml	2026-03-02 05:01:57 UTC			
+/embody/tdn_tests/text1	text	py	embody/tdn_tests/text1.py	2026-03-02 06:51:47 UTC			

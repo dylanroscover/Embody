@@ -69,7 +69,7 @@ class EmbodyExt:
 
         # Mapping: DAT type -> default tag parameter name
         self.dat_type_to_tag = {
-            'text': 'Txttag',
+            'text': 'Pytag',
             'table': 'Tsvtag',
             'execute': 'Pytag',
             'parexec': 'Pytag',
@@ -87,7 +87,22 @@ class EmbodyExt:
             'md': 'Mdtag', 'py': 'Pytag', 'rtf': 'Rtftag',
             'tsv': 'Tsvtag', 'txt': 'Txttag', 'vert': 'Glsltag',
             'xml': 'Xmltag', 'yml': 'Jsontag', 'yaml': 'Jsontag',
-            'python': 'Pytag', 'tscript': 'Pytag', 'text': 'Txttag'
+            'python': 'Pytag', 'tscript': 'Pytag'
+        }
+
+        # Mapping: tag value -> language parameter value (for text DATs)
+        self.tag_to_language = {
+            'py': 'python', 'json': 'json', 'xml': 'xml',
+            'html': 'xml', 'glsl': 'glsl', 'frag': 'glsl',
+            'vert': 'glsl', 'txt': 'text',
+        }
+
+        # Tags where the extension parameter must be set explicitly
+        # (language alone gives the wrong file extension, or no language mapping exists)
+        self.tag_to_extension = {
+            'html': 'html', 'frag': 'frag', 'vert': 'vert',
+            'md': 'md', 'csv': 'csv', 'tsv': 'tsv',
+            'rtf': 'rtf', 'dat': 'dat',
         }
 
         # Parameter tracker for detecting COMP changes
@@ -792,13 +807,12 @@ class EmbodyExt:
         # Clean up empty directories only (safe operation)
         self._cleanupEmptyDirectories(folder, prevFolder)
 
-        # Clear externalizations table
+        # Clear externalizations table synchronously (no delay — delayed clear
+        # creates a race condition if re-enabled before the callback fires)
         if self.Externalizations:
-            ext_path = str(self.Externalizations)
-            run(lambda: op(ext_path).clear(keepFirstRow=True) if op(ext_path) else None, delayFrames=10)
+            self.Externalizations.clear(keepFirstRow=True)
 
         self.my.par.Status = 'Disabled'
-        self.updateEnableButtonLabel('Enable')
         
         if folder:
             run(lambda: self.deleteEmptyDirectories(folder), delayFrames=60)
@@ -929,6 +943,12 @@ class EmbodyExt:
         if self.my.par.Status != 'Enabled':
             return
 
+        # Detect renames/moves BEFORE scanning for additions.
+        # Without this, a renamed op gets added as "new" by the additions
+        # scan, and the subsequent continuity check in Refresh() can't
+        # match the stale entry because the new op is already tracked.
+        self.checkOpsForContinuity(self.ExternalizationsFolder)
+
         # Check for parameter changes on TOX-strategy COMPs
         for comp in self.getExternalizedOps(COMP, strategy='tox'):
             if self.param_tracker.compareParameters(comp):
@@ -982,7 +1002,6 @@ class EmbodyExt:
         self._reportResults(dirties, additions, subtractions)
         if not suppress_refresh:
             run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
-        self.updateEnableButtonLabel('Update')
 
     def _reportResults(self, dirties, additions, subtractions):
         """Report update results to log."""
@@ -1235,10 +1254,13 @@ class EmbodyExt:
                 oper.par.Touchbuild = app.build
                 self.Externalizations[opPath, 'touch_build'] = app.build
 
-            # Export TDN
+            # Export TDN — protect .tdn files belonging to OTHER tracked
+            # TDN COMPs so the stale-file cleanup doesn't delete them.
             abs_path = str(self.buildAbsolutePath(rel_path))
+            protected = self._getAllTrackedTDNFiles(exclude_path=opPath)
             result = self.my.ext.TDN.ExportNetwork(
-                root_path=opPath, output_file=abs_path)
+                root_path=opPath, output_file=abs_path,
+                cleanup_protected=protected)
 
             if result.get('success'):
                 timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -1260,10 +1282,13 @@ class EmbodyExt:
         Used instead of oper.dirty for TDN COMPs (which always reads True
         because externaltox is empty). Captures all visual and metadata
         properties that a TDN export records: name, type, position, size,
-        color, tags, flags, comment, and connections.
+        color, tags, flags, comment, connections, and annotations.
         """
         parts = []
         for c in sorted(comp.children, key=lambda c: c.name):
+            # Skip annotations — they're fingerprinted separately below
+            if c.type == 'annotate':
+                continue
             color = tuple(round(v, 4) for v in c.color)
             tags = tuple(sorted(c.tags))
             flags = (c.bypass, c.lock, c.display, c.render,
@@ -1276,6 +1301,22 @@ class EmbodyExt:
             for i, conn in enumerate(c.inputConnectors):
                 for link in conn.connections:
                     parts.append((c.name, 'in', i, link.owner.name))
+        # All annotations (utility=True or False) — uses annotation-specific attrs
+        for ann in sorted(comp.findChildren(type=annotateCOMP, depth=1,
+                                            includeUtility=True),
+                          key=lambda a: a.name):
+            ann_color = tuple(round(v, 4) for v in (
+                ann.par.Backcolorr.eval(), ann.par.Backcolorg.eval(),
+                ann.par.Backcolorb.eval()))
+            parts.append((
+                ann.name, 'annotation',
+                ann.par.Mode.eval(),
+                ann.par.Titletext.eval(),
+                ann.par.Bodytext.eval(),
+                ann.nodeX, ann.nodeY, ann.nodeWidth, ann.nodeHeight,
+                ann_color,
+                round(ann.par.Opacity.eval(), 4),
+            ))
         return tuple(parts)
 
     def _isTDNDirty(self, comp) -> bool:
@@ -1305,6 +1346,30 @@ class EmbodyExt:
                 elif not has_strategy_col:
                     return table[i, 'rel_file_path'].val
         return None
+
+    def _getAllTrackedTDNFiles(self, exclude_path: Optional[str] = None) -> list[str]:
+        """Collect absolute paths of ALL tracked .tdn files in the table.
+
+        Used to protect .tdn files belonging to other TDN COMPs from
+        being deleted by stale-file cleanup during a single-COMP export.
+
+        Args:
+            exclude_path: Skip this op_path (the one being exported).
+        """
+        table = self.Externalizations
+        if not table or table[0, 'strategy'] is None:
+            return []
+        protected = []
+        for i in range(1, table.numRows):
+            if table[i, 'strategy'].val != 'tdn':
+                continue
+            path = table[i, 'path'].val
+            if path == exclude_path:
+                continue
+            rel = table[i, 'rel_file_path'].val
+            if rel:
+                protected.append(str(self.buildAbsolutePath(rel)))
+        return protected
 
     def _getCompStrategy(self, comp: OP) -> Optional[str]:
         """Determine if a COMP uses 'tox' or 'tdn' strategy from the table."""
@@ -1696,6 +1761,17 @@ class EmbodyExt:
                     if is_tdn:
                         tdn_comp_paths.add(row_path)
 
+            # Check for ancestor rename before per-operator processing.
+            # When a parent COMP is renamed, all children go missing
+            # simultaneously — handle as a single batch operation.
+            ancestor_result = self._detectAncestorRename(rows_to_check)
+            if ancestor_result:
+                old_prefix, new_prefix = ancestor_result
+                self._handleAncestorRename(
+                    old_prefix, new_prefix, rows_to_check,
+                    externalizationsFolder)
+                return
+
             processed_ops = set()
 
             for old_op_path, rel_file_path, row_type, strategy in rows_to_check:
@@ -1706,8 +1782,12 @@ class EmbodyExt:
                 is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
                 if is_tdn:
                     if not op(old_op_path):
-                        self.Log(f"Operator for TDN entry '{old_op_path}' no longer exists", "WARNING")
-                        self._removeTDNStrategy(old_op_path)
+                        # Try to find the renamed COMP before removing
+                        found = self._findMovedTDNOp(
+                            old_op_path, rel_file_path, processed_ops)
+                        if not found:
+                            self.Log(f"Operator for TDN entry '{old_op_path}' no longer exists", "WARNING")
+                            self._removeTDNStrategy(old_op_path)
                     continue
 
                 # Skip operators inside TDN-strategy COMPs — their lifecycle
@@ -1811,6 +1891,420 @@ class EmbodyExt:
                 return True
         
         return False
+
+    def _findMovedTDNOp(self, old_op_path: str, old_rel_file_path: str,
+                        processed_ops: set) -> bool:
+        """Find a TDN-strategy COMP that was renamed or moved.
+
+        TDN COMPs don't use externaltox/file, so _findMovedOp can't find
+        them. Instead, search for COMPs with the TDN tag that aren't
+        tracked in the externalizations table.
+
+        To avoid false matches, only same-parent candidates are considered
+        and only when there is exactly one unambiguous candidate.
+        """
+        tdn_tag = self.my.par.Tdntag.val
+        table = self.Externalizations
+
+        # Collect all TDN paths currently in the table (excluding the
+        # missing entry itself, which is about to be updated or removed)
+        tracked_tdn_paths = set()
+        for i in range(1, table.numRows):
+            if table[i, 'strategy'].val == 'tdn':
+                p = table[i, 'path'].val
+                if p != old_op_path:
+                    tracked_tdn_paths.add(p)
+
+        # Embody exclusion — same as _getTDNStrategyComps
+        embody_path = self.my.path
+
+        # Search for untracked TDN-tagged COMPs in the same parent
+        old_parent = '/'.join(old_op_path.rstrip('/').rsplit('/', 1)[:-1]) or '/'
+        candidates = []
+        for potential_op in self.root.findChildren(type=COMP, tags=[tdn_tag]):
+            if potential_op.path in tracked_tdn_paths:
+                continue
+            if potential_op.path in processed_ops:
+                continue
+            # Skip Embody and its descendants
+            if (potential_op.path == embody_path
+                    or embody_path.startswith(potential_op.path + '/')
+                    or potential_op.path.startswith(embody_path + '/')):
+                continue
+            # Only consider candidates in the same parent network
+            if str(potential_op.parent().path) == old_parent:
+                candidates.append(potential_op)
+
+        if len(candidates) != 1:
+            if len(candidates) > 1:
+                names = ', '.join(c.name for c in candidates)
+                self.Log(
+                    f"Multiple untracked TDN COMPs in {old_parent} — "
+                    f"cannot determine which replaced '{old_op_path}': {names}",
+                    "WARNING")
+            return False
+
+        new_op = candidates[0]
+        self.Log(f"Found moved/renamed TDN COMP: {old_op_path} -> {new_op.path}", "INFO")
+        self._updateMovedTDNOp(new_op, old_op_path, old_rel_file_path)
+        processed_ops.add(new_op.path)
+        return True
+
+    def _updateMovedTDNOp(self, new_op: OP, old_op_path: str,
+                          old_rel_file_path: str) -> None:
+        """Update table and .tdn file when a TDN-strategy COMP is renamed."""
+        try:
+            table = self.Externalizations
+            row_index = self.cleanupDuplicateRows(old_op_path)
+            if row_index is None:
+                self.Log(f"TDN row not found for '{old_op_path}'", "ERROR")
+                return
+
+            # Generate the new .tdn file path
+            new_rel_path = str(self._buildTDNRelPath(new_op))
+
+            # Rename the old .tdn file on disk
+            old_abs = self.buildAbsolutePath(
+                self.normalizePath(old_rel_file_path)).resolve()
+            new_abs = self.buildAbsolutePath(
+                self.normalizePath(new_rel_path)).resolve()
+
+            if old_abs.is_file():
+                try:
+                    new_abs.parent.mkdir(parents=True, exist_ok=True)
+                    old_abs.rename(new_abs)
+                    self.Log(f"Renamed TDN file: {old_rel_file_path} -> {new_rel_path}", "SUCCESS")
+                except Exception as e:
+                    self.Log(f"Error renaming TDN file", "ERROR", str(e))
+            else:
+                # Old file missing — re-export instead
+                result = self.my.ext.TDN.ExportNetwork(
+                    root_path=new_op.path, output_file=str(new_abs))
+                if result.get('success'):
+                    self.Log(f"Re-exported TDN for renamed COMP: {new_rel_path}", "SUCCESS")
+                else:
+                    self.Log(f"TDN re-export failed: {result.get('error')}", "ERROR")
+
+            # Clean up old empty directory
+            old_folder = old_abs.parent
+            try:
+                old_folder.rmdir()
+            except OSError:
+                pass  # Not empty or doesn't exist
+
+            # Update table row
+            timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+            table[row_index, 'path'] = new_op.path
+            table[row_index, 'type'] = new_op.type
+            table[row_index, 'rel_file_path'] = self.normalizePath(new_rel_path)
+            table[row_index, 'timestamp'] = timestamp
+            table.cook(force=True)
+
+            # Update fingerprint tracking
+            old_fp = self._tdn_fingerprints.pop(old_op_path, None)
+            if old_fp is not None:
+                self._tdn_fingerprints[new_op.path] = old_fp
+
+            # Update parameter tracking
+            self.param_tracker.removeComp(old_op_path)
+            self.param_tracker.updateParamStore(new_op)
+
+            # Update child entries (individually externalized DATs inside
+            # this TDN COMP) whose paths shifted with the rename.
+            self._updateTDNChildren(old_op_path, new_op.path)
+
+            self.Log(f"Updated TDN entry: {old_op_path} -> {new_op.path}", "SUCCESS")
+
+        except Exception as e:
+            self.Log("Error in _updateMovedTDNOp", "ERROR", str(e))
+
+    def _updateTDNChildren(self, old_prefix: str, new_prefix: str) -> None:
+        """Update table entries for children when a TDN COMP is renamed.
+
+        Individually externalized DATs inside a TDN COMP have their own
+        table rows. When the parent COMP is renamed, their op paths and
+        file paths shift. This method updates each child via updateMovedOp.
+        """
+        table = self.Externalizations
+        old_prefix_slash = old_prefix + '/'
+        children = []
+
+        for i in range(1, table.numRows):
+            child_path = table[i, 'path'].val
+            if child_path.startswith(old_prefix_slash):
+                children.append((
+                    child_path,
+                    table[i, 'rel_file_path'].val,
+                ))
+
+        for child_path, child_rel_file in children:
+            suffix = child_path[len(old_prefix):]
+            new_child_path = new_prefix + suffix
+            new_child = op(new_child_path)
+
+            if new_child:
+                self.updateMovedOp(
+                    new_child, child_path, child_rel_file,
+                    self.ExternalizationsFolder)
+            else:
+                # Child no longer exists at expected new path — remove stale row
+                self._handleMissingOperator(child_path, child_rel_file)
+
+    def _detectAncestorRename(self, rows_to_check):
+        """Detect if multiple missing operators share a common path prefix change.
+
+        When a COMP that is an ancestor of many externalized operators is renamed
+        (e.g., /embody → /myproject), all tracked operators under it go missing
+        simultaneously. This method detects that pattern and returns the old and
+        new prefix so the rename can be handled as a single batch operation
+        instead of 50+ individual updateMovedOp calls.
+
+        Returns:
+            (old_prefix, new_prefix) if an ancestor rename is detected,
+            or None for normal per-operator handling.
+        """
+        # 1. Separate missing ops from present ops
+        missing = []
+        present = []
+        for old_path, rel_file, row_type, strategy in rows_to_check:
+            if op(old_path):
+                present.append(old_path)
+            else:
+                missing.append((old_path, rel_file, row_type, strategy))
+
+        # Need 3+ missing ops to consider ancestor rename
+        # (1-2 could be individual renames/deletes)
+        if len(missing) < 3:
+            return None
+
+        # 2. Find common prefix of all missing paths
+        missing_paths = [p for p, _, _, _ in missing]
+        common = os.path.commonprefix(missing_paths)
+        # Truncate to last '/' to get a complete path segment
+        slash_pos = common.rfind('/')
+        if slash_pos <= 0:
+            return None
+        ancestor_path = common[:slash_pos]
+
+        # 3. Verify the ancestor COMP no longer exists at old path
+        if op(ancestor_path):
+            return None
+
+        # 4. Find what it was renamed to by searching for one of the missing
+        #    operators by its file parameter (same approach as _findMovedOp)
+        sample_path, sample_file, sample_type, _ = missing[0]
+        suffix = sample_path[len(ancestor_path):]
+
+        new_op = None
+        # Search COMPs by externaltox
+        for candidate in self.root.findChildren(type=COMP):
+            ext_path = (self.normalizePath(candidate.par.externaltox.eval())
+                        if candidate.par.externaltox else '')
+            if ext_path and ext_path == sample_file:
+                new_op = candidate
+                break
+        # Search DATs by file parameter
+        if not new_op:
+            for candidate in self.root.findChildren(type=DAT):
+                if not hasattr(candidate.par, 'file'):
+                    continue
+                file_path = (self.normalizePath(candidate.par.file.eval())
+                             if candidate.par.file else '')
+                if file_path and file_path == sample_file:
+                    new_op = candidate
+                    break
+
+        if not new_op:
+            return None
+
+        # 5. Derive new prefix from found operator
+        if not new_op.path.endswith(suffix):
+            return None
+        new_prefix = new_op.path[:-len(suffix)] if suffix else new_op.path
+
+        # 6. Verify ALL missing ops exist at new_prefix + their suffix
+        for old_path, _, _, _ in missing:
+            old_suffix = old_path[len(ancestor_path):]
+            expected_new = new_prefix + old_suffix
+            if not op(expected_new):
+                return None
+
+        # 7. Verify no present ops are under the old prefix
+        #    (if some ops under the prefix still exist, not a clean rename)
+        for p in present:
+            if p.startswith(ancestor_path + '/'):
+                return None
+
+        self.Log(f"Detected ancestor rename: {ancestor_path} → {new_prefix} "
+                 f"({len(missing)} operators affected)", "INFO")
+        return (ancestor_path, new_prefix)
+
+    def _handleAncestorRename(self, old_prefix, new_prefix, rows_to_check,
+                               externalizationsFolder):
+        """Handle an ancestor COMP rename as a single batch operation.
+
+        Instead of calling updateMovedOp() for each operator (which involves
+        clearing/resetting file parameters and saving each file individually),
+        this method:
+        1. Prompts the user for confirmation
+        2. Renames the directory on disk (single atomic operation)
+        3. Batch-updates the externalizations table
+        4. Updates file/externaltox parameters on all affected operators
+        """
+        old_dir_segment = old_prefix.strip('/')
+        new_dir_segment = new_prefix.strip('/')
+
+        # --- Phase A: Calculate what will change ---
+        affected = []
+        for old_path, rel_file, row_type, strategy in rows_to_check:
+            if old_path.startswith(old_prefix + '/') or old_path == old_prefix:
+                new_path = new_prefix + old_path[len(old_prefix):]
+                if rel_file.startswith(old_dir_segment + '/'):
+                    new_rel_file = new_dir_segment + rel_file[len(old_dir_segment):]
+                elif rel_file == old_dir_segment:
+                    new_rel_file = new_dir_segment
+                else:
+                    new_rel_file = rel_file
+                affected.append((old_path, new_path, rel_file, new_rel_file,
+                                row_type, strategy))
+
+        if not affected:
+            return
+
+        # --- Phase B: Prompt user ---
+        msg = (f"Detected rename: {old_prefix} → {new_prefix}\n\n"
+               f"{len(affected)} externalized files will be moved:\n"
+               f"  {old_dir_segment}/...  →  {new_dir_segment}/...\n\n"
+               f"This will rename the folder on disk and update all tracking.\n"
+               f"Cancel to leave files at their current location.")
+        choice = ui.messageBox('Embody — Ancestor Rename Detected', msg,
+                               buttons=['Cancel', 'Proceed'])
+        if choice != 1:
+            self.Log(f"Ancestor rename cancelled by user: "
+                     f"{old_prefix} → {new_prefix}", "INFO")
+            return
+
+        # --- Phase C: Rename directory on disk ---
+        project_folder = Path(project.folder)
+        old_dir = project_folder / old_dir_segment
+        new_dir = project_folder / new_dir_segment
+
+        if not old_dir.exists():
+            self.Log(f"Source directory not found: {old_dir}", "ERROR")
+            ui.messageBox('Embody Error',
+                          f'Source directory not found:\n{old_dir_segment}/',
+                          buttons=['OK'])
+            return
+
+        if new_dir.exists():
+            self.Log(f"Target directory already exists: {new_dir}", "ERROR")
+            ui.messageBox('Embody Error',
+                          f'Cannot rename: directory "{new_dir_segment}/" '
+                          f'already exists.', buttons=['OK'])
+            return
+
+        try:
+            old_dir.rename(new_dir)
+            self.Log(f"Renamed directory: {old_dir_segment}/ → "
+                     f"{new_dir_segment}/", "SUCCESS")
+        except Exception as e:
+            self.Log("Failed to rename directory", "ERROR", str(e))
+            ui.messageBox('Embody Error',
+                          f'Failed to rename directory:\n{e}', buttons=['OK'])
+            return
+
+        # --- Phase D: Update externalizations table ---
+        table = self.Externalizations
+        timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+
+        for old_path, new_path, old_rel, new_rel, _, _ in affected:
+            for i in range(1, table.numRows):
+                if table[i, 'path'].val == old_path:
+                    table[i, 'path'] = new_path
+                    table[i, 'rel_file_path'] = new_rel
+                    table[i, 'timestamp'] = timestamp
+                    break
+
+        table.cook(force=True)
+
+        # --- Phase E: Update operator file/externaltox parameters ---
+        # Collect Embody's own DATs to defer their parameter updates
+        embody_path = self.my.path
+        deferred_updates = []
+
+        for _, new_path, old_rel, new_rel, row_type, strategy in affected:
+            target_op = op(new_path)
+            if not target_op:
+                self.Log(f"Operator not found at new path: {new_path}",
+                         "WARNING")
+                continue
+
+            if strategy == 'tdn':
+                continue
+
+            try:
+                if target_op.family == 'COMP':
+                    current = (self.normalizePath(target_op.par.externaltox.eval())
+                               if target_op.par.externaltox else '')
+                    if current == old_rel:
+                        # Defer Embody's own COMP to avoid self-reinit
+                        if (new_path == embody_path or
+                                new_path.startswith(embody_path + '/')):
+                            deferred_updates.append(
+                                (new_path, 'externaltox', new_rel))
+                        else:
+                            target_op.par.externaltox.readOnly = False
+                            target_op.par.externaltox = new_rel
+                            target_op.par.externaltox.readOnly = True
+                elif hasattr(target_op.par, 'file'):
+                    current = (self.normalizePath(target_op.par.file.eval())
+                               if target_op.par.file else '')
+                    if current == old_rel:
+                        # Defer Embody's own DATs to avoid reinit mid-method
+                        if new_path.startswith(embody_path + '/'):
+                            deferred_updates.append(
+                                (new_path, 'file', new_rel))
+                        else:
+                            target_op.par.file.readOnly = False
+                            target_op.par.file = new_rel
+                            target_op.par.file.readOnly = True
+            except Exception as e:
+                self.Log(f"Failed to update file param for {new_path}",
+                         "WARNING", str(e))
+
+        # --- Phase F: Update Folder parameter if needed ---
+        folder_val = self.my.par.Folder.eval()
+        if folder_val and folder_val.startswith(old_dir_segment):
+            new_folder = new_dir_segment + folder_val[len(old_dir_segment):]
+            self.my.par.Folder = new_folder
+
+        # --- Phase G: Update param tracker and TDN fingerprints ---
+        for old_path, new_path, _, _, _, strategy in affected:
+            self.param_tracker.removeComp(old_path)
+            target_op = op(new_path)
+            if target_op:
+                self.param_tracker.updateParamStore(target_op)
+            # Move TDN fingerprints to new paths
+            if strategy == 'tdn':
+                old_fp = self._tdn_fingerprints.pop(old_path, None)
+                if old_fp is not None:
+                    self._tdn_fingerprints[new_path] = old_fp
+
+        self.Log(f"Ancestor rename complete: {old_prefix} → {new_prefix} "
+                 f"({len(affected)} operators updated)", "SUCCESS")
+
+        # --- Phase H: Deferred updates for Embody's own operators ---
+        # These are applied after this method returns to avoid extension
+        # reinitialization while we're still executing.
+        if deferred_updates:
+            for op_path, par_name, new_val in deferred_updates:
+                run(f"o = op('{op_path}'); "
+                    f"o.par.{par_name}.readOnly = False; "
+                    f"o.par.{par_name} = '{new_val}'; "
+                    f"o.par.{par_name}.readOnly = True",
+                    delayFrames=1)
+            self.Log(f"Deferred {len(deferred_updates)} file param updates "
+                     f"for Embody components", "DEBUG")
 
     def _handleMissingOperator(self, old_op_path, old_rel_file_path):
         """Handle an operator that no longer exists."""
@@ -2264,6 +2758,7 @@ class EmbodyExt:
 
             oper.tags.add(tag)
             oper.color = color
+            self._setDATLanguageForTag(oper, tag)
         else:
             oper.tags.remove(tag)
             self.resetOpColor(oper)
@@ -2318,7 +2813,31 @@ class EmbodyExt:
                             self.Log(f'Error removing TDN file: {e}', 'ERROR')
                     run(_delete, delayFrames=5)
                 table.deleteRow(i)
+                # Also remove orphaned child entries whose operators
+                # no longer exist (the parent COMP was deleted/lost).
+                self._removeOrphanedTDNChildren(op_path)
                 return
+
+    def _removeOrphanedTDNChildren(self, parent_path: str) -> None:
+        """Remove table entries for children of a removed TDN COMP.
+
+        Only removes entries where the operator no longer exists,
+        preventing accidental deletion of valid entries.
+        """
+        table = self.Externalizations
+        prefix = parent_path + '/'
+        rows_to_delete = []
+
+        for i in range(1, table.numRows):
+            child_path = table[i, 'path'].val
+            if child_path.startswith(prefix) and not op(child_path):
+                rows_to_delete.append(i)
+
+        # Delete in reverse order to preserve row indices
+        for i in reversed(rows_to_delete):
+            rel_file = table[i, 'rel_file_path'].val
+            self.Log(f"Removed orphaned child entry: {table[i, 'path'].val}", "INFO")
+            table.deleteRow(i)
 
     def _getTagColor(self, oper, tag):
         """Get appropriate color for tag on operator, or None if invalid."""
@@ -2337,6 +2856,30 @@ class EmbodyExt:
 
         self.Log("Tags can only be applied to COMPs or DATs", "ERROR")
         return None
+
+    def _inferDATTagValue(self, oper) -> str:
+        """Infer the best externalization tag value for a DAT operator.
+        Returns tag value string (e.g. 'py', 'txt', 'tsv') for applyTagToOperator().
+        """
+        if oper.type != 'text':
+            tag_param = self.dat_type_to_tag.get(oper.type, 'Pytag')
+            return getattr(self.my.par, tag_param).eval()
+
+        lang = oper.par.language.eval() if hasattr(oper.par, 'language') else ''
+        ext = oper.par.extension.eval() if hasattr(oper.par, 'extension') else ''
+        tag_param = self.extension_to_tag.get(lang) or self.extension_to_tag.get(ext) or 'Pytag'
+        return getattr(self.my.par, tag_param).eval()
+
+    def _setDATLanguageForTag(self, oper, tag):
+        """Set the language and/or extension on a text DAT to match the tag."""
+        if oper.family != 'DAT' or oper.type != 'text':
+            return
+        lang = self.tag_to_language.get(tag)
+        if lang:
+            oper.par.language = lang
+        ext = self.tag_to_extension.get(tag)
+        if ext:
+            oper.par.extension = ext
 
     def applyTagToOperator(self, oper: OP, tag: str) -> bool:
         """Apply a tag to an operator. Enforces mutual exclusivity."""
@@ -2366,6 +2909,7 @@ class EmbodyExt:
 
             oper.tags.add(tag)
             oper.color = color
+            self._setDATLanguageForTag(oper, tag)
             self.Log(f"Tag '{tag}' applied to '{oper.path}'", "SUCCESS")
 
             if oper.family == 'COMP' and tag == self.my.par.Toxtag.val:
@@ -2495,17 +3039,19 @@ class EmbodyExt:
         choice = ui.messageBox('Embody',
             'Add all compatible COMPs and DATs to Embody?\n'
             '(Palette components, clones, and replicants will be ignored)',
-            buttons=['Cancel', 'Confirm'])
-        
+            buttons=['Cancel', 'TOX', 'TDN'])
+
         if choice == 0:
             return
+
+        use_tdn = (choice == 2)
 
         # Find system COMPs to exclude
         sys_comps = self.root.findChildren(
             type=COMP, parName='clone',
             key=lambda x: any(s in (str(x.par.clone.expr) or '') for s in ['TDTox', 'TDBasicWidgets'])
         )
-        
+
         paths_to_exclude = set()
         for sys_comp in sys_comps:
             paths_to_exclude.add(sys_comp.path)
@@ -2516,24 +3062,24 @@ class EmbodyExt:
         for oper in self.root.findChildren(type=DAT, parName='file'):
             if self._shouldSkipOp(oper, paths_to_exclude):
                 continue
-            
+
             if oper.type in self.supported_dat_types:
-                tag_param = self.dat_type_to_tag.get(oper.type, 'Pytag')
-                
-                if oper.type == 'text':
-                    ext = oper.par.extension.eval() if hasattr(oper.par, 'extension') else ''
-                    lang = oper.par.language.eval() if hasattr(oper.par, 'language') else ''
-                    tag_param = self.extension_to_tag.get(lang) or self.extension_to_tag.get(ext) or tag_param
-                
-                tag_value = getattr(self.my.par, tag_param).eval()
+                tag_value = self._inferDATTagValue(oper)
                 self.applyTagToOperator(oper, tag_value)
 
         # Process COMPs
-        comp_tag = self.my.par.Toxtag.val
-        for oper in self.root.findChildren(type=COMP, parName='externaltox'):
-            if self._shouldSkipOp(oper, paths_to_exclude):
-                continue
-            self.applyTagToOperator(oper, comp_tag)
+        if use_tdn:
+            comp_tag = self.my.par.Tdntag.val
+            for oper in self.root.findChildren(type=COMP):
+                if self._shouldSkipOp(oper, paths_to_exclude):
+                    continue
+                self.applyTagToOperator(oper, comp_tag)
+        else:
+            comp_tag = self.my.par.Toxtag.val
+            for oper in self.root.findChildren(type=COMP, parName='externaltox'):
+                if self._shouldSkipOp(oper, paths_to_exclude):
+                    continue
+                self.applyTagToOperator(oper, comp_tag)
 
         self.UpdateHandler()
 
@@ -2755,17 +3301,22 @@ class EmbodyExt:
     def StripCompChildren(self, comp: OP) -> int:
         """Remove children from a TDN-strategy COMP (for smaller .toe).
 
-        Returns the number of children destroyed.
+        Destroys both regular children and utility operators (annotations).
+        Returns the number of operators destroyed.
         """
-        children = list(comp.children)
-        count = len(children)
-        for child in children:
+        # findChildren with includeUtility=True gets everything:
+        # regular children + hidden utility ops (annotations with utility=True)
+        all_ops = list(comp.findChildren(depth=1, includeUtility=True))
+        count = len(all_ops)
+        n_utility = sum(1 for c in all_ops if getattr(c, 'utility', False))
+        for child in all_ops:
             try:
                 child.destroy()
             except Exception as e:
                 self.Log(f'Failed to destroy {child.path}: {e}', 'WARNING')
         if count:
-            self.Log(f'Stripped {count} children from {comp.path}', 'INFO')
+            self.Log(f'Stripped {count} operators from {comp.path} '
+                     f'({count - n_utility} children, {n_utility} annotations)', 'INFO')
         return count
 
     def _verifyReconstructedComp(self, comp) -> list[str]:
@@ -2905,12 +3456,6 @@ class EmbodyExt:
             self.Refresh()
         elif action == 'close':
             win.par.winclose.pulse()
-
-    def updateEnableButtonLabel(self, label: str) -> None:
-        """Update enable button label."""
-        button = self.my.op('toolbar/container_left/initialize')
-        button.par.Buttonofflabel = label
-        button.par.Buttononlabel = label
 
     def resetOpColor(self, oper: OP) -> None:
         """Reset operator to default color."""

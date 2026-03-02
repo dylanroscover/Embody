@@ -39,9 +39,6 @@ def onValueChange(par, prev):
 	elif par.name == 'Embeddatsintdns':
 		parent.Embody.ext.TDN.ReexportAllTDNs()
 
-	elif par.name == 'Tdnexportmode':
-		parent.Embody.ext.TDN.ReexportAllTDNs()
-
 	return
 
 def onPulse(par):
@@ -74,9 +71,6 @@ def onPulse(par):
 
 	elif par.name == 'Exportprojecttdn':
 		parent.Embody.ext.TDN.ExportNetworkAsync(root_path='/', output_file='auto')
-
-	elif par.name == 'Exportalltdns':
-		parent.Embody.ext.TDN.ReexportAllTDNs()
 
 	elif par.name == 'Importtdn':
 		file_path = parent.Embody.par.Tdnfile.eval()

@@ -1,4 +1,4 @@
-"""
+﻿"""
 List COMP callbacks for Embody Manager UI.
 
 Renders the externalization tree with expand/collapse, rollover
@@ -159,7 +159,7 @@ def _strategy_style(state):
 	elif state == 'TDN_Exporting':
 		return ('...', _t['tdn_amber'], None)
 	elif state == 'Comp':
-		return ('', _t['comp'], None)
+		return ('Tag', _t['comp'], None)
 	elif state == 'DAT_Saved':
 		return ('', None, None)  # DATs show strategy text in _apply_cell
 	return ('', None, None)

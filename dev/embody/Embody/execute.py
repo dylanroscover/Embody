@@ -1,4 +1,4 @@
-# me - this DAT
+﻿# me - this DAT
 # 
 # frame - the current frame
 # state - True if the timeline is paused
@@ -41,17 +41,52 @@ def onDeviceChange():
 	return
 
 def onProjectPreSave():
-	# Suppress the delayed Refresh pulse — the continuity check must NOT
+	# Suppress the delayed Refresh pulse â€” the continuity check must NOT
 	# fire during the strip/restore window or it will delete files for
 	# temporarily-missing operators inside TDN COMPs.
 	parent.Embody.ext.Embody.Update(suppress_refresh=True)
-	# Strip children from TDN-strategy COMPs so the .toe stays small.
-	# The children are reconstructed from .tdn on next project open.
+
 	tdn_comps = parent.Embody.ext.Embody._getTDNStrategyComps()
-	stripped_info = []
+	if not tdn_comps:
+		return
+
+	# Phase 1 â€” Export current in-memory state to .tdn files.
+	# This ensures Ctrl+S actually saves any changes the user made
+	# (positions, parameters, annotations, new operators, etc.).
+	exported = []
 	for comp_path, rel_tdn_path in tdn_comps:
 		comp = op(comp_path)
-		if comp and comp.children:
+		if not comp:
+			continue
+		# Skip empty COMPs â€” nothing to export or strip
+		has_children = bool(comp.findChildren(depth=1, includeUtility=True))
+		if not has_children:
+			continue
+		try:
+			abs_path = str(parent.Embody.ext.Embody.buildAbsolutePath(rel_tdn_path))
+			protected = parent.Embody.ext.Embody._getAllTrackedTDNFiles(
+				exclude_path=comp_path)
+			result = parent.Embody.ext.TDN.ExportNetwork(
+				root_path=comp_path, output_file=abs_path,
+				cleanup_protected=protected)
+			if result.get('success'):
+				exported.append((comp_path, rel_tdn_path))
+				parent.Embody.ext.Embody._storeTDNFingerprint(comp)
+			else:
+				parent.Embody.ext.Embody.Log(
+					f'Pre-save export failed for {comp_path}: '
+					f'{result.get("error")}', 'ERROR')
+		except Exception as e:
+			parent.Embody.ext.Embody.Log(
+				f'Pre-save export error for {comp_path}: {e}', 'ERROR')
+
+	# Phase 2 â€” Strip children from exported COMPs so the .toe stays small.
+	# Only strip COMPs whose export succeeded â€” stripping without a valid
+	# .tdn on disk would permanently destroy the children.
+	stripped_info = []
+	for comp_path, rel_tdn_path in exported:
+		comp = op(comp_path)
+		if comp:
 			parent.Embody.ext.Embody.StripCompChildren(comp)
 			stripped_info.append((comp_path, rel_tdn_path))
 	if stripped_info:
@@ -92,13 +127,13 @@ def onProjectPostSave():
 				target_path=comp_path, tdn=tdn_doc, clear_first=True,
 				restore_file_links=True)
 		except Exception as e:
-			# print() as backup — Log may fail if extensions are reinitializing
+			# print() as backup â€” Log may fail if extensions are reinitializing
 			print(f'Embody > Post-save restore failed for {comp_path}: {e}')
 			try:
 				parent.Embody.ext.Embody.Log(
 					f'Post-save restore failed for {comp_path}: {e}', 'ERROR')
 			except Exception:
 				pass
-	# Safe to refresh now — all stripped COMPs have been restored
+	# Safe to refresh now â€” all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)
 	return

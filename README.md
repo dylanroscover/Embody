@@ -2,7 +2,7 @@
 
 ### ⚡ Automated Externalization and AI Integration for TouchDesigner
 
-💾 **TouchDesigner 2025.32050** (Windows / macOS) &nbsp;|&nbsp; 📦 **v5.0.86**
+💾 **TouchDesigner 2025.32280** (Windows / macOS) &nbsp;|&nbsp; 📦 **v5.0.140**
 
 🎬 [YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s)
 
@@ -40,7 +40,6 @@ Embody also includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.i
 - [📄 TDN Network Format](#-tdn-network-format)
   - [Exporting a Network](#-exporting-a-network)
   - [Importing a Network](#-importing-a-network)
-  - [Per-COMP Export Mode](#-per-comp-export-mode)
 - [📋 Logging](#-logging)
 - [🧪 Test Framework](#-test-framework)
 - [🔧 Troubleshooting](#-troubleshooting)
@@ -286,10 +285,6 @@ TDN files store only non-default parameter values, keeping the output minimal. D
 
 Use the `import_network` Envoy MCP tool to recreate a network from a `.tdn` file. The import process handles operator creation, custom parameters, parameter values, flags, wiring, DAT content, and positioning in the correct order.
 
-## 📂 Per-COMP Export Mode
-
-For large projects, TDN supports splitting the export into one file per COMP, creating a directory structure that mirrors your TouchDesigner network hierarchy.
-
 ## 📘 Full Specification
 
 See [docs/TDN.md](docs/TDN.md) for the complete format specification including all field definitions, value serialization rules, and import process details.
@@ -318,7 +313,7 @@ op.Embody.Error('Something broke')
 
 ## 🧪 Test Framework
 
-Embody includes a comprehensive automated test suite with **28 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **29 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ### ▶️ Running Tests
 
@@ -337,7 +332,7 @@ Via Envoy MCP: use the `run_tests` tool.
 
 - **13 core suites**: Externalization lifecycle, file management, tagging, rename/move, delete cleanup, path utilities, parameter tracking, logging
 - **11 MCP tool suites**: Operators, parameters, DAT content, connections, annotations, extensions, diagnostics, flags/position, code execution, externalization, performance
-- **3 TDN suites**: Export/import, helper functions, reconstruction round-trip
+- **4 TDN suites**: Export/import, helper functions, reconstruction round-trip, file I/O
 - **1 infrastructure suite**: Server lifecycle
 
 ---
@@ -355,7 +350,31 @@ For verbose path logging and troubleshooting, enable debug mode by setting `debu
 ---
 
 ## 📜 Version History
-- **5.0.86**: Current release — Manager UI refactored into modular externalized components
+- **5.0.140**: Current release — TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, TDN restore UI, companion DAT reuse during import, bug fixes
+    - Save-in-progress guard blocks mutating MCP operations during the strip/restore save window
+    - Pre-save verifies `.tdn` file exists before stripping children (prevents data loss)
+    - Post-save tracks restore failures for retry on next project open
+    - `file` and `syncfile` parameters now exported in TDN for self-contained externalized DAT round-trips
+    - New "Restore from TDN" button in tagger actions menu for TDN-strategy COMPs
+    - Post-import validation checks for missing file references and cook errors
+    - Companion DATs (auto-created by rampTOP, timerCHOP, etc.) are reused during import instead of creating duplicates
+    - Component-level TDN files protected from stale-file cleanup during project-level exports
+    - `StripCompChildren` now destroys annotations and respects Embody protection chain
+    - UI: midline ellipsis glyph for strategy column, active-menu state tracking, "Tag" label for unexternalized COMPs
+    - Fixed: `SaveDAT()` crash (undefined property), `_save_externalization` type mismatch, duplicate row corruption (missing strategy column)
+- **5.0.130**: TDN strategy externalization, strip/restore save cycle, compact TDN format
+    - New externalization strategy: COMPs can use TDN (JSON export/import) instead of TOX, enabling human-readable diffs
+    - Strip/restore save cycle: TDN-strategy COMP children are stripped before `.toe` save and reconstructed from `.tdn` on project open, keeping the `.toe` small
+    - Compact TDN format: `type_defaults` hoists shared parameter values, `par_templates` deduplicates custom parameter definitions, expression shorthand (`=` prefix for expressions, `~` for binds)
+    - Per-COMP split export mode: large networks export as one `.tdn` file per COMP for git-friendly directory structures
+    - `externalizations.tsv` gains `strategy` column (`tox`, `tdn`, `py`, `txt`, etc.)
+    - Continuity check skips TDN-strategy children (lifecycle managed by TDN, not individual externalization)
+    - 29 test suites covering all functionality
+- **5.0.93**: Modular sub-components, TDN snapshots, README rewrite
+    - Embody UI refactored into externalized sub-components (toolbar, tagger, manager, window manager)
+    - TDN network snapshot support added
+    - README comprehensively rewritten with full feature documentation
+- **5.0.86**: Manager UI refactored into modular externalized components
 - **5.0.71**: Rename Claudius to Envoy, expand README and help text
 - **5.0.61**: Rename MCP tools for consistency, add auto-restart on port change, expand testing documentation
 - **5.0.59**: Migrate tests to externalized DATs, add deferred test runner (one test per frame)

@@ -19,3 +19,4 @@ extglob.FullName
 *.lck
 CrashAutoSave*
 .plan.md
+dev/_test_pars_temp/
