@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 51,
-	"generator": "Embody/5.0.161",
+	"build": 52,
+	"generator": "Embody/5.0.163",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-02T06:05:32Z",
+	"exported_at": "2026-03-02T07:05:30Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -386,8 +386,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 29,
-					"Date": "2026-03-02 05:01:28 UTC",
+					"Build": 30,
+					"Date": "2026-03-02 07:05:30 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -427,6 +427,7 @@
 			"name": "TDNExt",
 			"type": "textDAT",
 			"parameters": {
+				"file": "embody/Embody/TDNExt.py",
 				"syncfile": true,
 				"language": "python"
 			},
@@ -500,6 +501,7 @@
 				"create": true,
 				"projectpresave": true,
 				"projectpostsave": true,
+				"file": "embody/Embody/execute.py",
 				"defaultreadencoding": "cp1252",
 				"syncfile": true
 			},
@@ -537,8 +539,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 9,
-					"Date": "2026-03-02 05:01:28 UTC",
+					"Build": 10,
+					"Date": "2026-03-02 07:05:30 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -555,6 +557,7 @@
 				"fromop": "=parent()",
 				"op": "..",
 				"pars": "*",
+				"file": "embody/Embody/parexec.py",
 				"defaultreadencoding": "cp1252",
 				"syncfile": true
 			},
@@ -614,6 +617,7 @@
 			"name": "EnvoyExt",
 			"type": "textDAT",
 			"parameters": {
+				"file": "embody/Embody/EnvoyExt.py",
 				"syncfile": true,
 				"language": "python"
 			},
@@ -641,6 +645,7 @@
 			"name": "EmbodyExt",
 			"type": "textDAT",
 			"parameters": {
+				"file": "embody/Embody/EmbodyExt.py",
 				"defaultreadencoding": "cp1252",
 				"syncfile": true,
 				"extension": "py"
@@ -666,6 +671,7 @@
 			"name": "text_claude",
 			"type": "textDAT",
 			"parameters": {
+				"file": "embody/Embody/text_claude.md",
 				"syncfile": true,
 				"language": "text",
 				"extension": "md"
@@ -2159,6 +2165,7 @@
 			"name": "fifo1_callbacks",
 			"type": "textDAT",
 			"parameters": {
+				"file": "embody/Embody/fifo1_callbacks.py",
 				"syncfile": true,
 				"language": "python"
 			},
@@ -2171,6 +2178,7 @@
 			"name": "timer_callbacks",
 			"type": "textDAT",
 			"parameters": {
+				"file": "embody/Embody/timer_callbacks.py",
 				"syncfile": true,
 				"language": "python"
 			},
@@ -2294,6 +2302,7 @@
 				"channel": "click",
 				"offtoon": true,
 				"valuechange": false,
+				"file": "embody/Embody/chopexec_exit_tagger.py",
 				"syncfile": true,
 				"language": "python"
 			},
@@ -2307,6 +2316,7 @@
 			"name": "keyboardin_callbacks",
 			"type": "textDAT",
 			"parameters": {
+				"file": "embody/Embody/keyboardin_callbacks.py",
 				"syncfile": true
 			},
 			"position": [-325, -375],
