@@ -16,7 +16,7 @@ TouchDesigner stores projects in binary `.toe` files that are impossible to diff
 
 **TDN** (TouchDesigner Network) takes it further — export your entire operator network to human-readable, diffable JSON. Review network changes in pull requests, snapshot your project state, and import networks back with full fidelity.
 
-![Embody Manager UI](docs/assets/embody-screenshot.jpg)
+![Embody Manager UI](docs/assets/embody-screenshot.png)
 
 | | Feature | What It Does |
 |---|---------|-------------|
