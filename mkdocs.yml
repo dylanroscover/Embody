@@ -1,0 +1,107 @@
+site_name: Embody Documentation
+site_description: Automated externalization, AI integration, and diffable network format for TouchDesigner
+site_url: https://dylanroscover.github.io/Embody/
+repo_url: https://github.com/dylanroscover/Embody
+repo_name: Embody
+
+theme:
+  name: material
+  font:
+    text: Open Sans
+    code: Roboto Mono
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - stylesheets/extra.css
+
+plugins:
+  - search
+  - tags
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.mark
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - tables
+  - attr_list
+  - md_in_html
+  - def_list
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Embody:
+    - embody/index.md
+    - Getting Started: embody/getting-started.md
+    - Externalization: embody/externalization.md
+    - Keyboard Shortcuts: embody/keyboard-shortcuts.md
+    - Manager UI: embody/manager-ui.md
+    - Supported Formats: embody/supported-formats.md
+    - Configuration: embody/configuration.md
+    - Troubleshooting: embody/troubleshooting.md
+  - Envoy:
+    - envoy/index.md
+    - Setup: envoy/setup.md
+    - Tools Reference: envoy/tools-reference.md
+    - Architecture: envoy/architecture.md
+  - TDN:
+    - tdn/index.md
+    - Specification: tdn/specification.md
+    - JSON Schema: tdn/schema.md
+    - Import & Export: tdn/import-export.md
+    - Examples: tdn/examples.md
+  - TD Development:
+    - td-development/index.md
+    - Extensions: td-development/extensions.md
+    - Parameters: td-development/parameters.md
+    - Threading: td-development/threading.md
+    - Common Mistakes: td-development/common-mistakes.md
+  - Testing: testing.md
+  - Changelog: changelog.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/dylanroscover/Embody
+    - icon: fontawesome/brands/youtube
+      link: https://www.youtube.com/watch?v=lR3adD3Cw5s

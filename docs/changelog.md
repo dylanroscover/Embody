@@ -1,0 +1,167 @@
+# Changelog
+
+## v5.0.163
+
+Re-export TDN files for list, manager, and container_right after param changes.
+
+## v5.0.140
+
+Current release — TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, TDN restore UI, companion DAT reuse during import, bug fixes.
+
+- Save-in-progress guard blocks mutating MCP operations during the strip/restore save window
+- Pre-save verifies `.tdn` file exists before stripping children (prevents data loss)
+- Post-save tracks restore failures for retry on next project open
+- `file` and `syncfile` parameters now exported in TDN for self-contained externalized DAT round-trips
+- New "Restore from TDN" button in tagger actions menu for TDN-strategy COMPs
+- Post-import validation checks for missing file references and cook errors
+- Companion DATs (auto-created by rampTOP, timerCHOP, etc.) are reused during import instead of creating duplicates
+- Component-level TDN files protected from stale-file cleanup during project-level exports
+- `StripCompChildren` now destroys annotations and respects Embody protection chain
+- UI: midline ellipsis glyph for strategy column, active-menu state tracking, "Tag" label for unexternalized COMPs
+- Fixed: `SaveDAT()` crash (undefined property), `_save_externalization` type mismatch, duplicate row corruption (missing strategy column)
+
+## v5.0.130
+
+TDN strategy externalization, strip/restore save cycle, compact TDN format.
+
+- New externalization strategy: COMPs can use TDN (JSON export/import) instead of TOX, enabling human-readable diffs
+- Strip/restore save cycle: TDN-strategy COMP children are stripped before `.toe` save and reconstructed from `.tdn` on project open, keeping the `.toe` small
+- Compact TDN format: `type_defaults` hoists shared parameter values, `par_templates` deduplicates custom parameter definitions, expression shorthand (`=` prefix for expressions, `~` for binds)
+- Per-COMP split export mode: large networks export as one `.tdn` file per COMP for git-friendly directory structures
+- `externalizations.tsv` gains `strategy` column (`tox`, `tdn`, `py`, `txt`, etc.)
+- Continuity check skips TDN-strategy children (lifecycle managed by TDN, not individual externalization)
+- 30 test suites covering all functionality
+
+## v5.0.93
+
+Modular sub-components, TDN snapshots, README rewrite.
+
+- Embody UI refactored into externalized sub-components (toolbar, tagger, manager, window manager)
+- TDN network snapshot support added
+- README comprehensively rewritten with full feature documentation
+
+## v5.0.86
+
+Manager UI refactored into modular externalized components.
+
+## v5.0.71
+
+Rename Claudius to Envoy, expand README and help text.
+
+## v5.0.61
+
+Rename MCP tools for consistency, add auto-restart on port change, expand testing documentation.
+
+## v5.0.59
+
+Migrate tests to externalized DATs, add deferred test runner (one test per frame).
+
+## v5.0.56
+
+Rewrite test runner, fix `run()` safety, add 6 new test suites, update documentation.
+
+## v5.0
+
+Major release — Envoy MCP server, TDN format, comprehensive testing.
+
+- **Envoy MCP Server**: 40+ tools for Claude Code integration
+- **TDN Format**: JSON export/import for operator networks
+- **Test Framework**: 26 test suites with sandbox isolation
+- **Structured Logging**: Multi-destination logging system
+- **CLAUDE.md Auto-Generation**: Project context for AI assistants
+- **Cross-platform**: macOS support
+
+## v4.7.14
+
+Safe file deletion — Embody now only deletes files it created. Untracked files preserved during disable/migration.
+
+## v4.7.11
+
+Cross-platform path handling (forward slashes on all platforms) + code cleanup.
+
+## v4.7.6
+
+Build save increment bug fix.
+
+## v4.7.5
+
+- ui.rolloverOp refactor
+- Restore handling of drag-and-drop COMP auto-populated externaltox pars
+- Cache parameters correctly between tox saves
+- Parameter updated coloring for dirty buttons in UI
+- Path lib implementation improvements
+- Auto refresh on UI maximize
+- Ignore untagged COMPs when checking for duplicate paths
+
+## v4.6.4
+
+- About page on externalized COMPs (Build Number, Touch Build, Build Date)
+- Build/Touch Build in externalization table + Lister
+- Window resizing support
+
+## v4.5.23
+
+- Fix deletion of old file storage after renaming
+- Network cleanup, tagging optimization
+- Fix duplicated rows from git merge conflicts
+
+## v4.5.19
+
+Allow master clones with clone pars to be externalized. Setup menu cleanup.
+
+## v4.5.17
+
+Bug fixes, smaller minimized window footprint.
+
+## v4.5.2
+
+- TSV support
+- Clone tag for shared external paths
+- Handle drag-and-dropped COMP externaltox pars
+- Detect dirty COMP parameter changes
+
+## v4.4.128
+
+Support for COMPs with empty/error-prone clone expressions.
+
+## v4.4.127
+
+Textport warning for paused timeline.
+
+## v4.4.126
+
+Clean up Save and dirtyHandler methods, auto set enableexternaltox.
+
+## v4.4.104
+
+TreeLister, improved Tagger stability, color theme updates.
+
+## v4.4.74
+
+- Full project externalization
+- Handle deletion and re-creation (redo) of COMPs/DATs
+- Support renaming and moving COMPs/DATs
+
+## v4.3.128
+
+Fixed abs path bug, macOS Finder support, keyboard shortcuts.
+
+## v4.3.122
+
+Separated logic/data for easier Embody updates.
+
+## v4.3.43
+
+UTC timestamps, Save/Table DAT buttons, refactored tagging.
+
+## v4.2.101
+
+Fixed keyboard shortcut bug, updated to TouchDesigner 2023.
+
+## v4.0.0
+
+Support for various file formats, parameter improvements.
+
+## v3.0.0
+
+Initial release.
