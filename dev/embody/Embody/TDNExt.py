@@ -518,6 +518,7 @@ class TDNExt:
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if not table:
+				self._log('No TDN exports to update', 'INFO')
 				return
 
 			tdn_entries = []
@@ -694,7 +695,7 @@ class TDNExt:
 			return {'error': f'Import failed: {e}'}
 
 	def ImportNetworkFromFile(self, file_path: str, target_path: str = '/',
-							   clear_first: bool = False) -> Optional[dict[str, Any]]:
+							   clear_first: bool = False) -> dict[str, Any]:
 		"""
 		Load a .tdn JSON file from disk and import it into a COMP.
 
@@ -705,22 +706,22 @@ class TDNExt:
 		"""
 		if not file_path:
 			self._log('No TDN file specified', 'WARNING')
-			return
+			return {'error': 'No TDN file specified'}
 
 		import os
 		if not os.path.isfile(file_path):
 			self._log(f'TDN file not found: {file_path}', 'ERROR')
-			return
+			return {'error': f'TDN file not found: {file_path}'}
 
 		try:
 			with open(file_path, 'r', encoding='utf-8') as f:
 				tdn_data = json.load(f)
 		except json.JSONDecodeError as e:
 			self._log(f'Invalid JSON in TDN file: {e}', 'ERROR')
-			return
+			return {'error': f'Invalid JSON in TDN file: {e}'}
 		except Exception as e:
 			self._log(f'Failed to read TDN file: {e}', 'ERROR')
-			return
+			return {'error': f'Failed to read TDN file: {e}'}
 
 		self._log(f'Importing from {file_path} into {target_path}...', 'INFO')
 		return self.ImportNetwork(target_path, tdn_data, clear_first=clear_first)
@@ -1898,6 +1899,56 @@ class TDNExt:
 	# =========================================================================
 	# PER-COMP SPLIT
 	# =========================================================================
+
+	@staticmethod
+	def _splitPerComp(ops, root_path, project_name, base_dir):
+		"""Split operator list into per-COMP files for multi-file TDN export.
+
+		Returns a dict mapping absolute file path -> list of op defs for that
+		file. COMPs with a 'children' key get their own .tdn file; leaf ops
+		stay in their parent file. 'children' is replaced with 'tdn_ref'
+		(path relative to base_dir, forward-slash separated) in parent entries.
+
+		Args:
+			ops: List of operator defs (may include 'children' for COMPs)
+			root_path: TD root path being exported (e.g., '/' or '/embody')
+			project_name: Project name used as stem of root file for '/' exports
+			base_dir: Absolute path to the base output directory
+
+		Returns:
+			dict mapping str(absolute_file_path) -> list of op defs
+		"""
+		from pathlib import Path
+		base = Path(base_dir)
+		result = {}
+
+		if root_path == '/':
+			root_file = base / f'{project_name}.tdn'
+			root_dir = base
+		else:
+			path_obj = base / root_path.lstrip('/')
+			root_file = path_obj.parent / (path_obj.name + '.tdn')
+			root_dir = path_obj
+
+		result[str(root_file)] = []
+
+		def process(op_list, file_key, current_dir):
+			for op_def in op_list:
+				if 'children' in op_def:
+					comp_name = op_def['name']
+					comp_file = current_dir / f'{comp_name}.tdn'
+					tdn_ref = str(comp_file.relative_to(base)).replace('\\', '/')
+					entry = {k: v for k, v in op_def.items() if k != 'children'}
+					entry['tdn_ref'] = tdn_ref
+					result[file_key].append(entry)
+					child_key = str(comp_file)
+					result[child_key] = []
+					process(op_def['children'], child_key, current_dir / comp_name)
+				else:
+					result[file_key].append(op_def)
+
+		process(ops, str(root_file), root_dir)
+		return result
 
 	# =========================================================================
 	# STALE FILE CLEANUP

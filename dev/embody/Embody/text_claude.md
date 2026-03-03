@@ -378,7 +378,7 @@ When creating Python files that will be used in TouchDesigner (scripts, extensio
 **Workflow:**
 1. Create the textDAT in TouchDesigner (via MCP `create_op` or in the TD UI)
 2. Write the Python code into the DAT (via MCP `set_dat_content` or edit in TD)
-3. Tag the DAT for externalization using Embody (`tag_for_externalization` MCP tool or `Ctrl+Shift+T` in TD)
+3. Tag the DAT for externalization using Embody (`tag_for_externalization` MCP tool or `lctrl-lctrl` double-press in TD)
 4. Save the externalization (`save_externalization` or `Ctrl+Shift+U`) — Embody writes the `.py` file to disk
 
 Embody handles all the file path management, `file` parameter configuration, `syncfile` toggling, and tracking in `externalizations.tsv`. **This is the whole reason Embody exists** — never bypass it with manual file parameter setup.
@@ -447,6 +447,18 @@ TouchDesigner projects are binary `.toe` files. Embody externalizes tagged opera
 
 **Important**: Edits to `.py` files in `dev/embody/Embody/` are read by TD when the project loads or the DAT syncs. Changes made inside TD are written out to these files on save. This bidirectional sync is the core of the system.
 
+### Export Portable Tox
+
+Embody can export any COMP as a self-contained `.tox` file with all external file references and Embody tags stripped. This produces a portable package that works when loaded into any TouchDesigner project — no missing file errors and no Embody metadata.
+
+**How it works:** `ExportPortableTox()` temporarily strips all relative `file`/`syncfile` references from DATs, `externaltox`/`enableexternaltox` references from COMPs, and all Embody tags from every operator, saves the `.tox`, then restores everything. The strip/save/restore cycle is synchronous (no cook cycle in between), so no timing issues arise.
+
+**Two integration points:**
+1. **Release build**: `execute_src_ctrl.py` calls `ExportPortableTox()` during `onProjectPreSave()` to produce the release `.tox` in `release/`
+2. **Actions menu**: The Manager UI's Actions popup includes an "Export portable tox" button that opens a file save dialog for exporting any individual COMP
+
+**Absolute path warnings:** Non-system absolute paths (not starting with `/sys/`) in `file` or `externaltox` parameters are logged as warnings but not stripped, since they may be intentional.
+
 ### Envoy MCP Architecture
 
 Envoy uses a dual-thread design:
@@ -510,6 +522,7 @@ When referencing the Embody extension in TouchDesigner Python:
 op.Embody.Update()
 op.Embody.Save()
 op.Embody.TagGetter()
+op.Embody.ExportPortableTox(target=some_comp, save_path='/path/to/output.tox')
 
 # Non-promoted methods (lowercase) — accessed through ext
 op.Embody.ext.Embody.getExternalizedOps()
@@ -762,6 +775,14 @@ If you need to configure manually, create `.mcp.json` in the project root:
 2. `save_externalization` to force-write it to disk
 3. `get_externalization_status` to confirm dirty state and file path
 4. Verify file exists in `dev/embody/` via file inspection
+
+### Exporting a Portable Tox
+1. In the Manager UI, click a COMP's strategy cell to open the Actions popup
+2. Click "Export portable tox" to open a file save dialog
+3. Choose a location — Embody strips all relative file references and Embody tags, saves the `.tox`, then restores them
+4. The exported `.tox` is self-contained with no external dependencies or Embody metadata
+
+Programmatically: `op.Embody.ExportPortableTox(target=some_comp, save_path='/path/to/output.tox')`
 
 ### Creating and Managing Annotations
 1. `create_annotation` with parent_path, mode (`"comment"`, `"networkbox"`, or `"annotate"`), text, and position

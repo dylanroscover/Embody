@@ -72,6 +72,19 @@ To reset ('unexternalize'), pulse the Disable button. This
 deletes only files tracked by Embody. Untracked files in
 the externalization folder are preserved.
 
+Export Portable Tox
+-------------------
+Export any COMP as a self-contained .tox file with all
+external file references and Embody tags stripped. The
+exported .tox works when loaded into any TouchDesigner
+project with no missing file errors and no Embody metadata.
+
+Use via the Actions menu in the Manager UI (click a COMP's
+strategy cell, then click "Export portable tox"), or call
+programmatically: op.Embody.ExportPortableTox(target, path)
+
+Non-system absolute paths are warned about but not stripped.
+
 Envoy (MCP Server)
 ---------------------
 Embody includes Envoy, an MCP (Model Context Protocol)
@@ -110,7 +123,8 @@ externalized operators and their metadata. From here you can:
 Keyboard Shortcuts
 ------------------
 ctrl-shift-o :   Open the Manager UI
-lctrl-lctrl :    Tag the selected operator for externalization
+lctrl-lctrl :    Tag or manage the operator under the cursor
+                 (shows Actions menu for already-tagged operators)
 ctrl-shift-u :   Initialize/update all externalizations
 ctrl-alt-u :     Save only the current COMP you are inside
 ctrl-shift-e :   Export the full project network to .tdn

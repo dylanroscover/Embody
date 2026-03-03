@@ -62,6 +62,33 @@ With TDN strategy:
 
 See [TDN Format](../tdn/index.md) for more details.
 
+## Export Portable Tox
+
+Export any COMP as a **self-contained `.tox`** with all external file references and Embody tags stripped. The exported `.tox` works when loaded into any TouchDesigner project — no missing file errors and no Embody metadata.
+
+### How it works
+
+`ExportPortableTox()` temporarily strips all relative `file`/`syncfile` references from DATs, `externaltox`/`enableexternaltox` references from COMPs, and all Embody tags from every operator, saves the `.tox`, then restores everything. The strip/save/restore cycle is synchronous, so no timing issues arise.
+
+### Usage
+
+**From the Manager UI:**
+
+1. Click a COMP's strategy cell to open the Actions popup
+2. Click **Export portable tox**
+3. Choose a save location in the file dialog
+
+**Programmatically:**
+
+```python
+op.Embody.ExportPortableTox(target=some_comp, save_path='/path/to/output.tox')
+```
+
+Both `target` and `save_path` are optional — when omitted, `target` defaults to the Embody COMP itself and `save_path` defaults to `release/{name}-v{version}.tox`.
+
+!!! warning "Absolute paths"
+    Non-system absolute paths (not starting with `/sys/`) in `file` or `externaltox` parameters are logged as warnings but **not** stripped, since they may be intentional. Check the log output after exporting to ensure portability.
+
 ## Resetting
 
 To completely reset and remove externalizations, pulse the **Disable** button.

@@ -84,11 +84,9 @@ def onProjectPreSave():
         # print(f"Error deleting old release: {e}")
         pass
 
-    # save out component
+    # save out self-contained portable .tox (strips external file references)
     save_path = Path(project.folder).parents[0] / 'release' / f"{comp.name}-v{new_version}.tox"
-    comp.save(str(save_path))
-    rel_path = Path('release') / f"{comp.name}-v{new_version}.tox"
-    comp.Log(f'saved {rel_path}', 'INFO')
+    comp.ExportPortableTox(save_path=str(save_path))
 
 def onProjectPostSave():
     return

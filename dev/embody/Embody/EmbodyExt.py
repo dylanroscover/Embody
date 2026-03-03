@@ -791,6 +791,16 @@ class EmbodyExt:
                         oper.tags.remove(tag)
                 self.resetOpColor(oper)
 
+        # Remove tags from ALL project operators (catches untracked tagged ops)
+        if removeTags:
+            tag_set = set(tags)
+            for oper in self.root.findChildren():
+                found = set(oper.tags) & tag_set
+                if found:
+                    for tag in found:
+                        oper.tags.remove(tag)
+                    self.resetOpColor(oper)
+
         # SAFELY delete only tracked files
         deleted_count = 0
         for tracked_file in tracked_files:
@@ -1274,6 +1284,160 @@ class EmbodyExt:
                 self.Log(f"TDN export failed for {opPath}: {result.get('error')}", "ERROR")
         except Exception as e:
             self.Log(f"SaveTDN failed for {opPath}", "ERROR", str(e))
+
+    def ExportPortableTox(self, target: 'OP' = None,
+                          save_path: Optional[str] = None) -> bool:
+        """Export a self-contained .tox with all external file references
+        and Embody tags stripped.
+
+        Temporarily strips file, syncfile, and externaltox parameters plus
+        all Embody tags from all descendants of the target COMP, saves the
+        .tox, then restores everything. The resulting .tox has no external
+        file dependencies and no Embody metadata.
+
+        Warns (but does not strip) about non-system absolute paths that won't
+        be portable to other machines.
+
+        Args:
+            target: The COMP to export. Defaults to the Embody COMP itself.
+            save_path: Absolute path for the output .tox. If None, uses the
+                       default release path (release/{name}-v{version}.tox).
+
+        Returns:
+            True if the .tox was saved successfully, False otherwise.
+        """
+        if target is None:
+            target = self.my
+        if save_path is None:
+            version = self.my.par.Version.eval()
+            save_path = str(
+                Path(project.folder).parents[0] / 'release'
+                / f"{target.name}-v{version}.tox"
+            )
+
+        # Phase 1: Collect relative file references to strip, warn about
+        # absolute paths that won't be portable.
+        saved_state = []
+
+        for child in target.findChildren():
+            if child.family == 'DAT' and hasattr(child.par, 'file'):
+                file_val = child.par.file.eval()
+                if not file_val:
+                    continue
+                if file_val.startswith('/') or (len(file_val) > 1 and file_val[1] == ':'):
+                    # Absolute path — warn if not a TD system path
+                    if not file_val.startswith('/sys/'):
+                        self.Log(
+                            f"Absolute path won't be portable: "
+                            f"{child.path} -> {file_val}", "WARNING")
+                else:
+                    saved_state.append({
+                        'op': child,
+                        'family': 'DAT',
+                        'file': file_val,
+                        'file_readonly': child.par.file.readOnly,
+                        'syncfile': child.par.syncfile.eval(),
+                    })
+
+            elif child.family == 'COMP' and hasattr(child.par, 'externaltox'):
+                tox_val = child.par.externaltox.eval()
+                if not tox_val:
+                    continue
+                if tox_val.startswith('/') or (len(tox_val) > 1 and tox_val[1] == ':'):
+                    if not tox_val.startswith('/sys/'):
+                        self.Log(
+                            f"Absolute path won't be portable: "
+                            f"{child.path} -> {tox_val}", "WARNING")
+                else:
+                    saved_state.append({
+                        'op': child,
+                        'family': 'COMP',
+                        'externaltox': tox_val,
+                        'externaltox_readonly': child.par.externaltox.readOnly,
+                        'enableexternaltox': child.par.enableexternaltox.eval(),
+                    })
+
+        # Phase 1b: Collect Embody tags to strip from all descendants
+        # (including the target itself). Recipients don't need Embody
+        # metadata — it would cause confusion if they have Embody installed.
+        embody_tags = set(self.getTags())
+        saved_tags = []  # list of (op_ref, set_of_removed_tags)
+
+        # Check target itself, then all descendants
+        for op_ref in [target] + target.findChildren():
+            found = set(op_ref.tags) & embody_tags
+            if found:
+                saved_tags.append((op_ref, found))
+
+        self.Log(
+            f"Exporting portable .tox: stripping {len(saved_state)} "
+            f"file reference(s) and {len(saved_tags)} tagged operator(s) "
+            f"from {target.path}", "INFO")
+
+        # Phase 2: Strip all collected relative references.
+        for entry in saved_state:
+            try:
+                op_ref = entry['op']
+                if entry['family'] == 'DAT':
+                    op_ref.par.file.readOnly = False
+                    op_ref.par.file = ''
+                    op_ref.par.syncfile = False
+                elif entry['family'] == 'COMP':
+                    op_ref.par.externaltox.readOnly = False
+                    op_ref.par.externaltox = ''
+                    op_ref.par.enableexternaltox = False
+            except Exception as e:
+                self.Log(f"Failed to strip {entry['op'].path}: {e}", "WARNING")
+
+        # Strip Embody tags.
+        for op_ref, tags_to_remove in saved_tags:
+            try:
+                for tag in tags_to_remove:
+                    op_ref.tags.remove(tag)
+            except Exception as e:
+                self.Log(
+                    f"Failed to strip tags from {op_ref.path}: {e}", "WARNING")
+
+        # Phase 3: Save the .tox.
+        success = False
+        try:
+            target.save(str(save_path))
+            try:
+                rel_path = Path(save_path).relative_to(
+                    Path(project.folder).parents[0])
+            except ValueError:
+                rel_path = save_path
+            self.Log(f"Exported portable .tox: {rel_path}", "SUCCESS")
+            success = True
+        except Exception as e:
+            self.Log(f"Portable .tox export failed: {e}", "ERROR")
+
+        # Phase 4: Restore all references (always, even on failure).
+        for entry in saved_state:
+            try:
+                op_ref = entry['op']
+                if entry['family'] == 'DAT':
+                    op_ref.par.file = entry['file']
+                    op_ref.par.file.readOnly = entry['file_readonly']
+                    op_ref.par.syncfile = entry['syncfile']
+                elif entry['family'] == 'COMP':
+                    op_ref.par.externaltox = entry['externaltox']
+                    op_ref.par.externaltox.readOnly = entry['externaltox_readonly']
+                    op_ref.par.enableexternaltox = entry['enableexternaltox']
+            except Exception as e:
+                self.Log(
+                    f"Failed to restore {entry['op'].path}: {e}", "WARNING")
+
+        # Restore Embody tags (always, even on save failure).
+        for op_ref, tags_to_restore in saved_tags:
+            try:
+                for tag in tags_to_restore:
+                    op_ref.tags.add(tag)
+            except Exception as e:
+                self.Log(
+                    f"Failed to restore tags on {op_ref.path}: {e}", "WARNING")
+
+        return success
 
     @staticmethod
     def _computeTDNFingerprint(comp) -> tuple:
@@ -1790,12 +1954,15 @@ class EmbodyExt:
                             self._removeTDNStrategy(old_op_path)
                     continue
 
-                # Skip operators inside TDN-strategy COMPs — their lifecycle
-                # is managed by TDN import/export, not individual externalization.
-                # Without this, the strip/restore save cycle would cause the
-                # continuity check to delete files for temporarily-missing children.
+                # Skip operators inside TDN-strategy COMPs ONLY if they
+                # don't have their own independent externalization strategy
+                # (py, tsv, tox, etc.). Individually-externalized operators
+                # need normal continuity checking for rename/delete detection.
+                # Operators without a strategy are purely TDN-managed and
+                # should be skipped to avoid false deletions.
                 if any(old_op_path.startswith(tdn_path + '/') for tdn_path in tdn_comp_paths):
-                    continue
+                    if not strategy:
+                        continue
 
                 existing_op = op(old_op_path)
 
@@ -2579,17 +2746,33 @@ class EmbodyExt:
                 buttons=['Ok'])
             return
 
-        # Determine which tags to show
+        # Route based on family + tag state
         if oper.type in self.supported_dat_types:
             switch.par.index = 1
+            active_tag = self._getActiveDATTag(oper)
+            if active_tag:
+                run(lambda: self.SetupTaggerDATManageMode(oper, active_tag), delayFrames=1)
+                run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
+                return
         elif oper.family == 'COMP':
             switch.par.index = 2
+            tox_tag = self.my.par.Toxtag.val
+            tdn_tag = self.my.par.Tdntag.val
+            if tox_tag in oper.tags:
+                run(lambda: self.SetupTaggerManageMode(oper, 'TOX_'), delayFrames=1)
+                run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
+                return
+            elif tdn_tag in oper.tags:
+                run(lambda: self.SetupTaggerManageMode(oper, 'TDN_'), delayFrames=1)
+                run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
+                return
         else:
-            ui.messageBox('Embody Error', 
-                'Tags can only be applied to COMPs or supported DATs.', 
+            ui.messageBox('Embody Error',
+                'Tags can only be applied to COMPs or supported DATs.',
                 buttons=['Ok'])
             return
 
+        # Untagged operator — show tag selection
         run(lambda: self.SetupTaggerTagMode(oper), delayFrames=1)
         run(f"op('{self.tagging_menu_window}').par.winopen.pulse()", delayFrames=2)
 
@@ -2630,10 +2813,10 @@ class EmbodyExt:
         tdn_btn = self.tagger.op('button2')
         if tox_btn:
             tox_btn.par.display = True
-            tox_btn.par.label = 'Remove tox' if is_tox else 'Switch to tox'
+            tox_btn.par.label = 'Remove tox' if is_tox else 'Convert to tox'
         if tdn_btn:
             tdn_btn.par.display = True
-            tdn_btn.par.label = 'Remove tdn' if not is_tox else 'Switch to tdn'
+            tdn_btn.par.label = 'Remove tdn' if not is_tox else 'Convert to tdn'
 
         # Hide any extra DAT-tag buttons (safety net for replicator timing)
         for i in range(3, 16):
@@ -2649,6 +2832,15 @@ class EmbodyExt:
             btn_save.par.colorr = self.my.par.Taggingmenucolorr.eval()
             btn_save.par.colorg = self.my.par.Taggingmenucolorg.eval()
             btn_save.par.colorb = self.my.par.Taggingmenucolorb.eval()
+
+        # Show Export portable tox button
+        btn_portable = self.tagger.op('btn_portable')
+        if btn_portable:
+            btn_portable.par.display = True
+            btn_portable.par.label = 'Export portable tox'
+            btn_portable.par.colorr = self.my.par.Taggingmenucolorr.eval()
+            btn_portable.par.colorg = self.my.par.Taggingmenucolorg.eval()
+            btn_portable.par.colorb = self.my.par.Taggingmenucolorb.eval()
 
         # Hide Remove button (use Remove tox/tdn buttons instead)
         btn_remove = self.tagger.op('btn_remove')
@@ -2670,8 +2862,78 @@ class EmbodyExt:
         if title:
             title.par.text = 'Actions'
 
-        # Update height: header + 2 tag buttons + Save (+ Open file if applicable)
-        visible_count = 4 + (1 if rel_fp else 0)
+        # Update height: header + 2 tag buttons + Save + Export Portable
+        # (+ Open file if applicable)
+        visible_count = 5 + (1 if rel_fp else 0)
+        self.tagger.store('visible_count', visible_count)
+
+    def SetupTaggerDATManageMode(self, oper: OP, active_tag: str) -> None:
+        """Configure tagger for manage mode on an already-tagged DAT.
+
+        Shows Convert to <format> options, Remove, and Reveal in Finder.
+        """
+        self._tagger_mode = 'manage'
+        self.rolloverOp = oper
+
+        # Ensure switch is set to DAT tags
+        switch = self.tagger.op('switch_family')
+        if switch:
+            switch.par.index = 1
+
+        self.SetupTagger(oper)
+
+        # COMP tags that should not appear as "Convert to" options for DATs
+        comp_tags = {self.my.par.Toxtag.val, self.my.par.Tdntag.val}
+
+        # Use replicated buttons for "Convert to <format>" options
+        tags = self.tagger.op('tags')
+        convert_count = 0
+        for i in range(1, tags.numRows):
+            btn = self.tagger.op(f'button{i}')
+            if btn:
+                tag_val = tags[i, 'value'].val
+                if tag_val == active_tag or tag_val in comp_tags:
+                    btn.par.display = False
+                else:
+                    btn.par.display = True
+                    btn.par.label = f'Convert to {tag_val}'
+                    convert_count += 1
+
+        # Hide Save button (DATs use syncfile)
+        btn_save = self.tagger.op('btn_save')
+        if btn_save:
+            btn_save.par.display = False
+
+        # Show Remove button
+        btn_remove = self.tagger.op('btn_remove')
+        if btn_remove:
+            btn_remove.par.display = True
+            btn_remove.par.label = 'Remove externalization'
+            btn_remove.par.colorr = self.my.par.Taggingmenucolorr.eval()
+            btn_remove.par.colorg = self.my.par.Taggingmenucolorg.eval()
+            btn_remove.par.colorb = self.my.par.Taggingmenucolorb.eval()
+
+        # Hide portable tox (COMP-only action)
+        btn_portable = self.tagger.op('btn_portable')
+        if btn_portable:
+            btn_portable.par.display = False
+
+        # Show Reveal in Finder/Explorer
+        btn_openfile = self.tagger.op('btn_openfile')
+        rel_fp = self.getExternalPath(oper)
+        self.tagger.store('manage_file_path', rel_fp or '')
+        if btn_openfile:
+            btn_openfile.par.display = bool(rel_fp)
+            label = 'Reveal in Finder' if sys.platform.startswith('darwin') else 'Reveal in Explorer'
+            btn_openfile.par.label = label
+
+        # Update header
+        title = self.tagger.op('header/text1')
+        if title:
+            title.par.text = 'Actions'
+
+        # Height: header + convert buttons + Remove + (Reveal if applicable)
+        visible_count = 1 + convert_count + 1 + (1 if rel_fp else 0)
         self.tagger.store('visible_count', visible_count)
 
     def SetupTaggerTagMode(self, oper: OP) -> None:
@@ -2682,12 +2944,15 @@ class EmbodyExt:
         btn_save = self.tagger.op('btn_save')
         btn_remove = self.tagger.op('btn_remove')
         btn_openfile = self.tagger.op('btn_openfile')
+        btn_portable = self.tagger.op('btn_portable')
         if btn_save:
             btn_save.par.display = False
         if btn_remove:
             btn_remove.par.display = False
         if btn_openfile:
             btn_openfile.par.display = False
+        if btn_portable:
+            btn_portable.par.display = False
 
         # Find if operator already has an Embody tag
         tags = self.tagger.op('tags')
@@ -2857,6 +3122,14 @@ class EmbodyExt:
         self.Log("Tags can only be applied to COMPs or DATs", "ERROR")
         return None
 
+    def _getActiveDATTag(self, oper: OP) -> Optional[str]:
+        """Return the active Embody DAT tag on an operator, or None."""
+        dat_tags = self.getTags('DAT')
+        for tag in dat_tags:
+            if tag in oper.tags:
+                return tag
+        return None
+
     def _inferDATTagValue(self, oper) -> str:
         """Infer the best externalization tag value for a DAT operator.
         Returns tag value string (e.g. 'py', 'txt', 'tsv') for applyTagToOperator().
@@ -2956,8 +3229,22 @@ class EmbodyExt:
 
         self.Refresh()
 
+    def HandlePortableExport(self, oper: OP) -> None:
+        """Show a file dialog and export a portable .tox for the given COMP."""
+        default_name = f"{oper.name}.tox"
+        start_dir = str(Path(project.folder).parents[0])
+        path = ui.chooseFile(
+            load=False,
+            start=start_dir,
+            fileTypes=['tox'],
+            title='Export portable tox')
+        if path is None:
+            return
+        self.ExportPortableTox(target=oper, save_path=str(path))
+        self.Refresh()
+
     def HandleStrategyRemove(self, oper: OP) -> None:
-        """Remove externalization from a COMP with confirmation dialog."""
+        """Remove externalization from a COMP or DAT with confirmation dialog."""
         result = ui.messageBox(
             'Remove',
             'Remove this externalization?\n\n'
@@ -2980,9 +3267,24 @@ class EmbodyExt:
                 oper.tags.discard(tox_tag)
                 oper.par.externaltox = ''
                 oper.par.externaltox.readOnly = False
+            elif oper.family == 'DAT':
+                active_tag = self._getActiveDATTag(oper)
+                if active_tag:
+                    rel_fp = self.getExternalPath(oper)
+                    self.RemoveListerRow(oper.path, rel_fp)
+                    oper.tags.discard(active_tag)
+                    oper.par.file = ''
+                    oper.par.file.readOnly = False
 
             self.resetOpColor(oper)
             self.Refresh()
+
+    def HandleDATConvert(self, oper: OP, new_tag: str) -> None:
+        """Convert a DAT's externalization to a different format."""
+        self.applyTagToOperator(oper, new_tag)
+        if new_tag in oper.tags:
+            self.ExternalizeImmediate(oper)
+        self.Refresh()
 
     def ExternalizeImmediate(self, oper: OP) -> None:
         """Immediately externalize a single tagged operator.
@@ -3023,8 +3325,7 @@ class EmbodyExt:
                     self.Save(oper.path)
                 elif is_tdn:
                     self.SaveTDN(oper.path)
-                else:
-                    self.Save(oper.path)
+                # DATs use syncfile — no explicit save needed
                 return
 
         # Not tracked — full initialization (creates tracking entry + saves file)

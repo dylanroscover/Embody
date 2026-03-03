@@ -1,12 +1,25 @@
 # Changelog
 
+## v5.0.171
+
+Export Portable Tox, improved tag management, TDN error handling, window management refactor.
+
+- **Export Portable Tox**: New `ExportPortableTox()` method exports any COMP as a self-contained `.tox` with all external file references and Embody tags stripped. Available from the Manager UI Actions menu and used automatically for release builds
+- **Improved tag stripping**: Disable now sweeps all project operators for stale Embody tags, not just tracked ones
+- **TDN error handling**: `ImportNetworkFromFile` now returns structured error dicts instead of `None` on failure
+- **TDN per-COMP split**: Refactored `_splitPerComp` into a reusable static method
+- **Window management**: Tagging menu and manager UI refactored into standalone window COMPs (`window_tagging_menu`, `window_manager`)
+- **Keyboard shortcut update**: `lctrl-lctrl` now shows an Actions menu for already-tagged operators (tag, retag, export portable tox, etc.)
+- **Release build**: `execute_src_ctrl.py` now uses `ExportPortableTox()` instead of raw `comp.save()` for portable release `.tox` files
+- **Test fixes**: Updated test_custom_parameters (synchronous `ReexportAllTDNs` call, Envoy transitional state handling) and test_tdn_reconstruction (improved continuity check distinguishing pure TDN children from individually-externalized ones)
+
 ## v5.0.163
 
 Re-export TDN files for list, manager, and container_right after param changes.
 
 ## v5.0.140
 
-Current release — TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, TDN restore UI, companion DAT reuse during import, bug fixes.
+TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, TDN restore UI, companion DAT reuse during import, bug fixes.
 
 - Save-in-progress guard blocks mutating MCP operations during the strip/restore save window
 - Pre-save verifies `.tdn` file exists before stripping children (prevents data loss)

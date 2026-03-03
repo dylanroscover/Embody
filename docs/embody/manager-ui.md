@@ -12,5 +12,6 @@ Press ++ctrl+shift+o++ to open the Embody Manager window.
 
 - **Click** to navigate to any operator in the network editor
 - **Open file location** in your system file browser
+- **Export portable tox** to save a self-contained `.tox` with no external dependencies
 - **Refresh** to update dirty states
 - **Filter/search** through externalized operators

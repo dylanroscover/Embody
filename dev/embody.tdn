@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 11,
-	"generator": "Embody/5.0.163",
+	"build": 15,
+	"generator": "Embody/5.0.170",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-02T07:05:30Z",
+	"exported_at": "2026-03-03T18:52:43Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false
@@ -671,7 +671,7 @@
 						"style": "Str",
 						"startSection": true,
 						"readOnly": true,
-						"value": "5.0.163"
+						"value": "5.0.170"
 					},
 					{
 						"name": "Touchbuild",
@@ -691,7 +691,7 @@
 						"style": "Int",
 						"label": "Build Number",
 						"readOnly": true,
-						"value": 52
+						"value": 84
 					},
 					{
 						"name": "Github",
@@ -704,7 +704,7 @@
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-02 07:05:30 UTC"
+						"value": "2026-03-03 18:52:43 UTC"
 					},
 					{
 						"name": "Help",
@@ -724,7 +724,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 44,
-					"Date": "2026-03-02 06:52:16 UTC",
+					"Date": "2026-03-03 17:04:54 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -744,7 +744,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 9,
-					"Date": "2026-03-02 06:05:33 UTC",
+					"Date": "2026-03-03 17:04:54 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -772,7 +772,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 92,
+				"rows": 83,
 				"cols": 8
 			},
 			"flags": ["viewer"],

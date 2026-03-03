@@ -2,7 +2,7 @@
 
 ### Automated Externalization and AI Integration for TouchDesigner
 
-**TouchDesigner 2025.32280** (Windows / macOS) &nbsp;|&nbsp; **v5.0.163**
+**TouchDesigner 2025.32280** (Windows / macOS) &nbsp;|&nbsp; **v5.0.171**
 
 [YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s) &nbsp;|&nbsp; [Full Documentation](docs/)
 
@@ -23,6 +23,7 @@ TouchDesigner stores projects in binary `.toe` files that are impossible to diff
 | 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync with your `.toe` on every save |
 | 🤖 | **Envoy MCP Server** | 40+ tools let AI assistants create operators, set parameters, wire connections, and more |
 | 📄 | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
+| 📤 | **Portable Tox Export** | Export any COMP as a self-contained `.tox` with all external references stripped |
 
 ---
 
@@ -55,7 +56,7 @@ my-project/              <- git repo root
 
 | Shortcut | Action |
 |----------|--------|
-| `lctrl + lctrl` | Tag the selected operator for externalization |
+| `lctrl + lctrl` | Tag or manage the operator under the cursor |
 | `ctrl + shift + u` | Initialize/update all externalizations |
 | `ctrl + alt + u` | Save only the current COMP |
 | `ctrl + shift + o` | Open the Manager UI |
@@ -147,10 +148,10 @@ See the [full changelog](docs/changelog.md) for detailed version history.
 
 **Recent releases:**
 
+- **5.0.171**: Export Portable Tox, improved tag management, TDN error handling, window management refactor
 - **5.0.163**: Re-export TDN files for list, manager, and container_right after param changes
 - **5.0.140**: TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, TDN restore UI, companion DAT reuse, bug fixes
 - **5.0.130**: TDN strategy externalization, strip/restore save cycle, compact TDN format, per-COMP split export
-- **5.0.93**: Modular sub-components, TDN snapshots, README rewrite
 - **5.0**: Major release — Envoy MCP server (40+ tools), TDN format, test framework (30 suites), structured logging, CLAUDE.md auto-generation, macOS support
 
 ---
