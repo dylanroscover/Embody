@@ -3182,7 +3182,6 @@ class EnvoyExt:
             '.mcp.json',
             '.claude/',
             '__pycache__/',
-            '*.lck',
             '.DS_Store',
         ]
 
