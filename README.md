@@ -12,17 +12,21 @@
 
 TouchDesigner stores projects in binary `.toe` files that are impossible to diff or merge in git. **Embody** solves this by automatically externalizing your COMPs and DATs to version-control-friendly files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. Tag any operator with a double-tap of left Ctrl, save your project, and Embody keeps everything in sync.
 
-Embody also includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) server that lets AI coding assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) create, modify, connect, and query operators in your live TouchDesigner session — all through natural language. And with the **TDN** network format, you can export your entire operator network to human-readable, diffable JSON.
+**Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, lets AI coding assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) create, modify, connect, and query operators in your live TouchDesigner session — all through natural language.
+
+**TDN** (TouchDesigner Network) takes it further — export your entire operator network to human-readable, diffable JSON. Review network changes in pull requests, snapshot your project state, and import networks back with full fidelity.
+
+![Embody Manager UI](docs/assets/embody-screenshot.jpg)
 
 | | Feature | What It Does |
 |---|---------|-------------|
-| | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync with your `.toe` on every save |
-| | **Envoy MCP Server** | 40+ tools let AI assistants create operators, set parameters, wire connections, and more |
-| | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
+| 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync with your `.toe` on every save |
+| 🤖 | **Envoy MCP Server** | 40+ tools let AI assistants create operators, set parameters, wire connections, and more |
+| 📄 | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### 1. Project Setup
 
@@ -47,7 +51,7 @@ my-project/              <- git repo root
 
 > If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
-### 3. Keyboard Shortcuts
+### 3. ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -62,7 +66,7 @@ For detailed feature documentation — supported formats, folder configuration, 
 
 ---
 
-## Envoy MCP Server
+## 🤖 Envoy MCP Server
 
 Embody includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) server that lets AI coding assistants interact with TouchDesigner programmatically.
 
@@ -83,7 +87,7 @@ When Envoy starts, it generates a `CLAUDE.md` file in your project root with con
 
 ---
 
-## TDN Network Format
+## 📄 TDN Network Format
 
 TDN (TouchDesigner Network) is a JSON-based format for exporting operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in git.
 
@@ -96,7 +100,7 @@ See the [full TDN specification](docs/tdn/specification.md) for format details, 
 
 ---
 
-## Logging
+## 📋 Logging
 
 Embody provides a multi-destination logging system:
 
@@ -113,7 +117,7 @@ op.Embody.Error('Something broke')
 
 ---
 
-## Testing
+## 🧪 Testing
 
 Embody includes **30 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
@@ -127,7 +131,7 @@ Via Envoy MCP: use the `run_tests` tool. See the [full testing docs](docs/testin
 
 ---
 
-## Troubleshooting
+## ❓ Troubleshooting
 
 - **Timeline Paused**: Embody requires the timeline to be running. A warning appears if paused.
 - **Clone/Replicant Operators**: Cannot be externalized. Embody warns if you try to tag them.
@@ -137,7 +141,7 @@ For more, see [Troubleshooting](docs/embody/troubleshooting.md).
 
 ---
 
-## Version History
+## 📝 Version History
 
 See the [full changelog](docs/changelog.md) for detailed version history.
 
