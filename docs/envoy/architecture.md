@@ -16,7 +16,7 @@ Envoy uses a two-thread architecture to bridge the MCP protocol with TouchDesign
 │  FastMCP Server   │    MCP Request ──►   │  _onRefresh()     │
 │  (uvicorn)        │                       │  Execute TD ops   │
 │                   │   ◄── TD Result       │                   │
-│  127.0.0.1:9876   │                       │  Cook cycle       │
+│  127.0.0.1:9870   │                       │  Cook cycle       │
 └──────────────────┘                       └──────────────────┘
 ```
 

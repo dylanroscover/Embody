@@ -652,7 +652,7 @@ Embody auto-installs all dependencies (mcp>=1.2.0, pywin32>=306 on Windows) via 
 ### Enabling the Server
 1. Open the Embody `.toe` project in TouchDesigner
 2. Toggle the `Envoyenable` parameter ON in the Embody COMP
-3. Server starts on configured port (default: 9876)
+3. Server starts on configured port (default: 9870)
 
 ### Changing the Port
 Changing the `Envoyport` parameter while the server is running will automatically:
@@ -671,7 +671,7 @@ If you need to configure manually, create `.mcp.json` in the project root:
   "mcpServers": {
     "envoy": {
       "type": "http",
-      "url": "http://localhost:9876/mcp"
+      "url": "http://localhost:9870/mcp"
     }
   }
 }

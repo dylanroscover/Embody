@@ -73,7 +73,7 @@ Embody includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) s
 ### Quick Start
 
 1. **Enable Envoy**: Toggle the `Envoyenable` parameter on the Embody COMP
-2. **Server starts**: Envoy runs on `localhost:9876` (configurable via `Envoyport`)
+2. **Server starts**: Envoy runs on `localhost:9870` (configurable via `Envoyport`)
 3. **Auto-configuration**: Envoy creates a `.mcp.json` file in your git repo root
 4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) — it picks up `.mcp.json` automatically
 

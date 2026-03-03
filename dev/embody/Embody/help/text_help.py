@@ -48,7 +48,7 @@ DATs:
 
 Supported File Formats
 ----------------------
-COMPs: .tox
+COMPs: .tox, .tdn (TDN strategy)
 DATs:  .py, .json, .xml, .html, .glsl, .frag, .vert,
        .txt, .md, .rtf, .csv, .tsv, .dat
 
@@ -85,7 +85,7 @@ programmatically. When enabled, Envoy lets you:
 - Export/import networks via the TDN format
 
 To enable: toggle the Envoyenable parameter ON. The server
-starts on port 9876 by default and auto-creates a .mcp.json
+starts on port 9870 by default and auto-creates a .mcp.json
 file in your git repo root for AI coding assistants to discover.
 
 TDN Network Format

@@ -36,7 +36,7 @@ class EnvoyMCPServer:
     """
 
     def __init__(self, request_queue: Optional[Queue], response_queue: Queue,
-                 add_to_refresh_queue: Callable[[dict], None], port: int = 9876,
+                 add_to_refresh_queue: Callable[[dict], None], port: int = 9870,
                  shutdown_event: Optional[Event] = None) -> None:
         self.request_queue: Optional[Queue] = request_queue
         self.response_queue: Queue = response_queue

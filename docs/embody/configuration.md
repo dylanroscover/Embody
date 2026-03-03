@@ -16,7 +16,7 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 ### Envoy
 
 - **Envoy Enable** — Toggle the MCP server on/off
-- **Envoy Port** — Port number for the MCP server (default: 9876)
+- **Envoy Port** — Port number for the MCP server (default: 9870)
 
 ### TDN
 
