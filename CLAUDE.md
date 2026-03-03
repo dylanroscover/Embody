@@ -469,8 +469,14 @@ Embody/
 ├── CLAUDE.md                              # This file
 ├── README.md                              # User-facing docs, changelog
 ├── LICENSE                                # TEC Friendly License v1.0
-├── docs/
-│   └── TDN.md                            # TDN network format documentation
+├── docs/                                  # MkDocs documentation site
+│   ├── embody/                           # Embody feature docs
+│   ├── envoy/                            # Envoy MCP server docs
+│   ├── tdn/                              # TDN format specification
+│   ├── td-development/                   # TD coding best practices
+│   ├── tdn.schema.json                   # JSON Schema for .tdn validation
+│   ├── testing.md                        # Test framework docs
+│   └── changelog.md                      # Version history
 ├── dev/
 │   ├── Embody-5.140.toe                    # Active development project
 │   ├── .venv/                             # Python virtual environment (auto-created)
@@ -488,7 +494,7 @@ Embody/
 │           ├── timer_callbacks.py         # Timer callbacks (double-press detection)
 │           ├── chopexec_exit_tagger.py    # CHOP exit handler
 │           └── help/
-│               └── text_help.txt           # Help text
+│               └── text_help.py            # Help text
 └── release/
     └── Embody-v*.tox                     # Latest release build
 ```
@@ -552,7 +558,7 @@ TDN (TouchDesigner Network) is a JSON-based format for representing TD operator 
 - **Relative source references**: Connections reference siblings by name only, falling back to full paths for cross-network references
 - **Palette clone detection**: COMPs cloned from `/sys/` are marked but their children are not exported (TD recreates them automatically)
 
-**File format**: JSON with `.tdn` extension. Full specification: [`docs/TDN.md`](docs/TDN.md)
+**File format**: JSON with `.tdn` extension. Full specification: [`docs/tdn/specification.md`](docs/tdn/specification.md)
 
 **Export modes:**
 - `Ctrl+Shift+E` — export entire project to a single `.tdn` file
@@ -610,8 +616,8 @@ op.Embody.ext.Envoy.Stop()
 | `timer_callbacks.py` | LOW | Double-press detection logic. |
 | `chopexec_exit_tagger.py` | LOW | CHOP exit handler for tagging. |
 | `externalizations.tsv` | NEVER EDIT | Managed exclusively by Embody. Manual edits corrupt tracking. |
-| `text_claude.md` | MEDIUM | Template for per-project CLAUDE.md. Must be kept in sync with root CLAUDE.md and text_help.txt. |
-| `help/text_help.txt` | LOW | Help text displayed in Embody UI. Must be kept in sync with CLAUDE.md and text_claude.md for shortcuts, features, and supported formats. |
+| `text_claude.md` | MEDIUM | Template for per-project CLAUDE.md. Must be kept in sync with root CLAUDE.md and text_help.py. |
+| `help/text_help.py` | LOW | Help text displayed in Embody UI. Must be kept in sync with CLAUDE.md and text_claude.md for shortcuts, features, and supported formats. |
 
 ## TouchDesigner Documentation
 
@@ -636,7 +642,7 @@ op.Embody.ext.Envoy.Stop()
   - https://docs.derivative.ca/Cook — Cook cycle (pull-based evaluation model)
   - https://docs.derivative.ca/DAT_Class — DAT class (text, table, cell access)
   - https://docs.derivative.ca/Channel_Class — CHOP channel class
-  - [`docs/TDN.md`](docs/TDN.md) — TDN network format specification (JSON schema for TD network export/import)
+  - [`docs/tdn/specification.md`](docs/tdn/specification.md) — TDN network format specification
 
 ## Envoy MCP Server Setup
 
@@ -829,11 +835,11 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 ## Testing
 
-Embody has a comprehensive automated test suite with **29 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
+Embody has a comprehensive automated test suite with **30 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
 
 ### Test Coverage
 
-**Core Embody (13 suites):**
+**Core Embody (14 suites):**
 - `test_externalization` — externalization lifecycle
 - `test_crud_operators` — create, read, update, delete operations
 - `test_file_management` — file I/O, path handling, cleanup
@@ -847,6 +853,7 @@ Embody has a comprehensive automated test suite with **29 test files** covering 
 - `test_param_tracker` — parameter change tracking
 - `test_operator_queries` — operator discovery and queries
 - `test_logging` — logging system
+- `test_custom_parameters` — custom parameter behavior
 
 **MCP Tools (11 suites):**
 - `test_mcp_operators` — create, delete, copy, rename, query, find
@@ -1018,7 +1025,7 @@ class TestMyFeature(EmbodyTestCase):
 8. **Thread boundary**: `EnvoyMCPServer` (worker thread) must never import or call TouchDesigner modules. All TD access goes through `_execute_in_td()` → main thread
 9. **Safe deletion only**: Never delete files outside Embody's tracking. Use `safeDeleteFile()` / `isTrackedFile()`
 10. **Always check for errors after creating operators** — call `get_op_errors` (with `recurse=true`) immediately after creating and connecting operators. Many TD operators require specific input types or parameter configurations to function. Fix all errors before considering the task complete.
-11. **CLAUDE.md, text_claude.md, and text_help.txt must ALWAYS be kept in sync.** The template at `dev/embody/Embody/text_claude.md` generates per-project CLAUDE.md files. The help text at `dev/embody/Embody/help/text_help.txt` is displayed in the Embody UI. Any documentation changes (keyboard shortcuts, supported formats, features, workflow) must be applied to all three files.
+11. **CLAUDE.md, text_claude.md, and text_help.py must ALWAYS be kept in sync.** The template at `dev/embody/Embody/text_claude.md` generates per-project CLAUDE.md files. The help text at `dev/embody/Embody/help/text_help.py` is displayed in the Embody UI. Any documentation changes (keyboard shortcuts, supported formats, features, workflow) must be applied to all three files.
 12. **Favor annotations over OP comments** — when documenting operators or groups of operators in the network, always use `create_annotation` (annotate mode with a title bar) instead of setting the `comment` property on individual operators. Annotations are more visible, support rich text, and can visually group related operators. Reserve OP comments for brief inline notes only.
 13. **Always analyze log files after MCP operations** — after running tests, bulk externalizations, or any multi-step MCP workflow, read the log file at `dev/logs/` to verify no errors occurred. The piggybacked `_logs` field and `get_logs` ring buffer only hold a limited window — errors from earlier in the operation may have been evicted. Grep the log file for `ERROR` and `WARNING` entries and resolve any issues before reporting success.
 14. **Always update unit tests when modifying project code.** When changing any extension file (EmbodyExt.py, EnvoyExt.py, TDNExt.py, etc.), check whether existing unit tests assert against the changed behavior — if so, update those assertions to match the new code. Never leave tests asserting against a format or API that no longer exists. Run the relevant test suite after changes to confirm all tests pass.

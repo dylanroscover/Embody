@@ -404,10 +404,16 @@ Embody/
 ├── CLAUDE.md                              # This file
 ├── README.md                              # User-facing docs, changelog
 ├── LICENSE                                # TEC Friendly License v1.0
-├── docs/
-│   └── TDN.md                            # TDN network format documentation
+├── docs/                                  # MkDocs documentation site
+│   ├── embody/                           # Embody feature docs
+│   ├── envoy/                            # Envoy MCP server docs
+│   ├── tdn/                              # TDN format specification
+│   ├── td-development/                   # TD coding best practices
+│   ├── tdn.schema.json                   # JSON Schema for .tdn validation
+│   ├── testing.md                        # Test framework docs
+│   └── changelog.md                      # Version history
 ├── dev/
-│   ├── Embody-5.61.toe                    # Active development project
+│   ├── Embody-5.140.toe                    # Active development project
 │   ├── .venv/                             # Python virtual environment (auto-created)
 │   ├── Backup/                            # Versioned .toe backups
 │   └── embody/
@@ -488,7 +494,7 @@ TDN (TouchDesigner Network) is a JSON-based format for representing TD operator 
 - **Palette clone detection**: COMPs cloned from `/sys/` are marked but their children are not exported (TD recreates them automatically)
 - **Per-COMP split mode**: Large networks can be exported as one `.tdn` file per COMP, creating a git-friendly directory structure
 
-**File format**: JSON with `.tdn` extension. Full specification: [`docs/TDN.md`](docs/TDN.md)
+**File format**: JSON with `.tdn` extension. Full specification: [`docs/tdn/specification.md`](docs/tdn/specification.md)
 
 **Export modes:**
 - `Ctrl+Shift+E` — export entire project to a single `.tdn` file
@@ -572,7 +578,7 @@ op.Embody.ext.Envoy.Stop()
   - https://docs.derivative.ca/Cook — Cook cycle (pull-based evaluation model)
   - https://docs.derivative.ca/DAT_Class — DAT class (text, table, cell access)
   - https://docs.derivative.ca/Channel_Class — CHOP channel class
-  - [`docs/TDN.md`](docs/TDN.md) — TDN network format specification (JSON schema for TD network export/import)
+  - [`docs/tdn/specification.md`](docs/tdn/specification.md) — TDN network format specification (JSON schema for TD network export/import)
 
 ## Envoy MCP Server Setup
 
@@ -767,44 +773,47 @@ If you need to configure manually, create `.mcp.json` in the project root:
 
 ## Testing
 
-Embody has a comprehensive automated test suite with **27 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
+Embody has a comprehensive automated test suite with **30 test files** covering all core functionality. The test framework lives at `/embody/unit_tests` and uses a custom test runner extension.
 
 ### Test Coverage
 
-**Core Embody (13 suites):**
-- `test_externalization.py` — externalization lifecycle
-- `test_crud_operators.py` — create, read, update, delete operations
-- `test_file_management.py` — file I/O, path handling, cleanup
-- `test_tag_management.py` — tagging operators for externalization
-- `test_tag_lifecycle.py` — tag application and removal
-- `test_rename_move_lifecycle.py` — rename and move tracking
-- `test_delete_cleanup.py` — deletion and file cleanup
-- `test_duplicate_handling.py` — duplicate operator handling
-- `test_update_sync.py` — sync between .toe and externalized files
-- `test_path_utils.py` — path normalization and utilities
-- `test_param_tracker.py` — parameter change tracking
-- `test_operator_queries.py` — operator discovery and queries
-- `test_logging.py` — logging system
+**Core Embody (14 suites):**
+- `test_externalization` — externalization lifecycle
+- `test_crud_operators` — create, read, update, delete operations
+- `test_file_management` — file I/O, path handling, cleanup
+- `test_tag_management` — tagging operators for externalization
+- `test_tag_lifecycle` — tag application and removal
+- `test_rename_move_lifecycle` — rename and move tracking
+- `test_delete_cleanup` — deletion and file cleanup
+- `test_duplicate_handling` — duplicate operator handling
+- `test_update_sync` — sync between .toe and externalized files
+- `test_path_utils` — path normalization and utilities
+- `test_param_tracker` — parameter change tracking
+- `test_operator_queries` — operator discovery and queries
+- `test_logging` — logging system
+- `test_custom_parameters` — custom parameter behavior
 
 **MCP Tools (11 suites):**
-- `test_mcp_operators.py` — create, delete, copy, rename, query, find
-- `test_mcp_parameters.py` — get/set parameters, modes, expressions
-- `test_mcp_dat_content.py` — DAT text and table operations
-- `test_mcp_connections.py` — wiring operators together
-- `test_mcp_annotations.py` — creating and managing annotations
-- `test_mcp_extensions.py` — extension creation and setup
-- `test_mcp_diagnostics.py` — error checking, performance, info
-- `test_mcp_flags_position.py` — operator flags and positioning
-- `test_mcp_code_execution.py` — executing Python in TD
-- `test_mcp_externalization.py` — Embody integration via MCP
-- `test_mcp_performance.py` — performance monitoring
+- `test_mcp_operators` — create, delete, copy, rename, query, find
+- `test_mcp_parameters` — get/set parameters, modes, expressions
+- `test_mcp_dat_content` — DAT text and table operations
+- `test_mcp_connections` — wiring operators together
+- `test_mcp_annotations` — creating and managing annotations
+- `test_mcp_extensions` — extension creation and setup
+- `test_mcp_diagnostics` — error checking, performance, info
+- `test_mcp_flags_position` — operator flags and positioning
+- `test_mcp_code_execution` — executing Python in TD
+- `test_mcp_externalization` — Embody integration via MCP
+- `test_mcp_performance` — performance monitoring
 
-**TDN Format (2 suites):**
-- `test_tdn_export_import.py` — network export/import
-- `test_tdn_helpers.py` — TDN utility functions
+**TDN Format (4 suites):**
+- `test_tdn_export_import` — network export/import
+- `test_tdn_helpers` — TDN utility functions
+- `test_tdn_reconstruction` — reconstruction round-trip fidelity
+- `test_tdn_file_io` — TDN file output, per-comp splitting, stale cleanup
 
 **Infrastructure (1 suite):**
-- `test_server_lifecycle.py` — Envoy MCP server start/stop
+- `test_server_lifecycle` — Envoy MCP server start/stop
 
 ### Test Framework Features
 
