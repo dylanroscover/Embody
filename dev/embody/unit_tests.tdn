@@ -1,0 +1,372 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 10,
+	"generator": "Embody/5.0.176",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-04T06:54:24Z",
+	"network_path": "/embody/unit_tests",
+	"options": {
+		"include_dat_content": false
+	},
+	"type_defaults": {
+		"textDAT": {
+			"parameters": {
+				"syncfile": true,
+				"language": "python"
+			},
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		}
+	},
+	"operators": [
+		{
+			"name": "results",
+			"type": "tableDAT",
+			"parameters": {
+				"file": "embody/unit_tests/results.tsv",
+				"syncfile": true,
+				"rows": 937,
+				"cols": 5
+			},
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["tsv"]
+		},
+		{
+			"name": "test_logging",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_logging.py"
+			},
+			"position": [0, -1000]
+		},
+		{
+			"name": "test_sandbox",
+			"type": "baseCOMP",
+			"custom_pars": {
+				"About": [
+					{
+						"name": "Build",
+						"style": "Int",
+						"label": "Build Number",
+						"readOnly": true,
+						"value": 29
+					},
+					{
+						"name": "Date",
+						"style": "Str",
+						"label": "Build Date",
+						"readOnly": true,
+						"value": "2026-03-03 18:42:22 UTC"
+					},
+					{
+						"name": "Touchbuild",
+						"style": "Str",
+						"label": "Touch Build",
+						"readOnly": true,
+						"value": "2025.32280"
+					}
+				]
+			},
+			"position": [400, 0],
+			"size": [160, 130],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
+		},
+		{
+			"name": "TestRunnerExt",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/TestRunnerExt.py"
+			},
+			"position": [200, 0]
+		},
+		{
+			"name": "test_path_utils",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_path_utils.py"
+			},
+			"position": [200, -800]
+		},
+		{
+			"name": "test_tdn_file_io",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_tdn_file_io.py"
+			},
+			"position": [600, -2200]
+		},
+		{
+			"name": "test_tdn_helpers",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_tdn_helpers.py"
+			},
+			"position": [200, -2200]
+		},
+		{
+			"name": "test_update_sync",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_update_sync.py"
+			},
+			"position": [0, -800]
+		},
+		{
+			"name": "test_mcp_operators",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_operators.py"
+			},
+			"position": [0, -1400]
+		},
+		{
+			"name": "test_param_tracker",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_param_tracker.py"
+			},
+			"position": [400, -800]
+		},
+		{
+			"name": "test_tag_lifecycle",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_tag_lifecycle.py"
+			},
+			"position": [0, -600]
+		},
+		{
+			"name": "test_crud_operators",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_crud_operators.py"
+			},
+			"position": [200, -400]
+		},
+		{
+			"name": "test_delete_cleanup",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_delete_cleanup.py"
+			},
+			"position": [400, -600]
+		},
+		{
+			"name": "test_mcp_extensions",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_extensions.py"
+			},
+			"position": [200, -1600]
+		},
+		{
+			"name": "test_mcp_parameters",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_parameters.py"
+			},
+			"position": [200, -1400]
+		},
+		{
+			"name": "test_tag_management",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_tag_management.py"
+			},
+			"position": [600, -400]
+		},
+		{
+			"name": "test_externalization",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_externalization.py"
+			},
+			"position": [0, -400]
+		},
+		{
+			"name": "test_file_management",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_file_management.py"
+			},
+			"position": [400, -400]
+		},
+		{
+			"name": "test_mcp_annotations",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_annotations.py"
+			},
+			"position": [0, -1600]
+		},
+		{
+			"name": "test_mcp_connections",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_connections.py"
+			},
+			"position": [600, -1400]
+		},
+		{
+			"name": "test_mcp_dat_content",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_dat_content.py"
+			},
+			"position": [400, -1400]
+		},
+		{
+			"name": "test_mcp_diagnostics",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_diagnostics.py"
+			},
+			"position": [400, -1600]
+		},
+		{
+			"name": "test_mcp_performance",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_performance.py"
+			},
+			"position": [400, -1800]
+		},
+		{
+			"name": "test_operator_queries",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_operator_queries.py"
+			},
+			"position": [600, -800]
+		},
+		{
+			"name": "test_server_lifecycle",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_server_lifecycle.py"
+			},
+			"position": [0, -2600]
+		},
+		{
+			"name": "test_custom_parameters",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_custom_parameters.py"
+			},
+			"position": [600, -1800]
+		},
+		{
+			"name": "test_tdn_export_import",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_tdn_export_import.py"
+			},
+			"position": [0, -2200]
+		},
+		{
+			"name": "test_duplicate_handling",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_duplicate_handling.py"
+			},
+			"position": [600, -600]
+		},
+		{
+			"name": "test_mcp_code_execution",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_code_execution.py"
+			},
+			"position": [0, -1800]
+		},
+		{
+			"name": "test_mcp_flags_position",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_flags_position.py"
+			},
+			"position": [600, -1600]
+		},
+		{
+			"name": "test_tdn_reconstruction",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_tdn_reconstruction.py"
+			},
+			"flags": ["viewer"],
+			"position": [400, -2200]
+		},
+		{
+			"name": "test_mcp_externalization",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_externalization.py"
+			},
+			"position": [200, -1800]
+		},
+		{
+			"name": "test_rename_move_lifecycle",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_rename_move_lifecycle.py"
+			},
+			"position": [200, -600]
+		}
+	],
+	"annotations": [
+		{
+			"name": "annotate1",
+			"mode": "annotate",
+			"title": "Infrastructure (3)",
+			"text": "Test runner, results table, and sandbox",
+			"position": [-70, -70],
+			"size": [700, 370],
+			"color": [0.22, 0.35, 0.22],
+			"opacity": 0.5
+		},
+		{
+			"name": "annotate2",
+			"mode": "annotate",
+			"title": "Core Embody Tests (13)",
+			"text": "Externalization, CRUD, file management, tagging,\nrename/move, delete, duplicates, sync, paths,\nparam tracking, operator queries, logging",
+			"position": [-70, -1070],
+			"size": [870, 930],
+			"color": [0.25, 0.3, 0.45],
+			"opacity": 0.5
+		},
+		{
+			"name": "annotate3",
+			"mode": "annotate",
+			"title": "MCP Tools Tests (12)",
+			"text": "Operators, parameters, DAT content, connections,\nannotations, extensions, diagnostics, flags/position,\ncode execution, externalization, performance, custom pars",
+			"position": [-70, -1870],
+			"size": [870, 730],
+			"color": [0.45, 0.3, 0.25],
+			"opacity": 0.5
+		},
+		{
+			"name": "annotate4",
+			"mode": "annotate",
+			"title": "TDN Format Tests (4)",
+			"text": "Export/import, helpers, reconstruction, file I/O",
+			"position": [-70, -2270],
+			"size": [870, 330],
+			"color": [0.35, 0.35, 0.25],
+			"opacity": 0.5
+		},
+		{
+			"name": "annotate5",
+			"mode": "annotate",
+			"title": "Server Lifecycle (1)",
+			"text": "Envoy MCP server start/stop",
+			"position": [-70, -2670],
+			"size": [270, 330],
+			"color": [0.35, 0.25, 0.35],
+			"opacity": 0.5
+		}
+	]
+}
