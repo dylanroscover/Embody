@@ -908,7 +908,8 @@ class EnvoyMCPServer:
         def export_network(root_path: str = "/",
                           include_dat_content: bool = None,
                           output_file: str = None,
-                          max_depth: int = None) -> dict:
+                          max_depth: int = None,
+                          embed_all: bool = False) -> dict:
             """
             Export a TouchDesigner network to .tdn JSON format.
             Only non-default properties are included, keeping output minimal.
@@ -918,6 +919,8 @@ class EnvoyMCPServer:
                 include_dat_content: Include DAT text/table content (default None = use Embeddatsintdns toggle)
                 output_file: File path to write JSON. Use "auto" to generate name. None returns dict only.
                 max_depth: Maximum recursion depth (None = unlimited)
+                embed_all: If True, recurse into TDN-tagged COMPs instead of
+                    skipping their children. Produces a self-contained export.
 
             Returns:
                 Dict with the .tdn JSON document and optional file path
@@ -927,6 +930,7 @@ class EnvoyMCPServer:
                 'include_dat_content': include_dat_content,
                 'output_file': output_file,
                 'max_depth': max_depth,
+                'embed_all': embed_all,
             })
 
         @self.mcp.tool()
@@ -3055,7 +3059,7 @@ class EnvoyExt:
     # === TDN Network Format (Main Thread Only) ===
 
     def _export_network(self, root_path='/', include_dat_content=True,
-                       output_file=None, max_depth=None):
+                       output_file=None, max_depth=None, embed_all=False):
         """Delegate to TDN extension for network export."""
         if not getattr(self.ownerComp.ext, 'TDN', None):
             return {'error': 'TDN extension not loaded on Embody COMP'}
@@ -3064,6 +3068,7 @@ class EnvoyExt:
             include_dat_content=include_dat_content,
             output_file=output_file,
             max_depth=max_depth,
+            embed_all=embed_all,
         )
 
     def _import_network(self, target_path, tdn, clear_first=False):

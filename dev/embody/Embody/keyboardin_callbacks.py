@@ -45,7 +45,7 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 
 	# Export project network to .tdn
 	elif state and key == 'e' and ctrl_or_cmd and lShift:
-		parent.Embody.ext.TDN.ExportNetworkAsync(output_file='auto')
+		parent.Embody.ext.TDN.ExportProjectTDNInteractive()
 
 	# Export current COMP to .tdn
 	elif state and key == 'e' and ctrl_or_cmd and alt:

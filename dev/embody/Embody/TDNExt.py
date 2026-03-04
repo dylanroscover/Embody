@@ -116,7 +116,8 @@ class TDNExt:
 
 	def ExportNetwork(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 					  output_file: Optional[str] = None, max_depth: Optional[int] = None,
-					  cleanup_protected: Optional[list[str]] = None) -> dict[str, Any]:
+					  cleanup_protected: Optional[list[str]] = None,
+					  embed_all: bool = False) -> dict[str, Any]:
 		"""
 		Export a TouchDesigner network to .tdn JSON format.
 
@@ -129,6 +130,8 @@ class TDNExt:
 			cleanup_protected: List of absolute .tdn file paths that must NOT
 				be deleted by stale-file cleanup. Used by SaveTDN to protect
 				.tdn files belonging to other independently-tracked TDN COMPs.
+			embed_all: If True, recurse into TDN-tagged COMPs instead of
+				skipping their children. Produces a self-contained export.
 
 		Returns:
 			dict with 'success' and 'tdn' keys, or 'error' key on failure
@@ -146,6 +149,7 @@ class TDNExt:
 		options = {
 			'include_dat_content': include_dat_content,
 			'max_depth': max_depth,
+			'embed_all': embed_all,
 		}
 
 		try:
@@ -224,7 +228,8 @@ class TDNExt:
 			return {'error': f'Export failed: {e}'}
 
 	def ExportNetworkAsync(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
-						   output_file: Optional[str] = None, max_depth: Optional[int] = None) -> None:
+						   output_file: Optional[str] = None, max_depth: Optional[int] = None,
+						   embed_all: bool = False) -> None:
 		"""
 		Non-blocking export using Thread Manager. Processes operators in
 		batches across frames so TouchDesigner stays responsive.
@@ -237,6 +242,8 @@ class TDNExt:
 			include_dat_content: Include text/table content of DATs
 			output_file: File path to write JSON to. 'auto' generates a name.
 			max_depth: Maximum recursion depth (None = unlimited)
+			embed_all: If True, recurse into TDN-tagged COMPs instead of
+				skipping their children. Produces a self-contained export.
 		"""
 		# Reject if export already running
 		if (self._export_state is not None
@@ -257,7 +264,7 @@ class TDNExt:
 		self._exportable_cache.clear()
 
 		# Phase 1: Collect all operator paths (fast tree walk, single frame)
-		op_paths = self._collectAllPaths(root_op, max_depth)
+		op_paths = self._collectAllPaths(root_op, max_depth, embed_all=embed_all)
 
 		# Resolve output path now (needs TD access)
 		resolved_path = None
@@ -297,6 +304,7 @@ class TDNExt:
 			'options': {
 				'include_dat_content': include_dat_content,
 				'max_depth': max_depth,
+				'embed_all': embed_all,
 			},
 			'root_path': root_path,
 			'output_file': resolved_path,
@@ -422,6 +430,42 @@ class TDNExt:
 		self._log(
 			f'Exporting {len(op_paths)} operators from {root_path}...',
 			'INFO')
+
+	def ExportProjectTDNInteractive(self):
+		"""Export project TDN with a dialog if TDN-tagged COMPs exist.
+
+		Shows a ui.messageBox letting the user choose between a full
+		(self-contained) export or a modular export that skips children
+		of TDN-managed COMPs. If no TDN-tagged COMPs exist, exports
+		everything directly without prompting.
+		"""
+		tdn_tag = self.ownerComp.par.Tdntag.val
+		tdn_comps = root.findChildren(tags=[tdn_tag])
+		# Exclude Embody + descendants, non-COMPs, and system paths
+		embody_path = self.ownerComp.path + '/'
+		tdn_comps = [c for c in tdn_comps
+					 if c.isCOMP
+					 and not c.path.startswith(embody_path)
+					 and c != self.ownerComp
+					 and c.path not in SYSTEM_PATHS
+					 and not c.path.startswith(_SYSTEM_PATH_PREFIXES)]
+
+		if not tdn_comps:
+			self.ExportNetworkAsync(output_file='auto', embed_all=True)
+			return
+
+		choice = ui.messageBox(
+			'Embody \u2014 Export Project TDN',
+			f'This project has {len(tdn_comps)} COMP(s) with their own '
+			f'.tdn files.\n\n'
+			'  Full: Self-contained file with all COMPs embedded.\n'
+			'  Modular: Skip children of TDN-managed COMPs.\n',
+			buttons=['Cancel', 'Full', 'Modular'])
+
+		if choice == 0:
+			return
+		self.ExportNetworkAsync(
+			output_file='auto', embed_all=(choice == 1))
 
 	def _onExportRefresh(self):
 		"""RefreshHook: Process a batch of operators per frame (main thread)."""
@@ -819,7 +863,7 @@ class TDNExt:
 		if recurse and hasattr(target, 'children'):
 			if self._isPaletteClone(target):
 				data['palette_clone'] = True
-			elif self._hasTDNTag(target):
+			elif self._hasTDNTag(target) and not options.get('embed_all'):
 				pass  # Child's network managed by its own .tdn file
 			else:
 				max_depth = options.get('max_depth')
@@ -1823,7 +1867,8 @@ class TDNExt:
 	# ASYNC EXPORT HELPERS
 	# =========================================================================
 
-	def _collectAllPaths(self, parent_op, max_depth=None, depth=0):
+	def _collectAllPaths(self, parent_op, max_depth=None, depth=0,
+					   embed_all=False):
 		"""Recursively collect all exportable operator paths."""
 		paths = []
 		for child in parent_op.children:
@@ -1833,13 +1878,17 @@ class TDNExt:
 				continue
 			paths.append(child.path)
 
-			# Recurse into COMPs (but skip palette clone children)
+			# Recurse into COMPs (but skip palette clone children
+			# and TDN-tagged COMP children unless embed_all)
 			if hasattr(child, 'children'):
 				if self._isPaletteClone(child):
 					continue
+				if not embed_all and self._hasTDNTag(child):
+					continue
 				if max_depth is None or depth < max_depth:
 					paths.extend(
-						self._collectAllPaths(child, max_depth, depth + 1))
+						self._collectAllPaths(child, max_depth, depth + 1,
+											  embed_all))
 
 		return paths
 

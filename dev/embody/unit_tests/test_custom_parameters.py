@@ -254,7 +254,12 @@ class TestCustomParameters(EmbodyTestCase):
             parexec.par.active = True
 
     def test_disable_z03_restore_tdn(self):
-        """Externalize full project (TDN mode), verify TDNs and files."""
+        """Externalize full project (TDN mode), verify table is populated.
+
+        Only checks that the table has rows — file existence and TDN/py counts
+        are verified in z04, which runs one frame later after deferred Updates
+        (TDN exports and DAT additions) have had time to settle.
+        """
         parexec = self.embody.op('parexec')
         parexec.par.active = False
         try:
@@ -262,36 +267,27 @@ class TestCustomParameters(EmbodyTestCase):
         finally:
             parexec.par.active = True
 
-        # Verify table is populated
+        # Verify table is populated — deferred Updates may still be in-flight,
+        # so we only assert the table is non-empty here. Full file/count checks
+        # happen in z04 (next frame).
         table = self.embody_ext.Externalizations
         self.assertGreater(table.numRows, 1,
                            'Externalizations table should have rows after TDN externalization')
 
-        # Verify files exist on disk
-        ext_folder = self.embody_ext.getProjectFolder()
-        tdn_count = 0
-        py_count = 0
-        for i in range(1, table.numRows):
-            rel_path = table[i, 'rel_file_path'].val
-            full_path = os.path.join(ext_folder, rel_path)
-            self.assertTrue(os.path.isfile(full_path),
-                            f'Externalized file should exist: {rel_path}')
-            if rel_path.endswith('.tdn'):
-                tdn_count += 1
-            elif rel_path.endswith('.py'):
-                py_count += 1
-
-        self.assertGreater(tdn_count, 0, 'Should have at least one TDN file')
-        self.assertGreater(py_count, 0, 'Should have at least one .py file')
-
     def test_disable_z04_verify_complete(self):
-        """Final verification: everything is populated and intact."""
+        """Final verification: all operators, files, TDN/py counts are intact.
+
+        Runs one frame after z03 so that deferred Updates (TDN exports, DAT
+        additions) have fully settled before asserting file existence and counts.
+        """
         table = self.embody_ext.Externalizations
         ext_folder = self.embody_ext.getProjectFolder()
 
-        # Check all table rows have valid operators
+        # Check all table rows have valid operators and files on disk
         missing_ops = []
         missing_files = []
+        tdn_count = 0
+        py_count = 0
         for i in range(1, table.numRows):
             op_path = table[i, 'path'].val
             rel_path = table[i, 'rel_file_path'].val
@@ -301,11 +297,17 @@ class TestCustomParameters(EmbodyTestCase):
                 missing_ops.append(op_path)
             if not os.path.isfile(full_path):
                 missing_files.append(rel_path)
+            if rel_path.endswith('.tdn'):
+                tdn_count += 1
+            elif rel_path.endswith('.py'):
+                py_count += 1
 
         self.assertEqual(len(missing_ops), 0,
                          f'All operators should exist: missing {missing_ops[:5]}')
         self.assertEqual(len(missing_files), 0,
                          f'All files should exist: missing {missing_files[:5]}')
+        self.assertGreater(tdn_count, 0, 'Should have at least one TDN file')
+        self.assertGreater(py_count, 0, 'Should have at least one .py file')
 
         # Verify Embody is fully operational
         self.assertEqual(self.embody.par.Status.eval(), 'Enabled')

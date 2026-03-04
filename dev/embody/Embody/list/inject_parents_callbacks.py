@@ -52,11 +52,14 @@ def onCook(scriptOp):
 	if not all_paths:
 		return
 
-	# Read filter text from toolbar widget
-	filter_widget = parent.Embody.op('toolbar/container_right/filter')
+	# Read filter text from toolbar textCOMP (or legacy widgetCOMP)
+	filter_op = parent.Embody.op('toolbar/container_right/new_filter') or parent.Embody.op('toolbar/container_right/filter')
 	filter_text = ''
-	if filter_widget:
-		filter_text = filter_widget.par.Value0.eval().strip().lower()
+	if filter_op:
+		if hasattr(filter_op.par, 'Value0'):
+			filter_text = filter_op.par.Value0.eval().strip().lower()
+		else:
+			filter_text = filter_op.par.text.eval().strip().lower()
 
 	# Apply text filter (case-insensitive substring match against path and file path)
 	if filter_text:

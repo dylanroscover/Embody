@@ -1736,7 +1736,7 @@ class EmbodyExt:
             self.Log(f"Error creating directory {abs_path.parent}", "ERROR", str(e))
 
         # Setup build parameters
-        build_page = next((p for p in oper.customPages if p.name == 'Build Info'), None)
+        build_page = next((p for p in oper.customPages if p.name == 'About'), None)
         if not build_page:
             build_page = oper.appendCustomPage('About')
 

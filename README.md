@@ -1,6 +1,6 @@
 # Embody
 
-### Automated Externalization and AI Integration for TouchDesigner
+### Supercharge Your TouchDesigner Workflow With AI
 
 **TouchDesigner 2025.32280** (Windows / macOS) &nbsp;|&nbsp; **v5.0.171**
 
@@ -10,11 +10,13 @@
 
 ## Overview
 
-TouchDesigner stores projects in binary `.toe` files that are impossible to diff or merge in git. **Embody** solves this by automatically externalizing your COMPs and DATs to version-control-friendly files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. Tag any operator with a double-tap of left Ctrl, save your project, and Embody keeps everything in sync.
+Build faster. Debug smarter. Let AI handle the tedious parts while you focus on what matters — your creative vision.
 
-**Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, lets AI coding assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) create, modify, connect, and query operators in your live TouchDesigner session — all through natural language.
+**Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, connects AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) to your live TouchDesigner session. Create operators, wire connections, set parameters, write extensions, and debug errors — all through natural conversation. No copy-pasting code. No describing your network in chat. You stay in control while AI does the heavy lifting.
 
-**TDN** (TouchDesigner Network) takes it further — export your entire operator network to human-readable, diffable JSON. Review network changes in pull requests, snapshot your project state, and import networks back with full fidelity.
+**Embody** makes your TouchDesigner projects version-control-friendly. Tag any operator with a double-tap of left Ctrl, save your project, and Embody automatically externalizes your COMPs and DATs to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy.
+
+**TDN** (TouchDesigner Network) takes it further — export your entire operator network to human-readable JSON. Review structural changes in pull requests, snapshot configurations, and reconstruct entire networks from text.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 

@@ -44,8 +44,18 @@ class EmbodyTestCase:
     def __init__(self, sandbox, embody, runner):
         self.sandbox = sandbox          # baseCOMP to create temp operators in
         self.embody = embody            # op.Embody reference (the Embody COMP)
-        self.embody_ext = embody.ext.Embody   # Direct EmbodyExt instance
         self.runner = runner            # TestRunner instance
+
+    @property
+    def embody_ext(self):
+        """Resolve EmbodyExt live on every access to avoid stale references.
+
+        Never cache extension references — TD may reinitialize the extension at
+        any time (e.g., when an externalized .py file changes on disk), which
+        silently invalidates any cached reference. Always resolve inline via
+        the component (CLAUDE.md rule #26).
+        """
+        return self.embody.ext.Embody
 
     def setUp(self):
         """Called before each test method. Override for per-test setup."""

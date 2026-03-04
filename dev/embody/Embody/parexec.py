@@ -70,7 +70,7 @@ def onPulse(par):
 		parent.Embody.ExternalizeProject()
 
 	elif par.name == 'Exportprojecttdn':
-		parent.Embody.ext.TDN.ExportNetworkAsync(root_path='/', output_file='auto')
+		parent.Embody.ext.TDN.ExportProjectTDNInteractive()
 
 	elif par.name == 'Importtdn':
 		file_path = parent.Embody.par.Tdnfile.eval()
