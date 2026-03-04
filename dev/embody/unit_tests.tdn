@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 10,
-	"generator": "Embody/5.0.176",
+	"generator": "Embody/5.0.177",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-04T06:54:24Z",
+	"exported_at": "2026-03-04T07:47:19Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false
@@ -15,6 +15,7 @@
 				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
@@ -30,6 +31,7 @@
 				"rows": 937,
 				"cols": 5
 			},
+			"flags": ["viewer"],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["tsv"]
@@ -59,7 +61,7 @@
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-03 18:42:22 UTC"
+						"value": "2026-03-04 07:47:19 UTC"
 					},
 					{
 						"name": "Touchbuild",
@@ -70,6 +72,7 @@
 					}
 				]
 			},
+			"flags": ["viewer"],
 			"position": [400, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
@@ -297,7 +300,6 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_tdn_reconstruction.py"
 			},
-			"flags": ["viewer"],
 			"position": [400, -2200]
 		},
 		{

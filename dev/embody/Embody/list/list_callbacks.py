@@ -29,6 +29,8 @@ COL_WIDTHS    = [0, 0, 80, 200, 70, 50, 190, 36]
 COL_STRETCHES = [False, True, False, True, False, False, False, False]
 TEXT_PAD_X = 6  # horizontal padding for left-justified cells
 
+# Row whose Strategy cell is "active" (menu open) — shows "..." while menu visible
+_active_strategy_row = -1
 
 # --- Theme colors (loaded from Embody UI pars in onInitTable) ---
 _t = {}
@@ -133,6 +135,12 @@ def _ensure_theme():
 		_load_theme()
 
 
+def clearActiveStrategy():
+	"""Clear the active strategy row (called when menu closes)."""
+	global _active_strategy_row
+	_active_strategy_row = -1
+
+
 def _source():
 	"""Return the inject_parents DAT (data source)."""
 	return op('inject_parents')
@@ -206,7 +214,20 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		strategy = data[row, 'strategy'].val
 		text, st_bg, st_text = _strategy_style(st)
 
-		if st == 'DAT_Saved':
+		if _active_strategy_row == row and st not in ('DAT_Saved', 'TDN_Exporting', ''):
+			# Menu is open for this row — show "..." with rollover color
+			attribs.text = '...' if st != 'Comp' else 'Tag'
+			if st in ('TOX_Dirty', 'TDN_Dirty'):
+				attribs.bgColor = _t['dirty_roll']
+			elif st in ('TOX_ParChange', 'TDN_ParChange'):
+				attribs.bgColor = _t['par_change_roll']
+			elif st == 'TOX_Saved':
+				attribs.bgColor = _t['saved_roll']
+			elif st == 'TDN_Saved':
+				attribs.bgColor = _t['tdn_saved_roll']
+			elif st == 'Comp':
+				attribs.bgColor = _t['comp_roll']
+		elif st == 'DAT_Saved':
 			# Show the file extension as the strategy label
 			attribs.text = strategy
 			attribs.bgColor = bg
@@ -300,22 +321,22 @@ def onRollover(comp, row, col, coords, prevRow, prevCol, prevCoords):
 
 	# Row changed -> restore old row, highlight new row
 	if prevRow != row:
-		if prevRow > 0 and prevRow < data.numRows:
+		if prevRow is not None and prevRow > 0 and prevRow < data.numRows:
 			for c in range(ncols):
 				_apply_cell(comp.cellAttribs[prevRow, c],
 				            prevRow, c, data, highlight=False)
-		if row > 0 and row < data.numRows:
+		if row is not None and row > 0 and row < data.numRows:
 			for c in range(ncols):
 				_apply_cell(comp.cellAttribs[row, c],
 				            row, c, data, highlight=True)
 
 	# Column changed within same row -> restore old cell to highlight state
-	if prevRow == row and prevCol != col and row > 0:
+	if prevRow == row and prevCol != col and row is not None and row > 0:
 		if prevCol >= 0 and prevCol < ncols and row < data.numRows:
 			_apply_cell(comp.cellAttribs[row, prevCol],
 			            row, prevCol, data, highlight=True)
 
-	if row <= 0 or row >= data.numRows or col < 0:
+	if row is None or col is None or row <= 0 or row >= data.numRows or col < 0:
 		return
 
 	# Cell-specific rollover effects on Strategy column
@@ -403,6 +424,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 			parent.Embody.OpenSaveFile(rel_fp)
 
 	elif col == COL_STRATEGY:
+		global _active_strategy_row
 		st = data[row, 'strategy_state'].val
 		oper = op(path)
 
@@ -411,6 +433,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 
 		if st == 'Comp' and oper:
 			# Unexternalized COMP — open tagger for strategy choice
+			_active_strategy_row = row
 			parent.Embody.ext.Embody.rolloverOp = oper
 			parent.Embody.op('tagger/switch_family').par.index = 2
 			run(lambda: parent.Embody.ext.Embody.SetupTaggerTagMode(oper), delayFrames=1)
@@ -418,6 +441,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 				delayFrames=2)
 		elif (st.startswith('TOX_') or st.startswith('TDN_')) and oper:
 			# Already tagged COMP — open manage menu with Switch/Save
+			_active_strategy_row = row
 			parent.Embody.ext.Embody.rolloverOp = oper
 			parent.Embody.op('tagger/switch_family').par.index = 2
 			run(lambda s=st: parent.Embody.ext.Embody.SetupTaggerManageMode(oper, s),

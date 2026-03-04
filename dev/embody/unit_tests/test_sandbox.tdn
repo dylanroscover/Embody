@@ -1,0 +1,13 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 29,
+	"generator": "Embody/5.0.177",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-04T07:47:19Z",
+	"network_path": "/embody/unit_tests/test_sandbox",
+	"options": {
+		"include_dat_content": false
+	},
+	"operators": []
+}

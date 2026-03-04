@@ -966,7 +966,14 @@ class EmbodyExt:
                 self.Save(comp.path)
 
         # Check for parameter changes on TDN-strategy COMPs
-        for comp in self.getExternalizedOps(COMP, strategy='tdn'):
+        # Skip root "/" — it's a Full Project export, not a managed COMP.
+        # SaveTDN("/") would trigger root-level stale cleanup that deletes
+        # other tracked .tdn files.
+        tdn_comps = self.getExternalizedOps(COMP, strategy='tdn')
+        tdn_paths = {comp.path for comp in tdn_comps}
+        for comp in tdn_comps:
+            if comp.path == '/':
+                continue
             if self.param_tracker.compareParameters(comp):
                 self.Externalizations[comp.path, 'dirty'] = 'Par'
                 self.SaveTDN(comp.path)
@@ -989,9 +996,14 @@ class EmbodyExt:
             and self.isOpProcessable(oper)
         ]
 
+        # TDN-strategy COMPs are excluded — their lifecycle is managed by
+        # ToggleTag() → _removeTDNStrategy(), not by tag-presence detection.
+        # Without this, Full Project TDN exports (which track "/" in the table
+        # without tagging the root) get incorrectly removed as "subtractions".
         subtractions = [
             oper for oper in externalized_ops
-            if not set(all_tags).intersection(oper.tags)
+            if oper.path not in tdn_paths
+            and not set(all_tags).intersection(oper.tags)
             and not oper.warnings()
             and not oper.scriptErrors()
             and self.isOpProcessable(oper)
@@ -1925,6 +1937,17 @@ class EmbodyExt:
                     if is_tdn:
                         tdn_comp_paths.add(row_path)
 
+            # Detect stripped TDN COMPs — exist but have no children
+            # (e.g., after a crash during the strip/restore save cycle).
+            # Their children will be restored by ReconstructTDNComps(),
+            # so we must skip ALL their entries (even individually-
+            # externalized ones like .py files) to prevent false removals.
+            stripped_tdn_paths = set()
+            for tdn_path in tdn_comp_paths:
+                tdn_op = op(tdn_path)
+                if tdn_op and not tdn_op.findChildren(depth=1):
+                    stripped_tdn_paths.add(tdn_path)
+
             # Check for ancestor rename before per-operator processing.
             # When a parent COMP is renamed, all children go missing
             # simultaneously — handle as a single batch operation.
@@ -1954,14 +1977,16 @@ class EmbodyExt:
                             self._removeTDNStrategy(old_op_path)
                     continue
 
-                # Skip operators inside TDN-strategy COMPs ONLY if they
-                # don't have their own independent externalization strategy
-                # (py, tsv, tox, etc.). Individually-externalized operators
-                # need normal continuity checking for rename/delete detection.
-                # Operators without a strategy are purely TDN-managed and
-                # should be skipped to avoid false deletions.
-                if any(old_op_path.startswith(tdn_path + '/') for tdn_path in tdn_comp_paths):
-                    if not strategy:
+                # Skip operators inside TDN-strategy COMPs when appropriate:
+                # - Always skip if no individual strategy (purely TDN-managed)
+                # - Also skip if the parent TDN COMP is stripped (no children,
+                #   e.g., crash recovery) — ReconstructTDNComps() will restore
+                #   them, so checking now would cause false removals
+                parent_tdn = next(
+                    (p for p in tdn_comp_paths
+                     if old_op_path.startswith(p + '/')), None)
+                if parent_tdn is not None:
+                    if not strategy or parent_tdn in stripped_tdn_paths:
                         continue
 
                 existing_op = op(old_op_path)
@@ -2833,6 +2858,15 @@ class EmbodyExt:
             btn_save.par.colorg = self.my.par.Taggingmenucolorg.eval()
             btn_save.par.colorb = self.my.par.Taggingmenucolorb.eval()
 
+        # Show Reload button
+        btn_reload = self.tagger.op('btn_reload')
+        if btn_reload:
+            btn_reload.par.display = True
+            btn_reload.par.label = 'Reload tox' if is_tox else 'Reload tdn'
+            btn_reload.par.colorr = self.my.par.Taggingmenucolorr.eval()
+            btn_reload.par.colorg = self.my.par.Taggingmenucolorg.eval()
+            btn_reload.par.colorb = self.my.par.Taggingmenucolorb.eval()
+
         # Show Export portable tox button
         btn_portable = self.tagger.op('btn_portable')
         if btn_portable:
@@ -2862,9 +2896,9 @@ class EmbodyExt:
         if title:
             title.par.text = 'Actions'
 
-        # Update height: header + 2 tag buttons + Save + Export Portable
+        # Update height: header + 2 tag buttons + Save + Reload + Export Portable
         # (+ Open file if applicable)
-        visible_count = 5 + (1 if rel_fp else 0)
+        visible_count = 6 + (1 if rel_fp else 0)
         self.tagger.store('visible_count', visible_count)
 
     def SetupTaggerDATManageMode(self, oper: OP, active_tag: str) -> None:
@@ -2913,10 +2947,13 @@ class EmbodyExt:
             btn_remove.par.colorg = self.my.par.Taggingmenucolorg.eval()
             btn_remove.par.colorb = self.my.par.Taggingmenucolorb.eval()
 
-        # Hide portable tox (COMP-only action)
+        # Hide portable tox and reload (COMP-only actions)
         btn_portable = self.tagger.op('btn_portable')
         if btn_portable:
             btn_portable.par.display = False
+        btn_reload = self.tagger.op('btn_reload')
+        if btn_reload:
+            btn_reload.par.display = False
 
         # Show Reveal in Finder/Explorer
         btn_openfile = self.tagger.op('btn_openfile')
@@ -2942,11 +2979,14 @@ class EmbodyExt:
 
         # Hide manage buttons
         btn_save = self.tagger.op('btn_save')
+        btn_reload = self.tagger.op('btn_reload')
         btn_remove = self.tagger.op('btn_remove')
         btn_openfile = self.tagger.op('btn_openfile')
         btn_portable = self.tagger.op('btn_portable')
         if btn_save:
             btn_save.par.display = False
+        if btn_reload:
+            btn_reload.par.display = False
         if btn_remove:
             btn_remove.par.display = False
         if btn_openfile:
@@ -3203,6 +3243,8 @@ class EmbodyExt:
         """Close tagging menu and reset mode."""
         self._tagger_mode = 'tag'
         self.tagging_menu_window.par.winclose.pulse()
+        self.my.op('list/list_callbacks').module.clearActiveStrategy()
+        self.lister.reset()
 
     def HandleStrategySwitch(self, oper: OP) -> None:
         """Switch a COMP between TOX and TDN strategies."""
@@ -3228,6 +3270,84 @@ class EmbodyExt:
             self.SaveTDN(oper.path)
 
         self.Refresh()
+
+    def HandleReload(self, oper: OP) -> None:
+        """Reload a COMP from its external tdn/tox file on disk."""
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+
+        strategy = 'tdn' if tdn_tag in oper.tags else 'tox'
+        result = ui.messageBox(
+            'Reload',
+            f'Reload this {strategy.upper()} from disk?\n\n'
+            'This will discard any unsaved in-memory changes\n'
+            'and replace the contents with the file on disk.\n\n'
+            'Operator: ' + oper.path,
+            buttons=['Cancel', 'Reload'])
+
+        if result != 1:
+            return
+
+        if tdn_tag in oper.tags:
+            self._reloadTDN(oper)
+        elif tox_tag in oper.tags:
+            self._reloadTox(oper)
+
+        self.Refresh()
+
+    def _reloadTDN(self, oper: OP) -> None:
+        """Reload a single TDN-strategy COMP from its .tdn file on disk."""
+        rel_tdn_path = self._getStrategyFilePath(oper.path, 'tdn')
+        if not rel_tdn_path:
+            self.Log(f'No TDN file path found for {oper.path}', 'ERROR')
+            return
+
+        abs_path = self.buildAbsolutePath(rel_tdn_path)
+        if not abs_path.is_file():
+            self.Log(f'TDN file not found: {rel_tdn_path}', 'ERROR')
+            return
+
+        try:
+            import json
+            tdn_doc = json.loads(abs_path.read_text(encoding='utf-8'))
+        except Exception as e:
+            self.Log(f'Failed to read TDN for {oper.path}: {e}', 'ERROR')
+            return
+
+        result = self.my.ext.TDN.ImportNetwork(
+            target_path=oper.path,
+            tdn=tdn_doc,
+            clear_first=True,
+            restore_file_links=True,
+        )
+
+        if result.get('error'):
+            self.Log(f'Reload failed for {oper.path}: {result["error"]}', 'ERROR')
+        else:
+            created = result.get('created_count', 0)
+            restored = result.get('restored_file_links', 0)
+            msg = f'Reloaded {oper.path} from disk ({created} ops'
+            if restored:
+                msg += f', {restored} file links'
+            msg += ')'
+            self.Log(msg, 'SUCCESS')
+
+    def _reloadTox(self, oper: OP) -> None:
+        """Reload a single TOX-strategy COMP from its .tox file on disk."""
+        rel_tox_path = self.getExternalPath(oper)
+        if not rel_tox_path:
+            self.Log(f'No TOX file path found for {oper.path}', 'ERROR')
+            return
+
+        abs_path = self.buildAbsolutePath(rel_tox_path)
+        if not abs_path.is_file():
+            self.Log(f'TOX file not found: {rel_tox_path}', 'ERROR')
+            return
+
+        # Toggle enableexternaltox to force TD to re-read the .tox
+        oper.par.enableexternaltox = False
+        oper.par.enableexternaltox = True
+        self.Log(f'Reloaded {oper.path} from disk ({rel_tox_path})', 'SUCCESS')
 
     def HandlePortableExport(self, oper: OP) -> None:
         """Show a file dialog and export a portable .tox for the given COMP."""
@@ -3275,6 +3395,9 @@ class EmbodyExt:
                     oper.tags.discard(active_tag)
                     oper.par.file = ''
                     oper.par.file.readOnly = False
+            elif self._getStrategyFilePath(oper.path, 'tdn'):
+                # Table-only TDN entry (e.g., Full Project export) — no tag on operator
+                self.RemoveTDNEntry(oper.path)
 
             self.resetOpColor(oper)
             self.Refresh()
@@ -3588,8 +3711,10 @@ class EmbodyExt:
         for i in range(1, table.numRows):
             if table[i, 'strategy'].val == 'tdn':
                 comp_path = table[i, 'path'].val
-                # Never include Embody, its ancestors, or its descendants
-                if (comp_path == embody_path
+                # Never include root "/" — stripping it destroys the entire project.
+                # Never include Embody, its ancestors, or its descendants.
+                if (comp_path == '/'
+                        or comp_path == embody_path
                         or embody_path.startswith(comp_path + '/')
                         or comp_path.startswith(embody_path + '/')):
                     continue

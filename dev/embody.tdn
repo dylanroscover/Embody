@@ -1,0 +1,899 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 16,
+	"generator": "Embody/5.0.177",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-04T07:47:19Z",
+	"network_path": "/embody",
+	"options": {
+		"include_dat_content": false
+	},
+	"type_defaults": {
+		"baseCOMP": {
+			"size": [160, 130],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
+		},
+		"annotateCOMP": {
+			"parameters": {
+				"includeinorder": true,
+				"order": "=me.digits or 0",
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
+				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+			},
+			"flags": ["display"],
+			"color": [0.45, 0.45, 0.45]
+		}
+	},
+	"par_templates": {
+		"about": [
+			{
+				"default": "1.0",
+				"name": "Version",
+				"readOnly": true,
+				"startSection": true,
+				"style": "Str"
+			},
+			{
+				"name": "Help",
+				"style": "Pulse"
+			}
+		],
+		"text": [
+			{
+				"default": "Annotate",
+				"label": "Title Text",
+				"name": "Titletext",
+				"startSection": true,
+				"style": "Str"
+			},
+			{
+				"clampMin": true,
+				"default": 30,
+				"label": "Title Height",
+				"name": "Titleheight",
+				"normMax": 100.0,
+				"normMin": 5.0,
+				"style": "Int"
+			},
+			{
+				"default": "left",
+				"label": "Title Align",
+				"menuLabels": ["Left", "Center", "Right"],
+				"menuNames": ["left", "center", "right"],
+				"name": "Titlealign",
+				"style": "Menu"
+			},
+			{
+				"label": "Body Text",
+				"name": "Bodytext",
+				"startSection": true,
+				"style": "Str"
+			},
+			{
+				"clampMin": true,
+				"default": 10,
+				"label": "Body Font Size",
+				"name": "Bodyfontsize",
+				"normMax": 100.0,
+				"normMin": 8.0,
+				"style": "Int"
+			},
+			{
+				"label": "Limit Body Text Width",
+				"name": "Bodylimitwidth",
+				"style": "Toggle"
+			},
+			{
+				"clampMin": true,
+				"default": 1000,
+				"label": "Max Body Text Width",
+				"name": "Bodymaxwidth",
+				"normMax": 2000.0,
+				"normMin": 100.0,
+				"style": "Int"
+			}
+		],
+		"settings": [
+			{
+				"default": "comment",
+				"menuLabels": ["Comment", "Network Box", "Annotate"],
+				"menuNames": ["comment", "networkbox", "annotate"],
+				"name": "Mode",
+				"style": "Menu"
+			},
+			{
+				"label": "Smart Quote",
+				"name": "Smartquote",
+				"startSection": true,
+				"style": "Toggle"
+			},
+			{
+				"default": true,
+				"label": "Body Word Wrap",
+				"name": "Bodywordwrap",
+				"style": "Toggle"
+			},
+			{
+				"default": 1,
+				"label": "Back Color",
+				"name": "Backcolorr",
+				"startSection": true,
+				"style": "RGBA"
+			},
+			{
+				"clampMax": true,
+				"clampMin": true,
+				"default": 1,
+				"label": "Back Color Alpha",
+				"name": "Backcoloralpha",
+				"style": "Float"
+			},
+			{
+				"clampMax": true,
+				"clampMin": true,
+				"default": 1,
+				"label": "Annotate Opacity",
+				"name": "Opacity",
+				"style": "Float"
+			}
+		],
+		"about_2": [
+			{
+				"label": "Build Number",
+				"name": "Build",
+				"readOnly": true,
+				"style": "Int"
+			},
+			{
+				"label": "Build Date",
+				"name": "Date",
+				"readOnly": true,
+				"style": "Str"
+			},
+			{
+				"label": "Touch Build",
+				"name": "Touchbuild",
+				"readOnly": true,
+				"style": "Str"
+			}
+		],
+		"op_viewer": [
+			{
+				"label": "Viewer Display",
+				"name": "Opviewerdisplay",
+				"style": "Toggle"
+			},
+			{
+				"label": "OP",
+				"name": "Opviewer",
+				"style": "OP"
+			},
+			{
+				"label": "OP Viewer Interactive",
+				"name": "Opviewerinteractive",
+				"style": "Toggle"
+			},
+			{
+				"default": "False",
+				"label": "Size/Aspect Override",
+				"menuLabels": ["Natural", "Specify", "Auto-Fit"],
+				"menuNames": ["natural", "specify", "autofit"],
+				"name": "Opvieweroversize",
+				"startSection": true,
+				"style": "Menu"
+			},
+			{
+				"clampMin": true,
+				"default": 800,
+				"label": "Size/Aspect",
+				"name": "Opviewersize",
+				"normMax": 1000.0,
+				"normMin": 1.0,
+				"style": "WH"
+			},
+			{
+				"default": 1,
+				"label": "Scale",
+				"name": "Opviewerscale",
+				"normMax": 2.0,
+				"startSection": true,
+				"style": "Float"
+			},
+			{
+				"label": "Justify X",
+				"name": "Opviewerjustifyx",
+				"normMin": -1.0,
+				"style": "Float"
+			},
+			{
+				"label": "Justify Y",
+				"name": "Opviewerjustifyy",
+				"normMin": -1.0,
+				"style": "Float"
+			},
+			{
+				"label": "Cover Body and Title",
+				"name": "Opviewerfillbodytitle",
+				"style": "Toggle"
+			},
+			{
+				"clampMin": true,
+				"default": 1,
+				"label": "OP Viewer Zoom",
+				"min": 0.001,
+				"name": "Opviewerzoom",
+				"normMax": 5.0,
+				"normMin": 1.0,
+				"startSection": true,
+				"style": "Float"
+			},
+			{
+				"label": "OP Viewer Offset",
+				"name": "Opvieweroffsetx",
+				"style": "XYZW"
+			},
+			{
+				"clampMax": true,
+				"clampMin": true,
+				"default": 1,
+				"label": "Fill Alpha",
+				"name": "Opviewerfillalpha",
+				"startSection": true,
+				"style": "Float"
+			}
+		]
+	},
+	"operators": [
+		{
+			"name": "Embody",
+			"type": "containerCOMP",
+			"parameters": {
+				"w": "~op('./manager').par.w",
+				"h": "~op('./manager').par.h",
+				"display": false,
+				"resizecomp": "=me",
+				"repocomp": "=me",
+				"borderover": false,
+				"align": "horizlr",
+				"ext0object": "op('./EmbodyExt').module.EmbodyExt(me)",
+				"ext0name": "Embody",
+				"ext0promote": true,
+				"parentshortcut": "Embody",
+				"opshortcut": "Embody",
+				"opviewer": "./text_bg",
+				"reloadbuiltin": false,
+				"ext1object": "op('./EnvoyExt').module.EnvoyExt(me)",
+				"ext1name": "Envoy",
+				"ext1promote": true,
+				"ext2object": "op('./TDNExt').module.TDNExt(me)",
+				"ext2name": "TDN",
+				"ext2promote": true
+			},
+			"custom_pars": {
+				"Embody": [
+					{
+						"name": "Status",
+						"style": "Str",
+						"readOnly": true,
+						"value": "Enabled"
+					},
+					{
+						"name": "Externalizations",
+						"style": "DAT",
+						"label": "Externalizations Table",
+						"startSection": true,
+						"value": "/embody/externalizations"
+					},
+					{
+						"name": "Openexternalizationstable",
+						"style": "Pulse",
+						"label": "Open Externalizations Table"
+					},
+					{
+						"name": "Folder",
+						"style": "Folder",
+						"label": "Externalizations Folder",
+						"startSection": true
+					},
+					{
+						"name": "Disable",
+						"style": "Pulse",
+						"startSection": true
+					},
+					{
+						"name": "Update",
+						"style": "Pulse",
+						"label": "Enable/Update"
+					},
+					{
+						"name": "Refresh",
+						"style": "Pulse"
+					},
+					{
+						"name": "Externalizeproject",
+						"style": "Pulse",
+						"label": "Externalize Full Project",
+						"startSection": true
+					},
+					{
+						"name": "Detectduplicatepaths",
+						"style": "Toggle",
+						"label": "Detect Duplicate Paths",
+						"value": true
+					},
+					{
+						"name": "Openmanager",
+						"style": "Pulse",
+						"label": "Open Manager",
+						"startSection": true
+					},
+					{
+						"name": "Closemanager",
+						"style": "Pulse",
+						"label": "Close Manager"
+					}
+				],
+				"Tags": [
+					{
+						"name": "Toxtags",
+						"style": "Header",
+						"label": "tox Tags"
+					},
+					{
+						"name": "Toxtagcolorr",
+						"style": "RGBA",
+						"label": "tox Tag Color",
+						"values": [0.325, 0.8, 0.3]
+					},
+					{
+						"name": "Toxtag",
+						"style": "Str",
+						"label": ".tox Tag",
+						"value": "tox"
+					},
+					{
+						"name": "Dattags",
+						"style": "Header",
+						"label": "DAT Tags",
+						"startSection": true
+					},
+					{
+						"name": "Dattagcolorr",
+						"style": "RGBA",
+						"label": "DAT Tag Color",
+						"values": [0.9, 0.3, 0.4]
+					},
+					{
+						"name": "Clonetagcolorr",
+						"style": "RGBA",
+						"label": "Clone Tag Color",
+						"values": [1, 0.7, 0.1]
+					},
+					{
+						"name": "Pytag",
+						"style": "Str",
+						"label": ".py Tag",
+						"value": "py"
+					},
+					{
+						"name": "Jsontag",
+						"style": "Str",
+						"label": ".json Tag",
+						"startSection": true,
+						"value": "json"
+					},
+					{
+						"name": "Xmltag",
+						"style": "Str",
+						"label": ".xml Tag",
+						"value": "xml"
+					},
+					{
+						"name": "Htmltag",
+						"style": "Str",
+						"label": ".html Tag",
+						"value": "html"
+					},
+					{
+						"name": "Glsltag",
+						"style": "Str",
+						"label": ".glsl Tag",
+						"startSection": true,
+						"value": "glsl"
+					},
+					{
+						"name": "Fragtag",
+						"style": "Str",
+						"label": ".frag Tag",
+						"value": "frag"
+					},
+					{
+						"name": "Verttag",
+						"style": "Str",
+						"label": ".vert Tag",
+						"value": "vert"
+					},
+					{
+						"name": "Txttag",
+						"style": "Str",
+						"label": ".txt Tag",
+						"startSection": true,
+						"value": "txt"
+					},
+					{
+						"name": "Mdtag",
+						"style": "Str",
+						"label": ".md Tag",
+						"value": "md"
+					},
+					{
+						"name": "Rtftag",
+						"style": "Str",
+						"label": ".rtf Tag",
+						"value": "rtf"
+					},
+					{
+						"name": "Csvtag",
+						"style": "Str",
+						"label": ".csv Tag",
+						"startSection": true,
+						"value": "csv"
+					},
+					{
+						"name": "Tsvtag",
+						"style": "Str",
+						"label": ".tsv Tag",
+						"value": "tsv"
+					},
+					{
+						"name": "Dattag",
+						"style": "Str",
+						"label": ".dat Tag",
+						"value": "dat"
+					},
+					{
+						"name": "Tdntags",
+						"style": "Header",
+						"label": "TDN Tags",
+						"startSection": true
+					},
+					{
+						"name": "Tdntagcolor",
+						"style": "RGBA",
+						"label": "TDN Tag Color",
+						"default": 0.3
+					},
+					{
+						"name": "Tdntag",
+						"style": "Str",
+						"label": ".tdn Tag",
+						"value": "tdn"
+					}
+				],
+				"TDN": [
+					{
+						"name": "Embeddatsintdns",
+						"style": "Toggle",
+						"label": "Embed DATs in TDNs"
+					},
+					{
+						"name": "Tdncreateonstart",
+						"style": "Toggle",
+						"label": "TDN Create on Start"
+					},
+					{
+						"name": "Exportprojecttdn",
+						"style": "Pulse",
+						"label": "Export Project TDN",
+						"startSection": true
+					},
+					{
+						"name": "Tdnfile",
+						"style": "File",
+						"label": "TDN File",
+						"startSection": true,
+						"value": "/Users/rosco/Documents/Git/Embody/dev/embody/tdn_tests.tdn"
+					},
+					{
+						"name": "Networkpath",
+						"style": "COMP",
+						"label": "Network Path",
+						"value": "/embody/tdn_tests"
+					},
+					{
+						"name": "Importtdn",
+						"style": "Pulse",
+						"label": "Import TDN"
+					}
+				],
+				"Envoy": [
+					{
+						"name": "Envoyenable",
+						"style": "Toggle",
+						"label": "Envoy Enable",
+						"value": true
+					},
+					{
+						"name": "Envoyport",
+						"style": "Int",
+						"label": "Envoy Port",
+						"default": 9876,
+						"value": 9870
+					},
+					{
+						"name": "Envoystatus",
+						"style": "Str",
+						"label": "Envoy Status",
+						"readOnly": true,
+						"value": "Running on port 9870"
+					}
+				],
+				"Logs": [
+					{
+						"name": "Verbose",
+						"style": "Toggle",
+						"label": "Verbose (Debug)"
+					},
+					{
+						"name": "Print",
+						"style": "Toggle",
+						"label": "Print to Textport",
+						"value": true
+					},
+					{
+						"name": "Logtofile",
+						"style": "Toggle",
+						"label": "Log to File",
+						"value": true
+					},
+					{
+						"name": "Logfolder",
+						"style": "Folder",
+						"label": "Log Folder",
+						"value": "logs"
+					}
+				],
+				"UI": [
+					{
+						"name": "Enablekeyboardshortcuts",
+						"style": "Toggle",
+						"label": "Enable Keyboard Shortcuts",
+						"value": true
+					},
+					{
+						"name": "Addtagshort",
+						"style": "Str",
+						"label": "Add Externalization Tag",
+						"startSection": true,
+						"readOnly": true,
+						"value": "lctrl-lctrl (lclick op & press 2x)"
+					},
+					{
+						"name": "Openmanagershort",
+						"style": "Str",
+						"label": "Open Manager",
+						"readOnly": true,
+						"value": "ctrl/cmd + lshift + o"
+					},
+					{
+						"name": "Initializeupdateshort",
+						"style": "Str",
+						"label": "Initialize/Update All",
+						"readOnly": true,
+						"value": "ctrl/cmd + lshift + u"
+					},
+					{
+						"name": "Saveshort",
+						"style": "Str",
+						"label": "Update Current COMP",
+						"readOnly": true,
+						"value": "ctrl/cmd + alt + u"
+					},
+					{
+						"name": "Textcolor",
+						"style": "RGBA",
+						"label": "Text Color",
+						"startSection": true,
+						"values": [0.59472, 0.63, 0.599424, 1]
+					},
+					{
+						"name": "Backgroundcolor",
+						"style": "RGBA",
+						"label": "Background Color",
+						"values": [0.0968, 0.121, 0.121, 0.8]
+					},
+					{
+						"name": "Buttonbackgroundcolor",
+						"style": "RGBA",
+						"label": "Button Background Color",
+						"values": [0.1246, 0.14, 0.13, 1]
+					},
+					{
+						"name": "Listheadercolor",
+						"style": "RGBA",
+						"label": "List Header Color",
+						"values": [0.089419, 0.121, 0.103104, 1]
+					},
+					{
+						"name": "Listrowcolor",
+						"style": "RGBA",
+						"label": "List Row Color",
+						"values": [0.1246, 0.14, 0.13, 1]
+					},
+					{
+						"name": "Listrowselectcolor",
+						"style": "RGBA",
+						"label": "List Row Select Color",
+						"values": [0.220088, 0.244, 0.221283, 1]
+					},
+					{
+						"name": "Savedcolor",
+						"style": "RGBA",
+						"label": "Saved Color",
+						"values": [0.227574, 0.423, 0.289133, 0.5]
+					},
+					{
+						"name": "Dirtycolor",
+						"style": "RGBA",
+						"label": "Dirty Color",
+						"values": [0.675, 0.25668, 0.2268, 1]
+					},
+					{
+						"name": "Dirtyparcolor",
+						"style": "RGBA",
+						"label": "Dirty Par Color",
+						"values": [0.49, 0.321897, 0.16464, 1]
+					},
+					{
+						"name": "Taggingmenucolor",
+						"style": "RGBA",
+						"label": "Tagging Menu Color",
+						"values": [0.2, 0.2, 0.2, 1]
+					},
+					{
+						"name": "Highlightcolor",
+						"style": "RGBA",
+						"label": "Highlight Color",
+						"values": [1, 1, 1, 1]
+					},
+					{
+						"name": "Tdnsavedcolor",
+						"style": "RGBA",
+						"label": "TDN Saved Color",
+						"values": [0.153552, 0.376081, 0.457, 1]
+					}
+				],
+				"About": [
+					{
+						"name": "Version",
+						"style": "Str",
+						"startSection": true,
+						"readOnly": true,
+						"value": "5.0.177"
+					},
+					{
+						"name": "Touchbuild",
+						"style": "Str",
+						"label": "Touch Build",
+						"readOnly": true,
+						"value": "2025.32280"
+					},
+					{
+						"name": "Author",
+						"style": "Str",
+						"readOnly": true,
+						"value": "Dylan Roscover"
+					},
+					{
+						"name": "Build",
+						"style": "Int",
+						"label": "Build Number",
+						"readOnly": true,
+						"value": 88
+					},
+					{
+						"name": "Github",
+						"style": "Pulse",
+						"label": "GitHub",
+						"startSection": true
+					},
+					{
+						"name": "Date",
+						"style": "Str",
+						"label": "Build Date",
+						"readOnly": true,
+						"value": "2026-03-04 07:47:19 UTC"
+					},
+					{
+						"name": "Help",
+						"style": "Pulse"
+					}
+				]
+			},
+			"flags": ["display", "viewer"],
+			"size": [160, 98],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
+		},
+		{
+			"name": "tdn_tests",
+			"type": "baseCOMP",
+			"custom_pars": {
+				"About": {
+					"$t": "about_2",
+					"Build": 44,
+					"Date": "2026-03-03 17:04:54 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"flags": ["viewer"],
+			"position": [25, -500]
+		},
+		{
+			"name": "unit_tests",
+			"type": "baseCOMP",
+			"parameters": {
+				"ext0object": "op('./TestRunnerExt').module.TestRunnerExt(me)",
+				"ext0name": "TestRunnerExt",
+				"ext0promote": true,
+				"opshortcut": "unit_tests"
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about_2",
+					"Build": 10,
+					"Date": "2026-03-04 07:47:19 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"position": [-600, -300]
+		},
+		{
+			"name": "execute_src_ctrl",
+			"type": "executeDAT",
+			"parameters": {
+				"fromop": "=parent()",
+				"projectpresave": true,
+				"file": "embody/execute_src_ctrl.py",
+				"syncfile": true,
+				"language": "python"
+			},
+			"flags": ["viewer"],
+			"position": [-625, 120],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		},
+		{
+			"name": "externalizations",
+			"type": "tableDAT",
+			"parameters": {
+				"file": "embody/externalizations.tsv",
+				"syncfile": true,
+				"rows": 77,
+				"cols": 8
+			},
+			"flags": ["viewer"],
+			"position": [-200, 0],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["tsv"]
+		},
+		{
+			"name": "annotation_unit_tests",
+			"type": "annotateCOMP",
+			"custom_pars": {
+				"Text": {
+					"$t": "text",
+					"Titletext": "Unit Tests",
+					"Bodytext": "Embody's test suites for verifying externalization, path resolution, and MCP tool behavior."
+				},
+				"Settings": {
+					"$t": "settings",
+					"Mode": "annotate",
+					"Backcolorr": [0.18, 0.22, 0.28],
+					"Opacity": 0.9
+				},
+				"OP Viewer": {
+					"$t": "op_viewer",
+					"Opvieweroversize": "natural"
+				},
+				"About": {
+					"$t": "about"
+				}
+			},
+			"position": [-700, -352],
+			"size": [329, 322],
+			"palette_clone": true
+		},
+		{
+			"name": "annotation_execute_src_ctrl",
+			"type": "annotateCOMP",
+			"custom_pars": {
+				"Text": {
+					"$t": "text",
+					"Titletext": "Build & Release Manager",
+					"Bodytext": "Runs on every project save (onProjectPreSave):\n\n1. Auto-increments the patch version\n   (e.g. v5.0.32 -> v5.0.33)\n\n2. Updates README.md with the new\n   version number and TD build\n\n3. Deletes the previous release .tox\n\n4. Saves a fresh Embody-vX.Y.Z.tox\n   to the /release folder",
+					"Bodyfontsize": 12
+				},
+				"Settings": {
+					"$t": "settings",
+					"Mode": "annotate",
+					"Backcolorr": [0.18, 0.22, 0.28],
+					"Opacity": 0.9
+				},
+				"OP Viewer": {
+					"$t": "op_viewer",
+					"Opvieweroversize": "natural"
+				},
+				"About": {
+					"$t": "about"
+				}
+			},
+			"position": [-775, 50],
+			"size": [440, 480],
+			"palette_clone": true
+		},
+		{
+			"name": "annotation_externalizations",
+			"type": "annotateCOMP",
+			"custom_pars": {
+				"Text": {
+					"$t": "text",
+					"Titletext": "Externalization Tracking",
+					"Bodytext": "Master tracking table for all externalized operators. Managed exclusively by Embody — never edit directly."
+				},
+				"Settings": {
+					"$t": "settings",
+					"Mode": "annotate",
+					"Backcolorr": [0.18, 0.22, 0.28],
+					"Opacity": 0.9
+				},
+				"OP Viewer": {
+					"$t": "op_viewer",
+					"Opvieweroversize": "natural"
+				},
+				"About": {
+					"$t": "about"
+				}
+			},
+			"position": [-250, -50],
+			"size": [223, 279],
+			"palette_clone": true
+		}
+	],
+	"annotations": [
+		{
+			"name": "annotation_execute_src_ctrl",
+			"mode": "annotate",
+			"title": "Build & Release Manager",
+			"text": "Runs on every project save (onProjectPreSave):\n\n1. Auto-increments the patch version\n   (e.g. v5.0.32 -> v5.0.33)\n\n2. Updates README.md with the new\n   version number and TD build\n\n3. Deletes the previous release .tox\n\n4. Saves a fresh Embody-vX.Y.Z.tox\n   to the /release folder",
+			"position": [-775, 50],
+			"size": [440, 480],
+			"color": [0.18, 0.22, 0.28],
+			"opacity": 0.9
+		},
+		{
+			"name": "annotation_externalizations",
+			"mode": "annotate",
+			"title": "Externalization Tracking",
+			"text": "Master tracking table for all externalized operators. Managed exclusively by Embody — never edit directly.",
+			"position": [-250, -50],
+			"size": [223, 279],
+			"color": [0.18, 0.22, 0.28],
+			"opacity": 0.9
+		},
+		{
+			"name": "annotation_unit_tests",
+			"mode": "annotate",
+			"title": "Unit Tests",
+			"text": "Embody's test suites for verifying externalization, path resolution, and MCP tool behavior.",
+			"position": [-700, -352],
+			"size": [329, 322],
+			"color": [0.18, 0.22, 0.28],
+			"opacity": 0.9
+		}
+	]
+}
