@@ -30,6 +30,7 @@ Clean, readable operator networks are critical. Every operator placed via MCP mu
 
 ### Operator Placement Rules
 
+- **NEVER place an operator on top of another operator**: Before creating ANY operator, scan the target network with `query_network` and `get_op_position` to find ALL existing operators and their positions. Calculate a position that does not overlap with any existing operator. Overlapping operators is the single worst layout mistake — it makes networks unreadable and can hide operators entirely. This applies to temporary/test operators too, not just production networks.
 - **Never rely on `layout()`**: TD's built-in `COMP.layout()` method arranges children with no awareness of relationships, producing overlapping, unreadable layouts. Claude must calculate and set explicit `x, y` positions using `set_op_position`. `layout()` may be used sparingly as a starting point for throwaway or temporary networks, but production networks must always have intentional, explicit positioning.
 - **New operators go near related operators**: When adding an operator to an existing network, place it adjacent to the operator(s) it relates to — not at `[0, 0]` and not at the bottom of the network.
 - **Scan before placing**: Before placing new operators, use `get_op_position` on nearby operators to understand the existing layout, then calculate positions that maintain the grid and spacing conventions.
@@ -506,11 +507,29 @@ Embody/
 TouchDesigner projects are binary `.toe` files. Embody externalizes tagged operators to text files under `dev/embody/`:
 
 1. **Tagging**: Operators are tagged for externalization (keyboard shortcut or MCP tool)
-2. **Sync out**: On `Ctrl+Shift+U` or project save, Embody writes tagged operators to files (`.tox` for COMPs, `.py`/`.json`/etc. for DATs)
-3. **Sync in**: When the `.toe` is opened, TouchDesigner reads the external files back into operators via their `file` parameter
+2. **Sync out**: On `Ctrl+Shift+U`, Embody writes tagged operators to files (`.tox` for COMPs, `.py`/`.json`/etc. for DATs)
+3. **Sync in / Restoration**: On project open, Embody automatically restores all externalized operators from disk — TOX-strategy COMPs from `.tox` files, TDN-strategy COMPs from `.tdn` JSON files, and DATs via TouchDesigner's native `file` parameter. Users do not need to save their `.toe` file to preserve externalized work.
 4. **Tracking**: `dev/embody/externalizations.tsv` tracks all externalized ops with path, type, timestamp, dirty state, and build number
 
-**Important**: Edits to `.py` files in `dev/embody/Embody/` are read by TD when the project loads or the DAT syncs. Changes made inside TD are written out to these files on save. This bidirectional sync is the core of the system.
+**Important**: Edits to `.py` files in `dev/embody/Embody/` are read by TD when the project loads or the DAT syncs. Changes made inside TD are written out to these files on save. This bidirectional sync is the core of the system. The externalized files on disk are the source of truth.
+
+### Automatic Restoration
+
+On project open, Embody runs a three-phase startup sequence (in `execute.py`) that fully restores all externalized operators from disk:
+
+| Frame | Method | Description |
+|-------|--------|-------------|
+| 30 | `_upgradeEnvoy()` | Silently extract CLAUDE.md if Envoy is enabled but file is missing |
+| 45 | `RestoreTOXComps()` | Restore missing TOX-strategy COMPs from `.tox` files on disk |
+| 60 | `ReconstructTDNComps()` | Rebuild TDN-strategy COMPs from `.tdn` JSON files |
+
+**TOX Restoration** (`Toxrestoreonstart` toggle, ON by default): If a TOX-strategy COMP is tracked in `externalizations.tsv` but missing from the `.toe` (e.g., the user externalized it but didn't save the project), Embody creates the COMP and sets `externaltox` to trigger TD's auto-load from the `.tox` file. COMPs are restored in depth order (parents before children). This runs before the continuity check, which would otherwise delete the `.tox` file.
+
+**TDN Reconstruction** (`Tdncreateonstart` toggle): TDN-strategy COMPs are intentionally stripped from the `.toe` during save. On project open, `ReconstructTDNComps()` rebuilds their children from `.tdn` files. See the TDN section below.
+
+**DAT Restoration**: DATs with externalized files are synced automatically by TouchDesigner's native `file` parameter mechanism — no Embody intervention needed.
+
+The net effect is that **all externalized operators are fully recoverable from the files on disk**, regardless of whether the `.toe` was saved after externalization.
 
 ### Export Portable Tox
 
@@ -1033,6 +1052,7 @@ class TestMyFeature(EmbodyTestCase):
 25. Assigning directly to a `tdu.Dependency` object (`dep = 5`) instead of its value (`dep.val = 5`) — destroys the Dependency, silently breaking all dependent expressions
 26. Caching extension references in local variables (`ext = self.ownerComp.ext.Embody`) — the reference goes stale when TD reinitializes the extension. Always call inline: `self.ownerComp.ext.Embody.Method()`
 27. Creating operators without setting explicit positions — all new operators default to `[0, 0]` and stack on top of each other. After creating operators (via MCP `create_op`, `execute_python`, or `import_network`), ALWAYS use `set_op_position` to place them on the 200-unit grid with proper spacing (see Network Layout Conventions). Never rely on `layout()` for production networks — it produces unreadable layouts with no logical grouping. `layout()` is acceptable only as a fallback for temporary/throwaway networks.
+28. **Placing operators on top of existing operators** — before creating ANY operator in a network, ALWAYS scan existing operators with `query_network` + `get_op_position` to find occupied positions. Calculate a clear position that doesn't overlap anything. This applies to ALL operators including temporary/test ones. An overlapping operator hides what's underneath and makes the network unreadable.
 
 ## Important Rules
 

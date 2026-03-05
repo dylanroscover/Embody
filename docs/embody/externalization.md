@@ -56,11 +56,24 @@ COMPs can also be externalized using the **TDN strategy** instead of `.tox`. Thi
 
 With TDN strategy:
 
-- **On save**: The COMP's children are exported to a `.tdn` file, then stripped from the `.toe` to keep it small
-- **On load**: Children are reconstructed from the `.tdn` file when the project opens
+- **On save** (++ctrl+shift+u++): The COMP's children are exported to a `.tdn` file
+- **On project save** (++ctrl+s++): Children are stripped from the `.toe` to keep it small, then restored after save completes
+- **On project open**: Children are automatically reconstructed from the `.tdn` file
 - **In git**: You see readable JSON diffs instead of binary changes
 
 See [TDN Format](../tdn/index.md) for more details.
+
+## Automatic Restoration
+
+Embody automatically restores all externalized operators when a project is opened. Your externalized files on disk are the source of truth — you do not need to save your `.toe` file to preserve externalized work.
+
+| Strategy | Restoration Method | Toggle |
+|----------|-------------------|--------|
+| **TOX** | Missing COMPs are restored from `.tox` files on disk | `Toxrestoreonstart` (ON by default) |
+| **TDN** | Children are reconstructed from `.tdn` JSON files | `Tdncreateonstart` |
+| **DAT** | Synced from external files via TouchDesigner's native `file` parameter | Always active |
+
+This means that even if you never save your `.toe` file after externalizing, all tagged operators are fully recoverable from the files on disk the next time you open the project.
 
 ## Export Portable Tox
 

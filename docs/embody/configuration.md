@@ -18,10 +18,14 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Envoy Enable** — Toggle the MCP server on/off
 - **Envoy Port** — Port number for the MCP server (default: 9870)
 
+### Restoration
+
+- **TOX Restore on Start** — Restore missing TOX-strategy COMPs from `.tox` files on project open (ON by default)
+- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open
+
 ### TDN
 
 - **Embed DATs in TDNs** — Include DAT content in TDN exports
-- **TDN Create on Start** — Restore TDN-strategy COMPs on project open
 - **Export Project TDN** — Pulse to export the entire project network
 
 ### Logs

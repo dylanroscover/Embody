@@ -441,11 +441,29 @@ Embody/
 TouchDesigner projects are binary `.toe` files. Embody externalizes tagged operators to text files under `dev/embody/`:
 
 1. **Tagging**: Operators are tagged for externalization (keyboard shortcut or MCP tool)
-2. **Sync out**: On `Ctrl+Shift+U` or project save, Embody writes tagged operators to files (`.tox` for COMPs, `.py`/`.json`/etc. for DATs)
-3. **Sync in**: When the `.toe` is opened, TouchDesigner reads the external files back into operators via their `file` parameter
+2. **Sync out**: On `Ctrl+Shift+U`, Embody writes tagged operators to files (`.tox` for COMPs, `.py`/`.json`/etc. for DATs)
+3. **Sync in / Restoration**: On project open, Embody automatically restores all externalized operators from disk — TOX-strategy COMPs from `.tox` files, TDN-strategy COMPs from `.tdn` JSON files, and DATs via TouchDesigner's native `file` parameter. Users do not need to save their `.toe` file to preserve externalized work.
 4. **Tracking**: `dev/embody/externalizations.tsv` tracks all externalized ops with path, type, timestamp, dirty state, and build number
 
-**Important**: Edits to `.py` files in `dev/embody/Embody/` are read by TD when the project loads or the DAT syncs. Changes made inside TD are written out to these files on save. This bidirectional sync is the core of the system.
+**Important**: Edits to `.py` files in `dev/embody/Embody/` are read by TD when the project loads or the DAT syncs. Changes made inside TD are written out to these files on save. This bidirectional sync is the core of the system. The externalized files on disk are the source of truth.
+
+### Automatic Restoration
+
+On project open, Embody runs a three-phase startup sequence that fully restores all externalized operators from disk:
+
+| Frame | Method | Description |
+|-------|--------|-------------|
+| 30 | `_upgradeEnvoy()` | Silently extract CLAUDE.md if Envoy is enabled but file is missing |
+| 45 | `RestoreTOXComps()` | Restore missing TOX-strategy COMPs from `.tox` files on disk |
+| 60 | `ReconstructTDNComps()` | Rebuild TDN-strategy COMPs from `.tdn` JSON files |
+
+**TOX Restoration** (`Toxrestoreonstart` toggle, ON by default): If a TOX-strategy COMP is tracked in `externalizations.tsv` but missing from the `.toe`, Embody creates the COMP and sets `externaltox` to trigger TD's auto-load from the `.tox` file. COMPs are restored in depth order (parents before children).
+
+**TDN Reconstruction** (`Tdncreateonstart` toggle): TDN-strategy COMPs are intentionally stripped from the `.toe` during save. On project open, `ReconstructTDNComps()` rebuilds their children from `.tdn` files.
+
+**DAT Restoration**: DATs with externalized files are synced automatically by TouchDesigner's native `file` parameter mechanism — no Embody intervention needed.
+
+The net effect is that **all externalized operators are fully recoverable from the files on disk**, regardless of whether the `.toe` was saved after externalization.
 
 ### Export Portable Tox
 

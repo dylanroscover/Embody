@@ -2,7 +2,7 @@
 
 ### Supercharge Your TouchDesigner Workflow With AI
 
-**TouchDesigner 2025.32280** (Windows / macOS) &nbsp;|&nbsp; **v5.0.171**
+**TouchDesigner 2025.32280** (Windows / macOS) &nbsp;|&nbsp; **v5.0.190**
 
 [YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s) &nbsp;|&nbsp; [Full Documentation](docs/)
 
@@ -14,7 +14,7 @@ Build faster. Debug smarter. Let AI handle the tedious parts while you focus on 
 
 **Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, connects AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) to your live TouchDesigner session. Create operators, wire connections, set parameters, write extensions, and debug errors — all through natural conversation. No copy-pasting code. No describing your network in chat. You stay in control while AI does the heavy lifting.
 
-**Embody** makes your TouchDesigner projects version-control-friendly. Tag any operator with a double-tap of left Ctrl, save your project, and Embody automatically externalizes your COMPs and DATs to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy.
+**Embody** makes your TouchDesigner projects version-control-friendly. Tag any operator with a double-tap of left Ctrl, and Embody automatically externalizes your COMPs and DATs to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. On project open, everything is restored from the files on disk — your externalized files are the source of truth.
 
 **TDN** (TouchDesigner Network) takes it further — export your entire operator network to human-readable JSON. Review structural changes in pull requests, snapshot configurations, and reconstruct entire networks from text.
 
@@ -22,7 +22,7 @@ Build faster. Debug smarter. Let AI handle the tedious parts while you focus on 
 
 | | Feature | What It Does |
 |---|---------|-------------|
-| 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync with your `.toe` on every save |
+| 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores everything from disk on project open |
 | 🤖 | **Envoy MCP Server** | 40+ tools let AI assistants create operators, set parameters, wire connections, and more |
 | 📄 | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
 | 📤 | **Portable Tox Export** | Export any COMP as a self-contained `.tox` with all external references stripped |
@@ -50,7 +50,7 @@ my-project/              <- git repo root
 1. **Download**: Drag and drop the Embody `.tox` from the [`/release`](release/) folder into your TouchDesigner project.
 2. **Tag operators**: Select any COMP or DAT and press `lctrl` twice in a row.
 3. **Initialize**: Press `ctrl + shift + u` to externalize all tagged operators.
-4. **Work normally**: Save your project with `ctrl + s` — Embody automatically updates any dirty COMPs.
+4. **Work normally**: Press `ctrl + shift + u` as you work to save dirty externalizations. On project open, Embody restores everything from the files on disk automatically.
 
 > If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
@@ -150,8 +150,9 @@ See the [full changelog](docs/changelog.md) for detailed version history.
 
 **Recent releases:**
 
+- **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs are fully restored from disk on project open, documentation overhaul
+- **5.0.178**: Reload from disk, full project TDN safety, continuity hardening
 - **5.0.171**: Export Portable Tox, improved tag management, TDN error handling, window management refactor
-- **5.0.163**: Re-export TDN files for list, manager, and container_right after param changes
 - **5.0.140**: TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, TDN restore UI, companion DAT reuse, bug fixes
 - **5.0.130**: TDN strategy externalization, strip/restore save cycle, compact TDN format, per-COMP split export
 - **5.0**: Major release — Envoy MCP server (40+ tools), TDN format, test framework (30 suites), structured logging, CLAUDE.md auto-generation, macOS support

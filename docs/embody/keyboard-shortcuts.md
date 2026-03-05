@@ -20,9 +20,11 @@ The double-tap ++lctrl++ shortcut works on the currently selected operator in th
 
 ## Save Operations
 
-- **++ctrl+shift+u++** — Saves all dirty externalized operators as you work. If Embody hasn't been initialized yet, this also performs first-time setup.
+- **++ctrl+shift+u++** — Saves all dirty externalized operators as you work. If Embody hasn't been initialized yet, this also performs first-time setup. This is the primary way to save your externalizations.
 - **++ctrl+alt+u++** — Saves only the COMP you're currently inside. Useful for large projects where a full save takes too long.
-- **++ctrl+s++** — Standard TouchDesigner project save. Embody hooks into this to automatically save all dirty COMPs.
+
+!!! tip "No need to save your .toe"
+    With automatic restoration, you don't need to save your `.toe` file to preserve externalized work. On project open, Embody restores TOX-strategy COMPs from `.tox` files and reconstructs TDN-strategy COMPs from `.tdn` files. Your externalized files on disk are the source of truth.
 
 ## TDN Export
 

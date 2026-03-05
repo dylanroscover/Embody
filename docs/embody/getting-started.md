@@ -40,9 +40,9 @@ That's it. Embody is a self-contained component — no external dependencies nee
 
 1. **Externalize operators**: Select any COMP or DAT and press ++lctrl++ twice in a row. Embody tags the operator and externalizes it to disk in one step.
 
-2. **Work normally**: Save your project with ++ctrl+s++ — Embody automatically updates any dirty COMPs. DATs sync through TouchDesigner's native Sync to File mechanism.
+2. **Save as you work**: Press ++ctrl+shift+u++ to update all dirty externalizations, or ++ctrl+alt+u++ to save just the COMP you're currently inside.
 
-3. **Save as you work**: Press ++ctrl+shift+u++ to update all dirty externalizations, or ++ctrl+alt+u++ to save just the COMP you're currently inside.
+3. **Work with confidence**: Your externalized files on disk are the source of truth. On project open, Embody automatically restores everything from disk — you never need to worry about losing externalized work.
 
 !!! tip
     To externalize an entire project at once, enable the **Externalize Full Project** option on the Embody COMP. Otherwise, externalize operators selectively with ++lctrl+lctrl++.
@@ -51,7 +51,7 @@ That's it. Embody is a self-contained component — no external dependencies nee
 
 Once set up, Embody works in the background:
 
-- **Auto-save on project save**: Saving your project (++ctrl+s++) autosaves all modified (dirty) COMPs. DATs synchronize automatically via their Sync to File parameter.
-- **Quick save**: Use ++ctrl+shift+u++ to update only dirty COMPs, or ++ctrl+alt+u++ to save just the COMP you're currently inside (useful for large projects).
+- **Save externalizations**: Use ++ctrl+shift+u++ to save all dirty COMPs and DATs, or ++ctrl+alt+u++ to save just the COMP you're currently inside.
+- **Automatic restoration**: On project open, Embody automatically restores all externalized operators from the files on disk. TOX-strategy COMPs are restored from `.tox` files, TDN-strategy COMPs are reconstructed from `.tdn` JSON files, and DATs sync via TouchDesigner's native file parameter. You do not need to save your `.toe` file to preserve externalized work.
 - **Parameter tracking**: Embody tracks all parameter values on externalized COMPs. When any parameter changes (not just network edits), that COMP is automatically marked dirty with a "Par" indicator.
 - **Cross-platform**: All file paths are normalized to forward slashes (`/`), so teams on mixed Windows/macOS platforms can collaborate without path-related merge conflicts.

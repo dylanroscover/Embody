@@ -1,5 +1,16 @@
 # Changelog
 
+## v5.0.190
+
+Automatic restoration, documentation overhaul.
+
+- **Automatic restoration**: TOX-strategy COMPs are restored from `.tox` files and TDN-strategy COMPs are reconstructed from `.tdn` files on project open — users no longer need to save their `.toe` to preserve externalized work
+- **Documentation overhaul**: Updated all documentation (README, docs site, help text, CLAUDE.md, text_claude.md) to reflect that externalized files on disk are the source of truth, removing outdated `ctrl+s` save workflow references
+
+## v5.0.178
+
+Reload from disk, full project TDN safety, continuity hardening.
+
 ## v5.0.171
 
 Export Portable Tox, improved tag management, TDN error handling, window management refactor.

@@ -16,7 +16,7 @@ Getting Started
 1. Add the Embody .tox to your project
 2. Tag operators for externalization (lctrl-lctrl)
 3. Press ctrl-shift-u to initialize/update
-4. Save your project (ctrl-s) to autosave dirty COMPs
+4. Work as normal — externalized files are the source of truth
 
 The default Tags are listed on the Tags page. These can be
 customized, but please do so before you enable Embody.
@@ -54,16 +54,33 @@ DATs:  .py, .json, .xml, .html, .glsl, .frag, .vert,
 
 Workflow
 --------
-As you work, Embody keeps your external files updated.
-Every time you save your project (ctrl-s), Embody checks
-for modified ('dirty') COMPs and autosaves them. DATs are
-automatically synchronized by TouchDesigner via their Sync
-to File parameter.
+Embody keeps your external files up to date as you work.
+Press ctrl-shift-u to save all dirty externalizations, or
+ctrl-alt-u to save just the COMP you're currently inside.
+DATs are automatically synchronized by TouchDesigner via
+their Sync to File parameter.
 
 Embody also tracks parameter changes on externalized COMPs.
 When any parameter is modified, the COMP is marked dirty
 with a "Par" indicator, ensuring parameter tweaks are never
 lost.
+
+Automatic Restoration
+---------------------
+You do not need to save your .toe file to preserve your
+externalized work. On project open, Embody automatically
+restores everything from the files on disk:
+
+- TOX-strategy COMPs: Restored from .tox files if missing
+  from the .toe (via the Toxrestoreonstart toggle)
+- TDN-strategy COMPs: Children are reconstructed from .tdn
+  JSON files (via the Tdncreateonstart toggle)
+- DATs: Synced from their external files via TouchDesigner's
+  native file parameter
+
+Your externalized files on disk are the source of truth.
+The .toe file is just a convenient container — all tagged
+operators are fully recoverable from the external files.
 
 All file paths are normalized to forward slashes for cross-
 platform compatibility between Windows and macOS.

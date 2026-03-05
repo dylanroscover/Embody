@@ -25,7 +25,7 @@ No copy-pasting code. No describing your network in chat. You stay in control wh
 
     ---
 
-    Tag any operator, save your project, and Embody keeps external files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in sync. Your entire network becomes diffable, mergeable, and reviewable in git.
+    Tag any operator and Embody keeps external files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in sync. On project open, everything is auto-restored from disk. Your entire network becomes diffable, mergeable, and reviewable in git.
 
     [:octicons-arrow-right-24: Get started](embody/getting-started.md)
 
@@ -67,7 +67,7 @@ You describe what you want in plain language, and the AI works with your live ne
 | | Feature | Description |
 |---|---------|-------------|
 | :material-robot: | **Envoy MCP Server** | 40+ tools connect AI assistants to your live TD session |
-| :material-sync: | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync with your `.toe` on every save |
+| :material-sync: | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores from disk on project open |
 | :material-file-document: | **TDN Format** | Export/import operator networks as diffable JSON for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — minimal friction |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |
@@ -89,6 +89,6 @@ You describe what you want in plain language, and the AI works with your live ne
 2. **Drag and drop** it into your TouchDesigner project
 3. **Enable Envoy** to connect AI assistants to your session
 4. **Externalize operators** by pressing ++lctrl++ twice on any COMP or DAT — tags and saves in one step
-5. **Save as you work** with ++ctrl+shift+u++ to update all dirty externalizations
+5. **Save as you work** with ++ctrl+shift+u++ — on next project open, everything restores from disk automatically
 
 [:octicons-arrow-right-24: Full setup guide](embody/getting-started.md)
