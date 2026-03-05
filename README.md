@@ -1,4 +1,4 @@
-# Embody
+# 🪞 Embody
 
 ### Supercharge Your TouchDesigner Workflow With AI
 
