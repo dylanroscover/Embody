@@ -1,0 +1,221 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 12,
+	"generator": "Embody/5.0.188",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-05T01:35:58Z",
+	"network_path": "/embody/Embody/toolbar",
+	"options": {
+		"include_dat_content": false
+	},
+	"type_defaults": {
+		"containerCOMP": {
+			"parameters": {
+				"resizecomp": "=me",
+				"repocomp": "=me"
+			},
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
+		},
+		"panelexecuteDAT": {
+			"parameters": {
+				"fromop": "=parent()",
+				"panelvalue": "*",
+				"ontooff": true,
+				"valuechange": true,
+				"syncfile": true,
+				"language": "python"
+			},
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		},
+		"parameterexecuteDAT": {
+			"parameters": {
+				"fromop": "=parent()",
+				"syncfile": true,
+				"language": "python"
+			},
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		}
+	},
+	"par_templates": {
+		"about": [
+			{
+				"label": "Build Number",
+				"name": "Build",
+				"readOnly": true,
+				"style": "Int"
+			},
+			{
+				"label": "Build Date",
+				"name": "Date",
+				"readOnly": true,
+				"style": "Str"
+			},
+			{
+				"label": "Touch Build",
+				"name": "Touchbuild",
+				"readOnly": true,
+				"style": "Str"
+			}
+		]
+	},
+	"operators": [
+		{
+			"name": "tooltip",
+			"type": "containerCOMP",
+			"parameters": {
+				"x": 2,
+				"y": 40,
+				"w": 149,
+				"h": 22,
+				"layer": 10,
+				"alignallow": "ignore",
+				"display": false,
+				"clickthrough": true,
+				"bgcolorr": 0.13,
+				"bgcolorg": 0.13,
+				"bgcolorb": 0.13,
+				"bgalpha": 0.95
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about",
+					"Build": 4,
+					"Date": "2026-03-05 01:35:49 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"position": [800, -200],
+			"size": [160, 130]
+		},
+		{
+			"name": "ToolbarExt",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/toolbar/ToolbarExt.py",
+				"syncfile": true,
+				"language": "python"
+			},
+			"position": [200, -200],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		},
+		{
+			"name": "tip_measure",
+			"type": "textTOP",
+			"parameters": {
+				"text": "Toggle externalization",
+				"font": "Open Sans",
+				"fontsizex": 10,
+				"fontsizey": 10,
+				"resmult": false
+			},
+			"position": [1400, -200],
+			"size": [130, 90],
+			"color": [0.67, 0.67, 0.67]
+		},
+		{
+			"name": "container_left",
+			"type": "containerCOMP",
+			"parameters": {
+				"w": 852,
+				"h": 26,
+				"borderover": false,
+				"align": "horizlr",
+				"reloadbuiltin": false
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about",
+					"Build": 7,
+					"Date": "2026-03-05 01:35:37 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"flags": ["viewer"],
+			"size": [160, 76]
+		},
+		{
+			"name": "panelexec_left",
+			"type": "panelexecuteDAT",
+			"parameters": {
+				"panels": "/embody/Embody/toolbar/container_left",
+				"file": "embody/Embody/toolbar/panelexec_left.py"
+			},
+			"position": [1000, -200]
+		},
+		{
+			"name": "parexec_filter",
+			"type": "parameterexecuteDAT",
+			"parameters": {
+				"op": "/embody/Embody/toolbar/container_right/filter",
+				"pars": "text",
+				"custom": false,
+				"file": "embody/Embody/toolbar/parexec_filter.py"
+			},
+			"position": [600, -200]
+		},
+		{
+			"name": "toolbar_config",
+			"type": "tableDAT",
+			"parameters": {
+				"file": "embody/Embody/toolbar/toolbar_config.tsv",
+				"syncfile": true,
+				"rows": 14,
+				"cols": 16
+			},
+			"position": [0, -200],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["tsv"]
+		},
+		{
+			"name": "container_right",
+			"type": "containerCOMP",
+			"parameters": {
+				"w": 270,
+				"h": 26,
+				"leftanchor": 1,
+				"horigin": 1,
+				"align": "horizrl"
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about",
+					"Build": 14,
+					"Date": "2026-03-05 01:35:36 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"flags": ["viewer"],
+			"position": [175, 0],
+			"size": [160, 76]
+		},
+		{
+			"name": "panelexec_right",
+			"type": "panelexecuteDAT",
+			"parameters": {
+				"panels": "/embody/Embody/toolbar/container_right",
+				"file": "embody/Embody/toolbar/panelexec_right.py"
+			},
+			"position": [1200, -200]
+		},
+		{
+			"name": "parexec_responsive",
+			"type": "parameterexecuteDAT",
+			"parameters": {
+				"op": "../manager",
+				"pars": "w",
+				"file": "embody/Embody/toolbar/parexec_responsive.py"
+			},
+			"flags": ["viewer"],
+			"position": [400, -200]
+		}
+	]
+}

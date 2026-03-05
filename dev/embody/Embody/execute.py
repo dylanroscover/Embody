@@ -1,4 +1,4 @@
-﻿# me - this DAT
+# me - this DAT
 # 
 # frame - the current frame
 # state - True if the timeline is paused
@@ -15,6 +15,8 @@ def onStart():
 	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
+	# Restore missing TOX-strategy COMPs from .tox files on disk
+	run(f"op('{parent.Embody}').RestoreTOXComps()", delayFrames=45)
 	# Reconstruct TDN-strategy COMPs from .tdn files
 	run(f"op('{parent.Embody}').ReconstructTDNComps()", delayFrames=60)
 	return
@@ -41,7 +43,7 @@ def onDeviceChange():
 	return
 
 def onProjectPreSave():
-	# Suppress the delayed Refresh pulse â€” the continuity check must NOT
+	# Suppress the delayed Refresh pulse - the continuity check must NOT
 	# fire during the strip/restore window or it will delete files for
 	# temporarily-missing operators inside TDN COMPs.
 	parent.Embody.ext.Embody.Update(suppress_refresh=True)
@@ -50,7 +52,7 @@ def onProjectPreSave():
 	if not tdn_comps:
 		return
 
-	# Phase 1 â€” Export current in-memory state to .tdn files.
+	# Phase 1: Export current in-memory state to .tdn files.
 	# This ensures Ctrl+S actually saves any changes the user made
 	# (positions, parameters, annotations, new operators, etc.).
 	exported = []
@@ -58,7 +60,7 @@ def onProjectPreSave():
 		comp = op(comp_path)
 		if not comp:
 			continue
-		# Skip empty COMPs â€” nothing to export or strip
+		# Skip empty COMPs - nothing to export or strip
 		has_children = bool(comp.findChildren(depth=1, includeUtility=True))
 		if not has_children:
 			continue
@@ -80,9 +82,14 @@ def onProjectPreSave():
 			parent.Embody.ext.Embody.Log(
 				f'Pre-save export error for {comp_path}: {e}', 'ERROR')
 
-	# Phase 2 â€” Strip children from exported COMPs so the .toe stays small.
-	# Only strip COMPs whose export succeeded â€” stripping without a valid
+	# Phase 2: Strip children from exported COMPs so the .toe stays small.
+	# Only strip COMPs whose export succeeded - stripping without a valid
 	# .tdn on disk would permanently destroy the children.
+	# Gated on Strip on Save toggle - when Off, .tdn files are still exported
+	# (Phase 1) but children stay in the .toe.
+	if not parent.Embody.par.Tdnstriponsave.eval():
+		return
+
 	stripped_info = []
 	for comp_path, rel_tdn_path in exported:
 		comp = op(comp_path)
@@ -127,13 +134,13 @@ def onProjectPostSave():
 				target_path=comp_path, tdn=tdn_doc, clear_first=True,
 				restore_file_links=True)
 		except Exception as e:
-			# print() as backup â€” Log may fail if extensions are reinitializing
+			# print() as backup - Log may fail if extensions are reinitializing
 			print(f'Embody > Post-save restore failed for {comp_path}: {e}')
 			try:
 				parent.Embody.ext.Embody.Log(
 					f'Post-save restore failed for {comp_path}: {e}', 'ERROR')
 			except Exception:
 				pass
-	# Safe to refresh now â€” all stripped COMPs have been restored
+	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)
 	return

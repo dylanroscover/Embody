@@ -142,9 +142,13 @@ class TDNExt:
 		if not hasattr(root_op, 'children'):
 			return {'error': f'{root_path} is not a COMP'}
 
-		# Resolve from toggle if not explicitly set
+		# Resolve from per-COMP storage, falling back to global toggle
 		if include_dat_content is None:
-			include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
+			per_comp = root_op.fetch('embed_dats_in_tdn', None, search=False)
+			if per_comp is not None:
+				include_dat_content = per_comp
+			else:
+				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
 
 		options = {
 			'include_dat_content': include_dat_content,
@@ -200,6 +204,7 @@ class TDNExt:
 					scan_folder, root_path)
 
 				filepath = self._resolveOutputPath(output_file, root_op)
+				Path(filepath).parent.mkdir(parents=True, exist_ok=True)
 				Path(filepath).write_text(
 					TDNExt._compact_json_dumps(tdn),
 					encoding='utf-8')
@@ -281,9 +286,13 @@ class TDNExt:
 			'ext_folder': self.ownerComp.ext.Embody.ExternalizationsFolder,
 		}
 
-		# Resolve from toggle if not explicitly set
+		# Resolve from per-COMP storage, falling back to global toggle
 		if include_dat_content is None:
-			include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
+			per_comp = root_op.fetch('embed_dats_in_tdn', None, search=False)
+			if per_comp is not None:
+				include_dat_content = per_comp
+			else:
+				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
 
 		done_event = Event()
 
@@ -291,10 +300,16 @@ class TDNExt:
 		# rglob/scandir suffers extreme GIL contention when called from a
 		# background thread (~30s vs ~70ms), so we do it here.
 		before_tdn = set()
+		protected_files = []
 		if resolved_path:
 			proj_folder = metadata['project_folder']
 			before_tdn = TDNExt._collectExistingTDNFiles(
 				proj_folder, root_path)
+			# Protect .tdn files belonging to other tracked TDN COMPs
+			# so the stale-file cleanup doesn't delete them.
+			protected_files = list(
+				self.ownerComp.ext.Embody._getAllTrackedTDNFiles(
+					exclude_path=root_path))
 
 		self._export_state = {
 			'paths': op_paths,
@@ -310,6 +325,7 @@ class TDNExt:
 			'output_file': resolved_path,
 			'metadata': metadata,
 			'before_tdn': before_tdn,
+			'protected_files': protected_files,
 			'done_event': done_event,
 			'done': False,
 			'error': None,
@@ -395,8 +411,10 @@ class TDNExt:
 					TDNExt._compact_json_dumps(tdn),
 					encoding='utf-8')
 
+				protected = [state['output_file']] + state.get(
+					'protected_files', [])
 				stale = TDNExt._cleanupStaleTDNFiles(
-					before_tdn, [state['output_file']],
+					before_tdn, protected,
 					base_folder)
 
 				state['result'] = {
@@ -848,12 +866,15 @@ class TDNExt:
 			if comp_conns:
 				data['comp_inputs'] = comp_conns
 
-		# DAT content (optional)
-		if (target.family == 'DAT'
-				and options.get('include_dat_content', True)):
-			content_data = self._exportDATContent(target)
-			if content_data:
-				data.update(content_data)
+		# DAT content — always embed non-externalized DATs (they have no
+		# other source of truth). The include_dat_content toggle only
+		# controls whether externalized DATs (with file on disk) also embed.
+		if target.family == 'DAT':
+			is_externalized = bool(target.par.file.eval()) if hasattr(target.par, 'file') else False
+			if not is_externalized or options.get('include_dat_content', True):
+				content_data = self._exportDATContent(target)
+				if content_data:
+					data.update(content_data)
 
 		# Recurse into COMP children (sync mode only)
 		# Skip children of palette clones — they come from /sys/ and

@@ -1,4 +1,4 @@
-﻿# me - this DAT
+# me - this DAT
 # par - the Par object that has changed
 # val - the current value
 # prev - the previous value
@@ -30,7 +30,7 @@ def onValueChange(par, prev):
 			# Delay restart to ensure clean shutdown
 			run("parent.Embody.ext.Envoy.Start()", delayFrames=2)
 
-	# UI color pars changed â€” reload list theme
+	# UI color pars changed - reload list theme
 	elif 'color' in par.name.lower():
 		list_comp = op('list/list1')
 		if list_comp:

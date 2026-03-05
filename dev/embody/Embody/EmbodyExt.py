@@ -562,56 +562,69 @@ class EmbodyExt:
         self.my.par.Externalizations.val = externalizations_dat
 
     def _migrateTableSchema(self) -> None:
-        """Migrate externalizations table to include 'strategy' column.
+        """Migrate externalizations table schema to current version.
 
-        Adds the strategy column if missing, populates it from existing data,
-        and removes legacy TDN companion rows (replaced by strategy='tdn' on
-        the COMP's primary row).
+        Adds missing columns (strategy, node_x, node_y, node_color),
+        populates them from existing data, and removes legacy rows.
         """
         table = self.Externalizations
         if not table or table.numRows < 1:
             return
 
         headers = [table[0, c].val for c in range(table.numCols)]
-        if 'strategy' in headers:
-            return  # Already migrated
 
-        # Insert strategy column after 'type' (index 2)
-        type_idx = headers.index('type') if 'type' in headers else 1
-        strategy_col = type_idx + 1
-        table.insertCol('', strategy_col)
-        table[0, strategy_col] = 'strategy'
+        migrations = []
 
-        # Collect TDN companion rows to remove (iterate backwards for safe deletion)
-        rows_to_delete = []
-        for i in range(1, table.numRows):
-            row_type = table[i, 'type'].val
-            rel_path = table[i, 'rel_file_path'].val
+        # Migration 1: Add strategy column (v5.0.176+)
+        if 'strategy' not in headers:
+            type_idx = headers.index('type') if 'type' in headers else 1
+            strategy_col = type_idx + 1
+            table.insertCol('', strategy_col)
+            table[0, strategy_col] = 'strategy'
 
-            if row_type == 'tdn':
-                # Legacy TDN companion row — mark for deletion
-                rows_to_delete.append(i)
-                continue
+            # Collect TDN companion rows to remove (iterate backwards)
+            rows_to_delete = []
+            for i in range(1, table.numRows):
+                row_type = table[i, 'type'].val
+                rel_path = table[i, 'rel_file_path'].val
 
-            # Determine strategy from context
-            oper = op(table[i, 'path'].val)
-            if oper and oper.family == 'COMP':
-                table[i, 'strategy'] = 'tox'
-            elif rel_path:
-                ext = rel_path.rsplit('.', 1)[-1] if '.' in rel_path else ''
-                table[i, 'strategy'] = ext
+                if row_type == 'tdn':
+                    rows_to_delete.append(i)
+                    continue
+
+                oper = op(table[i, 'path'].val)
+                if oper and oper.family == 'COMP':
+                    table[i, 'strategy'] = 'tox'
+                elif rel_path:
+                    ext = rel_path.rsplit('.', 1)[-1] if '.' in rel_path else ''
+                    table[i, 'strategy'] = ext
+                else:
+                    table[i, 'strategy'] = row_type
+
+            for i in reversed(rows_to_delete):
+                table.deleteRow(i)
+
+            count = len(rows_to_delete)
+            if count:
+                migrations.append(f'strategy column (removed {count} legacy TDN row(s))')
             else:
-                table[i, 'strategy'] = row_type
+                migrations.append('strategy column')
 
-        # Delete legacy TDN companion rows (reverse order to preserve indices)
-        for i in reversed(rows_to_delete):
-            table.deleteRow(i)
+            # Refresh headers after modification
+            headers = [table[0, c].val for c in range(table.numCols)]
 
-        count = len(rows_to_delete)
-        if count:
-            self.Log(f'Schema migration: added strategy column, removed {count} legacy TDN row(s)', 'SUCCESS')
-        else:
-            self.Log('Schema migration: added strategy column', 'SUCCESS')
+        # Migration 2: Add position/color columns (v5.0.189+)
+        if 'node_x' not in headers:
+            table.appendCol('node_x')
+            table.appendCol('node_y')
+            table.appendCol('node_color')
+            table[0, table.numCols - 3] = 'node_x'
+            table[0, table.numCols - 2] = 'node_y'
+            table[0, table.numCols - 1] = 'node_color'
+            migrations.append('node_x/node_y/node_color columns')
+
+        if migrations:
+            self.Log(f'Schema migration: added {", ".join(migrations)}', 'SUCCESS')
 
     def Verify(self) -> None:
         """Verify Embody instance and prompt for initialization."""
@@ -1244,6 +1257,8 @@ class EmbodyExt:
             self.Externalizations[opPath, 'timestamp'] = timestamp
             self.param_tracker.updateParamStore(oper)
             self.Externalizations[opPath, 'dirty'] = False
+            # Refresh position/color metadata
+            self._updatePositionInTable(oper, opPath)
 
             self.Log(f"Saved {opPath}", "SUCCESS")
         except Exception as e:
@@ -1262,6 +1277,22 @@ class EmbodyExt:
             if not rel_path:
                 self.Log(f"No TDN entry found for {opPath}", "ERROR")
                 return
+
+            # For root /, re-derive filename from current project name
+            # so it stays in sync when the .toe is renamed/versioned
+            if opPath == '/':
+                from pathlib import Path
+                safe_name = project.name.removesuffix('.toe')
+                ext_folder = self.ExternalizationsFolder or ''
+                new_rel = self.normalizePath(
+                    str(Path(ext_folder) / f'{safe_name}.tdn'))
+                if new_rel != rel_path:
+                    old_abs = self.buildAbsolutePath(rel_path)
+                    if old_abs.is_file():
+                        self.safeDeleteFile(str(old_abs))
+                    rel_path = new_rel
+                    self.Externalizations[opPath, 'rel_file_path'] = rel_path
+                    self.Log(f"Updated root TDN path: {rel_path}", "INFO")
 
             # Update build info
             if hasattr(oper.par, 'Build'):
@@ -1289,6 +1320,8 @@ class EmbodyExt:
                 self.Externalizations[opPath, 'timestamp'] = timestamp
                 self.param_tracker.updateParamStore(oper)
                 self.Externalizations[opPath, 'dirty'] = ''
+                # Refresh position/color metadata
+                self._updatePositionInTable(oper, opPath)
                 # Snapshot the network structure so _isTDNDirty returns False
                 self._storeTDNFingerprint(oper)
                 self.Log(f"Exported TDN for {opPath}", "SUCCESS")
@@ -1757,9 +1790,14 @@ class EmbodyExt:
             current_build = oper.par.Build.eval()
         self.setupBuildParameters(oper, build_page, current_build, app.build)
 
-        # Export TDN
+        # Export TDN — protect .tdn files belonging to OTHER tracked
+        # TDN COMPs so the stale-file cleanup doesn't delete them.
+        # Without this, bottom-up addition order causes parent exports
+        # to delete children's .tdn files as "stale".
+        protected = self._getAllTrackedTDNFiles(exclude_path=oper.path)
         result = self.my.ext.TDN.ExportNetwork(
-            root_path=oper.path, output_file=str(abs_path))
+            root_path=oper.path, output_file=str(abs_path),
+            cleanup_protected=protected)
 
         if result.get('success'):
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
@@ -1855,6 +1893,15 @@ class EmbodyExt:
         normalized_path = self.normalizePath(rel_file_path)
 
         has_strategy_col = self.Externalizations[0, 'strategy'] is not None
+        has_position_cols = self.Externalizations[0, 'node_x'] is not None
+
+        # Build position/color strings from the operator
+        node_x = str(int(oper.nodeX)) if has_position_cols else ''
+        node_y = str(int(oper.nodeY)) if has_position_cols else ''
+        node_color = ''
+        if has_position_cols:
+            c = oper.color
+            node_color = f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}'
 
         # Check if row already exists for this operator + strategy
         for row in range(1, self.Externalizations.numRows):
@@ -1864,19 +1911,37 @@ class EmbodyExt:
                     if row_strategy != strategy:
                         continue
                 self.Externalizations[row, 'rel_file_path'] = normalized_path
+                # Update position/color on existing rows too
+                if has_position_cols:
+                    self.Externalizations[row, 'node_x'] = node_x
+                    self.Externalizations[row, 'node_y'] = node_y
+                    self.Externalizations[row, 'node_color'] = node_color
                 return
 
         # Add new row
         if has_strategy_col:
-            self.Externalizations.appendRow([
+            row_data = [
                 oper.path, oper.type, strategy, normalized_path, timestamp,
                 dirty, build_num, touch_build
-            ])
+            ]
+            if has_position_cols:
+                row_data.extend([node_x, node_y, node_color])
+            self.Externalizations.appendRow(row_data)
         else:
             self.Externalizations.appendRow([
                 oper.path, oper.type, normalized_path, timestamp,
                 dirty, build_num, touch_build
             ])
+
+    def _updatePositionInTable(self, oper: 'OP', op_path: str) -> None:
+        """Update position/color metadata for an operator in the table."""
+        if self.Externalizations[0, 'node_x'] is None:
+            return
+        self.Externalizations[op_path, 'node_x'] = str(int(oper.nodeX))
+        self.Externalizations[op_path, 'node_y'] = str(int(oper.nodeY))
+        c = oper.color
+        self.Externalizations[op_path, 'node_color'] = (
+            f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}')
 
     def handleSubtraction(self, oper: OP) -> None:
         """Process removal of an operator from externalization."""
@@ -1937,15 +2002,18 @@ class EmbodyExt:
                     if is_tdn:
                         tdn_comp_paths.add(row_path)
 
-            # Detect stripped TDN COMPs — exist but have no children
-            # (e.g., after a crash during the strip/restore save cycle).
+            # Detect stripped or missing TDN COMPs:
+            # - Stripped: exists but has no children (e.g., after save
+            #   strip, or crash during the strip/restore cycle)
+            # - Missing: COMP was deleted entirely (e.g., crash before
+            #   post-save restore, or .toe opened without reconstruction)
             # Their children will be restored by ReconstructTDNComps(),
             # so we must skip ALL their entries (even individually-
             # externalized ones like .py files) to prevent false removals.
             stripped_tdn_paths = set()
             for tdn_path in tdn_comp_paths:
                 tdn_op = op(tdn_path)
-                if tdn_op and not tdn_op.findChildren(depth=1):
+                if not tdn_op or not tdn_op.findChildren(depth=1):
                     stripped_tdn_paths.add(tdn_path)
 
             # Check for ancestor rename before per-operator processing.
@@ -1969,6 +2037,14 @@ class EmbodyExt:
                 is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
                 if is_tdn:
                     if not op(old_op_path):
+                        # Check if .tdn file exists on disk — if so, the COMP
+                        # can be reconstructed (e.g., after strip/crash) and
+                        # we must NOT remove the tracking entry or delete the file.
+                        if rel_file_path:
+                            abs_tdn = self.buildAbsolutePath(
+                                self.normalizePath(rel_file_path))
+                            if abs_tdn.is_file():
+                                continue  # Recoverable — skip
                         # Try to find the renamed COMP before removing
                         found = self._findMovedTDNOp(
                             old_op_path, rel_file_path, processed_ops)
@@ -2557,6 +2633,7 @@ class EmbodyExt:
             self.Externalizations[row_index, 'type'] = new_op.type
             self.Externalizations[row_index, 'rel_file_path'] = self.normalizePath(new_rel_file_path)
             self.Externalizations[row_index, 'timestamp'] = timestamp
+            self._updatePositionInTable(new_op, new_op.path)
             self.Externalizations.cook(force=True)
             self.cleanupDuplicateRows(new_op.path)
 
@@ -2838,10 +2915,10 @@ class EmbodyExt:
         tdn_btn = self.tagger.op('button2')
         if tox_btn:
             tox_btn.par.display = True
-            tox_btn.par.label = 'Remove tox' if is_tox else 'Convert to tox'
+            tox_btn.par.label = '\u00d7  Remove tox' if is_tox else '\u21c4  Convert to tox'
         if tdn_btn:
             tdn_btn.par.display = True
-            tdn_btn.par.label = 'Remove tdn' if not is_tox else 'Convert to tdn'
+            tdn_btn.par.label = '\u00d7  Remove tdn' if not is_tox else '\u21c4  Convert to tdn'
 
         # Hide any extra DAT-tag buttons (safety net for replicator timing)
         for i in range(3, 16):
@@ -2853,7 +2930,7 @@ class EmbodyExt:
         btn_save = self.tagger.op('btn_save')
         if btn_save:
             btn_save.par.display = True
-            btn_save.par.label = 'Save tox' if is_tox else 'Save tdn'
+            btn_save.par.label = '\u2193  Save tox' if is_tox else '\u2193  Save tdn'
             btn_save.par.colorr = self.my.par.Taggingmenucolorr.eval()
             btn_save.par.colorg = self.my.par.Taggingmenucolorg.eval()
             btn_save.par.colorb = self.my.par.Taggingmenucolorb.eval()
@@ -2862,16 +2939,29 @@ class EmbodyExt:
         btn_reload = self.tagger.op('btn_reload')
         if btn_reload:
             btn_reload.par.display = True
-            btn_reload.par.label = 'Reload tox' if is_tox else 'Reload tdn'
+            btn_reload.par.label = '\u21bb  Reload tox' if is_tox else '\u21bb  Reload tdn'
             btn_reload.par.colorr = self.my.par.Taggingmenucolorr.eval()
             btn_reload.par.colorg = self.my.par.Taggingmenucolorg.eval()
             btn_reload.par.colorb = self.my.par.Taggingmenucolorb.eval()
+
+        # Show Embed DATs toggle (TDN COMPs only)
+        btn_embed = self.tagger.op('btn_embed')
+        embed_visible = not is_tox
+        if btn_embed:
+            btn_embed.par.display = embed_visible
+            if embed_visible:
+                per_comp = oper.fetch('embed_dats_in_tdn', None, search=False)
+                effective = per_comp if per_comp is not None else self.my.par.Embeddatsintdns.eval()
+                btn_embed.par.label = '\u229e  Embed DATs in tdn  \u2713' if effective else '\u229e  Embed DATs in tdn'
+                btn_embed.par.colorr = self.my.par.Taggingmenucolorr.eval()
+                btn_embed.par.colorg = self.my.par.Taggingmenucolorg.eval()
+                btn_embed.par.colorb = self.my.par.Taggingmenucolorb.eval()
 
         # Show Export portable tox button
         btn_portable = self.tagger.op('btn_portable')
         if btn_portable:
             btn_portable.par.display = True
-            btn_portable.par.label = 'Export portable tox'
+            btn_portable.par.label = '\u2197  Export portable tox'
             btn_portable.par.colorr = self.my.par.Taggingmenucolorr.eval()
             btn_portable.par.colorg = self.my.par.Taggingmenucolorg.eval()
             btn_portable.par.colorb = self.my.par.Taggingmenucolorb.eval()
@@ -2888,7 +2978,7 @@ class EmbodyExt:
         self.tagger.store('manage_file_path', rel_fp)
         if btn_openfile:
             btn_openfile.par.display = bool(rel_fp)
-            label = 'Reveal in Finder' if sys.platform.startswith('darwin') else 'Reveal in Explorer'
+            label = '\u25ce  Reveal in Finder' if sys.platform.startswith('darwin') else '\u25ce  Reveal in Explorer'
             btn_openfile.par.label = label
 
         # Update header text
@@ -2897,8 +2987,8 @@ class EmbodyExt:
             title.par.text = 'Actions'
 
         # Update height: header + 2 tag buttons + Save + Reload + Export Portable
-        # (+ Open file if applicable)
-        visible_count = 6 + (1 if rel_fp else 0)
+        # (+ Embed DATs for TDN) (+ Open file if applicable)
+        visible_count = 6 + (1 if embed_visible else 0) + (1 if rel_fp else 0)
         self.tagger.store('visible_count', visible_count)
 
     def SetupTaggerDATManageMode(self, oper: OP, active_tag: str) -> None:
@@ -2930,7 +3020,7 @@ class EmbodyExt:
                     btn.par.display = False
                 else:
                     btn.par.display = True
-                    btn.par.label = f'Convert to {tag_val}'
+                    btn.par.label = f'\u21c4  Convert to {tag_val}'
                     convert_count += 1
 
         # Hide Save button (DATs use syncfile)
@@ -2942,18 +3032,21 @@ class EmbodyExt:
         btn_remove = self.tagger.op('btn_remove')
         if btn_remove:
             btn_remove.par.display = True
-            btn_remove.par.label = 'Remove externalization'
+            btn_remove.par.label = '\u00d7  Remove externalization'
             btn_remove.par.colorr = self.my.par.Taggingmenucolorr.eval()
             btn_remove.par.colorg = self.my.par.Taggingmenucolorg.eval()
             btn_remove.par.colorb = self.my.par.Taggingmenucolorb.eval()
 
-        # Hide portable tox and reload (COMP-only actions)
+        # Hide portable tox, reload, and embed (COMP-only actions)
         btn_portable = self.tagger.op('btn_portable')
         if btn_portable:
             btn_portable.par.display = False
         btn_reload = self.tagger.op('btn_reload')
         if btn_reload:
             btn_reload.par.display = False
+        btn_embed = self.tagger.op('btn_embed')
+        if btn_embed:
+            btn_embed.par.display = False
 
         # Show Reveal in Finder/Explorer
         btn_openfile = self.tagger.op('btn_openfile')
@@ -2961,7 +3054,7 @@ class EmbodyExt:
         self.tagger.store('manage_file_path', rel_fp or '')
         if btn_openfile:
             btn_openfile.par.display = bool(rel_fp)
-            label = 'Reveal in Finder' if sys.platform.startswith('darwin') else 'Reveal in Explorer'
+            label = '\u25ce  Reveal in Finder' if sys.platform.startswith('darwin') else '\u25ce  Reveal in Explorer'
             btn_openfile.par.label = label
 
         # Update header
@@ -2983,10 +3076,13 @@ class EmbodyExt:
         btn_remove = self.tagger.op('btn_remove')
         btn_openfile = self.tagger.op('btn_openfile')
         btn_portable = self.tagger.op('btn_portable')
+        btn_embed = self.tagger.op('btn_embed')
         if btn_save:
             btn_save.par.display = False
         if btn_reload:
             btn_reload.par.display = False
+        if btn_embed:
+            btn_embed.par.display = False
         if btn_remove:
             btn_remove.par.display = False
         if btn_openfile:
@@ -3015,13 +3111,13 @@ class EmbodyExt:
                 if existing_tag is not None:
                     if i == existing_tag_index:
                         btn.par.display = True
-                        btn.par.label = f'Remove {tag_val}'
+                        btn.par.label = f'\u00d7  Remove {tag_val}'
                         visible_count += 1
                     else:
                         btn.par.display = False
                 else:
                     btn.par.display = True
-                    btn.par.label = f'Add {tag_val}'
+                    btn.par.label = f'+  Add {tag_val}'
                     visible_count += 1
 
         # Restore header text
@@ -3268,6 +3364,13 @@ class EmbodyExt:
             self.Save(oper.path)
         elif tdn_tag in oper.tags:
             self.SaveTDN(oper.path)
+        else:
+            # Fallback: check externalizations table for untagged COMPs (e.g. root)
+            strategy = self._getCompStrategy(oper)
+            if strategy == 'tox':
+                self.Save(oper.path)
+            elif strategy == 'tdn':
+                self.SaveTDN(oper.path)
 
         self.Refresh()
 
@@ -3276,7 +3379,14 @@ class EmbodyExt:
         tox_tag = self.my.par.Toxtag.val
         tdn_tag = self.my.par.Tdntag.val
 
-        strategy = 'tdn' if tdn_tag in oper.tags else 'tox'
+        # Determine strategy from tags, falling back to table for untagged COMPs
+        if tdn_tag in oper.tags:
+            strategy = 'tdn'
+        elif tox_tag in oper.tags:
+            strategy = 'tox'
+        else:
+            strategy = self._getCompStrategy(oper) or 'tox'
+
         result = ui.messageBox(
             'Reload',
             f'Reload this {strategy.upper()} from disk?\n\n'
@@ -3288,9 +3398,9 @@ class EmbodyExt:
         if result != 1:
             return
 
-        if tdn_tag in oper.tags:
+        if strategy == 'tdn':
             self._reloadTDN(oper)
-        elif tox_tag in oper.tags:
+        else:
             self._reloadTox(oper)
 
         self.Refresh()
@@ -3348,6 +3458,32 @@ class EmbodyExt:
         oper.par.enableexternaltox = False
         oper.par.enableexternaltox = True
         self.Log(f'Reloaded {oper.path} from disk ({rel_tox_path})', 'SUCCESS')
+
+    def HandleEmbed(self, oper: OP) -> None:
+        """Toggle per-COMP 'embed DATs' setting and re-export the .tdn."""
+        # Read current effective value
+        per_comp = oper.fetch('embed_dats_in_tdn', None, search=False)
+        if per_comp is not None:
+            effective = per_comp
+        else:
+            effective = self.my.par.Embeddatsintdns.eval()
+
+        # Toggle to explicit opposite
+        new_val = not effective
+        oper.store('embed_dats_in_tdn', new_val)
+
+        # Re-export the .tdn with the new setting
+        rel_tdn_path = self._getStrategyFilePath(oper.path, 'tdn')
+        if rel_tdn_path:
+            abs_path = str(self.buildAbsolutePath(rel_tdn_path))
+            protected = self._getAllTrackedTDNFiles(exclude_path=oper.path)
+            self.my.ext.TDN.ExportNetwork(
+                root_path=oper.path, output_file=abs_path,
+                cleanup_protected=protected)
+
+        state = 'on' if new_val else 'off'
+        self.Log(f"Embed DATs set to {state} for {oper.path}", 'SUCCESS')
+        self.Refresh()
 
     def HandlePortableExport(self, oper: OP) -> None:
         """Show a file dialog and export a portable .tox for the given COMP."""
@@ -3648,8 +3784,11 @@ class EmbodyExt:
         for comp_path, rel_tdn_path in tdn_comps:
             comp = op(comp_path)
             if comp is None:
-                self.Log(f'COMP {comp_path} not found, skipping', 'WARNING')
-                continue
+                # COMP was tagged but .toe wasn't saved — create the shell
+                comp = self._createMissingCompShell(comp_path, 'tdn')
+                if comp is None:
+                    errors_total += 1
+                    continue
 
             abs_path = self.buildAbsolutePath(rel_tdn_path)
             if not abs_path.is_file():
@@ -3782,6 +3921,248 @@ class EmbodyExt:
         else:
             self.Log(
                 f'TDN reconstruction complete: {count} COMP(s) rebuilt successfully',
+                'SUCCESS')
+
+    def _createMissingCompShell(self, comp_path: str, strategy: str) -> 'OP | None':
+        """Create a missing COMP that was tagged but not saved in the .toe.
+
+        Used by both ReconstructTDNComps and RestoreTOXComps when a tracked
+        COMP doesn't exist on project open.
+
+        Args:
+            comp_path: Full TD path (e.g., '/embody/base_tdn')
+            strategy: 'tdn' or 'tox' — determines which tag/color to apply
+
+        Returns:
+            The created COMP, or None on failure.
+        """
+        parent_path = comp_path.rsplit('/', 1)[0] or '/'
+        parent_op = op(parent_path)
+        if not parent_op or not hasattr(parent_op, 'create'):
+            self.Log(f'Cannot create {comp_path}: parent {parent_path} '
+                     f'not found or not a COMP', 'WARNING')
+            return None
+
+        comp_type = self._getCompTypeFromTable(comp_path) or 'base'
+        comp_name = comp_path.rsplit('/', 1)[-1]
+        td_type = f'{comp_type}COMP'
+
+        try:
+            new_comp = parent_op.create(td_type, comp_name)
+        except Exception as e:
+            self.Log(f'Failed to create {comp_path} ({td_type}): {e}', 'ERROR')
+            return None
+
+        self.Log(f'Created missing COMP shell: {comp_path}', 'INFO')
+
+        # Apply tag and color
+        if strategy == 'tdn':
+            tag = self.my.par.Tdntag.val
+            color = (self.my.par.Tdntagcolorr.eval(),
+                     self.my.par.Tdntagcolorg.eval(),
+                     self.my.par.Tdntagcolorb.eval())
+        else:
+            tag = self.my.par.Toxtag.val
+            color = (self.my.par.Toxtagcolorr.eval(),
+                     self.my.par.Toxtagcolorg.eval(),
+                     self.my.par.Toxtagcolorb.eval())
+        if tag:
+            new_comp.tags.add(tag)
+        new_comp.color = color
+
+        # Restore position/color from table metadata
+        self._restorePositionFromTable(new_comp, comp_path)
+
+        return new_comp
+
+    def _getCompTypeFromTable(self, comp_path: str) -> str:
+        """Read the 'type' column for a COMP from the externalizations table."""
+        table = self.Externalizations
+        if not table:
+            return ''
+        for i in range(1, table.numRows):
+            if table[i, 'path'].val == comp_path:
+                return table[i, 'type'].val
+        return ''
+
+    def _restorePositionFromTable(self, comp: 'OP', comp_path: str) -> None:
+        """Restore an operator's position and color from the externalizations table."""
+        table = self.Externalizations
+        if not table:
+            return
+        # Check if position columns exist
+        if table[0, 'node_x'] is None:
+            return
+        for i in range(1, table.numRows):
+            if table[i, 'path'].val == comp_path:
+                x_val = table[i, 'node_x'].val
+                y_val = table[i, 'node_y'].val
+                if x_val and y_val:
+                    try:
+                        comp.nodeX = int(float(x_val))
+                        comp.nodeY = int(float(y_val))
+                    except (ValueError, TypeError):
+                        pass
+                color_val = table[i, 'node_color'].val
+                if color_val:
+                    try:
+                        r, g, b = [float(c) for c in color_val.split(',')]
+                        comp.color = (r, g, b)
+                    except (ValueError, TypeError):
+                        pass
+                return
+
+    # ==========================================================================
+    # TOX RESTORATION ON START
+    # ==========================================================================
+
+    def RestoreTOXComps(self) -> None:
+        """Restore missing TOX-strategy COMPs from .tox files on project open.
+
+        For each TOX-strategy entry in the externalizations table where the
+        operator is missing but the .tox file exists on disk, creates the COMP
+        and sets externaltox to trigger TD's auto-load.
+        """
+        if not self.my.par.Toxrestoreonstart.eval():
+            return
+
+        tox_comps = self._getTOXStrategyComps()
+        if not tox_comps:
+            return
+
+        # Filter to only missing COMPs with existing .tox files
+        to_restore = []
+        for comp_path, rel_tox_path, comp_type in tox_comps:
+            if op(comp_path):
+                continue  # Already exists in .toe — nothing to do
+            abs_path = self.buildAbsolutePath(rel_tox_path)
+            if not abs_path.is_file():
+                self.Log(f'TOX file not found for missing COMP '
+                         f'{comp_path}: {rel_tox_path}', 'WARNING')
+                continue
+            to_restore.append((comp_path, rel_tox_path, comp_type))
+
+        if not to_restore:
+            return
+
+        self.Log(f'Restoring {len(to_restore)} TOX COMP(s) from disk...', 'INFO')
+        restored = 0
+        errors = 0
+
+        for comp_path, rel_tox_path, comp_type in to_restore:
+            # Check if it appeared (e.g. loaded as child of a parent .tox)
+            if op(comp_path):
+                restored += 1
+                self.Log(f'COMP {comp_path} already present '
+                         f'(loaded from parent .tox)', 'INFO')
+                continue
+
+            # Verify parent exists
+            parent_path = comp_path.rsplit('/', 1)[0] or '/'
+            parent_op = op(parent_path)
+            if not parent_op:
+                self.Log(f'Parent {parent_path} not found, cannot restore '
+                         f'{comp_path}', 'WARNING')
+                errors += 1
+                continue
+
+            if not hasattr(parent_op, 'create'):
+                self.Log(f'Parent {parent_path} is not a COMP, cannot restore '
+                         f'{comp_path}', 'WARNING')
+                errors += 1
+                continue
+
+            comp_name = comp_path.rsplit('/', 1)[-1]
+            td_type = f'{comp_type}COMP'
+
+            try:
+                new_comp = parent_op.create(td_type, comp_name)
+            except Exception as e:
+                self.Log(f'Failed to create {comp_path} '
+                         f'(type {td_type}): {e}', 'ERROR')
+                errors += 1
+                continue
+
+            # Set externaltox to trigger TD auto-load from .tox
+            try:
+                new_comp.par.externaltox = self.normalizePath(rel_tox_path)
+                new_comp.par.externaltox.readOnly = True
+                new_comp.par.enableexternaltox = True
+
+                # Handle timing issue (same workaround as
+                # _setupCompForExternalization)
+                if ("Cannot load external tox from path"
+                        in new_comp.scriptErrors()):
+                    new_comp.allowCooking = False
+                    run(lambda p=new_comp.path: self._safeAllowCooking(p, True),
+                        delayFrames=1)
+
+                # Re-apply Embody tag and color (may not survive .tox load)
+                tox_tag = self.my.par.Toxtag.val
+                if tox_tag and tox_tag not in new_comp.tags:
+                    new_comp.tags.add(tox_tag)
+                new_comp.color = (self.my.par.Toxtagcolorr.eval(),
+                                  self.my.par.Toxtagcolorg.eval(),
+                                  self.my.par.Toxtagcolorb.eval())
+
+                # Restore position from table metadata
+                self._restorePositionFromTable(new_comp, comp_path)
+
+                restored += 1
+                self.Log(f'Restored {comp_path} from {rel_tox_path}', 'SUCCESS')
+
+            except Exception as e:
+                self.Log(f'Failed to configure externaltox for '
+                         f'{comp_path}: {e}', 'ERROR')
+                errors += 1
+
+        self._logTOXRestorationReport(len(to_restore), restored, errors)
+
+    def _getTOXStrategyComps(self) -> list[tuple[str, str, str]]:
+        """Get all TOX-strategy COMPs from the externalizations table.
+
+        Returns list of (comp_path, rel_tox_path, comp_type) tuples,
+        sorted by path depth (shallowest first) so parents are created
+        before children.
+
+        Never includes Embody itself, its ancestors, or its descendants.
+        """
+        table = self.Externalizations
+        if not table:
+            return []
+        if table[0, 'strategy'] is None:
+            return []  # Legacy table without strategy column
+        embody_path = self.my.path
+        result = []
+        for i in range(1, table.numRows):
+            if table[i, 'strategy'].val == 'tox':
+                comp_path = table[i, 'path'].val
+                # Never include Embody, its ancestors, or its descendants
+                if (comp_path == '/'
+                        or comp_path == embody_path
+                        or embody_path.startswith(comp_path + '/')
+                        or comp_path.startswith(embody_path + '/')):
+                    continue
+                result.append((
+                    comp_path,
+                    table[i, 'rel_file_path'].val,
+                    table[i, 'type'].val,
+                ))
+        # Sort by path depth — parents first
+        result.sort(key=lambda x: x[0].count('/'))
+        return result
+
+    def _logTOXRestorationReport(self, total, restored, errors) -> None:
+        """Log a summary report after TOX restoration."""
+        if errors:
+            self.Log(
+                f'TOX restoration complete: {restored}/{total} COMP(s) '
+                f'restored, {errors} error(s)',
+                'WARNING')
+        else:
+            self.Log(
+                f'TOX restoration complete: {restored} COMP(s) restored '
+                f'successfully',
                 'SUCCESS')
 
     # ==========================================================================

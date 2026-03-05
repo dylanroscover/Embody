@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 41,
+	"build": 1,
 	"generator": "Embody/5.0.188",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-05T01:36:05Z",
-	"network_path": "/embody/Embody/list/list1",
+	"exported_at": "2026-03-05T01:35:34Z",
+	"network_path": "/perform",
 	"options": {
 		"include_dat_content": false
 	},

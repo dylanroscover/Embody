@@ -990,10 +990,41 @@ class EnvoyMCPServer:
             Returns:
                 Dict with passed/failed/error/skip counts and full results list
             """
-            return self._execute_in_td('run_tests', {
-                'suite_name': suite_name,
-                'test_name': test_name,
-            }, timeout=300.0)
+            # Use a dedicated Event so the worker thread can wait directly
+            # for test completion — bypasses the response_queue which is
+            # fragile against server restarts / extension reinit.
+            test_event = Event()
+            test_holder: dict = {}
+            sys._envoy_pending_test = {
+                'event': test_event,
+                'holder': test_holder,
+            }
+
+            # Queue the start request (main thread will run deferred tests)
+            self.add_to_refresh_queue({
+                'id': -1,  # Sentinel — no normal response expected
+                'operation': 'run_tests',
+                'params': {'suite_name': suite_name, 'test_name': test_name},
+            })
+
+            # Block worker thread until tests finish, timeout, or shutdown.
+            # Poll every 1s so shutdown_event can interrupt promptly.
+            deadline = time.time() + 300.0
+            while not self.shutdown_event.is_set():
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    sys._envoy_pending_test = None
+                    return {'error': 'Tests timed out after 300 seconds'}
+                if test_event.wait(timeout=min(remaining, 1.0)):
+                    break  # Tests finished
+            else:
+                # Server shutting down — unblock cleanly
+                sys._envoy_pending_test = None
+                return {'error': 'Server shutting down during test run'}
+
+            result = test_holder.get('result', {'error': 'No result'})
+            sys._envoy_pending_test = None
+            return result
 
     def run(self) -> None:
         """Run the MCP server (blocking) with graceful shutdown support"""
@@ -1083,6 +1114,10 @@ class EnvoyMCPServer:
         )
         uvi_server = uvicorn.Server(config)
 
+        # Store on sys so EnvoyExt.Start() can force-close sockets
+        # if the old server thread is stuck and won't release the port.
+        sys._envoy_uvi_server = uvi_server
+
         # Monitor shutdown_event and tell uvicorn to exit
         def shutdown_monitor():
             self.shutdown_event.wait()
@@ -1128,7 +1163,6 @@ class EnvoyExt:
         self.current_task: Optional[Any] = None
         self._server_gen: int = 0  # Generation counter for stale callback detection
         self._last_served_log_id: int = 0
-        self._pending_test_request_id: Optional[int] = None
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -1162,6 +1196,18 @@ class EnvoyExt:
             self.ownerComp.par.Envoystatus = 'Starting...'
             run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
                 delayFrames=30)
+
+        # If a deferred test run was in progress, unblock the old worker
+        # thread so the old server can shut down cleanly (release the port).
+        # The worker checks shutdown_event every 1s, but setting the Event
+        # directly is faster and ensures it unblocks even if shutdown_event
+        # was already set before the worker started polling.
+        pending_test = getattr(sys, '_envoy_pending_test', None)
+        if pending_test is not None:
+            pending_test['holder']['result'] = {
+                'error': 'Extension reinitialized during test run'}
+            pending_test['event'].set()
+            sys._envoy_pending_test = None
 
     # === Server Lifecycle ===
 
@@ -1239,6 +1285,51 @@ class EnvoyExt:
                 f' threads remain '
                 f'(capacity: {self.ThreadManager.ext.ThreadManagerExt.MaxNumberOfThreads.eval()})', 'DEBUG')
 
+    def _forceCloseOldServer(self) -> None:
+        """Force-close a stuck old uvicorn server so the port is freed.
+
+        When an old worker thread is stuck (e.g. waiting on a test Event or
+        an HTTP connection), the normal shutdown_event signal may not be enough
+        because uvicorn's event loop is blocked. This method:
+        1. Signals ALL known shutdown events (in case one was orphaned)
+        2. Force-closes the uvicorn server's socket listeners
+        3. Unblocks any stuck test Event
+        """
+        # Signal all known shutdown events
+        registry = getattr(sys, '_envoy_shutdown_events', {})
+        for path, evt in registry.items():
+            if not evt.is_set():
+                self._log(f'Force-signaling shutdown event for {path}', 'DEBUG')
+                evt.set()
+
+        # Unblock any stuck test wait
+        pending_test = getattr(sys, '_envoy_pending_test', None)
+        if pending_test is not None:
+            pending_test['holder']['result'] = {
+                'error': 'Server force-restarted during test run'}
+            pending_test['event'].set()
+            sys._envoy_pending_test = None
+
+        # Force-close the old uvicorn server's sockets
+        old_server = getattr(sys, '_envoy_uvi_server', None)
+        if old_server is not None:
+            self._log('Force-closing old uvicorn server sockets', 'DEBUG')
+            old_server.should_exit = True
+            # Close all listener sockets to immediately free the port.
+            # uvicorn.Server.servers holds asyncio.Server objects; each has
+            # a .sockets tuple of the underlying socket.socket objects.
+            for srv in getattr(old_server, 'servers', []):
+                for sock in getattr(srv, 'sockets', ()) or ():
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+                try:
+                    srv.close()
+                except Exception:
+                    pass
+            sys._envoy_uvi_server = None
+
     def Start(self, _retries_left: int = 10) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
         if self.ownerComp.fetch('envoy_running', False):
@@ -1267,9 +1358,11 @@ class EnvoyExt:
                 s.bind(('127.0.0.1', port))
             except OSError:
                 if _retries_left > 0:
+                    # On first detection, try to force-close a stuck old server
                     if _retries_left == 10:
-                        self._log(f'Port {port} in use, waiting for previous server to release...')
+                        self._log(f'Port {port} in use, attempting to free it...')
                         self.ownerComp.par.Envoystatus = 'Waiting for port...'
+                        self._forceCloseOldServer()
                     run(f"op('{self.ownerComp.path}').ext.Envoy.Start(_retries_left={_retries_left - 1})",
                         delayFrames=15)
                     return
@@ -1451,13 +1544,10 @@ class EnvoyExt:
 
             self._log(f'Processing: {operation}')
 
-            # Store request_id so deferred handlers can capture it
-            self._current_request_id = request_id
-
             result = self._execute_operation(operation, params)
 
             # Deferred operations (e.g. run_tests) return None —
-            # response will be sent later via _pollTestCompletion
+            # the worker thread handles its own response via Event
             if result is None:
                 continue
 
@@ -1589,42 +1679,75 @@ class EnvoyExt:
         """Run Embody test suites via /embody/unit_tests extension (deferred).
 
         Starts tests with RunTestsDeferredPerTest (one test per frame) to
-        keep TD responsive. Uses TD's run() to poll for completion and
-        send the response back to the worker thread.
+        keep TD responsive. The worker thread waits on a threading.Event
+        stored on sys — the main-thread poll signals it when tests finish.
+        This bypasses the response_queue entirely, surviving server restarts
+        and extension reinit.
+
+        Returns None on success (deferred). On error, signals the worker
+        thread directly via the Event and returns None — never returns a
+        dict, because the sentinel request_id=-1 would be silently dropped
+        by check_responses, leaving the worker thread blocked.
         """
-        if self._pending_test_request_id is not None:
-            return {'error': 'Tests already running'}
+        pending = getattr(sys, '_envoy_pending_test', None)
+        if pending is None:
+            # Worker thread hasn't set up sys._envoy_pending_test yet.
+            # This shouldn't happen because the worker sets it before queuing.
+            return {'error': 'Test pending state not initialized'}
+
         test_comp = op.unit_tests
         if not test_comp:
-            return {'error': 'Test framework not found (op.unit_tests)'}
+            self._signalTestError(pending, 'Test framework not found (op.unit_tests)')
+            return None
         if not test_comp.extensionsReady:
-            return {'error': 'Test framework extension not ready'}
+            self._signalTestError(pending, 'Test framework extension not ready')
+            return None
         try:
             test_comp.RunTestsDeferredPerTest(
                 suite_name=suite_name, test_name=test_name)
-            self._pending_test_request_id = self._current_request_id
-            # Poll for completion using TD's run() — reliable main-thread
-            # scheduling that doesn't depend on RefreshHook/InfoQueue.
-            run('args[0]()', self._pollTestCompletion, delayFrames=5)
-            return None  # Deferred — _pollTestCompletion sends response
+            self._schedulePollTestCompletion()
+            return None  # Deferred — worker thread waits on sys._envoy_pending_test['event']
         except Exception as e:
-            return {'error': f'Test run failed: {e}'}
+            self._signalTestError(pending, f'Test run failed: {e}')
+            return None
+
+    def _signalTestError(self, pending, message):
+        """Signal an error to the waiting worker thread via the test Event."""
+        pending['holder']['result'] = {'error': message}
+        pending['event'].set()
+        sys._envoy_pending_test = None
+
+    def _schedulePollTestCompletion(self):
+        """Schedule the test completion poll via run() with a string
+        expression that resolves the live extension instance at call time."""
+        run(f"op('{self.ownerComp.path}').ext.Envoy._pollTestCompletion()",
+            fromOP=self.ownerComp, delayFrames=5)
 
     def _pollTestCompletion(self):
-        """Check if deferred test run has finished; reschedule if not."""
-        if self._pending_test_request_id is None:
+        """Check if deferred test run has finished; signal worker thread if so."""
+        pending = getattr(sys, '_envoy_pending_test', None)
+        if pending is None:
             return  # Already handled or cancelled
         test_comp = op.unit_tests
         if not test_comp or not test_comp.extensionsReady:
-            run('args[0]()', self._pollTestCompletion, delayFrames=5)
+            self._schedulePollTestCompletion()
             return
         runner = getattr(test_comp.ext, 'TestRunnerExt', None)
         if runner and not runner._running:
             result = runner._getSummary()
-            self._send_response(self._pending_test_request_id, result)
-            self._pending_test_request_id = None
+            # Piggyback logs
+            log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
+            if log_buffer:
+                recent = [e for e in log_buffer
+                          if e['id'] > self._last_served_log_id]
+                if recent:
+                    result['_logs'] = recent[-20:]
+                    self._last_served_log_id = recent[-1]['id']
+            # Signal the worker thread directly via the Event
+            pending['holder']['result'] = result
+            pending['event'].set()
         else:
-            run('args[0]()', self._pollTestCompletion, delayFrames=5)
+            self._schedulePollTestCompletion()
 
     # --- Operator Management ---
 
@@ -3063,11 +3186,15 @@ class EnvoyExt:
         """Delegate to TDN extension for network export."""
         if not getattr(self.ownerComp.ext, 'TDN', None):
             return {'error': 'TDN extension not loaded on Embody COMP'}
+        # Protect .tdn files belonging to other tracked TDN COMPs
+        protected = self.ownerComp.ext.Embody._getAllTrackedTDNFiles(
+            exclude_path=root_path) if output_file else None
         return self.ownerComp.ext.TDN.ExportNetwork(
             root_path=root_path,
             include_dat_content=include_dat_content,
             output_file=output_file,
             max_depth=max_depth,
+            cleanup_protected=protected,
             embed_all=embed_all,
         )
 

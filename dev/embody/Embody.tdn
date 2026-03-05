@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 88,
-	"generator": "Embody/5.0.177",
+	"build": 117,
+	"generator": "Embody/5.0.188",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-04T07:47:19Z",
+	"exported_at": "2026-03-05T01:36:21Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -350,7 +350,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 15,
-					"Date": "2026-03-03 17:04:54 UTC",
+					"Date": "2026-03-05 01:35:37 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -386,8 +386,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 30,
-					"Date": "2026-03-03 17:04:54 UTC",
+					"Build": 32,
+					"Date": "2026-03-05 01:35:37 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -409,7 +409,310 @@
 			"flags": ["viewer"],
 			"position": [-700, 400],
 			"size": [130, 90],
-			"color": [0.67, 0.67, 0.67]
+			"color": [0.67, 0.67, 0.67],
+			"dat_content": [
+				[
+					"17:36:12  372578 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372581 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372583 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372585 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372587 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372588 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372590 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372593 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372596 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372603 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372605 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372609 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372614 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372617 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372621 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372624 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:12  372626 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372631 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372634 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372639 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372644 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372650 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372654 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372657 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372662 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372672 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372677 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372689 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:13  372691 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372693 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372696 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372697 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372699 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372701 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372702 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372704 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372706 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372709 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372710 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372711 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372714 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372715 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372719 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372720 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372722 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372725 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372727 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372731 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372732 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372734 SUCCESS TDNExt: Imported 15 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372737 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372743 SUCCESS TDNExt: Imported 6 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:14  372751 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372756 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372757 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372768 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372778 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372784 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372786 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372792 SUCCESS TDNExt: Imported 23 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372794 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372806 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372808 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:15  372810 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372812 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372814 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372819 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372820 INFO    EnvoyExt: Processing: get_op_errors"
+				],
+				[
+					"17:36:16  372820 ERROR   TDNExt: Import failed: 'str' object has no attribute 'get'"
+				],
+				[
+					"17:36:16  372824 WARNING TDNExt: Failed to create totallyFakeOP \"bad\": Unknown operator type. Value:'totallyFakeOP' Type:<class 'str'>."
+				],
+				[
+					"17:36:16  372824 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372825 WARNING TDNExt: Connection source not found: nonexistent_source -> dst[0]"
+				],
+				[
+					"17:36:16  372825 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372826 WARNING TDNExt: Unknown par style \"TotallyFakeStyle\" for X"
+				],
+				[
+					"17:36:16  372826 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372828 SUCCESS TDNExt: Imported 0 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372830 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372831 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372833 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:16  372834 SUCCESS TDNExt: Imported 100 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:17  372836 SUCCESS TDNExt: Imported 50 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:17  372848 SUCCESS TDNExt: Imported 11 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:19  372860 SUCCESS TDNExt: Imported 372 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:20  372864 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:20  372876 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+				],
+				[
+					"17:36:20  372884 WARNING EmbodyExt: Operator '/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp' no longer exists!"
+				],
+				[
+					"17:36:20  372884 SUCCESS EmbodyExt: Removed '/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp'"
+				],
+				[
+					"17:36:20  372885 WARNING EmbodyExt: Operator '/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/tdn_with_py_child/my_script' no longer exists!"
+				],
+				[
+					"17:36:20  372885 SUCCESS EmbodyExt: Removed '/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/tdn_with_py_child/my_script'"
+				],
+				[
+					"17:36:20  372888 WARNING EmbodyExt: Operator '/__test_orphan_dat_continuity_p05' no longer exists!"
+				],
+				[
+					"17:36:20  372888 SUCCESS EmbodyExt: Removed '/__test_orphan_dat_continuity_p05'"
+				],
+				[
+					"17:36:20  372891 WARNING EmbodyExt: No file found: embody/tdn_with_py_child/my_script.py"
+				],
+				[
+					"17:36:20  372893 WARNING EmbodyExt: No file found: embody/orphan_dat.txt"
+				],
+				[
+					"17:36:20  372893 INFO    EmbodyExt: Stripped 3 operators from /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/save_cycle_comp (3 children, 0 annotations)"
+				],
+				[
+					"17:36:20  372893 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/save_cycle_comp"
+				],
+				[
+					"17:36:20  372896 INFO    EmbodyExt: Stripped 1 operators from /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle (1 children, 0 annotations)"
+				],
+				[
+					"17:36:20  372896 INFO    TDNExt: Restored file links on 1 DAT(s) in /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle"
+				],
+				[
+					"17:36:20  372896 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle"
+				],
+				[
+					"17:36:21  372899 SUCCESS TDNExt: Exported network to /Users/rosco/Documents/Git/Embody/dev/embody/Embody/toolbar/container_left/status.tdn"
+				],
+				[
+					"17:36:21  372899 SUCCESS EmbodyExt: Exported TDN for /embody/Embody/toolbar/container_left/status"
+				]
+			],
+			"dat_content_format": "table"
 		},
 		{
 			"name": "null2",
@@ -458,7 +761,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 14,
-					"Date": "2026-03-04 07:47:19 UTC",
+					"Date": "2026-03-05 01:35:37 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -516,8 +819,8 @@
 			"type": "containerCOMP",
 			"parameters": {
 				"y": 1,
-				"w": 1055,
-				"h": 439,
+				"w": 1080,
+				"h": 440,
 				"resizer": true,
 				"resizeb": true,
 				"resizewmin": 250,
@@ -539,8 +842,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 10,
-					"Date": "2026-03-03 17:04:54 UTC",
+					"Build": 12,
+					"Date": "2026-03-05 01:35:37 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -606,7 +909,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 12,
-					"Date": "2026-03-04 06:10:00 UTC",
+					"Date": "2026-03-05 01:35:37 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -670,7 +973,20 @@
 			},
 			"flags": ["viewer"],
 			"position": [-325, -275],
-			"size": [130, 90]
+			"size": [130, 90],
+			"dat_content": [
+				["key", "character", "alt", "ctrl", "shift", "state", "time", "cmd"],
+				["lcmd", "", "0", "0", "0", "0", "-678717748", "0"],
+				["cmd", "", "0", "0", "0", "1", "-678715351", "1"],
+				["lcmd", "", "0", "0", "0", "1", "-678715351", "1"],
+				["cmd", "", "0", "0", "0", "0", "-678715217", "0"],
+				["lcmd", "", "0", "0", "0", "0", "-678715217", "0"],
+				["cmd", "", "0", "0", "0", "1", "-672770506", "1"],
+				["lcmd", "", "0", "0", "0", "1", "-672770506", "1"],
+				["cmd", "", "0", "0", "0", "0", "-672770506", "0"],
+				["lcmd", "", "0", "0", "0", "0", "-672770506", "0"]
+			],
+			"dat_content_format": "table"
 		},
 		{
 			"name": "text_claude",
@@ -1082,7 +1398,11 @@
 							"flags": ["viewer"],
 							"position": [0, -200],
 							"size": [130, 90],
-							"comment": "Popup help string as set in Popuphelp parameter"
+							"comment": "Popup help string as set in Popuphelp parameter",
+							"dat_content": [
+								[""]
+							],
+							"dat_content_format": "table"
 						},
 						{
 							"name": "docsHelper",
@@ -1197,7 +1517,9 @@
 								"panelvalue": "rselect",
 								"defaultreadencoding": "cp1252"
 							},
-							"position": [200, -200]
+							"position": [200, -200],
+							"dat_content": "# me - this DAT\n# panelValue - the PanelValue object that changed\n# \n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\nTDF = op.TDModules.mod.TDFunctions\n\ndef onOffToOn(panelValue):\n\tif not panelValue.owner.panel.ctrl:\n\t\treturn\n\top.TDResources.op('popMenu').Open(\n\t\t\t\t\t\titems=['Parameters', 'Viewer', 'Network', 'Customize Component'],\n\t\t\t\t\t\tcallback=onPopMenu)\n\ndef onPopMenu(info):\n\tif info['item'] == 'Parameters':\n\t\tparent.Widget.openParameters()\n\telif info['item'] == 'Viewer':\n\t\tparent.Widget.openViewer()\n\telif info['item'] == 'Network':\n\t\tTDF.showInPane(parent.Widget)\n\telif info['item'] == 'Customize Component':\n\t\top.TDDialogs.op('CompEditor').EditComp(parent.Widget)\n\t\t\n\ndef whileOn(panelValue):\n\treturn\n\ndef onOnToOff(panelValue):\n\treturn\n\ndef whileOff(panelValue):\n\treturn\n\ndef onValueChange(panelValue):\n\treturn\n\t",
+							"dat_content_format": "text"
 						},
 						{
 							"name": "TDUpdateSystem",
@@ -1407,7 +1729,7 @@
 					"position": [200, -200],
 					"size": [160, 76],
 					"color": [0.5, 0.35, 0.05],
-					"tags": ["TDSubComp", "TDPub"],
+					"tags": ["TDPub", "TDSubComp"],
 					"children": [
 						{
 							"name": "text",
@@ -1440,7 +1762,9 @@
 							"name": "text1_callbacks",
 							"type": "textDAT",
 							"position": [0, -150],
-							"size": [160, 130]
+							"size": [160, 130],
+							"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
+							"dat_content_format": "text"
 						}
 					]
 				},
@@ -1696,7 +2020,9 @@
 									},
 									"position": [-500, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"]
+									"tags": ["TDExtension"],
+									"dat_content": "TDF = op.TDModules.mod.TDFunctions\n\nclass SubWidgetExt:\n\t\"\"\"\n\tRockerExt description\n\t\"\"\"\n\n\tdef __init__(self, ownerComp, indexComp=None):\n\t\t# The component to which this extension is attached\n\t\tself.ownerComp = ownerComp\n\t\tif indexComp:\n\t\t\tself.indexComp = indexComp\n\t\telse:\n\t\t\tself.indexComp = self.ownerComp\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tPanel exec events from widget\n\t\t\"\"\"\n\t\tpass\n\n\tdef onParSettingsChange(self, par, prev):\n\t\t\"\"\"\n\t\tManages value changes widget settings parameters\n\t\t\"\"\"\n\t\tval = par.eval()\n\t\tif par.name == self.parPrefix + 'runcommand':\n\t\t\tenable = par.eval()\n\t\t\tfor suffix in ['commandon', 'commandoff', 'commandonvaluechange']:\n\t\t\t\tp = self.prefixPar(suffix)\n\t\t\t\tif p is not None:\n\t\t\t\t\tp.enable = enable\n\t\telif par.name == self.parPrefix + 'horizontalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('hfillweight').enable = fill\n\t\t\tself.prefixPar('width').enable = not fill\n\t\telif par.name == self.parPrefix + 'verticalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('vfillweight').enable = fill\n\t\t\tself.prefixPar('height').enable = not fill\n\t\telif par.name in [self.parPrefix + 'bordera',\n\t\t\t\t\t\t  self.parPrefix + 'borderb',\n\t\t\t\t\t\t  self.parPrefix + 'border']:\n\t\t\tgetattr(parent.Widget.par, par.name + 'colorr').enable = par.eval()\n\n\tdef onParSettingsPulse(self, par):\n\t\t\"\"\"\n\t\tManages pulse events for widget settings parameters\n\t\t\"\"\"\n\t\tif par.name == self.parPrefix + 'customizeinteraction':\n\t\t\tself.makePanelExecute()\n\n\tdef onToggleEvent(self, event, panelValue):\n\t\tif event == 'offToOn':\n\t\t\tself.toggle()\n\n\tdef toggle(self):\n\t\tindex = self.indexComp.digits\n\t\tvaluePar = getattr(parent.Widget.par, 'Value' + str(index))\n\t\tvaluePar.val = 1 - valuePar.eval()\n\n\tdef prefixPar(self, suffix):\n\t\t\"\"\"\n\t\tReturn a parameter prefixed by parPrefix\n\t\t:param suffix: the par name after parPrefix (string)\n\t\t:return: the parameter or None if not found\n\t\t\"\"\"\n\t\treturn getattr(self.ownerComp.parent.Widget.par,\n\t\t\t\t\t   self.parPrefix + suffix, None)\n\n\tdef getDockExpressionToOwner(self):\n\t\tpage = TDF.getCustomPage(self.ownerComp.parent.Widget, 'OPs')\n\t\texpr = \"me.dock.op('\" + self.ownerComp.name + \"')\"\n\t\tfor p in page.pars:\n\t\t\tif p.eval() == self.ownerComp:\n\t\t\t\texpr = \"me.dock.par.\" + p.name + \".eval()\"\n\t\t\t\tbreak\n\t\treturn expr\n\n\tdef makePanelExecute(self, panelExpr=None):\n\t\t\"\"\"\n\t\tCreates a panel execute DAT for running external code from the\n\t\twidget that is connected to the button interaction receiver - which\n\t\tis the ownerComp of this class\n\n\t\tpanelExpr: will be used as the expression in the panel parameter of the\n\t\t\tpanelExec. Defaults to \"me.dock.op('\" + self.ownerComp.name +\"')\"\n\t\t\"\"\"\n\t\tpanelExecPar = self.PanelExecPar\n\t\tpeDat = panelExecPar.eval()\n\t\texpr = self.getDockExpressionToOwner() \\\n\t\t\t\t\t\t\t\t\t\t\tif panelExpr is None else panelExpr\n\t\tif not peDat:\n\t\t\tpeDat = self.ownerComp.parent.Widget.parent().create(\n\t\t\t\tpanelexecuteDAT, self.parPrefix + 'PanelExec')\n\t\t\tpeDat.nodeX = self.ownerComp.parent.Widget.nodeX - 200\n\t\t\tpeDat.nodeY = self.ownerComp.parent.Widget.nodeY\n\t\t\tpeDat.dock = self.ownerComp.parent.Widget\n\t\t\tpeDat.par.panel.expr = expr\n\t\t\tpeDat.par.ontooff = True\n\t\t\tpeDat.viewer = True\n\t\t\tpanelExecPar.val = peDat.name\n\t\t\tpanelExecPar.enable = True\n\t\t\tpanelExecPar.readOnly = True\n\t\t\tself.ownerComp.op('panelExecOPExec').cook(force=True)\n\t\telse:\n\t\t\tif expr not in peDat.par.panel.expr:\n\t\t\t\tpeDat.par.panel.expr += ', ' + expr\n\t\tpanelExecPar.eval().par.edit.pulse()\n\n\t@property\n\tdef PanelExecPar(self):\n\t\treturn getattr(parent.Widget.par, self.parPrefix + 'panelexec', None)\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "ButtonPushExt",
@@ -1706,7 +2032,9 @@
 									},
 									"position": [-300, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"]
+									"tags": ["TDExtension"],
+									"dat_content": "SubWidgetExt = mod.SubWidgetExt.SubWidgetExt\nTDF = op.TDModules.mod.TDFunctions\n\nclass ButtonPushExt(SubWidgetExt):\n\t\"\"\"\n\tButtonPushExt description\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.parPrefix = 'Button'\n\t\tSubWidgetExt.__init__(self, ownerComp)\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tSelects correct funtion based on button widget\n\t\ttype\n\t\t\"\"\"\n\t\tval = panelValue != 0\n\t\trunCommand = self.parDict['runcommand']\n\t\tcommandOn = self.parDict['commandon']\n\t\tcommandOff = self.parDict['commandoff']\n\t\tif runCommand:\n\t\t\tif val and commandOn is not None:\n\t\t\t\tself.runCommand(commandOn)\n\t\t\telif not val and commandOff is not None:\n\t\t\t\tself.runCommand(commandOff)\n\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "panelexecValue",
@@ -1719,12 +2047,16 @@
 										"defaultreadencoding": "cp1252"
 									},
 									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05]
+									"color": [0.05, 0.5, 0.05],
+									"dat_content": "def offToOn(panelValue):\n\text.SubWidgetExt.onPanelEvent('offToOn', panelValue)\n\ndef onToOff(panelValue):\n\text.SubWidgetExt.onPanelEvent('onToOff', panelValue)\n\ndef valueChange(panelValue):\n\text.SubWidgetExt.onPanelEvent('valueChange', panelValue)\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "panelExecOPExec",
 									"type": "opexecuteDAT",
-									"position": [-300, 100]
+									"position": [-300, 100],
+									"dat_content": "def onOPdelete():\n\text.SubWidgetExt.PanelExecPar.val = ''\n\text.SubWidgetExt.PanelExecPar.enable = False\t",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "parexecSettings",
@@ -1738,13 +2070,17 @@
 									},
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes"
+									"comment": "Execution for parameter changes",
+									"dat_content": "def valueChange(par, val, prev):\n\text.SubWidgetExt.onParSettingsChange(par, prev)\n\ndef onPulse(par):\n\text.SubWidgetExt.onParSettingsPulse(par)\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
 									"position": [400, 50],
-									"size": [160, 130]
+									"size": [160, 130],
+									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
+									"dat_content_format": "text"
 								}
 							]
 						},
@@ -1857,7 +2193,9 @@
 									},
 									"position": [-500, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"]
+									"tags": ["TDExtension"],
+									"dat_content": "TDF = op.TDModules.mod.TDFunctions\n\nclass SubWidgetExt:\n\t\"\"\"\n\tRockerExt description\n\t\"\"\"\n\n\tdef __init__(self, ownerComp, indexComp=None):\n\t\t# The component to which this extension is attached\n\t\tself.ownerComp = ownerComp\n\t\tif indexComp:\n\t\t\tself.indexComp = indexComp\n\t\telse:\n\t\t\tself.indexComp = self.ownerComp\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tPanel exec events from widget\n\t\t\"\"\"\n\t\tpass\n\n\tdef onParSettingsChange(self, par, prev):\n\t\t\"\"\"\n\t\tManages value changes widget settings parameters\n\t\t\"\"\"\n\t\tval = par.eval()\n\t\tif par.name == self.parPrefix + 'runcommand':\n\t\t\tenable = par.eval()\n\t\t\tfor suffix in ['commandon', 'commandoff', 'commandonvaluechange']:\n\t\t\t\tp = self.prefixPar(suffix)\n\t\t\t\tif p is not None:\n\t\t\t\t\tp.enable = enable\n\t\telif par.name == self.parPrefix + 'horizontalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('hfillweight').enable = fill\n\t\t\tself.prefixPar('width').enable = not fill\n\t\telif par.name == self.parPrefix + 'verticalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('vfillweight').enable = fill\n\t\t\tself.prefixPar('height').enable = not fill\n\t\telif par.name in [self.parPrefix + 'bordera',\n\t\t\t\t\t\t  self.parPrefix + 'borderb',\n\t\t\t\t\t\t  self.parPrefix + 'border']:\n\t\t\tgetattr(parent.Widget.par, par.name + 'colorr').enable = par.eval()\n\n\tdef onParSettingsPulse(self, par):\n\t\t\"\"\"\n\t\tManages pulse events for widget settings parameters\n\t\t\"\"\"\n\t\tif par.name == self.parPrefix + 'customizeinteraction':\n\t\t\tself.makePanelExecute()\n\n\tdef onToggleEvent(self, event, panelValue):\n\t\tif event == 'offToOn':\n\t\t\tself.toggle()\n\n\tdef toggle(self):\n\t\tindex = self.indexComp.digits\n\t\tvaluePar = getattr(parent.Widget.par, 'Value' + str(index))\n\t\tvaluePar.val = 1 - valuePar.eval()\n\n\tdef prefixPar(self, suffix):\n\t\t\"\"\"\n\t\tReturn a parameter prefixed by parPrefix\n\t\t:param suffix: the par name after parPrefix (string)\n\t\t:return: the parameter or None if not found\n\t\t\"\"\"\n\t\treturn getattr(self.ownerComp.parent.Widget.par,\n\t\t\t\t\t   self.parPrefix + suffix, None)\n\n\tdef getDockExpressionToOwner(self):\n\t\tpage = TDF.getCustomPage(self.ownerComp.parent.Widget, 'OPs')\n\t\texpr = \"me.dock.op('\" + self.ownerComp.name + \"')\"\n\t\tfor p in page.pars:\n\t\t\tif p.eval() == self.ownerComp:\n\t\t\t\texpr = \"me.dock.par.\" + p.name + \".eval()\"\n\t\t\t\tbreak\n\t\treturn expr\n\n\tdef makePanelExecute(self, panelExpr=None):\n\t\t\"\"\"\n\t\tCreates a panel execute DAT for running external code from the\n\t\twidget that is connected to the button interaction receiver - which\n\t\tis the ownerComp of this class\n\n\t\tpanelExpr: will be used as the expression in the panel parameter of the\n\t\t\tpanelExec. Defaults to \"me.dock.op('\" + self.ownerComp.name +\"')\"\n\t\t\"\"\"\n\t\tpanelExecPar = self.PanelExecPar\n\t\tpeDat = panelExecPar.eval()\n\t\texpr = self.getDockExpressionToOwner() \\\n\t\t\t\t\t\t\t\t\t\t\tif panelExpr is None else panelExpr\n\t\tif not peDat:\n\t\t\tpeDat = self.ownerComp.parent.Widget.parent().create(\n\t\t\t\tpanelexecuteDAT, self.parPrefix + 'PanelExec')\n\t\t\tpeDat.nodeX = self.ownerComp.parent.Widget.nodeX - 200\n\t\t\tpeDat.nodeY = self.ownerComp.parent.Widget.nodeY\n\t\t\tpeDat.dock = self.ownerComp.parent.Widget\n\t\t\tpeDat.par.panel.expr = expr\n\t\t\tpeDat.par.ontooff = True\n\t\t\tpeDat.viewer = True\n\t\t\tpanelExecPar.val = peDat.name\n\t\t\tpanelExecPar.enable = True\n\t\t\tpanelExecPar.readOnly = True\n\t\t\tself.ownerComp.op('panelExecOPExec').cook(force=True)\n\t\telse:\n\t\t\tif expr not in peDat.par.panel.expr:\n\t\t\t\tpeDat.par.panel.expr += ', ' + expr\n\t\tpanelExecPar.eval().par.edit.pulse()\n\n\t@property\n\tdef PanelExecPar(self):\n\t\treturn getattr(parent.Widget.par, self.parPrefix + 'panelexec', None)\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "ButtonPushExt",
@@ -1867,7 +2205,9 @@
 									},
 									"position": [-300, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"]
+									"tags": ["TDExtension"],
+									"dat_content": "SubWidgetExt = mod.SubWidgetExt.SubWidgetExt\nTDF = op.TDModules.mod.TDFunctions\n\nclass ButtonPushExt(SubWidgetExt):\n\t\"\"\"\n\tButtonPushExt description\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.parPrefix = 'Button'\n\t\tSubWidgetExt.__init__(self, ownerComp)\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tSelects correct funtion based on button widget\n\t\ttype\n\t\t\"\"\"\n\t\tval = panelValue != 0\n\t\trunCommand = self.parDict['runcommand']\n\t\tcommandOn = self.parDict['commandon']\n\t\tcommandOff = self.parDict['commandoff']\n\t\tif runCommand:\n\t\t\tif val and commandOn is not None:\n\t\t\t\tself.runCommand(commandOn)\n\t\t\telif not val and commandOff is not None:\n\t\t\t\tself.runCommand(commandOff)\n\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "panelexecValue",
@@ -1880,12 +2220,16 @@
 										"defaultreadencoding": "cp1252"
 									},
 									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05]
+									"color": [0.05, 0.5, 0.05],
+									"dat_content": "def offToOn(panelValue):\n\text.SubWidgetExt.onPanelEvent('offToOn', panelValue)\n\ndef onToOff(panelValue):\n\text.SubWidgetExt.onPanelEvent('onToOff', panelValue)\n\ndef valueChange(panelValue):\n\text.SubWidgetExt.onPanelEvent('valueChange', panelValue)\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "panelExecOPExec",
 									"type": "opexecuteDAT",
-									"position": [-300, 100]
+									"position": [-300, 100],
+									"dat_content": "def onOPdelete():\n\text.SubWidgetExt.PanelExecPar.val = ''\n\text.SubWidgetExt.PanelExecPar.enable = False\t",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "parexecSettings",
@@ -1899,13 +2243,17 @@
 									},
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes"
+									"comment": "Execution for parameter changes",
+									"dat_content": "def valueChange(par, val, prev):\n\text.SubWidgetExt.onParSettingsChange(par, prev)\n\ndef onPulse(par):\n\text.SubWidgetExt.onParSettingsPulse(par)\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
 									"position": [400, 50],
-									"size": [160, 130]
+									"size": [160, 130],
+									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
+									"dat_content_format": "text"
 								}
 							]
 						},
@@ -1918,7 +2266,9 @@
 								"panelvalue": "lselect",
 								"language": "python"
 							},
-							"position": [200, -425]
+							"position": [200, -425],
+							"dat_content": "# me - this DAT\n# panelValue - the PanelValue object that changed\n# prev - the previous value of the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onOffToOn(panelValue):\n\tif panelValue.owner.name == 'buttonClose':\n\t\tparent.Widget.par.Windowclose.pulse()\n\telif panelValue.owner.name == 'buttonMax':\n\t\tparent.Widget.par.Windowmaximize.pulse()\n\telif panelValue.owner.name == 'buttonMin':\n\t\tparent.Widget.par.Windowminimize.pulse()\n\n\treturn\n\ndef whileOn(panelValue):\n\treturn\n\ndef onOnToOff(panelValue):\n\treturn\n\ndef whileOff(panelValue):\n\treturn\n\ndef onValueChange(panelValue, prev):\n\treturn\n\t",
+							"dat_content_format": "text"
 						},
 						{
 							"name": "buttonClose",
@@ -2031,7 +2381,9 @@
 									},
 									"position": [-500, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"]
+									"tags": ["TDExtension"],
+									"dat_content": "TDF = op.TDModules.mod.TDFunctions\n\nclass SubWidgetExt:\n\t\"\"\"\n\tRockerExt description\n\t\"\"\"\n\n\tdef __init__(self, ownerComp, indexComp=None):\n\t\t# The component to which this extension is attached\n\t\tself.ownerComp = ownerComp\n\t\tif indexComp:\n\t\t\tself.indexComp = indexComp\n\t\telse:\n\t\t\tself.indexComp = self.ownerComp\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tPanel exec events from widget\n\t\t\"\"\"\n\t\tpass\n\n\tdef onParSettingsChange(self, par, prev):\n\t\t\"\"\"\n\t\tManages value changes widget settings parameters\n\t\t\"\"\"\n\t\tval = par.eval()\n\t\tif par.name == self.parPrefix + 'runcommand':\n\t\t\tenable = par.eval()\n\t\t\tfor suffix in ['commandon', 'commandoff', 'commandonvaluechange']:\n\t\t\t\tp = self.prefixPar(suffix)\n\t\t\t\tif p is not None:\n\t\t\t\t\tp.enable = enable\n\t\telif par.name == self.parPrefix + 'horizontalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('hfillweight').enable = fill\n\t\t\tself.prefixPar('width').enable = not fill\n\t\telif par.name == self.parPrefix + 'verticalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('vfillweight').enable = fill\n\t\t\tself.prefixPar('height').enable = not fill\n\t\telif par.name in [self.parPrefix + 'bordera',\n\t\t\t\t\t\t  self.parPrefix + 'borderb',\n\t\t\t\t\t\t  self.parPrefix + 'border']:\n\t\t\tgetattr(parent.Widget.par, par.name + 'colorr').enable = par.eval()\n\n\tdef onParSettingsPulse(self, par):\n\t\t\"\"\"\n\t\tManages pulse events for widget settings parameters\n\t\t\"\"\"\n\t\tif par.name == self.parPrefix + 'customizeinteraction':\n\t\t\tself.makePanelExecute()\n\n\tdef onToggleEvent(self, event, panelValue):\n\t\tif event == 'offToOn':\n\t\t\tself.toggle()\n\n\tdef toggle(self):\n\t\tindex = self.indexComp.digits\n\t\tvaluePar = getattr(parent.Widget.par, 'Value' + str(index))\n\t\tvaluePar.val = 1 - valuePar.eval()\n\n\tdef prefixPar(self, suffix):\n\t\t\"\"\"\n\t\tReturn a parameter prefixed by parPrefix\n\t\t:param suffix: the par name after parPrefix (string)\n\t\t:return: the parameter or None if not found\n\t\t\"\"\"\n\t\treturn getattr(self.ownerComp.parent.Widget.par,\n\t\t\t\t\t   self.parPrefix + suffix, None)\n\n\tdef getDockExpressionToOwner(self):\n\t\tpage = TDF.getCustomPage(self.ownerComp.parent.Widget, 'OPs')\n\t\texpr = \"me.dock.op('\" + self.ownerComp.name + \"')\"\n\t\tfor p in page.pars:\n\t\t\tif p.eval() == self.ownerComp:\n\t\t\t\texpr = \"me.dock.par.\" + p.name + \".eval()\"\n\t\t\t\tbreak\n\t\treturn expr\n\n\tdef makePanelExecute(self, panelExpr=None):\n\t\t\"\"\"\n\t\tCreates a panel execute DAT for running external code from the\n\t\twidget that is connected to the button interaction receiver - which\n\t\tis the ownerComp of this class\n\n\t\tpanelExpr: will be used as the expression in the panel parameter of the\n\t\t\tpanelExec. Defaults to \"me.dock.op('\" + self.ownerComp.name +\"')\"\n\t\t\"\"\"\n\t\tpanelExecPar = self.PanelExecPar\n\t\tpeDat = panelExecPar.eval()\n\t\texpr = self.getDockExpressionToOwner() \\\n\t\t\t\t\t\t\t\t\t\t\tif panelExpr is None else panelExpr\n\t\tif not peDat:\n\t\t\tpeDat = self.ownerComp.parent.Widget.parent().create(\n\t\t\t\tpanelexecuteDAT, self.parPrefix + 'PanelExec')\n\t\t\tpeDat.nodeX = self.ownerComp.parent.Widget.nodeX - 200\n\t\t\tpeDat.nodeY = self.ownerComp.parent.Widget.nodeY\n\t\t\tpeDat.dock = self.ownerComp.parent.Widget\n\t\t\tpeDat.par.panel.expr = expr\n\t\t\tpeDat.par.ontooff = True\n\t\t\tpeDat.viewer = True\n\t\t\tpanelExecPar.val = peDat.name\n\t\t\tpanelExecPar.enable = True\n\t\t\tpanelExecPar.readOnly = True\n\t\t\tself.ownerComp.op('panelExecOPExec').cook(force=True)\n\t\telse:\n\t\t\tif expr not in peDat.par.panel.expr:\n\t\t\t\tpeDat.par.panel.expr += ', ' + expr\n\t\tpanelExecPar.eval().par.edit.pulse()\n\n\t@property\n\tdef PanelExecPar(self):\n\t\treturn getattr(parent.Widget.par, self.parPrefix + 'panelexec', None)\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "ButtonPushExt",
@@ -2041,7 +2393,9 @@
 									},
 									"position": [-300, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"]
+									"tags": ["TDExtension"],
+									"dat_content": "SubWidgetExt = mod.SubWidgetExt.SubWidgetExt\nTDF = op.TDModules.mod.TDFunctions\n\nclass ButtonPushExt(SubWidgetExt):\n\t\"\"\"\n\tButtonPushExt description\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.parPrefix = 'Button'\n\t\tSubWidgetExt.__init__(self, ownerComp)\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tSelects correct funtion based on button widget\n\t\ttype\n\t\t\"\"\"\n\t\tval = panelValue != 0\n\t\trunCommand = self.parDict['runcommand']\n\t\tcommandOn = self.parDict['commandon']\n\t\tcommandOff = self.parDict['commandoff']\n\t\tif runCommand:\n\t\t\tif val and commandOn is not None:\n\t\t\t\tself.runCommand(commandOn)\n\t\t\telif not val and commandOff is not None:\n\t\t\t\tself.runCommand(commandOff)\n\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "panelexecValue",
@@ -2054,12 +2408,16 @@
 										"defaultreadencoding": "cp1252"
 									},
 									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05]
+									"color": [0.05, 0.5, 0.05],
+									"dat_content": "def offToOn(panelValue):\n\text.SubWidgetExt.onPanelEvent('offToOn', panelValue)\n\ndef onToOff(panelValue):\n\text.SubWidgetExt.onPanelEvent('onToOff', panelValue)\n\ndef valueChange(panelValue):\n\text.SubWidgetExt.onPanelEvent('valueChange', panelValue)\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "panelExecOPExec",
 									"type": "opexecuteDAT",
-									"position": [-300, 100]
+									"position": [-300, 100],
+									"dat_content": "def onOPdelete():\n\text.SubWidgetExt.PanelExecPar.val = ''\n\text.SubWidgetExt.PanelExecPar.enable = False\t",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "parexecSettings",
@@ -2073,13 +2431,17 @@
 									},
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes"
+									"comment": "Execution for parameter changes",
+									"dat_content": "def valueChange(par, val, prev):\n\text.SubWidgetExt.onParSettingsChange(par, prev)\n\ndef onPulse(par):\n\text.SubWidgetExt.onParSettingsPulse(par)\n\n",
+									"dat_content_format": "text"
 								},
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
 									"position": [400, 50],
-									"size": [160, 130]
+									"size": [160, 130],
+									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
+									"dat_content_format": "text"
 								}
 							]
 						},
@@ -2092,14 +2454,18 @@
 								"pars": "w h",
 								"language": "python"
 							},
-							"position": [-375, 100]
+							"position": [-375, 100],
+							"dat_content": "# me - this DAT\n# par - the Par object that has changed\n# val - the current value\n# prev - the previous value\n# \n# Make sure the corresponding toggle is enabled in the Parameter Execute DAT.\n\ndef onValueChange(par, prev):\n\t# use par.eval() to get current value\n\text = parent.minMaxClose.ext.MinMaxCloseExt\n\n\tif ext.win_state == 1:\n\t\tif par.name == 'w':\n\t\t\text.max_width = par.eval()\n\t\telse:\n\t\t\text.max_height = par.eval()\n\t\n\treturn\n\n# Called at end of frame with complete list of individual parameter changes.\n# The changes are a list of named tuples, where each tuple is (Par, previous value)\ndef onValuesChanged(changes):\n\tfor c in changes:\n\t\t# use par.eval() to get current value\n\t\tpar = c.par\n\t\tprev = c.prev\n\treturn\n\ndef onPulse(par):\n\treturn\n\ndef onExpressionChange(par, val, prev):\n\treturn\n\ndef onExportChange(par, val, prev):\n\treturn\n\ndef onEnableChange(par, val, prev):\n\treturn\n\ndef onModeChange(par, val, prev):\n\treturn\n\t",
+							"dat_content_format": "text"
 						},
 						{
 							"name": "MinMaxCloseExt",
 							"type": "textDAT",
 							"position": [-200, 100],
 							"size": [130, 90],
-							"tags": ["TDExtension"]
+							"tags": ["TDExtension"],
+							"dat_content": "\nimport TDFunctions as TDF\n\nclass MinMaxCloseExt:\n\t\"\"\"\n\tManages minimize/maximize/close for the Embody manager window.\n\tCompact mode hides non-essential toolbar buttons for a widget-like footprint.\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.ownerComp = ownerComp\n\t\tself.windowCompPar = self.ownerComp.parent.Widget.par.Windowcomp\n\t\tself.panelCompPar = self.ownerComp.parent.Widget.par.Panelcomp\n\n\t\tself.mgr = parent.Embody\n\t\tself.tools = parent.Embody.op('toolbar')\n\t\tself.lister = parent.Embody.op('list')\n\t\tself.filter = self.tools.op('container_right')\n\t\tself.container_left = self.tools.op('container_left')\n\n\t\t# Buttons hidden in compact mode (envoy_toggle stays visible)\n\t\tself.compact_hide_names = (\n\t\t\t'save_folder',\n\t\t\t'envoy_status', 'disable'\n\t\t)\n\n\t\t# Known-good default display states for maximize restore\n\t\tself._defaults = {\n\t\t\t'status':       {'mode': 'constant', 'val': 0},\n\t\t\t'disable':      {'mode': 'constant', 'val': 1},\n\t\t\t'initialize':   {'mode': 'constant', 'val': 1},\n\t\t\t'refresh':      {'mode': 'expression', 'expr': \"1 if parent.Embody.par.Status == 'Enabled' else 0\"},\n\t\t\t'save_folder':  {'mode': 'expression', 'expr': \"1 if parent.Embody.par.Status == 'Enabled' else 0\"},\n\t\t\t'export_comp_tdn': {'mode': 'constant', 'val': 1},\n\t\t\t'export_tdn':   {'mode': 'constant', 'val': 1},\n\t\t\t'import_tdn':   {'mode': 'constant', 'val': 1},\n\t\t\t'envoy_status': {'mode': 'constant', 'val': 1},\n\t\t\t'envoy_toggle': {'mode': 'constant', 'val': 1},\n\t\t}\n\n\t\tself.win_state = 1\n\n\t\tself.min_width = 370\n\t\tself.min_height = 72\n\t\tself.max_width = 1080\n\t\tself.max_height = 440\n\n\t\tself.status_compact_w = 80\n\t\tself.status_default_w = 80\n\n\tdef Windowclose(self, par):\n\t\t\"\"\"Close the manager window.\"\"\"\n\t\twindowComp = self.windowCompPar.eval()\n\t\tif isinstance(windowComp, windowCOMP):\n\t\t\twindowComp.par.winclose.pulse()\n\n\tdef Windowmaximize(self, par):\n\t\t\"\"\"Restore to full manager view.\"\"\"\n\t\tself.win_state = 1\n\t\t# Restore ALL buttons to their known defaults\n\t\tif self.container_left:\n\t\t\tfor name, dflt in self._defaults.items():\n\t\t\t\tbtn = self.container_left.op(name)\n\t\t\t\tif not btn:\n\t\t\t\t\tcontinue\n\t\t\t\tif dflt['mode'] == 'expression':\n\t\t\t\t\tbtn.par.display.mode = ParMode.EXPRESSION\n\t\t\t\t\tbtn.par.display.expr = dflt['expr']\n\t\t\t\telse:\n\t\t\t\t\tbtn.par.display = dflt['val']\n\t\t\t# Restore status widget width\n\t\t\tstatus = self.container_left.op('status')\n\t\t\tif status:\n\t\t\t\tstatus.par.w = self.status_default_w\n\t\tself.tools.par.display = 1\n\t\tself.lister.par.display = 1\n\t\tself.filter.par.display = 1\n\t\tself.mgr.par.w = self.max_width\n\t\trun(f\"op('{self.mgr}').par.h = {self.max_height}\", delayFrames=1)\n\t\tparent.Embody.Refresh()\n\n\tdef Windowminimize(self, par):\n\t\t\"\"\"Collapse to compact widget mode.\"\"\"\n\t\tself.win_state = 0\n\t\tif self.container_left:\n\t\t\t# Hide non-essential buttons\n\t\t\tfor name in self.compact_hide_names:\n\t\t\t\tbtn = self.container_left.op(name)\n\t\t\t\tif btn:\n\t\t\t\t\tbtn.par.display = 0\n\t\t\t# Show status label with dirty count\n\t\t\tstatus = self.container_left.op('status')\n\t\t\tif status:\n\t\t\t\tstatus.par.display = 1\n\t\t\t\tstatus.par.w = self.status_compact_w\n\t\tself.lister.par.display = 0\n\t\tself.filter.par.display = 0\n\t\tself.mgr.par.w = self.min_width\n\t\trun(f\"op('{self.mgr}').par.h = {self.min_height}\", delayFrames=1)\n",
+							"dat_content_format": "text"
 						},
 						{
 							"name": "extensionParExec",
@@ -2111,7 +2477,9 @@
 								"builtin": false,
 								"defaultreadencoding": "cp1252"
 							},
-							"position": [-200, -125]
+							"position": [-200, -125],
+							"dat_content": "# This is a callback system for parameters. \n# to use:\n#\t- create a function in ParCallbacksExt/ParCallbacks\n#\t  using the same name as the parameter.\n\t\ndef onValueChange(par, val, prev):\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par, val, prev)\n\ndef onPulse(par):\n\t#debug(par)\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par)\n\ndef onExpressionChange(par, val, prev):\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par, val, prev)\n\ndef onExportChange(par, val, prev):\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par, val, prev)\n\ndef onEnableChange(par, val, prev):\n\treturn\n\t",
+							"dat_content_format": "text"
 						}
 					]
 				}
@@ -2158,8 +2526,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 5,
-					"Date": "2026-03-04 06:08:21 UTC",
+					"Build": 6,
+					"Date": "2026-03-05 01:35:35 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -2290,8 +2658,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 22,
-					"Date": "2026-03-03 18:41:09 UTC",
+					"Build": 23,
+					"Date": "2026-03-05 01:35:35 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
