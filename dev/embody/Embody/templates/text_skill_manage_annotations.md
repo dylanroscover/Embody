@@ -1,4 +1,4 @@
----
+﻿---
 name: manage-annotations
 description: "Create, position, and manage annotations in TouchDesigner networks with correct coordinate math"
 ---

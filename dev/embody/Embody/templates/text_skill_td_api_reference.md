@@ -1,4 +1,4 @@
----
+﻿---
 name: td-api-reference
 description: "TouchDesigner Python API reference: parameters, storage, dependencies, DATs, CHOPs, TOPs, POPs, run(), threading, custom parameters, tdu utilities, mod()"
 ---

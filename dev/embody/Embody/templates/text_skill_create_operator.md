@@ -1,4 +1,4 @@
----
+﻿---
 name: create-operator
 description: "Create TouchDesigner operators via MCP with proper verification, positioning, and error checking"
 ---

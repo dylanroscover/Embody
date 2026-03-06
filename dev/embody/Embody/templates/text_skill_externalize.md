@@ -1,4 +1,4 @@
----
+﻿---
 name: externalize-operator
 description: "Tag and save TouchDesigner operators for version-controlled externalization with Embody"
 ---

@@ -1,4 +1,4 @@
----
+﻿---
 name: create-extension
 description: "Create a TouchDesigner extension with proper lifecycle methods, promotion, and wiring"
 ---

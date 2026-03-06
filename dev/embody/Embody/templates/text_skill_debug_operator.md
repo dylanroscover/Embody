@@ -1,4 +1,4 @@
----
+﻿---
 name: debug-operator
 description: "Diagnose and resolve TouchDesigner operator errors systematically"
 ---
