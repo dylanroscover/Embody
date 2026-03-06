@@ -3,3 +3,9 @@ Backup
 External-Tox-Saver_V2.*.toe
 .DS_Store
 **/.DS_Store
+
+# Embody / Envoy (auto-managed)
+.venv/
+.mcp.json
+.claude/
+__pycache__/

@@ -1,0 +1,452 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.json",
+  "title": "TDN (TouchDesigner Network)",
+  "description": "JSON schema for TDN v1.0 — a human-readable format for representing TouchDesigner operator networks.",
+  "type": "object",
+  "required": ["format", "version", "generator", "td_build", "exported_at", "network_path", "options", "operators"],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "tdn",
+      "description": "File format identifier. Always \"tdn\"."
+    },
+    "version": {
+      "type": "string",
+      "description": "Format version (e.g., \"1.0\")."
+    },
+    "build": {
+      "type": ["integer", "null"],
+      "description": "Embody build number for the exported COMP. null if no build tracking."
+    },
+    "generator": {
+      "type": "string",
+      "description": "Tool that produced the file (e.g., \"Embody/5.0.93\")."
+    },
+    "td_build": {
+      "type": "string",
+      "description": "TouchDesigner version and build number (e.g., \"2025.32050\")."
+    },
+    "exported_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of export."
+    },
+    "network_path": {
+      "type": "string",
+      "description": "The COMP path represented by this file (e.g., \"/\" for the entire project)."
+    },
+    "options": {
+      "type": "object",
+      "required": ["include_dat_content"],
+      "additionalProperties": false,
+      "properties": {
+        "include_dat_content": {
+          "type": "boolean",
+          "description": "Whether DAT text/table content was included in the export."
+        }
+      }
+    },
+    "type_defaults": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "parameters": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/$defs/parameterValue" },
+            "description": "Parameter values shared unanimously by all operators of this type."
+          },
+          "flags": {
+            "$ref": "#/$defs/flagsArray",
+            "description": "Flags shared unanimously by all operators of this type."
+          },
+          "size": {
+            "type": "array",
+            "items": { "type": "integer" },
+            "minItems": 2,
+            "maxItems": 2,
+            "description": "Node tile size [width, height] shared unanimously by all operators of this type."
+          },
+          "color": {
+            "type": "array",
+            "items": { "type": "number", "minimum": 0, "maximum": 1 },
+            "minItems": 3,
+            "maxItems": 3,
+            "description": "Node color [r, g, b] shared unanimously by all operators of this type."
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Operator tags shared unanimously by all operators of this type."
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Per-type shared properties (parameters, flags, size, color, tags). Only types with 2+ operators and unanimous values are included."
+    },
+    "par_templates": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "$ref": "#/$defs/customParameterDef" },
+        "description": "Array of parameter definitions (without values) for this template."
+      },
+      "description": "Reusable custom parameter page definitions. Referenced by $t in operator custom_pars."
+    },
+    "operators": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/operator" },
+      "description": "Array of operator objects."
+    },
+    "annotations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/annotation" },
+      "description": "Array of annotation objects for the root network."
+    }
+  },
+
+  "$defs": {
+    "parameterValue": {
+      "description": "A parameter value: constant (string, number, boolean), expression ('=...'), bind ('~...'), or legacy dict format.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "required": ["expr"],
+          "additionalProperties": false,
+          "properties": {
+            "expr": {
+              "type": "string",
+              "description": "Legacy format: Python expression evaluated by TouchDesigner each frame."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["bind"],
+          "additionalProperties": false,
+          "properties": {
+            "bind": {
+              "type": "string",
+              "description": "Legacy format: Bind expression referencing another parameter."
+            }
+          }
+        }
+      ]
+    },
+
+    "connectionArray": {
+      "description": "Array of source operator references. Position equals input index. null for empty slots.",
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string", "description": "Source operator — sibling name or full path." },
+          { "type": "null", "description": "No connection at this index." }
+        ]
+      }
+    },
+
+    "legacyConnection": {
+      "type": "object",
+      "required": ["index", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Input connector index (0-based)."
+        },
+        "source": {
+          "type": "string",
+          "description": "Source operator — sibling name or full path."
+        }
+      }
+    },
+
+    "flagsArray": {
+      "description": "Array of flag name strings. Names without prefix set the flag to true; names with '-' prefix set to false.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^-?(bypass|lock|display|render|viewer|expose|allowCooking)$"
+      }
+    },
+
+    "legacyFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Legacy format: flags as object with boolean values.",
+      "properties": {
+        "bypass": { "type": "boolean" },
+        "lock": { "type": "boolean" },
+        "display": { "type": "boolean" },
+        "render": { "type": "boolean" },
+        "viewer": { "type": "boolean" },
+        "expose": { "type": "boolean" },
+        "allowCooking": { "type": "boolean" }
+      }
+    },
+
+    "customParameterDef": {
+      "type": "object",
+      "required": ["name", "style"],
+      "additionalProperties": false,
+      "description": "Definition of a custom parameter (structure, range, etc.). Used in par_templates and inline page arrays.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Base name of the parameter (without component suffix)."
+        },
+        "label": {
+          "type": "string",
+          "description": "Display label. Omitted when it matches the name."
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "Float", "Int",
+            "XY", "XYZ", "XYZW", "WH", "UV", "UVW", "RGB", "RGBA",
+            "Str", "Menu", "StrMenu", "Toggle",
+            "Pulse", "Momentary", "Header",
+            "File", "FileSave", "Folder", "Python",
+            "OP", "COMP", "TOP", "CHOP", "SOP", "DAT", "MAT", "POP",
+            "Object", "PanelCOMP", "Sequence"
+          ],
+          "description": "Parameter style."
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 2,
+          "description": "Number of components for multi-component Float/Int parameters."
+        },
+        "default": {
+          "description": "Default value. Omitted when it equals a standard default (0, 0.0, \"\", or false)."
+        },
+        "min": { "type": "number", "description": "Minimum value. Omitted when 0." },
+        "max": { "type": "number", "description": "Maximum value. Omitted when 1." },
+        "clampMin": { "type": "boolean", "description": "Whether the value is clamped to min." },
+        "clampMax": { "type": "boolean", "description": "Whether the value is clamped to max." },
+        "normMin": { "type": "number", "description": "Normalized range minimum. Omitted when 0." },
+        "normMax": { "type": "number", "description": "Normalized range maximum. Omitted when 1." },
+        "menuNames": { "type": "array", "items": { "type": "string" }, "description": "Internal names for each menu option." },
+        "menuLabels": { "type": "array", "items": { "type": "string" }, "description": "Display labels for each menu option." },
+        "menuSource": { "type": "string", "description": "DAT path or expression that dynamically populates the menu." },
+        "startSection": { "type": "boolean", "description": "Whether this parameter starts a new visual section." },
+        "readOnly": { "type": "boolean", "description": "Whether the parameter is read-only." },
+        "value": {
+          "$ref": "#/$defs/parameterValue",
+          "description": "Current value for single-component parameters."
+        },
+        "values": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/parameterValue" },
+          "description": "Current values for multi-component parameters."
+        }
+      }
+    },
+
+    "templateReference": {
+      "type": "object",
+      "required": ["$t"],
+      "description": "Reference to a par_template with value overrides. $t names the template; other keys are parameter name to value overrides.",
+      "properties": {
+        "$t": {
+          "type": "string",
+          "description": "Template name (matches a key in par_templates)."
+        }
+      },
+      "additionalProperties": { "$ref": "#/$defs/parameterValue" }
+    },
+
+    "customParsPageGrouped": {
+      "type": "object",
+      "description": "Custom parameters grouped by page name. Each page is either an array of parameter definitions or a template reference.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": { "$ref": "#/$defs/customParameterDef" },
+            "description": "Inline parameter definitions for this page."
+          },
+          {
+            "$ref": "#/$defs/templateReference",
+            "description": "Template reference with value overrides."
+          }
+        ]
+      }
+    },
+
+    "annotation": {
+      "type": "object",
+      "required": ["name", "mode", "size"],
+      "additionalProperties": false,
+      "description": "A visual annotation (comment, network box, or annotate panel) in the network editor.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Annotation operator name."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["annotate", "comment", "networkbox"],
+          "description": "Annotation display mode."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title bar text. Only for annotate and networkbox modes."
+        },
+        "text": {
+          "type": "string",
+          "description": "Body text content."
+        },
+        "position": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Position [x, y]. Omitted when [0, 0]."
+        },
+        "size": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Size [width, height]. Always included."
+        },
+        "color": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Background color [r, g, b] as floats 0.0-1.0."
+        },
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Background opacity. Omitted when 1.0."
+        }
+      }
+    },
+
+    "operator": {
+      "type": "object",
+      "required": ["name", "type"],
+      "additionalProperties": false,
+      "description": "A TouchDesigner operator with its non-default properties.",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Operator name."
+        },
+        "type": {
+          "type": "string",
+          "description": "TouchDesigner operator type (e.g., \"baseCOMP\", \"noiseTOP\", \"textDAT\")."
+        },
+        "position": {
+          "type": "array",
+          "items": { "type": "number" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Node tile position [x, y]. Omitted when [0, 0] (default)."
+        },
+        "size": {
+          "type": "array",
+          "items": { "type": "integer" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Node tile size [width, height]. Default: [200, 100]."
+        },
+        "color": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "minItems": 3,
+          "maxItems": 3,
+          "description": "Node color [r, g, b] as floats 0.0-1.0. Default: [0.545, 0.545, 0.545]."
+        },
+        "comment": {
+          "type": "string",
+          "description": "Annotation text on the node."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Operator tags."
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/parameterValue" },
+          "description": "Non-default built-in parameter values. Expressions use '=' prefix, binds use '~' prefix."
+        },
+        "custom_pars": {
+          "oneOf": [
+            { "$ref": "#/$defs/customParsPageGrouped" },
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/customParameterDef" },
+              "description": "Legacy format: flat array of custom parameter definitions with 'page' field."
+            }
+          ],
+          "description": "Custom parameter definitions (COMPs only). Preferred format: page-grouped object."
+        },
+        "flags": {
+          "oneOf": [
+            { "$ref": "#/$defs/flagsArray" },
+            { "$ref": "#/$defs/legacyFlags" }
+          ],
+          "description": "Operator flags. Preferred format: string array. Legacy format: object with boolean values."
+        },
+        "inputs": {
+          "oneOf": [
+            { "$ref": "#/$defs/connectionArray" },
+            { "type": "array", "items": { "$ref": "#/$defs/legacyConnection" } }
+          ],
+          "description": "Operator-level input connections. Preferred format: string array. Legacy format: object array."
+        },
+        "comp_inputs": {
+          "oneOf": [
+            { "$ref": "#/$defs/connectionArray" },
+            { "type": "array", "items": { "$ref": "#/$defs/legacyConnection" } }
+          ],
+          "description": "COMP-level input connections. Preferred format: string array. Legacy format: object array."
+        },
+        "dat_content": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "array",
+              "items": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          ],
+          "description": "DAT text (string) or table data (array of row arrays). DATs only."
+        },
+        "dat_content_format": {
+          "type": "string",
+          "enum": ["text", "table"],
+          "description": "Format of dat_content. Present whenever dat_content is present."
+        },
+        "children": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/operator" },
+          "description": "Child operators (COMPs only, excluding palette clones)."
+        },
+        "annotations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/annotation" },
+          "description": "Annotations within this COMP (COMPs only)."
+        },
+        "palette_clone": {
+          "type": "boolean",
+          "const": true,
+          "description": "true if this COMP is cloned from the TD palette (/sys/). Children are not exported."
+        }
+      }
+    }
+  }
+}
