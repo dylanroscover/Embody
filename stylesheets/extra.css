@@ -1,0 +1,118 @@
+/* Embody Documentation — Custom Theme
+ * Colors derived from the Embody TouchDesigner UI palette
+ */
+
+/* ============================================
+ * Light scheme overrides
+ * ============================================ */
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #1f2e2a;
+  --md-primary-fg-color--light: #2a4a42;
+  --md-primary-fg-color--dark: #181e1e;
+  --md-primary-bg-color: #ffffff;
+  --md-primary-bg-color--light: #f0f2f0;
+  --md-accent-fg-color: #3a7e5a;
+  --md-accent-fg-color--transparent: #3a7e5a1a;
+}
+
+/* ============================================
+ * Dark scheme overrides (matches Embody UI)
+ * ============================================ */
+[data-md-color-scheme="slate"] {
+  /* Background: Embody's #181e1e dark green-gray */
+  --md-default-bg-color: #181e1e;
+  --md-default-bg-color--light: #1f2321;
+  --md-default-bg-color--lighter: #283028;
+  --md-default-bg-color--lightest: #333d33;
+
+  /* Text: Embody's muted green-gray */
+  --md-default-fg-color: #c8d0c9;
+  --md-default-fg-color--light: #97a098;
+  --md-default-fg-color--lighter: #6b756c;
+  --md-default-fg-color--lightest: #3a433b;
+
+  /* Header/nav: slightly lighter than background */
+  --md-primary-fg-color: #1f2e2a;
+  --md-primary-fg-color--light: #2a4a42;
+  --md-primary-fg-color--dark: #161e1a;
+  --md-primary-bg-color: #e0e5e1;
+  --md-primary-bg-color--light: #c8d0c9;
+
+  /* Accent/links: bright green for readability on dark background */
+  --md-accent-fg-color: #6ee668;
+  --md-accent-fg-color--transparent: #6ee6681a;
+  --md-typeset-a-color: #6ee668;
+
+  /* Code blocks */
+  --md-code-bg-color: #161e1a;
+  --md-code-fg-color: #c8d0c9;
+
+  /* Footer */
+  --md-footer-bg-color: #161e1a;
+  --md-footer-bg-color--dark: #101414;
+}
+
+/* ============================================
+ * Shared component styles
+ * ============================================ */
+
+/* Header bar */
+.md-header {
+  background-color: var(--md-primary-fg-color);
+}
+
+/* Navigation tabs */
+.md-tabs {
+  background-color: var(--md-primary-fg-color--light);
+}
+
+/* Tag colors matching Embody's tag system */
+[data-md-color-scheme="slate"] .md-tag {
+  background-color: #2a4a42;
+}
+
+/* Links — ensure high contrast on dark backgrounds */
+[data-md-color-scheme="slate"] .md-typeset a {
+  color: #6ee668;
+}
+
+[data-md-color-scheme="slate"] .md-typeset a:hover {
+  color: #a0f09c;
+}
+
+/* Nav/sidebar links use subtler color */
+[data-md-color-scheme="slate"] .md-nav__link {
+  color: var(--md-default-fg-color--light);
+}
+
+[data-md-color-scheme="slate"] .md-nav__link--active,
+[data-md-color-scheme="slate"] .md-nav__link:hover {
+  color: #6ee668;
+}
+
+/* Octicons/emoji icon vertical alignment */
+.md-typeset .twemoji svg,
+.md-typeset .emojione svg {
+  vertical-align: -0.15em;
+}
+
+/* Admonition accents */
+[data-md-color-scheme="slate"] .md-typeset .admonition.note,
+[data-md-color-scheme="slate"] .md-typeset details.note {
+  border-color: #4c7fe5;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.tip,
+[data-md-color-scheme="slate"] .md-typeset details.tip {
+  border-color: #52cc4c;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.warning,
+[data-md-color-scheme="slate"] .md-typeset details.warning {
+  border-color: #ffb219;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .admonition.danger,
+[data-md-color-scheme="slate"] .md-typeset details.danger {
+  border-color: #ac4139;
+}
