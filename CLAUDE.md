@@ -8,7 +8,7 @@
 
 ## Critical Rules
 
-1. **ALWAYS use Envoy MCP tools to inspect and modify anything inside TouchDesigner** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." Use MCP tools for everything in the live TD environment. The filesystem is for externalized `.py` files; MCP is for everything else.
+1. **ALWAYS use Envoy MCP tools to inspect and modify anything inside TouchDesigner** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." Use MCP tools for everything in the live TD environment. The filesystem holds externalized files (`.py`, `.tox`, `.tdn`, `.json`, `.xml`, etc.); MCP is for interacting with operators, parameters, and network state inside TD.
 2. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure.
 3. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
 4. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
@@ -51,11 +51,18 @@ Embody/
 │       ├── td-api-reference/            # Full TD Python API reference
 │       └── mcp-tools-reference/         # Complete MCP tool catalog
 ├── docs/                                  # MkDocs documentation site
-│   ├── tdn/specification.md              # TDN format specification
+│   ├── embody/                           # Embody feature docs
+│   ├── envoy/                            # Envoy MCP server docs
+│   ├── tdn/                              # TDN format docs
+│   │   └── specification.md             # TDN format specification
+│   ├── td-development/                   # TD coding best practices
+│   ├── tdn.schema.json                   # JSON Schema for .tdn validation
 │   ├── testing.md                        # Test framework docs
 │   └── changelog.md                      # Version history
 ├── dev/
 │   ├── Embody-5.140.toe                  # Active development project
+│   ├── .venv/                            # Python virtual environment (auto-created)
+│   ├── Backup/                           # Versioned .toe backups
 │   └── embody/
 │       ├── externalizations.tsv          # Tracking table (managed by Embody)
 │       └── Embody/                       # Main extension source
@@ -63,6 +70,8 @@ Embody/
 │           ├── EnvoyExt.py               # MCP server extension
 │           ├── TDNExt.py                 # TDN network format export/import
 │           ├── text_claude.md            # Template for user-project CLAUDE.md
+│           ├── execute.py                # Project lifecycle callbacks
+│           ├── parexec.py                # Parameter change callbacks
 │           └── templates/                # Templates for generated rules/skills
 └── release/
     └── Embody-v*.tox                     # Latest release build
@@ -70,9 +79,9 @@ Embody/
 
 ## Architecture
 
-### Externalization Sync (.toe <-> .py files)
+### Externalization Sync (.toe <-> externalized files)
 
-Embody externalizes tagged operators to text files under `dev/embody/`. Edits to `.py` files are read by TD on load/sync; changes inside TD are written out on save. Externalized files on disk are the source of truth.
+Embody externalizes tagged operators to files under `dev/embody/` — `.py` for DATs, `.tox` for COMPs (TOX strategy), `.tdn` for COMPs (TDN strategy). Edits to externalized files are read by TD on load/sync; changes inside TD are written out on save. Externalized files on disk are the source of truth.
 
 ### Automatic Restoration
 
