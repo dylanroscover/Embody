@@ -6,7 +6,8 @@ External-Tox-Saver_V2.*.toe
 .venv/
 dev_vEnv/
 .mcp.json
-.claude/
+.claude/settings.local.json
+.claude/projects/
 nul
 __pycache__/
 dev/TDImportCache/

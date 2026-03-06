@@ -3308,11 +3308,13 @@ class EnvoyExt:
     def _configureGitignore(self, git_root):
         """Ensure .gitignore in the git root contains entries for
         Embody/Envoy auto-generated files.
-        Idempotent — only appends missing entries, preserves all existing content."""
+        Idempotent — only appends missing entries, preserves all existing content.
+        Migrates old `.claude/` blanket entry to specific entries."""
         MANAGED_ENTRIES = [
             '.venv/',
             '.mcp.json',
-            '.claude/',
+            '.claude/settings.local.json',
+            '.claude/projects/',
             '__pycache__/',
             '.DS_Store',
         ]
@@ -3321,12 +3323,25 @@ class EnvoyExt:
             gitignore = git_root / '.gitignore'
 
             existing_content = ''
-            existing_lines = set()
+            existing_lines = []
             if gitignore.exists():
                 existing_content = gitignore.read_text(encoding='utf-8')
-                existing_lines = {line.strip() for line in existing_content.splitlines()}
+                existing_lines = existing_content.splitlines()
 
-            missing = [e for e in MANAGED_ENTRIES if e not in existing_lines]
+            # Migrate: remove old blanket `.claude/` entry
+            existing_stripped = {line.strip() for line in existing_lines}
+            if '.claude/' in existing_stripped:
+                existing_lines = [
+                    line for line in existing_lines
+                    if line.strip() != '.claude/'
+                ]
+                existing_content = '\n'.join(existing_lines)
+                if existing_content and not existing_content.endswith('\n'):
+                    existing_content += '\n'
+                self._log('Migrated .gitignore: removed blanket .claude/ entry')
+
+            existing_stripped = {line.strip() for line in existing_lines}
+            missing = [e for e in MANAGED_ENTRIES if e not in existing_stripped]
 
             if not missing:
                 self._log('.gitignore already configured', 'DEBUG')
