@@ -1,22 +1,25 @@
 # 🪞 Embody
 
-### Supercharge Your TouchDesigner Workflow With AI
+**Have a conversation with TouchDesigner.**
 
-**TouchDesigner 2025.32280** (Windows / macOS) &nbsp;|&nbsp; **v5.0.190**
+![Version](https://img.shields.io/badge/version-5.0.190-blue)
+![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
+![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
+![License](https://img.shields.io/badge/license-TEC_Friendly-green)
 
-[YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s) &nbsp;|&nbsp; [Full Documentation](docs/)
+[YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s) &nbsp;|&nbsp; [Full Documentation](docs/) &nbsp;|&nbsp; [Changelog](docs/changelog.md)
 
 ---
 
-## Overview
+TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review in git. Embody makes your TD projects readable: by AI, by git, and by you.
 
-Build faster. Debug smarter. Let AI handle the tedious parts while you focus on what matters — your creative vision.
+## What It Does
 
-**Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, connects AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) to your live TouchDesigner session. Create operators, wire connections, set parameters, write extensions, and debug errors — all through natural conversation. No copy-pasting code. No describing your network in chat. You stay in control while AI does the heavy lifting.
+**Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, lets AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire connections, set parameters, write extensions, and debug errors — all through natural conversation. No copy-pasting code. No describing your network in chat.
 
-**Embody** makes your TouchDesigner projects version-control-friendly. Tag any operator with a double-tap of left Ctrl, and Embody automatically externalizes your COMPs and DATs to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. On project open, everything is restored from the files on disk — your externalized files are the source of truth.
+**Embody** externalizes your operators to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. Tag operators, save with `ctrl + shift + u`, and everything restores from disk automatically on project open — your externalized files are the source of truth.
 
-**TDN** (TouchDesigner Network) takes it further — export your entire operator network to human-readable JSON. Review structural changes in pull requests, snapshot configurations, and reconstruct entire networks from text.
+**TDN** (TouchDesigner Network) exports your entire operator network to human-readable JSON — a structured language that both humans and LLMs can read, diff, and reconstruct. Review structural changes in pull requests, snapshot configurations, or hand an LLM a complete picture of your network.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 
@@ -29,81 +32,103 @@ Build faster. Debug smarter. Let AI handle the tedious parts while you focus on 
 
 ---
 
-## 🚀 Getting Started
+## Quick Start
 
 ### 1. Project Setup
 
-Your TouchDesigner `.toe` file should live inside a **git repository**. Embody writes externalized files relative to the `.toe` location, so your repo structure will look like:
+Your TouchDesigner `.toe` file should live inside a **git repository**. Embody writes externalized files relative to the `.toe` location:
 
 ```
-my-project/              <- git repo root
+my-project/              ← git repo root
 ├── .gitignore
-├── my-project.toe       <- your TouchDesigner project
-├── base1/               <- externalized COMPs and DATs
-│   ├── base2.tox
-│   └── text1.py
+├── my-project.toe       ← your TouchDesigner project
+├── base1/               ← externalized operators
+│   ├── base2.tox        ← COMP (TOX strategy)
+│   ├── base3.tdn        ← COMP (TDN strategy — diffable JSON)
+│   └── text1.py         ← DAT
 └── ...
 ```
 
 ### 2. Install and Tag
 
-1. **Download**: Drag and drop the Embody `.tox` from the [`/release`](release/) folder into your TouchDesigner project.
-2. **Tag operators**: Select any COMP or DAT and press `lctrl` twice in a row.
-3. **Initialize**: Press `ctrl + shift + u` to externalize all tagged operators.
-4. **Work normally**: Press `ctrl + shift + u` as you work to save dirty externalizations. On project open, Embody restores everything from the files on disk automatically.
+1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project
+2. **Tag operators** — select any COMP or DAT and press `lctrl` twice
+3. **Initialize** — press `ctrl + shift + u` to externalize all tagged operators
+4. **Work normally** — press `ctrl + shift + u` as you work to save changes. On project open, Embody restores everything from disk automatically
 
-> If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
+> **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
-### 3. ⌨️ Keyboard Shortcuts
+### 3. Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
 | `lctrl + lctrl` | Tag or manage the operator under the cursor |
-| `ctrl + shift + u` | Initialize/update all externalizations |
+| `ctrl + shift + u` | Initialize / update all externalizations |
 | `ctrl + alt + u` | Save only the current COMP |
 | `ctrl + shift + o` | Open the Manager UI |
 | `ctrl + shift + e` | Export entire project to `.tdn` file |
 | `ctrl + alt + e` | Export current COMP to `.tdn` file |
 
-For detailed feature documentation — supported formats, folder configuration, duplicate handling, Manager UI, and more — see the [Embody docs](docs/embody/).
+For supported formats, folder configuration, duplicate handling, Manager UI, and more — see the [Embody docs](docs/embody/).
 
 ---
 
-## 🤖 Envoy MCP Server
+## Envoy MCP Server
 
-Embody includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) server that lets AI coding assistants interact with TouchDesigner programmatically.
+Embody includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) server that gives AI coding assistants direct access to your live TouchDesigner session.
 
-### Quick Start
+### Setup
 
-1. **Enable Envoy**: Toggle the `Envoyenable` parameter on the Embody COMP
-2. **Server starts**: Envoy runs on `localhost:9870` (configurable via `Envoyport`)
-3. **Auto-configuration**: Envoy creates a `.mcp.json` file in your git repo root
-4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) — it picks up `.mcp.json` automatically
+1. **Enable Envoy** — toggle the `Envoyenable` parameter on the Embody COMP
+2. **Server starts** on `localhost:9870` (configurable via `Envoyport`)
+3. **Auto-configuration** — Envoy creates a `.mcp.json` in your git repo root
+4. **Connect** — open a Claude Code session (or restart your IDE) in the repo root — it picks up `.mcp.json` automatically
 
-> If your project isn't in a git repo, see the [manual setup instructions](docs/envoy/setup.md).
+If your project isn't in a git repo, add `.mcp.json` manually to your project root:
 
-### Capabilities
+```json
+{
+  "mcpServers": {
+    "envoy": {
+      "type": "http",
+      "url": "http://localhost:9870/mcp"
+    }
+  }
+}
+```
 
-Envoy exposes 40+ MCP tools for operator management, parameters, connections, DAT content, extensions, annotations, diagnostics, Embody integration, TDN export/import, and code execution. See the [full tools reference](docs/envoy/tools-reference.md).
+### Tools at a Glance
 
-When Envoy starts, it generates a `CLAUDE.md` file in your project root with context about TD development patterns, the MCP tool reference, and project-specific guidance.
+| Tool | What It Does |
+|------|-------------|
+| `create_op` | Create any operator type in any network |
+| `set_parameter` | Set values, expressions, or bind modes on any parameter |
+| `connect_ops` | Wire operators together |
+| `execute_python` | Run arbitrary Python in TD's main thread |
+| `export_network` | Export networks to diffable `.tdn` JSON |
+| `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
+| `get_op_errors` | Inspect errors on any operator and its children |
+
+...and 35+ more. See the [full tools reference](docs/envoy/tools-reference.md).
+
+When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD development patterns, the complete MCP tool reference, and project-specific guidance.
 
 ---
 
-## 📄 TDN Network Format
+## TDN Network Format
 
 TDN (TouchDesigner Network) is a JSON-based format for exporting operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in git.
 
 - **Entire project**: `ctrl + shift + e`
 - **Current COMP**: `ctrl + alt + e`
-- **Via Envoy**: `export_network` MCP tool
-- **Import**: `import_network` MCP tool
+- **Via Envoy**: `export_network` / `import_network` MCP tools
 
 See the [full TDN specification](docs/tdn/specification.md) for format details, import process, and round-trip guarantees.
 
 ---
 
-## 📋 Logging
+<details>
+<summary><strong>Logging</strong></summary>
 
 Embody provides a multi-destination logging system:
 
@@ -118,9 +143,10 @@ op.Embody.Warn('Check this out')
 op.Embody.Error('Something broke')
 ```
 
----
+</details>
 
-## 🧪 Testing
+<details>
+<summary><strong>Testing</strong></summary>
 
 Embody includes **30 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
@@ -132,30 +158,33 @@ op.unit_tests.RunTestsSync()                           # All in one frame (block
 
 Via Envoy MCP: use the `run_tests` tool. See the [full testing docs](docs/testing.md) for coverage details and how to write new tests.
 
----
+</details>
 
-## ❓ Troubleshooting
+<details>
+<summary><strong>Troubleshooting</strong></summary>
 
-- **Timeline Paused**: Embody requires the timeline to be running. A warning appears if paused.
+- **Timeline Paused**: Embody requires the timeline to be running. An error appears if paused.
 - **Clone/Replicant Operators**: Cannot be externalized. Embody warns if you try to tag them.
 - **Engine COMPs**: Engine, time, and annotate COMPs are not supported for externalization.
 
 For more, see [Troubleshooting](docs/embody/troubleshooting.md).
 
+</details>
+
 ---
 
-## 📝 Version History
+## Version History
 
 See the [full changelog](docs/changelog.md) for detailed version history.
 
 **Recent releases:**
 
-- **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs are fully restored from disk on project open, documentation overhaul
+- **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs fully restored from disk on project open
 - **5.0.178**: Reload from disk, full project TDN safety, continuity hardening
-- **5.0.171**: Export Portable Tox, improved tag management, TDN error handling, window management refactor
-- **5.0.140**: TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, TDN restore UI, companion DAT reuse, bug fixes
-- **5.0.130**: TDN strategy externalization, strip/restore save cycle, compact TDN format, per-COMP split export
-- **5.0**: Major release — Envoy MCP server (40+ tools), TDN format, test framework (30 suites), structured logging, CLAUDE.md auto-generation, macOS support
+- **5.0.171**: Export Portable Tox, improved tag management, TDN error handling
+- **5.0.140**: TDN strip/restore hardening, post-import validation, companion DAT reuse
+- **5.0.130**: TDN strategy externalization, strip/restore save cycle, compact TDN format
+- **5.0**: Envoy MCP server (40+ tools), TDN format, test framework (30 suites), macOS support
 
 ---
 
