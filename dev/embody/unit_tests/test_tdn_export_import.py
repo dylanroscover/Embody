@@ -301,3 +301,89 @@ class TestTDNExportImport(EmbodyTestCase):
         self.assertIsNotNone(imported)
         self.assertEqual(imported.nodeWidth, 300)
         self.assertEqual(imported.nodeHeight, 150)
+
+    # --- Storage export/import ---
+
+    def test_export_includes_storage(self):
+        """Storage entries appear in exported TDN data."""
+        c = self.sandbox.create(baseCOMP, 'c')
+        c.store('my_key', 'my_value')
+        result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        ops = result['tdn']['operators']
+        op_data = [o for o in ops if o['name'] == 'c'][0]
+        self.assertIn('storage', op_data)
+        self.assertEqual(op_data['storage']['my_key'], 'my_value')
+
+    def test_export_storage_type_wrappers(self):
+        """Non-JSON types are wrapped with $type/$value."""
+        c = self.sandbox.create(baseCOMP, 'c')
+        c.store('my_tuple', (1, 2))
+        result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        ops = result['tdn']['operators']
+        op_data = [o for o in ops if o['name'] == 'c'][0]
+        self.assertEqual(
+            op_data['storage']['my_tuple'],
+            {'$type': 'tuple', '$value': [1, 2]})
+
+    def test_import_restores_storage(self):
+        """Storage from TDN data is restored on import."""
+        target = self.sandbox.create(baseCOMP, 'storage_target')
+        tdn = {'operators': [
+            {'name': 'stored_op', 'type': 'baseCOMP',
+             'storage': {'count': 42, 'label': 'test'}}
+        ]}
+        self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        imported = target.op('stored_op')
+        self.assertIsNotNone(imported)
+        self.assertEqual(
+            imported.fetch('count', None, search=False), 42)
+        self.assertEqual(
+            imported.fetch('label', None, search=False), 'test')
+
+    def test_import_restores_typed_storage(self):
+        """$type wrappers are deserialized on import."""
+        target = self.sandbox.create(baseCOMP, 'typed_target')
+        tdn = {'operators': [
+            {'name': 'typed_op', 'type': 'baseCOMP',
+             'storage': {
+                 'coords': {'$type': 'tuple', '$value': [10, 20]},
+                 'tags': {'$type': 'set', '$value': ['a', 'b']}
+             }}
+        ]}
+        self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        imported = target.op('typed_op')
+        self.assertEqual(
+            imported.fetch('coords', None, search=False), (10, 20))
+        self.assertEqual(
+            imported.fetch('tags', None, search=False), {'a', 'b'})
+
+    def test_import_restores_startup_storage(self):
+        """startup_storage keys are restored via storeStartupValue."""
+        target = self.sandbox.create(baseCOMP, 'startup_target')
+        tdn = {'operators': [
+            {'name': 'startup_op', 'type': 'baseCOMP',
+             'startup_storage': {'version': 1, 'mode': 'auto'}}
+        ]}
+        self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        imported = target.op('startup_op')
+        self.assertIsNotNone(imported)
+        # storeStartupValue also sets the current value
+        self.assertEqual(
+            imported.fetch('version', None, search=False), 1)
+        self.assertEqual(
+            imported.fetch('mode', None, search=False), 'auto')
+
+    def test_import_both_storage_and_startup_storage(self):
+        """Both storage and startup_storage are restored."""
+        target = self.sandbox.create(baseCOMP, 'both_target')
+        tdn = {'operators': [
+            {'name': 'both_op', 'type': 'baseCOMP',
+             'storage': {'count': 42},
+             'startup_storage': {'version': 1}}
+        ]}
+        self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        imported = target.op('both_op')
+        self.assertEqual(
+            imported.fetch('count', None, search=False), 42)
+        self.assertEqual(
+            imported.fetch('version', None, search=False), 1)

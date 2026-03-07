@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 14,
+	"build": 15,
 	"generator": "Embody/5.0.191",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-07T07:07:19Z",
+	"exported_at": "2026-03-07T07:12:51Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false
@@ -34,6 +34,226 @@
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["tsv"]
+		},
+		{
+			"name": "annotate6",
+			"type": "annotateCOMP",
+			"parameters": {
+				"includeinorder": true,
+				"order": "=me.digits or 0",
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
+				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+			},
+			"custom_pars": {
+				"Text": [
+					{
+						"name": "Titletext",
+						"style": "Str",
+						"label": "Title Text",
+						"startSection": true,
+						"default": "Annotate",
+						"value": "Claude Config Tests (1)"
+					},
+					{
+						"name": "Titleheight",
+						"style": "Int",
+						"label": "Title Height",
+						"default": 30,
+						"clampMin": true,
+						"normMin": 5.0,
+						"normMax": 100.0
+					},
+					{
+						"name": "Titlealign",
+						"style": "Menu",
+						"label": "Title Align",
+						"default": "left",
+						"menuNames": ["left", "center", "right"],
+						"menuLabels": ["Left", "Center", "Right"]
+					},
+					{
+						"name": "Bodytext",
+						"style": "Str",
+						"label": "Body Text",
+						"startSection": true,
+						"value": "Claude config generation pipeline, template DATs,\nwriteTemplate, writeClaudeMd, extractClaudeConfig"
+					},
+					{
+						"name": "Bodyfontsize",
+						"style": "Int",
+						"label": "Body Font Size",
+						"default": 10,
+						"clampMin": true,
+						"normMin": 8.0,
+						"normMax": 100.0
+					},
+					{
+						"name": "Bodylimitwidth",
+						"style": "Toggle",
+						"label": "Limit Body Text Width"
+					},
+					{
+						"name": "Bodymaxwidth",
+						"style": "Int",
+						"label": "Max Body Text Width",
+						"default": 1000,
+						"clampMin": true,
+						"normMin": 100.0,
+						"normMax": 2000.0
+					}
+				],
+				"Settings": [
+					{
+						"name": "Mode",
+						"style": "Menu",
+						"default": "comment",
+						"menuNames": ["comment", "networkbox", "annotate"],
+						"menuLabels": ["Comment", "Network Box", "Annotate"],
+						"value": "annotate"
+					},
+					{
+						"name": "Smartquote",
+						"style": "Toggle",
+						"label": "Smart Quote",
+						"startSection": true
+					},
+					{
+						"name": "Bodywordwrap",
+						"style": "Toggle",
+						"label": "Body Word Wrap",
+						"default": true
+					},
+					{
+						"name": "Backcolorr",
+						"style": "RGBA",
+						"label": "Back Color",
+						"startSection": true,
+						"default": 1,
+						"values": [0.3, 0.35, 0.4]
+					},
+					{
+						"name": "Backcoloralpha",
+						"style": "Float",
+						"label": "Back Color Alpha",
+						"default": 1,
+						"clampMin": true,
+						"clampMax": true
+					},
+					{
+						"name": "Opacity",
+						"style": "Float",
+						"label": "Annotate Opacity",
+						"default": 1,
+						"clampMin": true,
+						"clampMax": true,
+						"value": 0.5
+					}
+				],
+				"OP Viewer": [
+					{
+						"name": "Opviewerdisplay",
+						"style": "Toggle",
+						"label": "Viewer Display"
+					},
+					{
+						"name": "Opviewer",
+						"style": "OP",
+						"label": "OP"
+					},
+					{
+						"name": "Opviewerinteractive",
+						"style": "Toggle",
+						"label": "OP Viewer Interactive"
+					},
+					{
+						"name": "Opvieweroversize",
+						"style": "Menu",
+						"label": "Size/Aspect Override",
+						"startSection": true,
+						"default": "False",
+						"menuNames": ["natural", "specify", "autofit"],
+						"menuLabels": ["Natural", "Specify", "Auto-Fit"],
+						"value": "natural"
+					},
+					{
+						"name": "Opviewersize",
+						"style": "WH",
+						"label": "Size/Aspect",
+						"default": 800,
+						"clampMin": true,
+						"normMin": 1.0,
+						"normMax": 1000.0
+					},
+					{
+						"name": "Opviewerscale",
+						"style": "Float",
+						"label": "Scale",
+						"startSection": true,
+						"default": 1,
+						"normMax": 2.0
+					},
+					{
+						"name": "Opviewerjustifyx",
+						"style": "Float",
+						"label": "Justify X",
+						"normMin": -1.0
+					},
+					{
+						"name": "Opviewerjustifyy",
+						"style": "Float",
+						"label": "Justify Y",
+						"normMin": -1.0
+					},
+					{
+						"name": "Opviewerfillbodytitle",
+						"style": "Toggle",
+						"label": "Cover Body and Title"
+					},
+					{
+						"name": "Opviewerzoom",
+						"style": "Float",
+						"label": "OP Viewer Zoom",
+						"startSection": true,
+						"default": 1,
+						"min": 0.001,
+						"clampMin": true,
+						"normMin": 1.0,
+						"normMax": 5.0
+					},
+					{
+						"name": "Opvieweroffsetx",
+						"style": "XYZW",
+						"label": "OP Viewer Offset"
+					},
+					{
+						"name": "Opviewerfillalpha",
+						"style": "Float",
+						"label": "Fill Alpha",
+						"startSection": true,
+						"default": 1,
+						"clampMin": true,
+						"clampMax": true
+					}
+				],
+				"About": [
+					{
+						"name": "Version",
+						"style": "Str",
+						"startSection": true,
+						"default": "1.0",
+						"readOnly": true
+					},
+					{
+						"name": "Help",
+						"style": "Pulse"
+					}
+				]
+			},
+			"flags": ["display"],
+			"position": [-70, -3070],
+			"size": [270, 330],
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "test_logging",
@@ -406,6 +626,16 @@
 			"position": [-70, -2670],
 			"size": [270, 330],
 			"color": [0.35, 0.25, 0.35],
+			"opacity": 0.5
+		},
+		{
+			"name": "annotate6",
+			"mode": "annotate",
+			"title": "Claude Config Tests (1)",
+			"text": "Claude config generation pipeline, template DATs,\nwriteTemplate, writeClaudeMd, extractClaudeConfig",
+			"position": [-70, -3070],
+			"size": [270, 330],
+			"color": [0.3, 0.35, 0.4],
 			"opacity": 0.5
 		}
 	]

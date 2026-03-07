@@ -3,10 +3,10 @@ Test suite: TDN reconstruction — comprehensive round-trip fidelity,
 reconstruction simulation, and resilience testing.
 
 Tests ExportNetwork → ImportNetwork round-trips across all operator families,
-parameter modes, custom parameters, connections, flags, metadata, DAT content,
-deep nesting, type_defaults optimization, par_templates optimization,
-reconstruction simulation (strip + reimport), Embody self-protection,
-error handling, and scale stress tests.
+parameter modes, custom parameters, connections, flags, operator storage,
+metadata, DAT content, deep nesting, type_defaults optimization,
+par_templates optimization, reconstruction simulation (strip + reimport),
+Embody self-protection, error handling, and scale stress tests.
 """
 
 import json
@@ -202,6 +202,15 @@ class TestTDNReconstruction(EmbodyTestCase):
 				reimp_tags = sorted(reimp_type_defaults[op_type].get('tags', []))
 			self.assertEqual(orig_tags, reimp_tags,
 				f'{name}: tags mismatch')
+
+			# Storage
+			orig_storage = orig.get('storage', {})
+			reimp_storage = reimp.get('storage', {})
+			self.assertEqual(set(orig_storage.keys()), set(reimp_storage.keys()),
+				f'{name}: storage keys mismatch')
+			for skey in orig_storage:
+				self.assertEqual(orig_storage[skey], reimp_storage[skey],
+					f'{name}: storage[{skey}] mismatch')
 
 			# DAT content
 			if 'dat_content' in orig:
@@ -2057,3 +2066,162 @@ class TestTDNReconstruction(EmbodyTestCase):
 		finally:
 			self._removeTableRow(child_path)
 			self._removeTableRow(tdn_path, 'tdn')
+
+	# =================================================================
+	# Q. Operator Storage round-trips
+	# =================================================================
+
+	def test_Q01_int_storage_roundtrip(self):
+		"""Integer storage value round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('count', 42)
+		self._roundTrip(self.sandbox)
+		self.assertEqual(
+			self.sandbox.op('c').fetch('count', None, search=False), 42)
+
+	def test_Q02_float_storage_roundtrip(self):
+		"""Float storage value round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('speed', 3.14)
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch('speed', None, search=False)
+		self.assertApproxEqual(result, 3.14)
+
+	def test_Q03_string_storage_roundtrip(self):
+		"""String storage value round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('label', 'hello world')
+		self._roundTrip(self.sandbox)
+		self.assertEqual(
+			self.sandbox.op('c').fetch('label', None, search=False),
+			'hello world')
+
+	def test_Q04_bool_storage_roundtrip(self):
+		"""Boolean storage value round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('active', True)
+		self._roundTrip(self.sandbox)
+		self.assertTrue(
+			self.sandbox.op('c').fetch('active', None, search=False))
+
+	def test_Q05_none_storage_roundtrip(self):
+		"""None storage value round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('empty', None)
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch('empty', 'MISSING', search=False)
+		self.assertIsNone(result)
+
+	def test_Q06_list_storage_roundtrip(self):
+		"""List storage value round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('items', [1, 'two', 3.0])
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch('items', None, search=False)
+		self.assertEqual(result, [1, 'two', 3])
+
+	def test_Q07_dict_storage_roundtrip(self):
+		"""Dict storage value round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('config', {'key': 'value', 'nested': {'a': 1}})
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch('config', None, search=False)
+		self.assertEqual(result, {'key': 'value', 'nested': {'a': 1}})
+
+	def test_Q08_tuple_storage_roundtrip(self):
+		"""Tuple storage value round-trips via $type wrapper."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('coords', (10, 20, 30))
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch('coords', None, search=False)
+		self.assertEqual(result, (10, 20, 30))
+		self.assertIsInstance(result, tuple)
+
+	def test_Q09_set_storage_roundtrip(self):
+		"""Set storage value round-trips via $type wrapper."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('tags', {'a', 'b', 'c'})
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch('tags', None, search=False)
+		self.assertEqual(result, {'a', 'b', 'c'})
+		self.assertIsInstance(result, set)
+
+	def test_Q10_bytes_storage_roundtrip(self):
+		"""Bytes storage value round-trips via $type wrapper (base64)."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('data', b'\x00\x01\x02\xff')
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch('data', None, search=False)
+		self.assertEqual(result, b'\x00\x01\x02\xff')
+		self.assertIsInstance(result, bytes)
+
+	def test_Q11_skip_storage_keys_not_exported(self):
+		"""Keys in SKIP_STORAGE_KEYS are excluded from export."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('envoy_running', True)
+		c.store('user_data', 42)
+		result = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		ops = result['tdn']['operators']
+		op_data = [o for o in ops if o['name'] == 'c'][0]
+		storage = op_data.get('storage', {})
+		self.assertNotIn('envoy_running', storage)
+		self.assertIn('user_data', storage)
+		self.assertEqual(storage['user_data'], 42)
+
+	def test_Q12_empty_storage_no_field(self):
+		"""Operator with no storage entries has no 'storage' field."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		ops = result['tdn']['operators']
+		op_data = [o for o in ops if o['name'] == 'c'][0]
+		self.assertNotIn('storage', op_data)
+
+	def test_Q13_multiple_ops_different_storage(self):
+		"""Multiple operators each with their own storage round-trip."""
+		a = self.sandbox.create(baseCOMP, 'a')
+		b = self.sandbox.create(baseCOMP, 'b')
+		a.store('val', 'alpha')
+		b.store('val', 'beta')
+		self._roundTrip(self.sandbox)
+		self.assertEqual(
+			self.sandbox.op('a').fetch('val', None, search=False), 'alpha')
+		self.assertEqual(
+			self.sandbox.op('b').fetch('val', None, search=False), 'beta')
+
+	def test_Q14_nested_comp_storage_roundtrip(self):
+		"""Storage on operators inside nested COMPs round-trips."""
+		outer = self.sandbox.create(baseCOMP, 'outer')
+		inner = outer.create(baseCOMP, 'inner')
+		inner.store('depth', 2)
+		self._roundTrip(self.sandbox)
+		self.assertEqual(
+			self.sandbox.op('outer/inner').fetch(
+				'depth', None, search=False), 2)
+
+	def test_Q15_storage_on_non_comp(self):
+		"""Storage on non-COMP operators (TOPs, CHOPs, etc.) round-trips."""
+		n = self.sandbox.create(noiseTOP, 'n')
+		n.store('seed_offset', 123)
+		self._roundTrip(self.sandbox)
+		self.assertEqual(
+			self.sandbox.op('n').fetch(
+				'seed_offset', None, search=False), 123)
+
+	def test_Q16_embed_dats_in_tdn_preserved(self):
+		"""The embed_dats_in_tdn storage key (Embody per-COMP setting) round-trips."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('embed_dats_in_tdn', True)
+		self._roundTrip(self.sandbox)
+		result = self.sandbox.op('c').fetch(
+			'embed_dats_in_tdn', None, search=False)
+		self.assertTrue(result)
+
+	def test_Q17_storage_through_reconstruction(self):
+		"""Storage survives strip + reimport reconstruction cycle."""
+		c = self.sandbox.create(baseCOMP, 'c')
+		c.store('persist_me', {'key': [1, 2, 3]})
+		self._simulateReconstruction(self.sandbox)
+		result = self.sandbox.op('c').fetch(
+			'persist_me', None, search=False)
+		self.assertEqual(result, {'key': [1, 2, 3]})

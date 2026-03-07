@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 117,
-	"generator": "Embody/5.0.188",
+	"build": 119,
+	"generator": "Embody/5.0.191",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-05T01:36:21Z",
+	"exported_at": "2026-03-07T07:07:16Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -16,12 +16,20 @@
 				"repocomp": "=me"
 			}
 		},
-		"textDAT": {
-			"flags": ["viewer"]
-		},
 		"parameterexecuteDAT": {
 			"flags": ["viewer"],
 			"size": [130, 90]
+		},
+		"annotateCOMP": {
+			"parameters": {
+				"includeinorder": true,
+				"order": "=me.digits or 0",
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
+				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+			}
+		},
+		"baseCOMP": {
+			"size": [160, 130]
 		},
 		"panelexecuteDAT": {
 			"flags": ["viewer"],
@@ -65,15 +73,6 @@
 			"flags": ["bypass", "viewer"],
 			"size": [130, 90],
 			"color": [0.05, 0.5, 0.05]
-		},
-		"annotateCOMP": {
-			"parameters": {
-				"includeinorder": true,
-				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
-				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
-			},
-			"flags": ["display", "viewer"]
 		},
 		"windowCOMP": {
 			"parameters": {
@@ -412,304 +411,304 @@
 			"color": [0.67, 0.67, 0.67],
 			"dat_content": [
 				[
-					"17:36:12  372578 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:33:09  397723 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:12  372581 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:12  372583 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 INFO    EnvoyExt: execute_python: templates = op('/embody/Embody/templates')\nif not templates:\n    result = 'ERROR: templates COMP not found'\nelse:\n    tagged = []\n    for dat in templates.children:\n        # Set extension to md so au..."
 				],
 				[
-					"17:36:12  372585 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_rule_td_python'"
 				],
 				[
-					"17:36:12  372587 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_rule_mcp_safety'"
 				],
 				[
-					"17:36:12  372588 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_externalize'"
 				],
 				[
-					"17:36:12  372590 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_rule_network_layout'"
 				],
 				[
-					"17:36:12  372593 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_debug_operator'"
 				],
 				[
-					"17:36:12  372596 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_create_operator'"
 				],
 				[
-					"17:36:12  372603 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_create_extension'"
 				],
 				[
-					"17:36:12  372605 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_td_api_reference'"
 				],
 				[
-					"17:36:12  372609 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_manage_annotations'"
 				],
 				[
-					"17:36:12  372614 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_mcp_tools_reference'"
 				],
 				[
-					"17:36:12  372617 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_td_api_reference'"
 				],
 				[
-					"17:36:12  372621 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_mcp_tools_reference'"
 				],
 				[
-					"17:36:12  372624 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_manage_annotations'"
 				],
 				[
-					"17:36:12  372626 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_externalize'"
 				],
 				[
-					"17:36:13  372631 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_debug_operator'"
 				],
 				[
-					"17:36:13  372634 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_create_operator'"
 				],
 				[
-					"17:36:13  372639 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_create_extension'"
 				],
 				[
-					"17:36:13  372644 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_rule_td_python'"
 				],
 				[
-					"17:36:13  372650 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_rule_network_layout'"
 				],
 				[
-					"17:36:13  372654 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_rule_mcp_safety'"
 				],
 				[
-					"17:36:13  372657 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 SUCCESS EmbodyExt: Added 10 operators in total"
 				],
 				[
-					"17:36:13  372662 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:04  405636 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:13  372672 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:08  405648 INFO    EmbodyExt: Found 1 COMP with param changes"
 				],
 				[
-					"17:36:13  372677 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:17  405875 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:13  372689 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:17  405875 INFO    EnvoyExt: execute_python: templates = op(\"/embody/Embody/templates\")\nstatus = []\nfor dat in templates.children:\n    file_path = dat.par.file.eval()\n    sync = dat.par.syncfile.eval()\n    status.append(f\"{dat.name}: file={file_..."
 				],
 				[
-					"17:36:13  372691 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:17  405875 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:14  372693 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:32  406337 INFO    EnvoyExt: Processing: layout_children"
 				],
 				[
-					"17:36:14  372696 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:38:37  406527 INFO    EnvoyExt: Processing: get_op_errors"
 				],
 				[
-					"17:36:14  372697 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:40:21  409204 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:14  372699 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:40:21  409204 INFO    EnvoyExt: execute_python: op.Embody.ext.Embody._extractClaudeConfig()\nresult = \"_extractClaudeConfig() completed\""
 				],
 				[
-					"17:36:14  372701 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:40:21  409204 WARNING EmbodyExt: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to /Users/rosco/Documents/Git/Embody/ENVOY.md instead."
 				],
 				[
-					"17:36:14  372702 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:40:21  409204 SUCCESS EmbodyExt: Generated 10 .claude/ files at /Users/rosco/Documents/Git/Embody"
 				],
 				[
-					"17:36:14  372704 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:40:21  409204 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:14  372706 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:58:15  441560 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:14  372709 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:58:15  441560 INFO    EnvoyExt: execute_python: parent = op(\"/embody/Embody\")\npositions = []\nfor c in parent.children:\n    positions.append(f\"{c.name}: [{c.nodeX}, {c.nodeY}] {c.nodeWidth}x{c.nodeHeight}\")\nresult = \"\\n\".join(sorted(positions))"
 				],
 				[
-					"17:36:14  372710 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:58:15  441560 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:14  372711 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"15:58:48  442266 INFO    EnvoyExt: Processing: set_op_position"
 				],
 				[
-					"17:36:14  372714 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"17:41:31  799327 INFO    EnvoyExt: Processing: get_annotations"
 				],
 				[
-					"17:36:14  372715 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"17:41:56  800809 INFO    EnvoyExt: Processing: set_op_position"
 				],
 				[
-					"17:36:14  372719 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"17:53:03  818421 INFO    EnvoyExt: Processing: get_op_position"
 				],
 				[
-					"17:36:14  372720 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"17:53:21  819333 INFO    EnvoyExt: Processing: set_op_position"
 				],
 				[
-					"17:36:14  372722 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"17:53:23  819442 INFO    EnvoyExt: Processing: set_op_position"
 				],
 				[
-					"17:36:14  372725 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"17:53:37  820204 INFO    EnvoyExt: Processing: create_annotation"
 				],
 				[
-					"17:36:14  372727 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"17:54:53  820685 INFO    EnvoyExt: Processing: get_enclosed_ops"
 				],
 				[
-					"17:36:14  372731 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"18:06:54  840049 INFO    EnvoyExt: Processing: set_op_position"
 				],
 				[
-					"17:36:14  372732 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"18:07:09  840522 INFO    EnvoyExt: Processing: set_op_position"
 				],
 				[
-					"17:36:14  372734 SUCCESS TDNExt: Imported 15 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"18:07:19  840946 INFO    EnvoyExt: Processing: set_annotation"
 				],
 				[
-					"17:36:14  372737 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"18:10:02  844856 INFO    EnvoyExt: Processing: get_enclosed_ops"
 				],
 				[
-					"17:36:14  372743 SUCCESS TDNExt: Imported 6 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:02 1025652 SUCCESS TDNExt: Exported network to /Users/rosco/Documents/Git/Embody/dev/embody/Embody.tdn"
 				],
 				[
-					"17:36:14  372751 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:02 1025652 SUCCESS EmbodyExt: Exported TDN for /embody/Embody"
 				],
 				[
-					"17:36:15  372756 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:02 1025652 SUCCESS EmbodyExt: Saved 1 externalization"
 				],
 				[
-					"17:36:15  372757 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:02 1025652 SUCCESS TDNExt: Exported network to /Users/rosco/Documents/Git/Embody/dev/embody/unit_tests.tdn"
 				],
 				[
-					"17:36:15  372768 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:03 1025652 INFO    EmbodyExt: Stripped 38 operators from /embody/unit_tests (33 children, 5 annotations)"
 				],
 				[
-					"17:36:15  372778 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:03 1025652 INFO    EmbodyExt: Exporting portable .tox: stripping 32 file reference(s) and 64 tagged operator(s) from /embody/Embody"
 				],
 				[
-					"17:36:15  372784 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:04 1025652 SUCCESS EmbodyExt: Exported portable .tox: release/Embody-v5.0.191.tox"
 				],
 				[
-					"17:36:15  372786 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:05 1025652 INFO    TDNExt: Restored file links on 32 DAT(s) in /embody/unit_tests"
 				],
 				[
-					"17:36:15  372792 SUCCESS TDNExt: Imported 23 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:05 1025652 SUCCESS TDNExt: Imported 38 operators into /embody/unit_tests"
 				],
 				[
-					"17:36:15  372794 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"19:04:06 1025676 INFO    EnvoyExt: Starting Envoy MCP server on port 9871"
 				],
 				[
-					"17:36:15  372806 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:19 1734068 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:15  372808 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:19 1734068 INFO    EnvoyExt: execute_python: r = op.unit_tests.ext.TestRunner.RunTestsSync(suite_name=\"test_claude_config\")\nresult = str(r)"
 				],
 				[
-					"17:36:15  372810 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:21 1734068 ERROR   EnvoyExt: execute_python failed: 'td.Ext' object has no attribute 'TestRunner' Context:/embody/unit_tests"
 				],
 				[
-					"17:36:16  372812 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:34 1734762 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:16  372814 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:34 1734762 INFO    EnvoyExt: execute_python: ut = op.unit_tests\nresult = f\"type={ut.type}, extensions={[e.__class__.__name__ for e in ut.extensions]}, ext names={list(ut.ext.__dict__.keys()) if hasattr(ut.ext, \"__dict__\") else \"N/A\"}\""
 				],
 				[
-					"17:36:16  372819 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:34 1734762 ERROR   EnvoyExt: execute_python failed: f-string: unmatched '(' (<string>, line 2)"
 				],
 				[
-					"17:36:16  372820 INFO    EnvoyExt: Processing: get_op_errors"
+					"23:02:39 1735028 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:16  372820 ERROR   TDNExt: Import failed: 'str' object has no attribute 'get'"
+					"23:02:39 1735028 INFO    EnvoyExt: execute_python: ut = op.unit_tests\nnames = [e.__class__.__name__ for e in ut.extensions]\nresult = str(names)"
 				],
 				[
-					"17:36:16  372824 WARNING TDNExt: Failed to create totallyFakeOP \"bad\": Unknown operator type. Value:'totallyFakeOP' Type:<class 'str'>."
+					"23:02:39 1735028 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:16  372824 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:48 1735540 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:16  372825 WARNING TDNExt: Connection source not found: nonexistent_source -> dst[0]"
+					"23:02:48 1735540 INFO    EnvoyExt: execute_python: r = op.unit_tests.ext.TestRunnerExt.RunTestsSync(suite_name=\"test_claude_config\")\nresult = str(op.unit_tests.ext.TestRunnerExt.GetResults())"
 				],
 				[
-					"17:36:16  372825 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:48 1735540 INFO    TestRunnerExt: Discovered 1 test suite(s)"
 				],
 				[
-					"17:36:16  372826 WARNING TDNExt: Unknown par style \"TotallyFakeStyle\" for X"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_ffblmaj6/CLAUDE.md"
 				],
 				[
-					"17:36:16  372826 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_jh4cqz6i/CLAUDE.md"
 				],
 				[
-					"17:36:16  372828 SUCCESS TDNExt: Imported 0 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Updated CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_5gnv4o3q/CLAUDE.md"
 				],
 				[
-					"17:36:16  372830 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 WARNING EmbodyExt: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_8ivunite/ENVOY.md instead."
 				],
 				[
-					"17:36:16  372831 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 WARNING EmbodyExt: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_hswvu6dm/ENVOY.md instead."
 				],
 				[
-					"17:36:16  372833 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_nqg_u354/CLAUDE.md"
 				],
 				[
-					"17:36:16  372834 SUCCESS TDNExt: Imported 100 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_xz4rlcn6/CLAUDE.md"
 				],
 				[
-					"17:36:17  372836 SUCCESS TDNExt: Imported 50 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_2yfqa5nc/CLAUDE.md"
 				],
 				[
-					"17:36:17  372848 SUCCESS TDNExt: Imported 11 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_qch0rsi6/CLAUDE.md"
 				],
 				[
-					"17:36:19  372860 SUCCESS TDNExt: Imported 372 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_5ona3t48/CLAUDE.md"
 				],
 				[
-					"17:36:20  372864 SUCCESS TDNExt: Imported 2 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_4xrolkym/CLAUDE.md"
 				],
 				[
-					"17:36:20  372876 SUCCESS TDNExt: Imported 3 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_pe2u5a3i/CLAUDE.md"
 				],
 				[
-					"17:36:20  372884 WARNING EmbodyExt: Operator '/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp' no longer exists!"
+					"23:02:49 1735540 SUCCESS EmbodyExt: Updated CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_pe2u5a3i/CLAUDE.md"
 				],
 				[
-					"17:36:20  372884 SUCCESS EmbodyExt: Removed '/embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp'"
+					"23:02:49 1735540 SUCCESS TestRunnerExt: Tests complete: 35/35 passed"
 				],
 				[
-					"17:36:20  372885 WARNING EmbodyExt: Operator '/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/tdn_with_py_child/my_script' no longer exists!"
+					"23:02:49 1735540 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:20  372885 SUCCESS EmbodyExt: Removed '/embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/tdn_with_py_child/my_script'"
+					"23:04:48 1741438 INFO    EnvoyExt: Processing: query_network"
 				],
 				[
-					"17:36:20  372888 WARNING EmbodyExt: Operator '/__test_orphan_dat_continuity_p05' no longer exists!"
+					"23:05:00 1742165 INFO    EnvoyExt: Processing: get_annotations"
 				],
 				[
-					"17:36:20  372888 SUCCESS EmbodyExt: Removed '/__test_orphan_dat_continuity_p05'"
+					"23:05:05 1742493 INFO    EnvoyExt: Processing: get_annotations"
 				],
 				[
-					"17:36:20  372891 WARNING EmbodyExt: No file found: embody/tdn_with_py_child/my_script.py"
+					"23:05:15 1742974 INFO    EnvoyExt: Processing: get_annotations"
 				],
 				[
-					"17:36:20  372893 WARNING EmbodyExt: No file found: embody/orphan_dat.txt"
+					"23:05:26 1743665 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:20  372893 INFO    EmbodyExt: Stripped 3 operators from /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/save_cycle_comp (3 children, 0 annotations)"
+					"23:05:26 1743665 INFO    EnvoyExt: execute_python: import pathlib\n\n# 1. Create the textDAT\nparent = op(\"/embody/unit_tests\")\nnew_dat = parent.create(textDAT, \"test_claude_config\")\nnew_dat.par.language = \"python\"\n\n# 2. Read content from disk file\nconte..."
 				],
 				[
-					"17:36:20  372893 SUCCESS TDNExt: Imported 4 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/save_cycle_comp"
+					"23:05:26 1743665 ERROR   EnvoyExt: execute_python failed: [Errno 2] No such file or directory: '/Users/rosco/Documents/Git/Embody/dev/dev/embody/unit_tests/test_claude_config.py'"
 				],
 				[
-					"17:36:20  372896 INFO    EmbodyExt: Stripped 1 operators from /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle (1 children, 0 annotations)"
+					"23:06:14 1744228 INFO    EnvoyExt: Processing: execute_python"
 				],
 				[
-					"17:36:20  372896 INFO    TDNExt: Restored file links on 1 DAT(s) in /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle"
+					"23:06:14 1744228 INFO    EnvoyExt: execute_python: import pathlib\n\n# project.folder is the .toe dir, which is dev/\n# File is at dev/embody/unit_tests/test_claude_config.py\n# So relative to project.folder: embody/unit_tests/test_claude_config.py\nparent..."
 				],
 				[
-					"17:36:20  372896 SUCCESS TDNExt: Imported 1 operators into /embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction/full_cycle"
+					"23:06:15 1744228 INFO    EnvoyExt: execute_python: completed successfully"
 				],
 				[
-					"17:36:21  372899 SUCCESS TDNExt: Exported network to /Users/rosco/Documents/Git/Embody/dev/embody/Embody/toolbar/container_left/status.tdn"
+					"23:07:13 1744812 INFO    EnvoyExt: Processing: tag_for_externalization"
 				],
 				[
-					"17:36:21  372899 SUCCESS EmbodyExt: Exported TDN for /embody/Embody/toolbar/container_left/status"
+					"23:07:13 1744812 SUCCESS EmbodyExt: Tag 'py' applied to '/embody/unit_tests/test_claude_config'"
 				]
 			],
 			"dat_content_format": "table"
@@ -734,6 +733,7 @@
 				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-375, 375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -918,6 +918,23 @@
 			"size": [160, 76],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"],
+			"storage": {
+				"_tip_trace": {
+					"btn": "close",
+					"text": "Clear filter",
+					"text_width": 60.3,
+					"tip_w": 80,
+					"container_x": 726,
+					"container_w": 270,
+					"btn_x": 244,
+					"btn_w": 26,
+					"tip_x": 914,
+					"toolbar_w": 996,
+					"btn_center": 983,
+					"tip_center": 954,
+					"offset": -29
+				}
+			},
 			"comp_inputs": ["manager"]
 		},
 		{
@@ -928,6 +945,7 @@
 				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-375, 475],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -958,10 +976,187 @@
 				"language": "python",
 				"extension": "py"
 			},
+			"flags": ["viewer"],
 			"position": [-375, 576],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
+		},
+		{
+			"name": "annotate1",
+			"type": "annotateCOMP",
+			"custom_pars": {
+				"Text": {
+					"$t": "text",
+					"Titletext": "Claude Config",
+					"Bodytext": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation."
+				},
+				"Settings": {
+					"$t": "settings",
+					"Mode": "annotate",
+					"Backcolorr": ["=me.color[0] # node color [r]", "=me.color[1]", "=me.color[2] "]
+				},
+				"OP Viewer": {
+					"$t": "op_viewer",
+					"Opvieweroversize": "natural"
+				},
+				"About": {
+					"$t": "about"
+				}
+			},
+			"flags": ["display"],
+			"position": [-770, -1270],
+			"size": [600, 370],
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
+		},
+		{
+			"name": "templates",
+			"type": "baseCOMP",
+			"position": [-400, -1200],
+			"color": [0.67, 0.67, 0.67],
+			"children": [
+				{
+					"name": "text_rule_td_python",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_rule_td_python.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [-227, 79],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_rule_mcp_safety",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_rule_mcp_safety.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [-227, -236],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_skill_externalize",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_skill_externalize.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [227, 79],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_rule_network_layout",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_rule_network_layout.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [-227, -78],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_skill_debug_operator",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_skill_debug_operator.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [227, 236],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_skill_create_operator",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_skill_create_operator.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [0, 236],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_skill_create_extension",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_skill_create_extension.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [-227, 236],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_skill_td_api_reference",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_skill_td_api_reference.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [0, 79],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_skill_manage_annotations",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_skill_manage_annotations.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [227, -78],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				},
+				{
+					"name": "text_skill_mcp_tools_reference",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/templates/text_skill_mcp_tools_reference.md",
+						"syncfile": true,
+						"language": "text",
+						"extension": "md"
+					},
+					"position": [0, -78],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["md"]
+				}
+			]
 		},
 		{
 			"name": "keyboardin1",
@@ -976,15 +1171,15 @@
 			"size": [130, 90],
 			"dat_content": [
 				["key", "character", "alt", "ctrl", "shift", "state", "time", "cmd"],
-				["lcmd", "", "0", "0", "0", "0", "-678717748", "0"],
-				["cmd", "", "0", "0", "0", "1", "-678715351", "1"],
-				["lcmd", "", "0", "0", "0", "1", "-678715351", "1"],
-				["cmd", "", "0", "0", "0", "0", "-678715217", "0"],
-				["lcmd", "", "0", "0", "0", "0", "-678715217", "0"],
-				["cmd", "", "0", "0", "0", "1", "-672770506", "1"],
-				["lcmd", "", "0", "0", "0", "1", "-672770506", "1"],
-				["cmd", "", "0", "0", "0", "0", "-672770506", "0"],
-				["lcmd", "", "0", "0", "0", "0", "-672770506", "0"]
+				["lcmd", "", "0", "0", "0", "0", "-508402018", "0"],
+				["cmd", "", "0", "0", "0", "1", "-508391496", "1"],
+				["lcmd", "", "0", "0", "0", "1", "-508391496", "1"],
+				["cmd", "", "0", "0", "0", "0", "-506218368", "0"],
+				["lcmd", "", "0", "0", "0", "0", "-506218368", "0"],
+				["cmd", "", "0", "0", "0", "1", "-506216169", "1"],
+				["lcmd", "", "0", "0", "0", "1", "-506216169", "1"],
+				["cmd", "", "0", "0", "0", "0", "-506215648", "0"],
+				["lcmd", "", "0", "0", "0", "0", "-506215648", "0"]
 			],
 			"dat_content_format": "table"
 		},
@@ -997,7 +1192,8 @@
 				"language": "text",
 				"extension": "md"
 			},
-			"position": [-700, 100],
+			"flags": ["viewer"],
+			"position": [-700, -1200],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["md"]
@@ -1381,7 +1577,6 @@
 						"ext0promote": true,
 						"enablecloning": false
 					},
-					"size": [160, 130],
 					"color": [0.5, 0.2, 0.05],
 					"tags": ["TDSubComp"],
 					"children": [
@@ -1761,6 +1956,7 @@
 						{
 							"name": "text1_callbacks",
 							"type": "textDAT",
+							"flags": ["viewer"],
 							"position": [0, -150],
 							"size": [160, 130],
 							"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
@@ -2018,6 +2214,7 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
+									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"],
@@ -2030,6 +2227,7 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
+									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"],
@@ -2077,6 +2275,7 @@
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
+									"flags": ["viewer"],
 									"position": [400, 50],
 									"size": [160, 130],
 									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
@@ -2191,6 +2390,7 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
+									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"],
@@ -2203,6 +2403,7 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
+									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"],
@@ -2250,6 +2451,7 @@
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
+									"flags": ["viewer"],
 									"position": [400, 50],
 									"size": [160, 130],
 									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
@@ -2379,6 +2581,7 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
+									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"],
@@ -2391,6 +2594,7 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
+									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"],
@@ -2438,6 +2642,7 @@
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
+									"flags": ["viewer"],
 									"position": [400, 50],
 									"size": [160, 130],
 									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
@@ -2461,6 +2666,7 @@
 						{
 							"name": "MinMaxCloseExt",
 							"type": "textDAT",
+							"flags": ["viewer"],
 							"position": [-200, 100],
 							"size": [130, 90],
 							"tags": ["TDExtension"],
@@ -2508,6 +2714,7 @@
 					"$t": "about"
 				}
 			},
+			"flags": ["display", "viewer"],
 			"size": [1300, 1000],
 			"color": [0.45, 0.45, 0.45],
 			"palette_clone": true
@@ -2542,6 +2749,7 @@
 				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-700, 280],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -2555,6 +2763,7 @@
 				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-625, -375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -2583,6 +2792,7 @@
 					"$t": "about"
 				}
 			},
+			"flags": ["display", "viewer"],
 			"position": [-800, 0],
 			"size": [700, 800],
 			"color": [0.45, 0.45, 0.45],
@@ -2614,6 +2824,7 @@
 					"$t": "about"
 				}
 			},
+			"flags": ["display", "viewer"],
 			"position": [-800, -700],
 			"size": [700, 600],
 			"palette_clone": true
@@ -2641,6 +2852,7 @@
 					"$t": "about"
 				}
 			},
+			"flags": ["display", "viewer"],
 			"position": [100, 600],
 			"size": [1140, 310],
 			"color": [0.45, 0.45, 0.45],
@@ -2693,6 +2905,7 @@
 				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-325, -375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -2700,6 +2913,15 @@
 		}
 	],
 	"annotations": [
+		{
+			"name": "annotate1",
+			"mode": "annotate",
+			"title": "Claude Config",
+			"text": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation.",
+			"position": [-770, -1270],
+			"size": [600, 370],
+			"color": [0.45, 0.45, 0.45]
+		},
 		{
 			"name": "annotation_logic",
 			"mode": "annotate",

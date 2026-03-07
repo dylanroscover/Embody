@@ -175,6 +175,24 @@
       }
     },
 
+    "storageValue": {
+      "description": "A storage value: primitive, array, object, or typed wrapper ($type/$value).",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/storageValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/storageValue" }
+        }
+      ]
+    },
+
     "legacyFlags": {
       "type": "object",
       "additionalProperties": false,
@@ -398,6 +416,16 @@
             { "$ref": "#/$defs/legacyFlags" }
           ],
           "description": "Operator flags. Preferred format: string array. Legacy format: object with boolean values."
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/storageValue" },
+          "description": "Operator storage key-value pairs. Only serializable, non-transient entries."
+        },
+        "startup_storage": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/storageValue" },
+          "description": "Startup storage entries restored via storeStartupValue(). Values reset on every project open."
         },
         "inputs": {
           "oneOf": [

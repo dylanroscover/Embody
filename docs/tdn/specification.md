@@ -68,6 +68,8 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
   "parameters": { ... },
   "custom_pars": { ... },
   "flags": [ ... ],
+  "storage": { ... },
+  "startup_storage": { ... },
   "inputs": [ ... ],
   "comp_inputs": [ ... ],
   "dat_content": "...",
@@ -91,6 +93,8 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `parameters` | object | No | Only if there are non-default [built-in parameters](#built-in-parameters) (after [type_defaults](#type-defaults) are factored out). |
 | `custom_pars` | object | No | Only if the operator has [custom parameters](#custom-parameters). Dict keyed by page name. |
 | `flags` | array | No | Only if any [flags](#flags) differ from their defaults. |
+| `storage` | object | No | Only if the operator has non-transient [storage entries](#operator-storage). Dict of key-value pairs. |
+| `startup_storage` | object | No | Only if the operator has [startup storage entries](#startup-storage). Values restored via `storeStartupValue()` on import. |
 | `inputs` | array | No | Only if the operator has [operator-level connections](#operator-connections). |
 | `comp_inputs` | array | No | Only if the operator has [COMP-level connections](#comp-connections). COMPs only. |
 | `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true`. See [DAT Content](#dat-content). |
@@ -599,6 +603,73 @@ DAT content is only included when:
 
 ---
 
+## Operator Storage
+
+Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
+
+### Format
+
+```json
+{
+  "name": "my_comp",
+  "type": "baseCOMP",
+  "storage": {
+    "count": 42,
+    "label": "hello",
+    "items": [1, 2, 3],
+    "config": {"key": "value"},
+    "coords": {"$type": "tuple", "$value": [10, 20]},
+    "tags": {"$type": "set", "$value": ["a", "b", "c"]},
+    "raw": {"$type": "bytes", "$value": "AAEC/w=="}
+  }
+}
+```
+
+### Value Serialization
+
+Python types that map directly to JSON are stored as-is. Non-JSON types use a `$type`/`$value` wrapper:
+
+| Python Type | JSON Representation |
+|-------------|---------------------|
+| `str`, `int`, `float`, `bool` | Direct JSON value |
+| `None` | `null` |
+| `list` | JSON array (recursive) |
+| `dict` | JSON object (recursive, string keys only) |
+| `tuple` | `{"$type": "tuple", "$value": [...]}` |
+| `set` | `{"$type": "set", "$value": [...]}` (sorted for determinism) |
+| `bytes` | `{"$type": "bytes", "$value": "<base64>"}` |
+
+Values that cannot be serialized to JSON (threading objects, operator references, custom class instances) are silently skipped during export.
+
+### Skipped Keys
+
+The following storage keys are never exported (runtime/transient state managed by Embody):
+
+`_tdn_stripped_paths`, `_git_root`, `envoy_running`, `envoy_shutdown_event`, `expanded_paths`, `manage_file_path`, `visible_count`, `hover`
+
+### Startup Storage
+
+TouchDesigner supports `storeStartupValue(key, value)` — values that reset to their initial state on every project open, regardless of what they were when the file was saved. TDN supports this via an optional `startup_storage` field:
+
+```json
+{
+  "name": "my_comp",
+  "type": "baseCOMP",
+  "storage": {"runtime_count": 0},
+  "startup_storage": {"version": 1, "default_mode": "auto"}
+}
+```
+
+On import, keys in `startup_storage` are restored via `storeStartupValue()`, while keys in `storage` use `store()`.
+
+**Export limitation:** TouchDesigner provides no API to introspect which storage keys were set with `storeStartupValue()` vs `store()`. During automatic export, all entries go into `storage`. The `startup_storage` field must be populated manually or by tools that know the intent (e.g., code generators, StorageManager-aware exporters).
+
+### Import Behavior
+
+Storage is restored during Phase 6a (after DAT content, before positions). Keys in `storage` are restored via `op.store(key, value)`. Keys in `startup_storage` are restored via `op.storeStartupValue(key, value)`. `$type` wrappers are deserialized back to their Python types. Unknown `$type` values are treated as plain dicts with a warning logged.
+
+---
+
 ## Children and Hierarchy
 
 COMPs can contain child operators. These are stored in the `children` array, which contains nested operator objects following the exact same schema:
@@ -726,7 +797,7 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 ## Import Process
 
-Importing a `.tdn` file reconstructs the network in a pre-phase plus seven sequential phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
+Importing a `.tdn` file reconstructs the network in a pre-phase plus eight sequential phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
 
 | Phase | Action | Details |
 |-------|--------|---------|
@@ -737,6 +808,7 @@ Importing a `.tdn` file reconstructs the network in a pre-phase plus seven seque
 | 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
 | 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
+| 6a | **Restore storage** | Storage key-value pairs are restored via `op.store()`. `$type` wrappers are deserialized to Python types (tuple, set, bytes). |
 | 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. Missing position defaults to `[0, 0]`. |
 | 7a | **Create annotations** | Annotations are created from the `annotations` array (top-level and per-COMP). Each annotation is created as an `annotateCOMP` with `utility=True`, then its mode, title, body text, position, size, color, and opacity are set. |
 
@@ -764,6 +836,7 @@ For most networks, export → import → re-export produces identical `.tdn` out
 - Non-default parameter values (constant, expression, and bind modes)
 - Custom parameter definitions (all fields, all styles)
 - Flags, connections, positions, sizes, colors, comments, tags
+- Operator storage (serializable entries only — see [Operator Storage](#operator-storage))
 - Annotations (mode, title, body text, position, size, color, opacity)
 - DAT text and table content (byte-for-byte when `include_dat_content` is `true`)
 - Float values (stable after the first export — see below)
@@ -787,6 +860,8 @@ The following are never exported and are not considered a loss:
 - **Pulse / Momentary / Header styles** — no persistent state
 - **Read-only parameters** — cannot be set on import
 - **COMP externalization parameters** (`externaltox`, `enableexternaltox`, `reloadtox`) — COMP `.tox` externalization is managed separately by Embody
+- **Transient storage keys** — runtime state used by Embody (`envoy_running`, `_git_root`, etc.)
+- **Non-serializable storage values** — threading objects, operator references, custom class instances
 
 ---
 
@@ -811,6 +886,9 @@ Developers should ignore unknown fields when parsing TDN documents. This ensures
 | Version mismatch (`version`, `td_build`) | Log a warning, proceed with import. |
 | Unknown `$t` template reference | Log a warning, skip that page. |
 | Missing `type_defaults` entry for a type | No-op (operator uses its own properties). |
+| Non-serializable storage value on export | Skip that value, log at DEBUG level. |
+| Unknown `$type` in storage on import | Treat as plain dict, log a warning. |
+| Failed `store()` call on import | Skip that key, log a warning. |
 
 ### General Principle
 

@@ -95,6 +95,13 @@ COLOR_TOLERANCE = 0.01
 
 # System/internal paths to exclude from export
 SYSTEM_PATHS = ('/local', '/sys', '/perform', '/ui')
+
+# Storage keys to skip during TDN export (runtime/transient state)
+SKIP_STORAGE_KEYS = {
+	'_tdn_stripped_paths', '_git_root',
+	'envoy_running', 'envoy_shutdown_event',
+	'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
+}
 _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 
 
@@ -712,6 +719,9 @@ class TDNExt:
 			# Phase 6: Set DAT content
 			self._setDATContent(dest, op_defs)
 
+			# Phase 6a: Restore storage
+			self._restoreStorage(dest, op_defs)
+
 			# Phase 7: Set positions (last)
 			self._setPositions(dest, op_defs)
 
@@ -854,6 +864,11 @@ class TDNExt:
 		tags = list(target.tags)
 		if tags:
 			data['tags'] = tags
+
+		# Storage (all serializable entries, skipping transient/internal keys)
+		storage = self._exportStorage(target)
+		if storage:
+			data['storage'] = storage
 
 		# Operator connections (left/right wires)
 		connections = self._exportConnections(target)
@@ -1125,6 +1140,120 @@ class TDNExt:
 			except Exception as e:
 				self._log(f'Error reading flag {flag_name} on {target.path}: {e}', 'DEBUG')
 		return flags
+
+	def _exportStorage(self, target):
+		"""Export serializable storage entries from an operator.
+
+		Skips keys in SKIP_STORAGE_KEYS and values that cannot be
+		serialized to JSON. Returns dict or empty dict.
+		"""
+		try:
+			raw_storage = target.storage
+		except Exception:
+			return {}
+
+		if not raw_storage:
+			return {}
+
+		result = {}
+		for key, value in raw_storage.items():
+			if key in SKIP_STORAGE_KEYS:
+				continue
+			try:
+				serialized = self._serializeStorageValue(value)
+				result[key] = serialized
+			except (TypeError, ValueError, RecursionError) as e:
+				self._log(
+					f'Skipping non-serializable storage key '
+					f'"{key}" on {target.path}: {type(value).__name__} - {e}',
+					'DEBUG')
+		return result
+
+	def _serializeStorageValue(self, value):
+		"""Convert a storage value to a JSON-safe representation.
+
+		Primitive types (str, int, float, bool, None) are stored directly.
+		Collections (list, dict) are recursed. Non-JSON types (tuple, set,
+		bytes) use a $type/$value wrapper. Unserializable types raise TypeError.
+		"""
+		if value is None:
+			return None
+		if isinstance(value, bool):
+			return value
+		if isinstance(value, int):
+			return value
+		if isinstance(value, float):
+			rounded = round(value, 10)
+			if rounded == int(rounded) and abs(rounded) < 2**53:
+				return int(rounded)
+			return rounded
+		if isinstance(value, str):
+			return value
+		if isinstance(value, list):
+			return [self._serializeStorageValue(v) for v in value]
+		if isinstance(value, dict):
+			result = {}
+			for k, v in value.items():
+				if not isinstance(k, str):
+					raise TypeError(f'Non-string dict key: {type(k).__name__}')
+				result[k] = self._serializeStorageValue(v)
+			return result
+		if isinstance(value, tuple):
+			return {
+				'$type': 'tuple',
+				'$value': [self._serializeStorageValue(v) for v in value]
+			}
+		if isinstance(value, set):
+			items = sorted(value, key=lambda x: (type(x).__name__, x))
+			return {
+				'$type': 'set',
+				'$value': [self._serializeStorageValue(v) for v in items]
+			}
+		if isinstance(value, bytes):
+			import base64
+			return {
+				'$type': 'bytes',
+				'$value': base64.b64encode(value).decode('ascii')
+			}
+		raise TypeError(f'Cannot serialize {type(value).__name__}')
+
+	def _deserializeStorageValue(self, value):
+		"""Convert a JSON storage value back to a Python object.
+
+		Handles $type/$value wrappers for tuple, set, and bytes.
+		"""
+		if value is None:
+			return None
+		if isinstance(value, bool):
+			return value
+		if isinstance(value, (int, float)):
+			return value
+		if isinstance(value, str):
+			return value
+		if isinstance(value, list):
+			return [self._deserializeStorageValue(v) for v in value]
+		if isinstance(value, dict):
+			if '$type' in value and '$value' in value and len(value) == 2:
+				type_name = value['$type']
+				raw = value['$value']
+				if type_name == 'tuple':
+					return tuple(
+						self._deserializeStorageValue(v) for v in raw)
+				elif type_name == 'set':
+					return set(
+						self._deserializeStorageValue(v) for v in raw)
+				elif type_name == 'bytes':
+					import base64
+					return base64.b64decode(raw)
+				else:
+					self._log(
+						f'Unknown $type "{type_name}" in storage, '
+						f'treating as plain dict', 'WARNING')
+			return {
+				k: self._deserializeStorageValue(v)
+				for k, v in value.items()
+			}
+		return value
 
 	def _exportAnnotations(self, parent_op):
 		"""Export annotations (comment, networkbox, annotate) from a COMP.
@@ -1695,6 +1824,40 @@ class TDNExt:
 			children = op_def.get('children', [])
 			if children and target.isCOMP:
 				self._setDATContent(target, children)
+
+	def _restoreStorage(self, parent, op_defs):
+		"""Phase 6a: Restore operator storage from TDN data."""
+		for op_def in op_defs:
+			target = self._resolveOp(parent, op_def)
+			if not target:
+				continue
+
+			storage = op_def.get('storage', {})
+			if storage:
+				for key, value in storage.items():
+					try:
+						deserialized = self._deserializeStorageValue(value)
+						target.store(key, deserialized)
+					except Exception as e:
+						self._log(
+							f'Failed to restore storage key "{key}" '
+							f'on {target.path}: {e}', 'WARNING')
+
+			startup_storage = op_def.get('startup_storage', {})
+			if startup_storage:
+				for key, value in startup_storage.items():
+					try:
+						deserialized = self._deserializeStorageValue(value)
+						target.storeStartupValue(key, deserialized)
+					except Exception as e:
+						self._log(
+							f'Failed to restore startup storage key "{key}" '
+							f'on {target.path}: {e}', 'WARNING')
+
+			# Recurse
+			children = op_def.get('children', [])
+			if children and target.isCOMP:
+				self._restoreStorage(target, children)
 
 	def _setPositions(self, parent, op_defs):
 		"""Phase 7: Set positions (last, since creation can shift things)."""
