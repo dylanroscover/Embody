@@ -1315,6 +1315,10 @@ class EnvoyExt:
         if old_server is not None:
             self._log('Force-closing old uvicorn server sockets', 'DEBUG')
             old_server.should_exit = True
+            # force_exit skips graceful drain — without this, uvicorn waits
+            # for established connections (e.g. MCP client keep-alives) to
+            # close, which can block the port indefinitely.
+            old_server.force_exit = True
             # Close all listener sockets to immediately free the port.
             # uvicorn.Server.servers holds asyncio.Server objects; each has
             # a .sockets tuple of the underlying socket.socket objects.
@@ -1350,25 +1354,28 @@ class EnvoyExt:
 
         port = self.ownerComp.par.Envoyport.eval()
 
-        # Check if port is available, retrying if old server is still shutting down
+        # Check if port is available, retrying if old server is still shutting down.
+        # Use connect_ex() rather than bind() — it tests whether something is
+        # actively listening, which is immune to SO_REUSEADDR false-positives
+        # on macOS and avoids TIME_WAIT false-negatives.
         import socket
+        port_in_use = False
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                s.bind(('127.0.0.1', port))
-            except OSError:
-                if _retries_left > 0:
-                    # On first detection, try to force-close a stuck old server
-                    if _retries_left == 10:
-                        self._log(f'Port {port} in use, attempting to free it...')
-                        self.ownerComp.par.Envoystatus = 'Waiting for port...'
-                        self._forceCloseOldServer()
-                    run(f"op('{self.ownerComp.path}').ext.Envoy.Start(_retries_left={_retries_left - 1})",
-                        delayFrames=15)
-                    return
-                self._log(f'Port {port} is still in use after retries. Restart TouchDesigner to free it, or switch port via the Port parameter on Embody.', 'ERROR')
-                self.ownerComp.par.Envoystatus = f'Error: port {port} in use'
+            s.settimeout(1)
+            port_in_use = s.connect_ex(('127.0.0.1', port)) == 0
+        if port_in_use:
+            if _retries_left > 0:
+                # On first detection, try to force-close a stuck old server
+                if _retries_left == 10:
+                    self._log(f'Port {port} in use, attempting to free it...')
+                    self.ownerComp.par.Envoystatus = 'Waiting for port...'
+                    self._forceCloseOldServer()
+                run(f"op('{self.ownerComp.path}').ext.Envoy.Start(_retries_left={_retries_left - 1})",
+                    delayFrames=15)
                 return
+            self._log(f'Port {port} is still in use after retries. Restart TouchDesigner to free it, or switch port via the Port parameter on Embody.', 'ERROR')
+            self.ownerComp.par.Envoystatus = f'Error: port {port} in use'
+            return
 
         if _retries_left < 10:
             self._log(f'Port {port} became available after ~{(10 - _retries_left) * 0.25:.1f}s')
