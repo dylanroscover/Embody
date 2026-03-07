@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 13,
-	"generator": "Embody/5.0.189",
+	"build": 14,
+	"generator": "Embody/5.0.191",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-05T02:15:51Z",
+	"exported_at": "2026-03-07T07:07:19Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false
@@ -15,7 +15,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
@@ -42,6 +41,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_logging.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -1000]
 		},
 		{
@@ -84,6 +84,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/TestRunnerExt.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, 0]
 		},
 		{
@@ -92,6 +93,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_path_utils.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, -800]
 		},
 		{
@@ -100,6 +102,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_tdn_file_io.py"
 			},
+			"flags": ["viewer"],
 			"position": [600, -2200]
 		},
 		{
@@ -108,6 +111,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_tdn_helpers.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, -2200]
 		},
 		{
@@ -116,7 +120,16 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_update_sync.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -800]
+		},
+		{
+			"name": "test_claude_config",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_claude_config.py"
+			},
+			"position": [0, -3000]
 		},
 		{
 			"name": "test_mcp_operators",
@@ -124,6 +137,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_operators.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -1400]
 		},
 		{
@@ -132,6 +146,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_param_tracker.py"
 			},
+			"flags": ["viewer"],
 			"position": [400, -800]
 		},
 		{
@@ -140,6 +155,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_tag_lifecycle.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -600]
 		},
 		{
@@ -148,6 +164,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_crud_operators.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, -400]
 		},
 		{
@@ -156,6 +173,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_delete_cleanup.py"
 			},
+			"flags": ["viewer"],
 			"position": [400, -600]
 		},
 		{
@@ -164,6 +182,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_extensions.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, -1600]
 		},
 		{
@@ -172,6 +191,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_parameters.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, -1400]
 		},
 		{
@@ -180,6 +200,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_tag_management.py"
 			},
+			"flags": ["viewer"],
 			"position": [600, -400]
 		},
 		{
@@ -188,6 +209,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_externalization.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -400]
 		},
 		{
@@ -196,6 +218,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_file_management.py"
 			},
+			"flags": ["viewer"],
 			"position": [400, -400]
 		},
 		{
@@ -204,6 +227,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_annotations.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -1600]
 		},
 		{
@@ -212,6 +236,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_connections.py"
 			},
+			"flags": ["viewer"],
 			"position": [600, -1400]
 		},
 		{
@@ -220,6 +245,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_dat_content.py"
 			},
+			"flags": ["viewer"],
 			"position": [400, -1400]
 		},
 		{
@@ -228,6 +254,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_diagnostics.py"
 			},
+			"flags": ["viewer"],
 			"position": [400, -1600]
 		},
 		{
@@ -236,6 +263,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_performance.py"
 			},
+			"flags": ["viewer"],
 			"position": [400, -1800]
 		},
 		{
@@ -244,6 +272,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_operator_queries.py"
 			},
+			"flags": ["viewer"],
 			"position": [600, -800]
 		},
 		{
@@ -252,6 +281,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_server_lifecycle.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -2600]
 		},
 		{
@@ -260,6 +290,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_custom_parameters.py"
 			},
+			"flags": ["viewer"],
 			"position": [600, -1800]
 		},
 		{
@@ -268,6 +299,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_tdn_export_import.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -2200]
 		},
 		{
@@ -276,6 +308,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_duplicate_handling.py"
 			},
+			"flags": ["viewer"],
 			"position": [600, -600]
 		},
 		{
@@ -284,6 +317,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_code_execution.py"
 			},
+			"flags": ["viewer"],
 			"position": [0, -1800]
 		},
 		{
@@ -292,6 +326,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_flags_position.py"
 			},
+			"flags": ["viewer"],
 			"position": [600, -1600]
 		},
 		{
@@ -300,6 +335,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_tdn_reconstruction.py"
 			},
+			"flags": ["viewer"],
 			"position": [400, -2200]
 		},
 		{
@@ -308,6 +344,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_externalization.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, -1800]
 		},
 		{
@@ -316,6 +353,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_rename_move_lifecycle.py"
 			},
+			"flags": ["viewer"],
 			"position": [200, -600]
 		}
 	],

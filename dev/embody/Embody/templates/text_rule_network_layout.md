@@ -18,7 +18,11 @@ Clean, readable operator networks are critical. Every operator placed via MCP mu
 
 - **Every logical group gets an annotation**: Use `create_annotation` (annotate mode with a title) around each cluster of related operators.
 - **Annotations must enclose their operators**: Calculate the annotation's position and size to encompass all operators with padding (~100 units each side). Use `get_op_position` on all operators to find the bounding box.
+- **Operators go INSIDE or OUTSIDE annotations, never on the border**: An operator must be fully enclosed by an annotation or fully outside it. Partially overlapping an annotation edge is as bad as overlapping another operator.
+- **Create new annotations for orphaned groups**: If 2+ related operators don't belong in any existing annotation, create a NEW annotation for them rather than leaving them floating in no-man's-land.
+- **Read annotations before placing**: Always use `get_annotations` to understand the existing organizational structure. Place new operators inside the annotation where they logically belong, or create a new one.
 - **Spatial proximity for sub-groups**: Related operators near each other with consistent internal spacing.
+- **Annotations must NEVER overlap each other**: No two annotations may share any area. Treat this as strictly as operator overlap.
 - **Clear group boundaries**: Leave at least 400 units between annotation group edges.
 
 ## Operator Placement Rules
