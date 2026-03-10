@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 12,
-	"generator": "Embody/5.0.188",
+	"generator": "Embody/5.0.195",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-05T01:35:58Z",
+	"exported_at": "2026-03-10T22:28:03Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
 		"include_dat_content": false
@@ -69,9 +69,9 @@
 			"name": "tooltip",
 			"type": "containerCOMP",
 			"parameters": {
-				"x": 2,
+				"x": 759,
 				"y": 40,
-				"w": 149,
+				"w": 178,
 				"h": 22,
 				"layer": 10,
 				"alignallow": "ignore",
@@ -85,8 +85,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about",
-					"Build": 4,
-					"Date": "2026-03-05 01:35:49 UTC",
+					"Build": 7,
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -110,7 +110,7 @@
 			"name": "tip_measure",
 			"type": "textTOP",
 			"parameters": {
-				"text": "Toggle externalization",
+				"text": "Open Embody parameters",
 				"font": "Open Sans",
 				"fontsizex": 10,
 				"fontsizey": 10,
@@ -134,7 +134,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 7,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -189,7 +189,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 14,
-					"Date": "2026-03-05 01:35:36 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},

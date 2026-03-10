@@ -881,15 +881,11 @@ class TDNExt:
 			if comp_conns:
 				data['comp_inputs'] = comp_conns
 
-		# DAT content — always embed non-externalized DATs (they have no
-		# other source of truth). The include_dat_content toggle only
-		# controls whether externalized DATs (with file on disk) also embed.
-		if target.family == 'DAT':
-			is_externalized = bool(target.par.file.eval()) if hasattr(target.par, 'file') else False
-			if not is_externalized or options.get('include_dat_content', True):
-				content_data = self._exportDATContent(target)
-				if content_data:
-					data.update(content_data)
+		# DAT content — include when the include_dat_content option is True.
+		if target.family == 'DAT' and options.get('include_dat_content', True):
+			content_data = self._exportDATContent(target)
+			if content_data:
+				data.update(content_data)
 
 		# Recurse into COMP children (sync mode only)
 		# Skip children of palette clones — they come from /sys/ and
@@ -1915,15 +1911,29 @@ class TDNExt:
 		"""
 		for ann_def in annotations_data:
 			try:
-				ann = parent.create(annotateCOMP)
-				ann.utility = True  # Match TD UI behavior
+				name = ann_def.get('name')
+
+				# Reuse existing annotateCOMP if one with this name already
+				# exists (e.g., palette clone from the operators array).
+				ann = None
+				if name:
+					existing = parent.op(name)
+					if existing and existing.type == 'annotate':
+						ann = existing
+
+				if ann is None:
+					ann = parent.create('annotateCOMP')
+					ann.utility = True  # Match TD UI behavior
+					if name:
+						try:
+							ann.name = name
+						except Exception:
+							pass  # annotateCOMPs can't always be renamed
+				else:
+					ann.utility = True
 
 				mode = ann_def.get('mode', 'annotate')
 				ann.par.Mode = mode
-
-				name = ann_def.get('name')
-				if name:
-					ann.name = name
 
 				title = ann_def.get('title', '')
 				if title:

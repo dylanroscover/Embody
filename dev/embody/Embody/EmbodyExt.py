@@ -2100,18 +2100,20 @@ class EmbodyExt:
                 is_tdn = (strategy == 'tdn') if has_strategy else (row_type == 'tdn')
                 if is_tdn:
                     if not op(old_op_path):
-                        # Check if .tdn file exists on disk — if so, the COMP
-                        # can be reconstructed (e.g., after strip/crash) and
-                        # we must NOT remove the tracking entry or delete the file.
-                        if rel_file_path:
-                            abs_tdn = self.buildAbsolutePath(
-                                self.normalizePath(rel_file_path))
-                            if abs_tdn.is_file():
-                                continue  # Recoverable — skip
-                        # Try to find the renamed COMP before removing
+                        # Try rename detection first — a TDN-tagged COMP in
+                        # the same parent that isn't tracked is likely a rename.
                         found = self._findMovedTDNOp(
                             old_op_path, rel_file_path, processed_ops)
                         if not found:
+                            # No rename candidate — check if .tdn file exists
+                            # on disk so the COMP can be reconstructed (e.g.,
+                            # after strip/crash). We must NOT remove the
+                            # tracking entry or delete the file in that case.
+                            if rel_file_path:
+                                abs_tdn = self.buildAbsolutePath(
+                                    self.normalizePath(rel_file_path))
+                                if abs_tdn.is_file():
+                                    continue  # Recoverable — skip
                             self.Log(f"Operator for TDN entry '{old_op_path}' no longer exists", "WARNING")
                             self._removeTDNStrategy(old_op_path)
                     continue

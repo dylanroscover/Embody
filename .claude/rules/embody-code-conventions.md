@@ -1,4 +1,5 @@
 ---
+description: "Embody-specific conventions for extensions, logging, file safety, and MCP tool development"
 paths:
   - "dev/embody/**"
   - "CLAUDE.md"

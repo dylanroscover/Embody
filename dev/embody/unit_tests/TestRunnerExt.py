@@ -675,6 +675,10 @@ class TestRunnerExt:
         self.results_dat.appendRow([
             suite, test, status, message, f'{duration_ms:.2f}',
         ])
+        if status in ('FAIL', 'ERROR'):
+            self._log(f'{status}: {suite}.{test} - {message}', 'ERROR')
+        elif status == 'SKIP':
+            self._log(f'SKIP: {suite}.{test} - {message}', 'WARNING')
 
     def _getSummary(self):
         """Build summary dict from results."""

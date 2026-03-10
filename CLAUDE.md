@@ -98,7 +98,7 @@ Dual-thread design: worker thread runs MCP server (no TD imports), main thread e
 
 ### TDN Network Format
 
-JSON-based format for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: @docs/tdn/specification.md
+JSON-based format for representing TD networks as diffable text. Non-default parameters only, expression shorthand (`=` prefix), type defaults, parameter templates. Full spec: `docs/tdn/specification.md`
 
 ## Extension Referencing
 

@@ -412,6 +412,38 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         found = self.embody_ext._findMovedTDNOp(old_path2, old_rel2, processed)
         self.assertFalse(found, 'Should not match an already-tracked TDN COMP')
 
+    def test_continuity_detects_tdn_rename_with_file_on_disk(self):
+        """checkOpsForContinuity should detect a TDN rename even when the old .tdn file exists."""
+        from pathlib import Path as P
+        comp, old_path, old_rel = self._externalize_tdn_comp(self.workspace, 'tdn_cont')
+
+        old_abs = self.embody_ext.buildAbsolutePath(
+            self.embody_ext.normalizePath(old_rel)).resolve()
+        self.assertTrue(old_abs.is_file(), 'Old .tdn should exist before rename')
+
+        comp.name = 'tdn_cont_renamed'
+        new_path = comp.path
+
+        # Run the full continuity check (what Refresh triggers)
+        ext_folder = self.embody_ext.ExternalizationsFolder
+        self.embody_ext.checkOpsForContinuity(ext_folder)
+
+        # Table should now have the new path
+        found_new = False
+        for i in range(1, self.embody_ext.Externalizations.numRows):
+            if self.embody_ext.Externalizations[i, 'path'].val == new_path:
+                found_new = True
+                break
+        self.assertTrue(found_new, f'Table should have new path {new_path} after continuity check')
+
+        # Old path should be gone
+        found_old = False
+        for i in range(1, self.embody_ext.Externalizations.numRows):
+            if self.embody_ext.Externalizations[i, 'path'].val == old_path:
+                found_old = True
+                break
+        self.assertFalse(found_old, f'Old path {old_path} should be removed from table')
+
     def test_findMovedTDNOp_ambiguous_multiple_candidates(self):
         """_findMovedTDNOp should not match when multiple untracked candidates exist."""
         comp1, old_path1, old_rel1 = self._externalize_tdn_comp(self.workspace, 'tdn_amb1')

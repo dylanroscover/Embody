@@ -25,7 +25,7 @@ import sys
 import time
 import asyncio
 
-ENVOY_VERSION = "1.3.0"
+ENVOY_VERSION = "1.4.0"
 
 class EnvoyMCPServer:
     """
@@ -49,7 +49,8 @@ class EnvoyMCPServer:
         self.running: bool = True
 
         # Import mcp only when server is instantiated (in worker thread)
-        from mcp.server.fastmcp import FastMCP
+        from mcp.server.fastmcp import FastMCP, Image
+        self._Image = Image  # Store for use in tool functions
         self.mcp = FastMCP("Envoy", host="127.0.0.1", port=port, stateless_http=True)
         self._register_tools()
 
@@ -59,9 +60,8 @@ class EnvoyMCPServer:
         with self.lock:
             request_id = self.request_counter
             self.request_counter += 1
-
-        event = Event()
-        self.pending_requests[request_id] = {'event': event, 'result': None}
+            event = Event()
+            self.pending_requests[request_id] = {'event': event, 'result': None}
 
         # Queue request to main thread via Thread Manager's refresh queue
         self.add_to_refresh_queue({
@@ -72,11 +72,14 @@ class EnvoyMCPServer:
 
         # Wait for response (with timeout)
         if not event.wait(timeout=timeout):
-            result = {'error': f'Operation timed out after {timeout} seconds'}
-        else:
-            result = self.pending_requests[request_id].get('result', {'error': 'No result'})
+            with self.lock:
+                del self.pending_requests[request_id]
+            return {'error': f'Operation timed out after {timeout} seconds. '
+                    f'The operation may still execute on the main thread.'}
 
-        del self.pending_requests[request_id]
+        with self.lock:
+            result = self.pending_requests[request_id].get('result', {'error': 'No result'})
+            del self.pending_requests[request_id]
         return result
 
     def check_responses(self) -> None:
@@ -93,12 +96,18 @@ class EnvoyMCPServer:
                 except NameError:
                     expected = type(e).__name__ == 'Empty'
                 if not expected:
-                    print(f'[Envoy][WARNING] check_responses unexpected error: {e}')
+                    print(f'[Envoy][WARNING] check_responses unexpected error: {type(e).__name__}: {e}')
                 break
             request_id = response['id']
-            if request_id in self.pending_requests:
-                self.pending_requests[request_id]['result'] = response['result']
-                self.pending_requests[request_id]['event'].set()
+            with self.lock:
+                pending = self.pending_requests.get(request_id)
+            if pending is not None:
+                pending['result'] = response['result']
+                pending['event'].set()
+            else:
+                # Orphaned response — request already timed out and was removed
+                print(f'[Envoy][WARNING] Orphaned response for request {request_id} '
+                      f'(likely timed out). Operation still executed on main thread.')
 
     def _register_tools(self):
         """Register all MCP tools"""
@@ -953,6 +962,60 @@ class EnvoyMCPServer:
                 'clear_first': clear_first,
             })
 
+        # === TOP Capture ===
+
+        @self.mcp.tool()
+        def capture_top(op_path: str, format: str = "jpeg", quality: float = 0.8,
+                        max_resolution: int = 640) -> list:
+            """
+            Capture a TOP operator's output as an image.
+
+            Returns the image saved to a temp file (path included in response).
+            Small images are also returned inline as MCP ImageContent for direct viewing.
+
+            Args:
+                op_path: Path to a TOP operator (e.g., "/project1/null1")
+                format: Image format - "jpeg" (smaller, lossy) or "png" (lossless)
+                quality: JPEG compression quality 0.0-1.0 (ignored for PNG)
+                max_resolution: Max pixels on longest edge. 0 = native resolution.
+
+            Returns:
+                List with text metadata and optional inline image preview
+            """
+            import base64
+            import os
+            import uuid
+
+            result = self._execute_in_td('capture_top', {
+                'op_path': op_path,
+                'format': format,
+                'quality': quality,
+                'max_resolution': max_resolution,
+            })
+
+            if 'error' in result:
+                return result
+
+            # Decode the base64 image data from the main thread
+            image_bytes = base64.b64decode(result['image_b64'])
+
+            # Always save to temp file (Claude Code can Read images natively)
+            ext = '.jpg' if result['format'] == 'jpeg' else f".{result['format']}"
+            file_path = f'/tmp/envoy_capture_{uuid.uuid4().hex[:8]}{ext}'
+            with open(file_path, 'wb') as f:
+                f.write(image_bytes)
+
+            size_kb = result['size_bytes'] / 1024
+            info = (f"TOP capture: {result['original_width']}x{result['original_height']}"
+                    f" → {result['width']}x{result['height']} {result['format'].upper()}"
+                    f" ({size_kb:.1f} KB)\nSaved to: {file_path}")
+
+            # Include inline ImageContent for small images (within Claude Code token limits)
+            if result['size_bytes'] < 20000:
+                return [info, self._Image(data=image_bytes, format=result['format'])]
+            else:
+                return info + "\n(Use Read tool on the file path above to view the image)"
+
         # === Logging ===
 
         @self.mcp.tool()
@@ -1382,6 +1445,9 @@ class EnvoyExt:
 
         self.ownerComp.store('envoy_running', True)
 
+        # Clean up stale temp files from previous sessions
+        self._cleanupTempFiles()
+
         # Create a FRESH Event for this server instance.  Don't clear() the old
         # one — it must stay set so the previous thread's shutdown_monitor sees it.
         self.shutdown_event = Event()
@@ -1527,8 +1593,11 @@ class EnvoyExt:
         except Exception:
             return
 
-        # Process new requests from the worker thread
-        while True:
+        # Process up to MAX_REQUESTS_PER_FRAME to avoid frame stalls from
+        # burst MCP traffic.  Remaining requests queue to next frame.
+        MAX_REQUESTS_PER_FRAME = 5
+        processed = 0
+        while processed < MAX_REQUESTS_PER_FRAME:
             try:
                 info = self.request_queue.get_nowait()
             except Exception as e:
@@ -1538,8 +1607,9 @@ class EnvoyExt:
                 except NameError:
                     expected = type(e).__name__ == 'Empty'
                 if not expected:
-                    self._log(f'Unexpected error reading request queue: {e}', 'WARNING')
+                    self._log(f'Unexpected error reading request queue: {type(e).__name__}: {e}', 'WARNING')
                 break
+            processed += 1
 
             if not isinstance(info, dict) or 'operation' not in info:
                 self._log(f'Invalid payload received: {info}', 'WARNING')
@@ -1638,6 +1708,8 @@ class EnvoyExt:
             'get_enclosed_ops': self._get_enclosed_ops,
             # Logging
             'get_logs': self._get_logs,
+            # TOP capture
+            'capture_top': self._capture_top,
             # Testing
             'run_tests': self._run_tests,
         }
@@ -1832,7 +1904,7 @@ class EnvoyExt:
         if hasattr(target, 'children'):
             info['children'] = [child.name for child in target.children]
 
-        return info
+        return self._maybe_offload_to_file(info, 'get_op')
 
     def _set_parameter(self, op_path: str, par_name: str, value=None,
                       mode: str = None, expr: str = None,
@@ -1856,8 +1928,15 @@ class EnvoyExt:
             elif bind_expr is not None:
                 par.bindExpr = bind_expr
                 par.mode = ParMode.BIND
-            # Set constant value
+            # Set constant value (with type coercion for numeric/toggle pars)
             elif value is not None:
+                if isinstance(value, str) and par.isNumber:
+                    try:
+                        value = int(value) if par.isInt else float(value)
+                    except (ValueError, TypeError):
+                        pass  # Let TD handle the string as-is
+                elif isinstance(value, str) and par.isToggle:
+                    value = value not in ('0', 'false', 'False', '')
                 par.val = value
 
             # Set mode explicitly if provided (overrides auto-set above)
@@ -2039,11 +2118,12 @@ class EnvoyExt:
             return results
 
         operators = get_ops(parent)
-        return {
+        result = {
             'parent': parent_path,
             'count': len(operators),
             'operators': operators
         }
+        return self._maybe_offload_to_file(result, 'query_network')
 
     def _copy_op(self, source_path: str, dest_parent: str, new_name: str = None) -> dict:
         """Copy an operator"""
@@ -2433,6 +2513,90 @@ class EnvoyExt:
             }
         except Exception as e:
             return {'error': f'Failed to set DAT content: {e}'}
+
+    # === TOP Capture (Main Thread Only) ===
+
+    def _capture_top(self, op_path: str, format: str = 'jpeg',
+                     quality: float = 0.8, max_resolution: int = 640) -> dict:
+        """Capture a TOP operator's output as a compressed image."""
+        import base64
+
+        target = op(op_path)
+        if not target:
+            return {'error': f'Operator not found: {op_path}'}
+        if target.family != 'TOP':
+            return {'error': f'{op_path} is not a TOP (family: {target.family})'}
+
+        if format not in ('jpeg', 'png'):
+            return {'error': f'Unsupported format: {format}. Use "jpeg" or "png".'}
+        if not (0.0 <= quality <= 1.0):
+            return {'error': f'Quality must be between 0.0 and 1.0, got {quality}'}
+
+        try:
+            import numpy as np
+            import cv2
+
+            # Force cook so we get current output
+            target.cook(force=True)
+
+            original_w = target.width
+            original_h = target.height
+
+            # Capture pixel data from GPU
+            arr = target.numpyArray()  # float32 [H, W, C], bottom-up
+            if arr is None or arr.size == 0:
+                return {'error': f'No pixel data available from {op_path}'}
+
+            # Flip vertically (TD textures are bottom-up)
+            arr = np.flipud(arr)
+
+            # Convert float32 [0,1] to uint8 [0,255]
+            arr = (np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+            # Convert color channels for cv2 (expects BGR/BGRA)
+            channels = arr.shape[2] if arr.ndim == 3 else 1
+            if channels == 4:
+                arr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGRA)
+            elif channels == 3:
+                arr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            elif channels == 2:
+                # Luminance + Alpha: extract luminance only
+                arr = arr[:, :, 0]
+
+            # Resize if needed
+            h, w = arr.shape[:2]
+            if max_resolution > 0 and max(h, w) > max_resolution:
+                scale = max_resolution / max(h, w)
+                new_w = int(w * scale)
+                new_h = int(h * scale)
+                arr = cv2.resize(arr, (new_w, new_h),
+                                 interpolation=cv2.INTER_AREA)
+
+            # Encode to image format
+            if format == 'jpeg':
+                params = [cv2.IMWRITE_JPEG_QUALITY, int(quality * 100)]
+                success, buf = cv2.imencode('.jpg', arr, params)
+            else:
+                success, buf = cv2.imencode('.png', arr)
+
+            if not success:
+                return {'error': f'Failed to encode image as {format}'}
+
+            image_data = buf.tobytes()
+            out_h, out_w = arr.shape[:2]
+
+            return {
+                'success': True,
+                'image_b64': base64.b64encode(image_data).decode('ascii'),
+                'width': out_w,
+                'height': out_h,
+                'original_width': original_w,
+                'original_height': original_h,
+                'format': format,
+                'size_bytes': len(image_data),
+            }
+        except Exception as e:
+            return {'error': f'Failed to capture TOP: {e}'}
 
     # === Operator Flags Operations (Main Thread Only) ===
 
@@ -3218,11 +3382,11 @@ class EnvoyExt:
     # === Utility Methods ===
 
     def _configureMCPClient(self, port):
-        """Auto-configure MCP client by writing .mcp.json in the project root.
-        Works with both CLIs and IDE extensions.
+        """Auto-configure MCP client by writing .mcp.json and the STDIO bridge
+        script in the project root.  Uses STDIO transport so Claude Code always
+        has tools available (the bridge retries until Envoy is reachable).
         Idempotent — safe to call on every start."""
         from pathlib import Path
-        url = f'http://localhost:{port}/mcp'
         try:
             # Find the git root by walking up from the .toe directory
             project_dir = Path(project.folder)
@@ -3239,7 +3403,46 @@ class EnvoyExt:
                     'WARNING')
                 return
 
+            # --- Deploy the STDIO bridge script ---
+            bridge_dir = git_root / '.claude'
+            bridge_dir.mkdir(parents=True, exist_ok=True)
+            bridge_path = bridge_dir / 'envoy-bridge.py'
+
+            # Read bridge script from the textDAT if available, else from
+            # the externalized file alongside this extension.
+            bridge_content = None
+            try:
+                bridge_dat = self.ownerComp.op('text_envoy_bridge')
+                if bridge_dat:
+                    bridge_content = bridge_dat.text
+            except Exception:
+                pass
+
+            if not bridge_content:
+                # Fallback: read from the externalized file in dev/embody/
+                source = Path(project.folder) / 'embody' / 'envoy_bridge.py'
+                if source.exists():
+                    bridge_content = source.read_text(encoding='utf-8')
+
+            if not bridge_content:
+                self._log(
+                    'Bridge script source not found — falling back to HTTP transport',
+                    'WARNING')
+                self._configureMCPClientHTTP(git_root, port)
+                return
+
+            # Write bridge script (overwrite to pick up updates)
+            bridge_path.write_text(bridge_content, encoding='utf-8')
+            if sys.platform != 'win32':
+                bridge_path.chmod(0o755)
+
+            # macOS/Linux: 'python3'.  Windows: 'python' (no python3 command).
+            python_cmd = 'python' if sys.platform == 'win32' else 'python3'
+
+            # --- Write .mcp.json with STDIO transport ---
             mcp_file = git_root / '.mcp.json'
+            # Use forward slashes even on Windows for JSON portability
+            bridge_abs = str(bridge_path).replace('\\', '/')
 
             # Read existing config to preserve other servers
             config = {}
@@ -3248,27 +3451,50 @@ class EnvoyExt:
                     config = json.loads(mcp_file.read_text(encoding='utf-8'))
                 except (json.JSONDecodeError, OSError) as e:
                     self._log(f'Could not parse existing .mcp.json, will overwrite: {e}', 'DEBUG')
-                    pass
 
             servers = config.get('mcpServers', {})
             existing = servers.get('envoy', {})
 
-            # Only write if the entry is missing or the URL changed
-            if existing.get('url') == url and existing.get('type') == 'http':
-                self._log('MCP .mcp.json already configured', 'DEBUG')
+            # Check if already configured with matching STDIO bridge
+            expected_args = ['-u', bridge_abs, '--port', str(port)]
+            if (existing.get('type') == 'stdio'
+                    and existing.get('command') == python_cmd
+                    and existing.get('args') == expected_args):
+                self._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
                 return
 
             servers['envoy'] = {
-                'type': 'http',
-                'url': url
+                'type': 'stdio',
+                'command': python_cmd,
+                'args': expected_args,
             }
             config['mcpServers'] = servers
             mcp_file.write_text(
                 json.dumps(config, indent=2) + '\n', encoding='utf-8')
-            self._log(f'Wrote MCP config to {mcp_file}')
+            self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge → port {port})')
 
         except Exception as e:
             self._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
+
+    def _configureMCPClientHTTP(self, git_root, port):
+        """Fallback: configure .mcp.json with direct HTTP transport.
+        Used when the STDIO bridge script cannot be deployed."""
+        url = f'http://localhost:{port}/mcp'
+        mcp_file = git_root / '.mcp.json'
+
+        config = {}
+        if mcp_file.exists():
+            try:
+                config = json.loads(mcp_file.read_text(encoding='utf-8'))
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        servers = config.get('mcpServers', {})
+        servers['envoy'] = {'type': 'http', 'url': url}
+        config['mcpServers'] = servers
+        mcp_file.write_text(
+            json.dumps(config, indent=2) + '\n', encoding='utf-8')
+        self._log(f'Wrote MCP config to {mcp_file} (HTTP fallback)')
 
     def _checkOrInitGitRepo(self):
         """Check for a git repo. If missing, prompt user to initialize one.
@@ -3322,6 +3548,7 @@ class EnvoyExt:
             '.mcp.json',
             '.claude/settings.local.json',
             '.claude/projects/',
+            '.claude/envoy-bridge.py',
             '__pycache__/',
             '.DS_Store',
         ]
@@ -3365,6 +3592,48 @@ class EnvoyExt:
 
         except Exception as e:
             self._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
+
+    def _cleanupTempFiles(self):
+        """Remove stale Envoy temp files (captures, offloaded responses) from /tmp.
+        Deletes files older than 24 hours matching envoy_* patterns."""
+        import glob
+        import os
+
+        patterns = ['/tmp/envoy_capture_*', '/tmp/envoy_query_network_*',
+                    '/tmp/envoy_get_op_*']
+        cutoff = time.time() - 86400  # 24 hours ago
+        removed = 0
+        for pattern in patterns:
+            for path in glob.glob(pattern):
+                try:
+                    if os.path.getmtime(path) < cutoff:
+                        os.remove(path)
+                        removed += 1
+                except OSError:
+                    pass
+        if removed:
+            self._log(f'Cleaned up {removed} stale temp file(s) from /tmp', 'DEBUG')
+
+    def _maybe_offload_to_file(self, result: dict, label: str,
+                                threshold: int = 50000) -> dict:
+        """If the JSON-serialized result exceeds threshold bytes, write it
+        to a temp file and return a pointer instead. This prevents MCP
+        transport/token-limit issues with very large payloads."""
+        import uuid
+        serialized = json.dumps(result)
+        if len(serialized) <= threshold:
+            return result
+        file_path = f'/tmp/envoy_{label}_{uuid.uuid4().hex[:8]}.json'
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(serialized)
+        return {
+            'offloaded': True,
+            'file_path': file_path,
+            'size_bytes': len(serialized),
+            'message': f'Response too large ({len(serialized)} bytes). '
+                       f'Full result saved to {file_path}. '
+                       f'Use the Read tool to view the file.',
+        }
 
     def _log(self, message: str, level: str = 'INFO'):
         """Log a message via Embody's centralized logger."""

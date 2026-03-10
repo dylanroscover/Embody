@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 6,
-	"generator": "Embody/5.0.188",
+	"generator": "Embody/5.0.195",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-05T01:35:43Z",
+	"exported_at": "2026-03-10T22:27:50Z",
 	"network_path": "/embody/Embody/window_manager",
 	"options": {
 		"include_dat_content": false

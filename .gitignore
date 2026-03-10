@@ -22,3 +22,6 @@ CrashAutoSave*
 .plan.md
 dev/_test_pars_temp/
 site/
+
+# Embody / Envoy (auto-managed)
+.claude/envoy-bridge.py

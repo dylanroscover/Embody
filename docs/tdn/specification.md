@@ -490,7 +490,7 @@ The `flags` array contains string names of flags whose values differ from their 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `bypass` | `false` | Operator is skipped in the processing chain. |
-| `lock` | `false` | DAT content is locked and will not update. |
+| `lock` | `false` | Operator output is locked (frozen). See [Lock Flag Limitation](#lock-flag-limitation). |
 | `display` | `false` | Marks this operator as the display output (blue flag). |
 | `render` | `false` | Marks this operator for rendering (purple flag). |
 | `viewer` | `false` | Shows the operator's viewer on its node tile. |
@@ -513,6 +513,21 @@ Combined example — viewer on, cooking disabled:
 ```json
 "flags": ["viewer", "-allowCooking"]
 ```
+
+### Lock Flag Limitation
+
+The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, and SOPs — freezing their cooked output so it no longer updates from inputs or parameters. However, TDN only persists the frozen data for DATs.
+
+| Family | Flag persisted? | Frozen data persisted? | Notes |
+|--------|:-:|:-:|---|
+| **DAT** | Yes | Yes (via `dat_content`) | Full round-trip: both the lock state and text/table content are preserved. |
+| **TOP** | Yes | No | Pixel data is not stored. On import, the lock flag is set but no texture data exists. |
+| **CHOP** | Yes | No | Channel data is not stored. On import, the lock flag is set but no sample data exists. |
+| **SOP** | Yes | No | Geometry data is not stored. On import, the lock flag is set but no mesh data exists. |
+
+**Why not store the data?** Storing binary operator data (textures, audio waveforms, geometry meshes) would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
+
+**Practical effect:** When a `.tdn` file containing a locked non-DAT operator is imported, the lock flag is restored but the operator has no frozen data to display. The operator will need to be unlocked and allowed to re-cook to regenerate its output from parameters and inputs.
 
 ---
 
@@ -851,6 +866,8 @@ For most networks, export → import → re-export produces identical `.tdn` out
 **Float precision** — Values are rounded to 10 decimal places on first export. This can change the last digits of very precise values (e.g., `3.14159265358979` → `3.1415926536`). After that first rounding, subsequent exports are stable.
 
 **Type defaults recomputation** — Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the JSON structure may differ.
+
+**Locked non-DAT data** — When a TOP, CHOP, or SOP is locked, TDN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
 
 ### Intentionally Excluded
 

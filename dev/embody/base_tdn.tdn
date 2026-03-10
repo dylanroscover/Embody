@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.190",
+	"generator": "Embody/5.0.195",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-05T02:18:09Z",
-	"network_path": "/embody/base1",
+	"exported_at": "2026-03-10T22:27:49Z",
+	"network_path": "/embody/base_tdn",
 	"options": {
 		"include_dat_content": false
 	},

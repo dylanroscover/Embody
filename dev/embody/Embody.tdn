@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 119,
-	"generator": "Embody/5.0.191",
+	"build": 137,
+	"generator": "Embody/5.0.195",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-07T07:07:16Z",
+	"exported_at": "2026-03-10T22:28:15Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -15,6 +15,9 @@
 				"resizecomp": "=me",
 				"repocomp": "=me"
 			}
+		},
+		"textDAT": {
+			"flags": ["viewer"]
 		},
 		"parameterexecuteDAT": {
 			"flags": ["viewer"],
@@ -349,7 +352,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 15,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:47 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -386,7 +389,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 32,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:47 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -408,310 +411,7 @@
 			"flags": ["viewer"],
 			"position": [-700, 400],
 			"size": [130, 90],
-			"color": [0.67, 0.67, 0.67],
-			"dat_content": [
-				[
-					"15:33:09  397723 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"15:38:04  405636 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"15:38:04  405636 INFO    EnvoyExt: execute_python: templates = op('/embody/Embody/templates')\nif not templates:\n    result = 'ERROR: templates COMP not found'\nelse:\n    tagged = []\n    for dat in templates.children:\n        # Set extension to md so au..."
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_rule_td_python'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_rule_mcp_safety'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_externalize'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_rule_network_layout'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_debug_operator'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_create_operator'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_create_extension'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_td_api_reference'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_manage_annotations'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Tag 'md' applied to '/embody/Embody/templates/text_skill_mcp_tools_reference'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_td_api_reference'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_mcp_tools_reference'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_manage_annotations'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_externalize'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_debug_operator'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_create_operator'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_skill_create_extension'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_rule_td_python'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_rule_network_layout'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added '/embody/Embody/templates/text_rule_mcp_safety'"
-				],
-				[
-					"15:38:04  405636 SUCCESS EmbodyExt: Added 10 operators in total"
-				],
-				[
-					"15:38:04  405636 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"15:38:08  405648 INFO    EmbodyExt: Found 1 COMP with param changes"
-				],
-				[
-					"15:38:17  405875 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"15:38:17  405875 INFO    EnvoyExt: execute_python: templates = op(\"/embody/Embody/templates\")\nstatus = []\nfor dat in templates.children:\n    file_path = dat.par.file.eval()\n    sync = dat.par.syncfile.eval()\n    status.append(f\"{dat.name}: file={file_..."
-				],
-				[
-					"15:38:17  405875 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"15:38:32  406337 INFO    EnvoyExt: Processing: layout_children"
-				],
-				[
-					"15:38:37  406527 INFO    EnvoyExt: Processing: get_op_errors"
-				],
-				[
-					"15:40:21  409204 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"15:40:21  409204 INFO    EnvoyExt: execute_python: op.Embody.ext.Embody._extractClaudeConfig()\nresult = \"_extractClaudeConfig() completed\""
-				],
-				[
-					"15:40:21  409204 WARNING EmbodyExt: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to /Users/rosco/Documents/Git/Embody/ENVOY.md instead."
-				],
-				[
-					"15:40:21  409204 SUCCESS EmbodyExt: Generated 10 .claude/ files at /Users/rosco/Documents/Git/Embody"
-				],
-				[
-					"15:40:21  409204 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"15:58:15  441560 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"15:58:15  441560 INFO    EnvoyExt: execute_python: parent = op(\"/embody/Embody\")\npositions = []\nfor c in parent.children:\n    positions.append(f\"{c.name}: [{c.nodeX}, {c.nodeY}] {c.nodeWidth}x{c.nodeHeight}\")\nresult = \"\\n\".join(sorted(positions))"
-				],
-				[
-					"15:58:15  441560 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"15:58:48  442266 INFO    EnvoyExt: Processing: set_op_position"
-				],
-				[
-					"17:41:31  799327 INFO    EnvoyExt: Processing: get_annotations"
-				],
-				[
-					"17:41:56  800809 INFO    EnvoyExt: Processing: set_op_position"
-				],
-				[
-					"17:53:03  818421 INFO    EnvoyExt: Processing: get_op_position"
-				],
-				[
-					"17:53:21  819333 INFO    EnvoyExt: Processing: set_op_position"
-				],
-				[
-					"17:53:23  819442 INFO    EnvoyExt: Processing: set_op_position"
-				],
-				[
-					"17:53:37  820204 INFO    EnvoyExt: Processing: create_annotation"
-				],
-				[
-					"17:54:53  820685 INFO    EnvoyExt: Processing: get_enclosed_ops"
-				],
-				[
-					"18:06:54  840049 INFO    EnvoyExt: Processing: set_op_position"
-				],
-				[
-					"18:07:09  840522 INFO    EnvoyExt: Processing: set_op_position"
-				],
-				[
-					"18:07:19  840946 INFO    EnvoyExt: Processing: set_annotation"
-				],
-				[
-					"18:10:02  844856 INFO    EnvoyExt: Processing: get_enclosed_ops"
-				],
-				[
-					"19:04:02 1025652 SUCCESS TDNExt: Exported network to /Users/rosco/Documents/Git/Embody/dev/embody/Embody.tdn"
-				],
-				[
-					"19:04:02 1025652 SUCCESS EmbodyExt: Exported TDN for /embody/Embody"
-				],
-				[
-					"19:04:02 1025652 SUCCESS EmbodyExt: Saved 1 externalization"
-				],
-				[
-					"19:04:02 1025652 SUCCESS TDNExt: Exported network to /Users/rosco/Documents/Git/Embody/dev/embody/unit_tests.tdn"
-				],
-				[
-					"19:04:03 1025652 INFO    EmbodyExt: Stripped 38 operators from /embody/unit_tests (33 children, 5 annotations)"
-				],
-				[
-					"19:04:03 1025652 INFO    EmbodyExt: Exporting portable .tox: stripping 32 file reference(s) and 64 tagged operator(s) from /embody/Embody"
-				],
-				[
-					"19:04:04 1025652 SUCCESS EmbodyExt: Exported portable .tox: release/Embody-v5.0.191.tox"
-				],
-				[
-					"19:04:05 1025652 INFO    TDNExt: Restored file links on 32 DAT(s) in /embody/unit_tests"
-				],
-				[
-					"19:04:05 1025652 SUCCESS TDNExt: Imported 38 operators into /embody/unit_tests"
-				],
-				[
-					"19:04:06 1025676 INFO    EnvoyExt: Starting Envoy MCP server on port 9871"
-				],
-				[
-					"23:02:19 1734068 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"23:02:19 1734068 INFO    EnvoyExt: execute_python: r = op.unit_tests.ext.TestRunner.RunTestsSync(suite_name=\"test_claude_config\")\nresult = str(r)"
-				],
-				[
-					"23:02:21 1734068 ERROR   EnvoyExt: execute_python failed: 'td.Ext' object has no attribute 'TestRunner' Context:/embody/unit_tests"
-				],
-				[
-					"23:02:34 1734762 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"23:02:34 1734762 INFO    EnvoyExt: execute_python: ut = op.unit_tests\nresult = f\"type={ut.type}, extensions={[e.__class__.__name__ for e in ut.extensions]}, ext names={list(ut.ext.__dict__.keys()) if hasattr(ut.ext, \"__dict__\") else \"N/A\"}\""
-				],
-				[
-					"23:02:34 1734762 ERROR   EnvoyExt: execute_python failed: f-string: unmatched '(' (<string>, line 2)"
-				],
-				[
-					"23:02:39 1735028 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"23:02:39 1735028 INFO    EnvoyExt: execute_python: ut = op.unit_tests\nnames = [e.__class__.__name__ for e in ut.extensions]\nresult = str(names)"
-				],
-				[
-					"23:02:39 1735028 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"23:02:48 1735540 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"23:02:48 1735540 INFO    EnvoyExt: execute_python: r = op.unit_tests.ext.TestRunnerExt.RunTestsSync(suite_name=\"test_claude_config\")\nresult = str(op.unit_tests.ext.TestRunnerExt.GetResults())"
-				],
-				[
-					"23:02:48 1735540 INFO    TestRunnerExt: Discovered 1 test suite(s)"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_ffblmaj6/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_jh4cqz6i/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Updated CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_5gnv4o3q/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 WARNING EmbodyExt: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_8ivunite/ENVOY.md instead."
-				],
-				[
-					"23:02:49 1735540 WARNING EmbodyExt: CLAUDE.md already exists (not generated by Embody). Wrote MCP reference to /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_hswvu6dm/ENVOY.md instead."
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_nqg_u354/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_xz4rlcn6/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_2yfqa5nc/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_qch0rsi6/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_5ona3t48/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_4xrolkym/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Created CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_pe2u5a3i/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS EmbodyExt: Updated CLAUDE.md at /var/folders/xm/j9_s58g16rxgp4wrmh4y5sn40000gn/T/claude_config_test_pe2u5a3i/CLAUDE.md"
-				],
-				[
-					"23:02:49 1735540 SUCCESS TestRunnerExt: Tests complete: 35/35 passed"
-				],
-				[
-					"23:02:49 1735540 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"23:04:48 1741438 INFO    EnvoyExt: Processing: query_network"
-				],
-				[
-					"23:05:00 1742165 INFO    EnvoyExt: Processing: get_annotations"
-				],
-				[
-					"23:05:05 1742493 INFO    EnvoyExt: Processing: get_annotations"
-				],
-				[
-					"23:05:15 1742974 INFO    EnvoyExt: Processing: get_annotations"
-				],
-				[
-					"23:05:26 1743665 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"23:05:26 1743665 INFO    EnvoyExt: execute_python: import pathlib\n\n# 1. Create the textDAT\nparent = op(\"/embody/unit_tests\")\nnew_dat = parent.create(textDAT, \"test_claude_config\")\nnew_dat.par.language = \"python\"\n\n# 2. Read content from disk file\nconte..."
-				],
-				[
-					"23:05:26 1743665 ERROR   EnvoyExt: execute_python failed: [Errno 2] No such file or directory: '/Users/rosco/Documents/Git/Embody/dev/dev/embody/unit_tests/test_claude_config.py'"
-				],
-				[
-					"23:06:14 1744228 INFO    EnvoyExt: Processing: execute_python"
-				],
-				[
-					"23:06:14 1744228 INFO    EnvoyExt: execute_python: import pathlib\n\n# project.folder is the .toe dir, which is dev/\n# File is at dev/embody/unit_tests/test_claude_config.py\n# So relative to project.folder: embody/unit_tests/test_claude_config.py\nparent..."
-				],
-				[
-					"23:06:15 1744228 INFO    EnvoyExt: execute_python: completed successfully"
-				],
-				[
-					"23:07:13 1744812 INFO    EnvoyExt: Processing: tag_for_externalization"
-				],
-				[
-					"23:07:13 1744812 SUCCESS EmbodyExt: Tag 'py' applied to '/embody/unit_tests/test_claude_config'"
-				]
-			],
-			"dat_content_format": "table"
+			"color": [0.67, 0.67, 0.67]
 		},
 		{
 			"name": "null2",
@@ -733,7 +433,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-375, 375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -761,7 +460,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 14,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -843,7 +542,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 12,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -909,7 +608,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 12,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -945,11 +644,10 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-375, 475],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
-			"tags": ["TDExtension", "py"]
+			"tags": ["py", "TDExtension"]
 		},
 		{
 			"name": "mousein1",
@@ -976,7 +674,6 @@
 				"language": "python",
 				"extension": "py"
 			},
-			"flags": ["viewer"],
 			"position": [-375, 576],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -1013,150 +710,17 @@
 		{
 			"name": "templates",
 			"type": "baseCOMP",
-			"position": [-400, -1200],
-			"color": [0.67, 0.67, 0.67],
-			"children": [
-				{
-					"name": "text_rule_td_python",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_rule_td_python.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, 79],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_rule_mcp_safety",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_rule_mcp_safety.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, -236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_externalize",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_externalize.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [227, 79],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_rule_network_layout",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_rule_network_layout.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, -78],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_debug_operator",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_debug_operator.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [227, 236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_create_operator",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_create_operator.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [0, 236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_create_extension",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_create_extension.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, 236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_td_api_reference",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_td_api_reference.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [0, 79],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_manage_annotations",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_manage_annotations.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [227, -78],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_mcp_tools_reference",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_mcp_tools_reference.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [0, -78],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
+			"custom_pars": {
+				"About": {
+					"$t": "about_2",
+					"Build": 1,
+					"Date": "2026-03-10 22:27:46 UTC",
+					"Touchbuild": "2025.32280"
 				}
-			]
+			},
+			"position": [-400, -1200],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		},
 		{
 			"name": "keyboardin1",
@@ -1168,20 +732,7 @@
 			},
 			"flags": ["viewer"],
 			"position": [-325, -275],
-			"size": [130, 90],
-			"dat_content": [
-				["key", "character", "alt", "ctrl", "shift", "state", "time", "cmd"],
-				["lcmd", "", "0", "0", "0", "0", "-508402018", "0"],
-				["cmd", "", "0", "0", "0", "1", "-508391496", "1"],
-				["lcmd", "", "0", "0", "0", "1", "-508391496", "1"],
-				["cmd", "", "0", "0", "0", "0", "-506218368", "0"],
-				["lcmd", "", "0", "0", "0", "0", "-506218368", "0"],
-				["cmd", "", "0", "0", "0", "1", "-506216169", "1"],
-				["lcmd", "", "0", "0", "0", "1", "-506216169", "1"],
-				["cmd", "", "0", "0", "0", "0", "-506215648", "0"],
-				["lcmd", "", "0", "0", "0", "0", "-506215648", "0"]
-			],
-			"dat_content_format": "table"
+			"size": [130, 90]
 		},
 		{
 			"name": "text_claude",
@@ -1192,7 +743,6 @@
 				"language": "text",
 				"extension": "md"
 			},
-			"flags": ["viewer"],
 			"position": [-700, -1200],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -1593,11 +1143,7 @@
 							"flags": ["viewer"],
 							"position": [0, -200],
 							"size": [130, 90],
-							"comment": "Popup help string as set in Popuphelp parameter",
-							"dat_content": [
-								[""]
-							],
-							"dat_content_format": "table"
+							"comment": "Popup help string as set in Popuphelp parameter"
 						},
 						{
 							"name": "docsHelper",
@@ -1712,9 +1258,7 @@
 								"panelvalue": "rselect",
 								"defaultreadencoding": "cp1252"
 							},
-							"position": [200, -200],
-							"dat_content": "# me - this DAT\n# panelValue - the PanelValue object that changed\n# \n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\nTDF = op.TDModules.mod.TDFunctions\n\ndef onOffToOn(panelValue):\n\tif not panelValue.owner.panel.ctrl:\n\t\treturn\n\top.TDResources.op('popMenu').Open(\n\t\t\t\t\t\titems=['Parameters', 'Viewer', 'Network', 'Customize Component'],\n\t\t\t\t\t\tcallback=onPopMenu)\n\ndef onPopMenu(info):\n\tif info['item'] == 'Parameters':\n\t\tparent.Widget.openParameters()\n\telif info['item'] == 'Viewer':\n\t\tparent.Widget.openViewer()\n\telif info['item'] == 'Network':\n\t\tTDF.showInPane(parent.Widget)\n\telif info['item'] == 'Customize Component':\n\t\top.TDDialogs.op('CompEditor').EditComp(parent.Widget)\n\t\t\n\ndef whileOn(panelValue):\n\treturn\n\ndef onOnToOff(panelValue):\n\treturn\n\ndef whileOff(panelValue):\n\treturn\n\ndef onValueChange(panelValue):\n\treturn\n\t",
-							"dat_content_format": "text"
+							"position": [200, -200]
 						},
 						{
 							"name": "TDUpdateSystem",
@@ -1924,7 +1468,7 @@
 					"position": [200, -200],
 					"size": [160, 76],
 					"color": [0.5, 0.35, 0.05],
-					"tags": ["TDPub", "TDSubComp"],
+					"tags": ["TDSubComp", "TDPub"],
 					"children": [
 						{
 							"name": "text",
@@ -1956,11 +1500,8 @@
 						{
 							"name": "text1_callbacks",
 							"type": "textDAT",
-							"flags": ["viewer"],
 							"position": [0, -150],
-							"size": [160, 130],
-							"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
-							"dat_content_format": "text"
+							"size": [160, 130]
 						}
 					]
 				},
@@ -2214,12 +1755,9 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"],
-									"dat_content": "TDF = op.TDModules.mod.TDFunctions\n\nclass SubWidgetExt:\n\t\"\"\"\n\tRockerExt description\n\t\"\"\"\n\n\tdef __init__(self, ownerComp, indexComp=None):\n\t\t# The component to which this extension is attached\n\t\tself.ownerComp = ownerComp\n\t\tif indexComp:\n\t\t\tself.indexComp = indexComp\n\t\telse:\n\t\t\tself.indexComp = self.ownerComp\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tPanel exec events from widget\n\t\t\"\"\"\n\t\tpass\n\n\tdef onParSettingsChange(self, par, prev):\n\t\t\"\"\"\n\t\tManages value changes widget settings parameters\n\t\t\"\"\"\n\t\tval = par.eval()\n\t\tif par.name == self.parPrefix + 'runcommand':\n\t\t\tenable = par.eval()\n\t\t\tfor suffix in ['commandon', 'commandoff', 'commandonvaluechange']:\n\t\t\t\tp = self.prefixPar(suffix)\n\t\t\t\tif p is not None:\n\t\t\t\t\tp.enable = enable\n\t\telif par.name == self.parPrefix + 'horizontalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('hfillweight').enable = fill\n\t\t\tself.prefixPar('width').enable = not fill\n\t\telif par.name == self.parPrefix + 'verticalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('vfillweight').enable = fill\n\t\t\tself.prefixPar('height').enable = not fill\n\t\telif par.name in [self.parPrefix + 'bordera',\n\t\t\t\t\t\t  self.parPrefix + 'borderb',\n\t\t\t\t\t\t  self.parPrefix + 'border']:\n\t\t\tgetattr(parent.Widget.par, par.name + 'colorr').enable = par.eval()\n\n\tdef onParSettingsPulse(self, par):\n\t\t\"\"\"\n\t\tManages pulse events for widget settings parameters\n\t\t\"\"\"\n\t\tif par.name == self.parPrefix + 'customizeinteraction':\n\t\t\tself.makePanelExecute()\n\n\tdef onToggleEvent(self, event, panelValue):\n\t\tif event == 'offToOn':\n\t\t\tself.toggle()\n\n\tdef toggle(self):\n\t\tindex = self.indexComp.digits\n\t\tvaluePar = getattr(parent.Widget.par, 'Value' + str(index))\n\t\tvaluePar.val = 1 - valuePar.eval()\n\n\tdef prefixPar(self, suffix):\n\t\t\"\"\"\n\t\tReturn a parameter prefixed by parPrefix\n\t\t:param suffix: the par name after parPrefix (string)\n\t\t:return: the parameter or None if not found\n\t\t\"\"\"\n\t\treturn getattr(self.ownerComp.parent.Widget.par,\n\t\t\t\t\t   self.parPrefix + suffix, None)\n\n\tdef getDockExpressionToOwner(self):\n\t\tpage = TDF.getCustomPage(self.ownerComp.parent.Widget, 'OPs')\n\t\texpr = \"me.dock.op('\" + self.ownerComp.name + \"')\"\n\t\tfor p in page.pars:\n\t\t\tif p.eval() == self.ownerComp:\n\t\t\t\texpr = \"me.dock.par.\" + p.name + \".eval()\"\n\t\t\t\tbreak\n\t\treturn expr\n\n\tdef makePanelExecute(self, panelExpr=None):\n\t\t\"\"\"\n\t\tCreates a panel execute DAT for running external code from the\n\t\twidget that is connected to the button interaction receiver - which\n\t\tis the ownerComp of this class\n\n\t\tpanelExpr: will be used as the expression in the panel parameter of the\n\t\t\tpanelExec. Defaults to \"me.dock.op('\" + self.ownerComp.name +\"')\"\n\t\t\"\"\"\n\t\tpanelExecPar = self.PanelExecPar\n\t\tpeDat = panelExecPar.eval()\n\t\texpr = self.getDockExpressionToOwner() \\\n\t\t\t\t\t\t\t\t\t\t\tif panelExpr is None else panelExpr\n\t\tif not peDat:\n\t\t\tpeDat = self.ownerComp.parent.Widget.parent().create(\n\t\t\t\tpanelexecuteDAT, self.parPrefix + 'PanelExec')\n\t\t\tpeDat.nodeX = self.ownerComp.parent.Widget.nodeX - 200\n\t\t\tpeDat.nodeY = self.ownerComp.parent.Widget.nodeY\n\t\t\tpeDat.dock = self.ownerComp.parent.Widget\n\t\t\tpeDat.par.panel.expr = expr\n\t\t\tpeDat.par.ontooff = True\n\t\t\tpeDat.viewer = True\n\t\t\tpanelExecPar.val = peDat.name\n\t\t\tpanelExecPar.enable = True\n\t\t\tpanelExecPar.readOnly = True\n\t\t\tself.ownerComp.op('panelExecOPExec').cook(force=True)\n\t\telse:\n\t\t\tif expr not in peDat.par.panel.expr:\n\t\t\t\tpeDat.par.panel.expr += ', ' + expr\n\t\tpanelExecPar.eval().par.edit.pulse()\n\n\t@property\n\tdef PanelExecPar(self):\n\t\treturn getattr(parent.Widget.par, self.parPrefix + 'panelexec', None)\n\n",
-									"dat_content_format": "text"
+									"tags": ["TDExtension"]
 								},
 								{
 									"name": "ButtonPushExt",
@@ -2227,12 +1765,9 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"],
-									"dat_content": "SubWidgetExt = mod.SubWidgetExt.SubWidgetExt\nTDF = op.TDModules.mod.TDFunctions\n\nclass ButtonPushExt(SubWidgetExt):\n\t\"\"\"\n\tButtonPushExt description\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.parPrefix = 'Button'\n\t\tSubWidgetExt.__init__(self, ownerComp)\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tSelects correct funtion based on button widget\n\t\ttype\n\t\t\"\"\"\n\t\tval = panelValue != 0\n\t\trunCommand = self.parDict['runcommand']\n\t\tcommandOn = self.parDict['commandon']\n\t\tcommandOff = self.parDict['commandoff']\n\t\tif runCommand:\n\t\t\tif val and commandOn is not None:\n\t\t\t\tself.runCommand(commandOn)\n\t\t\telif not val and commandOff is not None:\n\t\t\t\tself.runCommand(commandOff)\n\n\n",
-									"dat_content_format": "text"
+									"tags": ["TDExtension"]
 								},
 								{
 									"name": "panelexecValue",
@@ -2245,16 +1780,12 @@
 										"defaultreadencoding": "cp1252"
 									},
 									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05],
-									"dat_content": "def offToOn(panelValue):\n\text.SubWidgetExt.onPanelEvent('offToOn', panelValue)\n\ndef onToOff(panelValue):\n\text.SubWidgetExt.onPanelEvent('onToOff', panelValue)\n\ndef valueChange(panelValue):\n\text.SubWidgetExt.onPanelEvent('valueChange', panelValue)\n",
-									"dat_content_format": "text"
+									"color": [0.05, 0.5, 0.05]
 								},
 								{
 									"name": "panelExecOPExec",
 									"type": "opexecuteDAT",
-									"position": [-300, 100],
-									"dat_content": "def onOPdelete():\n\text.SubWidgetExt.PanelExecPar.val = ''\n\text.SubWidgetExt.PanelExecPar.enable = False\t",
-									"dat_content_format": "text"
+									"position": [-300, 100]
 								},
 								{
 									"name": "parexecSettings",
@@ -2268,18 +1799,13 @@
 									},
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes",
-									"dat_content": "def valueChange(par, val, prev):\n\text.SubWidgetExt.onParSettingsChange(par, prev)\n\ndef onPulse(par):\n\text.SubWidgetExt.onParSettingsPulse(par)\n\n",
-									"dat_content_format": "text"
+									"comment": "Execution for parameter changes"
 								},
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
-									"flags": ["viewer"],
 									"position": [400, 50],
-									"size": [160, 130],
-									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
-									"dat_content_format": "text"
+									"size": [160, 130]
 								}
 							]
 						},
@@ -2390,12 +1916,9 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"],
-									"dat_content": "TDF = op.TDModules.mod.TDFunctions\n\nclass SubWidgetExt:\n\t\"\"\"\n\tRockerExt description\n\t\"\"\"\n\n\tdef __init__(self, ownerComp, indexComp=None):\n\t\t# The component to which this extension is attached\n\t\tself.ownerComp = ownerComp\n\t\tif indexComp:\n\t\t\tself.indexComp = indexComp\n\t\telse:\n\t\t\tself.indexComp = self.ownerComp\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tPanel exec events from widget\n\t\t\"\"\"\n\t\tpass\n\n\tdef onParSettingsChange(self, par, prev):\n\t\t\"\"\"\n\t\tManages value changes widget settings parameters\n\t\t\"\"\"\n\t\tval = par.eval()\n\t\tif par.name == self.parPrefix + 'runcommand':\n\t\t\tenable = par.eval()\n\t\t\tfor suffix in ['commandon', 'commandoff', 'commandonvaluechange']:\n\t\t\t\tp = self.prefixPar(suffix)\n\t\t\t\tif p is not None:\n\t\t\t\t\tp.enable = enable\n\t\telif par.name == self.parPrefix + 'horizontalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('hfillweight').enable = fill\n\t\t\tself.prefixPar('width').enable = not fill\n\t\telif par.name == self.parPrefix + 'verticalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('vfillweight').enable = fill\n\t\t\tself.prefixPar('height').enable = not fill\n\t\telif par.name in [self.parPrefix + 'bordera',\n\t\t\t\t\t\t  self.parPrefix + 'borderb',\n\t\t\t\t\t\t  self.parPrefix + 'border']:\n\t\t\tgetattr(parent.Widget.par, par.name + 'colorr').enable = par.eval()\n\n\tdef onParSettingsPulse(self, par):\n\t\t\"\"\"\n\t\tManages pulse events for widget settings parameters\n\t\t\"\"\"\n\t\tif par.name == self.parPrefix + 'customizeinteraction':\n\t\t\tself.makePanelExecute()\n\n\tdef onToggleEvent(self, event, panelValue):\n\t\tif event == 'offToOn':\n\t\t\tself.toggle()\n\n\tdef toggle(self):\n\t\tindex = self.indexComp.digits\n\t\tvaluePar = getattr(parent.Widget.par, 'Value' + str(index))\n\t\tvaluePar.val = 1 - valuePar.eval()\n\n\tdef prefixPar(self, suffix):\n\t\t\"\"\"\n\t\tReturn a parameter prefixed by parPrefix\n\t\t:param suffix: the par name after parPrefix (string)\n\t\t:return: the parameter or None if not found\n\t\t\"\"\"\n\t\treturn getattr(self.ownerComp.parent.Widget.par,\n\t\t\t\t\t   self.parPrefix + suffix, None)\n\n\tdef getDockExpressionToOwner(self):\n\t\tpage = TDF.getCustomPage(self.ownerComp.parent.Widget, 'OPs')\n\t\texpr = \"me.dock.op('\" + self.ownerComp.name + \"')\"\n\t\tfor p in page.pars:\n\t\t\tif p.eval() == self.ownerComp:\n\t\t\t\texpr = \"me.dock.par.\" + p.name + \".eval()\"\n\t\t\t\tbreak\n\t\treturn expr\n\n\tdef makePanelExecute(self, panelExpr=None):\n\t\t\"\"\"\n\t\tCreates a panel execute DAT for running external code from the\n\t\twidget that is connected to the button interaction receiver - which\n\t\tis the ownerComp of this class\n\n\t\tpanelExpr: will be used as the expression in the panel parameter of the\n\t\t\tpanelExec. Defaults to \"me.dock.op('\" + self.ownerComp.name +\"')\"\n\t\t\"\"\"\n\t\tpanelExecPar = self.PanelExecPar\n\t\tpeDat = panelExecPar.eval()\n\t\texpr = self.getDockExpressionToOwner() \\\n\t\t\t\t\t\t\t\t\t\t\tif panelExpr is None else panelExpr\n\t\tif not peDat:\n\t\t\tpeDat = self.ownerComp.parent.Widget.parent().create(\n\t\t\t\tpanelexecuteDAT, self.parPrefix + 'PanelExec')\n\t\t\tpeDat.nodeX = self.ownerComp.parent.Widget.nodeX - 200\n\t\t\tpeDat.nodeY = self.ownerComp.parent.Widget.nodeY\n\t\t\tpeDat.dock = self.ownerComp.parent.Widget\n\t\t\tpeDat.par.panel.expr = expr\n\t\t\tpeDat.par.ontooff = True\n\t\t\tpeDat.viewer = True\n\t\t\tpanelExecPar.val = peDat.name\n\t\t\tpanelExecPar.enable = True\n\t\t\tpanelExecPar.readOnly = True\n\t\t\tself.ownerComp.op('panelExecOPExec').cook(force=True)\n\t\telse:\n\t\t\tif expr not in peDat.par.panel.expr:\n\t\t\t\tpeDat.par.panel.expr += ', ' + expr\n\t\tpanelExecPar.eval().par.edit.pulse()\n\n\t@property\n\tdef PanelExecPar(self):\n\t\treturn getattr(parent.Widget.par, self.parPrefix + 'panelexec', None)\n\n",
-									"dat_content_format": "text"
+									"tags": ["TDExtension"]
 								},
 								{
 									"name": "ButtonPushExt",
@@ -2403,12 +1926,9 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"],
-									"dat_content": "SubWidgetExt = mod.SubWidgetExt.SubWidgetExt\nTDF = op.TDModules.mod.TDFunctions\n\nclass ButtonPushExt(SubWidgetExt):\n\t\"\"\"\n\tButtonPushExt description\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.parPrefix = 'Button'\n\t\tSubWidgetExt.__init__(self, ownerComp)\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tSelects correct funtion based on button widget\n\t\ttype\n\t\t\"\"\"\n\t\tval = panelValue != 0\n\t\trunCommand = self.parDict['runcommand']\n\t\tcommandOn = self.parDict['commandon']\n\t\tcommandOff = self.parDict['commandoff']\n\t\tif runCommand:\n\t\t\tif val and commandOn is not None:\n\t\t\t\tself.runCommand(commandOn)\n\t\t\telif not val and commandOff is not None:\n\t\t\t\tself.runCommand(commandOff)\n\n\n",
-									"dat_content_format": "text"
+									"tags": ["TDExtension"]
 								},
 								{
 									"name": "panelexecValue",
@@ -2421,16 +1941,12 @@
 										"defaultreadencoding": "cp1252"
 									},
 									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05],
-									"dat_content": "def offToOn(panelValue):\n\text.SubWidgetExt.onPanelEvent('offToOn', panelValue)\n\ndef onToOff(panelValue):\n\text.SubWidgetExt.onPanelEvent('onToOff', panelValue)\n\ndef valueChange(panelValue):\n\text.SubWidgetExt.onPanelEvent('valueChange', panelValue)\n",
-									"dat_content_format": "text"
+									"color": [0.05, 0.5, 0.05]
 								},
 								{
 									"name": "panelExecOPExec",
 									"type": "opexecuteDAT",
-									"position": [-300, 100],
-									"dat_content": "def onOPdelete():\n\text.SubWidgetExt.PanelExecPar.val = ''\n\text.SubWidgetExt.PanelExecPar.enable = False\t",
-									"dat_content_format": "text"
+									"position": [-300, 100]
 								},
 								{
 									"name": "parexecSettings",
@@ -2444,18 +1960,13 @@
 									},
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes",
-									"dat_content": "def valueChange(par, val, prev):\n\text.SubWidgetExt.onParSettingsChange(par, prev)\n\ndef onPulse(par):\n\text.SubWidgetExt.onParSettingsPulse(par)\n\n",
-									"dat_content_format": "text"
+									"comment": "Execution for parameter changes"
 								},
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
-									"flags": ["viewer"],
 									"position": [400, 50],
-									"size": [160, 130],
-									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
-									"dat_content_format": "text"
+									"size": [160, 130]
 								}
 							]
 						},
@@ -2468,9 +1979,7 @@
 								"panelvalue": "lselect",
 								"language": "python"
 							},
-							"position": [200, -425],
-							"dat_content": "# me - this DAT\n# panelValue - the PanelValue object that changed\n# prev - the previous value of the PanelValue object that changed\n# Make sure the corresponding toggle is enabled in the Panel Execute DAT.\n\ndef onOffToOn(panelValue):\n\tif panelValue.owner.name == 'buttonClose':\n\t\tparent.Widget.par.Windowclose.pulse()\n\telif panelValue.owner.name == 'buttonMax':\n\t\tparent.Widget.par.Windowmaximize.pulse()\n\telif panelValue.owner.name == 'buttonMin':\n\t\tparent.Widget.par.Windowminimize.pulse()\n\n\treturn\n\ndef whileOn(panelValue):\n\treturn\n\ndef onOnToOff(panelValue):\n\treturn\n\ndef whileOff(panelValue):\n\treturn\n\ndef onValueChange(panelValue, prev):\n\treturn\n\t",
-							"dat_content_format": "text"
+							"position": [200, -425]
 						},
 						{
 							"name": "buttonClose",
@@ -2581,12 +2090,9 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"],
-									"dat_content": "TDF = op.TDModules.mod.TDFunctions\n\nclass SubWidgetExt:\n\t\"\"\"\n\tRockerExt description\n\t\"\"\"\n\n\tdef __init__(self, ownerComp, indexComp=None):\n\t\t# The component to which this extension is attached\n\t\tself.ownerComp = ownerComp\n\t\tif indexComp:\n\t\t\tself.indexComp = indexComp\n\t\telse:\n\t\t\tself.indexComp = self.ownerComp\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tPanel exec events from widget\n\t\t\"\"\"\n\t\tpass\n\n\tdef onParSettingsChange(self, par, prev):\n\t\t\"\"\"\n\t\tManages value changes widget settings parameters\n\t\t\"\"\"\n\t\tval = par.eval()\n\t\tif par.name == self.parPrefix + 'runcommand':\n\t\t\tenable = par.eval()\n\t\t\tfor suffix in ['commandon', 'commandoff', 'commandonvaluechange']:\n\t\t\t\tp = self.prefixPar(suffix)\n\t\t\t\tif p is not None:\n\t\t\t\t\tp.enable = enable\n\t\telif par.name == self.parPrefix + 'horizontalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('hfillweight').enable = fill\n\t\t\tself.prefixPar('width').enable = not fill\n\t\telif par.name == self.parPrefix + 'verticalmode':\n\t\t\tfill = True if val == 'fill' else False\n\t\t\tself.prefixPar('vfillweight').enable = fill\n\t\t\tself.prefixPar('height').enable = not fill\n\t\telif par.name in [self.parPrefix + 'bordera',\n\t\t\t\t\t\t  self.parPrefix + 'borderb',\n\t\t\t\t\t\t  self.parPrefix + 'border']:\n\t\t\tgetattr(parent.Widget.par, par.name + 'colorr').enable = par.eval()\n\n\tdef onParSettingsPulse(self, par):\n\t\t\"\"\"\n\t\tManages pulse events for widget settings parameters\n\t\t\"\"\"\n\t\tif par.name == self.parPrefix + 'customizeinteraction':\n\t\t\tself.makePanelExecute()\n\n\tdef onToggleEvent(self, event, panelValue):\n\t\tif event == 'offToOn':\n\t\t\tself.toggle()\n\n\tdef toggle(self):\n\t\tindex = self.indexComp.digits\n\t\tvaluePar = getattr(parent.Widget.par, 'Value' + str(index))\n\t\tvaluePar.val = 1 - valuePar.eval()\n\n\tdef prefixPar(self, suffix):\n\t\t\"\"\"\n\t\tReturn a parameter prefixed by parPrefix\n\t\t:param suffix: the par name after parPrefix (string)\n\t\t:return: the parameter or None if not found\n\t\t\"\"\"\n\t\treturn getattr(self.ownerComp.parent.Widget.par,\n\t\t\t\t\t   self.parPrefix + suffix, None)\n\n\tdef getDockExpressionToOwner(self):\n\t\tpage = TDF.getCustomPage(self.ownerComp.parent.Widget, 'OPs')\n\t\texpr = \"me.dock.op('\" + self.ownerComp.name + \"')\"\n\t\tfor p in page.pars:\n\t\t\tif p.eval() == self.ownerComp:\n\t\t\t\texpr = \"me.dock.par.\" + p.name + \".eval()\"\n\t\t\t\tbreak\n\t\treturn expr\n\n\tdef makePanelExecute(self, panelExpr=None):\n\t\t\"\"\"\n\t\tCreates a panel execute DAT for running external code from the\n\t\twidget that is connected to the button interaction receiver - which\n\t\tis the ownerComp of this class\n\n\t\tpanelExpr: will be used as the expression in the panel parameter of the\n\t\t\tpanelExec. Defaults to \"me.dock.op('\" + self.ownerComp.name +\"')\"\n\t\t\"\"\"\n\t\tpanelExecPar = self.PanelExecPar\n\t\tpeDat = panelExecPar.eval()\n\t\texpr = self.getDockExpressionToOwner() \\\n\t\t\t\t\t\t\t\t\t\t\tif panelExpr is None else panelExpr\n\t\tif not peDat:\n\t\t\tpeDat = self.ownerComp.parent.Widget.parent().create(\n\t\t\t\tpanelexecuteDAT, self.parPrefix + 'PanelExec')\n\t\t\tpeDat.nodeX = self.ownerComp.parent.Widget.nodeX - 200\n\t\t\tpeDat.nodeY = self.ownerComp.parent.Widget.nodeY\n\t\t\tpeDat.dock = self.ownerComp.parent.Widget\n\t\t\tpeDat.par.panel.expr = expr\n\t\t\tpeDat.par.ontooff = True\n\t\t\tpeDat.viewer = True\n\t\t\tpanelExecPar.val = peDat.name\n\t\t\tpanelExecPar.enable = True\n\t\t\tpanelExecPar.readOnly = True\n\t\t\tself.ownerComp.op('panelExecOPExec').cook(force=True)\n\t\telse:\n\t\t\tif expr not in peDat.par.panel.expr:\n\t\t\t\tpeDat.par.panel.expr += ', ' + expr\n\t\tpanelExecPar.eval().par.edit.pulse()\n\n\t@property\n\tdef PanelExecPar(self):\n\t\treturn getattr(parent.Widget.par, self.parPrefix + 'panelexec', None)\n\n",
-									"dat_content_format": "text"
+									"tags": ["TDExtension"]
 								},
 								{
 									"name": "ButtonPushExt",
@@ -2594,12 +2100,9 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
-									"tags": ["TDExtension"],
-									"dat_content": "SubWidgetExt = mod.SubWidgetExt.SubWidgetExt\nTDF = op.TDModules.mod.TDFunctions\n\nclass ButtonPushExt(SubWidgetExt):\n\t\"\"\"\n\tButtonPushExt description\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.parPrefix = 'Button'\n\t\tSubWidgetExt.__init__(self, ownerComp)\n\n\tdef onPanelEvent(self, event, panelValue):\n\t\t\"\"\"\n\t\tSelects correct funtion based on button widget\n\t\ttype\n\t\t\"\"\"\n\t\tval = panelValue != 0\n\t\trunCommand = self.parDict['runcommand']\n\t\tcommandOn = self.parDict['commandon']\n\t\tcommandOff = self.parDict['commandoff']\n\t\tif runCommand:\n\t\t\tif val and commandOn is not None:\n\t\t\t\tself.runCommand(commandOn)\n\t\t\telif not val and commandOff is not None:\n\t\t\t\tself.runCommand(commandOff)\n\n\n",
-									"dat_content_format": "text"
+									"tags": ["TDExtension"]
 								},
 								{
 									"name": "panelexecValue",
@@ -2612,16 +2115,12 @@
 										"defaultreadencoding": "cp1252"
 									},
 									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05],
-									"dat_content": "def offToOn(panelValue):\n\text.SubWidgetExt.onPanelEvent('offToOn', panelValue)\n\ndef onToOff(panelValue):\n\text.SubWidgetExt.onPanelEvent('onToOff', panelValue)\n\ndef valueChange(panelValue):\n\text.SubWidgetExt.onPanelEvent('valueChange', panelValue)\n",
-									"dat_content_format": "text"
+									"color": [0.05, 0.5, 0.05]
 								},
 								{
 									"name": "panelExecOPExec",
 									"type": "opexecuteDAT",
-									"position": [-300, 100],
-									"dat_content": "def onOPdelete():\n\text.SubWidgetExt.PanelExecPar.val = ''\n\text.SubWidgetExt.PanelExecPar.enable = False\t",
-									"dat_content_format": "text"
+									"position": [-300, 100]
 								},
 								{
 									"name": "parexecSettings",
@@ -2635,18 +2134,13 @@
 									},
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes",
-									"dat_content": "def valueChange(par, val, prev):\n\text.SubWidgetExt.onParSettingsChange(par, prev)\n\ndef onPulse(par):\n\text.SubWidgetExt.onParSettingsPulse(par)\n\n",
-									"dat_content_format": "text"
+									"comment": "Execution for parameter changes"
 								},
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
-									"flags": ["viewer"],
 									"position": [400, 50],
-									"size": [160, 130],
-									"dat_content": "# Text Component callbacks\n\ndef onValueChange(comp, value, prevValue):\n\t\"\"\"\n\tCalled whenever the text component's value parameter changes for any reason including typing\n\tin the text window or changing the parameter directly. The callback is equivalent to the\n\tonValueChange in the parameter exectute DAT.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonValueChange comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\ndef onFocus(comp):\n\t\"\"\"\n\tCalled when one of the text components viewers gets keyboard focus. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonFocus comp:', comp.path)\n\treturn\n\ndef onFocusEnd(comp, info):\n\t\"\"\"\n\tCalled when one of the text component's viewers loses keyboard focus. In regular editing mode\n\tthis is right after the contents are saved back to the value parameter. This function is called\n\teverytime the viewer loses focus, even if the text does not change.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tinfo: a dictionary containing information about the event including:\n\t\t\treason: a string indicating what caused the viewer to lose focus e.g. 'enter', 'escape', 'tab', 'unknown'\n\t\n\t\"\"\"\n\t#debug('\\nonFocusEnd comp:', comp.path, '- info:\\n', info)\n\treturn\n\t\ndef onTextEdit(comp):\n\t\"\"\"\n\tCalled each time the contents of the text component viewer change i.e. when typing a character,\n\tdeleting text, cutting or pasting. \n\t\n\tArgs:\n\t\tcomp: the text component\n\t\"\"\"\n\t#debug('\\nonTextEdit comp:', comp.path, '- text: ', comp.editText)\n\treturn\n\t\ndef onTextEditEnd(comp, value, prevValue):\n\t\"\"\"\n\tCalled when the user finishes editing and the value has been changed. Not called in 'Continuous Edit' mode. Use\n\tonTextEdit and onFocusEnd when using continuous editing.\n\t\n\tArgs:\n\t\tcomp: the text component\n\t\tvalue: the new value\n\t\tprevValue: the previous value\n\t\"\"\"\n\t#debug('\\nonTextEditEnd comp:', comp.path, '- new value: ', value, ', prev value: ', prevValue )\n\treturn\n\t\n\t",
-									"dat_content_format": "text"
+									"size": [160, 130]
 								}
 							]
 						},
@@ -2659,19 +2153,14 @@
 								"pars": "w h",
 								"language": "python"
 							},
-							"position": [-375, 100],
-							"dat_content": "# me - this DAT\n# par - the Par object that has changed\n# val - the current value\n# prev - the previous value\n# \n# Make sure the corresponding toggle is enabled in the Parameter Execute DAT.\n\ndef onValueChange(par, prev):\n\t# use par.eval() to get current value\n\text = parent.minMaxClose.ext.MinMaxCloseExt\n\n\tif ext.win_state == 1:\n\t\tif par.name == 'w':\n\t\t\text.max_width = par.eval()\n\t\telse:\n\t\t\text.max_height = par.eval()\n\t\n\treturn\n\n# Called at end of frame with complete list of individual parameter changes.\n# The changes are a list of named tuples, where each tuple is (Par, previous value)\ndef onValuesChanged(changes):\n\tfor c in changes:\n\t\t# use par.eval() to get current value\n\t\tpar = c.par\n\t\tprev = c.prev\n\treturn\n\ndef onPulse(par):\n\treturn\n\ndef onExpressionChange(par, val, prev):\n\treturn\n\ndef onExportChange(par, val, prev):\n\treturn\n\ndef onEnableChange(par, val, prev):\n\treturn\n\ndef onModeChange(par, val, prev):\n\treturn\n\t",
-							"dat_content_format": "text"
+							"position": [-375, 100]
 						},
 						{
 							"name": "MinMaxCloseExt",
 							"type": "textDAT",
-							"flags": ["viewer"],
 							"position": [-200, 100],
 							"size": [130, 90],
-							"tags": ["TDExtension"],
-							"dat_content": "\nimport TDFunctions as TDF\n\nclass MinMaxCloseExt:\n\t\"\"\"\n\tManages minimize/maximize/close for the Embody manager window.\n\tCompact mode hides non-essential toolbar buttons for a widget-like footprint.\n\t\"\"\"\n\tdef __init__(self, ownerComp):\n\t\tself.ownerComp = ownerComp\n\t\tself.windowCompPar = self.ownerComp.parent.Widget.par.Windowcomp\n\t\tself.panelCompPar = self.ownerComp.parent.Widget.par.Panelcomp\n\n\t\tself.mgr = parent.Embody\n\t\tself.tools = parent.Embody.op('toolbar')\n\t\tself.lister = parent.Embody.op('list')\n\t\tself.filter = self.tools.op('container_right')\n\t\tself.container_left = self.tools.op('container_left')\n\n\t\t# Buttons hidden in compact mode (envoy_toggle stays visible)\n\t\tself.compact_hide_names = (\n\t\t\t'save_folder',\n\t\t\t'envoy_status', 'disable'\n\t\t)\n\n\t\t# Known-good default display states for maximize restore\n\t\tself._defaults = {\n\t\t\t'status':       {'mode': 'constant', 'val': 0},\n\t\t\t'disable':      {'mode': 'constant', 'val': 1},\n\t\t\t'initialize':   {'mode': 'constant', 'val': 1},\n\t\t\t'refresh':      {'mode': 'expression', 'expr': \"1 if parent.Embody.par.Status == 'Enabled' else 0\"},\n\t\t\t'save_folder':  {'mode': 'expression', 'expr': \"1 if parent.Embody.par.Status == 'Enabled' else 0\"},\n\t\t\t'export_comp_tdn': {'mode': 'constant', 'val': 1},\n\t\t\t'export_tdn':   {'mode': 'constant', 'val': 1},\n\t\t\t'import_tdn':   {'mode': 'constant', 'val': 1},\n\t\t\t'envoy_status': {'mode': 'constant', 'val': 1},\n\t\t\t'envoy_toggle': {'mode': 'constant', 'val': 1},\n\t\t}\n\n\t\tself.win_state = 1\n\n\t\tself.min_width = 370\n\t\tself.min_height = 72\n\t\tself.max_width = 1080\n\t\tself.max_height = 440\n\n\t\tself.status_compact_w = 80\n\t\tself.status_default_w = 80\n\n\tdef Windowclose(self, par):\n\t\t\"\"\"Close the manager window.\"\"\"\n\t\twindowComp = self.windowCompPar.eval()\n\t\tif isinstance(windowComp, windowCOMP):\n\t\t\twindowComp.par.winclose.pulse()\n\n\tdef Windowmaximize(self, par):\n\t\t\"\"\"Restore to full manager view.\"\"\"\n\t\tself.win_state = 1\n\t\t# Restore ALL buttons to their known defaults\n\t\tif self.container_left:\n\t\t\tfor name, dflt in self._defaults.items():\n\t\t\t\tbtn = self.container_left.op(name)\n\t\t\t\tif not btn:\n\t\t\t\t\tcontinue\n\t\t\t\tif dflt['mode'] == 'expression':\n\t\t\t\t\tbtn.par.display.mode = ParMode.EXPRESSION\n\t\t\t\t\tbtn.par.display.expr = dflt['expr']\n\t\t\t\telse:\n\t\t\t\t\tbtn.par.display = dflt['val']\n\t\t\t# Restore status widget width\n\t\t\tstatus = self.container_left.op('status')\n\t\t\tif status:\n\t\t\t\tstatus.par.w = self.status_default_w\n\t\tself.tools.par.display = 1\n\t\tself.lister.par.display = 1\n\t\tself.filter.par.display = 1\n\t\tself.mgr.par.w = self.max_width\n\t\trun(f\"op('{self.mgr}').par.h = {self.max_height}\", delayFrames=1)\n\t\tparent.Embody.Refresh()\n\n\tdef Windowminimize(self, par):\n\t\t\"\"\"Collapse to compact widget mode.\"\"\"\n\t\tself.win_state = 0\n\t\tif self.container_left:\n\t\t\t# Hide non-essential buttons\n\t\t\tfor name in self.compact_hide_names:\n\t\t\t\tbtn = self.container_left.op(name)\n\t\t\t\tif btn:\n\t\t\t\t\tbtn.par.display = 0\n\t\t\t# Show status label with dirty count\n\t\t\tstatus = self.container_left.op('status')\n\t\t\tif status:\n\t\t\t\tstatus.par.display = 1\n\t\t\t\tstatus.par.w = self.status_compact_w\n\t\tself.lister.par.display = 0\n\t\tself.filter.par.display = 0\n\t\tself.mgr.par.w = self.min_width\n\t\trun(f\"op('{self.mgr}').par.h = {self.min_height}\", delayFrames=1)\n",
-							"dat_content_format": "text"
+							"tags": ["TDExtension"]
 						},
 						{
 							"name": "extensionParExec",
@@ -2683,9 +2172,7 @@
 								"builtin": false,
 								"defaultreadencoding": "cp1252"
 							},
-							"position": [-200, -125],
-							"dat_content": "# This is a callback system for parameters. \n# to use:\n#\t- create a function in ParCallbacksExt/ParCallbacks\n#\t  using the same name as the parameter.\n\t\ndef onValueChange(par, val, prev):\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par, val, prev)\n\ndef onPulse(par):\n\t#debug(par)\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par)\n\ndef onExpressionChange(par, val, prev):\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par, val, prev)\n\ndef onExportChange(par, val, prev):\n\tcomp = op(me.par.op)\n\tif hasattr(comp, par.name):\n\t\tgetattr(comp, par.name)(par, val, prev)\n\ndef onEnableChange(par, val, prev):\n\treturn\n\t",
-							"dat_content_format": "text"
+							"position": [-200, -125]
 						}
 					]
 				}
@@ -2734,7 +2221,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 6,
-					"Date": "2026-03-05 01:35:35 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -2749,7 +2236,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-700, 280],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -2763,7 +2249,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-625, -375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -2871,7 +2356,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 23,
-					"Date": "2026-03-05 01:35:35 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -2905,7 +2390,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-325, -375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],

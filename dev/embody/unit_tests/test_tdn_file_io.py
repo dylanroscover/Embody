@@ -653,19 +653,22 @@ class TestTDNFileIO(EmbodyTestCase):
 		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path='/nonexistent/xyz.tdn',
 			target_path=self.sandbox.path)
-		self.assertIsNone(result)
+		self.assertIn('error', result)
+		self.assertIn('not found', result['error'])
 
 	def test_importFromFile_invalid_json(self):
 		bad = str(Path(self._temp_dir) / 'bad.tdn')
 		Path(bad).write_text('{{{invalid')
 		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path=bad, target_path=self.sandbox.path)
-		self.assertIsNone(result)
+		self.assertIn('error', result)
+		self.assertIn('Invalid JSON', result['error'])
 
 	def test_importFromFile_empty_string_path(self):
 		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path='', target_path=self.sandbox.path)
-		self.assertIsNone(result)
+		self.assertIn('error', result)
+		self.assertIn('No TDN file specified', result['error'])
 
 	def test_importFromFile_roundtrip_preserves_connections(self):
 		"""File-based roundtrip should preserve operator connections."""

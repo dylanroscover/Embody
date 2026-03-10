@@ -102,6 +102,12 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Export network to `.tdn` JSON (non-default properties only) |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
 
+## TOP Capture
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?` | Capture a TOP's output as an image. Saves to temp file and returns the path. Small images (<20 KB) also include an inline MCP `ImageContent` preview. Default: JPEG at 80% quality, max 640px long edge. |
+
 ## Logging
 
 | Tool | Parameters | Description |

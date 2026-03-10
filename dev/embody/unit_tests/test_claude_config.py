@@ -344,3 +344,39 @@ class TestClaudeConfig(EmbodyTestCase):
 		result = self.embody_ext._findProjectRoot()
 		self.assertTrue((result / '.git').exists(),
 			f'No .git found at {result}')
+
+	# ------------------------------------------------------------------
+	# Group G: Template drift detection
+	# ------------------------------------------------------------------
+
+	# Templates that intentionally differ from repo .claude/ files.
+	# mcp-safety: repo has detailed dev version, template has short user version.
+	_DRIFT_EXCLUSIONS = {'text_rule_mcp_safety'}
+
+	def test_G01_template_content_matches_repo(self):
+		"""Template DAT content should match corresponding .claude/ repo files."""
+		project_root = self.embody_ext._findProjectRoot()
+		templates_comp = self.embody_ext.my.op('templates')
+		drifted = []
+		for dat_name, rel_path in self.embody_ext._TEMPLATE_MAP.items():
+			if dat_name in self._DRIFT_EXCLUSIONS:
+				continue
+			dat = templates_comp.op(dat_name)
+			if dat is None:
+				continue
+			template_content = dat.text.strip()
+			repo_file = project_root / rel_path
+			if not repo_file.exists():
+				drifted.append(f'{dat_name}: repo file not found at {repo_file}')
+				continue
+			repo_content = repo_file.read_text(encoding='utf-8-sig').strip()
+			if template_content != repo_content:
+				drifted.append(f'{dat_name}: template DAT and repo file differ for {rel_path}')
+		self.assertEqual(drifted, [],
+			f'Template drift detected:\n' + '\n'.join(drifted))
+
+	def test_G02_exclusions_are_valid(self):
+		"""All drift exclusion names should exist in _TEMPLATE_MAP."""
+		for name in self._DRIFT_EXCLUSIONS:
+			self.assertIn(name, self.embody_ext._TEMPLATE_MAP,
+				f'Drift exclusion {name!r} not in _TEMPLATE_MAP')

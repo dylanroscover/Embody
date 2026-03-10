@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 14,
-	"generator": "Embody/5.0.188",
+	"generator": "Embody/5.0.195",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-05T01:36:03Z",
+	"exported_at": "2026-03-10T22:28:05Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false
@@ -67,13 +67,7 @@
 			"flags": ["viewer"],
 			"position": [-400, 0],
 			"size": [130, 90],
-			"inputs": ["switch_family"],
-			"dat_content": [
-				["name", "label", "value"],
-				["Toxtag", ".tox Tag", "tox"],
-				["Tdntag", ".tdn Tag", "tdn"]
-			],
-			"dat_content_format": "table"
+			"inputs": ["switch_family"]
 		},
 		{
 			"name": "header",
@@ -94,7 +88,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 2,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -124,7 +118,7 @@
 			"name": "button1",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "⇄  Convert to tox",
+				"label": "×  Remove tox",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -139,7 +133,7 @@
 			"name": "button2",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "×  Remove tdn",
+				"label": "⇄  Convert to tdn",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -154,7 +148,7 @@
 			"name": "btn_save",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "↓  Save tdn",
+				"label": "↓  Save tox",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
@@ -173,6 +167,7 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.65,
+				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [260, 275],
@@ -182,7 +177,7 @@
 			"name": "btn_reload",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "↻  Reload tdn",
+				"label": "↻  Reload tox",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
@@ -217,26 +212,7 @@
 			},
 			"flags": ["viewer"],
 			"position": [-1000, 0],
-			"size": [130, 90],
-			"dat_content": [
-				["name", "label", "value"],
-				["Toxtag", ".tox Tag", "tox"],
-				["Pytag", ".py Tag", "py"],
-				["Jsontag", ".json Tag", "json"],
-				["Xmltag", ".xml Tag", "xml"],
-				["Htmltag", ".html Tag", "html"],
-				["Glsltag", ".glsl Tag", "glsl"],
-				["Fragtag", ".frag Tag", "frag"],
-				["Verttag", ".vert Tag", "vert"],
-				["Txttag", ".txt Tag", "txt"],
-				["Mdtag", ".md Tag", "md"],
-				["Rtftag", ".rtf Tag", "rtf"],
-				["Csvtag", ".csv Tag", "csv"],
-				["Tsvtag", ".tsv Tag", "tsv"],
-				["Dattag", ".dat Tag", "dat"],
-				["Tdntag", ".tdn Tag", "tdn"]
-			],
-			"dat_content_format": "table"
+			"size": [130, 90]
 		},
 		{
 			"name": "btn_restore",
@@ -270,7 +246,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 1,
-					"Date": "2026-03-05 01:35:37 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -287,26 +263,7 @@
 				"rownames": "^Toxtag ^Toxexternalchildrentag"
 			},
 			"position": [-800, -75],
-			"inputs": ["parameter1"],
-			"dat_content": [
-				["name", "label", "value"],
-				["Toxtag", ".tox Tag", "tox"],
-				["Pytag", ".py Tag", "py"],
-				["Jsontag", ".json Tag", "json"],
-				["Xmltag", ".xml Tag", "xml"],
-				["Htmltag", ".html Tag", "html"],
-				["Glsltag", ".glsl Tag", "glsl"],
-				["Fragtag", ".frag Tag", "frag"],
-				["Verttag", ".vert Tag", "vert"],
-				["Txttag", ".txt Tag", "txt"],
-				["Mdtag", ".md Tag", "md"],
-				["Rtftag", ".rtf Tag", "rtf"],
-				["Csvtag", ".csv Tag", "csv"],
-				["Tsvtag", ".tsv Tag", "tsv"],
-				["Dattag", ".dat Tag", "dat"],
-				["Tdntag", ".tdn Tag", "tdn"]
-			],
-			"dat_content_format": "table"
+			"inputs": ["parameter1"]
 		},
 		{
 			"name": "btn_openfile",
@@ -317,6 +274,7 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 10,
+				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-820, 275],
@@ -343,13 +301,7 @@
 				"rownames": "Toxtag Tdntag Toxexternalchildrentag"
 			},
 			"position": [-800, -175],
-			"inputs": ["parameter1"],
-			"dat_content": [
-				["name", "label", "value"],
-				["Toxtag", ".tox Tag", "tox"],
-				["Tdntag", ".tdn Tag", "tdn"]
-			],
-			"dat_content_format": "table"
+			"inputs": ["parameter1"]
 		},
 		{
 			"name": "switch_family",
@@ -360,13 +312,7 @@
 			"flags": ["viewer"],
 			"position": [-600, 0],
 			"size": [130, 90],
-			"inputs": ["parameter1", "select_dats", "select_comps"],
-			"dat_content": [
-				["name", "label", "value"],
-				["Toxtag", ".tox Tag", "tox"],
-				["Tdntag", ".tdn Tag", "tdn"]
-			],
-			"dat_content_format": "table"
+			"inputs": ["parameter1", "select_dats", "select_comps"]
 		},
 		{
 			"name": "replicator1_callbacks",
