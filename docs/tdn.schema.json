@@ -394,6 +394,10 @@
           "items": { "type": "string" },
           "description": "Operator tags."
         },
+        "dock": {
+          "type": "string",
+          "description": "Name or path of the operator this operator is docked to. Sibling name preferred; full path for cross-hierarchy docking. Omitted when not docked."
+        },
         "parameters": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/parameterValue" },

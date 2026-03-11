@@ -19,6 +19,16 @@ Essential rules to prevent common mistakes. For full API reference, use the `/td
 - **Never call `op()`, `parent()`, or access TD objects at module level**. Module-level code executes during import, before the network is ready. Defer to methods.
 - **DAT naming conflicts**: TD searches for DATs by name before `sys.path`. A DAT named `json` shadows Python's stdlib `json`. Name DATs carefully.
 
+## Operator Path Portability
+
+- **NEVER use absolute paths in expressions** — `op('/embody/Embody/...')` breaks the moment Embody is renamed or relocated. This is a portability cardinal sin.
+- **Same-container siblings**: `op('sibling_name')` — bare name resolves within the current network.
+- **Children of the current COMP**: `op('./child_name')` — dot-slash addresses operators INSIDE `me`.
+- **Parent network operators**: `op('../sibling_of_parent')` — double-dot navigates up one network level.
+- **Extension-relative**: `parent.Embody.op('subpath/op_name')` — navigate from the Embody COMP shortcut.
+- **Global OP shortcuts**: `op.MyShortcut` — for project-wide operators assigned a Global OP Shortcut.
+- **Anywhere you type `/embody/` or `/project1/` in an expression is a bug.**
+
 ## Extensions
 
 - **`extensionsReady` guard**: Parameter expressions referencing extension-promoted attributes must use: `parent().MyProp if parent().extensionsReady else 0`

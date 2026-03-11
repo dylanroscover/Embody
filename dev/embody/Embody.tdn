@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 140,
-	"generator": "Embody/5.0.197",
+	"build": 141,
+	"generator": "Embody/5.0.201",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-11T03:13:57Z",
+	"exported_at": "2026-03-11T20:19:04Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -16,39 +16,11 @@
 				"repocomp": "=me"
 			}
 		},
-		"selectDAT": {
-			"parameters": {
-				"rowindexend": "=me.inputTable.numRows - 1",
-				"rowexpr": "=re.match('.*',me.inputCell.val) != None",
-				"colindexend": "=me.inputTable.numCols - 1",
-				"colexpr": "=re.match('.*',me.inputCell.val) != None"
-			},
-			"flags": ["viewer"],
-			"size": [130, 90]
-		},
-		"textCOMP": {
-			"parameters": {
-				"resizecomp": "=me",
-				"repocomp": "=me"
-			}
-		},
-		"buttonCOMP": {
-			"parameters": {
-				"scaletofit": "onlyshrink",
-				"fontsize": 12,
-				"h": 28,
-				"resizecomp": "=me",
-				"repocomp": "=me",
-				"borderover": false,
-				"enablecloning": false,
-				"clone": "=op.TDTox.op('defaultCOMPs/button')"
-			},
+		"textDAT": {
 			"flags": ["viewer"]
 		},
 		"parameterexecuteDAT": {
-			"size": [130, 90]
-		},
-		"panelexecuteDAT": {
+			"flags": ["viewer"],
 			"size": [130, 90]
 		},
 		"annotateCOMP": {
@@ -61,6 +33,24 @@
 		},
 		"baseCOMP": {
 			"size": [160, 130]
+		},
+		"panelexecuteDAT": {
+			"flags": ["viewer"],
+			"size": [130, 90]
+		},
+		"textCOMP": {
+			"parameters": {
+				"callbacks": "text1_callbacks",
+				"legacyfontselection": true,
+				"hmode": "fill",
+				"vmode": "fill",
+				"clickthrough": true,
+				"resizecomp": "=me",
+				"repocomp": "=me",
+				"borderover": false,
+				"reloadbuiltin": false
+			},
+			"flags": ["viewer"]
 		},
 		"constantTOP": {
 			"parameters": {
@@ -95,8 +85,8 @@
 				"reloadbuiltin": false
 			},
 			"flags": ["viewer"],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		}
 	},
 	"par_templates": {
@@ -362,29 +352,15 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 15,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Date": "2026-03-10 22:27:47 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [196, 675],
 			"size": [142, 155],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"],
-			"children": [
-				{
-					"name": "text_help",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/help/text_help.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				}
-			]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		},
 		{
 			"name": "list",
@@ -412,93 +388,17 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 32,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Build": 33,
+					"Date": "2026-03-11 19:12:50 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [250, 50],
 			"size": [257, 250],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"],
-			"comp_inputs": ["manager"],
-			"children": [
-				{
-					"name": "list1",
-					"type": "listCOMP",
-					"parameters": {
-						"callbacks": "=op('/embody/Embody/list/list_callbacks')",
-						"rows": "=op('/embody/Embody/list/inject_parents').numRows",
-						"cols": 8,
-						"lockfirstrow": true,
-						"hscrollbar": false,
-						"offcellcallbacks": true,
-						"hmode": "fill",
-						"vmode": "fill",
-						"resizecomp": "=me",
-						"repocomp": "=me"
-					},
-					"custom_pars": {
-						"About": {
-							"$t": "about_2",
-							"Build": 42,
-							"Date": "2026-03-11 03:10:55 UTC",
-							"Touchbuild": "2025.32280"
-						}
-					},
-					"position": [445, 0],
-					"size": [160, 130],
-					"color": [0.325, 0.8, 0.3],
-					"tags": ["tox"]
-				},
-				{
-					"name": "select1",
-					"type": "selectDAT",
-					"parameters": {
-						"dat": "=parent.Embody.par.Externalizations"
-					},
-					"position": [-275, 0]
-				},
-				{
-					"name": "inject_parents",
-					"type": "scriptDAT",
-					"parameters": {
-						"callbacks": "inject_parents_callbacks"
-					},
-					"position": [-100, 0],
-					"size": [130, 90],
-					"color": [0.67, 0.67, 0.67],
-					"inputs": ["select1"]
-				},
-				{
-					"name": "list_callbacks",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/list/list_callbacks.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"position": [625, 0],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				},
-				{
-					"name": "inject_parents_callbacks",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/list/inject_parents_callbacks.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"flags": ["viewer"],
-					"position": [-100, -120],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				}
-			]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
+			"comp_inputs": ["manager"]
 		},
 		{
 			"name": "fifo1",
@@ -533,7 +433,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-375, 375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -561,388 +460,15 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 14,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [900, 225],
 			"size": [108, 155],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"],
-			"children": [
-				{
-					"name": "tags",
-					"type": "nullDAT",
-					"flags": ["viewer"],
-					"position": [-400, 0],
-					"size": [130, 90],
-					"inputs": ["switch_family"]
-				},
-				{
-					"name": "header",
-					"type": "containerCOMP",
-					"parameters": {
-						"h": 28,
-						"hmode": "fill",
-						"bgcolorr": "=parent.Embody.par.Listheadercolorr",
-						"bgcolorg": "=parent.Embody.par.Listheadercolorg",
-						"bgcolorb": "=parent.Embody.par.Listheadercolorb",
-						"bgalpha": "=parent.Embody.par.Listheadercolora",
-						"borderover": false,
-						"reloadbuiltin": false
-					},
-					"custom_pars": {
-						"About": {
-							"$t": "about_2",
-							"Build": 2,
-							"Date": "2026-03-11 03:10:55 UTC",
-							"Touchbuild": "2025.32280"
-						}
-					},
-					"flags": ["viewer"],
-					"position": [0, 275],
-					"size": [160, 76],
-					"color": [0.325, 0.8, 0.3],
-					"tags": ["tox"],
-					"children": [
-						{
-							"name": "text1",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "Actions",
-								"callbacks": "text1_callbacks",
-								"legacyfontselection": true,
-								"fontsize": 12,
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"fontalpha": "=parent.Embody.par.Textcolora",
-								"h": 30,
-								"hmode": "fill",
-								"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-								"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-								"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-								"bgalpha": "=parent.Embody.par.Backgroundcolora",
-								"borderover": false,
-								"reloadbuiltin": false
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 3,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"flags": ["viewer"],
-							"position": [-200, 0],
-							"size": [160, 129],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "button_close",
-							"type": "buttonCOMP",
-							"parameters": {
-								"label": "×",
-								"colorr": "=parent.Embody.par.Textcolorr",
-								"colorg": "=parent.Embody.par.Textcolorg",
-								"colorb": "=parent.Embody.par.Textcolorb",
-								"w": 28,
-								"layer": 1,
-								"leftanchor": 1,
-								"horigin": 1,
-								"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-								"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-								"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-								"bgalpha": "=parent.Embody.par.Backgroundcolora",
-								"topsmoothness": "mipmap",
-								"reloadbuiltin": false
-							},
-							"position": [50, 0],
-							"size": [160, 134],
-							"palette_clone": true
-						},
-						{
-							"name": "text1_callbacks",
-							"type": "textDAT",
-							"parameters": {
-								"file": "embody/Embody/tagger/header/text1_callbacks.py",
-								"syncfile": true,
-								"language": "python"
-							},
-							"flags": ["viewer"],
-							"position": [-200, -160],
-							"size": [160, 130],
-							"color": [0.9, 0.3, 0.4],
-							"tags": ["py"]
-						}
-					]
-				},
-				{
-					"name": "button0",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "=op('tags')[me.digits, 'label']",
-						"colorr": "=parent.Embody.par.Taggingmenucolorr",
-						"colorg": "=parent.Embody.par.Taggingmenucolorg",
-						"colorb": "=parent.Embody.par.Taggingmenucolorb",
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 1,
-						"display": false,
-						"topsmoothness": "mipmap",
-						"reloadbuiltin": false
-					},
-					"position": [-225, 175],
-					"size": [160, 76],
-					"palette_clone": true
-				},
-				{
-					"name": "button1",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "⇄  Convert to tox",
-						"colorr": 0.2,
-						"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 1,
-						"topsmoothness": "mipmap",
-						"reloadbuiltin": false
-					},
-					"position": [-225, -276],
-					"size": [160, 76],
-					"palette_clone": true
-				},
-				{
-					"name": "button2",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "×  Remove tdn",
-						"colorr": 0.2,
-						"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 1,
-						"topsmoothness": "mipmap",
-						"reloadbuiltin": false
-					},
-					"position": [25, -276],
-					"size": [160, 76],
-					"palette_clone": true
-				},
-				{
-					"name": "btn_save",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "↓  Save tdn",
-						"colorr": 0.2,
-						"colorg": 0.2,
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 0.5,
-						"relpath": "externaltox"
-					},
-					"position": [25, 100],
-					"size": [160, 134],
-					"palette_clone": true
-				},
-				{
-					"name": "btn_embed",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "⊞  Embed DATs in tdn",
-						"colorr": 0.2,
-						"colorg": 0.2,
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 0.65,
-						"relpath": "externaltox"
-					},
-					"position": [260, 275],
-					"size": [160, 134],
-					"palette_clone": true
-				},
-				{
-					"name": "btn_reload",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "↻  Reload tdn",
-						"colorr": 0.2,
-						"colorg": 0.2,
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 0.6,
-						"relpath": "externaltox"
-					},
-					"position": [-280, 275],
-					"size": [160, 134],
-					"palette_clone": true
-				},
-				{
-					"name": "btn_remove",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "Remove externalization",
-						"colorr": 0.2,
-						"colorg": 0.2,
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 11,
-						"display": false,
-						"relpath": "externaltox"
-					},
-					"position": [-1000, 275],
-					"size": [160, 134],
-					"palette_clone": true
-				},
-				{
-					"name": "parameter1",
-					"type": "parameterDAT",
-					"parameters": {
-						"ops": "=parent.Embody",
-						"parameters": "*tag",
-						"label": true
-					},
-					"flags": ["viewer"],
-					"position": [-1000, 0],
-					"size": [130, 90]
-				},
-				{
-					"name": "btn_restore",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "Restore from tdn",
-						"colorr": 0.2,
-						"colorg": 0.2,
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 0.5,
-						"display": false,
-						"relpath": "externaltox"
-					},
-					"position": [-640, 275],
-					"size": [160, 134],
-					"palette_clone": true
-				},
-				{
-					"name": "replicator1",
-					"type": "replicatorCOMP",
-					"parameters": {
-						"template": "tags",
-						"opprefix": "button",
-						"master": "button0",
-						"destination": "=parent()",
-						"callbacks": "replicator1_callbacks",
-						"layoutorigin1": "=me.nodeX",
-						"layoutorigin2": "=me.nodeY - 200",
-						"reloadbuiltin": false
-					},
-					"custom_pars": {
-						"About": {
-							"$t": "about_2",
-							"Build": 1,
-							"Date": "2026-03-11 03:10:55 UTC",
-							"Touchbuild": "2025.32280"
-						}
-					},
-					"flags": ["viewer"],
-					"position": [-225, 0],
-					"size": [160, 130],
-					"color": [0.325, 0.8, 0.3],
-					"tags": ["tox"]
-				},
-				{
-					"name": "select_dats",
-					"type": "selectDAT",
-					"parameters": {
-						"firstrow": true,
-						"extractrows": "bynames",
-						"rownames": "^Toxtag ^Toxexternalchildrentag"
-					},
-					"position": [-800, -75],
-					"inputs": ["parameter1"]
-				},
-				{
-					"name": "btn_openfile",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "◎  Reveal in Finder",
-						"colorr": 0.2,
-						"colorg": 0.2,
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 10,
-						"relpath": "externaltox"
-					},
-					"position": [-820, 275],
-					"size": [160, 134],
-					"palette_clone": true
-				},
-				{
-					"name": "btn_portable",
-					"type": "buttonCOMP",
-					"parameters": {
-						"label": "↗  Export portable tox",
-						"colorr": 0.2,
-						"colorg": 0.2,
-						"colorb": 0.2,
-						"w": 50,
-						"hmode": "fill",
-						"alignorder": 1,
-						"relpath": "externaltox"
-					},
-					"position": [-460, 275],
-					"size": [160, 134],
-					"palette_clone": true
-				},
-				{
-					"name": "select_comps",
-					"type": "selectDAT",
-					"parameters": {
-						"firstrow": true,
-						"extractrows": "bynames",
-						"rownames": "Toxtag Tdntag Toxexternalchildrentag"
-					},
-					"position": [-800, -175],
-					"inputs": ["parameter1"]
-				},
-				{
-					"name": "switch_family",
-					"type": "switchDAT",
-					"parameters": {
-						"index": 2
-					},
-					"flags": ["viewer"],
-					"position": [-600, 0],
-					"size": [130, 90],
-					"inputs": ["parameter1", "select_dats", "select_comps"]
-				},
-				{
-					"name": "replicator1_callbacks",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/tagger/replicator1_callbacks.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"flags": ["viewer"],
-					"position": [-225, -160],
-					"size": [160, 130],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				}
-			]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		},
 		{
 			"name": "timer1",
@@ -1016,15 +542,15 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 12,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [650, 250],
 			"size": [160, 92],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		},
 		{
 			"name": "parexec",
@@ -1037,7 +563,6 @@
 				"defaultreadencoding": "cp1252",
 				"syncfile": true
 			},
-			"flags": ["viewer"],
 			"position": [-375, 100],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
@@ -1083,15 +608,15 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 12,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [300, 350],
 			"size": [160, 76],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
 			"storage": {
 				"_tip_trace": {
 					"btn": "close",
@@ -1109,748 +634,7 @@
 					"offset": -29
 				}
 			},
-			"comp_inputs": ["manager"],
-			"children": [
-				{
-					"name": "tooltip",
-					"type": "containerCOMP",
-					"parameters": {
-						"x": 2,
-						"y": 40,
-						"w": 149,
-						"h": 22,
-						"layer": 10,
-						"alignallow": "ignore",
-						"display": false,
-						"clickthrough": true,
-						"bgcolorr": 0.13,
-						"bgcolorg": 0.13,
-						"bgcolorb": 0.13,
-						"bgalpha": 0.95
-					},
-					"custom_pars": {
-						"About": {
-							"$t": "about_2",
-							"Build": 8,
-							"Date": "2026-03-11 03:10:55 UTC",
-							"Touchbuild": "2025.32280"
-						}
-					},
-					"position": [800, -200],
-					"size": [160, 130],
-					"color": [0.325, 0.8, 0.3],
-					"tags": ["tox"],
-					"children": [
-						{
-							"name": "text",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "Refresh tracking state",
-								"callbacks": "text_callbacks",
-								"font": "Open Sans",
-								"fontsize": 10,
-								"fontcolorr": 0.8,
-								"fontcolorg": 0.8,
-								"fontcolorb": 0.8,
-								"hmode": "fill",
-								"vmode": "fill"
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 6,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "text_callbacks",
-							"type": "textDAT",
-							"parameters": {
-								"file": "embody/Embody/toolbar/tooltip/text_callbacks.py",
-								"syncfile": true,
-								"language": "python"
-							},
-							"flags": ["viewer"],
-							"position": [0, -160],
-							"size": [160, 130],
-							"color": [0.9, 0.3, 0.4],
-							"tags": ["py"]
-						}
-					]
-				},
-				{
-					"name": "ToolbarExt",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/toolbar/ToolbarExt.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"position": [200, -200],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				},
-				{
-					"name": "tip_measure",
-					"type": "textTOP",
-					"parameters": {
-						"text": "Refresh tracking state",
-						"font": "Open Sans",
-						"fontsizex": 10,
-						"fontsizey": 10,
-						"resmult": false
-					},
-					"position": [1400, -200],
-					"size": [130, 90],
-					"color": [0.67, 0.67, 0.67]
-				},
-				{
-					"name": "container_left",
-					"type": "containerCOMP",
-					"parameters": {
-						"w": 852,
-						"h": 26,
-						"borderover": false,
-						"align": "horizlr",
-						"reloadbuiltin": false
-					},
-					"custom_pars": {
-						"About": {
-							"$t": "about_2",
-							"Build": 7,
-							"Date": "2026-03-11 03:10:55 UTC",
-							"Touchbuild": "2025.32280"
-						}
-					},
-					"flags": ["viewer"],
-					"size": [160, 76],
-					"color": [0.325, 0.8, 0.3],
-					"tags": ["tox"],
-					"children": [
-						{
-							"name": "status",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "=str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''",
-								"callbacks": "new_status_callbacks",
-								"font": "Open Sans",
-								"fontsize": 9,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 80,
-								"vmode": "fill",
-								"alignorder": -100,
-								"display": false,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
-								"marginl": 3
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 22,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [800, -200],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "disable",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "󰐥",
-								"callbacks": "new_disable_callbacks",
-								"font": "Material Design Icons",
-								"fontsize": 11,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 36,
-								"vmode": "fill",
-								"clickthrough": true,
-								"bgcolorr": "=(0.13 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=(0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=(0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "refresh",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "󰑐",
-								"callbacks": "new_refresh_callbacks",
-								"font": "Material Design Icons",
-								"fontsize": 11,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 36,
-								"vmode": "fill",
-								"alignorder": 400,
-								"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 2,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [200, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "export_tdn",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "󰈇",
-								"callbacks": "new_export_tdn_callbacks",
-								"font": "Material Design Icons",
-								"fontsize": 11,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 36,
-								"vmode": "fill",
-								"alignorder": 1000,
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [0, -200],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "import_tdn",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "󰋺",
-								"callbacks": "new_import_tdn_callbacks",
-								"font": "Material Design Icons",
-								"fontsize": 11,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 36,
-								"vmode": "fill",
-								"alignorder": 925,
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 3,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [400, -200],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "initialize",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "󰓦",
-								"callbacks": "new_initialize_callbacks",
-								"font": "Material Design Icons",
-								"fontsize": 11,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 36,
-								"vmode": "fill",
-								"alignorder": 600,
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 3,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [600, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "spacer_tdn",
-							"type": "containerCOMP",
-							"parameters": {
-								"w": 10,
-								"vmode": "fill",
-								"alignorder": 800,
-								"clickthrough": true
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [600, -200],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "save_folder",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "=f'/{parent.Embody.par.Folder}'",
-								"callbacks": "new_save_folder_callbacks",
-								"font": "Open Sans",
-								"fontsize": 9,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 100,
-								"vmode": "fill",
-								"alignorder": 700,
-								"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [400, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "envoy_status",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "=':' + str(parent.Embody.par.Envoyport.eval()) if parent.Embody.par.Envoyenable.eval() else 'Off'",
-								"callbacks": "new_envoy_status_callbacks",
-								"font": "Open Sans",
-								"fontsize": 9,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 55,
-								"vmode": "fill",
-								"alignorder": 1100,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
-								"marginl": 3
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [1000, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "envoy_toggle",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "Envoy",
-								"callbacks": "new_envoy_toggle_callbacks",
-								"font": "Open Sans",
-								"fontsize": 9,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 65,
-								"vmode": "fill",
-								"alignorder": 1050,
-								"clickthrough": true,
-								"bgcolorr": "=(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [800, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "spacer_envoy",
-							"type": "containerCOMP",
-							"parameters": {
-								"w": 10,
-								"vmode": "fill",
-								"alignorder": 1025,
-								"clickthrough": true
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [1200, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "export_comp_tdn",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "󰈝",
-								"callbacks": "new_export_comp_tdn_callbacks",
-								"font": "Material Design Icons",
-								"fontsize": 11,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 36,
-								"vmode": "fill",
-								"alignorder": 950,
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [200, -200],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						}
-					]
-				},
-				{
-					"name": "panelexec_left",
-					"type": "panelexecuteDAT",
-					"parameters": {
-						"fromop": "=parent()",
-						"panels": "/embody/Embody/toolbar/container_left",
-						"panelvalue": "*",
-						"ontooff": true,
-						"valuechange": true,
-						"file": "embody/Embody/toolbar/panelexec_left.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"position": [1000, -200],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				},
-				{
-					"name": "parexec_filter",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"fromop": "=parent()",
-						"op": "/embody/Embody/toolbar/container_right/filter",
-						"pars": "text",
-						"custom": false,
-						"file": "embody/Embody/toolbar/parexec_filter.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"position": [600, -200],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				},
-				{
-					"name": "toolbar_config",
-					"type": "tableDAT",
-					"parameters": {
-						"file": "embody/Embody/toolbar/toolbar_config.tsv",
-						"syncfile": true,
-						"rows": 14,
-						"cols": 16
-					},
-					"position": [0, -200],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["tsv"]
-				},
-				{
-					"name": "container_right",
-					"type": "containerCOMP",
-					"parameters": {
-						"w": 270,
-						"h": 26,
-						"leftanchor": 1,
-						"horigin": 1,
-						"align": "horizrl"
-					},
-					"custom_pars": {
-						"About": {
-							"$t": "about_2",
-							"Build": 14,
-							"Date": "2026-03-11 03:10:55 UTC",
-							"Touchbuild": "2025.32280"
-						}
-					},
-					"flags": ["viewer"],
-					"position": [175, 0],
-					"size": [160, 76],
-					"color": [0.325, 0.8, 0.3],
-					"tags": ["tox"],
-					"children": [
-						{
-							"name": "pars",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "Pars",
-								"callbacks": "new_pars_callbacks",
-								"font": "Open Sans",
-								"fontsize": 9,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 51,
-								"vmode": "fill",
-								"alignorder": 350,
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [600, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "close",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "󰖭",
-								"callbacks": "new_close_callbacks",
-								"font": "Material Design Icons",
-								"fontsize": 11,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"w": 26,
-								"vmode": "fill",
-								"alignorder": -200,
-								"clickthrough": true,
-								"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "filter",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "",
-								"editmode": "editablecontinuous",
-								"placeholdertext": "Filter...",
-								"callbacks": "new_filter_callbacks",
-								"font": "Open Sans",
-								"fontsize": 9,
-								"fontsizeunits": "points",
-								"fontcolorr": "=parent.Embody.par.Textcolorr",
-								"fontcolorg": "=parent.Embody.par.Textcolorg",
-								"fontcolorb": "=parent.Embody.par.Textcolorb",
-								"textoffsetx": 8,
-								"alignx": "left",
-								"w": 170,
-								"vmode": "fill",
-								"alignorder": 25,
-								"bgcolorr": 0.08,
-								"bgcolorg": 0.08,
-								"bgcolorb": 0.08,
-								"bgalpha": 1
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [200, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						},
-						{
-							"name": "spacer_pars",
-							"type": "containerCOMP",
-							"parameters": {
-								"w": 10,
-								"vmode": "fill",
-								"alignorder": 100,
-								"clickthrough": true
-							},
-							"custom_pars": {
-								"About": {
-									"$t": "about_2",
-									"Build": 1,
-									"Date": "2026-03-11 03:10:55 UTC",
-									"Touchbuild": "2025.32280"
-								}
-							},
-							"position": [400, 0],
-							"size": [160, 130],
-							"color": [0.325, 0.8, 0.3],
-							"tags": ["tox"]
-						}
-					]
-				},
-				{
-					"name": "panelexec_right",
-					"type": "panelexecuteDAT",
-					"parameters": {
-						"fromop": "=parent()",
-						"panels": "/embody/Embody/toolbar/container_right",
-						"panelvalue": "*",
-						"ontooff": true,
-						"valuechange": true,
-						"file": "embody/Embody/toolbar/panelexec_right.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"position": [1200, -200],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				},
-				{
-					"name": "parexec_responsive",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"fromop": "=parent()",
-						"op": "../manager",
-						"pars": "w",
-						"file": "embody/Embody/toolbar/parexec_responsive.py",
-						"syncfile": true,
-						"language": "python"
-					},
-					"flags": ["viewer"],
-					"position": [400, -200],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["py"]
-				}
-			]
+			"comp_inputs": ["manager"]
 		},
 		{
 			"name": "EnvoyExt",
@@ -1860,7 +644,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-375, 475],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -1891,7 +674,6 @@
 				"language": "python",
 				"extension": "py"
 			},
-			"flags": ["viewer"],
 			"position": [-375, 576],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -1932,155 +714,13 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 1,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"position": [-400, -1200],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"],
-			"children": [
-				{
-					"name": "text_rule_td_python",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_rule_td_python.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, 79],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_rule_mcp_safety",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_rule_mcp_safety.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, -236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_externalize",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_externalize.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [227, 79],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_rule_network_layout",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_rule_network_layout.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, -78],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_debug_operator",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_debug_operator.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [227, 236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_create_operator",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_create_operator.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [0, 236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_create_extension",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_create_extension.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [-227, 236],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_td_api_reference",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_td_api_reference.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [0, 79],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_manage_annotations",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_manage_annotations.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [227, -78],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				},
-				{
-					"name": "text_skill_mcp_tools_reference",
-					"type": "textDAT",
-					"parameters": {
-						"file": "embody/Embody/templates/text_skill_mcp_tools_reference.md",
-						"syncfile": true,
-						"language": "text",
-						"extension": "md"
-					},
-					"position": [0, -78],
-					"size": [130, 90],
-					"color": [0.9, 0.3, 0.4],
-					"tags": ["md"]
-				}
-			]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		},
 		{
 			"name": "keyboardin1",
@@ -2103,7 +743,6 @@
 				"language": "text",
 				"extension": "md"
 			},
-			"flags": ["viewer"],
 			"position": [-700, -1200],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -2619,7 +1258,6 @@
 								"panelvalue": "rselect",
 								"defaultreadencoding": "cp1252"
 							},
-							"flags": ["viewer"],
 							"position": [200, -200]
 						},
 						{
@@ -2830,7 +1468,7 @@
 					"position": [200, -200],
 					"size": [160, 76],
 					"color": [0.5, 0.35, 0.05],
-					"tags": ["TDSubComp", "TDPub"],
+					"tags": ["TDPub", "TDSubComp"],
 					"children": [
 						{
 							"name": "text",
@@ -2839,8 +1477,6 @@
 								"text": "~parent.Widget.par.Headerlabel",
 								"type": "multiline",
 								"wordwrap": "=parent.Widget.par.Headerlabelwordwrap",
-								"callbacks": "text1_callbacks",
-								"legacyfontselection": true,
 								"font": "=parent.Widget.par.Font.eval()",
 								"bold": "=parent.Widget.par.Headerlabelfontbold.eval()",
 								"scaletofit": "='onlyshrink' if parent.Widget.par.Headerlabelscaletoolarge.eval() else 'never'",
@@ -2857,22 +1493,16 @@
 								"textpaddingb": "=parent.Widget.par.Headerlabelpadding3.eval()",
 								"textpaddingt": "=parent.Widget.par.Headerlabelpadding4.eval()",
 								"alignx": "=parent.Widget.par.Headerlabelalignx.eval()",
-								"aligny": "=parent.Widget.par.Headerlabelaligny.eval()",
-								"hmode": "fill",
-								"vmode": "fill",
-								"clickthrough": true,
-								"borderover": false,
-								"reloadbuiltin": false
+								"aligny": "=parent.Widget.par.Headerlabelaligny.eval()"
 							},
-							"flags": ["viewer"],
 							"size": [160, 76]
 						},
 						{
 							"name": "text1_callbacks",
 							"type": "textDAT",
-							"flags": ["viewer"],
 							"position": [0, -150],
-							"size": [160, 130]
+							"size": [160, 130],
+							"dock": "text"
 						}
 					]
 				},
@@ -3061,8 +1691,6 @@
 									"type": "textCOMP",
 									"parameters": {
 										"text": "=parent.Value.par.Symbol",
-										"callbacks": "text1_callbacks",
-										"legacyfontselection": true,
 										"font": "Material Design Icons",
 										"scaletofit": "=parent.Widget.par.Buttonfontsizemode.eval()",
 										"fontsize": "=parent.Widget.par.Buttonfontsize.eval() if parent.Widget.par.Buttonfontsizemode.eval() in ['points', 'panelunits'] else parent.Widget.par.Buttonfontfraction.eval()",
@@ -3077,15 +1705,10 @@
 										"textpaddingt": 11,
 										"alignxmode": "bbox",
 										"alignymode": "bbox",
-										"hmode": "fill",
-										"vmode": "fill",
-										"clickthrough": true,
 										"bgcolorr": "=me.par.Facecolor.eval()[0]",
 										"bgcolorg": "=me.par.Facecolor.eval()[1]",
 										"bgcolorb": "=me.par.Facecolor.eval()[2]",
-										"bgalpha": "=me.par.Facecolor.eval()[3]",
-										"borderover": false,
-										"reloadbuiltin": false
+										"bgalpha": "=me.par.Facecolor.eval()[3]"
 									},
 									"custom_pars": {
 										"Expressions": {
@@ -3096,7 +1719,6 @@
 											"Fontratio": "=None"
 										}
 									},
-									"flags": ["viewer"],
 									"position": [400, 200],
 									"size": [160, 155]
 								},
@@ -3134,7 +1756,6 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"]
@@ -3145,7 +1766,6 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"]
@@ -3160,7 +1780,6 @@
 										"ontooff": true,
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 0],
 									"color": [0.05, 0.5, 0.05]
 								},
@@ -3179,7 +1798,6 @@
 										"builtin": false,
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
 									"comment": "Execution for parameter changes"
@@ -3187,9 +1805,9 @@
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
-									"flags": ["viewer"],
 									"position": [400, 50],
-									"size": [160, 130]
+									"size": [160, 130],
+									"dock": "text"
 								}
 							]
 						},
@@ -3235,8 +1853,6 @@
 									"type": "textCOMP",
 									"parameters": {
 										"text": "=parent.Value.par.Symbol",
-										"callbacks": "text1_callbacks",
-										"legacyfontselection": true,
 										"font": "Material Design Icons",
 										"scaletofit": "=parent.Widget.par.Buttonfontsizemode.eval()",
 										"fontsize": "=parent.Widget.par.Buttonfontsize.eval() if parent.Widget.par.Buttonfontsizemode.eval() in ['points', 'panelunits'] else parent.Widget.par.Buttonfontfraction.eval()",
@@ -3251,15 +1867,10 @@
 										"textpaddingt": 11,
 										"alignxmode": "bbox",
 										"alignymode": "bbox",
-										"hmode": "fill",
-										"vmode": "fill",
-										"clickthrough": true,
 										"bgcolorr": "=me.par.Facecolor.eval()[0]",
 										"bgcolorg": "=me.par.Facecolor.eval()[1]",
 										"bgcolorb": "=me.par.Facecolor.eval()[2]",
-										"bgalpha": "=me.par.Facecolor.eval()[3]",
-										"borderover": false,
-										"reloadbuiltin": false
+										"bgalpha": "=me.par.Facecolor.eval()[3]"
 									},
 									"custom_pars": {
 										"Expressions": {
@@ -3270,7 +1881,6 @@
 											"Fontratio": "=None"
 										}
 									},
-									"flags": ["viewer"],
 									"position": [400, 200],
 									"size": [160, 155]
 								},
@@ -3308,7 +1918,6 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"]
@@ -3319,7 +1928,6 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"]
@@ -3334,7 +1942,6 @@
 										"ontooff": true,
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 0],
 									"color": [0.05, 0.5, 0.05]
 								},
@@ -3353,7 +1960,6 @@
 										"builtin": false,
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
 									"comment": "Execution for parameter changes"
@@ -3361,9 +1967,9 @@
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
-									"flags": ["viewer"],
 									"position": [400, 50],
-									"size": [160, 130]
+									"size": [160, 130],
+									"dock": "text"
 								}
 							]
 						},
@@ -3376,7 +1982,6 @@
 								"panelvalue": "lselect",
 								"language": "python"
 							},
-							"flags": ["viewer"],
 							"position": [200, -425]
 						},
 						{
@@ -3423,8 +2028,6 @@
 									"type": "textCOMP",
 									"parameters": {
 										"text": "=parent.Value.par.Symbol",
-										"callbacks": "text1_callbacks",
-										"legacyfontselection": true,
 										"font": "Material Design Icons",
 										"scaletofit": "=parent.Widget.par.Buttonfontsizemode.eval()",
 										"fontsize": "=parent.Widget.par.Buttonfontsize.eval() if parent.Widget.par.Buttonfontsizemode.eval() in ['points', 'panelunits'] else parent.Widget.par.Buttonfontfraction.eval()",
@@ -3439,15 +2042,10 @@
 										"textpaddingt": 11,
 										"alignxmode": "bbox",
 										"alignymode": "bbox",
-										"hmode": "fill",
-										"vmode": "fill",
-										"clickthrough": true,
 										"bgcolorr": "=me.par.Facecolor.eval()[0]",
 										"bgcolorg": "=me.par.Facecolor.eval()[1]",
 										"bgcolorb": "=me.par.Facecolor.eval()[2]",
-										"bgalpha": "=me.par.Facecolor.eval()[3]",
-										"borderover": false,
-										"reloadbuiltin": false
+										"bgalpha": "=me.par.Facecolor.eval()[3]"
 									},
 									"custom_pars": {
 										"Expressions": {
@@ -3458,7 +2056,6 @@
 											"Fontratio": "=None"
 										}
 									},
-									"flags": ["viewer"],
 									"position": [400, 200],
 									"size": [160, 155]
 								},
@@ -3496,7 +2093,6 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-500, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"]
@@ -3507,7 +2103,6 @@
 									"parameters": {
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 400],
 									"size": [130, 90],
 									"tags": ["TDExtension"]
@@ -3522,7 +2117,6 @@
 										"ontooff": true,
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 0],
 									"color": [0.05, 0.5, 0.05]
 								},
@@ -3541,7 +2135,6 @@
 										"builtin": false,
 										"defaultreadencoding": "cp1252"
 									},
-									"flags": ["viewer"],
 									"position": [-300, 200],
 									"color": [0.05, 0.5, 0.05],
 									"comment": "Execution for parameter changes"
@@ -3549,9 +2142,9 @@
 								{
 									"name": "text1_callbacks",
 									"type": "textDAT",
-									"flags": ["viewer"],
 									"position": [400, 50],
-									"size": [160, 130]
+									"size": [160, 130],
+									"dock": "text"
 								}
 							]
 						},
@@ -3564,13 +2157,11 @@
 								"pars": "w h",
 								"language": "python"
 							},
-							"flags": ["viewer"],
 							"position": [-375, 100]
 						},
 						{
 							"name": "MinMaxCloseExt",
 							"type": "textDAT",
-							"flags": ["viewer"],
 							"position": [-200, 100],
 							"size": [130, 90],
 							"tags": ["TDExtension"]
@@ -3585,7 +2176,6 @@
 								"builtin": false,
 								"defaultreadencoding": "cp1252"
 							},
-							"flags": ["viewer"],
 							"position": [-200, -125]
 						}
 					]
@@ -3634,8 +2224,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 7,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Build": 8,
+					"Date": "2026-03-11 18:03:08 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -3650,11 +2240,11 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-700, 280],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"tags": ["py"],
+			"dock": "fifo1"
 		},
 		{
 			"name": "timer_callbacks",
@@ -3664,11 +2254,11 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-625, -375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"tags": ["py"],
+			"dock": "timer1"
 		},
 		{
 			"name": "annotation_logic",
@@ -3772,7 +2362,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 23,
-					"Date": "2026-03-11 03:10:55 UTC",
+					"Date": "2026-03-10 22:27:46 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -3796,7 +2386,8 @@
 			"position": [-325, -650],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"tags": ["py"],
+			"dock": "null2"
 		},
 		{
 			"name": "keyboardin_callbacks",
@@ -3806,11 +2397,11 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-325, -375],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"tags": ["py"],
+			"dock": "keyboardin1"
 		}
 	],
 	"annotations": [

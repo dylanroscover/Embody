@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 8,
-	"generator": "Embody/5.0.197",
+	"build": 9,
+	"generator": "Embody/5.0.201",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-11T03:13:58Z",
+	"exported_at": "2026-03-11T20:19:04Z",
 	"network_path": "/embody/Embody/toolbar/tooltip",
 	"options": {
 		"include_dat_content": false
@@ -14,7 +14,7 @@
 			"name": "text",
 			"type": "textCOMP",
 			"parameters": {
-				"text": "Refresh tracking state",
+				"text": "Toggle Envoy MCP server",
 				"callbacks": "text_callbacks",
 				"font": "Open Sans",
 				"fontsize": 10,
@@ -33,14 +33,14 @@
 						"style": "Int",
 						"label": "Build Number",
 						"readOnly": true,
-						"value": 6
+						"value": 7
 					},
 					{
 						"name": "Date",
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-11 03:10:55 UTC"
+						"value": "2026-03-11 20:19:04 UTC"
 					},
 					{
 						"name": "Touchbuild",
@@ -52,8 +52,8 @@
 				]
 			},
 			"size": [160, 130],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		},
 		{
 			"name": "text_callbacks",
@@ -67,7 +67,8 @@
 			"position": [0, -160],
 			"size": [160, 130],
 			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"tags": ["py"],
+			"dock": "text"
 		}
 	]
 }

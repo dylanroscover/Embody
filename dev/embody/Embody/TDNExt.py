@@ -725,6 +725,9 @@ class TDNExt:
 			# Phase 7: Set positions (last)
 			self._setPositions(dest, op_defs)
 
+			# Phase 7b: Set docking relationships
+			self._setDocking(dest, op_defs)
+
 			# Phase 7a: Create annotations
 			ann_created = []
 			if isinstance(tdn, dict):
@@ -864,6 +867,14 @@ class TDNExt:
 		tags = list(target.tags)
 		if tags:
 			data['tags'] = tags
+
+		# Docking (omit when not docked)
+		if target.dock is not None:
+			dock_op = target.dock
+			if dock_op.parent() == target.parent():
+				data['dock'] = dock_op.name
+			else:
+				data['dock'] = dock_op.path
 
 		# Storage (all serializable entries, skipping transient/internal keys)
 		storage = self._exportStorage(target)
@@ -1900,6 +1911,45 @@ class TDNExt:
 			children = op_def.get('children', [])
 			if children and target.isCOMP:
 				self._setPositions(target, children)
+
+	def _setDocking(self, parent, op_defs):
+		"""Phase 7b: Restore docking relationships."""
+		for op_def in op_defs:
+			dock_ref = op_def.get('dock')
+			children = op_def.get('children', [])
+
+			if not dock_ref:
+				# No dock on this op — still recurse into children
+				if children:
+					target = self._resolveOp(parent, op_def)
+					if target and target.isCOMP:
+						self._setDocking(target, children)
+				continue
+
+			target = self._resolveOp(parent, op_def)
+			if not target:
+				continue
+
+			# Resolve dock target: sibling name first, then full path
+			dock_target = parent.op(dock_ref)
+			if not dock_target:
+				dock_target = op(dock_ref)
+
+			if dock_target:
+				try:
+					target.dock = dock_target
+				except Exception as e:
+					self._log(
+						f'Failed to dock {target.path} to {dock_ref}: {e}',
+						'WARNING')
+			else:
+				self._log(
+					f'Dock target not found: {dock_ref} for {target.path}',
+					'WARNING')
+
+			# Recurse into children
+			if children and target.isCOMP:
+				self._setDocking(target, children)
 
 	def _createAnnotationsFromList(self, parent, annotations_data, created):
 		"""Phase 7a: Create annotations in a COMP from an annotations array.

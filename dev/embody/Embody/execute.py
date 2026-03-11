@@ -23,8 +23,14 @@ def onStart():
 
 def onCreate():
 	init()
-	run(f"op('{parent.Embody}').Verify()", delayFrames = 30)
-
+	# Prevent Envoy from auto-starting before init completes.
+	# The release .tox may bake in Envoyenable=True; reset it so the git
+	# dialog doesn't fire before the externalizations table is ready.
+	parent.Embody.par.Envoyenable = False
+	# Auto-create (or reconnect) the externalizations table before Verify()
+	run(f"op('{parent.Embody}').ext.Embody.CreateExternalizationsTable()", delayFrames=15)
+	# Verify handles update-scenario detection and Envoy opt-in
+	run(f"op('{parent.Embody}').Verify()", delayFrames=30)
 	return
 
 def onExit():

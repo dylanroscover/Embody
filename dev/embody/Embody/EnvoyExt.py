@@ -3515,15 +3515,38 @@ class EnvoyExt:
             'Envoy auto-configures .mcp.json, .gitignore, and CLAUDE.md\n'
             'in your git repository root. No git repository was found.\n\n'
             f'Initialize a git repo in:\n  {project_dir}\n\n'
+            'Or browse to select a different folder (e.g. an existing repo root).\n'
             'You can also create one manually and re-enable Envoy.',
-            buttons=['Cancel', 'Initialize Git', 'Start Without Git'])
+            buttons=['Cancel', 'Initialize Git Here', 'Browse for Folder', 'Start Without Git'])
 
-        if choice not in (1, 2):  # Cancel or closed dialog
+        if choice not in (1, 2, 3):  # Cancel or closed dialog
             self.ownerComp.par.Envoyenable = False
             self._log('Envoy cancelled — no git repository.', 'INFO')
             return None
 
-        if choice == 1:  # Initialize Git
+        if choice == 2:  # Browse for Folder
+            result = ui.chooseFolder(
+                title='Select Git Repository Root', start=str(project_dir))
+            if not result:
+                self.ownerComp.par.Envoyenable = False
+                self._log('Envoy cancelled — folder selection aborted.', 'INFO')
+                return None
+            chosen = Path(result)
+            # If the chosen folder already contains a .git, use it directly
+            if (chosen / '.git').exists():
+                self._log(f'Using existing git repo at {chosen}', 'SUCCESS')
+                return chosen
+            # No .git there — offer to initialize in that folder
+            init_choice = ui.messageBox(
+                'Envoy — Initialize Git',
+                f'No git repo found in:\n  {chosen}\n\nInitialize git here?',
+                buttons=['Cancel', 'Initialize Git'])
+            if init_choice not in (1,):
+                self.ownerComp.par.Envoyenable = False
+                return None
+            project_dir = chosen  # use chosen folder for init below
+
+        if choice in (1, 2):  # Initialize Git Here, or Browse → confirmed init
             try:
                 subprocess.run(
                     ['git', 'init', str(project_dir)],
@@ -3534,7 +3557,7 @@ class EnvoyExt:
                 self._log(f'Failed to initialize git repo: {e}', 'ERROR')
                 # Fall through to start-without-git
 
-        # choice == 2 or git init failed — start without git
+        # choice == 3 or git init failed — start without git
         self._log('Starting Envoy without git repo — auto-config skipped.', 'WARNING')
         return 'no-git'
 

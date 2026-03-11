@@ -44,6 +44,10 @@ Embody maintains an `externalizations` tableDAT outside the Embody component wit
 | `dirty` | Dirty state (`True`, `False`, or `Par` for parameter changes) |
 | `build` | Build number (COMPs only) |
 | `touch_build` | TouchDesigner build version (COMPs only) |
+| `strategy` | Externalization strategy (`tox`, `tdn`, `py`, `txt`, etc.) |
+| `node_x` | Operator X position in the network (for restoration) |
+| `node_y` | Operator Y position in the network (for restoration) |
+| `node_color` | Operator node color (for restoration) |
 
 This table serves as the source of truth for what files Embody manages. Only files listed here will ever be deleted by Embody.
 

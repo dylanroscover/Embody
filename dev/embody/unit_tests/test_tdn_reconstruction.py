@@ -2225,3 +2225,82 @@ class TestTDNReconstruction(EmbodyTestCase):
 		result = self.sandbox.op('c').fetch(
 			'persist_me', None, search=False)
 		self.assertEqual(result, {'key': [1, 2, 3]})
+
+	# =================================================================
+	# R: Docking
+	# =================================================================
+
+	def test_R01_dock_exported_when_set(self):
+		"""dock field appears in export when an operator is docked."""
+		host = self.sandbox.create(noiseTOP, 'host')
+		docked = self.sandbox.create(infoDAT, 'docked')
+		docked.dock = host
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		ops = {o['name']: o for o in result['tdn']['operators']}
+		self.assertIn('dock', ops['docked'])
+		self.assertEqual(ops['docked']['dock'], 'host')
+
+	def test_R02_dock_omitted_when_none(self):
+		"""dock field is absent when an operator is not docked."""
+		self.sandbox.create(noiseTOP, 'op1')
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		ops = {o['name']: o for o in result['tdn']['operators']}
+		self.assertNotIn('dock', ops['op1'])
+
+	def test_R03_dock_roundtrip_sibling(self):
+		"""Sibling-name dock relationship survives export → import."""
+		host = self.sandbox.create(noiseTOP, 'host')
+		docked = self.sandbox.create(infoDAT, 'docked')
+		docked.dock = host
+		self._roundTrip(self.sandbox)
+		restored_host = self.sandbox.op('host')
+		restored_docked = self.sandbox.op('docked')
+		self.assertIsNotNone(restored_docked.dock)
+		self.assertEqual(restored_docked.dock, restored_host)
+
+	def test_R04_dock_missing_target_warns(self):
+		"""Import with unknown dock target logs a WARNING and does not crash."""
+		tdn_data = {
+			'format': 'tdn', 'version': '1.0',
+			'generator': 'test', 'td_build': '2025.0',
+			'exported_at': '2025-01-01T00:00:00Z',
+			'network_path': self.sandbox.path,
+			'options': {'include_dat_content': False},
+			'operators': [
+				{'name': 'lonely', 'type': 'infoDAT', 'dock': 'nonexistent'}
+			]
+		}
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path, tdn=tdn_data, clear_first=True)
+		self.assertTrue(result.get('success'))
+		restored = self.sandbox.op('lonely')
+		self.assertIsNotNone(restored)
+		# dock should remain None since target was missing
+		self.assertIsNone(restored.dock)
+
+	def test_R05_dock_in_nested_comp(self):
+		"""Docking inside a child COMP roundtrips correctly."""
+		parent_comp = self.sandbox.create(baseCOMP, 'parent_comp')
+		host = parent_comp.create(noiseTOP, 'host')
+		docked = parent_comp.create(infoDAT, 'docked')
+		docked.dock = host
+		self._roundTrip(self.sandbox)
+		restored_comp = self.sandbox.op('parent_comp')
+		restored_host = restored_comp.op('host')
+		restored_docked = restored_comp.op('docked')
+		self.assertIsNotNone(restored_docked.dock)
+		self.assertEqual(restored_docked.dock, restored_host)
+
+	def test_R06_multiple_ops_docked_to_same_host(self):
+		"""Two operators docked to the same host are both restored."""
+		host = self.sandbox.create(noiseTOP, 'host')
+		d1 = self.sandbox.create(infoDAT, 'd1')
+		d2 = self.sandbox.create(infoDAT, 'd2')
+		d1.dock = host
+		d2.dock = host
+		self._roundTrip(self.sandbox)
+		restored_host = self.sandbox.op('host')
+		self.assertEqual(self.sandbox.op('d1').dock, restored_host)
+		self.assertEqual(self.sandbox.op('d2').dock, restored_host)

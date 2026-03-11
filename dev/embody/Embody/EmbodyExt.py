@@ -30,19 +30,22 @@ class EmbodyExt:
     TouchDesigner COMPs and DATs to external files.
     """
 
-    # Template DAT name -> target path (relative to project root)
-    # Used by _extractClaudeConfig() to generate .claude/ structure for user projects
-    _TEMPLATE_MAP = {
-        'text_rule_network_layout': '.claude/rules/network-layout.md',
-        'text_rule_td_python': '.claude/rules/td-python.md',
-        'text_rule_mcp_safety': '.claude/rules/mcp-safety.md',
-        'text_skill_create_operator': '.claude/skills/create-operator/SKILL.md',
-        'text_skill_debug_operator': '.claude/skills/debug-operator/SKILL.md',
-        'text_skill_externalize': '.claude/skills/externalize-operator/SKILL.md',
-        'text_skill_create_extension': '.claude/skills/create-extension/SKILL.md',
-        'text_skill_manage_annotations': '.claude/skills/manage-annotations/SKILL.md',
-        'text_skill_td_api_reference': '.claude/skills/td-api-reference/SKILL.md',
-        'text_skill_mcp_tools_reference': '.claude/skills/mcp-tools-reference/SKILL.md',
+    # Rule DAT name -> slug (shared across all AI clients)
+    _TEMPLATE_MAP_RULES = {
+        'text_rule_network_layout': 'network-layout',
+        'text_rule_td_python':      'td-python',
+        'text_rule_mcp_safety':     'mcp-safety',
+    }
+
+    # Skill DAT name -> slug (Claude Code only)
+    _TEMPLATE_MAP_SKILLS = {
+        'text_skill_create_operator':     'create-operator',
+        'text_skill_debug_operator':      'debug-operator',
+        'text_skill_externalize':         'externalize-operator',
+        'text_skill_create_extension':    'create-extension',
+        'text_skill_manage_annotations':  'manage-annotations',
+        'text_skill_td_api_reference':    'td-api-reference',
+        'text_skill_mcp_tools_reference': 'mcp-tools-reference',
     }
 
     # ==========================================================================
@@ -449,7 +452,8 @@ class EmbodyExt:
             '  - Install Python dependencies (~30 MB)\n'
             '  - Start a local MCP server on port '
             f'{self.my.par.Envoyport.eval()}\n'
-            '  - Create CLAUDE.md and .mcp.json in your project\n\n'
+            '  - Generate AI config files in your project root\n'
+            '    (CLAUDE.md, AGENTS.md, .mcp.json, .claude/ rules + skills)\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
             'You can change this later via the Envoyenable parameter.',
             buttons=['Skip', 'Enable Envoy'])
@@ -461,20 +465,22 @@ class EmbodyExt:
             self.Log('Envoy skipped. Enable later via Envoyenable parameter.', 'INFO')
 
     def _enableEnvoy(self):
-        """Enable Envoy: install deps, extract Claude config, start server."""
+        """Enable Envoy: install deps, extract AI config, start server."""
         self.Log('Setting up Envoy...', 'INFO')
 
         # Install Python dependencies
         self._setupEnvironment()
 
-        # Extract CLAUDE.md and .claude/ structure to project/repo root
-        self._extractClaudeConfig()
+        # Extract AI coding assistant config files to project/repo root
+        self._extractAIConfig()
 
         # Enable Envoy (triggers Start() via parexec.py)
         self.my.par.Envoyenable = True
 
+        client_label = self.my.par.Aiclient.label
         self.Log(
-            'Envoy enabled! Start your AI coding assistant and connect via MCP.',
+            f'Envoy enabled! Config generated for {client_label}. '
+            f'Connect your AI coding assistant via MCP.',
             'SUCCESS'
         )
 
@@ -491,38 +497,203 @@ class EmbodyExt:
         )
         return project_dir
 
-    def _extractClaudeConfig(self):
-        """Extract CLAUDE.md and .claude/ structure to the project/repo root."""
+    def _extractAIConfig(self):
+        """Extract AI coding assistant config files based on par.Aiclient."""
         target_dir = self._findProjectRoot()
+        client = self.my.par.Aiclient.eval()
 
-        # 1. Write CLAUDE.md (with ENVOY.md fallback)
+        # Always: AGENTS.md (universal standard, read by all major AI tools)
+        self._writeAgentsMd(target_dir)
+
+        if client == 'claudecode':
+            self._writeClaudeCodeConfig(target_dir)
+        elif client == 'cursor':
+            self._writeCursorRules(target_dir)
+        elif client == 'copilot':
+            self._writeCopilotInstructions(target_dir)
+        elif client == 'windsurf':
+            self._writeWindsurfRules(target_dir)
+        # 'none': AGENTS.md only (already written above)
+
+    def _writeAgentsMd(self, target_dir):
+        """Write AGENTS.md — universal AI instructions read by all major AI tools."""
+        templates_comp = self.my.op('templates')
+        agents_md_dat = templates_comp.op('text_agents_md') if templates_comp else None
+
+        if agents_md_dat and agents_md_dat.text:
+            content = agents_md_dat.text
+        else:
+            # Assemble from the 3 rule templates as a fallback
+            self.Log('text_agents_md DAT not found — assembling AGENTS.md from rules', 'DEBUG')
+            parts = ['<!-- Generated by Embody/Envoy — do not edit manually -->\n']
+            parts.append('# Embody + Envoy — AI Instructions\n\n')
+            parts.append(
+                'This project uses [Embody](https://github.com/dylanroscover/Embody) '
+                '(TouchDesigner externalization) and Envoy (MCP server for AI coding tools).\n\n'
+                '---\n\n'
+            )
+            if templates_comp:
+                for dat_name in self._TEMPLATE_MAP_RULES:
+                    dat = templates_comp.op(dat_name)
+                    if dat and dat.text:
+                        # Strip frontmatter from each rule before embedding
+                        parts.append(self._stripFrontmatter(dat.text).strip())
+                        parts.append('\n\n---\n\n')
+            content = ''.join(parts)
+
+        self._writeTemplate(target_dir, 'AGENTS.md', content)
+
+    def _writeClaudeCodeConfig(self, target_dir):
+        """Write Claude Code config: CLAUDE.md + .claude/rules/ + .claude/skills/"""
+        # 1. CLAUDE.md (with ENVOY.md fallback if user already has one)
         self._writeClaudeMd(target_dir)
 
-        # 2. Write .claude/rules/ and .claude/skills/ from template DATs
+        # 2. .claude/rules/ and .claude/skills/ from template DATs
         templates_comp = self.my.op('templates')
         if not templates_comp:
-            self.Log(
-                'Templates COMP not found — skipping .claude/ generation',
-                'DEBUG'
-            )
+            self.Log('Templates COMP not found — skipping .claude/ generation', 'DEBUG')
             return
 
         written = 0
-        for dat_name, rel_path in self._TEMPLATE_MAP.items():
+        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
             template_dat = templates_comp.op(dat_name)
-            if not template_dat:
+            if not template_dat or not template_dat.text:
                 continue
-            content = template_dat.text
-            if not content:
+            if self._writeTemplate(target_dir, f'.claude/rules/{slug}.md', template_dat.text):
+                written += 1
+
+        for dat_name, slug in self._TEMPLATE_MAP_SKILLS.items():
+            template_dat = templates_comp.op(dat_name)
+            if not template_dat or not template_dat.text:
                 continue
-            if self._writeTemplate(target_dir, rel_path, content):
+            if self._writeTemplate(target_dir, f'.claude/skills/{slug}/SKILL.md', template_dat.text):
                 written += 1
 
         if written > 0:
-            self.Log(
-                f'Generated {written} .claude/ files at {target_dir}',
-                'SUCCESS'
+            self.Log(f'Generated {written} .claude/ files at {target_dir}', 'SUCCESS')
+
+    def _stripFrontmatter(self, content):
+        """Strip leading YAML frontmatter (---...---) from content if present.
+
+        Returns the content after the closing --- block, with leading whitespace
+        trimmed. Handles BOM-prefixed content.
+        """
+        # Strip BOM that TD may add to externalized files
+        content = content.lstrip('\ufeff')
+        if not content.startswith('---\n'):
+            return content
+        close_idx = content.find('\n---\n', 4)
+        if close_idx == -1:
+            return content
+        return content[close_idx + 5:].lstrip('\n')
+
+    def _writeCursorRules(self, target_dir):
+        """Write Cursor rules: .cursor/rules/{slug}.mdc with YAML frontmatter.
+
+        Templates already embed a 'description:' field. This injects 'globs: []'
+        and 'alwaysApply: true' into the existing frontmatter rather than
+        prepending a duplicate block.
+        """
+        templates_comp = self.my.op('templates')
+        if not templates_comp:
+            self.Log('Templates COMP not found — skipping .cursor/ generation', 'DEBUG')
+            return
+
+        written = 0
+        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
+            template_dat = templates_comp.op(dat_name)
+            if not template_dat or not template_dat.text:
+                continue
+            raw = template_dat.text.lstrip('\ufeff')
+            # Inject globs/alwaysApply into existing frontmatter
+            SEP = '\n---\n'
+            if raw.startswith('---\n') and SEP in raw[4:]:
+                close_idx = raw.find(SEP, 4)
+                fm_lines = raw[4:close_idx]
+                rest = raw[close_idx + len(SEP):]
+                if 'alwaysApply:' not in fm_lines:
+                    fm_lines += '\nglobs: []\nalwaysApply: true'
+                content = '---\n' + fm_lines + SEP + rest
+            else:
+                # No frontmatter — build one from first H1
+                description = slug.replace('-', ' ').title()
+                for line in raw.splitlines():
+                    if line.startswith('# '):
+                        description = line[2:].strip()
+                        break
+                content = (
+                    f'---\ndescription: "{description}"\n'
+                    f'globs: []\nalwaysApply: true\n---\n\n{raw}'
+                )
+            if self._writeTemplate(target_dir, f'.cursor/rules/{slug}.mdc', content):
+                written += 1
+
+        if written > 0:
+            self.Log(f'Generated {written} .cursor/rules/ files at {target_dir}', 'SUCCESS')
+
+    def _writeCopilotInstructions(self, target_dir):
+        """Write GitHub Copilot config: combined instructions + per-rule files."""
+        templates_comp = self.my.op('templates')
+        if not templates_comp:
+            self.Log('Templates COMP not found — skipping .github/ generation', 'DEBUG')
+            return
+
+        written = 0
+        rule_parts = ['<!-- Generated by Embody/Envoy — do not edit manually -->\n\n']
+        individual_contents = {}
+
+        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
+            template_dat = templates_comp.op(dat_name)
+            if not template_dat or not template_dat.text:
+                continue
+            # Strip template frontmatter — Copilot uses its own applyTo format
+            rule_content = self._stripFrontmatter(template_dat.text).strip()
+            # Extract heading for section label
+            heading = slug.replace('-', ' ').title()
+            for line in rule_content.splitlines():
+                if line.startswith('# '):
+                    heading = line[2:].strip()
+                    break
+            rule_parts.append(f'## {heading}\n\n{rule_content}\n\n---\n\n')
+            # Individual file with applyTo frontmatter + generated marker
+            individual_contents[slug] = (
+                f'---\n'
+                f'applyTo: "**"\n'
+                f'---\n\n'
+                f'<!-- Generated by Embody/Envoy — do not edit manually -->\n\n'
+                f'{rule_content}'
             )
+
+        # Combined file (.github/copilot-instructions.md)
+        combined = ''.join(rule_parts)
+        if self._writeTemplate(target_dir, '.github/copilot-instructions.md', combined):
+            written += 1
+
+        # Individual per-rule files (.github/instructions/{slug}.instructions.md)
+        for slug, content in individual_contents.items():
+            if self._writeTemplate(target_dir, f'.github/instructions/{slug}.instructions.md', content):
+                written += 1
+
+        if written > 0:
+            self.Log(f'Generated {written} .github/ files at {target_dir}', 'SUCCESS')
+
+    def _writeWindsurfRules(self, target_dir):
+        """Write Windsurf rules: .windsurf/rules/{slug}.md (plain markdown)."""
+        templates_comp = self.my.op('templates')
+        if not templates_comp:
+            self.Log('Templates COMP not found — skipping .windsurf/ generation', 'DEBUG')
+            return
+
+        written = 0
+        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
+            template_dat = templates_comp.op(dat_name)
+            if not template_dat or not template_dat.text:
+                continue
+            if self._writeTemplate(target_dir, f'.windsurf/rules/{slug}.md', template_dat.text):
+                written += 1
+
+        if written > 0:
+            self.Log(f'Generated {written} .windsurf/rules/ files at {target_dir}', 'SUCCESS')
 
     def _writeClaudeMd(self, target_dir):
         """Write CLAUDE.md from the text_claude template DAT."""
@@ -573,16 +744,27 @@ class EmbodyExt:
         return True
 
     def _upgradeEnvoy(self):
-        """Silently extract Claude config if Envoy is enabled but files are missing."""
+        """Silently extract AI config if Envoy is enabled but files are missing."""
         if not self.my.par.Envoyenable.eval():
             return
         target_dir = self._findProjectRoot()
-        needs_extract = (
-            not (target_dir / 'CLAUDE.md').exists()
-            and not (target_dir / 'ENVOY.md').exists()
-        ) or not (target_dir / '.claude' / 'rules').exists()
-        if needs_extract:
-            self._extractClaudeConfig()
+        client = self.my.par.Aiclient.eval()
+        agents_md_missing = not (target_dir / 'AGENTS.md').exists()
+        if agents_md_missing or self._clientFilesMissing(target_dir, client):
+            self._extractAIConfig()
+
+    def _clientFilesMissing(self, target_dir, client):
+        """Return True if the primary config files for the selected client are absent."""
+        checks = {
+            'claudecode': lambda d: (
+                not (d / 'CLAUDE.md').exists() and not (d / 'ENVOY.md').exists()
+            ) or not (d / '.claude' / 'rules').exists(),
+            'cursor':     lambda d: not (d / '.cursor' / 'rules').exists(),
+            'copilot':    lambda d: not (d / '.github' / 'copilot-instructions.md').exists(),
+            'windsurf':   lambda d: not (d / '.windsurf' / 'rules').exists(),
+            'none':       lambda d: False,
+        }
+        return checks.get(client, lambda d: False)(target_dir)
 
     # ==========================================================================
     # INITIALIZATION & RESET
@@ -599,13 +781,23 @@ class EmbodyExt:
         """Create or reset the externalizations tracking table."""
         table_name = 'externalizations'
         externalizations_dat = self.Externalizations
-        
+
+        # Update scenario: par reference is lost but the sibling table survived
+        # Embody deletion (undocked tables are not deleted with their host).
         if not externalizations_dat:
-            # Create new table
+            existing_sibling = self.my.parent().op(table_name)
+            if existing_sibling and existing_sibling.family == 'DAT':
+                externalizations_dat = existing_sibling
+                self.my.par.Externalizations.val = externalizations_dat
+                self.Log(f"Re-connected to existing '{table_name}' tableDAT", "INFO")
+
+        if not externalizations_dat:
+            # Truly fresh install — create new table as a regular sibling.
+            # NOTE: not docked to Embody so the table survives when Embody is
+            # deleted during an upgrade (delete old → drag new .tox).
             externalizations_dat = self.my.parent().create(tableDAT, table_name)
             externalizations_dat.nodeX = self.my.nodeX - 200
             externalizations_dat.nodeY = self.my.nodeY
-            externalizations_dat.dock = self.my
             externalizations_dat.color = (
                 self.my.par.Dattagcolorr,
                 self.my.par.Dattagcolorg,
@@ -621,8 +813,28 @@ class EmbodyExt:
         else:
             externalizations_dat.clear(keepFirstRow=True)
             self.Log(f"Reset '{table_name}' tableDAT", "INFO")
-        
+
         self.my.par.Externalizations.val = externalizations_dat
+
+    def CreateExternalizationsTable(self) -> None:
+        """Recovery/init method: create or reconnect the externalizations table.
+
+        Safe to call at any time. No-op if the table already exists and is
+        connected via par.Externalizations. If the parameter is empty but a
+        sibling named 'externalizations' exists (e.g. after an Embody upgrade),
+        reconnects to it without creating a duplicate.
+        """
+        externalizations_dat = self.Externalizations
+        if not externalizations_dat:
+            existing_sibling = self.my.parent().op('externalizations')
+            if existing_sibling and existing_sibling.family == 'DAT':
+                self.my.par.Externalizations.val = existing_sibling
+                self.Log('Re-connected to existing externalizations tableDAT', 'INFO')
+                return
+        if externalizations_dat:
+            self.Log('Externalizations table already exists', 'INFO')
+            return
+        self.createExternalizationsTable()
 
     def _migrateTableSchema(self) -> None:
         """Migrate externalizations table schema to current version.
@@ -690,7 +902,16 @@ class EmbodyExt:
             self.Log(f'Schema migration: added {", ".join(migrations)}', 'SUCCESS')
 
     def Verify(self) -> None:
-        """Verify Embody instance and prompt for initialization."""
+        """Initialize or reconnect Embody on install or update.
+
+        Called from execute.py onCreate() after CreateExternalizationsTable()
+        has already run.  Two scenarios:
+
+        - Fresh install: table exists but is empty (just created) — skip dialog,
+          run UpdateHandler quietly, then offer Envoy opt-in.
+        - Update install: table has prior data — offer a re-scan to validate
+          tracked operators after upgrading Embody.
+        """
         embodies = op('/').findChildren(name='Embody', parName='Addtagshort')
         other_embody = next((e for e in embodies if e != self.my), None)
 
@@ -700,17 +921,27 @@ class EmbodyExt:
                 'Please remove it first.', buttons=['Ok'])
             return
 
-        # Stage 1: Standard Embody initialization
-        if not ui.messageBox('Embody',
-            'Initialize Embody from previously saved state?\n'
-            '(If unsure, select "Yes")',
-            buttons=['No', 'Yes']):
-            return  # User declined -- stop here
+        table = self.Externalizations
+        has_prior_data = table and table.numRows > 1
 
-        self.Reset()
+        if has_prior_data:
+            # UPDATE scenario: reconnected to a surviving table with prior entries.
+            # Offer a re-scan so Embody validates/updates all tracked operators.
+            choice = ui.messageBox('Embody',
+                f'{table.numRows - 1} externalized operator(s) found.\n\n'
+                'Re-scan to validate tracked operators?\n'
+                '(Recommended after upgrading Embody)',
+                buttons=['Skip', 'Re-scan'])
+            if choice in (1,):  # Re-scan
+                self.Reset()
+        else:
+            # FRESH INSTALL: table was just created (empty). No dialog needed —
+            # just run UpdateHandler quietly; it will find nothing yet.
+            run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
 
-        # Stage 2: Envoy opt-in (deferred so Reset() completes first)
-        run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=5)
+        # Offer Envoy opt-in only if not already enabled
+        if not self.my.par.Envoyenable.eval():
+            run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=15)
 
     # ==========================================================================
     # SAFE FILE TRACKING
@@ -2170,20 +2401,36 @@ class EmbodyExt:
                 "me.parent().fileFolder + '/' +" in x.par.externaltox.expr
             )
         )
-        
-        if comps_with_filefolder:
+
+        if not comps_with_filefolder:
+            return
+
+        embody_path = self.ownerComp.path
+        internal, external = [], []
+        for comp in comps_with_filefolder:
+            if comp.path == embody_path or comp.path.startswith(embody_path + '/'):
+                internal.append(comp)
+            else:
+                external.append(comp)
+
+        def _reset(comp):
+            try:
+                comp.par.externaltox.expr = ''
+                comp.par.externaltox = ''
+                self.Log(f"Reset externaltox for '{comp.path}'", "SUCCESS")
+            except Exception as e:
+                self.Log(f"Error resetting '{comp.path}'", "ERROR", str(e))
+
+        for comp in internal:
+            _reset(comp)
+
+        if external:
             message = "Found COMPs using deprecated 'me.parent().fileFolder':\n\n"
-            message += "\n".join([f"- {comp.path}" for comp in comps_with_filefolder])
+            message += "\n".join([f"- {comp.path}" for comp in external])
             message += "\n\nReset these paths?"
-            
             if ui.messageBox('Embody', message, buttons=['No', 'Yes']) == 1:
-                for comp in comps_with_filefolder:
-                    try:
-                        comp.par.externaltox.expr = ''
-                        comp.par.externaltox = ''
-                        self.Log(f"Reset externaltox for '{comp.path}'", "SUCCESS")
-                    except Exception as e:
-                        self.Log(f"Error resetting '{comp.path}'", "ERROR", str(e))
+                for comp in external:
+                    _reset(comp)
 
     def _updateOpTimestamp(self, oper):
         """Update timestamp for an operator from file system."""

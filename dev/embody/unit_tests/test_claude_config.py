@@ -1,8 +1,10 @@
 """
-Test suite: Claude config generation pipeline in EmbodyExt.
+Test suite: AI config generation pipeline in EmbodyExt.
 
-Tests _TEMPLATE_MAP integrity, _writeTemplate, _writeClaudeMd,
-_extractClaudeConfig end-to-end, and _upgradeEnvoy condition logic.
+Tests _TEMPLATE_MAP_RULES / _TEMPLATE_MAP_SKILLS integrity, _writeTemplate,
+_writeClaudeMd, _writeAgentsMd, _writeClaudeCodeConfig, _writeCursorRules,
+_writeCopilotInstructions, _writeWindsurfRules, _clientFilesMissing,
+and _upgradeEnvoy condition logic.
 """
 
 import tempfile
@@ -19,7 +21,7 @@ class TestClaudeConfig(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self._temp_dir = Path(tempfile.mkdtemp(prefix='claude_config_test_'))
+		self._temp_dir = Path(tempfile.mkdtemp(prefix='ai_config_test_'))
 
 	def tearDown(self):
 		try:
@@ -32,64 +34,111 @@ class TestClaudeConfig(EmbodyTestCase):
 	# Group A: Template DAT integrity
 	# ------------------------------------------------------------------
 
-	def test_A01_template_map_has_10_entries(self):
-		"""_TEMPLATE_MAP should have exactly 10 template entries."""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP, 10)
+	def test_A01_rules_map_has_3_entries(self):
+		"""_TEMPLATE_MAP_RULES should have exactly 3 rule entries."""
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_RULES, 3)
 
-	def test_A02_templates_comp_exists(self):
+	def test_A02_skills_map_has_7_entries(self):
+		"""_TEMPLATE_MAP_SKILLS should have exactly 7 skill entries."""
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 7)
+
+	def test_A03_templates_comp_exists(self):
 		"""The templates COMP should exist inside Embody."""
 		templates_comp = self.embody_ext.my.op('templates')
 		self.assertIsNotNone(templates_comp,
 			'templates COMP not found inside Embody')
 
-	def test_A03_all_template_dats_exist(self):
-		"""Every DAT named in _TEMPLATE_MAP should exist in the templates COMP."""
+	def test_A04_all_rule_dats_exist(self):
+		"""Every DAT named in _TEMPLATE_MAP_RULES should exist in templates COMP."""
 		templates_comp = self.embody_ext.my.op('templates')
-		for dat_name in self.embody_ext._TEMPLATE_MAP:
+		for dat_name in self.embody_ext._TEMPLATE_MAP_RULES:
 			dat = templates_comp.op(dat_name)
 			self.assertIsNotNone(dat,
-				f'Template DAT {dat_name!r} missing from templates COMP')
+				f'Rule DAT {dat_name!r} missing from templates COMP')
 
-	def test_A04_all_template_dats_have_content(self):
-		"""Every template DAT should have non-empty text content."""
+	def test_A05_all_skill_dats_exist(self):
+		"""Every DAT named in _TEMPLATE_MAP_SKILLS should exist in templates COMP."""
 		templates_comp = self.embody_ext.my.op('templates')
-		for dat_name in self.embody_ext._TEMPLATE_MAP:
+		for dat_name in self.embody_ext._TEMPLATE_MAP_SKILLS:
+			dat = templates_comp.op(dat_name)
+			self.assertIsNotNone(dat,
+				f'Skill DAT {dat_name!r} missing from templates COMP')
+
+	def test_A06_all_rule_dats_have_content(self):
+		"""Every rule template DAT should have non-empty text content."""
+		templates_comp = self.embody_ext.my.op('templates')
+		for dat_name in self.embody_ext._TEMPLATE_MAP_RULES:
 			dat = templates_comp.op(dat_name)
 			self.assertTrue(dat.text,
-				f'Template DAT {dat_name!r} has empty .text')
+				f'Rule DAT {dat_name!r} has empty .text')
 
-	def test_A05_all_template_dats_have_marker(self):
-		"""Every template DAT should contain the Embody/Envoy marker."""
+	def test_A07_all_skill_dats_have_content(self):
+		"""Every skill template DAT should have non-empty text content."""
 		templates_comp = self.embody_ext.my.op('templates')
-		for dat_name in self.embody_ext._TEMPLATE_MAP:
+		for dat_name in self.embody_ext._TEMPLATE_MAP_SKILLS:
+			dat = templates_comp.op(dat_name)
+			self.assertTrue(dat.text,
+				f'Skill DAT {dat_name!r} has empty .text')
+
+	def test_A08_all_rule_dats_have_marker(self):
+		"""Every rule template DAT should contain the Embody/Envoy marker."""
+		templates_comp = self.embody_ext.my.op('templates')
+		for dat_name in self.embody_ext._TEMPLATE_MAP_RULES:
 			dat = templates_comp.op(dat_name)
 			self.assertIn(self.MARKER, dat.text,
-				f'Template DAT {dat_name!r} missing marker')
+				f'Rule DAT {dat_name!r} missing marker')
 
-	def test_A06_text_claude_dat_exists(self):
+	def test_A09_all_skill_dats_have_marker(self):
+		"""Every skill template DAT should contain the Embody/Envoy marker."""
+		templates_comp = self.embody_ext.my.op('templates')
+		for dat_name in self.embody_ext._TEMPLATE_MAP_SKILLS:
+			dat = templates_comp.op(dat_name)
+			self.assertIn(self.MARKER, dat.text,
+				f'Skill DAT {dat_name!r} missing marker')
+
+	def test_A10_text_claude_dat_exists(self):
 		"""The text_claude DAT should exist at the Embody COMP level."""
 		dat = self.embody_ext.my.op('text_claude')
 		self.assertIsNotNone(dat, 'text_claude DAT not found')
 
-	def test_A07_text_claude_dat_has_marker(self):
+	def test_A11_text_claude_dat_has_marker(self):
 		"""text_claude DAT content should contain the Embody/Envoy marker."""
 		dat = self.embody_ext.my.op('text_claude')
 		self.assertIn(self.MARKER, dat.text,
 			'text_claude DAT missing marker')
 
-	def test_A08_template_map_paths_are_relative(self):
-		"""All _TEMPLATE_MAP paths should be relative and use forward slashes."""
-		for dat_name, rel_path in self.embody_ext._TEMPLATE_MAP.items():
-			self.assertFalse(rel_path.startswith('/'),
-				f'{dat_name}: path {rel_path!r} should be relative')
-			self.assertNotIn('\\', rel_path,
-				f'{dat_name}: path {rel_path!r} has backslash')
+	def test_A12_text_agents_md_dat_exists(self):
+		"""The text_agents_md DAT should exist in the templates COMP."""
+		templates_comp = self.embody_ext.my.op('templates')
+		dat = templates_comp.op('text_agents_md')
+		self.assertIsNotNone(dat, 'text_agents_md DAT not found in templates COMP')
 
-	def test_A09_template_map_paths_under_dot_claude(self):
-		"""All _TEMPLATE_MAP paths should be under .claude/."""
-		for dat_name, rel_path in self.embody_ext._TEMPLATE_MAP.items():
-			self.assertTrue(rel_path.startswith('.claude/'),
-				f'{dat_name}: path {rel_path!r} not under .claude/')
+	def test_A13_text_agents_md_has_content(self):
+		"""text_agents_md DAT should have non-empty content."""
+		templates_comp = self.embody_ext.my.op('templates')
+		dat = templates_comp.op('text_agents_md')
+		self.assertTrue(dat.text, 'text_agents_md DAT has empty .text')
+
+	def test_A14_text_agents_md_has_marker(self):
+		"""text_agents_md DAT content should contain the Embody/Envoy marker."""
+		templates_comp = self.embody_ext.my.op('templates')
+		dat = templates_comp.op('text_agents_md')
+		self.assertIn(self.MARKER, dat.text,
+			'text_agents_md DAT missing marker')
+
+	def test_A15_rule_slugs_are_simple_strings(self):
+		"""_TEMPLATE_MAP_RULES values should be simple slugs (no path separators)."""
+		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():
+			self.assertNotIn('/', slug,
+				f'{dat_name}: slug {slug!r} should not contain slashes')
+			self.assertNotIn('\\', slug,
+				f'{dat_name}: slug {slug!r} should not contain backslashes')
+
+	def test_A16_skill_slugs_are_simple_strings(self):
+		"""_TEMPLATE_MAP_SKILLS values should be simple slugs (no path separators)."""
+		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_SKILLS.items():
+			self.assertNotIn('/', slug,
+				f'{dat_name}: slug {slug!r} should not contain slashes')
 
 	# ------------------------------------------------------------------
 	# Group B: _writeTemplate() behavior
@@ -189,7 +238,6 @@ class TestClaudeConfig(EmbodyTestCase):
 		expected_fallback = self._temp_dir / 'ENVOY.md'
 		self.assertEqual(result, expected_fallback)
 		self.assertTrue(expected_fallback.exists())
-		# Original CLAUDE.md should be untouched
 		self.assertEqual(
 			user_claude.read_text(encoding='utf-8'),
 			'My own claude config')
@@ -208,121 +256,314 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertEqual(result, self._temp_dir / 'CLAUDE.md')
 
 	# ------------------------------------------------------------------
-	# Group D: _extractClaudeConfig() end-to-end
+	# Group D: _writeClaudeCodeConfig() end-to-end
 	# ------------------------------------------------------------------
 
-	def _run_pipeline(self):
-		"""Helper: run the full pipeline against self._temp_dir."""
-		self.embody_ext._writeClaudeMd(self._temp_dir)
-		templates_comp = self.embody_ext.my.op('templates')
-		written = 0
-		for dat_name, rel_path in self.embody_ext._TEMPLATE_MAP.items():
-			dat = templates_comp.op(dat_name)
-			if dat and dat.text:
-				if self.embody_ext._writeTemplate(
-						self._temp_dir, rel_path, dat.text):
-					written += 1
-		return written
+	def _run_claude_pipeline(self):
+		"""Helper: run the Claude Code config pipeline against self._temp_dir."""
+		self.embody_ext._writeClaudeCodeConfig(self._temp_dir)
 
 	def test_D01_all_template_files_created(self):
-		"""Full pipeline should create CLAUDE.md + all 10 template files."""
-		self._run_pipeline()
+		"""Claude pipeline should create CLAUDE.md + all rules + all skills."""
+		self._run_claude_pipeline()
 		self.assertTrue((self._temp_dir / 'CLAUDE.md').exists())
-		for rel_path in self.embody_ext._TEMPLATE_MAP.values():
-			full = self._temp_dir / rel_path
-			self.assertTrue(full.exists(),
-				f'Expected file not created: {rel_path}')
+		for slug in self.embody_ext._TEMPLATE_MAP_RULES.values():
+			full = self._temp_dir / '.claude' / 'rules' / f'{slug}.md'
+			self.assertTrue(full.exists(), f'Rule file missing: {slug}.md')
+		for slug in self.embody_ext._TEMPLATE_MAP_SKILLS.values():
+			full = self._temp_dir / '.claude' / 'skills' / slug / 'SKILL.md'
+			self.assertTrue(full.exists(), f'Skill file missing: {slug}/SKILL.md')
 
 	def test_D02_file_content_matches_dats(self):
-		"""Each template file content should match its source DAT."""
-		self._run_pipeline()
+		"""Each rule file content should match its source DAT."""
+		self._run_claude_pipeline()
 		templates_comp = self.embody_ext.my.op('templates')
-		for dat_name, rel_path in self.embody_ext._TEMPLATE_MAP.items():
+		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():
 			dat = templates_comp.op(dat_name)
-			full = self._temp_dir / rel_path
+			full = self._temp_dir / '.claude' / 'rules' / f'{slug}.md'
 			actual = full.read_text(encoding='utf-8')
 			self.assertEqual(actual, dat.text,
-				f'Content mismatch for {rel_path}')
+				f'Content mismatch for rules/{slug}.md')
 
 	def test_D03_directory_structure_correct(self):
-		"""Pipeline should create .claude/rules/ and .claude/skills/ subdirs."""
-		self._run_pipeline()
+		"""Claude pipeline should create .claude/rules/ and .claude/skills/ subdirs."""
+		self._run_claude_pipeline()
 		self.assertTrue((self._temp_dir / '.claude' / 'rules').is_dir())
 		self.assertTrue((self._temp_dir / '.claude' / 'skills').is_dir())
 
 	def test_D04_rules_files_count(self):
 		"""Three rule files should be created in .claude/rules/."""
-		self._run_pipeline()
+		self._run_claude_pipeline()
 		rules_dir = self._temp_dir / '.claude' / 'rules'
 		rule_files = list(rules_dir.glob('*.md'))
 		self.assertLen(rule_files, 3)
 
 	def test_D05_skills_directories_count(self):
 		"""Seven skill directories should be created in .claude/skills/."""
-		self._run_pipeline()
+		self._run_claude_pipeline()
 		skills_dir = self._temp_dir / '.claude' / 'skills'
 		skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
 		self.assertLen(skill_dirs, 7)
 
 	def test_D06_idempotent_rerun(self):
-		"""Running the pipeline twice should produce identical files."""
-		self._run_pipeline()
+		"""Running the Claude pipeline twice should produce identical files."""
+		self._run_claude_pipeline()
 		first_run = {}
-		for rel_path in self.embody_ext._TEMPLATE_MAP.values():
-			full = self._temp_dir / rel_path
-			first_run[rel_path] = full.read_text(encoding='utf-8')
-		# Second run
-		self._run_pipeline()
-		for rel_path in self.embody_ext._TEMPLATE_MAP.values():
-			full = self._temp_dir / rel_path
-			second = full.read_text(encoding='utf-8')
-			self.assertEqual(first_run[rel_path], second,
-				f'Content changed on second run for {rel_path}')
+		for slug in self.embody_ext._TEMPLATE_MAP_RULES.values():
+			p = self._temp_dir / '.claude' / 'rules' / f'{slug}.md'
+			first_run[slug] = p.read_text(encoding='utf-8')
+		self._run_claude_pipeline()
+		for slug in self.embody_ext._TEMPLATE_MAP_RULES.values():
+			p = self._temp_dir / '.claude' / 'rules' / f'{slug}.md'
+			self.assertEqual(first_run[slug], p.read_text(encoding='utf-8'),
+				f'Content changed on second run for {slug}.md')
 
 	# ------------------------------------------------------------------
-	# Group E: _upgradeEnvoy() condition logic
+	# Group Da: _writeAgentsMd()
 	# ------------------------------------------------------------------
 
-	def test_E01_upgrade_needed_when_no_files(self):
-		"""Upgrade should be needed when both CLAUDE.md and ENVOY.md are missing."""
-		d = self._temp_dir
-		needs_extract = (
-			not (d / 'CLAUDE.md').exists()
-			and not (d / 'ENVOY.md').exists()
-		) or not (d / '.claude' / 'rules').exists()
-		self.assertTrue(needs_extract)
+	def test_Da01_agents_md_created(self):
+		"""_writeAgentsMd should create AGENTS.md."""
+		self.embody_ext._writeAgentsMd(self._temp_dir)
+		self.assertTrue((self._temp_dir / 'AGENTS.md').exists())
 
-	def test_E02_upgrade_not_needed_when_all_present(self):
-		"""Upgrade not needed when CLAUDE.md and .claude/rules/ both exist."""
-		d = self._temp_dir
-		(d / 'CLAUDE.md').write_text('content', encoding='utf-8')
-		(d / '.claude' / 'rules').mkdir(parents=True)
-		needs_extract = (
-			not (d / 'CLAUDE.md').exists()
-			and not (d / 'ENVOY.md').exists()
-		) or not (d / '.claude' / 'rules').exists()
-		self.assertFalse(needs_extract)
+	def test_Da02_agents_md_has_marker(self):
+		"""Generated AGENTS.md should contain the Embody/Envoy marker."""
+		self.embody_ext._writeAgentsMd(self._temp_dir)
+		content = (self._temp_dir / 'AGENTS.md').read_text(encoding='utf-8')
+		self.assertIn(self.MARKER, content)
 
-	def test_E03_upgrade_needed_when_rules_missing(self):
-		"""Upgrade needed when .claude/rules/ missing even with CLAUDE.md."""
-		d = self._temp_dir
-		(d / 'CLAUDE.md').write_text('content', encoding='utf-8')
-		needs_extract = (
-			not (d / 'CLAUDE.md').exists()
-			and not (d / 'ENVOY.md').exists()
-		) or not (d / '.claude' / 'rules').exists()
-		self.assertTrue(needs_extract)
+	def test_Da03_agents_md_has_content(self):
+		"""Generated AGENTS.md should have substantial content (> 100 chars)."""
+		self.embody_ext._writeAgentsMd(self._temp_dir)
+		content = (self._temp_dir / 'AGENTS.md').read_text(encoding='utf-8')
+		self.assertGreater(len(content), 100)
 
-	def test_E04_upgrade_not_needed_with_envoy_md(self):
-		"""Upgrade not needed when ENVOY.md and .claude/rules/ both exist."""
-		d = self._temp_dir
-		(d / 'ENVOY.md').write_text('content', encoding='utf-8')
-		(d / '.claude' / 'rules').mkdir(parents=True)
-		needs_extract = (
-			not (d / 'CLAUDE.md').exists()
-			and not (d / 'ENVOY.md').exists()
-		) or not (d / '.claude' / 'rules').exists()
-		self.assertFalse(needs_extract)
+	def test_Da04_agents_md_idempotent(self):
+		"""Running _writeAgentsMd twice should produce identical output."""
+		self.embody_ext._writeAgentsMd(self._temp_dir)
+		first = (self._temp_dir / 'AGENTS.md').read_text(encoding='utf-8')
+		self.embody_ext._writeAgentsMd(self._temp_dir)
+		second = (self._temp_dir / 'AGENTS.md').read_text(encoding='utf-8')
+		self.assertEqual(first, second)
+
+	# ------------------------------------------------------------------
+	# Group Db: _writeCursorRules()
+	# ------------------------------------------------------------------
+
+	def test_Db01_cursor_rules_files_created(self):
+		"""_writeCursorRules should create .mdc files for each rule."""
+		self.embody_ext._writeCursorRules(self._temp_dir)
+		cursor_dir = self._temp_dir / '.cursor' / 'rules'
+		self.assertTrue(cursor_dir.is_dir())
+		mdc_files = list(cursor_dir.glob('*.mdc'))
+		self.assertLen(mdc_files, 3)
+
+	def test_Db02_cursor_files_have_yaml_frontmatter(self):
+		"""Each .mdc file should start with YAML frontmatter (---)."""
+		self.embody_ext._writeCursorRules(self._temp_dir)
+		cursor_dir = self._temp_dir / '.cursor' / 'rules'
+		for mdc_file in cursor_dir.glob('*.mdc'):
+			content = mdc_file.read_text(encoding='utf-8')
+			self.assertTrue(content.startswith('---\n'),
+				f'{mdc_file.name}: missing YAML frontmatter')
+
+	def test_Db03_cursor_files_have_always_apply(self):
+		"""Each .mdc file should contain alwaysApply: true."""
+		self.embody_ext._writeCursorRules(self._temp_dir)
+		cursor_dir = self._temp_dir / '.cursor' / 'rules'
+		for mdc_file in cursor_dir.glob('*.mdc'):
+			content = mdc_file.read_text(encoding='utf-8')
+			self.assertIn('alwaysApply: true', content,
+				f'{mdc_file.name}: missing alwaysApply: true')
+
+	def test_Db04_cursor_files_have_description(self):
+		"""Each .mdc file should contain a description field."""
+		self.embody_ext._writeCursorRules(self._temp_dir)
+		cursor_dir = self._temp_dir / '.cursor' / 'rules'
+		for mdc_file in cursor_dir.glob('*.mdc'):
+			content = mdc_file.read_text(encoding='utf-8')
+			self.assertIn('description:', content,
+				f'{mdc_file.name}: missing description field')
+
+	def test_Db05_cursor_files_have_marker(self):
+		"""Each .mdc file should contain the Embody/Envoy marker."""
+		self.embody_ext._writeCursorRules(self._temp_dir)
+		cursor_dir = self._temp_dir / '.cursor' / 'rules'
+		for mdc_file in cursor_dir.glob('*.mdc'):
+			content = mdc_file.read_text(encoding='utf-8')
+			self.assertIn(self.MARKER, content,
+				f'{mdc_file.name}: missing generated-by marker')
+
+	def test_Db06_cursor_files_have_single_frontmatter_block(self):
+		"""Each .mdc file should have exactly one YAML frontmatter block (no doubling)."""
+		self.embody_ext._writeCursorRules(self._temp_dir)
+		cursor_dir = self._temp_dir / '.cursor' / 'rules'
+		for mdc_file in cursor_dir.glob('*.mdc'):
+			content = mdc_file.read_text(encoding='utf-8')
+			# Count occurrences of '---' at line start
+			fence_count = sum(1 for line in content.splitlines() if line.strip() == '---')
+			self.assertEqual(fence_count, 2,
+				f'{mdc_file.name}: expected exactly 2 --- fences, got {fence_count}')
+
+	# ------------------------------------------------------------------
+	# Group Dc: _writeCopilotInstructions()
+	# ------------------------------------------------------------------
+
+	def test_Dc01_copilot_combined_file_created(self):
+		"""_writeCopilotInstructions should create .github/copilot-instructions.md."""
+		self.embody_ext._writeCopilotInstructions(self._temp_dir)
+		combined = self._temp_dir / '.github' / 'copilot-instructions.md'
+		self.assertTrue(combined.exists())
+
+	def test_Dc02_copilot_individual_files_created(self):
+		"""_writeCopilotInstructions should create per-rule .instructions.md files."""
+		self.embody_ext._writeCopilotInstructions(self._temp_dir)
+		instructions_dir = self._temp_dir / '.github' / 'instructions'
+		self.assertTrue(instructions_dir.is_dir())
+		files = list(instructions_dir.glob('*.instructions.md'))
+		self.assertLen(files, 3)
+
+	def test_Dc03_copilot_combined_has_marker(self):
+		"""Combined copilot-instructions.md should have the generated-by marker."""
+		self.embody_ext._writeCopilotInstructions(self._temp_dir)
+		content = (self._temp_dir / '.github' / 'copilot-instructions.md').read_text(encoding='utf-8')
+		self.assertIn(self.MARKER, content)
+
+	def test_Dc04_copilot_individual_files_have_apply_to(self):
+		"""Each .instructions.md should contain applyTo frontmatter."""
+		self.embody_ext._writeCopilotInstructions(self._temp_dir)
+		instructions_dir = self._temp_dir / '.github' / 'instructions'
+		for f in instructions_dir.glob('*.instructions.md'):
+			content = f.read_text(encoding='utf-8')
+			self.assertIn('applyTo:', content,
+				f'{f.name}: missing applyTo frontmatter')
+
+	def test_Dc05_copilot_individual_files_have_marker(self):
+		"""Each .instructions.md should have the generated-by marker."""
+		self.embody_ext._writeCopilotInstructions(self._temp_dir)
+		instructions_dir = self._temp_dir / '.github' / 'instructions'
+		for f in instructions_dir.glob('*.instructions.md'):
+			content = f.read_text(encoding='utf-8')
+			self.assertIn(self.MARKER, content,
+				f'{f.name}: missing generated-by marker')
+
+	# ------------------------------------------------------------------
+	# Group Dd: _writeWindsurfRules()
+	# ------------------------------------------------------------------
+
+	def test_Dd01_windsurf_rules_files_created(self):
+		"""_writeWindsurfRules should create .windsurf/rules/*.md files."""
+		self.embody_ext._writeWindsurfRules(self._temp_dir)
+		windsurf_dir = self._temp_dir / '.windsurf' / 'rules'
+		self.assertTrue(windsurf_dir.is_dir())
+		md_files = list(windsurf_dir.glob('*.md'))
+		self.assertLen(md_files, 3)
+
+	def test_Dd02_windsurf_files_have_no_cursor_or_copilot_metadata(self):
+		"""Windsurf rule files should not contain alwaysApply or applyTo directives."""
+		self.embody_ext._writeWindsurfRules(self._temp_dir)
+		windsurf_dir = self._temp_dir / '.windsurf' / 'rules'
+		for f in windsurf_dir.glob('*.md'):
+			content = f.read_text(encoding='utf-8')
+			self.assertNotIn('alwaysApply:', content,
+				f'{f.name}: should not contain Cursor alwaysApply directive')
+			self.assertNotIn('applyTo:', content,
+				f'{f.name}: should not contain Copilot applyTo directive')
+
+	def test_Dd03_windsurf_files_have_marker(self):
+		"""Each Windsurf rule file should contain the Embody/Envoy marker."""
+		self.embody_ext._writeWindsurfRules(self._temp_dir)
+		windsurf_dir = self._temp_dir / '.windsurf' / 'rules'
+		for f in windsurf_dir.glob('*.md'):
+			content = f.read_text(encoding='utf-8')
+			self.assertIn(self.MARKER, content,
+				f'{f.name}: missing generated-by marker')
+
+	def test_Dd04_windsurf_content_matches_rule_dats(self):
+		"""Windsurf rule file content should match the source DAT content."""
+		self.embody_ext._writeWindsurfRules(self._temp_dir)
+		templates_comp = self.embody_ext.my.op('templates')
+		windsurf_dir = self._temp_dir / '.windsurf' / 'rules'
+		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():
+			dat = templates_comp.op(dat_name)
+			f = windsurf_dir / f'{slug}.md'
+			actual = f.read_text(encoding='utf-8')
+			self.assertEqual(actual, dat.text,
+				f'Content mismatch for {slug}.md')
+
+	# ------------------------------------------------------------------
+	# Group E: _clientFilesMissing() logic
+	# ------------------------------------------------------------------
+
+	def test_E01_claudecode_missing_when_no_files(self):
+		"""claudecode: missing when neither CLAUDE.md nor .claude/rules exist."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'claudecode'))
+
+	def test_E02_claudecode_not_missing_when_all_present(self):
+		"""claudecode: not missing when CLAUDE.md and .claude/rules both exist."""
+		(self._temp_dir / 'CLAUDE.md').write_text('content', encoding='utf-8')
+		(self._temp_dir / '.claude' / 'rules').mkdir(parents=True)
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'claudecode'))
+
+	def test_E03_claudecode_missing_when_rules_absent(self):
+		"""claudecode: missing when .claude/rules absent even with CLAUDE.md."""
+		(self._temp_dir / 'CLAUDE.md').write_text('content', encoding='utf-8')
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'claudecode'))
+
+	def test_E04_claudecode_not_missing_with_envoy_md(self):
+		"""claudecode: not missing when ENVOY.md and .claude/rules both exist."""
+		(self._temp_dir / 'ENVOY.md').write_text('content', encoding='utf-8')
+		(self._temp_dir / '.claude' / 'rules').mkdir(parents=True)
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'claudecode'))
+
+	def test_E05_cursor_missing_when_no_files(self):
+		"""cursor: missing when .cursor/rules does not exist."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'cursor'))
+
+	def test_E06_cursor_not_missing_when_rules_exist(self):
+		"""cursor: not missing when .cursor/rules exists."""
+		(self._temp_dir / '.cursor' / 'rules').mkdir(parents=True)
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'cursor'))
+
+	def test_E07_copilot_missing_when_no_files(self):
+		"""copilot: missing when .github/copilot-instructions.md does not exist."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'copilot'))
+
+	def test_E08_copilot_not_missing_when_file_exists(self):
+		"""copilot: not missing when .github/copilot-instructions.md exists."""
+		(self._temp_dir / '.github').mkdir(parents=True)
+		(self._temp_dir / '.github' / 'copilot-instructions.md').write_text('x', encoding='utf-8')
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'copilot'))
+
+	def test_E09_windsurf_missing_when_no_files(self):
+		"""windsurf: missing when .windsurf/rules does not exist."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'windsurf'))
+
+	def test_E10_windsurf_not_missing_when_rules_exist(self):
+		"""windsurf: not missing when .windsurf/rules exists."""
+		(self._temp_dir / '.windsurf' / 'rules').mkdir(parents=True)
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'windsurf'))
+
+	def test_E11_none_never_missing(self):
+		"""none client: _clientFilesMissing always returns False."""
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'none'))
+
+	def test_E12_unknown_client_never_missing(self):
+		"""Unknown client string: _clientFilesMissing returns False (safe default)."""
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'unknowntool'))
 
 	# ------------------------------------------------------------------
 	# Group F: _findProjectRoot()
@@ -346,7 +587,7 @@ class TestClaudeConfig(EmbodyTestCase):
 			f'No .git found at {result}')
 
 	# ------------------------------------------------------------------
-	# Group G: Template drift detection
+	# Group G: Template drift detection (Claude Code files vs repo)
 	# ------------------------------------------------------------------
 
 	# Templates that intentionally differ from repo .claude/ files.
@@ -354,29 +595,29 @@ class TestClaudeConfig(EmbodyTestCase):
 	_DRIFT_EXCLUSIONS = {'text_rule_mcp_safety'}
 
 	def test_G01_template_content_matches_repo(self):
-		"""Template DAT content should match corresponding .claude/ repo files."""
+		"""Rule template DAT content should match corresponding .claude/ repo files."""
 		project_root = self.embody_ext._findProjectRoot()
 		templates_comp = self.embody_ext.my.op('templates')
 		drifted = []
-		for dat_name, rel_path in self.embody_ext._TEMPLATE_MAP.items():
+		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():
 			if dat_name in self._DRIFT_EXCLUSIONS:
 				continue
 			dat = templates_comp.op(dat_name)
 			if dat is None:
 				continue
 			template_content = dat.text.strip()
-			repo_file = project_root / rel_path
+			repo_file = project_root / '.claude' / 'rules' / f'{slug}.md'
 			if not repo_file.exists():
 				drifted.append(f'{dat_name}: repo file not found at {repo_file}')
 				continue
 			repo_content = repo_file.read_text(encoding='utf-8-sig').strip()
 			if template_content != repo_content:
-				drifted.append(f'{dat_name}: template DAT and repo file differ for {rel_path}')
+				drifted.append(f'{dat_name}: template DAT and repo file differ for {slug}.md')
 		self.assertEqual(drifted, [],
-			f'Template drift detected:\n' + '\n'.join(drifted))
+			'Template drift detected:\n' + '\n'.join(drifted))
 
 	def test_G02_exclusions_are_valid(self):
-		"""All drift exclusion names should exist in _TEMPLATE_MAP."""
+		"""All drift exclusion names should exist in _TEMPLATE_MAP_RULES."""
 		for name in self._DRIFT_EXCLUSIONS:
-			self.assertIn(name, self.embody_ext._TEMPLATE_MAP,
-				f'Drift exclusion {name!r} not in _TEMPLATE_MAP')
+			self.assertIn(name, self.embody_ext._TEMPLATE_MAP_RULES,
+				f'Drift exclusion {name!r} not in _TEMPLATE_MAP_RULES')

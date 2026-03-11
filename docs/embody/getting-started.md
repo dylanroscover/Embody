@@ -34,7 +34,22 @@ When Envoy starts, it automatically adds the following entries to your `.gitigno
 1. **Download** the Embody `.tox` from the [`/release`](https://github.com/dylanroscover/Embody/tree/main/release) folder
 2. **Drag and drop** it into your TouchDesigner project
 
-That's it. Embody is a self-contained component — no external dependencies needed for the core externalization features.
+Embody initializes automatically over the next two frames:
+
+- **Frame 15**: Creates (or reconnects to) the `externalizations` tableDAT in the same container as Embody. If you're upgrading and a table already exists as a sibling, Embody reconnects to it without creating a duplicate.
+- **Frame 30**: Runs `Verify()`, which checks whether this is a fresh install or an upgrade:
+    - **Fresh install** (empty table): Embody runs quietly with no dialogs.
+    - **Upgrade** (table has prior data): Embody prompts you to re-scan and validate tracked operators.
+
+After verification, if Envoy is not yet enabled, Embody prompts you to set it up. Accepting will:
+
+- Install Python MCP dependencies (~30 MB via `uv`)
+- Start a local MCP server on the configured port
+- Generate AI config files in your project root: `CLAUDE.md`, `AGENTS.md`, `.mcp.json`, and a `.claude/` directory with coding rules and skills
+
+You can skip this and enable Envoy later from the **Envoy** tab.
+
+Embody is a self-contained component — no external dependencies are needed for the core externalization features.
 
 ## First Externalization
 

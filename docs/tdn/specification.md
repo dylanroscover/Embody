@@ -90,6 +90,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]` (tolerance: 0.01 per channel). RGB values are floats from 0.0 to 1.0, rounded to 4 decimal places. |
 | `comment` | string | No | Only if non-empty. Annotation text on the node. |
 | `tags` | array of strings | No | Only if the operator has tags. |
+| `dock` | string | No | Only if the operator is docked to another operator. Sibling name or full path. |
 | `parameters` | object | No | Only if there are non-default [built-in parameters](#built-in-parameters) (after [type_defaults](#type-defaults) are factored out). |
 | `custom_pars` | object | No | Only if the operator has [custom parameters](#custom-parameters). Dict keyed by page name. |
 | `flags` | array | No | Only if any [flags](#flags) differ from their defaults. |
@@ -565,6 +566,34 @@ Each string element references the source operator:
 - `null` means no connection at that index.
 
 On import, the source is resolved by first looking for a sibling with that name, then falling back to interpreting it as a full path.
+
+---
+
+## Docking
+
+Operators in TouchDesigner can be visually docked to other operators. A docked operator moves with its host in the network editor and can be collapsed into the host's tile.
+
+When an operator is docked, TDN records a `"dock"` field on it:
+
+| Field | Type | Condition |
+|-------|------|-----------|
+| `dock` | string | Only if the operator is docked to another operator. |
+
+The value is the **sibling name** of the dock host when they share a parent COMP, or the **full operator path** for cross-hierarchy docking. This follows the same reference convention as [operator connections](#connections).
+
+Docking is a purely visual/organizational relationship — it has no effect on operator behavior, data flow, or cooking. It is omitted from `type_defaults` because docking is always instance-specific.
+
+**Example:**
+
+```json
+{
+  "name": "info1",
+  "type": "infoDAT",
+  "dock": "noise1"
+}
+```
+
+During import, the dock target is resolved by sibling name first, then full path fallback. If the target cannot be found, a warning is logged and docking is skipped gracefully.
 
 ---
 

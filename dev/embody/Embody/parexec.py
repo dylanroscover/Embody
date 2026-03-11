@@ -17,6 +17,10 @@ def onValueChange(par, prev):
 		if not par:
 			parent.Embody.MissingExternalizationsPar()
 
+	elif par.name == 'Aiclient':
+		if parent.Embody.par.Envoyenable.eval():
+			op.Embody.ext.Embody._extractAIConfig()
+
 	elif par.name == 'Envoyenable':
 		if par.eval():
 			parent.Embody.ext.Envoy.Start()
@@ -70,6 +74,9 @@ def onPulse(par):
 
 	elif par.name == 'Openexternalizationstable':
 		parent.Embody.OpenTable()
+
+	elif par.name == 'Createexternalizationstable':
+		parent.Embody.ext.Embody.CreateExternalizationsTable()
 
 	elif par.name == 'Externalizeproject':
 		parent.Embody.ExternalizeProject()
