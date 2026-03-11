@@ -3666,7 +3666,7 @@ class EmbodyExt:
             '(Palette components, clones, and replicants will be ignored)',
             buttons=['Cancel', 'TOX', 'TDN'])
 
-        if choice == 0:
+        if choice not in (1, 2):
             return
 
         use_tdn = (choice == 2)

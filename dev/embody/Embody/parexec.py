@@ -36,6 +36,11 @@ def onValueChange(par, prev):
 		if list_comp:
 			list_comp.reset()
 
+	elif par.name == 'Localtimestamps':
+		list_comp = op('list/list1')
+		if list_comp:
+			list_comp.reset()
+
 	elif par.name == 'Embeddatsintdns':
 		parent.Embody.ext.TDN.ReexportAllTDNs()
 

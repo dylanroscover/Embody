@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 15,
-	"generator": "Embody/5.0.195",
+	"build": 19,
+	"generator": "Embody/5.0.197",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-10T22:29:13Z",
+	"exported_at": "2026-03-11T03:13:59Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false
@@ -27,7 +27,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/results.tsv",
 				"syncfile": true,
-				"rows": 107,
+				"rows": 21,
 				"cols": 5
 			},
 			"flags": ["viewer"],
@@ -61,7 +61,7 @@
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-10 22:29:13 UTC"
+						"value": "2026-03-11 03:10:55 UTC"
 					},
 					{
 						"name": "Touchbuild",
@@ -75,8 +75,8 @@
 			"flags": ["viewer"],
 			"position": [400, 0],
 			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"color": [0.325, 0.8, 0.3],
+			"tags": ["tox"]
 		},
 		{
 			"name": "TestRunnerExt",
@@ -122,6 +122,14 @@
 			},
 			"flags": ["viewer"],
 			"position": [0, -800]
+		},
+		{
+			"name": "test_envoy_bridge",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_envoy_bridge.py"
+			},
+			"position": [400, -2600]
 		},
 		{
 			"name": "test_claude_config",
@@ -303,6 +311,14 @@
 			"position": [600, -1800]
 		},
 		{
+			"name": "test_envoy_thread_comm",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_envoy_thread_comm.py"
+			},
+			"position": [200, -2600]
+		},
+		{
 			"name": "test_tdn_export_import",
 			"type": "textDAT",
 			"parameters": {
@@ -370,7 +386,7 @@
 		{
 			"name": "annotate1",
 			"mode": "annotate",
-			"title": "u",
+			"title": "Test Infrastructure",
 			"text": "Test runner, results table, and sandbox",
 			"position": [-70, -70],
 			"size": [700, 370],
@@ -380,7 +396,7 @@
 		{
 			"name": "annotate2",
 			"mode": "annotate",
-			"title": "u",
+			"title": "Embody Core Tests (13)",
 			"text": "Externalization, CRUD, file management, tagging,\nrename/move, delete, duplicates, sync, paths,\nparam tracking, operator queries, logging",
 			"position": [-70, -1070],
 			"size": [870, 930],
@@ -410,10 +426,10 @@
 		{
 			"name": "annotate5",
 			"mode": "annotate",
-			"title": "Server Lifecycle (1)",
-			"text": "Envoy MCP server start/stop",
+			"title": "Envoy Infrastructure Tests (3)",
+			"text": "Server lifecycle, STDIO bridge, thread communication,\nqueue processing, request throttling, log piggybacking",
 			"position": [-70, -2670],
-			"size": [270, 330],
+			"size": [670, 330],
 			"color": [0.35, 0.25, 0.35],
 			"opacity": 0.5
 		},

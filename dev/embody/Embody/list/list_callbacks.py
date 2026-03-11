@@ -8,6 +8,7 @@ is pure Python — no TOP textures needed.
 me   - this callbacks DAT
 comp - the List COMP (available in all callbacks)
 """
+from datetime import datetime, timezone
 
 # --- Column indices ---
 COL_EXPANDO = 0
@@ -247,7 +248,14 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		attribs.bgColor = bg
 
 	elif col == COL_TIMESTAMP:
-		attribs.text = data[row, 'timestamp'].val
+		ts = data[row, 'timestamp'].val
+		if ts and parent.Embody.par.Localtimestamps.eval():
+			try:
+				utc_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=timezone.utc)
+				ts = utc_dt.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+			except ValueError:
+				pass
+		attribs.text = ts
 		attribs.textJustify = JustifyType.CENTERLEFT
 		attribs.textOffsetX = TEXT_PAD_X
 		attribs.bgColor = bg

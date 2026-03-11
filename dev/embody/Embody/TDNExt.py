@@ -487,7 +487,7 @@ class TDNExt:
 			'  Modular: Skip children of TDN-managed COMPs.\n',
 			buttons=['Cancel', 'Full', 'Modular'])
 
-		if choice == 0:
+		if choice not in (1, 2):
 			return
 		self.ExportNetworkAsync(
 			output_file='auto', embed_all=(choice == 1))

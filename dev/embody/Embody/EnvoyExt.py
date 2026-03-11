@@ -3518,7 +3518,7 @@ class EnvoyExt:
             'You can also create one manually and re-enable Envoy.',
             buttons=['Cancel', 'Initialize Git', 'Start Without Git'])
 
-        if choice == 0:  # Cancel
+        if choice not in (1, 2):  # Cancel or closed dialog
             self.ownerComp.par.Envoyenable = False
             self._log('Envoy cancelled — no git repository.', 'INFO')
             return None

@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 7,
-	"generator": "Embody/5.0.195",
+	"build": 8,
+	"generator": "Embody/5.0.197",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-10T22:27:50Z",
+	"exported_at": "2026-03-11T03:13:58Z",
 	"network_path": "/embody/Embody/toolbar/tooltip",
 	"options": {
 		"include_dat_content": false
@@ -14,7 +14,7 @@
 			"name": "text",
 			"type": "textCOMP",
 			"parameters": {
-				"text": "Open Embody parameters",
+				"text": "Refresh tracking state",
 				"callbacks": "text_callbacks",
 				"font": "Open Sans",
 				"fontsize": 10,
@@ -33,14 +33,14 @@
 						"style": "Int",
 						"label": "Build Number",
 						"readOnly": true,
-						"value": 5
+						"value": 6
 					},
 					{
 						"name": "Date",
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-10 22:27:46 UTC"
+						"value": "2026-03-11 03:10:55 UTC"
 					},
 					{
 						"name": "Touchbuild",
@@ -52,8 +52,8 @@
 				]
 			},
 			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"color": [0.325, 0.8, 0.3],
+			"tags": ["tox"]
 		},
 		{
 			"name": "text_callbacks",

@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 14,
-	"generator": "Embody/5.0.195",
+	"generator": "Embody/5.0.197",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-10T22:28:05Z",
+	"exported_at": "2026-03-11T03:13:58Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false
@@ -14,9 +14,7 @@
 			"parameters": {
 				"scaletofit": "onlyshrink",
 				"fontsize": 12,
-				"w": 50,
 				"h": 28,
-				"hmode": "fill",
 				"resizecomp": "=me",
 				"repocomp": "=me",
 				"borderover": false,
@@ -24,6 +22,16 @@
 				"clone": "=op.TDTox.op('defaultCOMPs/button')"
 			},
 			"flags": ["viewer"]
+		},
+		"textDAT": {
+			"parameters": {
+				"syncfile": true,
+				"language": "python"
+			},
+			"flags": ["viewer"],
+			"size": [160, 130],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		"selectDAT": {
 			"parameters": {
@@ -88,15 +96,85 @@
 				"About": {
 					"$t": "about",
 					"Build": 2,
-					"Date": "2026-03-10 22:27:46 UTC",
+					"Date": "2026-03-11 03:10:55 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [0, 275],
 			"size": [160, 76],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"color": [0.325, 0.8, 0.3],
+			"tags": ["tox"],
+			"children": [
+				{
+					"name": "text1",
+					"type": "textCOMP",
+					"parameters": {
+						"text": "Actions",
+						"callbacks": "text1_callbacks",
+						"legacyfontselection": true,
+						"fontsize": 12,
+						"fontcolorr": "=parent.Embody.par.Textcolorr",
+						"fontcolorg": "=parent.Embody.par.Textcolorg",
+						"fontcolorb": "=parent.Embody.par.Textcolorb",
+						"fontalpha": "=parent.Embody.par.Textcolora",
+						"h": 30,
+						"hmode": "fill",
+						"resizecomp": "=me",
+						"repocomp": "=me",
+						"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
+						"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
+						"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
+						"bgalpha": "=parent.Embody.par.Backgroundcolora",
+						"borderover": false,
+						"reloadbuiltin": false
+					},
+					"custom_pars": {
+						"About": {
+							"$t": "about",
+							"Build": 3,
+							"Date": "2026-03-11 03:10:55 UTC",
+							"Touchbuild": "2025.32280"
+						}
+					},
+					"flags": ["viewer"],
+					"position": [-200, 0],
+					"size": [160, 129],
+					"color": [0.325, 0.8, 0.3],
+					"tags": ["tox"]
+				},
+				{
+					"name": "button_close",
+					"type": "buttonCOMP",
+					"parameters": {
+						"label": "×",
+						"colorr": "=parent.Embody.par.Textcolorr",
+						"colorg": "=parent.Embody.par.Textcolorg",
+						"colorb": "=parent.Embody.par.Textcolorb",
+						"w": 28,
+						"layer": 1,
+						"leftanchor": 1,
+						"horigin": 1,
+						"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
+						"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
+						"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
+						"bgalpha": "=parent.Embody.par.Backgroundcolora",
+						"topsmoothness": "mipmap",
+						"reloadbuiltin": false
+					},
+					"position": [50, 0],
+					"size": [160, 134],
+					"palette_clone": true
+				},
+				{
+					"name": "text1_callbacks",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/tagger/header/text1_callbacks.py"
+					},
+					"position": [-200, -160]
+				}
+			]
 		},
 		{
 			"name": "button0",
@@ -106,57 +184,69 @@
 				"colorr": "=parent.Embody.par.Taggingmenucolorr",
 				"colorg": "=parent.Embody.par.Taggingmenucolorg",
 				"colorb": "=parent.Embody.par.Taggingmenucolorb",
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 1,
 				"display": false,
 				"topsmoothness": "mipmap",
 				"reloadbuiltin": false
 			},
 			"position": [-225, 175],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "button1",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "×  Remove tox",
+				"label": "⇄  Convert to tox",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
 				"reloadbuiltin": false
 			},
 			"position": [-225, -276],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "button2",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "⇄  Convert to tdn",
+				"label": "×  Remove tdn",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
 				"reloadbuiltin": false
 			},
 			"position": [25, -276],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_save",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "↓  Save tox",
+				"label": "↓  Save tdn",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 0.5,
 				"relpath": "externaltox"
 			},
 			"position": [25, 100],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_embed",
@@ -166,26 +256,31 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 0.65,
-				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [260, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_reload",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "↻  Reload tox",
+				"label": "↻  Reload tdn",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 0.6,
 				"relpath": "externaltox"
 			},
 			"position": [-280, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_remove",
@@ -195,12 +290,15 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 11,
 				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-1000, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "parameter1",
@@ -222,12 +320,15 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 0.5,
 				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-640, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "replicator1",
@@ -246,15 +347,15 @@
 				"About": {
 					"$t": "about",
 					"Build": 1,
-					"Date": "2026-03-10 22:27:46 UTC",
+					"Date": "2026-03-11 03:10:55 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [-225, 0],
 			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"color": [0.325, 0.8, 0.3],
+			"tags": ["tox"]
 		},
 		{
 			"name": "select_dats",
@@ -273,12 +374,14 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 10,
-				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-820, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_portable",
@@ -288,11 +391,14 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
+				"w": 50,
+				"hmode": "fill",
 				"alignorder": 1,
 				"relpath": "externaltox"
 			},
 			"position": [-460, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "select_comps",
@@ -318,15 +424,9 @@
 			"name": "replicator1_callbacks",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/tagger/replicator1_callbacks.py",
-				"syncfile": true,
-				"language": "python"
+				"file": "embody/Embody/tagger/replicator1_callbacks.py"
 			},
-			"flags": ["viewer"],
-			"position": [-225, -160],
-			"size": [160, 130],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"position": [-225, -160]
 		}
 	]
 }
