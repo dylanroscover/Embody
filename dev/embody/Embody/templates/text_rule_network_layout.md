@@ -51,6 +51,6 @@ TD's Y-axis increases upward. New rows go **downward** (decreasing Y). Primary c
 
 ## Annotation Coordinate Model
 
-For annotation positioning math, `annotateCOMP` quirks, and enclosure calculations, invoke the `/manage-annotations` skill.
+**STOP — you MUST invoke `/manage-annotations` before calling `create_annotation` or `set_annotation`.** It contains required coordinate math that cannot be done from memory.
 
 Key point: `nodeX`/`nodeY` is the **bottom-left corner** — `nodeY` must be below (less than) the lowest operator's Y.

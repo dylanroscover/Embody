@@ -1534,10 +1534,14 @@ class EnvoyExt:
         self.ownerComp.par.Envoystatus = f'Running on port {port}'
 
         # Auto-configure git repo (MCP client, .gitignore, CLAUDE.md)
+        # Each step is independent — one failure must not block the others.
         if git_root != 'no-git':
             self._configureMCPClient(port)
             self._configureGitignore(git_root)
-            op.Embody.ext.Embody._upgradeEnvoy()
+            try:
+                op.Embody.ext.Embody._upgradeEnvoy()
+            except Exception as e:
+                self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
 
     def Stop(self) -> None:
         """Stop MCP server"""
@@ -3509,11 +3513,11 @@ class EnvoyExt:
             bridge_dir.mkdir(parents=True, exist_ok=True)
             bridge_path = bridge_dir / 'envoy-bridge.py'
 
-            # Read bridge script from the textDAT if available, else from
-            # the externalized file alongside this extension.
+            # Read bridge script from templates textDAT, else from disk fallback
             bridge_content = None
             try:
-                bridge_dat = self.ownerComp.op('text_envoy_bridge')
+                templates = self.ownerComp.op('templates')
+                bridge_dat = templates.op('text_envoy_bridge') if templates else None
                 if bridge_dat:
                     bridge_content = bridge_dat.text
             except Exception:
@@ -3562,6 +3566,7 @@ class EnvoyExt:
                     and existing.get('command') == python_cmd
                     and existing.get('args') == expected_args):
                 self._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
+                self._deploySettingsLocal(bridge_dir)
                 return
 
             servers['envoy'] = {
@@ -3573,6 +3578,9 @@ class EnvoyExt:
             mcp_file.write_text(
                 json.dumps(config, indent=2) + '\n', encoding='utf-8')
             self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge → port {port})')
+
+            # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
+            self._deploySettingsLocal(bridge_dir)
 
         except Exception as e:
             self._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
@@ -3596,6 +3604,35 @@ class EnvoyExt:
         mcp_file.write_text(
             json.dumps(config, indent=2) + '\n', encoding='utf-8')
         self._log(f'Wrote MCP config to {mcp_file} (HTTP fallback)')
+
+    def _deploySettingsLocal(self, claude_dir):
+        """Deploy settings.local.json to .claude/ from the template DAT.
+
+        Auto-allows read-only Envoy MCP tools so the user isn't prompted
+        for every query operation. Only writes if the file doesn't exist
+        yet — never overwrites user customizations.
+        """
+        settings_path = claude_dir / 'settings.local.json'
+        if settings_path.exists():
+            self._log('settings.local.json already exists — skipping', 'DEBUG')
+            return
+
+        settings_content = None
+        try:
+            templates = self.ownerComp.op('templates')
+            settings_dat = templates.op('text_settings_local') if templates else None
+            if settings_dat:
+                settings_content = settings_dat.text
+        except Exception:
+            pass
+
+        if not settings_content:
+            self._log('text_settings_local template not found — skipping settings deployment', 'DEBUG')
+            return
+
+        claude_dir.mkdir(parents=True, exist_ok=True)
+        settings_path.write_text(settings_content, encoding='utf-8')
+        self._log(f'Deployed settings.local.json to {settings_path}')
 
     def _checkOrInitGitRepo(self):
         """Check for a git repo. If missing, prompt user to initialize one.
@@ -3668,6 +3705,11 @@ class EnvoyExt:
         Idempotent — only appends missing entries, preserves all existing content.
         Migrates old `.claude/` blanket entry to specific entries."""
         MANAGED_ENTRIES = [
+            # TouchDesigner project
+            'Backup/',
+            'logs/',
+            'CrashAutoSave*',
+            # Embody / Envoy
             '.venv/',
             '.mcp.json',
             '.claude/settings.local.json',

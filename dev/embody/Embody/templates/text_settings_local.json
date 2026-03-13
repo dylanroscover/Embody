@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "mcp__envoy__capture_top",
+      "mcp__envoy__get_op",
+      "mcp__envoy__get_parameter",
+      "mcp__envoy__get_connections",
+      "mcp__envoy__get_annotations",
+      "mcp__envoy__get_enclosed_ops",
+      "mcp__envoy__get_op_position",
+      "mcp__envoy__get_op_flags",
+      "mcp__envoy__get_op_performance",
+      "mcp__envoy__get_op_errors",
+      "mcp__envoy__get_dat_content",
+      "mcp__envoy__get_td_info",
+      "mcp__envoy__get_td_classes",
+      "mcp__envoy__get_td_class_details",
+      "mcp__envoy__get_logs",
+      "mcp__envoy__get_externalizations",
+      "mcp__envoy__get_externalization_status",
+      "mcp__envoy__get_module_help",
+      "mcp__envoy__get_network_layout",
+      "mcp__envoy__query_network",
+      "mcp__envoy__find_children",
+      "mcp__envoy__run_tests"
+    ]
+  }
+}

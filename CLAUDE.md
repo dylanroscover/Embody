@@ -11,17 +11,12 @@
 1. **ALWAYS use Envoy MCP tools to inspect and modify anything inside TouchDesigner** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." Use MCP tools for everything in the live TD environment. The filesystem holds externalized files (`.py`, `.tox`, `.tdn`, `.json`, `.xml`, etc.); MCP is for interacting with operators, parameters, and network state inside TD.
 2. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure.
 3. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
-4. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
-5. **Always use forward slashes** in file paths for cross-platform compatibility.
-6. **Always consult the TD wiki** before writing TD Python code — confirm API behavior even if you're confident.
-7. **Binary files** (`.toe`, `.tox`) — use MCP tools to inspect contents, not the filesystem.
-8. **Thread boundary**: `EnvoyMCPServer` (worker thread) must never import TD modules. All TD access goes through `_execute_in_td()` → main thread.
-9. **Safe deletion only**: Use `safeDeleteFile()` / `isTrackedFile()`. Never delete untracked files.
-10. **Always check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting operators.
-11. **When updating a rule or skill** in `.claude/`, also update the corresponding template DAT in `dev/embody/Embody/templates/` if one exists. Root CLAUDE.md and `text_claude.md` serve different audiences and are maintained independently. `text_help.py` covers UI-facing help only.
-12. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
-13. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
-14. **Always update unit tests when modifying project code** — check whether existing tests assert against changed behavior.
+4. **Always consult the TD wiki** before writing TD Python code OR claiming TD behavior — confirm API behavior, file formats, and application features against official Derivative documentation even if you're confident. Never assume a TD feature, file type, or convention exists without a verified source.
+5. **Binary files** (`.toe`, `.tox`) — use MCP tools to inspect contents, not the filesystem.
+6. **Always check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting operators.
+7. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
+8. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
+9. **Always update unit tests when modifying project code** — check whether existing tests assert against changed behavior.
 
 ## Approach Guidelines
 
@@ -35,10 +30,15 @@
 Embody/
 ├── CLAUDE.md                              # This file — slim north star
 ├── .claude/
+│   ├── commands/                         # User-invocable slash commands
+│   │   ├── run-tests.md                 # /run-tests — run test suite via MCP
+│   │   ├── status.md                    # /status — project health check
+│   │   └── explore-network.md           # /explore-network — discover TD network
 │   ├── rules/                            # Always-loaded conventions
 │   │   ├── network-layout.md            # Grid, spacing, annotation coords
 │   │   ├── td-python.md                 # TD Python gotchas and rules
 │   │   ├── mcp-safety.md               # Thread boundary, localhost, timeouts
+│   │   ├── skill-prerequisites.md       # Which skills to load before MCP calls
 │   │   └── embody-code-conventions.md   # Path-scoped to dev/embody/**
 │   └── skills/                           # On-demand workflows and reference
 │       ├── create-operator/             # Operator creation workflow
@@ -60,7 +60,7 @@ Embody/
 │   ├── testing.md                        # Test framework docs
 │   └── changelog.md                      # Version history
 ├── dev/
-│   ├── Embody-5.140.toe                  # Active development project
+│   ├── Embody-5.toe                      # Active development project
 │   ├── .venv/                            # Python virtual environment (auto-created)
 │   ├── Backup/                           # Versioned .toe backups
 │   └── embody/
@@ -115,22 +115,10 @@ op.Embody.ext.Envoy.Start()
 
 **NEVER cache extension references in variables** — always call inline.
 
-## Developing Embody
-
-### File Editing Impact
-
-| File | Impact | Notes |
-|------|--------|-------|
-| `EmbodyExt.py` | HIGH | Core engine. All externalization behavior. |
-| `EnvoyExt.py` | HIGH | MCP server. Tool signature changes break API. |
-| `TDNExt.py` | MEDIUM | `.tdn` format compatibility. |
-| `parexec.py` | MEDIUM | Every parameter change. Performance-sensitive. |
-| `externalizations.tsv` | NEVER EDIT | Managed exclusively by Embody. |
-
-### Key References
+## Key References
 
 - **TD Wiki**: https://docs.derivative.ca/Main_Page
-- **TD Python API**: Use the `/td-api-reference` skill for full reference
-- **MCP Tools**: Use the `/mcp-tools-reference` skill for the complete tool catalog
+- **TD Python API**: MUST load `/td-api-reference` before writing TD Python code
+- **MCP Tools**: MUST load `/mcp-tools-reference` before first MCP tool call in session
 - **Tests**: Use the `/run-tests` skill for running and writing tests
 - **TDN Spec**: See `docs/tdn/specification.md` for the full format specification

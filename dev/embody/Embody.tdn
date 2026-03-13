@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 145,
-	"generator": "Embody/5.0.204",
+	"build": 146,
+	"generator": "Embody/5.0.207",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-13T15:31:27Z",
+	"exported_at": "2026-03-13T18:34:03Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -648,8 +648,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 1,
-					"Date": "2026-03-10 22:27:46 UTC",
+					"Build": 3,
+					"Date": "2026-03-13 18:34:03 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -679,8 +679,7 @@
 				"extension": "md"
 			},
 			"flags": ["viewer"],
-			"position": [-700, -1200],
-			"tags": ["md"]
+			"position": [-700, -1200]
 		},
 		{
 			"name": "windowHeader",

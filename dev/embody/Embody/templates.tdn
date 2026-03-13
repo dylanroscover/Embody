@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 1,
-	"generator": "Embody/5.0.197",
+	"build": 4,
+	"generator": "Embody/5.0.207",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-11T03:13:58Z",
+	"exported_at": "2026-03-13T18:34:39Z",
 	"network_path": "/embody/Embody/templates",
 	"options": {
 		"include_dat_content": false
@@ -12,95 +12,165 @@
 	"type_defaults": {
 		"textDAT": {
 			"parameters": {
-				"syncfile": true,
-				"language": "text",
-				"extension": "md"
+				"syncfile": true
 			},
 			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["md"]
+			"color": [0.9, 0.3, 0.4]
 		}
 	},
 	"operators": [
 		{
+			"name": "text_claude",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/text_claude.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"flags": ["viewer"],
+			"position": [-700, -1200],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_agents_md",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_agents_md.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [639, -236],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_envoy_bridge",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_envoy_bridge.py",
+				"language": "python"
+			},
+			"position": [412, -236],
+			"tags": ["py"]
+		},
+		{
 			"name": "text_rule_td_python",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_rule_td_python.md"
+				"file": "embody/Embody/templates/text_rule_td_python.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [-227, 79]
+			"position": [-43, -78],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_settings_local",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_settings_local.json",
+				"language": "json"
+			},
+			"position": [-43, 79],
+			"tags": ["json"]
 		},
 		{
 			"name": "text_rule_mcp_safety",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_rule_mcp_safety.md"
+				"file": "embody/Embody/templates/text_rule_mcp_safety.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [-227, -236]
+			"position": [184, -236],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_skill_externalize",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_skill_externalize.md"
+				"file": "embody/Embody/templates/text_skill_externalize.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [227, 79]
+			"position": [412, 79],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_rule_network_layout",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_rule_network_layout.md"
+				"file": "embody/Embody/templates/text_rule_network_layout.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [-227, -78]
+			"position": [-43, -236],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_skill_debug_operator",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_skill_debug_operator.md"
+				"file": "embody/Embody/templates/text_skill_debug_operator.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [227, 236]
+			"position": [412, 236],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_skill_create_operator",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_skill_create_operator.md"
+				"file": "embody/Embody/templates/text_skill_create_operator.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [0, 236]
+			"position": [184, 236],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_skill_create_extension",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_skill_create_extension.md"
+				"file": "embody/Embody/templates/text_skill_create_extension.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [-227, 236]
+			"position": [-43, 236],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_skill_td_api_reference",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_skill_td_api_reference.md"
+				"file": "embody/Embody/templates/text_skill_td_api_reference.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [0, 79]
+			"position": [184, 79],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_skill_manage_annotations",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_skill_manage_annotations.md"
+				"file": "embody/Embody/templates/text_skill_manage_annotations.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [227, -78]
+			"position": [412, -78],
+			"tags": ["md"]
 		},
 		{
 			"name": "text_skill_mcp_tools_reference",
 			"type": "textDAT",
 			"parameters": {
-				"file": "embody/Embody/templates/text_skill_mcp_tools_reference.md"
+				"file": "embody/Embody/templates/text_skill_mcp_tools_reference.md",
+				"language": "text",
+				"extension": "md"
 			},
-			"position": [0, -78]
+			"position": [184, -78],
+			"tags": ["md"]
 		}
 	]
 }

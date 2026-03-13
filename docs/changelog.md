@@ -1,5 +1,14 @@
 # Changelog
 
+## v5.0.207
+
+Claude Code integration docs, slash commands, CLAUDE.md deduplication.
+
+- **Claude Code Integration docs**: New [documentation page](envoy/claude-code.md) covering the generated `.claude/` directory — rules, skills, slash commands, and customization
+- **Slash commands**: Added `/run-tests`, `/status`, and `/explore-network` commands to `.claude/commands/` for common workflows
+- **CLAUDE.md deduplication**: Moved rules that were restated in both `CLAUDE.md` and `.claude/rules/` into rules only — reduced critical rules from 15 to 9. Skill prerequisites moved to dedicated `skill-prerequisites.md` rule
+- **Getting Started update**: `.gitignore` documentation updated to reflect specific `.claude/` entries instead of blanket directory exclusion
+
 ## v5.0.206
 
 Metadata reconciliation, network layout tool, save_externalization fix.

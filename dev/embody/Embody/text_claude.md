@@ -15,11 +15,19 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 3. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
 4. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
 5. **Always use forward slashes** in file paths for cross-platform compatibility.
-6. **Always consult the TD wiki** before writing TD Python code — confirm API behavior even if you're confident.
+6. **Always consult the TD wiki** before writing TD Python code OR claiming TD behavior — confirm API behavior, file formats, and application features against official Derivative documentation even if you're confident. Never assume a TD feature, file type, or convention exists without a verified source.
 7. **Binary files** (`.toe`, `.tox`) — use MCP tools to inspect contents, not the filesystem.
 8. **Always check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting.
 9. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
 10. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
+11. **Load the relevant skill BEFORE acting** — skills are prerequisites, not optional reference:
+    - Before `create_op`: load `/create-operator`
+    - Before `create_annotation` or `set_annotation`: load `/manage-annotations`
+    - Before `create_extension`: load `/create-extension`
+    - Before `tag_for_externalization` or `save_externalization`: load `/externalize-operator`
+    - Before writing TD Python (`execute_python`, `set_dat_content`): load `/td-api-reference`
+    - When diagnosing operator errors: load `/debug-operator`
+    - Before first MCP call in a new session: load `/mcp-tools-reference`
 
 ## Approach Guidelines
 
@@ -74,7 +82,7 @@ When creating Python files for TouchDesigner (scripts, extensions, callbacks):
 ## Key References
 
 - **TD Wiki**: https://docs.derivative.ca/Main_Page
-- **TD Python API**: See `.claude/skills/td-api-reference/` for full reference
-- **MCP Tools**: See `.claude/skills/mcp-tools-reference/` for the complete tool catalog
+- **TD Python API**: MUST load `/td-api-reference` before writing TD Python code
+- **MCP Tools**: MUST load `/mcp-tools-reference` before first MCP tool call in session
 - **Network Layout**: See `.claude/rules/network-layout.md` for placement conventions
 - **TD Python Rules**: See `.claude/rules/td-python.md` for critical gotchas

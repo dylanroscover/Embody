@@ -697,9 +697,10 @@ class EmbodyExt:
 
     def _writeClaudeMd(self, target_dir):
         """Write CLAUDE.md from the text_claude template DAT."""
-        template_dat = self.my.op('text_claude')
+        templates_comp = self.my.op('templates')
+        template_dat = templates_comp.op('text_claude') if templates_comp else None
         if not template_dat:
-            self.Log('CLAUDE.md template DAT not found inside Embody', 'WARNING')
+            self.Log('CLAUDE.md template DAT not found inside Embody/templates', 'WARNING')
             return None
 
         content = template_dat.text

@@ -22,7 +22,9 @@ When Envoy starts, it automatically adds the following entries to your `.gitigno
 |-------|---------|
 | `.venv/` | Python virtual environment (auto-created for Envoy dependencies) |
 | `.mcp.json` | MCP client config (auto-generated per machine) |
-| `.claude/` | Claude Code session data |
+| `.claude/settings.local.json` | Claude Code per-machine permissions |
+| `.claude/projects/` | Claude Code session data |
+| `.claude/envoy-bridge.py` | MCP transport bridge (auto-generated) |
 | `__pycache__/` | Python bytecode cache |
 | `.DS_Store` | macOS Finder metadata |
 
@@ -45,7 +47,7 @@ After verification, if Envoy is not yet enabled, Embody prompts you to set it up
 
 - Install Python MCP dependencies (~30 MB via `uv`)
 - Start a local MCP server on the configured port
-- Generate AI config files in your project root: `CLAUDE.md`, `AGENTS.md`, `.mcp.json`, and a `.claude/` directory with coding rules and skills
+- Generate AI config files in your project root: `CLAUDE.md`, `.mcp.json`, and a `.claude/` directory with [coding rules, skills, and slash commands](../envoy/claude-code.md)
 
 You can skip this and enable Envoy later from the **Envoy** tab.
 
