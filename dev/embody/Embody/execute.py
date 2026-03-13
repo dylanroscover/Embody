@@ -19,6 +19,8 @@ def onStart():
 	run(f"op('{parent.Embody}').RestoreTOXComps()", delayFrames=45)
 	# Reconstruct TDN-strategy COMPs from .tdn files
 	run(f"op('{parent.Embody}').ReconstructTDNComps()", delayFrames=60)
+	# Reconcile metadata for operators that exist but lost tags/colors/file params
+	run(f"op('{parent.Embody}').ext.Embody.ReconcileMetadata()", delayFrames=75)
 	return
 
 def onCreate():

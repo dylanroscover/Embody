@@ -26,7 +26,7 @@ create_annotation(
 
 To create an annotation that encloses a group of operators:
 
-1. **Get positions**: `get_op_position` on all operators in the group
+1. **Get positions**: `get_network_layout` on the parent COMP (includes all operator positions and bounding box)
 2. **Calculate bounding box**: Find `min_x`, `max_x`, `min_y`, `max_y` (max includes operator width/height: `max_x = max(op_x + op_w)`, `max_y = max(op_y + op_h)`)
 3. **Add padding**: 70 units on left/right/bottom, **170 units on top** (title bar + body text)
 4. **Set coordinates**:

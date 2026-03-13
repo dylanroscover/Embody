@@ -811,11 +811,37 @@ class TDNExt:
 		if max_depth is not None and depth > max_depth:
 			return []
 
+		children = list(parent_op.children)
+
+		# Detect accumulated companion duplicates (e.g. timer1_callbacks1,
+		# timer1_callbacks2) left over from previous import cycles.
+		# Signal: name minus trailing digits yields a sibling with the same
+		# OPType, and both are docked to the same target operator.
+		sibling_map = {c.name: c for c in children}
+		skip = set()
+		for child in children:
+			name = child.name
+			base = name.rstrip('0123456789')
+			if base == name or base not in sibling_map:
+				continue
+			sibling = sibling_map[base]
+			if sibling.OPType != child.OPType:
+				continue
+			if (child.dock is not None and sibling.dock is not None
+					and child.dock.path == sibling.dock.path):
+				skip.add(name)
+				self._log(
+					f'Skipping duplicate companion "{name}" '
+					f'(original: "{base}")', 'INFO')
+
 		result = []
-		for child in parent_op.children:
+		for child in children:
 			# Skip system/internal paths (exact match or children)
 			if child.path in SYSTEM_PATHS or child.path.startswith(
 					_SYSTEM_PATH_PREFIXES):
+				continue
+
+			if child.name in skip:
 				continue
 
 			op_data = self._exportSingleOp(child, options, depth)
@@ -1412,11 +1438,31 @@ class TDNExt:
 		Stores a reference to each created operator in op_def['_created_op']
 		so that Phases 2-7 can resolve the correct operator even when TD
 		auto-renamed it due to name conflicts.
+
+		Auto-created companion DATs (e.g. timerCHOP callbacks, rampTOP keys)
+		are reused rather than duplicated — if an operator with the target
+		name already exists in the parent, it was auto-created by a prior
+		create() call in this same import pass.
 		"""
 		for op_def in op_defs:
 			name = op_def.get('name')
 			op_type = op_def.get('type')
 			if not name or not op_type:
+				continue
+
+			# Reuse auto-created companions (e.g. timerCHOP callbacks,
+			# rampTOP keys). With clear_first=True the container was empty
+			# before Phase 1, so any existing op was auto-created by a
+			# sibling's create() earlier in this loop.
+			existing = parent.op(name)
+			if existing is not None:
+				created.append(existing.path)
+				op_def['_created_op'] = existing
+				self._log(
+					f'Reusing existing operator "{name}"', 'INFO')
+				children = op_def.get('children', [])
+				if children and existing.isCOMP:
+					self._createOps(existing, children, created)
 				continue
 
 			try:

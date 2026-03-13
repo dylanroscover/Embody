@@ -46,6 +46,7 @@ description: "Complete reference of all Envoy MCP tools: operators, parameters, 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_position` | `op_path` | Get position, size, color, and comment |
+| `get_network_layout` | `comp_path`, `include_annotations?` | Get positions of ALL operators (and annotations) in a COMP in one call. Returns bounding_box. Use instead of repeated `get_op_position` calls |
 | `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set position, size, color (`[r,g,b]` 0-1), or comment |
 | `layout_children` | `op_path` | Auto-layout all children in a COMP |
 

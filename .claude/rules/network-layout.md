@@ -20,27 +20,27 @@ Clean, readable operator networks are critical. Every operator placed via MCP mu
 ## Grouping and Annotations
 
 - **Every logical group gets an annotation**: Use `create_annotation` (annotate mode with a title) around each cluster of related operators.
-- **Annotations must enclose their operators**: Calculate the annotation's position and size to encompass all operators with padding (~100 units each side). Use `get_op_position` on all operators to find the bounding box.
+- **Annotations must enclose their operators**: Calculate the annotation's position and size to encompass all operators with padding (~100 units each side). Use `get_network_layout` to find the bounding box.
 - **Operators go INSIDE or OUTSIDE annotations, never on the border**: An operator must be fully enclosed by an annotation or fully outside it. Partially overlapping an annotation edge is as bad as overlapping another operator.
 - **Create new annotations for orphaned groups**: If 2+ related operators don't belong in any existing annotation, create a NEW annotation for them rather than leaving them floating in no-man's-land.
 - **Read annotations before placing**: Always use `get_annotations` to understand the existing organizational structure. Place new operators inside the annotation where they logically belong, or create a new one.
 - **No operator may exist outside all annotations**: In a network that uses annotations, every non-utility operator must be inside exactly one annotation. If a new operator doesn't fit an existing group, expand the annotation or create a new one — never leave operators floating in unorganized space.
-- **Expand annotations when adding operators**: If placing a new operator inside an existing annotation would exceed its bounds, resize the annotation (width/height) to fit. Use `get_op_position` on all enclosed ops plus the new one to recalculate the bounding box with padding.
+- **Expand annotations when adding operators**: If placing a new operator inside an existing annotation would exceed its bounds, resize the annotation (width/height) to fit. Use `get_network_layout` to recalculate the bounding box with padding.
 - **Spatial proximity for sub-groups**: Related operators near each other with consistent internal spacing.
 - **Annotations must NEVER overlap each other**: No two annotations may share any area. Treat this as strictly as operator overlap.
 - **Clear group boundaries**: Leave at least 400 units between annotation group edges.
 
 ## Operator Placement Rules
 
-- **NEVER place an operator on top of another operator**: Before creating ANY operator, scan the target network with `query_network` and `get_op_position` to find ALL existing operators. Overlapping operators is the single worst layout mistake.
+- **NEVER place an operator on top of another operator**: Before creating ANY operator, scan the target network with `get_network_layout` to find ALL existing operators and their positions. Overlapping operators is the single worst layout mistake.
 - **Never rely on `layout()`**: TD's `COMP.layout()` produces overlapping, unreadable layouts. Always calculate and set explicit `x, y` positions using `set_op_position`.
 - **New operators go near related operators**: Place adjacent to related ops — not at `[0, 0]`.
-- **Scan before placing**: Use `get_op_position` on nearby operators to understand existing layout first.
+- **Scan before placing**: Use `get_network_layout` on the parent COMP to understand existing layout first.
 - **Align rows and columns**: Same stage in a chain = same X. Parallel chains = same Y.
 
 ## Positioning Strategy for MCP Operations
 
-1. **Single operator**: `get_op_position` on related op, calculate grid-snapped offset (+300 horizontal, +/-400 vertical), then `set_op_position`.
+1. **Single operator**: `get_network_layout` on parent COMP, find related op position, calculate grid-snapped offset (+300 horizontal, +/-400 vertical), then `set_op_position`.
 2. **Multiple operators in a chain**: Calculate all positions upfront (chain length x 300), place all, then connect.
 3. **Bulk creation (10+ operators)**: Calculate grid layout by logical group, set all positions, then add annotations.
 4. **Adding to existing networks**: Read existing positions first, find open space on grid.

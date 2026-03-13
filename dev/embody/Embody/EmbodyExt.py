@@ -1524,6 +1524,9 @@ class EmbodyExt:
         """Save a TOX-strategy COMP and update tracking."""
         try:
             oper = op(opPath)
+            if not oper or oper.family != 'COMP':
+                self.Log(f"Save() requires a COMP, got {oper.family if oper else 'None'}: {opPath}", "ERROR")
+                return
             oper.par.enableexternaltox = True
 
             # Update build info
@@ -4323,6 +4326,115 @@ class EmbodyExt:
                     except (ValueError, TypeError):
                         pass
                 return
+
+    # ==========================================================================
+    # METADATA RECONCILIATION ON START
+    # ==========================================================================
+
+    def ReconcileMetadata(self) -> None:
+        """Re-apply tags, colors, and file parameters from the externalizations table.
+
+        Handles the case where the user tagged operators (writing to the table
+        on disk) but closed TD without saving (Ctrl+S).  The .toe retains the
+        operators but loses their in-memory Embody metadata.  This method reads
+        the table and re-applies any missing metadata so the session stays in
+        sync with the on-disk source of truth.
+        """
+        if self.my.par.Status != 'Enabled':
+            return
+
+        table = self.Externalizations
+        if not table or table.numRows < 2:
+            return
+
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+        embody_path = self.my.path
+        reconciled = 0
+
+        for i in range(1, table.numRows):
+            path = table[i, 'path'].val
+            strategy = table[i, 'strategy'].val if table[0, 'strategy'] is not None else ''
+            rel_file_path = table[i, 'rel_file_path'].val
+            node_color = table[i, 'node_color'].val if table[0, 'node_color'] is not None else ''
+
+            # Skip Embody itself and its descendants
+            if path == embody_path or path.startswith(embody_path + '/'):
+                continue
+
+            oper = op(path)
+            if oper is None:
+                continue  # Missing ops handled by RestoreTOXComps / ReconstructTDNComps
+
+            # Determine expected tag from strategy
+            if strategy == 'tox':
+                tag = tox_tag
+            elif strategy == 'tdn':
+                tag = tdn_tag
+            else:
+                tag = strategy  # DAT strategies are the tag value (py, md, tsv, etc.)
+
+            if not tag:
+                continue
+
+            # Check if already reconciled (idempotency)
+            tag_present = tag in oper.tags
+            if strategy == 'tox':
+                if tag_present and oper.par.externaltox.eval():
+                    continue
+            elif strategy == 'tdn':
+                if tag_present:
+                    continue
+            else:  # DAT
+                if tag_present and oper.par.file.eval():
+                    continue
+
+            # --- Apply metadata ---
+            if strategy not in ('tox', 'tdn'):
+                # DAT reconciliation
+                oper.tags.add(tag)
+                self._setDATLanguageForTag(oper, tag)
+                oper.par.file.readOnly = False
+                oper.par.file = rel_file_path
+                oper.par.syncfile = True
+                oper.par.file.readOnly = True
+
+            elif strategy == 'tox':
+                # TOX COMP reconciliation
+                oper.tags.add(tag)
+                oper.par.externaltox.readOnly = False
+                oper.par.externaltox = rel_file_path
+                oper.par.externaltox.readOnly = True
+                oper.par.enableexternaltox = True
+                oper.par.reloadtoxpulse.pulse()
+                self._restorePositionFromTable(oper, path)
+
+            elif strategy == 'tdn':
+                # TDN COMP reconciliation
+                oper.tags.add(tag)
+                self._restorePositionFromTable(oper, path)
+
+            # Apply color: prefer table value, fall back to tag color
+            color_applied = False
+            if node_color:
+                try:
+                    r, g, b = [float(c) for c in node_color.split(',')]
+                    oper.color = (r, g, b)
+                    color_applied = True
+                except (ValueError, TypeError):
+                    pass
+            if not color_applied:
+                color = self._getTagColor(oper, tag)
+                if color:
+                    oper.color = color
+
+            reconciled += 1
+            self.Log(f"Reconciled '{path}' ({strategy})", "INFO")
+
+        if reconciled:
+            self.Log(f"Reconciled metadata on {reconciled} operator(s)", "SUCCESS")
+        else:
+            self.Log("All operator metadata consistent", "DEBUG")
 
     # ==========================================================================
     # TOX RESTORATION ON START

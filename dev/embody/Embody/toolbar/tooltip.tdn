@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 9,
-	"generator": "Embody/5.0.201",
+	"build": 10,
+	"generator": "Embody/5.0.204",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-11T20:19:04Z",
+	"exported_at": "2026-03-13T15:31:27Z",
 	"network_path": "/embody/Embody/toolbar/tooltip",
 	"options": {
 		"include_dat_content": false
@@ -14,7 +14,7 @@
 			"name": "text",
 			"type": "textCOMP",
 			"parameters": {
-				"text": "Toggle Envoy MCP server",
+				"text": "Open Embody parameters",
 				"callbacks": "text_callbacks",
 				"font": "Open Sans",
 				"fontsize": 10,
@@ -33,14 +33,14 @@
 						"style": "Int",
 						"label": "Build Number",
 						"readOnly": true,
-						"value": 7
+						"value": 8
 					},
 					{
 						"name": "Date",
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-11 20:19:04 UTC"
+						"value": "2026-03-13 15:31:27 UTC"
 					},
 					{
 						"name": "Touchbuild",

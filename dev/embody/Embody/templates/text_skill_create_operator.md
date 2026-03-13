@@ -9,7 +9,7 @@ description: "Create TouchDesigner operators via MCP with proper verification, p
 Follow these steps every time you create operators via MCP:
 
 1. **Discover the target network**: `query_network` on the target parent to confirm it exists and see existing operators
-2. **Scan existing positions**: Use `get_op_position` on nearby operators to find occupied space
+2. **Scan existing positions**: Use `get_network_layout` on the parent COMP to get all operator and annotation positions in one call
 3. **Calculate position**: Grid-snap to 200-unit multiples. +300 horizontal for downstream connections, +/-400 vertical for parallel chains
 4. **Create the operator**: `create_op` with the desired type and name
 5. **Set position immediately**: `set_op_position` — never leave operators at `[0, 0]`

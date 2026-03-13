@@ -566,6 +566,25 @@ class EnvoyMCPServer:
             return self._execute_in_td('get_op_position', {'op_path': op_path})
 
         @self.mcp.tool()
+        def get_network_layout(comp_path: str, include_annotations: bool = True) -> dict:
+            """
+            Get positions and sizes of all operators (and optionally annotations) in a COMP.
+            Use this instead of calling get_op_position repeatedly for each operator.
+
+            Args:
+                comp_path: Path to the parent COMP
+                include_annotations: Whether to include annotation positions (default True)
+
+            Returns:
+                Dict with operators list (path, name, type, nodeX, nodeY, nodeWidth, nodeHeight,
+                nodeCenterX, nodeCenterY), annotations list, and bounding_box of all operators
+            """
+            return self._execute_in_td('get_network_layout', {
+                'comp_path': comp_path,
+                'include_annotations': include_annotations
+            })
+
+        @self.mcp.tool()
         def set_op_position(op_path: str, x: int = None, y: int = None,
                            width: int = None, height: int = None,
                            color: list = None, comment: str = None) -> dict:
@@ -1676,6 +1695,7 @@ class EnvoyExt:
             'set_op_flags': self._set_op_flags,
             # Operator positioning & layout
             'get_op_position': self._get_op_position,
+            'get_network_layout': self._get_network_layout,
             'set_op_position': self._set_op_position,
             'layout_children': self._layout_children,
             # Extended operator management
@@ -2723,6 +2743,73 @@ class EnvoyExt:
         except Exception as e:
             return {'error': f'Failed to get position: {e}'}
 
+    def _get_network_layout(self, comp_path: str, include_annotations: bool = True) -> dict:
+        """Get positions of all operators and annotations in a COMP"""
+        parent_op = op(comp_path)
+        if not parent_op:
+            return {'error': f'COMP not found: {comp_path}'}
+        if not hasattr(parent_op, 'children'):
+            return {'error': f'{comp_path} is not a COMP'}
+
+        try:
+            operators = []
+            min_x = min_y = float('inf')
+            max_x = max_y = float('-inf')
+
+            for child in parent_op.children:
+                entry = {
+                    'path': child.path,
+                    'name': child.name,
+                    'type': child.OPType,
+                    'family': child.family,
+                    'nodeX': child.nodeX,
+                    'nodeY': child.nodeY,
+                    'nodeWidth': child.nodeWidth,
+                    'nodeHeight': child.nodeHeight,
+                    'nodeCenterX': child.nodeCenterX,
+                    'nodeCenterY': child.nodeCenterY,
+                }
+                operators.append(entry)
+                min_x = min(min_x, child.nodeX)
+                min_y = min(min_y, child.nodeY)
+                max_x = max(max_x, child.nodeX + child.nodeWidth)
+                max_y = max(max_y, child.nodeY + child.nodeHeight)
+
+            result = {
+                'comp_path': comp_path,
+                'count': len(operators),
+                'operators': operators,
+            }
+
+            if operators:
+                result['bounding_box'] = {
+                    'min_x': min_x,
+                    'min_y': min_y,
+                    'max_x': max_x,
+                    'max_y': max_y,
+                    'width': max_x - min_x,
+                    'height': max_y - min_y,
+                }
+
+            if include_annotations:
+                annotations = []
+                for child in parent_op.findChildren(type=annotateCOMP, includeUtility=True, depth=1):
+                    annotations.append({
+                        'path': child.path,
+                        'name': child.name,
+                        'nodeX': child.nodeX,
+                        'nodeY': child.nodeY,
+                        'nodeWidth': child.nodeWidth,
+                        'nodeHeight': child.nodeHeight,
+                        'text': child.par.text.eval() if hasattr(child.par, 'text') else '',
+                    })
+                result['annotations'] = annotations
+
+            return self._maybe_offload_to_file(result, 'get_network_layout')
+
+        except Exception as e:
+            return {'error': f'Failed to get network layout: {e}'}
+
     def _set_op_position(self, op_path: str, x: int = None, y: int = None,
                         width: int = None, height: int = None,
                         color: list = None, comment: str = None) -> dict:
@@ -3182,11 +3269,25 @@ class EnvoyExt:
             return {'error': f'Operator not found: {op_path}'}
 
         try:
-            op.Embody.Save(target)
-            return {
-                'success': True,
-                'path': op_path
-            }
+            if target.family == 'COMP':
+                strategy = op.Embody.ext.Embody._getCompStrategy(target)
+                if strategy == 'tdn':
+                    op.Embody.SaveTDN(op_path)
+                else:
+                    op.Embody.Save(op_path)
+            elif target.family == 'DAT':
+                if hasattr(target.par, 'syncfile') and target.par.syncfile.eval():
+                    return {
+                        'success': True,
+                        'path': op_path,
+                        'note': 'DAT is file-synced automatically by TouchDesigner'
+                    }
+                else:
+                    return {'error': f'DAT at {op_path} does not have file sync enabled — not externalized'}
+            else:
+                return {'error': f'Operator family "{target.family}" is not supported for save_externalization'}
+
+            return {'success': True, 'path': op_path}
         except Exception as e:
             return {'error': f'Failed to save: {e}'}
 

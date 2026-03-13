@@ -1,5 +1,21 @@
 # Changelog
 
+## v5.0.206
+
+Metadata reconciliation, network layout tool, save_externalization fix.
+
+- **Metadata reconciliation**: New `ReconcileMetadata()` method runs at frame 75 on project open — re-applies tags, colors, file parameters, and readOnly flags to operators that exist in the externalizations table but lost their in-memory metadata (e.g. when TD was closed without saving after tagging)
+- **`get_network_layout` MCP tool**: Returns positions and sizes of all operators and annotations in a COMP in a single call — replaces the need for repeated `get_op_position` calls. Includes bounding box calculation
+- **`save_externalization` fix**: Now correctly handles TDN-strategy COMPs (calls `SaveTDN`) and file-synced DATs, instead of blindly calling `Save()` which only works for TOX-strategy COMPs
+- **`Save()` guard**: Validates target is a COMP before proceeding — prevents cryptic errors on non-COMP operators
+
+## v5.0.205
+
+Fix companion DAT duplication during TDN strip/restore save cycle.
+
+- **Companion DAT reuse on import**: `_createOps` now detects auto-created companion DATs (timerCHOP callbacks, rampTOP keys, etc.) and reuses them instead of creating duplicates that accumulate on each save
+- **Duplicate companion cleanup on export**: `_exportChildren` detects and skips accumulated companion duplicates (e.g. `timer1_callbacks1`, `timer1_callbacks2`) using docking-based detection — existing `.tdn` files self-clean on next save
+
 ## v5.0.204
 
 Custom window header, path portability, TDN template cleanup.
