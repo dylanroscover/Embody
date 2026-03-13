@@ -2405,7 +2405,7 @@ class EmbodyExt:
         if not comps_with_filefolder:
             return
 
-        embody_path = self.ownerComp.path
+        embody_path = self.my.path
         internal, external = [], []
         for comp in comps_with_filefolder:
             if comp.path == embody_path or comp.path.startswith(embody_path + '/'):

@@ -289,7 +289,7 @@
 						"name": "Externalizations",
 						"style": "DAT",
 						"label": "Externalizations Table",
-						"value": "/embody/externalizations"
+						"value": "=me.op('externalizations')"
 					},
 					{
 						"name": "Openexternalizationstable",

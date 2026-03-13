@@ -1,5 +1,18 @@
 # Changelog
 
+## v5.0.204
+
+Custom window header, path portability, TDN template cleanup.
+
+- **Custom window header**: Replaced `widgetCOMP` clone of TDBasicWidgets with a lightweight `containerCOMP` + `WindowHeaderExt` extension — minimize/maximize/close with hover-based button detection, no palette dependency
+- **Absolute path elimination**: Replaced hardcoded `/embody/...` paths with relative expressions (`=op('container_left')`, `=me.op('externalizations')`, etc.) in toolbar and root TDN files for full portability
+- **TDN template cleanup**: Removed unused `type_defaults` entries (baseCOMP, panelexecuteDAT, constantTOP, opexecuteDAT) and stale custom par pages (settings_2, expressions) from Embody.tdn — smaller, cleaner exports
+- **EmbodyExt.py**: `self.ownerComp.path` → `self.my.path` for consistency with codebase conventions
+
+## v5.0.203
+
+Multi-client AI config, TDN docking, robust init.
+
 ## v5.0.201
 
 Robust first-install init, table schema expansion, release build hardening.

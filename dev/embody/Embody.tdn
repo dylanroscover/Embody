@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 141,
-	"generator": "Embody/5.0.201",
+	"build": 144,
+	"generator": "Embody/5.0.203",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-11T20:19:04Z",
+	"exported_at": "2026-03-13T05:35:51Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -14,14 +14,15 @@
 			"parameters": {
 				"resizecomp": "=me",
 				"repocomp": "=me"
-			}
-		},
-		"textDAT": {
+			},
 			"flags": ["viewer"]
 		},
-		"parameterexecuteDAT": {
-			"flags": ["viewer"],
-			"size": [130, 90]
+		"textDAT": {
+			"parameters": {
+				"syncfile": true
+			},
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4]
 		},
 		"annotateCOMP": {
 			"parameters": {
@@ -31,51 +32,18 @@
 				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
 			}
 		},
-		"baseCOMP": {
-			"size": [160, 130]
-		},
-		"panelexecuteDAT": {
-			"flags": ["viewer"],
-			"size": [130, 90]
-		},
 		"textCOMP": {
 			"parameters": {
-				"callbacks": "text1_callbacks",
-				"legacyfontselection": true,
-				"hmode": "fill",
+				"fontsizeunits": "points",
+				"fontcolorr": "=parent.Embody.par.Textcolorr",
+				"fontcolorg": "=parent.Embody.par.Textcolorg",
+				"fontcolorb": "=parent.Embody.par.Textcolorb",
 				"vmode": "fill",
-				"clickthrough": true,
 				"resizecomp": "=me",
-				"repocomp": "=me",
-				"borderover": false,
-				"reloadbuiltin": false
+				"repocomp": "=me"
 			},
-			"flags": ["viewer"]
-		},
-		"constantTOP": {
-			"parameters": {
-				"colorr": 0,
-				"colorg": 0,
-				"colorb": 0,
-				"alpha": 0,
-				"operand": "over",
-				"resolutionw": 1,
-				"resolutionh": 1
-			},
-			"flags": ["viewer"],
-			"size": [130, 105]
-		},
-		"opexecuteDAT": {
-			"parameters": {
-				"active": false,
-				"fromop": "=parent()",
-				"op": "pare",
-				"destroy": true,
-				"defaultreadencoding": "cp1252"
-			},
-			"flags": ["bypass", "viewer"],
-			"size": [130, 90],
-			"color": [0.05, 0.5, 0.05]
+			"size": [160, 130],
+			"color": [0.67, 0.67, 0.67]
 		},
 		"windowCOMP": {
 			"parameters": {
@@ -306,31 +274,6 @@
 				"startSection": true,
 				"style": "Float"
 			}
-		],
-		"settings_2": [
-			{
-				"name": "Symbol",
-				"style": "Str"
-			}
-		],
-		"expressions": [
-			{
-				"name": "Value",
-				"style": "Python"
-			},
-			{
-				"name": "Fontcolor",
-				"style": "Python"
-			},
-			{
-				"name": "Facecolor",
-				"style": "Python"
-			},
-			{
-				"label": "Font Ratio",
-				"name": "Fontratio",
-				"style": "Python"
-			}
 		]
 	},
 	"operators": [
@@ -393,7 +336,6 @@
 					"Touchbuild": "2025.32280"
 				}
 			},
-			"flags": ["viewer"],
 			"position": [250, 50],
 			"size": [257, 250],
 			"color": [0.3, 0.5, 0.9],
@@ -430,12 +372,10 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/TDNExt.py",
-				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-375, 375],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
 		},
 		{
@@ -464,7 +404,6 @@
 					"Touchbuild": "2025.32280"
 				}
 			},
-			"flags": ["viewer"],
 			"position": [900, 225],
 			"size": [108, 155],
 			"color": [0.3, 0.5, 0.9],
@@ -546,7 +485,6 @@
 					"Touchbuild": "2025.32280"
 				}
 			},
-			"flags": ["viewer"],
 			"position": [650, 250],
 			"size": [160, 92],
 			"color": [0.3, 0.5, 0.9],
@@ -563,7 +501,9 @@
 				"defaultreadencoding": "cp1252",
 				"syncfile": true
 			},
+			"flags": ["viewer"],
 			"position": [-375, 100],
+			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
 		},
@@ -612,7 +552,6 @@
 					"Touchbuild": "2025.32280"
 				}
 			},
-			"flags": ["viewer"],
 			"position": [300, 350],
 			"size": [160, 76],
 			"color": [0.3, 0.5, 0.9],
@@ -641,13 +580,11 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/EnvoyExt.py",
-				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-375, 475],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py", "TDExtension"]
+			"tags": ["TDExtension", "py"]
 		},
 		{
 			"name": "mousein1",
@@ -670,13 +607,11 @@
 			"parameters": {
 				"file": "embody/Embody/EmbodyExt.py",
 				"defaultreadencoding": "cp1252",
-				"syncfile": true,
 				"language": "python",
 				"extension": "py"
 			},
+			"flags": ["viewer"],
 			"position": [-375, 576],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
 		},
 		{
@@ -719,6 +654,7 @@
 				}
 			},
 			"position": [-400, -1200],
+			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"]
 		},
@@ -739,49 +675,30 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/text_claude.md",
-				"syncfile": true,
 				"language": "text",
 				"extension": "md"
 			},
+			"flags": ["viewer"],
 			"position": [-700, -1200],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
 			"tags": ["md"]
 		},
 		{
 			"name": "windowHeader",
-			"type": "widgetCOMP",
+			"type": "containerCOMP",
 			"parameters": {
-				"y": 400,
-				"w": 996,
 				"h": 32,
 				"hmode": "fill",
 				"alignorder": -1,
-				"enable": "=me.par.Value0.bindMaster.enable if hasattr(me.par, 'Value0') and me.par.Value0.bindMaster and isinstance(me.par.Value0.bindMaster, Par) else True",
-				"helpdat": "./code/help",
-				"resizecomp": "=me",
-				"resizewmin": 400,
-				"resizewmax": 3840,
-				"resizehmin": 40,
-				"resizehmax": 2160,
-				"repocomp": "=me",
 				"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
 				"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
 				"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
 				"bgalpha": "=parent.Embody.par.Backgroundcolora",
-				"topsmoothness": "mipmap",
-				"borderar": 0,
-				"borderag": 0,
-				"borderab": 0,
-				"borderaalpha": 0,
-				"borderbalpha": 0,
 				"align": "horizlr",
+				"marginl": 8,
 				"justifyh": "left",
 				"justifyv": "top",
-				"ext0promote": true,
-				"parentshortcut": "Widget",
-				"enablecloning": false,
-				"clone": "=op.TDBasicWidgets.op('windowHeader') if hasattr(op, 'TDBasicWidgets') else ''"
+				"ext0object": "op('./WindowHeaderExt').module.WindowHeaderExt(me)",
+				"ext0promote": true
 			},
 			"custom_pars": {
 				"Header": [
@@ -789,127 +706,7 @@
 						"name": "Headerlabel",
 						"style": "Str",
 						"label": "Label",
-						"default": "Application",
 						"value": "=f'Embody v{parent.Embody.par.Version}'"
-					},
-					{
-						"name": "Headerlabeldisplay",
-						"style": "Toggle",
-						"label": "Display",
-						"startSection": true,
-						"default": true
-					},
-					{
-						"name": "Headerlabelwordwrap",
-						"style": "Toggle",
-						"label": "Word Wrap",
-						"startSection": true
-					},
-					{
-						"name": "Headerlabelfontsizemode",
-						"style": "Menu",
-						"label": "Font Size Mode",
-						"startSection": true,
-						"default": "panelunits",
-						"menuNames": ["points", "fract", "panelunits"],
-						"menuLabels": ["Points", "Fraction", "Panel Units"],
-						"value": "points"
-					},
-					{
-						"name": "Headerlabelfontsize",
-						"style": "Int",
-						"label": "Font Size",
-						"default": 12,
-						"min": 1.0,
-						"max": 20.0,
-						"clampMin": true,
-						"normMin": 6.0,
-						"normMax": 20.0,
-						"value": 10
-					},
-					{
-						"name": "Headerlabelfontfraction",
-						"style": "Float",
-						"label": "Font Fraction",
-						"default": 1
-					},
-					{
-						"name": "Headerlabelscaletoolarge",
-						"style": "Toggle",
-						"label": "Scale when too Large"
-					},
-					{
-						"name": "Headerlabelfontbold",
-						"style": "Toggle",
-						"label": "Font Bold",
-						"default": true,
-						"value": false
-					},
-					{
-						"name": "Headerlabelalignx",
-						"style": "Menu",
-						"label": "Align Horizontal",
-						"startSection": true,
-						"default": "left",
-						"menuNames": ["left", "center", "right"],
-						"menuLabels": ["Left", "Center", "Right"]
-					},
-					{
-						"name": "Headerlabelaligny",
-						"style": "Menu",
-						"label": "Align Vertical",
-						"default": "center",
-						"menuNames": ["bottom", "center", "top"],
-						"menuLabels": ["Bottom", "Center", "Top"]
-					},
-					{
-						"name": "Headerlabeloffsetx",
-						"style": "XYZW",
-						"label": "Offset",
-						"startSection": true,
-						"default": 6,
-						"min": -5.0,
-						"max": 5.0,
-						"normMin": -5.0,
-						"normMax": 5.0,
-						"values": [10, 0]
-					},
-					{
-						"name": "Headerlabelpadding",
-						"style": "Float",
-						"label": "Padding",
-						"size": 4
-					},
-					{
-						"name": "Headerlabelbgcolor",
-						"style": "RGBA",
-						"label": "Bg Color",
-						"startSection": true,
-						"default": 0.15,
-						"clampMin": true,
-						"clampMax": true,
-						"values": [0.074745, 0.097383, 0.099, 0]
-					},
-					{
-						"name": "Headerlabelfontcolor",
-						"style": "RGBA",
-						"label": "Font Color",
-						"default": 0.8,
-						"clampMin": true,
-						"clampMax": true,
-						"values": [
-							"=parent.Embody.par.Textcolorr",
-							"=parent.Embody.par.Textcolorg",
-							"=parent.Embody.par.Textcolorb",
-							"=parent.Embody.par.Textcolora"
-						]
-					},
-					{
-						"name": "Headerrepositionwindow",
-						"style": "Toggle",
-						"label": "Reposition Window",
-						"startSection": true,
-						"default": true
 					}
 				],
 				"Controls": [
@@ -917,1268 +714,111 @@
 						"name": "Windowcomp",
 						"style": "COMP",
 						"label": "Window COMP",
-						"default": "parent(2)",
 						"value": "/embody/Embody/window_manager"
-					},
-					{
-						"name": "Panelcomp",
-						"style": "COMP",
-						"label": "Panel COMP"
-					},
-					{
-						"name": "Buttonfontsizemode",
-						"style": "Menu",
-						"label": "Font Size Mode",
-						"startSection": true,
-						"default": "panelunits",
-						"menuNames": ["points", "fract", "panelunits"],
-						"menuLabels": ["Points", "Fraction", "Panel Units"]
-					},
-					{
-						"name": "Buttonfontsize",
-						"style": "Int",
-						"label": "Font Size",
-						"default": 12,
-						"min": 1.0,
-						"max": 20.0,
-						"clampMin": true,
-						"normMin": 6.0,
-						"normMax": 20.0
-					},
-					{
-						"name": "Buttonfontfraction",
-						"style": "Float",
-						"label": "Font Fraction",
-						"default": 1
-					},
-					{
-						"name": "Buttonscaletoolarge",
-						"style": "Toggle",
-						"label": "Scale when too Large"
-					},
-					{
-						"name": "Buttonfontbold",
-						"style": "Toggle",
-						"label": "Font Bold"
-					},
-					{
-						"name": "Buttonofffacecolor",
-						"style": "RGBA",
-						"label": "Off Face Color",
-						"startSection": true,
-						"default": 0.15,
-						"values": [0, 0, 0, 0]
-					},
-					{
-						"name": "Buttononfacecolor",
-						"style": "RGBA",
-						"label": "On Face Color",
-						"default": 0.5
-					},
-					{
-						"name": "Buttonofffontcolor",
-						"style": "RGBA",
-						"label": "Off Font Color",
-						"default": 0.5,
-						"min": 1.0
-					},
-					{
-						"name": "Buttononfontcolor",
-						"style": "RGBA",
-						"label": "On Font Color",
-						"default": 0.382
-					},
-					{
-						"name": "Windowclose",
-						"style": "Pulse",
-						"label": "Window Close",
-						"startSection": true
-					},
-					{
-						"name": "Windowmaximize",
-						"style": "Pulse",
-						"label": "Window Maximize"
-					},
-					{
-						"name": "Windowminimize",
-						"style": "Pulse",
-						"label": "Window Minimize"
-					}
-				],
-				"Widget": [
-					{
-						"name": "Enablerollover",
-						"style": "Toggle",
-						"label": "Enable Rollover",
-						"startSection": true,
-						"default": true
-					},
-					{
-						"name": "Rollovercolor",
-						"style": "RGBA",
-						"label": "Rollover Color",
-						"default": 1,
-						"values": [0.2, 0.2, 0.2, 0.5]
-					},
-					{
-						"name": "Disablecolor",
-						"style": "RGBA",
-						"label": "Disable Color"
-					},
-					{
-						"name": "Font",
-						"style": "Menu",
-						"default": "Open Sans",
-						"menuSource": "op.TDResources.op('TDUI/fontMenuSource').par.font"
-					},
-					{
-						"name": "Fontfile",
-						"style": "File",
-						"label": "Font File"
-					},
-					{
-						"name": "Popuphelp",
-						"style": "Str",
-						"label": "Popup Help"
-					},
-					{
-						"name": "Update",
-						"style": "Pulse",
-						"startSection": true
-					},
-					{
-						"name": "Widgettox",
-						"style": "Str",
-						"label": "Widget Tox",
-						"default": "windowHeader"
-					},
-					{
-						"name": "Rightclickmenu",
-						"style": "Toggle",
-						"label": "Right Click Menu",
-						"default": true
-					}
-				],
-				"OPs": [
-					{
-						"name": "Buttonclose",
-						"style": "COMP",
-						"label": "buttonClose",
-						"default": "./minMaxClose/buttonClose",
-						"readOnly": true,
-						"value": "/embody/Embody/windowHeader/minMaxClose/buttonClose"
-					},
-					{
-						"name": "Buttonmax",
-						"style": "COMP",
-						"label": "buttonMax",
-						"default": "./minMaxClose/buttonMax",
-						"readOnly": true,
-						"value": "/embody/Embody/windowHeader/minMaxClose/buttonMax"
-					},
-					{
-						"name": "Buttonmin",
-						"style": "COMP",
-						"label": "buttonMin",
-						"default": "./minMaxClose/buttonMin",
-						"readOnly": true,
-						"value": "/embody/Embody/windowHeader/minMaxClose/buttonMin"
-					},
-					{
-						"name": "Header",
-						"style": "COMP",
-						"label": "header",
-						"default": "./header",
-						"readOnly": true,
-						"value": "/embody/Embody/windowHeader/header"
-					}
-				],
-				"About": [
-					{
-						"name": "Help",
-						"style": "Pulse"
-					},
-					{
-						"name": "Version",
-						"style": "Str",
-						"default": "2.1.35",
-						"readOnly": true
-					},
-					{
-						"name": "Toxsavebuild",
-						"style": "Str",
-						"label": ".tox Save Build",
-						"readOnly": true,
-						"value": "2022.24200"
 					}
 				]
 			},
-			"flags": ["viewer"],
 			"position": [300, 475],
-			"size": [160, 76],
-			"color": [0.6, 0.6, 0.6],
-			"tags": ["TDBasicWidget"],
+			"size": [160, 130],
+			"color": [0.67, 0.67, 0.67],
 			"comp_inputs": ["manager"],
 			"children": [
 				{
-					"name": "code",
-					"type": "baseCOMP",
+					"name": "title",
+					"type": "textCOMP",
 					"parameters": {
-						"ext0promote": true,
-						"enablecloning": false
-					},
-					"color": [0.5, 0.2, 0.05],
-					"tags": ["TDSubComp"],
-					"children": [
-						{
-							"name": "help",
-							"type": "evaluateDAT",
-							"parameters": {
-								"expr": "parent(2).par.Popuphelp.eval()",
-								"rowindexend": "=me.inputs[0].numRows - 1",
-								"rowexpr": "=re.match('.*',me.inputCell.val) != None",
-								"colindexend": "=me.inputs[0].numCols - 1",
-								"colexpr": "=re.match('.*',me.inputCell.val) != None"
-							},
-							"flags": ["viewer"],
-							"position": [0, -200],
-							"size": [130, 90],
-							"comment": "Popup help string as set in Popuphelp parameter"
-						},
-						{
-							"name": "docsHelper",
-							"type": "containerCOMP",
-							"parameters": {
-								"w": 32,
-								"h": 32,
-								"layer": 1,
-								"display": false,
-								"borderover": false,
-								"ext0object": "op('./DocsHelper').module.DocsHelper(me)",
-								"ext0promote": true,
-								"parentshortcut": "DocsHelper",
-								"clone": "=op.TDResources.op('docsHelper')",
-								"reloadbuiltin": false
-							},
-							"custom_pars": {
-								"Docs Helper": [
-									{
-										"name": "Palettecomp",
-										"style": "COMP",
-										"label": "Help COMP",
-										"value": "=parent(2)"
-									},
-									{
-										"name": "Helpcommand",
-										"style": "Str",
-										"label": "Help Command",
-										"readOnly": true,
-										"value": "=ext.DocsHelper.HelpCommand"
-									},
-									{
-										"name": "Mode",
-										"style": "Menu",
-										"startSection": true,
-										"default": "Palette",
-										"menuNames": ["URL", "Wiki", "Palette"],
-										"value": "Wiki"
-									},
-									{
-										"name": "Palettename",
-										"style": "Str",
-										"label": "Palette COMP Name",
-										"value": "windowHeader"
-									},
-									{
-										"name": "Resetpalettecompname",
-										"style": "Pulse",
-										"label": "Reset Palette COMP Name"
-									},
-									{
-										"name": "Wikipage",
-										"style": "Str",
-										"label": "Wiki Page",
-										"value": "Widgets"
-									},
-									{
-										"name": "Experimental",
-										"style": "Toggle",
-										"readOnly": true,
-										"value": "=app.experimental"
-									},
-									{
-										"name": "Section",
-										"style": "Str"
-									},
-									{
-										"name": "Url",
-										"style": "Str",
-										"label": "URL",
-										"default": "https://www.derivative.ca"
-									},
-									{
-										"name": "Createaboutpage",
-										"style": "Pulse",
-										"label": "Create About Page and Pars",
-										"startSection": true
-									},
-									{
-										"name": "Settoxsavebuild",
-										"style": "Pulse",
-										"label": "Set Tox Save Build"
-									},
-									{
-										"name": "Testopenhelp",
-										"style": "Pulse",
-										"label": "Test Open Help"
-									}
-								],
-								"About": [
-									{
-										"name": "Version",
-										"style": "Str",
-										"default": "1.4",
-										"readOnly": true,
-										"value": "1.3"
-									}
-								]
-							},
-							"position": [600, -200],
-							"size": [160, 130],
-							"comment": "Clone master for wiki connection helper in palette comps",
-							"palette_clone": true
-						},
-						{
-							"name": "panelexec1",
-							"type": "panelexecuteDAT",
-							"parameters": {
-								"active": "=parent.Widget.par.Rightclickmenu",
-								"fromop": "=parent()",
-								"panels": "=[parent(2)] + parent(2).findChildren(type=PanelCOMP)",
-								"panelvalue": "rselect",
-								"defaultreadencoding": "cp1252"
-							},
-							"position": [200, -200]
-						},
-						{
-							"name": "TDUpdateSystem",
-							"type": "containerCOMP",
-							"parameters": {
-								"topsmoothness": "mipmap",
-								"borderover": false,
-								"clone": "=op.TDUpdater.op('TDUpdateSystem')",
-								"reloadbuiltin": false
-							},
-							"custom_pars": {
-								"TD Update System": [
-									{
-										"name": "Updatesystem",
-										"style": "COMP",
-										"label": "Update System",
-										"readOnly": true,
-										"value": "=op.TDUpdater"
-									},
-									{
-										"name": "Comptoupdate",
-										"style": "COMP",
-										"label": "COMP To Update",
-										"value": "=parent(2)"
-									},
-									{
-										"name": "Enableupdatesystem",
-										"style": "Toggle",
-										"label": "Enable Update System",
-										"default": true
-									},
-									{
-										"name": "Setupparameters",
-										"style": "Pulse",
-										"label": "Setup Parameters",
-										"startSection": true
-									},
-									{
-										"name": "Update",
-										"style": "Pulse",
-										"startSection": true
-									}
-								],
-								"Customizations": [
-									{
-										"name": "Invalidsourcemessage",
-										"style": "Str",
-										"label": "Invalid Source Message"
-									}
-								]
-							},
-							"flags": ["viewer"],
-							"position": [400, -200],
-							"size": [160, 129],
-							"palette_clone": true
-						}
-					]
-				},
-				{
-					"name": "header",
-					"type": "containerCOMP",
-					"parameters": {
-						"w": 30,
-						"h": 30,
+						"text": "=parent().par.Headerlabel",
+						"callbacks": "title_callbacks",
+						"font": "Open Sans",
+						"fontsize": 9,
+						"alignx": "left",
 						"hmode": "fill",
-						"vmode": "fill",
-						"helpdat": "./code/help",
-						"reposition": "=parent.Widget.par.Headerrepositionwindow",
-						"bgcolorr": "=parent.Widget.par.Headerlabelbgcolorr",
-						"bgcolorg": "=parent.Widget.par.Headerlabelbgcolorg",
-						"bgcolorb": "=parent.Widget.par.Headerlabelbgcolorb",
-						"bgalpha": "=parent.Widget.par.Headerlabelbgcolora",
-						"top": "./bg",
-						"topsmoothness": "mipmap",
-						"borderover": false,
-						"align": "horizlr",
-						"enablecloning": false
-					},
-					"custom_pars": {
-						"Header": [
-							{
-								"name": "Headerlabel",
-								"style": "Str",
-								"label": "Label",
-								"default": "Header",
-								"value": "Application"
-							},
-							{
-								"name": "Headerlabeldisplay",
-								"style": "Toggle",
-								"label": "Display",
-								"startSection": true,
-								"default": true
-							},
-							{
-								"name": "Headerlabelwordwrap",
-								"style": "Toggle",
-								"label": "Word Wrap",
-								"startSection": true
-							},
-							{
-								"name": "Headerlabelfontsizemode",
-								"style": "Menu",
-								"label": "Font Size Mode",
-								"startSection": true,
-								"default": "points",
-								"menuNames": ["points", "fract", "panelunits"],
-								"menuLabels": ["Points", "Fraction", "Panel Units"]
-							},
-							{
-								"name": "Headerlabelfontsize",
-								"style": "Int",
-								"label": "Font Size",
-								"default": 8,
-								"min": 1.0,
-								"max": 20.0,
-								"clampMin": true,
-								"normMin": 6.0,
-								"normMax": 20.0,
-								"value": 12
-							},
-							{
-								"name": "Headerlabelfontfraction",
-								"style": "Float",
-								"label": "Font Fraction",
-								"default": 1
-							},
-							{
-								"name": "Headerlabelscaletoolarge",
-								"style": "Toggle",
-								"label": "Scale when too Large"
-							},
-							{
-								"name": "Headerlabelfontbold",
-								"style": "Toggle",
-								"label": "Font Bold"
-							},
-							{
-								"name": "Headerlabelalignx",
-								"style": "Menu",
-								"label": "Align Horizontal",
-								"startSection": true,
-								"default": "Center",
-								"menuNames": ["left", "center", "right"],
-								"menuLabels": ["Left", "Center", "Right"],
-								"value": "left"
-							},
-							{
-								"name": "Headerlabelaligny",
-								"style": "Menu",
-								"label": "Align Vertical",
-								"default": "Center",
-								"menuNames": ["bottom", "center", "top"],
-								"menuLabels": ["Bottom", "Center", "Top"],
-								"value": "center"
-							},
-							{
-								"name": "Headerlabeloffsetx",
-								"style": "XYZW",
-								"label": "Offset",
-								"startSection": true,
-								"min": -5.0,
-								"max": 5.0,
-								"normMin": -5.0,
-								"normMax": 5.0
-							},
-							{
-								"name": "Headerlabelpadding",
-								"style": "Float",
-								"label": "Padding",
-								"size": 4
-							},
-							{
-								"name": "Headerlabelbgcolor",
-								"style": "RGBA",
-								"label": "Bg Color",
-								"startSection": true,
-								"default": 0.15,
-								"clampMin": true,
-								"clampMax": true,
-								"values": [0.15, 0.0753, 0.0764952, 0]
-							},
-							{
-								"name": "Headerlabelfontcolor",
-								"style": "RGBA",
-								"label": "Font Color",
-								"default": 1,
-								"clampMin": true,
-								"clampMax": true,
-								"values": [
-									"=parent.Embody.par.Textcolorr",
-									"=parent.Embody.par.Textcolorg",
-									"=parent.Embody.par.Textcolorb",
-									"=parent.Embody.par.Textcolora"
-								]
-							},
-							{
-								"name": "Headerrepositionwindow",
-								"style": "Toggle",
-								"label": "Reposition Window",
-								"startSection": true,
-								"value": true
-							}
-						]
-					},
-					"flags": ["viewer"],
-					"position": [200, -200],
-					"size": [160, 76],
-					"color": [0.5, 0.35, 0.05],
-					"tags": ["TDPub", "TDSubComp"],
-					"children": [
-						{
-							"name": "text",
-							"type": "textCOMP",
-							"parameters": {
-								"text": "~parent.Widget.par.Headerlabel",
-								"type": "multiline",
-								"wordwrap": "=parent.Widget.par.Headerlabelwordwrap",
-								"font": "=parent.Widget.par.Font.eval()",
-								"bold": "=parent.Widget.par.Headerlabelfontbold.eval()",
-								"scaletofit": "='onlyshrink' if parent.Widget.par.Headerlabelscaletoolarge.eval() else 'never'",
-								"fontsize": "=parent.Widget.par.Headerlabelfontsize.eval() if parent.Widget.par.Headerlabelfontsizemode.eval() in ['points', 'panelunits'] else parent.Widget.par.Headerlabelfontfraction.eval()",
-								"fontsizeunits": "=parent.Widget.par.Headerlabelfontsizemode.eval()",
-								"fontcolorr": "=parent.Widget.par.Headerlabelfontcolorr.eval()",
-								"fontcolorg": "=parent.Widget.par.Headerlabelfontcolorg.eval()",
-								"fontcolorb": "=parent.Widget.par.Headerlabelfontcolorb.eval()",
-								"fontalpha": "=parent.Widget.par.Headerlabelfontcolora.eval()",
-								"textoffsetx": "=parent.Widget.par.Headerlabeloffsetx.eval()",
-								"textoffsety": "=parent.Widget.par.Headerlabeloffsety.eval()",
-								"textpaddingl": "=parent.Widget.par.Headerlabelpadding1.eval()",
-								"textpaddingr": "=parent.Widget.par.Headerlabelpadding2.eval()",
-								"textpaddingb": "=parent.Widget.par.Headerlabelpadding3.eval()",
-								"textpaddingt": "=parent.Widget.par.Headerlabelpadding4.eval()",
-								"alignx": "=parent.Widget.par.Headerlabelalignx.eval()",
-								"aligny": "=parent.Widget.par.Headerlabelaligny.eval()"
-							},
-							"size": [160, 76]
-						},
-						{
-							"name": "text1_callbacks",
-							"type": "textDAT",
-							"position": [0, -150],
-							"size": [160, 130],
-							"dock": "text"
-						}
-					]
+						"reposition": "window",
+						"offsetx": 10
+					}
 				},
 				{
-					"name": "overlay",
-					"type": "containerCOMP",
+					"name": "button_max",
+					"type": "textCOMP",
 					"parameters": {
-						"layer": 100000,
-						"hmode": "fill",
-						"vmode": "fill",
-						"alignallow": "ignoremargin",
-						"display": "=1-parent().par.enable",
-						"bgcolorr": "=parent.Widget.par.Disablecolorr",
-						"bgcolorg": "=parent.Widget.par.Disablecolorg",
-						"bgcolorb": "=parent.Widget.par.Disablecolorb",
-						"bgalpha": "=parent.Widget.par.Disablecolora",
-						"topsmoothness": "mipmap",
-						"borderover": false
+						"text": "󰖯",
+						"callbacks": "button_max_callbacks",
+						"font": "Material Design Icons",
+						"fontsize": 12,
+						"w": 32,
+						"alignorder": 2,
+						"clickthrough": true,
+						"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgalpha": 1
 					},
-					"flags": ["viewer"],
-					"position": [0, 200],
-					"size": [160, 76],
-					"color": [0.5, 0.2, 0.05],
-					"tags": ["TDSubComp"]
+					"position": [600, 0]
 				},
 				{
-					"name": "minMaxClose",
-					"type": "containerCOMP",
+					"name": "button_min",
+					"type": "textCOMP",
 					"parameters": {
-						"w": "=3*parent().height",
-						"vmode": "fill",
-						"topsmoothness": "mipmap",
-						"borderover": false,
-						"align": "horizlr",
-						"justifyh": "right",
-						"ext0object": "op('./MinMaxCloseExt').module.MinMaxCloseExt(me)",
-						"ext0promote": true,
-						"parentshortcut": "minMaxClose",
-						"enablecloning": false
+						"text": "󰖰",
+						"callbacks": "button_min_callbacks",
+						"font": "Material Design Icons",
+						"fontsize": 12,
+						"w": 32,
+						"alignorder": 1,
+						"clickthrough": true,
+						"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgalpha": 1
 					},
-					"custom_pars": {
-						"Controls": [
-							{
-								"name": "Windowcomp",
-								"style": "COMP",
-								"label": "Window COMP",
-								"default": "False",
-								"value": ""
-							},
-							{
-								"name": "Panelcomp",
-								"style": "COMP",
-								"label": "Panel COMP"
-							},
-							{
-								"name": "Buttonfontsizemode",
-								"style": "Menu",
-								"label": "Font Size Mode",
-								"startSection": true,
-								"default": "points",
-								"menuNames": ["points", "fract", "panelunits"],
-								"menuLabels": ["Points", "Fraction", "Panel Units"]
-							},
-							{
-								"name": "Buttonfontsize",
-								"style": "Int",
-								"label": "Font Size",
-								"default": 8,
-								"min": 1.0,
-								"max": 20.0,
-								"clampMin": true,
-								"normMin": 6.0,
-								"normMax": 20.0
-							},
-							{
-								"name": "Buttonfontfraction",
-								"style": "Float",
-								"label": "Font Fraction",
-								"default": 1
-							},
-							{
-								"name": "Buttonscaletoolarge",
-								"style": "Toggle",
-								"label": "Scale when too Large"
-							},
-							{
-								"name": "Buttonfontbold",
-								"style": "Toggle",
-								"label": "Font Bold"
-							},
-							{
-								"name": "Buttonofffacecolor",
-								"style": "RGBA",
-								"label": "Off Face Color",
-								"startSection": true,
-								"default": 0.382
-							},
-							{
-								"name": "Buttononfacecolor",
-								"style": "RGBA",
-								"label": "On Face Color",
-								"default": 0.81818
-							},
-							{
-								"name": "Buttonofffontcolor",
-								"style": "RGBA",
-								"label": "Off Font Color",
-								"default": 0.18182,
-								"min": 1.0,
-								"values": [0.184183, 0.184183, 0.308, 1]
-							},
-							{
-								"name": "Buttononfontcolor",
-								"style": "RGBA",
-								"label": "On Font Color",
-								"default": 0.382
-							},
-							{
-								"name": "Windowclose",
-								"style": "Pulse",
-								"label": "Window Close",
-								"startSection": true,
-								"value": "~parent.Widget.par.Windowclose"
-							},
-							{
-								"name": "Windowmaximize",
-								"style": "Pulse",
-								"label": "Window Maximize",
-								"value": "~parent.Widget.par.Windowmaximize"
-							},
-							{
-								"name": "Windowminimize",
-								"style": "Pulse",
-								"label": "Window Minimize",
-								"value": "~parent.Widget.par.Windowminimize"
-							}
-						]
+					"position": [300, 0]
+				},
+				{
+					"name": "panelexec1",
+					"type": "panelexecuteDAT",
+					"parameters": {
+						"fromop": "=parent()",
+						"panelvalue": "*",
+						"ontooff": true,
+						"valuechange": true,
+						"file": "embody/Embody/windowHeader/panelexec1.py",
+						"syncfile": true,
+						"loadonstart": true,
+						"language": "python"
 					},
-					"flags": ["viewer"],
-					"position": [500, -400],
-					"size": [160, 84],
-					"color": [0.5, 0.35, 0.05],
-					"tags": ["TDSubComp"],
-					"children": [
-						{
-							"name": "buttonMax",
-							"type": "containerCOMP",
-							"parameters": {
-								"w": 32,
-								"h": "=parent.Widget.par.Buttonheight",
-								"fixedaspect": "vertical",
-								"hfillweight": "=parent.Widget.par.Buttonhfillweight",
-								"vmode": "fill",
-								"alignorder": 2,
-								"helpdat": "./code/help",
-								"topsmoothness": "mipmap",
-								"borderar": 0,
-								"borderag": 0,
-								"borderab": 0,
-								"borderaalpha": 0,
-								"borderbalpha": 0,
-								"borderover": false,
-								"align": "horizlr",
-								"justifyh": "left",
-								"justifyv": "center",
-								"crop": "on",
-								"ext0object": "op('./ButtonPushExt').module.ButtonPushExt(me)",
-								"ext0promote": true,
-								"parentshortcut": "Value",
-								"clone": "buttonMin"
-							},
-							"custom_pars": {
-								"Settings": {
-									"$t": "settings_2",
-									"Symbol": "=chr(0xF05AF)"
-								}
-							},
-							"flags": ["viewer"],
-							"position": [200, -100],
-							"size": [160, 155],
-							"color": [0.5, 0.35, 0.05],
-							"tags": ["TDPub"],
-							"children": [
-								{
-									"name": "text",
-									"type": "textCOMP",
-									"parameters": {
-										"text": "=parent.Value.par.Symbol",
-										"font": "Material Design Icons",
-										"scaletofit": "=parent.Widget.par.Buttonfontsizemode.eval()",
-										"fontsize": "=parent.Widget.par.Buttonfontsize.eval() if parent.Widget.par.Buttonfontsizemode.eval() in ['points', 'panelunits'] else parent.Widget.par.Buttonfontfraction.eval()",
-										"fontsizeunits": "=parent.Widget.par.Buttonfontsizemode.eval()",
-										"fontcolorr": "=me.par.Fontcolor.eval()[0]",
-										"fontcolorg": "=me.par.Fontcolor.eval()[1]",
-										"fontcolorb": "=me.par.Fontcolor.eval()[2]",
-										"fontalpha": "=me.par.Fontcolor.eval()[3]",
-										"textpaddingl": 11,
-										"textpaddingr": 11,
-										"textpaddingb": 11,
-										"textpaddingt": 11,
-										"alignxmode": "bbox",
-										"alignymode": "bbox",
-										"bgcolorr": "=me.par.Facecolor.eval()[0]",
-										"bgcolorg": "=me.par.Facecolor.eval()[1]",
-										"bgcolorb": "=me.par.Facecolor.eval()[2]",
-										"bgalpha": "=me.par.Facecolor.eval()[3]"
-									},
-									"custom_pars": {
-										"Expressions": {
-											"$t": "expressions",
-											"Value": "=parent.Value.panel.select",
-											"Fontcolor": "=parent.Widget.parGroup.Buttononfontcolor.eval() if me.par.Value.eval() else parent.Widget.parGroup.Buttonofffontcolor.eval()",
-											"Facecolor": "=parent.Widget.parGroup.Buttononfacecolor.eval() if me.par.Value.eval() else parent.Widget.parGroup.Buttonofffacecolor.eval()",
-											"Fontratio": "=None"
-										}
-									},
-									"position": [400, 200],
-									"size": [160, 155]
-								},
-								{
-									"name": "empty",
-									"type": "constantTOP"
-								},
-								{
-									"name": "rollover",
-									"type": "containerCOMP",
-									"parameters": {
-										"layer": 7,
-										"hmode": "fill",
-										"vmode": "fill",
-										"alignallow": "ignore",
-										"display": "=parent().panel.rollover or parent().panel.lselect",
-										"clickthrough": true,
-										"bgcolorr": "=parent.Widget.par.Rollovercolorr.eval()",
-										"bgcolorg": "=parent.Widget.par.Rollovercolorg.eval()",
-										"bgcolorb": "=parent.Widget.par.Rollovercolorb.eval()",
-										"bgalpha": "=parent.Widget.par.Rollovercolora.eval()",
-										"topsmoothness": "mipmap",
-										"borderover": false,
-										"composite": "add",
-										"enablecloning": false,
-										"reloadbuiltin": false
-									},
-									"flags": ["viewer"],
-									"position": [400, 400],
-									"size": [160, 155]
-								},
-								{
-									"name": "SubWidgetExt",
-									"type": "textDAT",
-									"parameters": {
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-500, 400],
-									"size": [130, 90],
-									"tags": ["TDExtension"]
-								},
-								{
-									"name": "ButtonPushExt",
-									"type": "textDAT",
-									"parameters": {
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 400],
-									"size": [130, 90],
-									"tags": ["TDExtension"]
-								},
-								{
-									"name": "panelexecValue",
-									"type": "panelexecuteDAT",
-									"parameters": {
-										"active": false,
-										"fromop": "=me.parent()",
-										"panelvalue": "lselect",
-										"ontooff": true,
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05]
-								},
-								{
-									"name": "panelExecOPExec",
-									"type": "opexecuteDAT",
-									"position": [-300, 100]
-								},
-								{
-									"name": "parexecSettings",
-									"type": "parameterexecuteDAT",
-									"parameters": {
-										"fromop": "=me.parent()",
-										"op": "=parent.Widget ",
-										"pars": "Buttonpanelexecute Buttoncustomizeinteraction",
-										"builtin": false,
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 200],
-									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes"
-								},
-								{
-									"name": "text1_callbacks",
-									"type": "textDAT",
-									"position": [400, 50],
-									"size": [160, 130],
-									"dock": "text"
-								}
-							]
-						},
-						{
-							"name": "buttonMin",
-							"type": "containerCOMP",
-							"parameters": {
-								"w": 32,
-								"h": "=parent.Widget.par.Buttonheight",
-								"fixedaspect": "vertical",
-								"hfillweight": "=parent.Widget.par.Buttonhfillweight",
-								"vmode": "fill",
-								"alignorder": 1,
-								"helpdat": "./code/help",
-								"topsmoothness": "mipmap",
-								"borderar": 0,
-								"borderag": 0,
-								"borderab": 0,
-								"borderaalpha": 0,
-								"borderbalpha": 0,
-								"borderover": false,
-								"align": "horizlr",
-								"justifyh": "left",
-								"justifyv": "center",
-								"crop": "on",
-								"ext0object": "op('./ButtonPushExt').module.ButtonPushExt(me)",
-								"ext0promote": true,
-								"parentshortcut": "Value"
-							},
-							"custom_pars": {
-								"Settings": {
-									"$t": "settings_2",
-									"Symbol": "=chr(0xF05B0)"
-								}
-							},
-							"flags": ["viewer"],
-							"size": [160, 155],
-							"color": [0.5, 0.35, 0.05],
-							"tags": ["TDPub"],
-							"children": [
-								{
-									"name": "text",
-									"type": "textCOMP",
-									"parameters": {
-										"text": "=parent.Value.par.Symbol",
-										"font": "Material Design Icons",
-										"scaletofit": "=parent.Widget.par.Buttonfontsizemode.eval()",
-										"fontsize": "=parent.Widget.par.Buttonfontsize.eval() if parent.Widget.par.Buttonfontsizemode.eval() in ['points', 'panelunits'] else parent.Widget.par.Buttonfontfraction.eval()",
-										"fontsizeunits": "=parent.Widget.par.Buttonfontsizemode.eval()",
-										"fontcolorr": "=me.par.Fontcolor.eval()[0]",
-										"fontcolorg": "=me.par.Fontcolor.eval()[1]",
-										"fontcolorb": "=me.par.Fontcolor.eval()[2]",
-										"fontalpha": "=me.par.Fontcolor.eval()[3]",
-										"textpaddingl": 11,
-										"textpaddingr": 11,
-										"textpaddingb": 11,
-										"textpaddingt": 11,
-										"alignxmode": "bbox",
-										"alignymode": "bbox",
-										"bgcolorr": "=me.par.Facecolor.eval()[0]",
-										"bgcolorg": "=me.par.Facecolor.eval()[1]",
-										"bgcolorb": "=me.par.Facecolor.eval()[2]",
-										"bgalpha": "=me.par.Facecolor.eval()[3]"
-									},
-									"custom_pars": {
-										"Expressions": {
-											"$t": "expressions",
-											"Value": "=parent.Value.panel.select",
-											"Fontcolor": "=parent.Widget.parGroup.Buttononfontcolor.eval() if me.par.Value.eval() else parent.Widget.parGroup.Buttonofffontcolor.eval()",
-											"Facecolor": "=parent.Widget.parGroup.Buttononfacecolor.eval() if me.par.Value.eval() else parent.Widget.parGroup.Buttonofffacecolor.eval()",
-											"Fontratio": "=None"
-										}
-									},
-									"position": [400, 200],
-									"size": [160, 155]
-								},
-								{
-									"name": "empty",
-									"type": "constantTOP"
-								},
-								{
-									"name": "rollover",
-									"type": "containerCOMP",
-									"parameters": {
-										"layer": 7,
-										"hmode": "fill",
-										"vmode": "fill",
-										"alignallow": "ignore",
-										"display": "=parent().panel.rollover or parent().panel.lselect",
-										"clickthrough": true,
-										"bgcolorr": "=parent.Widget.par.Rollovercolorr.eval()",
-										"bgcolorg": "=parent.Widget.par.Rollovercolorg.eval()",
-										"bgcolorb": "=parent.Widget.par.Rollovercolorb.eval()",
-										"bgalpha": "=parent.Widget.par.Rollovercolora.eval()",
-										"topsmoothness": "mipmap",
-										"borderover": false,
-										"composite": "add",
-										"enablecloning": false,
-										"reloadbuiltin": false
-									},
-									"flags": ["viewer"],
-									"position": [400, 400],
-									"size": [160, 155]
-								},
-								{
-									"name": "SubWidgetExt",
-									"type": "textDAT",
-									"parameters": {
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-500, 400],
-									"size": [130, 90],
-									"tags": ["TDExtension"]
-								},
-								{
-									"name": "ButtonPushExt",
-									"type": "textDAT",
-									"parameters": {
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 400],
-									"size": [130, 90],
-									"tags": ["TDExtension"]
-								},
-								{
-									"name": "panelexecValue",
-									"type": "panelexecuteDAT",
-									"parameters": {
-										"active": false,
-										"fromop": "=me.parent()",
-										"panelvalue": "lselect",
-										"ontooff": true,
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05]
-								},
-								{
-									"name": "panelExecOPExec",
-									"type": "opexecuteDAT",
-									"position": [-300, 100]
-								},
-								{
-									"name": "parexecSettings",
-									"type": "parameterexecuteDAT",
-									"parameters": {
-										"fromop": "=me.parent()",
-										"op": "=parent.Widget ",
-										"pars": "Buttonpanelexecute Buttoncustomizeinteraction",
-										"builtin": false,
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 200],
-									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes"
-								},
-								{
-									"name": "text1_callbacks",
-									"type": "textDAT",
-									"position": [400, 50],
-									"size": [160, 130],
-									"dock": "text"
-								}
-							]
-						},
-						{
-							"name": "panelexec1",
-							"type": "panelexecuteDAT",
-							"parameters": {
-								"fromop": "=parent()",
-								"panels": "button*",
-								"panelvalue": "lselect",
-								"language": "python"
-							},
-							"position": [200, -425]
-						},
-						{
-							"name": "buttonClose",
-							"type": "containerCOMP",
-							"parameters": {
-								"w": 32,
-								"h": "=parent.Widget.par.Buttonheight",
-								"fixedaspect": "vertical",
-								"hfillweight": "=parent.Widget.par.Buttonhfillweight",
-								"vmode": "fill",
-								"alignorder": 3,
-								"helpdat": "./code/help",
-								"topsmoothness": "mipmap",
-								"borderar": 0,
-								"borderag": 0,
-								"borderab": 0,
-								"borderaalpha": 0,
-								"borderbalpha": 0,
-								"borderover": false,
-								"align": "horizlr",
-								"justifyh": "left",
-								"justifyv": "center",
-								"crop": "on",
-								"ext0object": "op('./ButtonPushExt').module.ButtonPushExt(me)",
-								"ext0promote": true,
-								"parentshortcut": "Value",
-								"clone": "buttonMin"
-							},
-							"custom_pars": {
-								"Settings": {
-									"$t": "settings_2",
-									"Symbol": "=chr(0xF05AD)"
-								}
-							},
-							"flags": ["viewer"],
-							"position": [400, -200],
-							"size": [160, 155],
-							"color": [0.5, 0.35, 0.05],
-							"tags": ["TDPub"],
-							"children": [
-								{
-									"name": "text",
-									"type": "textCOMP",
-									"parameters": {
-										"text": "=parent.Value.par.Symbol",
-										"font": "Material Design Icons",
-										"scaletofit": "=parent.Widget.par.Buttonfontsizemode.eval()",
-										"fontsize": "=parent.Widget.par.Buttonfontsize.eval() if parent.Widget.par.Buttonfontsizemode.eval() in ['points', 'panelunits'] else parent.Widget.par.Buttonfontfraction.eval()",
-										"fontsizeunits": "=parent.Widget.par.Buttonfontsizemode.eval()",
-										"fontcolorr": "=me.par.Fontcolor.eval()[0]",
-										"fontcolorg": "=me.par.Fontcolor.eval()[1]",
-										"fontcolorb": "=me.par.Fontcolor.eval()[2]",
-										"fontalpha": "=me.par.Fontcolor.eval()[3]",
-										"textpaddingl": 11,
-										"textpaddingr": 11,
-										"textpaddingb": 11,
-										"textpaddingt": 11,
-										"alignxmode": "bbox",
-										"alignymode": "bbox",
-										"bgcolorr": "=me.par.Facecolor.eval()[0]",
-										"bgcolorg": "=me.par.Facecolor.eval()[1]",
-										"bgcolorb": "=me.par.Facecolor.eval()[2]",
-										"bgalpha": "=me.par.Facecolor.eval()[3]"
-									},
-									"custom_pars": {
-										"Expressions": {
-											"$t": "expressions",
-											"Value": "=parent.Value.panel.select",
-											"Fontcolor": "=parent.Widget.parGroup.Buttononfontcolor.eval() if me.par.Value.eval() else parent.Widget.parGroup.Buttonofffontcolor.eval()",
-											"Facecolor": "=parent.Widget.parGroup.Buttononfacecolor.eval() if me.par.Value.eval() else parent.Widget.parGroup.Buttonofffacecolor.eval()",
-											"Fontratio": "=None"
-										}
-									},
-									"position": [400, 200],
-									"size": [160, 155]
-								},
-								{
-									"name": "empty",
-									"type": "constantTOP"
-								},
-								{
-									"name": "rollover",
-									"type": "containerCOMP",
-									"parameters": {
-										"layer": 7,
-										"hmode": "fill",
-										"vmode": "fill",
-										"alignallow": "ignore",
-										"display": "=parent().panel.rollover or parent().panel.lselect",
-										"clickthrough": true,
-										"bgcolorr": "=parent.Widget.par.Rollovercolorr.eval()",
-										"bgcolorg": "=parent.Widget.par.Rollovercolorg.eval()",
-										"bgcolorb": "=parent.Widget.par.Rollovercolorb.eval()",
-										"bgalpha": "=parent.Widget.par.Rollovercolora.eval()",
-										"topsmoothness": "mipmap",
-										"borderover": false,
-										"composite": "add",
-										"enablecloning": false,
-										"reloadbuiltin": false
-									},
-									"flags": ["viewer"],
-									"position": [400, 400],
-									"size": [160, 155]
-								},
-								{
-									"name": "SubWidgetExt",
-									"type": "textDAT",
-									"parameters": {
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-500, 400],
-									"size": [130, 90],
-									"tags": ["TDExtension"]
-								},
-								{
-									"name": "ButtonPushExt",
-									"type": "textDAT",
-									"parameters": {
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 400],
-									"size": [130, 90],
-									"tags": ["TDExtension"]
-								},
-								{
-									"name": "panelexecValue",
-									"type": "panelexecuteDAT",
-									"parameters": {
-										"active": false,
-										"fromop": "=me.parent()",
-										"panelvalue": "lselect",
-										"ontooff": true,
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 0],
-									"color": [0.05, 0.5, 0.05]
-								},
-								{
-									"name": "panelExecOPExec",
-									"type": "opexecuteDAT",
-									"position": [-300, 100]
-								},
-								{
-									"name": "parexecSettings",
-									"type": "parameterexecuteDAT",
-									"parameters": {
-										"fromop": "=me.parent()",
-										"op": "=parent.Widget ",
-										"pars": "Buttonpanelexecute Buttoncustomizeinteraction",
-										"builtin": false,
-										"defaultreadencoding": "cp1252"
-									},
-									"position": [-300, 200],
-									"color": [0.05, 0.5, 0.05],
-									"comment": "Execution for parameter changes"
-								},
-								{
-									"name": "text1_callbacks",
-									"type": "textDAT",
-									"position": [400, 50],
-									"size": [160, 130],
-									"dock": "text"
-								}
-							]
-						},
-						{
-							"name": "parexec_width",
-							"type": "parameterexecuteDAT",
-							"parameters": {
-								"fromop": "=parent()",
-								"op": "../../manager",
-								"pars": "w h",
-								"language": "python"
-							},
-							"position": [-375, 100]
-						},
-						{
-							"name": "MinMaxCloseExt",
-							"type": "textDAT",
-							"position": [-200, 100],
-							"size": [130, 90],
-							"tags": ["TDExtension"]
-						},
-						{
-							"name": "extensionParExec",
-							"type": "parameterexecuteDAT",
-							"parameters": {
-								"fromop": "=parent()",
-								"op": "=parent()",
-								"pars": "*",
-								"builtin": false,
-								"defaultreadencoding": "cp1252"
-							},
-							"position": [-200, -125]
-						}
-					]
+					"position": [300, -200],
+					"size": [130, 90],
+					"color": [0.9, 0.3, 0.4],
+					"tags": ["py"]
+				},
+				{
+					"name": "button_close",
+					"type": "textCOMP",
+					"parameters": {
+						"text": "󰖭",
+						"callbacks": "button_close_callbacks",
+						"font": "Material Design Icons",
+						"fontsize": 12,
+						"w": 32,
+						"alignorder": 3,
+						"clickthrough": true,
+						"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.08 if me.fetch('hover', False) else 0)",
+						"bgalpha": 1
+					},
+					"position": [900, 0]
+				},
+				{
+					"name": "WindowHeaderExt",
+					"type": "textDAT",
+					"parameters": {
+						"file": "embody/Embody/windowHeader/WindowHeaderExt.py",
+						"loadonstart": true,
+						"language": "python"
+					},
+					"position": [0, -200],
+					"tags": ["py"]
 				}
 			]
 		},
@@ -2224,8 +864,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 8,
-					"Date": "2026-03-11 18:03:08 UTC",
+					"Build": 9,
+					"Date": "2026-03-13 05:30:08 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -2237,12 +877,10 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/fifo1_callbacks.py",
-				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-700, 280],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"],
 			"dock": "fifo1"
 		},
@@ -2251,12 +889,10 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/timer_callbacks.py",
-				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-625, -375],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"],
 			"dock": "timer1"
 		},
@@ -2394,12 +1030,10 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/keyboardin_callbacks.py",
-				"syncfile": true,
 				"language": "python"
 			},
+			"flags": ["viewer"],
 			"position": [-325, -375],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"],
 			"dock": "keyboardin1"
 		}

@@ -534,7 +534,7 @@
 			"name": "panelexec_left",
 			"type": "panelexecuteDAT",
 			"parameters": {
-				"panels": "/embody/Embody/toolbar/container_left",
+				"panels": "=op('container_left')",
 				"file": "embody/Embody/toolbar/panelexec_left.py"
 			},
 			"position": [1000, -200]
@@ -543,7 +543,7 @@
 			"name": "parexec_filter",
 			"type": "parameterexecuteDAT",
 			"parameters": {
-				"op": "/embody/Embody/toolbar/container_right/filter",
+				"op": "=op('container_right/filter')",
 				"pars": "text",
 				"custom": false,
 				"file": "embody/Embody/toolbar/parexec_filter.py"
@@ -704,7 +704,7 @@
 			"name": "panelexec_right",
 			"type": "panelexecuteDAT",
 			"parameters": {
-				"panels": "/embody/Embody/toolbar/container_right",
+				"panels": "=op('container_right')",
 				"file": "embody/Embody/toolbar/panelexec_right.py"
 			},
 			"position": [1200, -200]
@@ -713,7 +713,7 @@
 			"name": "parexec_responsive",
 			"type": "parameterexecuteDAT",
 			"parameters": {
-				"op": "../manager",
+				"op": "=op('../manager')",
 				"pars": "w",
 				"file": "embody/Embody/toolbar/parexec_responsive.py"
 			},
