@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 24,
-	"generator": "Embody/5.0.198",
+	"build": 25,
+	"generator": "Embody/5.0.208",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-11T18:03:08Z",
+	"exported_at": "2026-03-14T00:27:56Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false
@@ -289,7 +289,7 @@
 						"name": "Externalizations",
 						"style": "DAT",
 						"label": "Externalizations Table",
-						"value": "=me.op('externalizations')"
+						"value": "/embody/externalizations"
 					},
 					{
 						"name": "Openexternalizationstable",
@@ -338,6 +338,12 @@
 						"name": "Toxrestoreonstart",
 						"style": "Toggle",
 						"label": "Restore toxes on Start",
+						"value": true
+					},
+					{
+						"name": "Datrestoreonstart",
+						"style": "Toggle",
+						"label": "Restore DATs on Start",
 						"value": true
 					},
 					{
@@ -517,14 +523,12 @@
 						"name": "Tdnfile",
 						"style": "File",
 						"label": "TDN File",
-						"startSection": true,
-						"value": "/Users/rosco/Documents/Git/Embody/dev/embody/tdn_tests.tdn"
+						"startSection": true
 					},
 					{
 						"name": "Networkpath",
 						"style": "COMP",
-						"label": "Network Path",
-						"value": "/embody/tdn_tests"
+						"label": "Network Path"
 					},
 					{
 						"name": "Importtdn",
@@ -533,6 +537,15 @@
 					}
 				],
 				"Envoy": [
+					{
+						"name": "Aiclient",
+						"style": "Menu",
+						"label": "AI Client",
+						"default": "0",
+						"menuNames": ["claudecode", "cursor", "copilot", "windsurf", "none"],
+						"menuLabels": ["Claude Code", "Cursor", "GitHub Copilot", "Windsurf", "None"],
+						"value": "claudecode"
+					},
 					{
 						"name": "Envoyenable",
 						"style": "Toggle",
@@ -695,7 +708,7 @@
 						"style": "Str",
 						"startSection": true,
 						"readOnly": true,
-						"value": "5.0.198"
+						"value": "5.0.208"
 					},
 					{
 						"name": "Touchbuild",
@@ -715,7 +728,7 @@
 						"style": "Int",
 						"label": "Build Number",
 						"readOnly": true,
-						"value": 140
+						"value": 164
 					},
 					{
 						"name": "Github",
@@ -728,7 +741,7 @@
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-11 02:25:31 UTC"
+						"value": "2026-03-14 00:27:53 UTC"
 					},
 					{
 						"name": "Help",
@@ -743,14 +756,57 @@
 			"storage": {
 				"claudius_running": false,
 				"_tdn_restore_failures": ["/embody/base1"]
-			}
-		},
-		{
-			"name": "noise1",
-			"type": "noiseTOP",
-			"position": [1200, 0],
-			"size": [130, 90],
-			"color": [0.67, 0.67, 0.67]
+			},
+			"annotations": [
+				{
+					"name": "annotate1",
+					"mode": "annotate",
+					"title": "Claude Config",
+					"text": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation.",
+					"position": [-770, -1270],
+					"size": [600, 370],
+					"color": [0.45, 0.45, 0.45]
+				},
+				{
+					"name": "annotation_logic",
+					"mode": "annotate",
+					"title": "Logic",
+					"text": "Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.",
+					"position": [-800, 0],
+					"size": [700, 800],
+					"color": [0.485, 0.0, 0.2748],
+					"opacity": 0.9
+				},
+				{
+					"name": "annotation_tagging",
+					"mode": "annotate",
+					"title": "Tagging",
+					"text": "Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection).",
+					"position": [-800, -700],
+					"size": [700, 600],
+					"color": [0.1981, 0.5, 0.1765],
+					"opacity": 0.9
+				},
+				{
+					"name": "annotation_ui",
+					"mode": "annotate",
+					"title": "UI",
+					"text": "All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.",
+					"size": [1300, 1000],
+					"color": [0.45, 0.45, 0.45],
+					"opacity": 0.9
+				},
+				{
+					"name": "annotation_windows",
+					"mode": "annotate",
+					"title": "Windows",
+					"text": "Popup windows for the tagging menu and externalization manager UI.",
+					"position": [100, 600],
+					"size": [1140, 310],
+					"color": [0.574, 0.574, 0.574],
+					"opacity": 0.9
+				}
+			]
 		},
 		{
 			"name": "base_tdn",
@@ -759,7 +815,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 1,
-					"Date": "2026-03-10 22:27:46 UTC",
+					"Date": "2026-03-14 00:26:12 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -772,12 +828,26 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 2,
-					"Date": "2026-03-10 22:27:46 UTC",
+					"Date": "2026-03-14 00:26:12 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
 			"flags": ["viewer"],
 			"position": [425, -300]
+		},
+		{
+			"name": "base_test",
+			"type": "baseCOMP",
+			"custom_pars": {
+				"About": {
+					"$t": "about_2",
+					"Build": 1,
+					"Date": "2026-03-14 00:26:12 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"flags": ["viewer"],
+			"position": [700, -125]
 		},
 		{
 			"name": "tdn_tests",
@@ -786,7 +856,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 44,
-					"Date": "2026-03-10 22:27:46 UTC",
+					"Date": "2026-03-14 00:26:12 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -809,7 +879,7 @@
 				"About": {
 					"$t": "about_2",
 					"Build": 19,
-					"Date": "2026-03-11 01:44:31 UTC",
+					"Date": "2026-03-14 00:26:12 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -3211,7 +3281,69 @@
 						}
 					]
 				}
-			}
+			},
+			"annotations": [
+				{
+					"name": "annotate1",
+					"mode": "annotate",
+					"title": "Test Infrastructure",
+					"text": "Test runner, results table, and sandbox",
+					"position": [-70, -70],
+					"size": [700, 370],
+					"color": [0.22, 0.35, 0.22],
+					"opacity": 0.5
+				},
+				{
+					"name": "annotate2",
+					"mode": "annotate",
+					"title": "Embody Core Tests (13)",
+					"text": "Externalization, CRUD, file management, tagging,\nrename/move, delete, duplicates, sync, paths,\nparam tracking, operator queries, logging",
+					"position": [-70, -1070],
+					"size": [870, 930],
+					"color": [0.25, 0.3, 0.45],
+					"opacity": 0.5
+				},
+				{
+					"name": "annotate3",
+					"mode": "annotate",
+					"title": "MCP Tools Tests (13)",
+					"text": "Operators, parameters, DAT content, connections,\nannotations, extensions, diagnostics, flags/position,\ncode execution, externalization, performance, custom pars,\nTOP capture",
+					"position": [-70, -1870],
+					"size": [1070, 730],
+					"color": [0.45, 0.3, 0.25],
+					"opacity": 0.5
+				},
+				{
+					"name": "annotate4",
+					"mode": "annotate",
+					"title": "TDN Format Tests (4)",
+					"text": "Export/import, helpers, reconstruction, file I/O",
+					"position": [-70, -2270],
+					"size": [870, 330],
+					"color": [0.35, 0.35, 0.25],
+					"opacity": 0.5
+				},
+				{
+					"name": "annotate5",
+					"mode": "annotate",
+					"title": "Envoy Infrastructure Tests (3)",
+					"text": "Server lifecycle, STDIO bridge, thread communication,\nqueue processing, request throttling, log piggybacking",
+					"position": [-70, -2670],
+					"size": [670, 330],
+					"color": [0.35, 0.25, 0.35],
+					"opacity": 0.5
+				},
+				{
+					"name": "annotate6",
+					"mode": "annotate",
+					"title": "Claude Config Tests (1)",
+					"text": "Claude config generation pipeline, template DATs,\nwriteTemplate, writeClaudeMd, extractClaudeConfig",
+					"position": [-70, -3070],
+					"size": [270, 330],
+					"color": [0.3, 0.35, 0.4],
+					"opacity": 0.5
+				}
+			]
 		},
 		{
 			"name": "execute_src_ctrl",
@@ -3235,7 +3367,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 111,
+				"rows": 132,
 				"cols": 11
 			},
 			"flags": ["viewer"],
@@ -3268,8 +3400,7 @@
 				}
 			},
 			"position": [-700, -352],
-			"size": [329, 322],
-			"palette_clone": true
+			"size": [329, 322]
 		},
 		{
 			"name": "annotation_execute_src_ctrl",
@@ -3296,8 +3427,7 @@
 				}
 			},
 			"position": [-775, 50],
-			"size": [440, 480],
-			"palette_clone": true
+			"size": [440, 480]
 		},
 		{
 			"name": "annotation_externalizations",
@@ -3323,8 +3453,7 @@
 				}
 			},
 			"position": [-250, -50],
-			"size": [223, 279],
-			"palette_clone": true
+			"size": [223, 279]
 		}
 	],
 	"annotations": [

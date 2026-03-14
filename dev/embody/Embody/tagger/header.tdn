@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 2,
-	"generator": "Embody/5.0.197",
+	"generator": "Embody/5.0.208",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-11T03:13:58Z",
+	"exported_at": "2026-03-14T00:27:50Z",
 	"network_path": "/embody/Embody/tagger/header",
 	"options": {
 		"include_dat_content": false
@@ -47,7 +47,7 @@
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-11 03:10:55 UTC"
+						"value": "2026-03-14 00:26:13 UTC"
 					},
 					{
 						"name": "Touchbuild",
@@ -61,8 +61,8 @@
 			"flags": ["viewer"],
 			"position": [-200, 0],
 			"size": [160, 129],
-			"color": [0.325, 0.8, 0.3],
-			"tags": ["tox"]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		},
 		{
 			"name": "button_close",
@@ -93,8 +93,7 @@
 			},
 			"flags": ["viewer"],
 			"position": [50, 0],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "text1_callbacks",
@@ -108,7 +107,8 @@
 			"position": [-200, -160],
 			"size": [160, 130],
 			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"tags": ["py"],
+			"dock": "text1"
 		}
 	]
 }

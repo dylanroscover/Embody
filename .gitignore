@@ -25,3 +25,7 @@ site/
 
 # Embody / Envoy (auto-managed)
 .claude/envoy-bridge.py
+
+# Embody / Envoy (auto-managed)
+Backup/
+logs/

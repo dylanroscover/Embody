@@ -13,6 +13,8 @@ Output columns:
   strategy_state, depth, has_children
 """
 
+MAX_VISIBLE_ROWS = 100
+
 
 def onCook(scriptOp):
 	scriptOp.clear()
@@ -106,8 +108,14 @@ def onCook(scriptOp):
 	# Get expand/collapse state
 	expanded = parent.Embody.fetch('expanded_paths', None)
 	if expanded is None:
-		expanded = set(all_paths)
+		expanded = set()  # Start collapsed — users expand what they need
 		parent.Embody.store('expanded_paths', expanded)
+
+	# LRU tracking for row limit enforcement
+	expand_order = parent.Embody.fetch('expand_order', None)
+	if expand_order is None:
+		expand_order = list(expanded)  # seed from existing set if upgrading
+		parent.Embody.store('expand_order', expand_order)
 
 	# Sort and filter by visibility
 	sorted_paths = sorted(all_paths)
@@ -123,6 +131,51 @@ def onCook(scriptOp):
 			visible.append(path)
 			if path in has_children and path in expanded:
 				visible_expanded.add(path)
+
+	# Clean stale paths from LRU tracker (mutate in-place to keep reference)
+	expand_order[:] = [p for p in expand_order if p in all_paths]
+
+	# Enforce row limit — collapse the node with the fewest visible
+	# children first, but never collapse the active branch
+	active = expand_order[-1] if expand_order else None
+	protected = set()
+	if active:
+		parts = active.strip('/').split('/')
+		for i in range(1, len(parts) + 1):
+			protected.add('/' + '/'.join(parts[:i]))
+
+	def _child_count(p):
+		"""Count visible rows that are direct/indirect children of p."""
+		prefix = p + '/'
+		return sum(1 for v in visible if v.startswith(prefix))
+
+	while len(visible) > MAX_VISIBLE_ROWS:
+		# Candidates: any expanded node not in the active branch
+		candidates = [p for p in expanded if p not in protected
+		              and p in has_children]
+		if not candidates:
+			break  # nothing left to collapse without breaking active branch
+		# Collapse the candidate with the fewest visible children
+		smallest = min(candidates, key=_child_count)
+		if smallest in expand_order:
+			expand_order.remove(smallest)
+		expanded.discard(smallest)
+		# Rebuild visible list
+		visible_expanded = set()
+		visible = []
+		for path in sorted_paths:
+			parts = path.strip('/').split('/')
+			parent_path = '/' + '/'.join(parts[:-1]) if len(parts) > 1 else None
+			if (parent_path is None
+					or parent_path not in all_paths
+					or parent_path in visible_expanded):
+				visible.append(path)
+				if path in has_children and path in expanded:
+					visible_expanded.add(path)
+
+	# NOTE: expanded and expand_order are mutated in-place above.
+	# Do NOT call store() here — it triggers recooks and would cause
+	# an infinite cook loop since this DAT fetches from the same keys.
 
 	# Write output
 	out_headers = ['path', 'type', 'strategy', 'rel_file_path', 'timestamp',

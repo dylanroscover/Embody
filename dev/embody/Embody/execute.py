@@ -17,6 +17,8 @@ def onStart():
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
 	# Restore missing TOX-strategy COMPs from .tox files on disk
 	run(f"op('{parent.Embody}').RestoreTOXComps()", delayFrames=45)
+	# Restore missing standalone DATs from externalized files on disk
+	run(f"op('{parent.Embody}').RestoreDATs()", delayFrames=50)
 	# Reconstruct TDN-strategy COMPs from .tdn files
 	run(f"op('{parent.Embody}').ReconstructTDNComps()", delayFrames=60)
 	# Reconcile metadata for operators that exist but lost tags/colors/file params

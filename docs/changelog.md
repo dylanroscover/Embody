@@ -1,5 +1,26 @@
 # Changelog
 
+## v5.0.210
+
+DAT restoration on startup, continuity check hardening, manager list row limiting.
+
+- **Automatic DAT restoration**: New `RestoreDATs()` method recreates missing DAT-strategy operators from externalized files on project open (frame 50). Controlled by `Datrestoreonstart` parameter. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs
+- **Continuity check hardening**: Before removing entries for missing operators, checks if the backing file exists on disk — recoverable entries are preserved for restoration instead of being deleted
+- **Manager list row limiting**: Tree starts collapsed by default. LRU-based auto-collapse keeps visible rows under 100, protecting the active branch from being collapsed
+- **TDN structural cleanup**: toolbar.tdn and tagger.tdn shed embedded child definitions in favor of externalized `.tdn` files — smaller diffs, cleaner hierarchy
+- **base_test converted to TDN**: Replaced binary `base_test.tox` with `base_test.tdn` for diffability
+- **text_claude.md relocated**: Template moved from `Embody/` root into `Embody/templates/` alongside other template DATs
+- **New tests**: `test_dat_restoration.py` with 13 tests covering DAT restoration, skip conditions, and continuity check recovery
+
+## v5.0.208
+
+Settings auto-deploy, bridge template, Envoy startup resilience.
+
+- **settings.local.json auto-deploy**: Read-only MCP tool permissions deployed automatically on Envoy startup
+- **Bridge script template**: `text_envoy_bridge.py` and settings template moved into the templates COMP for centralized management
+- **Envoy startup resilience**: `_upgradeEnvoy()` failure no longer blocks MCP server startup
+- **`.gitignore` managed entries**: Expanded auto-managed entries to include `Backup/`, `logs/`, `CrashAutoSave*`
+
 ## v5.0.207
 
 Claude Code integration docs, slash commands, CLAUDE.md deduplication.

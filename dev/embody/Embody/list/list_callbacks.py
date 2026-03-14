@@ -403,11 +403,18 @@ def onSelect(comp, startRow, startCol, startCoords,
 		hc = data[row, 'has_children'].val == '1'
 		if hc:
 			expanded = parent.Embody.fetch('expanded_paths', set())
+			expand_order = parent.Embody.fetch('expand_order', [])
 			if path in expanded:
 				expanded.discard(path)
+				if path in expand_order:
+					expand_order.remove(path)
 			else:
 				expanded.add(path)
+				if path in expand_order:
+					expand_order.remove(path)
+				expand_order.append(path)
 			parent.Embody.store('expanded_paths', expanded)
+			parent.Embody.store('expand_order', expand_order)
 			parent.Embody.Refresh()
 
 	elif col == COL_TYPE:

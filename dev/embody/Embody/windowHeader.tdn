@@ -1,0 +1,184 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 1,
+	"generator": "Embody/5.0.208",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-14T00:27:21Z",
+	"network_path": "/embody/Embody/windowHeader",
+	"options": {
+		"include_dat_content": false
+	},
+	"type_defaults": {
+		"textCOMP": {
+			"parameters": {
+				"fontsizeunits": "points",
+				"fontcolorr": "=parent.Embody.par.Textcolorr",
+				"fontcolorg": "=parent.Embody.par.Textcolorg",
+				"fontcolorb": "=parent.Embody.par.Textcolorb",
+				"vmode": "fill",
+				"resizecomp": "=me",
+				"repocomp": "=me"
+			},
+			"size": [160, 130],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
+		}
+	},
+	"par_templates": {
+		"about": [
+			{
+				"label": "Build Number",
+				"name": "Build",
+				"readOnly": true,
+				"style": "Int"
+			},
+			{
+				"label": "Build Date",
+				"name": "Date",
+				"readOnly": true,
+				"style": "Str"
+			},
+			{
+				"label": "Touch Build",
+				"name": "Touchbuild",
+				"readOnly": true,
+				"style": "Str"
+			}
+		]
+	},
+	"operators": [
+		{
+			"name": "title",
+			"type": "textCOMP",
+			"parameters": {
+				"text": "=parent().par.Headerlabel",
+				"callbacks": "title_callbacks",
+				"font": "Open Sans",
+				"fontsize": 9,
+				"alignx": "left",
+				"hmode": "fill",
+				"reposition": "window",
+				"offsetx": 10
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about",
+					"Build": 1,
+					"Date": "2026-03-14 00:26:12 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			}
+		},
+		{
+			"name": "button_max",
+			"type": "textCOMP",
+			"parameters": {
+				"text": "󰖯",
+				"callbacks": "button_max_callbacks",
+				"font": "Material Design Icons",
+				"fontsize": 10,
+				"w": 32,
+				"alignorder": 2,
+				"clickthrough": true,
+				"bgcolorr": 1.0,
+				"bgcolorg": 1.0,
+				"bgcolorb": 1.0,
+				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about",
+					"Build": 1,
+					"Date": "2026-03-14 00:26:12 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"position": [600, 0]
+		},
+		{
+			"name": "button_min",
+			"type": "textCOMP",
+			"parameters": {
+				"text": "󰖰",
+				"callbacks": "button_min_callbacks",
+				"font": "Material Design Icons",
+				"fontsize": 10,
+				"w": 32,
+				"alignorder": 1,
+				"clickthrough": true,
+				"bgcolorr": 1.0,
+				"bgcolorg": 1.0,
+				"bgcolorb": 1.0,
+				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about",
+					"Build": 1,
+					"Date": "2026-03-14 00:26:12 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"position": [300, 0]
+		},
+		{
+			"name": "panelexec1",
+			"type": "panelexecuteDAT",
+			"parameters": {
+				"fromop": "=parent()",
+				"panelvalue": "*",
+				"ontooff": true,
+				"valuechange": true,
+				"file": "embody/Embody/windowHeader/panelexec1.py",
+				"syncfile": true,
+				"loadonstart": true,
+				"language": "python"
+			},
+			"position": [300, -200],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		},
+		{
+			"name": "button_close",
+			"type": "textCOMP",
+			"parameters": {
+				"text": "󰖭",
+				"callbacks": "button_close_callbacks",
+				"font": "Material Design Icons",
+				"fontsize": 10,
+				"w": 32,
+				"alignorder": 3,
+				"clickthrough": true,
+				"bgcolorr": 1.0,
+				"bgcolorg": 1.0,
+				"bgcolorb": 1.0,
+				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
+			},
+			"custom_pars": {
+				"About": {
+					"$t": "about",
+					"Build": 1,
+					"Date": "2026-03-14 00:26:12 UTC",
+					"Touchbuild": "2025.32280"
+				}
+			},
+			"position": [900, 0]
+		},
+		{
+			"name": "WindowHeaderExt",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/windowHeader/WindowHeaderExt.py",
+				"syncfile": true,
+				"loadonstart": true,
+				"language": "python"
+			},
+			"position": [0, -200],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		}
+	]
+}

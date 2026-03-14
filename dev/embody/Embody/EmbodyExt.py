@@ -2382,6 +2382,14 @@ class EmbodyExt:
                             old_op_path, rel_file_path, externalizationsFolder, processed_ops
                         )
                         if not found_moved:
+                            # Before removing: if the file exists on disk, the
+                            # entry is recoverable (RestoreDATs / RestoreTOXComps
+                            # will recreate it). Do NOT remove.
+                            if rel_file_path:
+                                abs_file = self.buildAbsolutePath(
+                                    self.normalizePath(rel_file_path))
+                                if abs_file.is_file():
+                                    continue  # Recoverable — skip
                             # Operator was replaced, not moved - remove old entry
                             self.Log(f"Operator at '{old_op_path}' was replaced", "WARNING")
                             self._handleMissingOperator(old_op_path, rel_file_path)
@@ -2391,6 +2399,14 @@ class EmbodyExt:
                         old_op_path, rel_file_path, externalizationsFolder, processed_ops
                     )
                     if not found_renamed:
+                        # Before removing: if the file exists on disk, the
+                        # entry is recoverable (RestoreDATs / RestoreTOXComps
+                        # will recreate it). Do NOT remove.
+                        if rel_file_path:
+                            abs_file = self.buildAbsolutePath(
+                                self.normalizePath(rel_file_path))
+                            if abs_file.is_file():
+                                continue  # Recoverable — skip
                         self._handleMissingOperator(old_op_path, rel_file_path)
 
         except Exception as e:
@@ -4587,6 +4603,193 @@ class EmbodyExt:
         else:
             self.Log(
                 f'TOX restoration complete: {restored} COMP(s) restored '
+                f'successfully',
+                'SUCCESS')
+
+    # ==========================================================================
+    # DAT RESTORATION ON START
+    # ==========================================================================
+
+    def RestoreDATs(self) -> None:
+        """Restore missing DATs from externalized files on project open.
+
+        For each DAT-strategy entry in the externalizations table where the
+        operator is missing but the source file exists on disk, creates the
+        correct DAT type and configures file/syncfile for auto-sync.
+        """
+        if not self.my.par.Datrestoreonstart.eval():
+            return
+
+        dat_entries = self._getDATEntries()
+        if not dat_entries:
+            return
+
+        # Supported DAT types (matches self.supported_dat_types)
+        valid_dat_types = set(self.supported_dat_types)
+
+        # Filter to only missing DATs with existing files on disk
+        to_restore = []
+        for dat_path, rel_file_path, dat_type, strategy in dat_entries:
+            if op(dat_path):
+                continue  # Already exists in network
+            abs_path = self.buildAbsolutePath(rel_file_path)
+            if not abs_path.is_file():
+                self.Log(f'File not found for missing DAT '
+                         f'{dat_path}: {rel_file_path}', 'WARNING')
+                continue
+            to_restore.append((dat_path, rel_file_path, dat_type, strategy))
+
+        if not to_restore:
+            return
+
+        self.Log(f'Restoring {len(to_restore)} DAT(s) from disk...', 'INFO')
+        restored = 0
+        errors = 0
+
+        for dat_path, rel_file_path, dat_type, strategy in to_restore:
+            # Check if it appeared (e.g. loaded as child of a parent .tox)
+            if op(dat_path):
+                restored += 1
+                self.Log(f'DAT {dat_path} already present '
+                         f'(loaded from parent)', 'INFO')
+                continue
+
+            # Verify parent exists and is a COMP
+            parent_path = dat_path.rsplit('/', 1)[0] or '/'
+            parent_op = op(parent_path)
+            if not parent_op:
+                self.Log(f'Parent {parent_path} not found, cannot restore '
+                         f'{dat_path}', 'WARNING')
+                errors += 1
+                continue
+
+            if not hasattr(parent_op, 'create'):
+                self.Log(f'Parent {parent_path} is not a COMP, cannot restore '
+                         f'{dat_path}', 'WARNING')
+                errors += 1
+                continue
+
+            if dat_type not in valid_dat_types:
+                self.Log(f'Unknown DAT type "{dat_type}" for '
+                         f'{dat_path}', 'WARNING')
+                errors += 1
+                continue
+
+            dat_name = dat_path.rsplit('/', 1)[-1]
+            td_type = f'{dat_type}DAT'
+            try:
+                new_dat = parent_op.create(td_type, dat_name)
+            except Exception as e:
+                self.Log(f'Failed to create {dat_path} '
+                         f'(type {td_type}): {e}', 'ERROR')
+                errors += 1
+                continue
+
+            try:
+                # Configure file sync
+                normalized = self.normalizePath(rel_file_path)
+                new_dat.par.file = normalized
+                new_dat.par.syncfile = True
+                new_dat.par.file.readOnly = True
+
+                # Kick syncfile to force TD to read from disk
+                op_path = str(new_dat)
+                run(lambda p=op_path: self._safeSyncFile(p, False),
+                    delayFrames=1)
+                run(lambda p=op_path: self._safeSyncFile(p, True),
+                    delayFrames=2)
+
+                # Set language/extension for text DATs
+                self._setDATLanguageForTag(new_dat, strategy)
+
+                # Apply tag and color
+                if strategy:
+                    new_dat.tags.add(strategy)
+                new_dat.color = (self.my.par.Dattagcolorr.eval(),
+                                 self.my.par.Dattagcolorg.eval(),
+                                 self.my.par.Dattagcolorb.eval())
+
+                # Restore position from table metadata
+                self._restorePositionFromTable(new_dat, dat_path)
+
+                restored += 1
+                self.Log(f'Restored {dat_path} from {rel_file_path}',
+                         'SUCCESS')
+
+            except Exception as e:
+                self.Log(f'Failed to configure DAT {dat_path}: {e}', 'ERROR')
+                errors += 1
+
+        self._logDATRestorationReport(len(to_restore), restored, errors)
+
+    def _getDATEntries(self) -> list[tuple[str, str, str, str]]:
+        """Get all DAT-strategy entries from the externalizations table.
+
+        Returns list of (dat_path, rel_file_path, dat_type, strategy) tuples,
+        sorted by path depth (shallowest first).
+
+        Never includes Embody itself or its descendants.
+        Excludes DATs inside TOX-strategy or TDN-strategy COMPs
+        (those are handled by RestoreTOXComps / ReconstructTDNComps).
+        """
+        table = self.Externalizations
+        if not table:
+            return []
+        if table[0, 'strategy'] is None:
+            return []  # Legacy table without strategy column
+
+        embody_path = self.my.path
+
+        # Collect TOX/TDN COMP paths so we can skip DATs inside them
+        comp_paths = set()
+        for i in range(1, table.numRows):
+            strategy = table[i, 'strategy'].val
+            if strategy in ('tox', 'tdn'):
+                comp_paths.add(table[i, 'path'].val)
+
+        result = []
+        for i in range(1, table.numRows):
+            strategy = table[i, 'strategy'].val
+            if strategy in ('tox', 'tdn', ''):
+                continue  # COMP strategies or empty
+
+            dat_path = table[i, 'path'].val
+            if not dat_path:
+                continue
+
+            # Never include Embody or its descendants
+            if (dat_path == embody_path
+                    or dat_path.startswith(embody_path + '/')):
+                continue
+
+            # Skip DATs inside TOX/TDN COMPs
+            inside_comp = any(
+                dat_path.startswith(cp + '/')
+                for cp in comp_paths)
+            if inside_comp:
+                continue
+
+            result.append((
+                dat_path,
+                table[i, 'rel_file_path'].val,
+                table[i, 'type'].val,
+                strategy,
+            ))
+
+        # Sort by path depth — shallowest first
+        result.sort(key=lambda x: x[0].count('/'))
+        return result
+
+    def _logDATRestorationReport(self, total, restored, errors) -> None:
+        """Log a summary report after DAT restoration."""
+        if errors:
+            self.Log(
+                f'DAT restoration complete: {restored}/{total} DAT(s) '
+                f'restored, {errors} error(s)',
+                'WARNING')
+        else:
+            self.Log(
+                f'DAT restoration complete: {restored} DAT(s) restored '
                 f'successfully',
                 'SUCCESS')
 
