@@ -14,13 +14,14 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 
 ## Critical Rules
 
-1. **Always use Envoy MCP tools** to inspect and modify anything inside TouchDesigner — never say "I can't access that binary file."
-2. **Do NOT assume network paths** — use `query_network` on `/` to discover the actual root structure.
-3. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
-4. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
-5. **Always use forward slashes** in file paths.
-6. **Check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creation.
-7. **Thread boundary**: MCP server worker thread must never import TD modules. All TD access goes through `_execute_in_td()`.
+1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
+2. **Use Envoy MCP tools for live TD state and non-TDN operators** — never say "I can't access that binary file." For operators not externalized as TDN, use MCP tools to inspect and modify them.
+3. **Do NOT assume network paths** — use `query_network` on `/` to discover the actual root structure.
+4. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
+5. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
+6. **Always use forward slashes** in file paths.
+7. **Check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creation.
+8. **Thread boundary**: MCP server worker thread must never import TD modules. All TD access goes through `_execute_in_td()`.
 
 ---
 
