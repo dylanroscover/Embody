@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.190-blue)
+![Version](https://img.shields.io/badge/version-5.0.210-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -179,11 +179,12 @@ See the [full changelog](docs/changelog.md) for detailed version history.
 
 **Recent releases:**
 
+- **5.0.210**: DAT restoration on startup, continuity check hardening, manager list row limiting
+- **5.0.208**: Settings auto-deploy, bridge template, Envoy startup resilience
+- **5.0.206**: Metadata reconciliation, network layout tool, TDN companion dedup
+- **5.0.204**: Custom window header, path portability, TDN cleanup
+- **5.0.201**: Robust first-install init, table schema expansion, release build hardening
 - **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs fully restored from disk on project open
-- **5.0.178**: Reload from disk, full project TDN safety, continuity hardening
-- **5.0.171**: Export Portable Tox, improved tag management, TDN error handling
-- **5.0.140**: TDN strip/restore hardening, post-import validation, companion DAT reuse
-- **5.0.130**: TDN strategy externalization, strip/restore save cycle, compact TDN format
 - **5.0**: Envoy MCP server (40+ tools), TDN format, test framework (30 suites), macOS support
 
 ---
