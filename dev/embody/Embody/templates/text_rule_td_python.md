@@ -19,15 +19,63 @@ Essential rules to prevent common mistakes. For full API reference, use the `/td
 - **Never call `op()`, `parent()`, or access TD objects at module level**. Module-level code executes during import, before the network is ready. Defer to methods.
 - **DAT naming conflicts**: TD searches for DATs by name before `sys.path`. A DAT named `json` shadows Python's stdlib `json`. Name DATs carefully.
 
-## Operator Path Portability
+## Operator Referencing
 
-- **NEVER use absolute paths in expressions** — `op('/embody/Embody/...')` breaks the moment Embody is renamed or relocated. This is a portability cardinal sin.
-- **Same-container siblings**: `op('sibling_name')` — bare name resolves within the current network.
-- **Children of the current COMP**: `op('./child_name')` — dot-slash addresses operators INSIDE `me`.
-- **Parent network operators**: `op('../sibling_of_parent')` — double-dot navigates up one network level.
-- **Extension-relative**: `parent.Embody.op('subpath/op_name')` — navigate from the Embody COMP shortcut.
-- **Global OP shortcuts**: `op.MyShortcut` — for project-wide operators assigned a Global OP Shortcut.
-- **Anywhere you type `/embody/` or `/project1/` in an expression is a bug.**
+How you reference an operator matters. A wrong choice works today and breaks tomorrow — when the component is renamed, instanced, or moved. The goal is always to pick the **narrowest, most portable reference** that correctly resolves from where the code runs.
+
+**Absolute paths are always wrong.** `op('/embody/Embody/...')` or `op('/project1/...')` hardcodes the entire network hierarchy. The moment anything is renamed, relocated, or instanced, it breaks. If you see a `/` at the start of an operator path in an expression, it's a bug.
+
+### Relative Paths — for operators near you
+
+Use relative paths when the target operator is in the same network or a nearby one. These are the simplest and most portable references because they describe relationships, not locations.
+
+- `op('sibling_name')` — another operator in the same network (same parent COMP).
+- `op('./child_name')` — an operator inside `me` (only valid from a COMP).
+- `op('../sibling_of_parent')` — an operator in the parent's network (go up one level, then find by name).
+
+Relative paths break down when you need to reach across distant parts of the network. That's where shortcuts come in.
+
+### Parent Shortcuts (`parent.CompName`) — for reaching your owner
+
+A Parent Shortcut is set on a COMP's Common page via the `parentshortcut` parameter. Once configured, any operator that is a descendant of that COMP (child, grandchild, etc.) can reference it as `parent.CompName`. TD resolves this by walking up the parent chain from the caller until it finds a COMP whose Parent Shortcut matches.
+
+This is the right choice when code running **inside** a component needs to reach the component itself — typically to call extension methods or navigate relative to the component root.
+
+- `parent.Embody.Update()` — call a promoted extension method.
+- `parent.Embody.ext.Embody.helperMethod()` — reach a non-promoted method.
+- `parent.Embody.op('subpath/op_name')` — navigate from the component root to find an internal operator.
+
+Key properties:
+- **Reusable across instances**: Multiple COMPs can use the same Parent Shortcut name. Each descendant resolves to its own nearest matching ancestor — so the same code works identically across every instance of a component.
+- **Only resolves from inside**: Code that is not a descendant of the COMP will not find it via `parent.CompName`. This is a feature, not a limitation — it keeps references scoped to where they belong.
+- **Not the same as `parent()`**: `parent()` always returns the immediate parent COMP. `parent.CompName` searches upward by name and can skip multiple levels.
+
+### Global OP Shortcuts (`op.CompName`) — for project-wide access
+
+A Global OP Shortcut is set on a COMP's Common page via the `opshortcut` parameter. It registers the COMP so that `op.CompName` resolves to it from **anywhere** in the project.
+
+This is the right choice for singleton services that many unrelated parts of the project need to reach — logging, test runners, shared managers.
+
+- `op.Embody.Log('message')` — call Embody's logging from anywhere.
+- `op.unit_tests.RunTests()` — kick off the test runner from any script.
+
+Key properties:
+- **Globally unique**: Only one COMP can hold a given Global OP Shortcut name at a time. Assigning a name already in use removes it from the previous holder.
+- **Use sparingly**: If `parent.CompName` works, prefer it. Global shortcuts create invisible coupling — any code anywhere can depend on the name existing, making renames and refactors risky.
+
+### Choosing the right reference
+
+Think about **where the calling code lives** relative to the target:
+
+| Relationship | Pattern | Why |
+|---|---|---|
+| Same network (siblings) | `op('name')` | Simplest. No hierarchy traversal. |
+| Inside your own COMP | `op('./child')` | Reaches your children explicitly. |
+| Up one level | `op('../name')` | Reaches parent's siblings. |
+| Anywhere inside a component | `parent.CompName` | Scoped to descendants. Supports instancing. |
+| Anywhere in the project | `op.CompName` | Global singleton access. Use only when parent shortcut can't work. |
+
+**Always verify references resolve correctly.** After writing an expression or script that uses `op()`, `parent.X`, or `op.X`, confirm the target exists and the path resolves from the calling context. A reference that returns `None` silently (or worse, finds the wrong operator) is a latent bug.
 
 ## Extensions
 
