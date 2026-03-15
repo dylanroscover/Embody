@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.210-blue)
+![Version](https://img.shields.io/badge/version-5.0.217-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -148,7 +148,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **30 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **36 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -179,6 +179,7 @@ See the [full changelog](docs/changelog.md) for detailed version history.
 
 **Recent releases:**
 
+- **5.0.217**: TDN target COMP parameter preservation, user-prompted file cleanup, dock safety, git init hardening
 - **5.0.210**: DAT restoration on startup, continuity check hardening, manager list row limiting
 - **5.0.208**: Settings auto-deploy, bridge template, Envoy startup resilience
 - **5.0.206**: Metadata reconciliation, network layout tool, TDN companion dedup

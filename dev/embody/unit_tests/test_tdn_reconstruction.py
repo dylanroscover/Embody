@@ -38,7 +38,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'), f'Export failed: {orig}')
 		orig_tdn = orig['tdn']
 
-		# Clear children
+		# Clear dock relationships before destroying — TD raises an
+		# uncatchable tdError if a dock target is destroyed first.
+		for c in list(parent.children):
+			try:
+				if c.dock is not None:
+					c.dock = None
+			except Exception:
+				pass
 		for c in list(parent.children):
 			c.destroy()
 
@@ -1500,6 +1507,126 @@ class TestTDNReconstruction(EmbodyTestCase):
 		names = self._getOpNames(self.sandbox)
 		self.assertIn('old_op', names)
 		self.assertNotIn('extra', names)
+
+	# =================================================================
+	# K2. Target COMP Parameter Preservation (5 tests)
+	# =================================================================
+
+	def test_K09_target_custom_pars_survive_clear_first(self):
+		"""Target COMP's own custom parameters must survive clear_first import."""
+		page = self.sandbox.appendCustomPage('Creds')
+		page.appendFile('Privatekey', label='Private Key')
+		page.appendStr('Databaseid', label='Database ID')
+		page.appendToggle('Autoconnect', label='Auto Connect')
+		self.sandbox.par.Privatekey = '/path/to/key.json'
+		self.sandbox.par.Databaseid = 'my-project-id'
+		self.sandbox.par.Autoconnect = True
+
+		# Add a child so export has something
+		self.sandbox.create(noiseTOP, 'noise1')
+
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn_doc = orig['tdn']
+
+		# Verify custom_pars in exported TDN
+		self.assertIn('custom_pars', tdn_doc,
+			'TDN should include target COMP custom_pars')
+
+		# Import with clear_first (simulates reconstruction)
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn_doc, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		# Values must survive
+		self.assertEqual(self.sandbox.par.Privatekey.eval(), '/path/to/key.json')
+		self.assertEqual(self.sandbox.par.Databaseid.eval(), 'my-project-id')
+		self.assertEqual(self.sandbox.par.Autoconnect.eval(), True)
+
+	def test_K10_target_custom_par_expression_survives(self):
+		"""Target COMP custom par in expression mode must survive roundtrip."""
+		page = self.sandbox.appendCustomPage('Test')
+		page.appendFloat('Speed', label='Speed')
+		self.sandbox.par.Speed.expr = 'absTime.seconds'
+		self.sandbox.par.Speed.mode = ParMode.EXPRESSION
+
+		self.sandbox.create(noiseTOP, 'noise1')
+
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=orig['tdn'], clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertEqual(self.sandbox.par.Speed.mode, ParMode.EXPRESSION)
+		self.assertEqual(self.sandbox.par.Speed.expr, 'absTime.seconds')
+
+	def test_K11_target_builtin_params_survive(self):
+		"""Target COMP non-default built-in params must survive roundtrip."""
+		self.sandbox.par.parentshortcut = 'mycomp'
+
+		self.sandbox.create(noiseTOP, 'noise1')
+
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		tdn_doc = orig['tdn']
+
+		# Verify parameters in exported TDN
+		self.assertIn('parameters', tdn_doc,
+			'TDN should include target COMP non-default parameters')
+
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn_doc, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertEqual(self.sandbox.par.parentshortcut.eval(), 'mycomp')
+
+	def test_K12_target_pars_on_missing_shell(self):
+		"""Custom pars must be created on a bare COMP from TDN data."""
+		page = self.sandbox.appendCustomPage('Config')
+		page.appendFloat('Threshold', label='Threshold')
+		self.sandbox.par.Threshold = 0.75
+
+		self.sandbox.create(noiseTOP, 'noise1')
+
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		tdn_doc = orig['tdn']
+
+		# Destroy custom page to simulate bare shell
+		for p in list(self.sandbox.customPages):
+			p.destroy()
+		self.assertFalse(hasattr(self.sandbox.par, 'Threshold'))
+
+		# Import should recreate custom pars from TDN
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn_doc, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertTrue(hasattr(self.sandbox.par, 'Threshold'))
+		self.assertApproxEqual(self.sandbox.par.Threshold.eval(), 0.75)
+
+	def test_K13_backward_compat_no_container_fields(self):
+		"""Import of TDN without top-level custom_pars/parameters must not error."""
+		self.sandbox.create(noiseTOP, 'noise1')
+
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		tdn_doc = orig['tdn']
+
+		# Strip the new fields to simulate old TDN format
+		tdn_doc.pop('custom_pars', None)
+		tdn_doc.pop('parameters', None)
+
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn_doc, clear_first=True)
+		self.assertTrue(result.get('success'))
 
 	# =================================================================
 	# L. Embody Self-Protection (3 tests)

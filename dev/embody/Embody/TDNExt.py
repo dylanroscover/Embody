@@ -192,6 +192,14 @@ class TDNExt:
 				tdn['type_defaults'] = type_defaults
 			if par_templates:
 				tdn['par_templates'] = par_templates
+			# Target COMP's own parameters (custom + non-default built-in)
+			root_custom_pars = self._exportCustomPars(root_op)
+			if root_custom_pars:
+				tdn['custom_pars'] = root_custom_pars
+			root_builtin_params = self._exportBuiltinParams(root_op)
+			if root_builtin_params:
+				tdn['parameters'] = root_builtin_params
+
 			tdn['operators'] = operators
 
 			# Root-level annotations
@@ -673,6 +681,15 @@ class TDNExt:
 			return {'error': 'Invalid .tdn format'}
 
 		if clear_first:
+			# Clear dock relationships before destroying — TD's engine
+			# raises an uncatchable tdError if a dock target is destroyed
+			# before its docked operator.
+			for child in list(dest.children):
+				try:
+					if child.dock is not None:
+						child.dock = None
+				except Exception:
+					pass
 			for child in list(dest.children):
 				try:
 					child.destroy()
@@ -701,8 +718,14 @@ class TDNExt:
 		try:
 			created = []
 
+			# Snapshot pre-existing children so Phase 1 can distinguish
+			# them from auto-created companions during merge imports.
+			pre_existing = (
+				set() if clear_first
+				else {c.name for c in dest.children})
+
 			# Phase 1: Create all operators (depth-first)
-			self._createOps(dest, op_defs, created)
+			self._createOps(dest, op_defs, created, pre_existing)
 
 			# Phase 2: Create custom parameters
 			self._createCustomPars(dest, op_defs)
@@ -751,6 +774,20 @@ class TDNExt:
 					if children:
 						_cleanupRefs(children)
 			_cleanupRefs(op_defs)
+
+			# Phase 9: Apply target COMP's own parameters from TDN.
+			# Runs AFTER child creation so extension reinit (triggered by
+			# recreating extension source DATs) has already happened —
+			# this overwrites any defaults the extension set.
+			if isinstance(tdn, dict):
+				tdn_custom = tdn.get('custom_pars', {})
+				if tdn_custom:
+					flat_defs = self._flattenCustomPars(tdn_custom)
+					self._createCustomParsOnOp(dest, flat_defs)
+					self._setCustomParValues(dest, flat_defs)
+				tdn_params = tdn.get('parameters', {})
+				for par_name, value in tdn_params.items():
+					self._setParValue(dest, par_name, value)
 
 			self._log(
 				f'Imported {len(created)} operators into {target_path}',
@@ -1115,6 +1152,10 @@ class TDNExt:
 		if first_par.readOnly:
 			par_def['readOnly'] = True
 
+		# Help text
+		if first_par.help:
+			par_def['help'] = first_par.help
+
 		# Current values — only if different from default
 		if len(group) == 1:
 			val = self._getParValue(first_par)
@@ -1432,7 +1473,7 @@ class TDNExt:
 			return created
 		return parent.op(op_def.get('name', ''))
 
-	def _createOps(self, parent, op_defs, created):
+	def _createOps(self, parent, op_defs, created, pre_existing=None):
 		"""Phase 1: Create all operators depth-first.
 
 		Stores a reference to each created operator in op_def['_created_op']
@@ -1441,9 +1482,18 @@ class TDNExt:
 
 		Auto-created companion DATs (e.g. timerCHOP callbacks, rampTOP keys)
 		are reused rather than duplicated — if an operator with the target
-		name already exists in the parent, it was auto-created by a prior
-		create() call in this same import pass.
+		name already exists in the parent AND was NOT present before import
+		started, it was auto-created by a sibling's create() earlier in
+		this same import pass.
+
+		Args:
+			pre_existing: Set of operator names that existed in the parent
+				before import started. Operators in this set are NOT reused
+				(a new op is created, possibly auto-renamed by TD).
 		"""
+		if pre_existing is None:
+			pre_existing = set()
+
 		for op_def in op_defs:
 			name = op_def.get('name')
 			op_type = op_def.get('type')
@@ -1451,11 +1501,11 @@ class TDNExt:
 				continue
 
 			# Reuse auto-created companions (e.g. timerCHOP callbacks,
-			# rampTOP keys). With clear_first=True the container was empty
-			# before Phase 1, so any existing op was auto-created by a
-			# sibling's create() earlier in this loop.
+			# rampTOP keys) — but only if the op was NOT present before
+			# import started (i.e. it was auto-created by a sibling's
+			# create() earlier in this same import pass).
 			existing = parent.op(name)
-			if existing is not None:
+			if existing is not None and name not in pre_existing:
 				created.append(existing.path)
 				op_def['_created_op'] = existing
 				self._log(
@@ -1640,6 +1690,10 @@ class TDNExt:
 				if par_def.get('readOnly'):
 					par.readOnly = True
 
+				# Help text
+				if par_def.get('help'):
+					par.help = par_def['help']
+
 			except Exception as e:
 				self._log(
 					f'Failed to create custom par "{par_name}": {e}',
@@ -1659,48 +1713,56 @@ class TDNExt:
 			# Custom parameter values
 			flat_defs = TDNExt._flattenCustomPars(
 				op_def.get('custom_pars', {}))
-			for par_def in flat_defs:
-				par_name = par_def.get('name', '')
-				style = par_def.get('style', '')
-
-				# Single value
-				if 'value' in par_def:
-					value = par_def['value']
-					if value is not None:
-						self._setParValue(target, par_name, value)
-
-				# Multi-component values
-				if 'values' in par_def:
-					suffixes = STYLE_SUFFIXES.get(style, [])
-					values = par_def['values']
-
-					if suffixes:
-						# Strip first suffix from par_name to get base
-						# (e.g., 'Tintr' → 'Tint' for RGBA)
-						base_name = par_name
-						first_suffix = suffixes[0]
-						if par_name.endswith(first_suffix):
-							base_name = par_name[:-len(first_suffix)]
-
-						# TD reports 'RGBA' for both RGB and RGBA;
-						# use values count to pick correct suffixes
-						actual_suffixes = suffixes[:len(values)]
-
-						for suffix, val in zip(actual_suffixes, values):
-							if val is not None:
-								self._setParValue(
-									target, base_name + suffix, val)
-					elif style in ('Float', 'Int') and len(values) > 1:
-						# Numeric multi-component: suffix is 1, 2, 3...
-						for i, val in enumerate(values):
-							if val is not None:
-								self._setParValue(
-									target, f'{par_name}{i+1}', val)
+			self._setCustomParValues(target, flat_defs)
 
 			# Recurse
 			children = op_def.get('children', [])
 			if children and target.isCOMP:
 				self._setParameters(target, children)
+
+	def _setCustomParValues(self, target, flat_defs):
+		"""Set custom parameter values on a single operator from flat defs.
+
+		Handles single values, multi-component values (RGB, XYZ, etc.),
+		and expression/bind modes via _setParValue shorthand.
+		"""
+		for par_def in flat_defs:
+			par_name = par_def.get('name', '')
+			style = par_def.get('style', '')
+
+			# Single value
+			if 'value' in par_def:
+				value = par_def['value']
+				if value is not None:
+					self._setParValue(target, par_name, value)
+
+			# Multi-component values
+			if 'values' in par_def:
+				suffixes = STYLE_SUFFIXES.get(style, [])
+				values = par_def['values']
+
+				if suffixes:
+					# Strip first suffix from par_name to get base
+					# (e.g., 'Tintr' → 'Tint' for RGBA)
+					base_name = par_name
+					first_suffix = suffixes[0]
+					if par_name.endswith(first_suffix):
+						base_name = par_name[:-len(first_suffix)]
+
+					# TD reports 'RGBA' for both RGB and RGBA;
+					# use values count to pick correct suffixes
+					actual_suffixes = suffixes[:len(values)]
+
+					for suffix, val in zip(actual_suffixes, values):
+						if val is not None:
+							self._setParValue(
+								target, base_name + suffix, val)
+				elif style in ('Float', 'Int') and len(values) > 1:
+					# Numeric multi-component: suffix is 1, 2, 3...
+					for i, val in enumerate(values):
+						if val is not None:
+							self._setParValue(
+								target, f'{par_name}{i+1}', val)
 
 	def _setParValue(self, target, par_name, value):
 		"""Set a single parameter value (constant, expression, or bind).

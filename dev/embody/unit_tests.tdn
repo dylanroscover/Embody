@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 19,
-	"generator": "Embody/5.0.209",
+	"generator": "Embody/5.0.216",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T05:40:40Z",
+	"exported_at": "2026-03-15T04:46:23Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false
@@ -20,6 +20,37 @@
 			"tags": ["py"]
 		}
 	},
+	"custom_pars": {
+		"About": [
+			{
+				"name": "Build",
+				"style": "Int",
+				"label": "Build Number",
+				"readOnly": true,
+				"value": 19
+			},
+			{
+				"name": "Date",
+				"style": "Str",
+				"label": "Build Date",
+				"readOnly": true,
+				"value": "2026-03-14 18:12:05 UTC"
+			},
+			{
+				"name": "Touchbuild",
+				"style": "Str",
+				"label": "Touch Build",
+				"readOnly": true,
+				"value": "2025.32280"
+			}
+		]
+	},
+	"parameters": {
+		"ext0object": "op('./TestRunnerExt').module.TestRunnerExt(me)",
+		"ext0name": "TestRunnerExt",
+		"ext0promote": true,
+		"opshortcut": "unit_tests"
+	},
 	"operators": [
 		{
 			"name": "results",
@@ -27,7 +58,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/results.tsv",
 				"syncfile": true,
-				"rows": 141,
+				"rows": 5,
 				"cols": 5
 			},
 			"flags": ["viewer"],
@@ -54,14 +85,14 @@
 						"style": "Int",
 						"label": "Build Number",
 						"readOnly": true,
-						"value": 46
+						"value": 62
 					},
 					{
 						"name": "Date",
 						"style": "Str",
 						"label": "Build Date",
 						"readOnly": true,
-						"value": "2026-03-14 00:26:12 UTC"
+						"value": "2026-03-14 18:13:58 UTC"
 					},
 					{
 						"name": "Touchbuild",
@@ -317,6 +348,14 @@
 				"file": "embody/unit_tests/test_envoy_thread_comm.py"
 			},
 			"position": [200, -2600]
+		},
+		{
+			"name": "test_strategy_handlers",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_strategy_handlers.py"
+			},
+			"position": [600, 0]
 		},
 		{
 			"name": "test_tdn_export_import",

@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 12,
-	"generator": "Embody/5.0.208",
+	"generator": "Embody/5.0.212",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T00:27:45Z",
+	"exported_at": "2026-03-14T18:12:57Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
 		"include_dat_content": false
@@ -69,9 +69,9 @@
 			"name": "tooltip",
 			"type": "containerCOMP",
 			"parameters": {
-				"x": 180,
+				"x": 759,
 				"y": 40,
-				"w": 111,
+				"w": 178,
 				"h": 22,
 				"layer": 10,
 				"alignallow": "ignore",
@@ -85,8 +85,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about",
-					"Build": 14,
-					"Date": "2026-03-14 00:26:13 UTC",
+					"Build": 12,
+					"Date": "2026-03-14 18:12:06 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -110,7 +110,7 @@
 			"name": "tip_measure",
 			"type": "textTOP",
 			"parameters": {
-				"text": "Import TDN file",
+				"text": "Open Embody parameters",
 				"font": "Open Sans",
 				"fontsizex": 10,
 				"fontsizey": 10,
@@ -134,7 +134,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 7,
-					"Date": "2026-03-14 00:26:13 UTC",
+					"Date": "2026-03-14 18:12:07 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -189,7 +189,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 14,
-					"Date": "2026-03-14 00:26:13 UTC",
+					"Date": "2026-03-14 18:12:06 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},

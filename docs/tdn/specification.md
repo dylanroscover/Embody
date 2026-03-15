@@ -29,6 +29,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
   },
   "type_defaults": { ... },
   "par_templates": { ... },
+  "custom_pars": { ... },
+  "parameters": { ... },
   "operators": [ ... ],
   "annotations": [ ... ]
 }
@@ -47,6 +49,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |
 | `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
+| `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
+| `parameters` | object | No | Target COMP's own non-default built-in parameter values. Same format as operator-level [`parameters`](#parameters). Only present if the target COMP has non-default built-in parameters. |
 | `operators` | array | Yes | Array of [operator objects](#operator-object). |
 | `annotations` | array | No | Array of [annotation objects](#annotations). Only present if the root COMP contains annotations. |
 
@@ -283,6 +287,7 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 | `menuSource` | string | Dynamically populated menus | DAT path or expression that populates the menu. When present, `menuNames`/`menuLabels` are omitted. |
 | `startSection` | boolean | If `true` | Whether this parameter starts a new visual section. |
 | `readOnly` | boolean | If `true` | Whether the parameter is read-only. |
+| `help` | string | If non-empty | Tooltip help text shown when hovering the parameter in the dialog. Omitted when empty. |
 | `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default. |
 | `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults. |
 

@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 14,
-	"generator": "Embody/5.0.208",
+	"build": 16,
+	"generator": "Embody/5.0.216",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T00:27:51Z",
+	"exported_at": "2026-03-15T04:46:23Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false
@@ -60,6 +60,48 @@
 			}
 		]
 	},
+	"custom_pars": {
+		"About": [
+			{
+				"name": "Build",
+				"style": "Int",
+				"label": "Build Number",
+				"readOnly": true,
+				"value": 16
+			},
+			{
+				"name": "Date",
+				"style": "Str",
+				"label": "Build Date",
+				"readOnly": true,
+				"value": "2026-03-15 04:46:23 UTC"
+			},
+			{
+				"name": "Touchbuild",
+				"style": "Str",
+				"label": "Touch Build",
+				"readOnly": true,
+				"value": "2025.32280"
+			}
+		]
+	},
+	"parameters": {
+		"w": 180,
+		"h": "=28 * me.fetch('visible_count', op('./tags').numRows) + 2",
+		"display": false,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Listrowcolorr",
+		"bgcolorg": "=parent.Embody.par.Listrowcolorg",
+		"bgcolorb": "=parent.Embody.par.Listrowcolorb",
+		"bgalpha": 1,
+		"borderar": 0.26426,
+		"borderag": 0.298469,
+		"borderab": 0.362,
+		"align": "verttb",
+		"parentshortcut": "menu",
+		"reloadbuiltin": false
+	},
 	"operators": [
 		{
 			"name": "tags",
@@ -88,7 +130,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 2,
-					"Date": "2026-03-14 00:26:13 UTC",
+					"Date": "2026-03-14 18:12:08 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -112,13 +154,14 @@
 				"reloadbuiltin": false
 			},
 			"position": [-225, 175],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "button1",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "⇄  Convert to tox",
+				"label": "+  Add tox",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -127,13 +170,14 @@
 				"reloadbuiltin": false
 			},
 			"position": [-225, -276],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "button2",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "×  Remove tdn",
+				"label": "+  Add tdn",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -142,7 +186,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [25, -276],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_save",
@@ -153,10 +198,12 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.5,
+				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [25, 100],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_embed",
@@ -167,10 +214,12 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.65,
+				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [260, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_reload",
@@ -181,10 +230,12 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.6,
+				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-280, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_remove",
@@ -199,7 +250,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [-1000, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "parameter1",
@@ -226,7 +278,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [-640, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "replicator1",
@@ -245,7 +298,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 1,
-					"Date": "2026-03-14 00:26:13 UTC",
+					"Date": "2026-03-14 18:12:08 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -273,10 +326,12 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 10,
+				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-820, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_portable",
@@ -287,10 +342,12 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 1,
+				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-460, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "select_comps",

@@ -11,12 +11,9 @@ Essential rules to prevent common mistakes. For full API reference, use the `/td
 - **Never assume a TD feature, file type, or convention exists** without confirming against official Derivative documentation (docs.derivative.ca). This applies to Python API calls AND to claims about TD application behavior, file formats, default directories, or generated artifacts.
 - **When in doubt, search first** — use WebSearch with `allowed_domains: ["derivative.ca", "docs.derivative.ca", "forum.derivative.ca"]` to verify.
 
-## Parameter Access
+## Parameters
 
-- **Always use `.eval()`** to get a parameter's current runtime value. `.val` only returns the constant-mode value.
-- **Setting `.val` silently switches mode to CONSTANT** — destroys any active expression. Use assignment (`par.tx = 5`) only when you intend constant mode.
-- **Toggle parameters** use `0`/`1` (not `"True"`/`"False"`). With `set_parameter`, pass `value="0"` or `value="1"`.
-- **Explicit type conversion**: TD parameters remain TD objects internally. Convert with `int()`, `float()`, `str()` before passing to standard Python functions.
+See `parameters.md` for all parameter rules — reading/writing values, designing custom parameter pages, help text, sections, and naming.
 
 ## Operator Access
 

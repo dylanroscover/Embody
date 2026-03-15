@@ -2,12 +2,44 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.208",
+	"generator": "Embody/5.0.212",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T00:26:12Z",
+	"exported_at": "2026-03-14T18:12:04Z",
 	"network_path": "/perform",
 	"options": {
 		"include_dat_content": false
+	},
+	"custom_pars": {
+		"About": [
+			{
+				"name": "Build",
+				"style": "Int",
+				"label": "Build Number",
+				"readOnly": true,
+				"value": 1
+			},
+			{
+				"name": "Date",
+				"style": "Str",
+				"label": "Build Date",
+				"readOnly": true,
+				"value": "2026-03-14 18:12:04 UTC"
+			},
+			{
+				"name": "Touchbuild",
+				"style": "Str",
+				"label": "Touch Build",
+				"readOnly": true,
+				"value": "2025.32280"
+			}
+		]
+	},
+	"parameters": {
+		"winop": "embody",
+		"title": "=me",
+		"justifyh": "center",
+		"justifyv": "center",
+		"reloadbuiltin": false
 	},
 	"operators": []
 }

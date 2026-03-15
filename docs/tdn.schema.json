@@ -94,6 +94,22 @@
       },
       "description": "Reusable custom parameter page definitions. Referenced by $t in operator custom_pars."
     },
+    "custom_pars": {
+      "oneOf": [
+        { "$ref": "#/$defs/customParsPageGrouped" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customParameterDef" },
+          "description": "Legacy format: flat array of custom parameter definitions with 'page' field."
+        }
+      ],
+      "description": "Target COMP's own custom parameter definitions and values. Same format as operator-level custom_pars."
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/parameterValue" },
+      "description": "Target COMP's own non-default built-in parameter values. Same format as operator-level parameters."
+    },
     "operators": {
       "type": "array",
       "items": { "$ref": "#/$defs/operator" },
@@ -254,6 +270,7 @@
         "menuSource": { "type": "string", "description": "DAT path or expression that dynamically populates the menu." },
         "startSection": { "type": "boolean", "description": "Whether this parameter starts a new visual section." },
         "readOnly": { "type": "boolean", "description": "Whether the parameter is read-only." },
+        "help": { "type": "string", "description": "Tooltip help text for the parameter. Omitted when empty." },
         "value": {
           "$ref": "#/$defs/parameterValue",
           "description": "Current value for single-component parameters."

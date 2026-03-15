@@ -48,6 +48,8 @@ p = pg[0]                                       # Get the actual Par
 p.default = 0.5
 p.normMin = 0; p.normMax = 2    # Slider range
 p.min = 0; p.clampMin = True    # Hard clamp
+p.help = "Playback speed multiplier."  # Tooltip on hover
+p.startSection = True           # Draw separator line above
 
 # Other methods:
 page.appendInt('Count')
@@ -60,12 +62,19 @@ page.appendXYZ('Pos')          # Creates Pos1, Pos2, Pos3
 page.appendOP('Target')
 page.appendFile('Path')
 
+# Post-creation properties:
+p.help = "Tooltip text shown on hover"  # ALWAYS set this
+p.startSection = True   # Draw separator line above this parameter
+p.order = 11.5          # Insert between order 11 and 12
+p.readOnly = True       # Display-only parameter
+
 # Cleanup:
 comp.destroyCustomPars()       # Remove ALL custom pars
 par.Speed.destroy()            # Remove single custom par
 ```
 
 **Naming rule:** First letter MUST be uppercase, rest lowercase/numbers. No underscores.
+- **Parameter design rules**: See `.claude/rules/parameters.md` for full conventions
 - Docs: https://docs.derivative.ca/Custom_Parameters
 
 ## `op()` vs `opex()`

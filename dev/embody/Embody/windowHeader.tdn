@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.208",
+	"generator": "Embody/5.0.212",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T00:27:21Z",
+	"exported_at": "2026-03-14T18:12:25Z",
 	"network_path": "/embody/Embody/windowHeader",
 	"options": {
 		"include_dat_content": false
@@ -65,7 +65,7 @@
 				"About": {
 					"$t": "about",
 					"Build": 1,
-					"Date": "2026-03-14 00:26:12 UTC",
+					"Date": "2026-03-14 18:12:05 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			}
@@ -81,16 +81,16 @@
 				"w": 32,
 				"alignorder": 2,
 				"clickthrough": true,
-				"bgcolorr": 1.0,
-				"bgcolorg": 1.0,
-				"bgcolorb": 1.0,
+				"bgcolorr": "=1.0",
+				"bgcolorg": "=1.0",
+				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
 			"custom_pars": {
 				"About": {
 					"$t": "about",
 					"Build": 1,
-					"Date": "2026-03-14 00:26:12 UTC",
+					"Date": "2026-03-14 18:12:05 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -107,16 +107,16 @@
 				"w": 32,
 				"alignorder": 1,
 				"clickthrough": true,
-				"bgcolorr": 1.0,
-				"bgcolorg": 1.0,
-				"bgcolorb": 1.0,
+				"bgcolorr": "=1.0",
+				"bgcolorg": "=1.0",
+				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
 			"custom_pars": {
 				"About": {
 					"$t": "about",
 					"Build": 1,
-					"Date": "2026-03-14 00:26:12 UTC",
+					"Date": "2026-03-14 18:12:05 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
@@ -151,16 +151,16 @@
 				"w": 32,
 				"alignorder": 3,
 				"clickthrough": true,
-				"bgcolorr": 1.0,
-				"bgcolorg": 1.0,
-				"bgcolorb": 1.0,
+				"bgcolorr": "=1.0",
+				"bgcolorg": "=1.0",
+				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
 			"custom_pars": {
 				"About": {
 					"$t": "about",
 					"Build": 1,
-					"Date": "2026-03-14 00:26:12 UTC",
+					"Date": "2026-03-14 18:12:05 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},

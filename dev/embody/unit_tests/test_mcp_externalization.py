@@ -15,6 +15,14 @@ class TestMCPExternalization(EmbodyTestCase):
         super().setUp()
         self.envoy = self.embody.ext.Envoy
 
+    def tearDown(self):
+        """Clean up externalizations table rows for sandbox ops."""
+        for i in range(self.embody_ext.Externalizations.numRows - 1, 0, -1):
+            path = self.embody_ext.Externalizations[i, 'path'].val
+            if path.startswith(self.sandbox.path):
+                self.embody_ext.Externalizations.deleteRow(i)
+        super().tearDown()
+
     # --- _get_externalizations ---
 
     def test_get_externalizations_returns_list(self):

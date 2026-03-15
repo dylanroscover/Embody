@@ -3638,7 +3638,7 @@ class EnvoyExt:
         """Check for a git repo. If missing, prompt user to initialize one.
         Returns the git root Path, or None if user cancelled."""
         from pathlib import Path
-        import subprocess
+        import os, subprocess
 
         project_dir = Path(project.folder)
 
@@ -3686,10 +3686,38 @@ class EnvoyExt:
 
         if choice in (1, 2):  # Initialize Git Here, or Browse → confirmed init
             try:
-                subprocess.run(
-                    ['git', 'init', str(project_dir)],
-                    check=True, capture_output=True, text=True)
+                # Strip git env vars that TD's embedded Python may set —
+                # these can cause git init to produce a broken repository.
+                clean_env = {
+                    k: v for k, v in os.environ.items()
+                    if k not in (
+                        'GIT_DIR', 'GIT_WORK_TREE',
+                        'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES',
+                    )
+                }
+                git_kwargs = dict(
+                    capture_output=True, text=True,
+                    cwd=str(project_dir), env=clean_env,
+                )
+                subprocess.run(['git', 'init'], check=True, **git_kwargs)
                 self._log(f'Initialized git repo in {project_dir}', 'SUCCESS')
+
+                # Verify the init produced a working repository
+                verify = subprocess.run(
+                    ['git', 'rev-parse', '--is-inside-work-tree'],
+                    **git_kwargs)
+                if verify.returncode != 0:
+                    self._log('Git verify failed after init — retrying', 'WARNING')
+                    subprocess.run(['git', 'init'], check=True, **git_kwargs)
+                    verify = subprocess.run(
+                        ['git', 'rev-parse', '--is-inside-work-tree'],
+                        **git_kwargs)
+                    if verify.returncode != 0:
+                        raise RuntimeError(
+                            f'git rev-parse failed after retry: '
+                            f'{verify.stderr.strip()}')
+                    self._log('Git repo verified after retry', 'SUCCESS')
+
                 return project_dir
             except Exception as e:
                 self._log(f'Failed to initialize git repo: {e}', 'ERROR')

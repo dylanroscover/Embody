@@ -35,6 +35,7 @@ class EmbodyExt:
         'text_rule_network_layout': 'network-layout',
         'text_rule_td_python':      'td-python',
         'text_rule_mcp_safety':     'mcp-safety',
+        'text_rule_parameters':     'parameters',
     }
 
     # Skill DAT name -> slug (Claude Code only)
@@ -162,7 +163,7 @@ class EmbodyExt:
         # Dependencies - pywin32 is Windows-only
         # Bump MCP_MIN_VERSION when a new release is tested and verified
         MCP_MIN_VERSION = '1.26.0'
-        deps = [f'mcp>={MCP_MIN_VERSION}']
+        deps = [f'mcp>={MCP_MIN_VERSION}', 'attrs<25']
         if sys.platform.startswith('win'):
             deps.append('pywin32>=306')
 
@@ -176,8 +177,17 @@ class EmbodyExt:
                 from importlib.metadata import version as pkg_version
                 installed = pkg_version('mcp')
                 if tuple(int(x) for x in installed.split('.')) >= tuple(int(x) for x in MCP_MIN_VERSION.split('.')):
-                    self._checkMCPUpdate(installed)
-                    return
+                    # Check for attrs 25.x which conflicts with TD's bundled attr module
+                    try:
+                        installed_attrs = pkg_version('attrs')
+                        if tuple(int(x) for x in installed_attrs.split('.')) >= (25,):
+                            self.Log(f'attrs {installed_attrs} may conflict with TD — downgrading...')
+                        else:
+                            self._checkMCPUpdate(installed)
+                            return
+                    except Exception:
+                        self._checkMCPUpdate(installed)
+                        return
                 self.Log(f'MCP {installed} installed, upgrading to >={MCP_MIN_VERSION}...')
             except Exception:
                 return  # Can't determine version, assume OK
@@ -2326,6 +2336,7 @@ class EmbodyExt:
                 return
 
             processed_ops = set()
+            missing_with_files = []
 
             for old_op_path, rel_file_path, row_type, strategy in rows_to_check:
                 if old_op_path in processed_ops:
@@ -2340,15 +2351,14 @@ class EmbodyExt:
                         found = self._findMovedTDNOp(
                             old_op_path, rel_file_path, processed_ops)
                         if not found:
-                            # No rename candidate — check if .tdn file exists
-                            # on disk so the COMP can be reconstructed (e.g.,
-                            # after strip/crash). We must NOT remove the
-                            # tracking entry or delete the file in that case.
+                            # Check if .tdn file exists on disk
                             if rel_file_path:
                                 abs_tdn = self.buildAbsolutePath(
                                     self.normalizePath(rel_file_path))
                                 if abs_tdn.is_file():
-                                    continue  # Recoverable — skip
+                                    missing_with_files.append(
+                                        (old_op_path, rel_file_path, 'tdn'))
+                                    continue
                             self.Log(f"Operator for TDN entry '{old_op_path}' no longer exists", "WARNING")
                             self._removeTDNStrategy(old_op_path)
                     continue
@@ -2382,14 +2392,14 @@ class EmbodyExt:
                             old_op_path, rel_file_path, externalizationsFolder, processed_ops
                         )
                         if not found_moved:
-                            # Before removing: if the file exists on disk, the
-                            # entry is recoverable (RestoreDATs / RestoreTOXComps
-                            # will recreate it). Do NOT remove.
+                            # Check if file exists on disk — defer to user preference
                             if rel_file_path:
                                 abs_file = self.buildAbsolutePath(
                                     self.normalizePath(rel_file_path))
                                 if abs_file.is_file():
-                                    continue  # Recoverable — skip
+                                    missing_with_files.append(
+                                        (old_op_path, rel_file_path, 'replaced'))
+                                    continue
                             # Operator was replaced, not moved - remove old entry
                             self.Log(f"Operator at '{old_op_path}' was replaced", "WARNING")
                             self._handleMissingOperator(old_op_path, rel_file_path)
@@ -2399,15 +2409,22 @@ class EmbodyExt:
                         old_op_path, rel_file_path, externalizationsFolder, processed_ops
                     )
                     if not found_renamed:
-                        # Before removing: if the file exists on disk, the
-                        # entry is recoverable (RestoreDATs / RestoreTOXComps
-                        # will recreate it). Do NOT remove.
+                        # Check if file exists on disk — defer to user preference
                         if rel_file_path:
-                            abs_file = self.buildAbsolutePath(
-                                self.normalizePath(rel_file_path))
+                            normalized = self.normalizePath(rel_file_path)
+                            abs_file = self.buildAbsolutePath(normalized)
+                            self.Debug(f"File check: rel='{rel_file_path}' norm='{normalized}' abs='{abs_file}' exists={abs_file.is_file()}")
                             if abs_file.is_file():
-                                continue  # Recoverable — skip
+                                missing_with_files.append(
+                                    (old_op_path, rel_file_path, 'missing'))
+                                continue
+                        else:
+                            self.Debug(f"No rel_file_path for '{old_op_path}'")
                         self._handleMissingOperator(old_op_path, rel_file_path)
+
+            # Handle operators whose files still exist on disk — prompt user
+            if missing_with_files:
+                self._handleMissingOpsWithFiles(missing_with_files)
 
         except Exception as e:
             self.Log("Error in checkOpsForContinuity", "ERROR", str(e))
@@ -2906,7 +2923,7 @@ class EmbodyExt:
             self.Log(f"Deferred {len(deferred_updates)} file param updates "
                      f"for Embody components", "DEBUG")
 
-    def _handleMissingOperator(self, old_op_path, old_rel_file_path):
+    def _handleMissingOperator(self, old_op_path, old_rel_file_path, delete_file=True):
         """Handle an operator that no longer exists."""
         self.cleanupDuplicateRows(old_op_path)
 
@@ -2916,8 +2933,74 @@ class EmbodyExt:
         for i in range(1, self.Externalizations.numRows):
             if (self.Externalizations[i, 'path'].val == old_op_path
                     and self.normalizePath(self.Externalizations[i, 'rel_file_path'].val) == normalized):
-                self.RemoveListerRow(old_op_path, old_rel_file_path)
+                self.RemoveListerRow(old_op_path, old_rel_file_path,
+                                     delete_file=delete_file)
                 break
+
+    def _handleMissingOpsWithFiles(self, missing_ops: list) -> None:
+        """Handle operators removed from the network whose files still exist.
+
+        Prompts the user (or applies their saved preference) to decide whether
+        to keep or delete the external files when removing the table entries.
+
+        Args:
+            missing_ops: List of (op_path, rel_file_path, reason) tuples where
+                reason is 'tdn', 'replaced', or 'missing'.
+        """
+        filecleanup_par = getattr(self.my.par, 'Filecleanup', None)
+        preference = filecleanup_par.eval() if filecleanup_par else 'ask'
+
+        if preference == 'ask':
+            op_list = '\n'.join(f'  • {path}' for path, _, _ in missing_ops)
+            count = len(missing_ops)
+            noun = 'operator' if count == 1 else 'operators'
+            s = '' if count == 1 else 's'
+            msg = (f'{count} externalized {noun} removed from the network:\n\n'
+                   f'{op_list}\n\n'
+                   f'External file{s} still exist{"s" if count == 1 else ""} on disk.\n'
+                   f'Remove from tracking only, or also delete file{s}?')
+
+            title = ('Removed Operator Detected' if count == 1
+                     else 'Removed Operators Detected')
+            choice = ui.messageBox(
+                title,
+                msg,
+                buttons=[f'Keep File{s}', f'Delete File{s}',
+                         'Always Keep', 'Always Delete'])
+
+            # ui.messageBox returns 0-based button index (0 also for dialog close)
+            if choice == 0:
+                delete_files = False  # Keep File (or dialog closed)
+            elif choice == 1:
+                delete_files = True   # Delete File
+            elif choice == 2:
+                delete_files = False  # Always Keep
+                if filecleanup_par:
+                    self.my.par.Filecleanup = 'keep'
+                self.Log('File cleanup preference set to Always Keep', 'INFO')
+            elif choice == 3:
+                delete_files = True   # Always Delete
+                if filecleanup_par:
+                    self.my.par.Filecleanup = 'delete'
+                self.Log('File cleanup preference set to Always Delete', 'INFO')
+            else:
+                return
+        elif preference == 'keep':
+            delete_files = False
+        else:  # 'delete'
+            delete_files = True
+
+        for op_path, rel_file_path, reason in missing_ops:
+            if reason == 'tdn':
+                self.Log(f"Operator for TDN entry '{op_path}' no longer exists",
+                         'WARNING')
+                self._removeTDNStrategy(op_path, delete_file=delete_files)
+            else:
+                if reason == 'replaced':
+                    self.Log(f"Operator at '{op_path}' was replaced", 'WARNING')
+                self._handleMissingOperator(
+                    op_path, rel_file_path,
+                    delete_file=delete_files)
 
     def updateMovedOp(self, new_op: OP, old_op_path: str, old_rel_file_path: str, externalizationsFolder: str) -> None:
         """Update table and files when an operator is renamed."""
@@ -3523,25 +3606,33 @@ class EmbodyExt:
         elif tag == self.my.par.Tdntag.val:
             self._removeTDNStrategy(oper.path)
 
-    def _removeTDNStrategy(self, op_path: str) -> None:
-        """Remove TDN strategy entry from table and delete .tdn file."""
+    def _removeTDNStrategy(self, op_path: str, delete_file: bool = True) -> None:
+        """Remove TDN strategy entry from table and optionally delete .tdn file."""
         table = self.Externalizations
         if not table:
+            self.Log(f"_removeTDNStrategy: no table!", "WARNING")
             return
         if table[0, 'strategy'] is None:
+            self.Log(f"_removeTDNStrategy: no strategy column!", "WARNING")
             return  # Legacy table without strategy column — no TDN entries
+        self.Log(f"_removeTDNStrategy: searching for '{op_path}' delete_file={delete_file} rows={table.numRows}", "INFO")
         for i in range(1, table.numRows):
             if (table[i, 'path'].val == op_path
                     and table[i, 'strategy'].val == 'tdn'):
                 rel_path = table[i, 'rel_file_path'].val
-                if rel_path:
+                self.Log(f"_removeTDNStrategy: found row {i}, rel_path='{rel_path}' delete_file={delete_file}", "INFO")
+                if delete_file and rel_path:
                     full_path = self.buildAbsolutePath(
                         self.normalizePath(rel_path)).resolve()
+                    self.Debug(f"TDN delete: rel='{rel_path}' abs='{full_path}' exists={full_path.is_file()} suffix='{full_path.suffix}'")
                     def _delete(fp=full_path, rp=rel_path, opp=op_path):
                         try:
+                            debug(f"_delete executing: {fp} exists={fp.is_file()}")
                             if fp.is_file() and fp.suffix.lower() == '.tdn':
                                 fp.unlink()
                                 self.Log(f'Removed TDN externalization for {opp} ({rp})', 'SUCCESS')
+                            else:
+                                debug(f"_delete skipped: is_file={fp.is_file()} suffix={fp.suffix}")
                         except Exception as e:
                             self.Log(f'Error removing TDN file: {e}', 'ERROR')
                     run(_delete, delayFrames=5)
@@ -3843,32 +3934,60 @@ class EmbodyExt:
             buttons=['Cancel', 'Remove'])
 
         if result == 1:
-            tox_tag = self.my.par.Toxtag.val
-            tdn_tag = self.my.par.Tdntag.val
+            self._removeExternalization(oper)
 
-            if tdn_tag in oper.tags:
-                self.RemoveTDNEntry(oper.path)
-                oper.tags.discard(tdn_tag)
-            elif tox_tag in oper.tags:
+    def _removeExternalization(self, oper: OP) -> None:
+        """Remove externalization from a COMP or DAT (no confirmation dialog).
+
+        Deletes the external file, clears tags/parameters, removes the
+        tracking entry, and resets operator color.
+        """
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+
+        if tdn_tag in oper.tags:
+            self.RemoveTDNEntry(oper.path)
+            oper.tags.discard(tdn_tag)
+        elif tox_tag in oper.tags:
+            rel_fp = self.getExternalPath(oper)
+            self.RemoveListerRow(oper.path, rel_fp)
+            oper.tags.discard(tox_tag)
+            oper.par.externaltox = ''
+            oper.par.externaltox.readOnly = False
+        elif oper.family == 'DAT':
+            active_tag = self._getActiveDATTag(oper)
+            if active_tag:
                 rel_fp = self.getExternalPath(oper)
                 self.RemoveListerRow(oper.path, rel_fp)
-                oper.tags.discard(tox_tag)
-                oper.par.externaltox = ''
-                oper.par.externaltox.readOnly = False
-            elif oper.family == 'DAT':
-                active_tag = self._getActiveDATTag(oper)
-                if active_tag:
-                    rel_fp = self.getExternalPath(oper)
-                    self.RemoveListerRow(oper.path, rel_fp)
-                    oper.tags.discard(active_tag)
-                    oper.par.file = ''
-                    oper.par.file.readOnly = False
-            elif self._getStrategyFilePath(oper.path, 'tdn'):
-                # Table-only TDN entry (e.g., Full Project export) — no tag on operator
-                self.RemoveTDNEntry(oper.path)
+                oper.tags.discard(active_tag)
+                oper.par.file = ''
+                oper.par.file.readOnly = False
+        elif self._getStrategyFilePath(oper.path, 'tdn'):
+            # Table-only TDN entry (e.g., Full Project export) — no tag on operator
+            self.RemoveTDNEntry(oper.path)
 
-            self.resetOpColor(oper)
-            self.Refresh()
+        self.resetOpColor(oper)
+        self.Refresh()
+
+    def _dispatchTaggerButton(self, oper: OP, tag: str,
+                              label: str) -> None:
+        """Route a tagger manage-mode button click to the correct handler.
+
+        Determines the action from the button label text:
+        - Labels containing 'Remove' → remove externalization
+        - Labels containing 'Convert to' → convert DAT format
+        - Otherwise → switch COMP strategy (TOX↔TDN)
+
+        Note: The caller (parexec1 in tagger buttons) is responsible for
+        closing the tagger window and deferring if needed (e.g., to let
+        the window close before showing a confirmation dialog).
+        """
+        if 'Remove' in label:
+            self.HandleStrategyRemove(oper)
+        elif 'Convert to' in label:
+            self.HandleDATConvert(oper, tag)
+        else:
+            self.HandleStrategySwitch(oper)
 
     def HandleDATConvert(self, oper: OP, new_tag: str) -> None:
         """Convert a DAT's externalization to a different format."""
@@ -3989,10 +4108,11 @@ class EmbodyExt:
     # LISTER ROW REMOVAL
     # ==========================================================================
 
-    def RemoveListerRow(self, op_path: str, rel_file_path: str) -> None:
+    def RemoveListerRow(self, op_path: str, rel_file_path: str, delete_file: bool = True) -> None:
         """
         Remove an operator from externalization tracking.
         SAFETY: Only deletes the file if it's tracked by Embody and not referenced elsewhere.
+        When delete_file=False, the table row and tags are removed but the file is preserved on disk.
         """
         is_clone = False
         
@@ -4028,13 +4148,14 @@ class EmbodyExt:
         other_references = self._checkFileReferences(op_path, normalized_path)
 
         # Delete file only if:
-        # 1. It's not a clone reference
-        # 2. No other operators reference it
-        # 3. It's a file we're tracking (implicit - we got rel_file_path from our table)
-        if normalized_path and not other_references and not is_clone:
+        # 1. delete_file is True (caller wants file removed)
+        # 2. It's not a clone reference
+        # 3. No other operators reference it
+        # 4. It's a file we're tracking (implicit - we got rel_file_path from our table)
+        if delete_file and normalized_path and not other_references and not is_clone:
             full_path = self.buildAbsolutePath(normalized_path).resolve()
             
-            def delete_file():
+            def _do_delete():
                 try:
                     if full_path.is_file():
                         full_path.unlink()
@@ -4054,8 +4175,8 @@ class EmbodyExt:
                         self.Log(f"No file found: {normalized_path}", "WARNING")
                 except Exception as e:
                     self.Log(f"Error removing file", "ERROR", str(e))
-            
-            run(delete_file, delayFrames=5)
+
+            run(_do_delete, delayFrames=5)
         elif is_clone or other_references:
             self.Log(f"Preserved file '{normalized_path}' (still in use)", "INFO")
 
@@ -4206,6 +4327,15 @@ class EmbodyExt:
         all_ops = list(comp.findChildren(depth=1, includeUtility=True))
         count = len(all_ops)
         n_utility = sum(1 for c in all_ops if getattr(c, 'utility', False))
+        # Clear dock relationships before destroying — TD's engine
+        # raises an uncatchable tdError if a dock target is destroyed
+        # before its docked operator.
+        for child in all_ops:
+            try:
+                if child.dock is not None:
+                    child.dock = None
+            except Exception:
+                pass
         for child in all_ops:
             try:
                 child.destroy()
