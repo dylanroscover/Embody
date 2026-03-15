@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 16,
-	"generator": "Embody/5.0.216",
+	"build": 17,
+	"generator": "Embody/5.0.217",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-15T04:46:23Z",
+	"exported_at": "2026-03-15T05:03:38Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false
@@ -67,14 +67,14 @@
 				"style": "Int",
 				"label": "Build Number",
 				"readOnly": true,
-				"value": 16
+				"value": 17
 			},
 			{
 				"name": "Date",
 				"style": "Str",
 				"label": "Build Date",
 				"readOnly": true,
-				"value": "2026-03-15 04:46:23 UTC"
+				"value": "2026-03-15 05:03:38 UTC"
 			},
 			{
 				"name": "Touchbuild",
@@ -161,7 +161,7 @@
 			"name": "button1",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "+  Add tox",
+				"label": "⇄  Convert to tox",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -177,7 +177,7 @@
 			"name": "button2",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "+  Add tdn",
+				"label": "×  Remove tdn",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -198,7 +198,6 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.5,
-				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [25, 100],
@@ -214,7 +213,6 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.65,
-				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [260, 275],
@@ -230,7 +228,6 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.6,
-				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-280, 275],
@@ -326,7 +323,6 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 10,
-				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-820, 275],
@@ -342,7 +338,6 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 1,
-				"display": false,
 				"relpath": "externaltox"
 			},
 			"position": [-460, 275],

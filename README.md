@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.217-blue)
+![Version](https://img.shields.io/badge/version-5.0.218-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
