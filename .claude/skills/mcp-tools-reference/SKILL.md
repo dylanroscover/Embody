@@ -103,10 +103,10 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `tag_for_externalization` | `op_path`, `tag_type?` | Tag operator for externalization |
+| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (one step) |
 | `remove_externalization_tag` | `op_path` | Remove externalization tag |
 | `get_externalizations` | _(none)_ | List all externalized operators |
-| `save_externalization` | `op_path` | Force save to disk |
+| `save_externalization` | `op_path` | Force re-export an already-externalized operator |
 | `get_externalization_status` | `op_path` | Get dirty state, build, timestamp, path |
 
 ## TDN Network Format

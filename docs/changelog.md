@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.222
+
+Rename `tag_for_externalization` to `externalize_op`, clarify single-step workflow.
+
+- **MCP tool rename**: `tag_for_externalization` → `externalize_op` across EnvoyExt, docs, skills, templates, and settings. The new name better reflects that the tool tags AND writes to disk in one step
+- **Externalize workflow clarification**: Skill and docs now explain that `externalize_op` is a single-step operation (no separate `save_externalization` needed), and that `save_externalization` is for re-exporting already-externalized operators
+- **Test updates**: Renamed test methods and references to match new tool name
+
 ## v5.0.221
 
 TDN annotation properties, GitHub release rule, templates cleanup.

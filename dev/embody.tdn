@@ -1925,14 +1925,14 @@
 						},
 						{
 							"suite": "test_mcp_externalization",
-							"test": "test_tag_for_externalization_comp",
+							"test": "test_externalize_op_comp",
 							"status": "PASS",
 							"message": "",
 							"duration_ms": 71.52
 						},
 						{
 							"suite": "test_mcp_externalization",
-							"test": "test_tag_for_externalization_nonexistent",
+							"test": "test_externalize_op_nonexistent",
 							"status": "PASS",
 							"message": "",
 							"duration_ms": 0.02

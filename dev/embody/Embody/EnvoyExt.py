@@ -827,9 +827,9 @@ class EnvoyMCPServer:
         # === Embody Integration Tools ===
 
         @self.mcp.tool()
-        def tag_for_externalization(op_path: str, tag_type: str = None) -> dict:
+        def externalize_op(op_path: str, tag_type: str = None) -> dict:
             """
-            Apply an Embody externalization tag to an operator.
+            Tag an operator for Embody externalization and write it to disk.
 
             Args:
                 op_path: Path to the operator
@@ -839,7 +839,7 @@ class EnvoyMCPServer:
             Returns:
                 Dict with success status and applied tag
             """
-            return self._execute_in_td('tag_for_externalization', {
+            return self._execute_in_td('externalize_op', {
                 'op_path': op_path,
                 'tag_type': tag_type
             })
@@ -1715,7 +1715,7 @@ class EnvoyExt:
             'get_td_class_details': self._get_td_class_details,
             'get_module_help': self._get_module_help,
             # Embody integration
-            'tag_for_externalization': self._tag_for_externalization,
+            'externalize_op': self._externalize_op,
             'remove_externalization_tag': self._remove_externalization_tag,
             'get_externalizations': self._get_externalizations,
             'save_externalization': self._save_externalization,
@@ -3184,8 +3184,8 @@ class EnvoyExt:
 
     # === Embody Integration ===
 
-    def _tag_for_externalization(self, op_path: str, tag_type: str = None) -> dict:
-        """Apply Embody externalization tag and externalize to disk"""
+    def _externalize_op(self, op_path: str, tag_type: str = None) -> dict:
+        """Tag an operator for Embody externalization and write it to disk"""
         target = op(op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}

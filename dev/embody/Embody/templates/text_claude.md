@@ -25,7 +25,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
     - Before `create_op`: load `/create-operator`
     - Before `create_annotation` or `set_annotation`: load `/manage-annotations`
     - Before `create_extension`: load `/create-extension`
-    - Before `tag_for_externalization` or `save_externalization`: load `/externalize-operator`
+    - Before `externalize_op` or `save_externalization`: load `/externalize-operator`
     - Before writing TD Python (`execute_python`, `set_dat_content`): load `/td-api-reference`
     - When diagnosing operator errors: load `/debug-operator`
     - Before first MCP call in a new session: load `/mcp-tools-reference`
@@ -75,8 +75,7 @@ op.MyExtension.ext.MyExtension.helperMethod()
 When creating Python files for TouchDesigner (scripts, extensions, callbacks):
 1. Create the textDAT in TouchDesigner first (via MCP `create_op` or in TD UI)
 2. Write code into the DAT (via MCP `set_dat_content`)
-3. Tag for externalization (`tag_for_externalization`)
-4. Save (`save_externalization`) — Embody writes the file to disk
+3. Externalize the DAT (`externalize_op`) — Embody writes the file to disk
 
 **Never** manually set `file`/`syncfile` parameters — Embody handles all file management.
 

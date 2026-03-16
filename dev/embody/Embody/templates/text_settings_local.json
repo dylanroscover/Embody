@@ -45,7 +45,7 @@
       "mcp__envoy__set_op_flags",
       "mcp__envoy__set_op_position",
       "mcp__envoy__set_parameter",
-      "mcp__envoy__tag_for_externalization"
+      "mcp__envoy__externalize_op"
     ]
   }
 }

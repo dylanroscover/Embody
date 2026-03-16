@@ -1,7 +1,7 @@
 """
 Test suite: MCP externalization integration handlers in EnvoyExt.
 
-Tests _tag_for_externalization, _remove_externalization_tag,
+Tests _externalize_op, _remove_externalization_tag,
 _get_externalizations, _get_externalization_status.
 """
 
@@ -55,15 +55,15 @@ class TestMCPExternalization(EmbodyTestCase):
             op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
 
-    # --- _tag_for_externalization ---
+    # --- _externalize_op ---
 
-    def test_tag_for_externalization_comp(self):
+    def test_externalize_op_comp(self):
         comp = self.sandbox.create(baseCOMP, 'tag_ext_comp')
-        result = self.envoy._tag_for_externalization(op_path=comp.path)
+        result = self.envoy._externalize_op(op_path=comp.path)
         self.assertTrue(result.get('success'))
 
-    def test_tag_for_externalization_nonexistent(self):
-        result = self.envoy._tag_for_externalization(
+    def test_externalize_op_nonexistent(self):
+        result = self.envoy._externalize_op(
             op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
 
@@ -72,7 +72,7 @@ class TestMCPExternalization(EmbodyTestCase):
     def test_remove_externalization_tag(self):
         comp = self.sandbox.create(baseCOMP, 'untag_comp')
         # Tag it first
-        self.envoy._tag_for_externalization(op_path=comp.path)
+        self.envoy._externalize_op(op_path=comp.path)
         # Now remove
         result = self.envoy._remove_externalization_tag(op_path=comp.path)
         self.assertTrue(result.get('success'))
@@ -87,7 +87,7 @@ class TestMCPExternalization(EmbodyTestCase):
     def test_tag_textdat_defaults_to_py(self):
         """textDAT with default language should auto-tag as py."""
         dat = self.sandbox.create(textDAT, 'auto_py')
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Pytag.eval())
 
@@ -95,7 +95,7 @@ class TestMCPExternalization(EmbodyTestCase):
         """textDAT with language=python should tag as py."""
         dat = self.sandbox.create(textDAT, 'lang_py')
         dat.par.language = 'python'
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Pytag.eval())
 
@@ -103,7 +103,7 @@ class TestMCPExternalization(EmbodyTestCase):
         """textDAT with language=glsl should tag as glsl."""
         dat = self.sandbox.create(textDAT, 'lang_glsl')
         dat.par.language = 'glsl'
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Glsltag.eval())
 
@@ -111,7 +111,7 @@ class TestMCPExternalization(EmbodyTestCase):
         """textDAT with language=json should tag as json."""
         dat = self.sandbox.create(textDAT, 'lang_json')
         dat.par.language = 'json'
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Jsontag.eval())
 
@@ -119,7 +119,7 @@ class TestMCPExternalization(EmbodyTestCase):
         """textDAT with language=xml should tag as xml."""
         dat = self.sandbox.create(textDAT, 'lang_xml')
         dat.par.language = 'xml'
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Xmltag.eval())
 
@@ -127,21 +127,21 @@ class TestMCPExternalization(EmbodyTestCase):
         """textDAT with language='text' (Plain Text) still defaults to py."""
         dat = self.sandbox.create(textDAT, 'lang_txt')
         dat.par.language = 'text'
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Pytag.eval())
 
     def test_tag_tabledat_auto(self):
         """tableDAT should auto-tag as tsv."""
         dat = self.sandbox.create(tableDAT, 'auto_tsv')
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Tsvtag.eval())
 
     def test_tag_executedat_auto(self):
         """executeDAT should auto-tag as py."""
         dat = self.sandbox.create(executeDAT, 'auto_exec')
-        result = self.envoy._tag_for_externalization(op_path=dat.path)
+        result = self.envoy._externalize_op(op_path=dat.path)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], self.embody.par.Pytag.eval())
 
@@ -149,7 +149,7 @@ class TestMCPExternalization(EmbodyTestCase):
         """Explicit tag_type should override auto-detection."""
         dat = self.sandbox.create(textDAT, 'explicit_txt')
         dat.par.language = 'python'
-        result = self.envoy._tag_for_externalization(
+        result = self.envoy._externalize_op(
             op_path=dat.path, tag_type='txt')
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], 'txt')

@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.221-blue)
+![Version](https://img.shields.io/badge/version-5.0.222-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -179,6 +179,7 @@ See the [full changelog](docs/changelog.md) for detailed version history.
 
 **Recent releases:**
 
+- **5.0.222**: Rename `tag_for_externalization` → `externalize_op`, clarify single-step workflow
 - **5.0.221**: TDN annotation properties, GitHub release rule, templates cleanup
 - **5.0.220**: Network layout rewrite, commit-push checklist rule, expanded MCP tool allowlist, tooltip fix
 - **5.0.217**: TDN target COMP parameter preservation, user-prompted file cleanup, dock safety, git init hardening

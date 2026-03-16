@@ -66,8 +66,7 @@ op.MyExtension.ext.MyExtension.helperMethod()
 When creating Python files for TouchDesigner (scripts, extensions, callbacks):
 1. Create the textDAT in TouchDesigner first (via MCP `create_op` or in TD UI)
 2. Write code into the DAT (via MCP `set_dat_content`)
-3. Tag for externalization (`tag_for_externalization`)
-4. Save (`save_externalization`) — Embody writes the file to disk
+3. Externalize the DAT (`externalize_op`) — Embody writes the file to disk
 
 **Never** manually set `file`/`syncfile` parameters — Embody handles all file management.
 

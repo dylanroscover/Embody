@@ -11,7 +11,7 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | `create_op` | `/create-operator` |
 | `create_annotation` or `set_annotation` | `/manage-annotations` |
 | `create_extension` | `/create-extension` |
-| `tag_for_externalization` or `save_externalization` | `/externalize-operator` |
+| `externalize_op` or `save_externalization` | `/externalize-operator` |
 | `execute_python` or `set_dat_content` (writing TD Python) | `/td-api-reference` |
 | Diagnosing operator errors | `/debug-operator` |
 | First MCP call in a new session | `/mcp-tools-reference` |

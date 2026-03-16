@@ -89,7 +89,7 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `tag_for_externalization` | `op_path`, `tag_type?` | Tag operator for externalization (auto-detects type if omitted) |
+| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
 | `remove_externalization_tag` | `op_path` | Remove externalization tag |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
 | `save_externalization` | `op_path` | Force save an externalized operator to disk |
