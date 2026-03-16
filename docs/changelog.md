@@ -1,5 +1,15 @@
 # Changelog
 
+## v5.0.220
+
+Network layout rule rewrite, commit-push checklist, expanded settings template, tooltip fix.
+
+- **Network layout rule rewrite**: Replaced verbose placement rules with a concise 7-step placement procedure, added anti-patterns section and complexity thresholds for when to encapsulate into COMPs. Template synced
+- **Commit-push checklist rule**: New `.claude/rules/commit-push-checklist.md` enforcing change evaluation, doc audit, test audit, and release detection before every commit. Added to `EmbodyExt._TEMPLATE_MAP_RULES` for auto-deployment, template synced, release-commits.md updated with mapping
+- **Expanded MCP tool allowlist**: Settings template (`text_settings_local.json`) now includes all 42 MCP tools sorted alphabetically, instead of only read-only tools
+- **Tooltip fix**: Toolbar tooltip text changed from "Refresh tracking state" to "Clear filter" with repositioned widget
+- **Parameters template BOM fix**: Restored missing BOM marker on `text_rule_parameters.md`
+
 ## v5.0.217
 
 TDN target COMP parameter preservation, user-prompted file cleanup, dock safety, companion reuse fix, git init hardening.

@@ -32,10 +32,11 @@ class EmbodyExt:
 
     # Rule DAT name -> slug (shared across all AI clients)
     _TEMPLATE_MAP_RULES = {
-        'text_rule_network_layout': 'network-layout',
-        'text_rule_td_python':      'td-python',
-        'text_rule_mcp_safety':     'mcp-safety',
-        'text_rule_parameters':     'parameters',
+        'text_rule_network_layout':          'network-layout',
+        'text_rule_td_python':               'td-python',
+        'text_rule_mcp_safety':              'mcp-safety',
+        'text_rule_parameters':              'parameters',
+        'text_rule_commit_push_checklist':   'commit-push-checklist',
     }
 
     # Skill DAT name -> slug (Claude Code only)

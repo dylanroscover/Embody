@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 187,
-	"generator": "Embody/5.0.217",
+	"build": 188,
+	"generator": "Embody/5.0.219",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-15T05:03:38Z",
+	"exported_at": "2026-03-16T01:40:35Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -810,7 +810,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.217"
+				"value": "5.0.219"
 			},
 			{
 				"name": "Touchbuild",
@@ -833,7 +833,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 187
+				"value": 188
 			},
 			{
 				"name": "Github",
@@ -848,7 +848,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-03-15 05:03:38 UTC"
+				"value": "2026-03-16 01:40:35 UTC"
 			},
 			{
 				"name": "Help",
@@ -1231,8 +1231,8 @@
 			"custom_pars": {
 				"About": {
 					"$t": "about_2",
-					"Build": 4,
-					"Date": "2026-03-14 18:12:08 UTC",
+					"Build": 10,
+					"Date": "2026-03-15 23:31:53 UTC",
 					"Touchbuild": "2025.32280"
 				}
 			},
