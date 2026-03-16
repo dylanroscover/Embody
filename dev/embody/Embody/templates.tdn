@@ -2,24 +2,14 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 12,
-	"generator": "Embody/5.0.219",
+	"generator": "Embody/5.0.220",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-16T05:38:53Z",
+	"exported_at": "2026-03-16T07:00:20Z",
 	"network_path": "/embody/Embody/templates",
 	"options": {
 		"include_dat_content": false
 	},
 	"type_defaults": {
-		"annotateCOMP": {
-			"parameters": {
-				"includeinorder": true,
-				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
-				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
-			},
-			"flags": ["display"],
-			"color": [0.45, 0.45, 0.45]
-		},
 		"textDAT": {
 			"parameters": {
 				"syncfile": true
@@ -27,231 +17,6 @@
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4]
 		}
-	},
-	"par_templates": {
-		"about": [
-			{
-				"default": "1.0",
-				"help": "Annotate COMP default setup version.",
-				"name": "Version",
-				"readOnly": true,
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"help": "Click to open help page.",
-				"name": "Help",
-				"style": "Pulse"
-			}
-		],
-		"text": [
-			{
-				"default": "Annotate",
-				"help": "Text in the title bar.",
-				"label": "Title Text",
-				"name": "Titletext",
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"clampMin": true,
-				"default": 30,
-				"help": "Height of the title bar. Title font height adjusts automatically to fill.",
-				"label": "Title Height",
-				"name": "Titleheight",
-				"normMax": 100.0,
-				"normMin": 5.0,
-				"style": "Int"
-			},
-			{
-				"default": "left",
-				"help": "Alignment of title text.",
-				"label": "Title Align",
-				"menuLabels": ["Left", "Center", "Right"],
-				"menuNames": ["left", "center", "right"],
-				"name": "Titlealign",
-				"style": "Menu"
-			},
-			{
-				"help": "Text in the body area. Use an expression for newlines etc.",
-				"label": "Body Text",
-				"name": "Bodytext",
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"clampMin": true,
-				"default": 10,
-				"help": "Size of text in the body area.",
-				"label": "Body Font Size",
-				"name": "Bodyfontsize",
-				"normMax": 100.0,
-				"normMin": 8.0,
-				"style": "Int"
-			},
-			{
-				"help": "Limit the width of the text area.",
-				"label": "Limit Body Text Width",
-				"name": "Bodylimitwidth",
-				"style": "Toggle"
-			},
-			{
-				"clampMin": true,
-				"default": 1000,
-				"help": "Width limit that will cause wraparound or cut-off. Measured in Panel units.",
-				"label": "Max Body Text Width",
-				"name": "Bodymaxwidth",
-				"normMax": 2000.0,
-				"normMin": 100.0,
-				"style": "Int"
-			}
-		],
-		"settings": [
-			{
-				"default": "comment",
-				"help": "Switch between Comment, Network Box, and Annotate Modes. ",
-				"menuLabels": ["Comment", "Network Box", "Annotate"],
-				"menuNames": ["comment", "networkbox", "annotate"],
-				"name": "Mode",
-				"style": "Menu"
-			},
-			{
-				"help": "Converts quotes, ellipsis, and dashes to more typographically nice unicode versions.",
-				"label": "Smart Quote",
-				"name": "Smartquote",
-				"startSection": true,
-				"style": "Toggle"
-			},
-			{
-				"default": true,
-				"help": "Wrap body text when it extends past right bound.",
-				"label": "Body Word Wrap",
-				"name": "Bodywordwrap",
-				"style": "Toggle"
-			},
-			{
-				"default": 1,
-				"help": "Background color base.",
-				"label": "Back Color",
-				"name": "Backcolorr",
-				"startSection": true,
-				"style": "RGBA"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Back color alpha.",
-				"label": "Back Color Alpha",
-				"name": "Backcoloralpha",
-				"style": "Float"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Opacity of the entire Annotate.",
-				"label": "Annotate Opacity",
-				"name": "Opacity",
-				"style": "Float"
-			}
-		],
-		"op_viewer": [
-			{
-				"help": "Turn the visibility of the viewer specified in the OP parameter below on or off.",
-				"label": "Viewer Display",
-				"name": "Opviewerdisplay",
-				"style": "Toggle"
-			},
-			{
-				"help": "The operator whose viewer is displayed in the Annotate.",
-				"label": "OP",
-				"name": "Opviewer",
-				"style": "OP"
-			},
-			{
-				"help": "Allow interaction with the OP viewer.",
-				"label": "OP Viewer Interactive",
-				"name": "Opviewerinteractive",
-				"style": "Toggle"
-			},
-			{
-				"default": "False",
-				"help": "Use the Size/Aspect Override to control viewer's size in the background.",
-				"label": "Size/Aspect Override",
-				"menuLabels": ["Natural", "Specify", "Auto-Fit"],
-				"menuNames": ["natural", "specify", "autofit"],
-				"name": "Opvieweroversize",
-				"startSection": true,
-				"style": "Menu"
-			},
-			{
-				"clampMin": true,
-				"default": 800,
-				"help": "Diplay viewer as-if it were being displayed at this resolution. This is particularly useful for zooming into operators that don't have a built-in resolution, like CHOPs, SOPs, and DATs.",
-				"label": "Size/Aspect",
-				"name": "Opviewersize",
-				"normMax": 1000.0,
-				"normMin": 1.0,
-				"style": "WH"
-			},
-			{
-				"default": 1,
-				"help": "Scale the viewer by this factor.",
-				"label": "Scale",
-				"name": "Opviewerscale",
-				"normMax": 2.0,
-				"startSection": true,
-				"style": "Float"
-			},
-			{
-				"help": "Move the border of the viewer towards left edge of Annotate when negative or towards right edge when positive.",
-				"label": "Justify X",
-				"name": "Opviewerjustifyx",
-				"normMin": -1.0,
-				"style": "Float"
-			},
-			{
-				"label": "Justify Y",
-				"name": "Opviewerjustifyy",
-				"normMin": -1.0,
-				"style": "Float"
-			},
-			{
-				"help": "When True, allow viewer to display in the Annotate title area as well as body.",
-				"label": "Cover Body and Title",
-				"name": "Opviewerfillbodytitle",
-				"style": "Toggle"
-			},
-			{
-				"clampMin": true,
-				"default": 1,
-				"help": "Zoom the viewer by this scale factor without increasing the size of its display area in the Annotate.",
-				"label": "OP Viewer Zoom",
-				"min": 0.001,
-				"name": "Opviewerzoom",
-				"normMax": 5.0,
-				"normMin": 1.0,
-				"startSection": true,
-				"style": "Float"
-			},
-			{
-				"help": "Offsets the displayed area within the viewer. Combined with OP Viewer Zoom, this lets you display a specific area of a viewer, such as a CHOP channel or table cell.",
-				"label": "OP Viewer Offset",
-				"name": "Opvieweroffsetx",
-				"style": "XYZW"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Alpha value of the background area in the OP Viewer.",
-				"label": "Fill Alpha",
-				"name": "Opviewerfillalpha",
-				"startSection": true,
-				"style": "Float"
-			}
-		]
 	},
 	"custom_pars": {
 		"About": [
@@ -279,87 +44,6 @@
 		]
 	},
 	"operators": [
-		{
-			"name": "annotate1",
-			"type": "annotateCOMP",
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Config Templates",
-					"Bodytext": "CLAUDE.md, AGENTS.md, settings, bridge"
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": ["=me.color[0] # node color [r]", "=me.color[1]", "=me.color[2] "],
-					"Opacity": 0.5
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-70, 1130],
-			"size": [1170, 330],
-			"palette_clone": true
-		},
-		{
-			"name": "annotate2",
-			"type": "annotateCOMP",
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Rule Templates",
-					"Bodytext": "Auto-deployed rules for user projects"
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": ["=me.color[0] # node color [r]", "=me.color[1]", "=me.color[2] "],
-					"Opacity": 0.5
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-70, 330],
-			"size": [1470, 330],
-			"palette_clone": true
-		},
-		{
-			"name": "annotate3",
-			"type": "annotateCOMP",
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Skill Templates",
-					"Bodytext": "Auto-deployed skills for Claude Code"
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": ["=me.color[0] # node color [r]", "=me.color[1]", "=me.color[2] "],
-					"Opacity": 0.5
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-70, -470],
-			"size": [2070, 330],
-			"palette_clone": true
-		},
 		{
 			"name": "text_claude",
 			"type": "textDAT",
@@ -448,6 +132,17 @@
 			"tags": ["md"]
 		},
 		{
+			"name": "text_rule_github_release",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_github_release.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [1500, 400],
+			"tags": ["md"]
+		},
+		{
 			"name": "text_rule_network_layout",
 			"type": "textDAT",
 			"parameters": {
@@ -529,6 +224,7 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_rule_commit_push_checklist.md",
+				"language": "text",
 				"extension": "md"
 			},
 			"position": [1200, 400],
@@ -552,7 +248,7 @@
 			"title": "Rule Templates",
 			"text": "Auto-deployed rules for user projects",
 			"position": [-70, 330],
-			"size": [1470, 330],
+			"size": [1770, 330],
 			"color": [0.45, 0.45, 0.45],
 			"opacity": 0.5
 		},
