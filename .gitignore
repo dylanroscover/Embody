@@ -29,3 +29,4 @@ site/
 # Embody / Envoy (auto-managed)
 Backup/
 logs/
+.tdn_backup/

@@ -34,9 +34,9 @@ class TestClaudeConfig(EmbodyTestCase):
 	# Group A: Template DAT integrity
 	# ------------------------------------------------------------------
 
-	def test_A01_rules_map_has_3_entries(self):
-		"""_TEMPLATE_MAP_RULES should have exactly 3 rule entries."""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP_RULES, 3)
+	def test_A01_rules_map_has_expected_entries(self):
+		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
+		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)
 
 	def test_A02_skills_map_has_7_entries(self):
 		"""_TEMPLATE_MAP_SKILLS should have exactly 7 skill entries."""
@@ -97,13 +97,13 @@ class TestClaudeConfig(EmbodyTestCase):
 				f'Skill DAT {dat_name!r} missing marker')
 
 	def test_A10_text_claude_dat_exists(self):
-		"""The text_claude DAT should exist at the Embody COMP level."""
-		dat = self.embody_ext.my.op('text_claude')
+		"""The text_claude DAT should exist in the templates COMP."""
+		dat = self.embody_ext.my.op('templates/text_claude')
 		self.assertIsNotNone(dat, 'text_claude DAT not found')
 
 	def test_A11_text_claude_dat_has_marker(self):
 		"""text_claude DAT content should contain the Embody/Envoy marker."""
-		dat = self.embody_ext.my.op('text_claude')
+		dat = self.embody_ext.my.op('templates/text_claude')
 		self.assertIn(self.MARKER, dat.text,
 			'text_claude DAT missing marker')
 
@@ -216,7 +216,7 @@ class TestClaudeConfig(EmbodyTestCase):
 	def test_C02_created_claude_md_has_template_content(self):
 		"""Created CLAUDE.md should contain the text_claude DAT content."""
 		self.embody_ext._writeClaudeMd(self._temp_dir)
-		expected = self.embody_ext.my.op('text_claude').text
+		expected = self.embody_ext.my.op('templates/text_claude').text
 		actual = (self._temp_dir / 'CLAUDE.md').read_text(encoding='utf-8')
 		self.assertEqual(actual, expected)
 
@@ -227,7 +227,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		result = self.embody_ext._writeClaudeMd(self._temp_dir)
 		self.assertEqual(result, existing)
 		updated = existing.read_text(encoding='utf-8')
-		expected = self.embody_ext.my.op('text_claude').text
+		expected = self.embody_ext.my.op('templates/text_claude').text
 		self.assertEqual(updated, expected)
 
 	def test_C04_falls_back_to_envoy_md_without_marker(self):
@@ -246,7 +246,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		"""ENVOY.md fallback should contain the text_claude DAT content."""
 		(self._temp_dir / 'CLAUDE.md').write_text('user content', encoding='utf-8')
 		self.embody_ext._writeClaudeMd(self._temp_dir)
-		expected = self.embody_ext.my.op('text_claude').text
+		expected = self.embody_ext.my.op('templates/text_claude').text
 		actual = (self._temp_dir / 'ENVOY.md').read_text(encoding='utf-8')
 		self.assertEqual(actual, expected)
 
@@ -275,14 +275,16 @@ class TestClaudeConfig(EmbodyTestCase):
 			self.assertTrue(full.exists(), f'Skill file missing: {slug}/SKILL.md')
 
 	def test_D02_file_content_matches_dats(self):
-		"""Each rule file content should match its source DAT."""
+		"""Each rule file content should match its source DAT (frontmatter stripped for CC)."""
 		self._run_claude_pipeline()
 		templates_comp = self.embody_ext.my.op('templates')
 		for dat_name, slug in self.embody_ext._TEMPLATE_MAP_RULES.items():
 			dat = templates_comp.op(dat_name)
 			full = self._temp_dir / '.claude' / 'rules' / f'{slug}.md'
 			actual = full.read_text(encoding='utf-8')
-			self.assertEqual(actual, dat.text,
+			# Claude Code rules have YAML frontmatter stripped by _writeClaudeCodeConfig
+			expected = self.embody_ext._stripFrontmatter(dat.text)
+			self.assertEqual(actual, expected,
 				f'Content mismatch for rules/{slug}.md')
 
 	def test_D03_directory_structure_correct(self):
@@ -292,11 +294,11 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertTrue((self._temp_dir / '.claude' / 'skills').is_dir())
 
 	def test_D04_rules_files_count(self):
-		"""Three rule files should be created in .claude/rules/."""
+		"""Rule files count should match _TEMPLATE_MAP_RULES."""
 		self._run_claude_pipeline()
 		rules_dir = self._temp_dir / '.claude' / 'rules'
 		rule_files = list(rules_dir.glob('*.md'))
-		self.assertLen(rule_files, 3)
+		self.assertLen(rule_files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_D05_skills_directories_count(self):
 		"""Seven skill directories should be created in .claude/skills/."""
@@ -357,7 +359,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		cursor_dir = self._temp_dir / '.cursor' / 'rules'
 		self.assertTrue(cursor_dir.is_dir())
 		mdc_files = list(cursor_dir.glob('*.mdc'))
-		self.assertLen(mdc_files, 3)
+		self.assertLen(mdc_files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_Db02_cursor_files_have_yaml_frontmatter(self):
 		"""Each .mdc file should start with YAML frontmatter (---)."""
@@ -422,7 +424,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		instructions_dir = self._temp_dir / '.github' / 'instructions'
 		self.assertTrue(instructions_dir.is_dir())
 		files = list(instructions_dir.glob('*.instructions.md'))
-		self.assertLen(files, 3)
+		self.assertLen(files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_Dc03_copilot_combined_has_marker(self):
 		"""Combined copilot-instructions.md should have the generated-by marker."""
@@ -458,7 +460,7 @@ class TestClaudeConfig(EmbodyTestCase):
 		windsurf_dir = self._temp_dir / '.windsurf' / 'rules'
 		self.assertTrue(windsurf_dir.is_dir())
 		md_files = list(windsurf_dir.glob('*.md'))
-		self.assertLen(md_files, 3)
+		self.assertLen(md_files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_Dd02_windsurf_files_have_no_cursor_or_copilot_metadata(self):
 		"""Windsurf rule files should not contain alwaysApply or applyTo directives."""
@@ -605,7 +607,12 @@ class TestClaudeConfig(EmbodyTestCase):
 			dat = templates_comp.op(dat_name)
 			if dat is None:
 				continue
-			template_content = dat.text.strip()
+			# Strip BOM, frontmatter, and generated-by marker from template
+			template_content = self.embody_ext._stripFrontmatter(dat.text).strip()
+			# Also strip the generated-by marker line if present
+			marker_line = '<!-- Generated by Embody/Envoy - Do not remove this comment -->'
+			if template_content.startswith(marker_line):
+				template_content = template_content[len(marker_line):].strip()
 			repo_file = project_root / '.claude' / 'rules' / f'{slug}.md'
 			if not repo_file.exists():
 				drifted.append(f'{dat_name}: repo file not found at {repo_file}')

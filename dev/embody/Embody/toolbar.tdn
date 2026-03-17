@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 12,
-	"generator": "Embody/5.0.212",
+	"generator": "Embody/5.0.224",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T18:12:57Z",
+	"exported_at": "2026-03-17T03:13:26Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
 		"include_dat_content": false
@@ -42,36 +42,14 @@
 			"tags": ["py"]
 		}
 	},
-	"par_templates": {
-		"about": [
-			{
-				"label": "Build Number",
-				"name": "Build",
-				"readOnly": true,
-				"style": "Int"
-			},
-			{
-				"label": "Build Date",
-				"name": "Date",
-				"readOnly": true,
-				"style": "Str"
-			},
-			{
-				"label": "Touch Build",
-				"name": "Touchbuild",
-				"readOnly": true,
-				"style": "Str"
-			}
-		]
-	},
 	"operators": [
 		{
 			"name": "tooltip",
 			"type": "containerCOMP",
 			"parameters": {
-				"x": 759,
+				"x": 998,
 				"y": 40,
-				"w": 178,
+				"w": 80,
 				"h": 22,
 				"layer": 10,
 				"alignallow": "ignore",
@@ -81,14 +59,6 @@
 				"bgcolorg": 0.13,
 				"bgcolorb": 0.13,
 				"bgalpha": 0.95
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 12,
-					"Date": "2026-03-14 18:12:06 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [800, -200],
 			"size": [160, 130]
@@ -110,7 +80,7 @@
 			"name": "tip_measure",
 			"type": "textTOP",
 			"parameters": {
-				"text": "Open Embody parameters",
+				"text": "Clear filter",
 				"font": "Open Sans",
 				"fontsizex": 10,
 				"fontsizey": 10,
@@ -129,14 +99,6 @@
 				"borderover": false,
 				"align": "horizlr",
 				"reloadbuiltin": false
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 7,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"flags": ["viewer"],
 			"size": [160, 76]
@@ -184,14 +146,6 @@
 				"leftanchor": 1,
 				"horigin": 1,
 				"align": "horizrl"
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 14,
-					"Date": "2026-03-14 18:12:06 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"flags": ["viewer"],
 			"position": [175, 0],

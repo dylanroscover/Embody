@@ -1,13 +1,33 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 3,
-	"generator": "Embody/5.0.212",
+	"build": 4,
+	"generator": "Embody/5.0.227",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T18:12:43Z",
+	"exported_at": "2026-03-17T14:40:04Z",
 	"network_path": "/embody/Embody/toolbar/container_left/initialize",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "󰓦",
+		"callbacks": "new_initialize_callbacks",
+		"font": "Material Design Icons",
+		"fontsize": 11,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"w": 36,
+		"vmode": "fill",
+		"alignorder": 600,
+		"clickthrough": true,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
+		"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
+		"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+		"bgalpha": 1
 	},
 	"operators": []
 }

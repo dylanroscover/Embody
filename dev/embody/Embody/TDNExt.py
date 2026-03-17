@@ -13,7 +13,11 @@ This extension lives on the Embody COMP and is callable via:
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from threading import Event
 from typing import Any, Optional, Union
 
@@ -26,6 +30,10 @@ SKIP_PARAMS = {
 	'savecustom', 'reloadcustom',
 	'pageindex',  # UI state (visible parameter page tab), not config
 }
+
+# Embody-managed About page parameters — excluded from TDN export
+# because they are reconstructed from externalizations.tsv at import time.
+_EMBODY_ABOUT_PARS = {'Build', 'Date', 'Touchbuild'}
 
 # Built-in parameter styles to skip (actions, not state)
 SKIP_BUILTIN_STYLES = {'Pulse', 'Momentary', 'Header'}
@@ -116,6 +124,208 @@ class TDNExt:
 		# so we cache them to avoid repeated Python-to-C++ bridge calls.
 		self._defaults_cache: dict[str, dict[str, Any]] = {}
 		self._exportable_cache: dict[str, set[str]] = {}
+
+	# =========================================================================
+	# CRASH SAFETY — atomic writes, backup rotation, validation
+	# =========================================================================
+
+	@staticmethod
+	def _get_backup_path(tdn_path: str, project_folder: str,
+						 suffix: str = '.bak') -> Path:
+		"""Compute backup path for a .tdn file.
+
+		Mirrors the relative directory structure under
+		{project_folder}/.tdn_backup/.
+
+		Example:
+			tdn_path:       /proj/embody/Foo/bar.tdn
+			project_folder: /proj
+			result:         /proj/.tdn_backup/embody/Foo/bar.tdn.bak
+		"""
+		tdn = Path(tdn_path)
+		proj = Path(project_folder)
+		try:
+			rel = tdn.relative_to(proj)
+		except ValueError:
+			# tdn_path not under project_folder — fall back to flat name
+			rel = Path(tdn.name)
+		backup_dir = proj / '.tdn_backup'
+		return backup_dir / (str(rel) + suffix)
+
+	@staticmethod
+	def _rotate_backups(tdn_path: str, project_folder: str) -> None:
+		"""Rotate backup copies before overwriting a .tdn file.
+
+		Keeps 2 generations: .bak (previous) and .bak2 (one before that).
+		Uses shutil.copy2 (not rename) so the original stays in place
+		until the atomic write replaces it.
+
+		No-op if tdn_path does not yet exist on disk (first export).
+		"""
+		src = Path(tdn_path)
+		if not src.is_file():
+			return
+
+		bak = TDNExt._get_backup_path(tdn_path, project_folder, '.bak')
+		bak2 = TDNExt._get_backup_path(tdn_path, project_folder, '.bak2')
+
+		# Rotate: .bak -> .bak2
+		if bak.is_file():
+			bak2.parent.mkdir(parents=True, exist_ok=True)
+			shutil.copy2(str(bak), str(bak2))
+
+		# Copy current -> .bak
+		bak.parent.mkdir(parents=True, exist_ok=True)
+		shutil.copy2(str(src), str(bak))
+
+	@staticmethod
+	def _atomic_write(filepath: str, content: str) -> None:
+		"""Write content to filepath atomically using temp-file-then-rename.
+
+		Guarantees that `filepath` always contains either the complete old
+		content or the complete new content — never a partial write.
+
+		The temp file is created in the same directory as filepath to
+		ensure os.replace() is atomic (same filesystem).
+		"""
+		target = Path(filepath)
+		target.parent.mkdir(parents=True, exist_ok=True)
+		tmp_fd = None
+		tmp_path = None
+		try:
+			tmp_fd, tmp_path = tempfile.mkstemp(
+				dir=str(target.parent), suffix='.tdn.tmp')
+			with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+				tmp_fd = None  # os.fdopen takes ownership of the fd
+				f.write(content)
+				f.flush()
+				os.fsync(f.fileno())
+			os.replace(tmp_path, filepath)
+			tmp_path = None  # Rename succeeded — no cleanup needed
+		finally:
+			if tmp_fd is not None:
+				os.close(tmp_fd)
+			if tmp_path is not None:
+				try:
+					os.unlink(tmp_path)
+				except OSError:
+					pass
+
+	@staticmethod
+	def _validate_tdn_file(filepath: str) -> dict:
+		"""Read back a .tdn file and verify it's valid.
+
+		Returns {'valid': True} or {'valid': False, 'error': '...'}.
+		"""
+		try:
+			text = Path(filepath).read_text(encoding='utf-8')
+		except Exception as e:
+			return {'valid': False, 'error': f'Read failed: {e}'}
+		if not text:
+			return {'valid': False, 'error': 'File is empty'}
+		try:
+			doc = json.loads(text)
+		except json.JSONDecodeError as e:
+			return {'valid': False, 'error': f'Invalid JSON: {e}'}
+		if not isinstance(doc, dict):
+			return {'valid': False, 'error': 'Root is not a JSON object'}
+		if doc.get('format') != 'tdn':
+			return {'valid': False,
+					'error': f'Missing or wrong format key: {doc.get("format")}'}
+		if 'operators' not in doc:
+			return {'valid': False, 'error': 'Missing operators key'}
+		return {'valid': True}
+
+	@staticmethod
+	def _safe_write_tdn(tdn_path: str, content: str,
+						project_folder: str) -> dict:
+		"""Write a .tdn file with full crash safety.
+
+		1. Rotate backups (.bak, .bak2)
+		2. Atomic write (temp file + rename + fsync)
+		3. Post-write validation (read back + JSON parse)
+		4. If validation fails, restore from .bak
+
+		Returns {'success': True} or {'error': '...'}.
+		"""
+		# Step 1: Backup rotation (only if file already exists)
+		try:
+			TDNExt._rotate_backups(tdn_path, project_folder)
+		except Exception:
+			# Backup failure should not block the write — log but continue.
+			# The write itself is still atomic.
+			pass
+
+		# Step 2: Atomic write
+		try:
+			TDNExt._atomic_write(tdn_path, content)
+		except Exception as e:
+			return {'error': f'Atomic write failed: {e}'}
+
+		# Step 3: Post-write validation
+		validation = TDNExt._validate_tdn_file(tdn_path)
+		if validation.get('valid'):
+			return {'success': True}
+
+		# Step 4: Validation failed — attempt restore from backup
+		error_msg = validation.get('error', 'unknown')
+		bak = TDNExt._get_backup_path(tdn_path, project_folder, '.bak')
+		if bak.is_file():
+			try:
+				shutil.copy2(str(bak), tdn_path)
+				return {'error': f'Validation failed ({error_msg}), '
+								 f'restored from backup'}
+			except Exception as restore_e:
+				return {'error': f'Validation failed ({error_msg}) '
+								 f'and backup restore failed: {restore_e}'}
+		return {'error': f'Validation failed ({error_msg}), no backup available'}
+
+	def _get_backup_path_instance(self, tdn_path: str,
+								  suffix: str = '.bak') -> Path:
+		"""Instance wrapper for _get_backup_path using project.folder."""
+		return TDNExt._get_backup_path(tdn_path, str(project.folder), suffix)
+
+	# =========================================================================
+	# CONTENT COMPARISON
+	# =========================================================================
+
+	_TDN_VOLATILE_KEYS = frozenset({
+		'build', 'generator', 'td_build', 'exported_at',
+	})
+
+	@staticmethod
+	def _tdn_content_equal(new_tdn: dict, existing_tdn: dict) -> bool:
+		"""Compare two TDN dicts ignoring volatile header metadata.
+
+		Returns True if all non-volatile keys (operators, parameters,
+		connections, annotations, custom_pars, options, etc.) are identical.
+		"""
+		for key in new_tdn:
+			if key in TDNExt._TDN_VOLATILE_KEYS:
+				continue
+			if new_tdn[key] != existing_tdn.get(key):
+				return False
+		for key in existing_tdn:
+			if key in TDNExt._TDN_VOLATILE_KEYS:
+				continue
+			if key not in new_tdn:
+				return False
+		return True
+
+	@staticmethod
+	def _read_existing_tdn(file_path: str) -> Optional[dict]:
+		"""Read and parse an existing .tdn file from disk.
+
+		Returns the parsed dict, or None if the file is missing, corrupt,
+		or unreadable.
+		"""
+		try:
+			p = Path(file_path)
+			if not p.is_file():
+				return None
+			return json.loads(p.read_text(encoding='utf-8'))
+		except Exception:
+			return None
 
 	# =========================================================================
 	# PROMOTED METHODS (uppercase — callable directly on op.Embody)
@@ -211,18 +421,18 @@ class TDNExt:
 
 			# Write to file if requested
 			if output_file:
-				from pathlib import Path
-
 				# Scan from project folder — TDN paths mirror TD hierarchy
 				scan_folder = str(project.folder)
 				before_tdn = TDNExt._collectExistingTDNFiles(
 					scan_folder, root_path)
 
 				filepath = self._resolveOutputPath(output_file, root_op)
-				Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-				Path(filepath).write_text(
-					TDNExt._compact_json_dumps(tdn),
-					encoding='utf-8')
+				content = TDNExt._compact_json_dumps(tdn)
+				write_result = TDNExt._safe_write_tdn(
+					filepath, content, scan_folder)
+				if not write_result.get('success'):
+					return {'error':
+						f'Safe write failed: {write_result.get("error")}'}
 
 				protected = [filepath]
 				if cleanup_protected:
@@ -416,15 +626,19 @@ class TDNExt:
 
 			# Write to file (file I/O is fine in worker thread)
 			if state['output_file']:
-				from pathlib import Path
 				# Use pre-collected .tdn files (collected on main thread
 				# to avoid GIL contention with rglob/scandir)
 				before_tdn = state.get('before_tdn', set())
 				base_folder = state['metadata']['project_folder']
 
-				Path(state['output_file']).write_text(
-					TDNExt._compact_json_dumps(tdn),
-					encoding='utf-8')
+				content = TDNExt._compact_json_dumps(tdn)
+				write_result = TDNExt._safe_write_tdn(
+					state['output_file'], content, base_folder)
+				if not write_result.get('success'):
+					state['result'] = {
+						'error': f'Safe write failed: '
+								 f'{write_result.get("error")}'}
+					return
 
 				protected = [state['output_file']] + state.get(
 					'protected_files', [])
@@ -1084,6 +1298,12 @@ class TDNExt:
 
 			if page_pars:
 				pages_dict[page.name] = page_pars
+
+		# Filter Embody-managed About pages (metadata lives in externalizations.tsv)
+		if 'About' in pages_dict:
+			about_par_names = {d.get('name') for d in pages_dict['About']}
+			if about_par_names <= _EMBODY_ABOUT_PARS:
+				del pages_dict['About']
 
 		return pages_dict
 
@@ -2947,13 +3167,8 @@ class TDNExt:
 			return 'unknown'
 
 	def _getBuildNumber(self, root_op):
-		"""Get build number for a COMP from its Build custom par or the externalizations table."""
-		if hasattr(root_op.par, 'Build'):
-			try:
-				return int(root_op.par.Build.eval())
-			except (ValueError, TypeError):
-				pass
-		# Fall back to table
+		"""Get build number from externalizations table, falling back to COMP par."""
+		# TSV is source of truth
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if table:
@@ -2974,6 +3189,12 @@ class TDNExt:
 							pass
 		except Exception:
 			pass
+		# Fall back to COMP parameter
+		if hasattr(root_op.par, 'Build'):
+			try:
+				return int(root_op.par.Build.eval())
+			except (ValueError, TypeError):
+				pass
 		return None
 
 	def _resolveOutputPath(self, output_file, root_op):

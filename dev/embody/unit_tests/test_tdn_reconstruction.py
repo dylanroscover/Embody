@@ -2431,3 +2431,75 @@ class TestTDNReconstruction(EmbodyTestCase):
 		restored_host = self.sandbox.op('host')
 		self.assertEqual(self.sandbox.op('d1').dock, restored_host)
 		self.assertEqual(self.sandbox.op('d2').dock, restored_host)
+
+	# =================================================================
+	# S — About page filtering (Embody-managed metadata)
+	# =================================================================
+
+	def test_S01_export_excludes_embody_about(self):
+		"""Embody-managed About page (Build/Date/Touchbuild) is excluded from TDN export."""
+		c = self.sandbox.create(baseCOMP, 'c1')
+		page = c.appendCustomPage('About')
+		pg = page.appendInt('Build', label='Build Number')
+		pg[0].readOnly = True
+		pg[0].val = 5
+		pg = page.appendStr('Date', label='Build Date')
+		pg[0].readOnly = True
+		pg[0].val = '2026-03-17 01:00:00 UTC'
+		pg = page.appendStr('Touchbuild', label='Touch Build')
+		pg[0].readOnly = True
+		pg[0].val = '2025.32280'
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		for entry in orig['tdn']['operators']:
+			cp = entry.get('custom_pars', {})
+			self.assertNotIn('About', cp, 'Embody About page should be excluded from export')
+
+	def test_S02_export_preserves_user_about(self):
+		"""About page with extra user parameters is preserved in export."""
+		c = self.sandbox.create(baseCOMP, 'c1')
+		page = c.appendCustomPage('About')
+		pg = page.appendInt('Build', label='Build Number')
+		pg[0].readOnly = True
+		page.appendStr('Author', label='Author')
+		c.par.Author = 'TestUser'
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		found_about = False
+		for entry in orig['tdn']['operators']:
+			cp = entry.get('custom_pars', {})
+			if 'About' in cp:
+				found_about = True
+		self.assertTrue(found_about, 'User About page with extra pars should be preserved')
+
+	def test_S03_export_excludes_child_about(self):
+		"""Child COMP About pages are also excluded from export."""
+		parent_comp = self.sandbox.create(baseCOMP, 'parent')
+		child = parent_comp.create(baseCOMP, 'child')
+		for comp in [parent_comp, child]:
+			page = comp.appendCustomPage('About')
+			pg = page.appendInt('Build', label='Build Number')
+			pg[0].readOnly = True
+			pg = page.appendStr('Date', label='Build Date')
+			pg[0].readOnly = True
+			pg = page.appendStr('Touchbuild', label='Touch Build')
+			pg[0].readOnly = True
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		for entry in orig['tdn']['operators']:
+			cp = entry.get('custom_pars', {})
+			self.assertNotIn('About', cp, f"About should be excluded from {entry.get('name')}")
+
+	def test_S04_root_about_excluded_from_export(self):
+		"""Root COMP's own About page is excluded from top-level custom_pars."""
+		page = self.sandbox.appendCustomPage('About')
+		pg = page.appendInt('Build', label='Build Number')
+		pg[0].readOnly = True
+		pg = page.appendStr('Date', label='Build Date')
+		pg[0].readOnly = True
+		pg = page.appendStr('Touchbuild', label='Touch Build')
+		pg[0].readOnly = True
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		top_cp = orig['tdn'].get('custom_pars', {})
+		self.assertNotIn('About', top_cp, 'Root About page should be excluded')

@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 188,
-	"generator": "Embody/5.0.219",
+	"build": 205,
+	"generator": "Embody/5.0.227",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-16T01:40:35Z",
+	"exported_at": "2026-03-17T14:40:04Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -270,26 +270,6 @@
 				"name": "Opviewerfillalpha",
 				"startSection": true,
 				"style": "Float"
-			}
-		],
-		"about_2": [
-			{
-				"label": "Build Number",
-				"name": "Build",
-				"readOnly": true,
-				"style": "Int"
-			},
-			{
-				"label": "Build Date",
-				"name": "Date",
-				"readOnly": true,
-				"style": "Str"
-			},
-			{
-				"label": "Touch Build",
-				"name": "Touchbuild",
-				"readOnly": true,
-				"style": "Str"
 			}
 		]
 	},
@@ -810,7 +790,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.219"
+				"value": "5.0.227"
 			},
 			{
 				"name": "Touchbuild",
@@ -833,7 +813,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 188
+				"value": 205
 			},
 			{
 				"name": "Github",
@@ -848,7 +828,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-03-16 01:40:35 UTC"
+				"value": "2026-03-17 14:40:04 UTC"
 			},
 			{
 				"name": "Help",
@@ -888,14 +868,6 @@
 				"borderover": false,
 				"reloadbuiltin": false
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 15,
-					"Date": "2026-03-14 18:12:08 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"flags": ["viewer"],
 			"position": [196, 675],
 			"size": [142, 155],
@@ -924,14 +896,6 @@
 				"marginl": 5,
 				"marginr": 5,
 				"reloadbuiltin": false
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 33,
-					"Date": "2026-03-14 18:12:08 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [250, 50],
 			"size": [257, 250],
@@ -988,14 +952,6 @@
 				"align": "verttb",
 				"parentshortcut": "menu",
 				"reloadbuiltin": false
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 17,
-					"Date": "2026-03-15 05:03:38 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [900, 225],
 			"size": [108, 155]
@@ -1068,14 +1024,6 @@
 				"align": "verttb",
 				"reloadbuiltin": false
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 13,
-					"Date": "2026-03-14 18:12:08 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [650, 250],
 			"size": [160, 92]
 		},
@@ -1132,14 +1080,6 @@
 				"ext0name": "ToolbarExt",
 				"ext0promote": true,
 				"reloadbuiltin": false
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 12,
-					"Date": "2026-03-14 18:12:08 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [300, 350],
 			"size": [160, 76],
@@ -1228,14 +1168,6 @@
 		{
 			"name": "templates",
 			"type": "baseCOMP",
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 10,
-					"Date": "2026-03-15 23:31:53 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [-400, -1200],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
@@ -1287,13 +1219,7 @@
 						"label": "Window COMP",
 						"value": "/embody/Embody/window_manager"
 					}
-				],
-				"About": {
-					"$t": "about_2",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:06 UTC",
-					"Touchbuild": "2025.32280"
-				}
+				]
 			},
 			"position": [300, 475],
 			"size": [160, 130],
@@ -1337,14 +1263,6 @@
 				"justifyv": "center",
 				"winoffsetx": -12,
 				"cursorvisible": "alwaysvisible"
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 12,
-					"Date": "2026-03-14 18:12:05 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [500, 675],
 			"size": [154, 89]
@@ -1466,14 +1384,6 @@
 				"justifyh": "mouse",
 				"justifyv": "mouse",
 				"winoffsetx": 110
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about_2",
-					"Build": 24,
-					"Date": "2026-03-14 18:12:05 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [900, 675],
 			"size": [110, 157]

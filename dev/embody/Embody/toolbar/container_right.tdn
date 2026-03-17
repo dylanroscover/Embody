@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 14,
-	"generator": "Embody/5.0.212",
+	"generator": "Embody/5.0.224",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T18:12:30Z",
+	"exported_at": "2026-03-17T03:13:01Z",
 	"network_path": "/embody/Embody/toolbar/container_right",
 	"options": {
 		"include_dat_content": false
@@ -26,28 +26,6 @@
 			"tags": ["tdn"]
 		}
 	},
-	"par_templates": {
-		"about": [
-			{
-				"label": "Build Number",
-				"name": "Build",
-				"readOnly": true,
-				"style": "Int"
-			},
-			{
-				"label": "Build Date",
-				"name": "Date",
-				"readOnly": true,
-				"style": "Str"
-			},
-			{
-				"label": "Touch Build",
-				"name": "Touchbuild",
-				"readOnly": true,
-				"style": "Str"
-			}
-		]
-	},
 	"operators": [
 		{
 			"name": "pars",
@@ -63,14 +41,6 @@
 				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)"
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:06 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [600, 0]
 		},
@@ -88,14 +58,6 @@
 				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)"
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:06 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			}
 		},
 		{
@@ -116,14 +78,6 @@
 				"bgcolorg": 0.08,
 				"bgcolorb": 0.08
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:06 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [200, 0]
 		},
 		{
@@ -136,14 +90,6 @@
 				"clickthrough": true,
 				"resizecomp": "=me",
 				"repocomp": "=me"
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:06 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [400, 0],
 			"size": [160, 130],

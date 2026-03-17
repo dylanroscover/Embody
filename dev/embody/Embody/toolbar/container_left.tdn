@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 7,
-	"generator": "Embody/5.0.212",
+	"generator": "Embody/5.0.224",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T18:12:57Z",
+	"exported_at": "2026-03-17T03:13:25Z",
 	"network_path": "/embody/Embody/toolbar/container_left",
 	"options": {
 		"include_dat_content": false
@@ -37,28 +37,6 @@
 			"tags": ["tdn"]
 		}
 	},
-	"par_templates": {
-		"about": [
-			{
-				"label": "Build Number",
-				"name": "Build",
-				"readOnly": true,
-				"style": "Int"
-			},
-			{
-				"label": "Build Date",
-				"name": "Date",
-				"readOnly": true,
-				"style": "Str"
-			},
-			{
-				"label": "Touch Build",
-				"name": "Touchbuild",
-				"readOnly": true,
-				"style": "Str"
-			}
-		]
-	},
 	"operators": [
 		{
 			"name": "status",
@@ -76,14 +54,6 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
 				"marginl": 3
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 42,
-					"Date": "2026-03-14 18:12:44 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [800, -200]
 		},
 		{
@@ -100,14 +70,6 @@
 				"bgcolorg": "=(0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
 				"bgcolorb": "=(0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			}
 		},
 		{
@@ -127,14 +89,6 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 2,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [200, 0]
 		},
 		{
@@ -152,14 +106,6 @@
 				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [0, -200]
 		},
@@ -179,14 +125,6 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 3,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [400, -200]
 		},
 		{
@@ -205,14 +143,6 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 3,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [600, 0]
 		},
 		{
@@ -220,14 +150,6 @@
 			"type": "containerCOMP",
 			"parameters": {
 				"alignorder": 800
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [600, -200]
 		},
@@ -248,14 +170,6 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [400, 0]
 		},
 		{
@@ -272,14 +186,6 @@
 				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
 				"marginl": 3
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [1000, 0]
 		},
@@ -299,14 +205,6 @@
 				"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [800, 0]
 		},
 		{
@@ -314,14 +212,6 @@
 			"type": "containerCOMP",
 			"parameters": {
 				"alignorder": 1025
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [1200, 0]
 		},
@@ -340,14 +230,6 @@
 				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:07 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [200, -200]
 		}

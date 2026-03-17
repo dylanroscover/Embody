@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.212",
+	"generator": "Embody/5.0.224",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T18:12:25Z",
+	"exported_at": "2026-03-17T03:12:06Z",
 	"network_path": "/embody/Embody/windowHeader",
 	"options": {
 		"include_dat_content": false
@@ -25,28 +25,6 @@
 			"tags": ["tdn"]
 		}
 	},
-	"par_templates": {
-		"about": [
-			{
-				"label": "Build Number",
-				"name": "Build",
-				"readOnly": true,
-				"style": "Int"
-			},
-			{
-				"label": "Build Date",
-				"name": "Date",
-				"readOnly": true,
-				"style": "Str"
-			},
-			{
-				"label": "Touch Build",
-				"name": "Touchbuild",
-				"readOnly": true,
-				"style": "Str"
-			}
-		]
-	},
 	"operators": [
 		{
 			"name": "title",
@@ -60,14 +38,6 @@
 				"hmode": "fill",
 				"reposition": "window",
 				"offsetx": 10
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:05 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			}
 		},
 		{
@@ -86,14 +56,6 @@
 				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:05 UTC",
-					"Touchbuild": "2025.32280"
-				}
-			},
 			"position": [600, 0]
 		},
 		{
@@ -111,14 +73,6 @@
 				"bgcolorg": "=1.0",
 				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:05 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [300, 0]
 		},
@@ -155,14 +109,6 @@
 				"bgcolorg": "=1.0",
 				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
-			},
-			"custom_pars": {
-				"About": {
-					"$t": "about",
-					"Build": 1,
-					"Date": "2026-03-14 18:12:05 UTC",
-					"Touchbuild": "2025.32280"
-				}
 			},
 			"position": [900, 0]
 		},

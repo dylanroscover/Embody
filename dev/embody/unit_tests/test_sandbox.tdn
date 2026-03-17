@@ -1,92 +1,32 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 62,
-	"generator": "Embody/5.0.212",
+	"build": 2,
+	"generator": "Embody/5.0.224",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-14T18:13:58Z",
+	"exported_at": "2026-03-17T03:45:53Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false
 	},
 	"type_defaults": {
 		"baseCOMP": {
-			"size": [160, 130],
-			"color": [0.67, 0.67, 0.67]
+			"size": [160, 130]
 		}
-	},
-	"custom_pars": {
-		"About": [
-			{
-				"name": "Build",
-				"style": "Int",
-				"label": "Build Number",
-				"readOnly": true,
-				"value": 62
-			},
-			{
-				"name": "Date",
-				"style": "Str",
-				"label": "Build Date",
-				"readOnly": true,
-				"value": "2026-03-14 18:13:58 UTC"
-			},
-			{
-				"name": "Touchbuild",
-				"style": "Str",
-				"label": "Touch Build",
-				"readOnly": true,
-				"value": "2025.32280"
-			}
-		]
 	},
 	"operators": [
 		{
-			"name": "sandbox_test_delete_cleanup",
-			"type": "baseCOMP"
-		},
-		{
-			"name": "sandbox_test_tdn_reconstruction",
+			"name": "sandbox_test_mcp_externalization",
 			"type": "baseCOMP",
-			"parameters": {
-				"parentshortcut": "mycomp"
-			},
-			"custom_pars": {
-				"Creds": [
-					{
-						"name": "Privatekey",
-						"style": "File",
-						"label": "Private Key",
-						"value": "/path/to/key.json"
-					},
-					{
-						"name": "Databaseid",
-						"style": "Str",
-						"label": "Database ID",
-						"value": "my-project-id"
-					},
-					{
-						"name": "Autoconnect",
-						"style": "Toggle",
-						"label": "Auto Connect",
-						"value": true
-					}
-				],
-				"Test": [
-					{
-						"name": "Speed",
-						"style": "Float",
-						"value": "=absTime.seconds"
-					}
-				],
-				"Config": [
-					{
-						"name": "Threshold",
-						"style": "Float",
-						"value": 0.75
-					}
-				]
-			}
+			"color": [0.67, 0.67, 0.67],
+			"children": [
+				{
+					"name": "tag_ext_comp",
+					"type": "baseCOMP",
+					"color": [0.325, 0.8, 0.3],
+					"tags": ["tox"]
+				}
+			]
 		}
 	]
 }

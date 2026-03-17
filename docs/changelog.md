@@ -1,5 +1,22 @@
 # Changelog
 
+## v5.0.227
+
+TDN crash safety, atomic writes, content-equal skip, About page filtering.
+
+- **Atomic TDN writes**: `TDNExt._safe_write_tdn` now writes via temp file + `os.replace` + `fsync` to prevent partial writes corrupting `.tdn` files on crash or power loss
+- **Backup rotation**: Before each write, `.tdn` files are copied to `.tdn_backup/` (`.bak` and `.bak2` generations). `.tdn_backup/` is git-ignored
+- **Post-write validation**: After each atomic write, the file is read back and parsed. If validation fails, the previous backup is automatically restored
+- **Rollback on reconstruction failure**: `ReconstructTDNComps` and `onProjectPostSave` now attempt rollback from `.bak` if reconstruction fails after import
+- **Content-equal skip**: Pre-save export compares new TDN content against the existing file (ignoring volatile header fields: `build`, `generator`, `td_build`, `exported_at`). Unchanged COMPs are skipped, eliminating noisy git diffs
+- **Structural dirty detection**: `Refresh` now detects structural changes in TDN-strategy COMPs (not just parameter changes) and triggers `SaveTDN` when children are added/removed/renamed
+- **About page filtering**: `Build`, `Date`, and `Touchbuild` parameters are excluded from TDN export and reconstructed from `externalizations.tsv` at import time via `_reconstructAboutPage`. Prevents version metadata from polluting TDN diffs
+- **Continuity dialog suppression**: File cleanup dialog is suppressed when the test runner is active, preventing modal spam during rapid operator create/destroy cycles
+- **Continuity check fix**: Individually-externalized children are only skipped if the parent TDN COMP is completely absent (crash recovery). If the parent exists but is empty, genuine deletions are detected normally
+- **Rules frontmatter strip**: `_writeTemplate` now strips YAML frontmatter before writing rules to user projects (Claude Code doesn't read frontmatter in `.claude/rules/`)
+- **New test suite**: `test_tdn_crash_safety.py` — atomic write behavior, backup rotation, post-write validation, failure injection, and stress tests (37 total suites)
+- **Expanded test coverage**: `test_tdn_helpers.py` adds `_tdn_content_equal` and `_read_existing_tdn` tests; `test_tdn_reconstruction.py` adds S-series About page filtering tests
+
 ## v5.0.222
 
 Rename `tag_for_externalization` to `externalize_op`, clarify single-step workflow.

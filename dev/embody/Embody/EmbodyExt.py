@@ -334,6 +334,11 @@ class EmbodyExt:
         """Returns the configured externalization folder, or empty string."""
         return self.my.par.Folder.eval() or ''
 
+    @property
+    def TDNBackupDir(self) -> Path:
+        """Returns the .tdn_backup directory path (under the project root)."""
+        return Path(project.folder) / '.tdn_backup'
+
     # ==========================================================================
     # PATH UTILITIES - Cross-Platform Support
     # ==========================================================================
@@ -571,7 +576,10 @@ class EmbodyExt:
             template_dat = templates_comp.op(dat_name)
             if not template_dat or not template_dat.text:
                 continue
-            if self._writeTemplate(target_dir, f'.claude/rules/{slug}.md', template_dat.text):
+            # Claude Code doesn't use YAML frontmatter — strip it.
+            # Keep the generated-by marker for overwrite protection.
+            content = self._stripFrontmatter(template_dat.text)
+            if self._writeTemplate(target_dir, f'.claude/rules/{slug}.md', content):
                 written += 1
 
         for dat_name, slug in self._TEMPLATE_MAP_SKILLS.items():
@@ -1285,7 +1293,7 @@ class EmbodyExt:
                 self.Externalizations[comp.path, 'dirty'] = 'Par'
                 self.Save(comp.path)
 
-        # Check for parameter changes on TDN-strategy COMPs
+        # Check for parameter or structural changes on TDN-strategy COMPs.
         # Skip root "/" — it's a Full Project export, not a managed COMP.
         # SaveTDN("/") would trigger root-level stale cleanup that deletes
         # other tracked .tdn files.
@@ -1294,8 +1302,11 @@ class EmbodyExt:
         for comp in tdn_comps:
             if comp.path == '/':
                 continue
-            if self.param_tracker.compareParameters(comp):
-                self.Externalizations[comp.path, 'dirty'] = 'Par'
+            par_dirty = self.param_tracker.compareParameters(comp)
+            struct_dirty = self._isTDNDirty(comp)
+            if par_dirty or struct_dirty:
+                self.Externalizations[comp.path, 'dirty'] = (
+                    'Par' if par_dirty else 'True')
                 self.SaveTDN(comp.path)
 
         # Check for duplicates
@@ -2285,6 +2296,35 @@ class EmbodyExt:
             touch_par.readOnly = True
         touch_par.val = touch_build
 
+    def _reconstructAboutPage(self, comp: 'COMP', comp_path: str) -> None:
+        """Reconstruct Embody's About custom page from externalizations.tsv.
+
+        Called during TDN reconstruction so About pages appear in TD even
+        though they are no longer serialized into .tdn files.
+        """
+        build_cell = self.Externalizations[comp_path, 'build']
+        if build_cell is None:
+            return
+        try:
+            build_num = int(build_cell.val) if hasattr(build_cell, 'val') else int(build_cell)
+        except (ValueError, TypeError):
+            build_num = 1
+
+        touch_cell = self.Externalizations[comp_path, 'touch_build']
+        touch_build = (touch_cell.val if hasattr(touch_cell, 'val') else str(touch_cell)) if touch_cell else str(app.build)
+
+        ts_cell = self.Externalizations[comp_path, 'timestamp']
+        date_str = (ts_cell.val if hasattr(ts_cell, 'val') else str(ts_cell)) if ts_cell else ''
+
+        build_page = next((p for p in comp.customPages if p.name == 'About'), None)
+        if not build_page:
+            build_page = comp.appendCustomPage('About')
+
+        self.setupBuildParameters(comp, build_page, build_num, touch_build)
+        # Override Date with TSV timestamp (not current time from setupBuildParameters)
+        if hasattr(comp.par, 'Date'):
+            comp.par.Date.val = date_str
+
     # ==========================================================================
     # CONTINUITY & RENAME HANDLING
     # ==========================================================================
@@ -2367,14 +2407,18 @@ class EmbodyExt:
 
                 # Skip operators inside TDN-strategy COMPs when appropriate:
                 # - Always skip if no individual strategy (purely TDN-managed)
-                # - Also skip if the parent TDN COMP is stripped (no children,
-                #   e.g., crash recovery) — ReconstructTDNComps() will restore
-                #   them, so checking now would cause false removals
+                # - Skip individually-externalized children only if the parent
+                #   TDN COMP is completely missing (crash recovery before
+                #   reconstruction). If the parent exists but is empty, the
+                #   child was genuinely deleted — check it normally.
+                #   (Save-cycle stripping is protected by suppress_refresh.)
                 parent_tdn = next(
                     (p for p in tdn_comp_paths
                      if old_op_path.startswith(p + '/')), None)
                 if parent_tdn is not None:
-                    if not strategy or parent_tdn in stripped_tdn_paths:
+                    if not strategy:
+                        continue
+                    if parent_tdn in stripped_tdn_paths and not op(parent_tdn):
                         continue
 
                 existing_op = op(old_op_path)
@@ -2949,6 +2993,22 @@ class EmbodyExt:
             missing_ops: List of (op_path, rel_file_path, reason) tuples where
                 reason is 'tdn', 'replaced', or 'missing'.
         """
+        # Suppress dialog during test runs to prevent modal spam —
+        # rapid operator create/destroy cycles can trigger continuity
+        # checks that find transient sandbox ops as "missing".
+        try:
+            runner = getattr(op, 'unit_tests', None)
+            if runner:
+                runner_ext = getattr(
+                    getattr(runner, 'ext', None), 'TestRunnerExt', None)
+                if runner_ext and getattr(runner_ext, '_running', False):
+                    self.Debug(
+                        f'Continuity dialog suppressed: test runner active '
+                        f'({len(missing_ops)} missing ops)')
+                    return
+        except Exception:
+            pass
+
         filecleanup_par = getattr(self.my.par, 'Filecleanup', None)
         preference = filecleanup_par.eval() if filecleanup_par else 'ask'
 
@@ -4268,6 +4328,29 @@ class EmbodyExt:
 
             if result.get('error'):
                 self.Log(f'Reconstruction failed for {comp_path}: {result["error"]}', 'ERROR')
+                # Attempt rollback from backup .tdn
+                try:
+                    backup_path = self.my.ext.TDN._get_backup_path_instance(
+                        str(abs_path))
+                    if backup_path.is_file():
+                        import json as _json
+                        backup_tdn = _json.loads(
+                            backup_path.read_text(encoding='utf-8'))
+                        rb_result = self.my.ext.TDN.ImportNetwork(
+                            target_path=comp_path, tdn=backup_tdn,
+                            clear_first=True, restore_file_links=True)
+                        if rb_result.get('success'):
+                            self.Log(
+                                f'Rolled back {comp_path} from backup',
+                                'WARNING')
+                            continue
+                        else:
+                            self.Log(
+                                f'Rollback failed for {comp_path}: '
+                                f'{rb_result.get("error")}', 'ERROR')
+                except Exception as rb_e:
+                    self.Log(
+                        f'Rollback error for {comp_path}: {rb_e}', 'ERROR')
                 errors_total += 1
                 continue
 
@@ -4278,6 +4361,9 @@ class EmbodyExt:
                 msg += f', {restored} file links'
             msg += ')'
             self.Log(msg, 'SUCCESS')
+
+            # Reconstruct About page from TSV (no longer serialized in .tdn)
+            self._reconstructAboutPage(comp, comp_path)
 
             # Phase E: Post-reconstruction error checking
             comp_errors = self._verifyReconstructedComp(comp)

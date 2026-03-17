@@ -3,7 +3,7 @@ Test suite: TDN helper methods (pure Python logic).
 
 Tests _serializeValue, _valuesDiffer, _colorsDiffer,
 _assembleHierarchy, _getGroupBaseName, _serializeStorageValue,
-and _deserializeStorageValue.
+_deserializeStorageValue, _tdn_content_equal, and _read_existing_tdn.
 """
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -225,3 +225,102 @@ class TestTDNHelpers(EmbodyTestCase):
         result = self.tdn._deserializeStorageValue(
             {'$type': 'unknown', '$value': 'x'})
         self.assertIsInstance(result, dict)
+
+    # --- _tdn_content_equal ---
+
+    def _make_tdn(self, **overrides):
+        """Build a minimal TDN dict with sensible defaults."""
+        base = {
+            'format': 'tdn',
+            'version': '1.0',
+            'build': 1,
+            'generator': 'Embody/5.0.200',
+            'td_build': '099.2025.32280',
+            'exported_at': '2026-01-01T00:00:00Z',
+            'network_path': '/test',
+            'options': {'include_dat_content': True},
+            'operators': [
+                {'name': 'noise1', 'type': 'noiseTOP'},
+            ],
+        }
+        base.update(overrides)
+        return base
+
+    def test_tdn_content_equal_identical(self):
+        """Identical dicts (same volatile fields) returns True."""
+        tdn = self._make_tdn()
+        self.assertTrue(self.tdn._tdn_content_equal(tdn, tdn.copy()))
+
+    def test_tdn_content_equal_only_volatile_diff(self):
+        """Dicts differing only in volatile header fields returns True."""
+        a = self._make_tdn()
+        b = self._make_tdn(
+            build=99,
+            generator='Embody/9.9.999',
+            td_build='100.2030.99999',
+            exported_at='2030-12-31T23:59:59Z',
+        )
+        self.assertTrue(self.tdn._tdn_content_equal(a, b))
+
+    def test_tdn_content_equal_different_operators(self):
+        a = self._make_tdn()
+        b = self._make_tdn(operators=[
+            {'name': 'noise1', 'type': 'noiseTOP'},
+            {'name': 'null1', 'type': 'nullTOP'},
+        ])
+        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+
+    def test_tdn_content_equal_different_options(self):
+        a = self._make_tdn()
+        b = self._make_tdn(options={'include_dat_content': False})
+        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+
+    def test_tdn_content_equal_extra_key_in_existing(self):
+        """Key present in existing but not in new is detected."""
+        a = self._make_tdn()
+        b = self._make_tdn(annotations=[{'name': 'ann1'}])
+        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+
+    def test_tdn_content_equal_extra_key_in_new(self):
+        """Key present in new but not in existing is detected."""
+        a = self._make_tdn(custom_pars=[{'name': 'Speed'}])
+        b = self._make_tdn()
+        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+
+    def test_tdn_content_equal_different_version(self):
+        """Non-volatile header field 'version' difference is detected."""
+        a = self._make_tdn()
+        b = self._make_tdn(version='2.0')
+        self.assertFalse(self.tdn._tdn_content_equal(a, b))
+
+    # --- _read_existing_tdn ---
+
+    def test_read_existing_tdn_missing_file(self):
+        import os, tempfile
+        path = os.path.join(tempfile.gettempdir(), 'nonexistent_abc123.tdn')
+        self.assertIsNone(self.tdn._read_existing_tdn(path))
+
+    def test_read_existing_tdn_corrupt_file(self):
+        import os, tempfile
+        path = os.path.join(tempfile.gettempdir(), 'corrupt_test.tdn')
+        try:
+            with open(path, 'w') as f:
+                f.write('not valid json {{{')
+            self.assertIsNone(self.tdn._read_existing_tdn(path))
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)
+
+    def test_read_existing_tdn_valid_file(self):
+        import os, json, tempfile
+        path = os.path.join(tempfile.gettempdir(), 'valid_test.tdn')
+        data = {'format': 'tdn', 'operators': []}
+        try:
+            with open(path, 'w') as f:
+                json.dump(data, f)
+            result = self.tdn._read_existing_tdn(path)
+            self.assertIsNotNone(result)
+            self.assertEqual(result['format'], 'tdn')
+        finally:
+            if os.path.exists(path):
+                os.unlink(path)

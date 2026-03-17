@@ -62,9 +62,10 @@ def onProjectPreSave():
 	if not tdn_comps:
 		return
 
-	# Phase 1: Export current in-memory state to .tdn files.
-	# This ensures Ctrl+S actually saves any changes the user made
-	# (positions, parameters, annotations, new operators, etc.).
+	# Phase 1: Export current in-memory state to .tdn files, but only
+	# if the content actually changed. Skipping unchanged COMPs avoids
+	# noisy git diffs from volatile header fields (build, generator,
+	# exported_at, td_build).
 	exported = []
 	for comp_path, rel_tdn_path in tdn_comps:
 		comp = op(comp_path)
@@ -76,18 +77,54 @@ def onProjectPreSave():
 			continue
 		try:
 			abs_path = str(parent.Embody.ext.Embody.buildAbsolutePath(rel_tdn_path))
-			protected = parent.Embody.ext.Embody._getAllTrackedTDNFiles(
-				exclude_path=comp_path)
+
+			# Export to dict only (no file write yet)
 			result = parent.Embody.ext.TDN.ExportNetwork(
-				root_path=comp_path, output_file=abs_path,
-				cleanup_protected=protected)
-			if result.get('success'):
-				exported.append((comp_path, rel_tdn_path))
-				parent.Embody.ext.Embody._storeTDNFingerprint(comp)
-			else:
+				root_path=comp_path, output_file=None)
+			if not result.get('success'):
 				parent.Embody.ext.Embody.Log(
 					f'Pre-save export failed for {comp_path}: '
 					f'{result.get("error")}', 'ERROR')
+				continue
+
+			new_tdn = result['tdn']
+
+			# Compare against existing file — skip write if content unchanged
+			existing_tdn = parent.Embody.ext.TDN._read_existing_tdn(abs_path)
+			if existing_tdn and parent.Embody.ext.TDN._tdn_content_equal(
+					new_tdn, existing_tdn):
+				exported.append((comp_path, rel_tdn_path))
+				continue
+
+			# Content changed (or first export) — write to disk
+			scan_folder = str(project.folder)
+			before_tdn = parent.Embody.ext.TDN._collectExistingTDNFiles(
+				scan_folder, comp_path)
+			content = parent.Embody.ext.TDN._compact_json_dumps(new_tdn)
+			write_result = parent.Embody.ext.TDN._safe_write_tdn(
+				abs_path, content, scan_folder)
+			if not write_result.get('success'):
+				parent.Embody.ext.Embody.Log(
+					f'Pre-save write failed for {comp_path}: '
+					f'{write_result.get("error")}', 'ERROR')
+				continue
+
+			# Stale file cleanup
+			protected = [abs_path]
+			other_protected = parent.Embody.ext.Embody._getAllTrackedTDNFiles(
+				exclude_path=comp_path)
+			if other_protected:
+				protected.extend(other_protected)
+			parent.Embody.ext.TDN._cleanupStaleTDNFiles(
+				before_tdn, protected, scan_folder)
+
+			# Track export and update fingerprint
+			parent.Embody.ext.TDN._trackTDNExport(
+				comp_path, abs_path,
+				build_num=new_tdn.get('build'),
+				touch_build=f'{app.version}.{app.build}')
+			parent.Embody.ext.Embody._storeTDNFingerprint(comp)
+			exported.append((comp_path, rel_tdn_path))
 		except Exception as e:
 			parent.Embody.ext.Embody.Log(
 				f'Pre-save export error for {comp_path}: {e}', 'ERROR')
@@ -151,6 +188,20 @@ def onProjectPostSave():
 					f'Post-save restore failed for {comp_path}: {e}', 'ERROR')
 			except Exception:
 				pass
+			# Attempt rollback from backup .tdn
+			try:
+				backup_path = parent.Embody.ext.TDN._get_backup_path_instance(
+					str(abs_path))
+				if backup_path.is_file():
+					import json as _json
+					backup_tdn = _json.loads(
+						backup_path.read_text(encoding='utf-8'))
+					parent.Embody.ext.TDN.ImportNetwork(
+						target_path=comp_path, tdn=backup_tdn,
+						clear_first=True, restore_file_links=True)
+					print(f'Embody > Rolled back {comp_path} from backup')
+			except Exception as rb_e:
+				print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')
 	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)
 	return

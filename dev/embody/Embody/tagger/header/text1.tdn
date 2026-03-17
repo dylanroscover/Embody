@@ -2,57 +2,12 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 6,
-	"generator": "Embody/5.0.217",
+	"generator": "Embody/5.0.224",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-15T05:03:38Z",
+	"exported_at": "2026-03-17T03:13:27Z",
 	"network_path": "/embody/Embody/tagger/header/text1",
 	"options": {
 		"include_dat_content": false
-	},
-	"custom_pars": {
-		"About": [
-			{
-				"name": "Build",
-				"style": "Int",
-				"label": "Build Number",
-				"readOnly": true,
-				"value": 6
-			},
-			{
-				"name": "Date",
-				"style": "Str",
-				"label": "Build Date",
-				"readOnly": true,
-				"value": "2026-03-15 05:03:38 UTC"
-			},
-			{
-				"name": "Touchbuild",
-				"style": "Str",
-				"label": "Touch Build",
-				"readOnly": true,
-				"value": "2025.32280"
-			}
-		]
-	},
-	"parameters": {
-		"text": "Actions",
-		"callbacks": "text1_callbacks",
-		"legacyfontselection": true,
-		"fontsize": 12,
-		"fontcolorr": "=parent.Embody.par.Textcolorr",
-		"fontcolorg": "=parent.Embody.par.Textcolorg",
-		"fontcolorb": "=parent.Embody.par.Textcolorb",
-		"fontalpha": "=parent.Embody.par.Textcolora",
-		"h": 30,
-		"hmode": "fill",
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-		"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-		"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-		"bgalpha": "=parent.Embody.par.Backgroundcolora",
-		"borderover": false,
-		"reloadbuiltin": false
 	},
 	"operators": []
 }
