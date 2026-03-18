@@ -3,9 +3,30 @@ Backup
 External-Tox-Saver_V2.*.toe
 .DS_Store
 **/.DS_Store
+.venv/
+dev_vEnv/
+.mcp.json
+.claude/settings.local.json
+.claude/projects/
+nul
+__pycache__/
+dev/TDImportCache/
+dev/logs/
+dev/embody/unit_tests/test_sandbox/
+dev/embody/unit_tests/results.tsv
+extglob.FullName
 
 # Embody / Envoy (auto-managed)
-.venv/
-.mcp.json
-.claude/
-__pycache__/
+*.lck
+CrashAutoSave*
+.plan.md
+dev/_test_pars_temp/
+site/
+
+# Embody / Envoy (auto-managed)
+.claude/envoy-bridge.py
+
+# Embody / Envoy (auto-managed)
+Backup/
+logs/
+.tdn_backup/

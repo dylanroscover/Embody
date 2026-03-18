@@ -1,0 +1,13 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 1,
+	"generator": "Embody/5.0.224",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-17T03:13:23Z",
+	"network_path": "/embody/Embody/toolbar/container_left/export_comp_tdn",
+	"options": {
+		"include_dat_content": false
+	},
+	"operators": []
+}

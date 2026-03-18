@@ -44,6 +44,10 @@ Embody maintains an `externalizations` tableDAT outside the Embody component wit
 | `dirty` | Dirty state (`True`, `False`, or `Par` for parameter changes) |
 | `build` | Build number (COMPs only) |
 | `touch_build` | TouchDesigner build version (COMPs only) |
+| `strategy` | Externalization strategy (`tox`, `tdn`, `py`, `txt`, etc.) |
+| `node_x` | Operator X position in the network (for restoration) |
+| `node_y` | Operator Y position in the network (for restoration) |
+| `node_color` | Operator node color (for restoration) |
 
 This table serves as the source of truth for what files Embody manages. Only files listed here will ever be deleted by Embody.
 
@@ -57,9 +61,12 @@ COMPs can also be externalized using the **TDN strategy** instead of `.tox`. Thi
 With TDN strategy:
 
 - **On save** (++ctrl+shift+u++): The COMP's children are exported to a `.tdn` file
-- **On project save** (++ctrl+s++): Children are stripped from the `.toe` to keep it small, then restored after save completes
+- **On project save** (++ctrl+s++): Children are **stripped from the `.toe`** to keep it small, then restored immediately after save completes. This means the `.toe` does not contain TDN children — they live entirely in `.tdn` files on disk.
 - **On project open**: Children are automatically reconstructed from the `.tdn` file
 - **In git**: You see readable JSON diffs instead of binary changes
+
+!!! important "Always save externalizations before saving the .toe"
+    Since ++ctrl+s++ strips TDN children from the `.toe`, always press ++ctrl+shift+u++ first to ensure your `.tdn` files are up to date. If TD crashes mid-save, the `.tdn` files are what Embody uses to reconstruct your work.
 
 See [TDN Format](../tdn/index.md) for more details.
 

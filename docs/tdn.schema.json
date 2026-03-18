@@ -94,6 +94,22 @@
       },
       "description": "Reusable custom parameter page definitions. Referenced by $t in operator custom_pars."
     },
+    "custom_pars": {
+      "oneOf": [
+        { "$ref": "#/$defs/customParsPageGrouped" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/customParameterDef" },
+          "description": "Legacy format: flat array of custom parameter definitions with 'page' field."
+        }
+      ],
+      "description": "Target COMP's own custom parameter definitions and values. Same format as operator-level custom_pars."
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/parameterValue" },
+      "description": "Target COMP's own non-default built-in parameter values. Same format as operator-level parameters."
+    },
     "operators": {
       "type": "array",
       "items": { "$ref": "#/$defs/operator" },
@@ -175,6 +191,24 @@
       }
     },
 
+    "storageValue": {
+      "description": "A storage value: primitive, array, object, or typed wrapper ($type/$value).",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        {
+          "type": "array",
+          "items": { "$ref": "#/$defs/storageValue" }
+        },
+        {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/storageValue" }
+        }
+      ]
+    },
+
     "legacyFlags": {
       "type": "object",
       "additionalProperties": false,
@@ -236,6 +270,7 @@
         "menuSource": { "type": "string", "description": "DAT path or expression that dynamically populates the menu." },
         "startSection": { "type": "boolean", "description": "Whether this parameter starts a new visual section." },
         "readOnly": { "type": "boolean", "description": "Whether the parameter is read-only." },
+        "help": { "type": "string", "description": "Tooltip help text for the parameter. Omitted when empty." },
         "value": {
           "$ref": "#/$defs/parameterValue",
           "description": "Current value for single-component parameters."
@@ -376,6 +411,10 @@
           "items": { "type": "string" },
           "description": "Operator tags."
         },
+        "dock": {
+          "type": "string",
+          "description": "Name or path of the operator this operator is docked to. Sibling name preferred; full path for cross-hierarchy docking. Omitted when not docked."
+        },
         "parameters": {
           "type": "object",
           "additionalProperties": { "$ref": "#/$defs/parameterValue" },
@@ -398,6 +437,16 @@
             { "$ref": "#/$defs/legacyFlags" }
           ],
           "description": "Operator flags. Preferred format: string array. Legacy format: object with boolean values."
+        },
+        "storage": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/storageValue" },
+          "description": "Operator storage key-value pairs. Only serializable, non-transient entries."
+        },
+        "startup_storage": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/storageValue" },
+          "description": "Startup storage entries restored via storeStartupValue(). Values reset on every project open."
         },
         "inputs": {
           "oneOf": [

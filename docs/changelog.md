@@ -1,5 +1,133 @@
 # Changelog
 
+## v5.0.227
+
+TDN crash safety, atomic writes, content-equal skip, About page filtering.
+
+- **Atomic TDN writes**: `TDNExt._safe_write_tdn` now writes via temp file + `os.replace` + `fsync` to prevent partial writes corrupting `.tdn` files on crash or power loss
+- **Backup rotation**: Before each write, `.tdn` files are copied to `.tdn_backup/` (`.bak` and `.bak2` generations). `.tdn_backup/` is git-ignored
+- **Post-write validation**: After each atomic write, the file is read back and parsed. If validation fails, the previous backup is automatically restored
+- **Rollback on reconstruction failure**: `ReconstructTDNComps` and `onProjectPostSave` now attempt rollback from `.bak` if reconstruction fails after import
+- **Content-equal skip**: Pre-save export compares new TDN content against the existing file (ignoring volatile header fields: `build`, `generator`, `td_build`, `exported_at`). Unchanged COMPs are skipped, eliminating noisy git diffs
+- **Structural dirty detection**: `Refresh` now detects structural changes in TDN-strategy COMPs (not just parameter changes) and triggers `SaveTDN` when children are added/removed/renamed
+- **About page filtering**: `Build`, `Date`, and `Touchbuild` parameters are excluded from TDN export and reconstructed from `externalizations.tsv` at import time via `_reconstructAboutPage`. Prevents version metadata from polluting TDN diffs
+- **Continuity dialog suppression**: File cleanup dialog is suppressed when the test runner is active, preventing modal spam during rapid operator create/destroy cycles
+- **Continuity check fix**: Individually-externalized children are only skipped if the parent TDN COMP is completely absent (crash recovery). If the parent exists but is empty, genuine deletions are detected normally
+- **Rules frontmatter strip**: `_writeTemplate` now strips YAML frontmatter before writing rules to user projects (Claude Code doesn't read frontmatter in `.claude/rules/`)
+- **New test suite**: `test_tdn_crash_safety.py` — atomic write behavior, backup rotation, post-write validation, failure injection, and stress tests (37 total suites)
+- **Expanded test coverage**: `test_tdn_helpers.py` adds `_tdn_content_equal` and `_read_existing_tdn` tests; `test_tdn_reconstruction.py` adds S-series About page filtering tests
+
+## v5.0.222
+
+Rename `tag_for_externalization` to `externalize_op`, clarify single-step workflow.
+
+- **MCP tool rename**: `tag_for_externalization` → `externalize_op` across EnvoyExt, docs, skills, templates, and settings. The new name better reflects that the tool tags AND writes to disk in one step
+- **Externalize workflow clarification**: Skill and docs now explain that `externalize_op` is a single-step operation (no separate `save_externalization` needed), and that `save_externalization` is for re-exporting already-externalized operators
+- **Test updates**: Renamed test methods and references to match new tool name
+
+## v5.0.221
+
+TDN annotation properties, GitHub release rule, templates cleanup.
+
+- **TDN annotation properties**: Export and import now support `backAlpha`, `titleHeight`, and `bodyFontSize` annotation parameters, preserving non-default values through TDN round-trips
+- **GitHub release rule**: New `.claude/rules/github-release.md` with post-push workflow for detecting release artifacts, extracting version from changelog, and creating GitHub releases via `gh` CLI. Added to `EmbodyExt._TEMPLATE_MAP_RULES` for auto-deployment, template synced, release-commits.md updated with mapping
+- **Templates TDN cleanup**: Annotations in `templates.tdn` now use the native annotation format instead of being represented as annotateCOMP operators. Removed `annotateCOMP` type defaults and `par_templates` section. Expanded Rule Templates annotation to accommodate new template DAT
+
+## v5.0.220
+
+Network layout rule rewrite, commit-push checklist, expanded settings template, tooltip fix.
+
+- **Network layout rule rewrite**: Replaced verbose placement rules with a concise 7-step placement procedure, added anti-patterns section and complexity thresholds for when to encapsulate into COMPs. Template synced
+- **Commit-push checklist rule**: New `.claude/rules/commit-push-checklist.md` enforcing change evaluation, doc audit, test audit, and release detection before every commit. Added to `EmbodyExt._TEMPLATE_MAP_RULES` for auto-deployment, template synced, release-commits.md updated with mapping
+- **Expanded MCP tool allowlist**: Settings template (`text_settings_local.json`) now includes all 42 MCP tools sorted alphabetically, instead of only read-only tools
+- **Tooltip fix**: Toolbar tooltip text changed from "Refresh tracking state" to "Clear filter" with repositioned widget
+- **Parameters template BOM fix**: Restored missing BOM marker on `text_rule_parameters.md`
+
+## v5.0.217
+
+TDN target COMP parameter preservation, user-prompted file cleanup, dock safety, companion reuse fix, git init hardening.
+
+- **Target COMP parameter preservation**: TDN export now captures the target COMP's own custom parameters (`custom_pars`) and non-default built-in parameters (`parameters`) at the root level of the TDN document. Import restores these in a new Phase 9 after child creation, so extension reinit doesn't clobber custom par values. 5 new tests cover roundtrip survival of custom pars, expressions, built-in params, bare shell creation, and backward compatibility
+- **Help text in TDN**: Custom parameter definitions now export and import `help` tooltip text. TDN schema and specification updated with the new `help` field
+- **User-prompted file cleanup**: When the continuity check detects externalized operators removed from the network whose backing files still exist on disk, Embody now prompts the user to keep or delete the files instead of silently skipping. Supports "Always Keep" / "Always Delete" persistent preferences via the new `Filecleanup` parameter
+- **Dock safety on destroy**: Both `_clearChildren` (EmbodyExt) and TDN import (`clear_first`) now clear `child.dock = None` before destroying child operators, preventing uncatchable `tdError` when a dock target is destroyed before its docked operator
+- **Companion reuse fix**: `_createOps` now tracks pre-existing operator names to distinguish them from auto-created companions during merge imports. Prevents merge (non-`clear_first`) imports from incorrectly reusing operators that existed before import started
+- **Git init hardening**: `_ensureGitRepo` strips `GIT_DIR`, `GIT_WORK_TREE`, and other git env vars before `git init` to prevent broken repos caused by TD's embedded Python environment. Verifies the init with `git rev-parse` and retries on failure
+- **`attrs<25` version pin**: MCP dependency install now pins `attrs<25` to avoid conflicts with TD's bundled `attr` module. Startup detects and downgrades attrs 25.x automatically
+- **Tagger refactoring**: Extracted `_removeExternalization` (no-dialog removal) and `_dispatchTaggerButton` (label-based routing for manage-mode buttons) from inline handler code
+- **`RemoveListerRow` / `_removeTDNStrategy`**: Now accept `delete_file` parameter to optionally preserve files on disk when removing tracking entries
+- **Parameter rules**: New dedicated `.claude/rules/parameters.md` covering help text, sections, naming, ranges, styles, and page organization. `td-python.md` now points to it. TD API reference skill updated with post-creation property examples
+- **New tests**: `test_strategy_handlers.py` with 15 tests covering `_removeExternalization`, `HandleStrategySwitch`, `_dispatchTaggerButton`, and manage-mode button dispatch. `test_mcp_externalization.py` gains tearDown cleanup for sandbox entries
+
+## v5.0.210
+
+DAT restoration on startup, continuity check hardening, manager list row limiting.
+
+- **Automatic DAT restoration**: New `RestoreDATs()` method recreates missing DAT-strategy operators from externalized files on project open (frame 50). Controlled by `Datrestoreonstart` parameter. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs
+- **Continuity check hardening**: Before removing entries for missing operators, checks if the backing file exists on disk — recoverable entries are preserved for restoration instead of being deleted
+- **Manager list row limiting**: Tree starts collapsed by default. LRU-based auto-collapse keeps visible rows under 100, protecting the active branch from being collapsed
+- **TDN structural cleanup**: toolbar.tdn and tagger.tdn shed embedded child definitions in favor of externalized `.tdn` files — smaller diffs, cleaner hierarchy
+- **base_test converted to TDN**: Replaced binary `base_test.tox` with `base_test.tdn` for diffability
+- **text_claude.md relocated**: Template moved from `Embody/` root into `Embody/templates/` alongside other template DATs
+- **New tests**: `test_dat_restoration.py` with 13 tests covering DAT restoration, skip conditions, and continuity check recovery
+
+## v5.0.208
+
+Settings auto-deploy, bridge template, Envoy startup resilience.
+
+- **settings.local.json auto-deploy**: Read-only MCP tool permissions deployed automatically on Envoy startup
+- **Bridge script template**: `text_envoy_bridge.py` and settings template moved into the templates COMP for centralized management
+- **Envoy startup resilience**: `_upgradeEnvoy()` failure no longer blocks MCP server startup
+- **`.gitignore` managed entries**: Expanded auto-managed entries to include `Backup/`, `logs/`, `CrashAutoSave*`
+
+## v5.0.207
+
+Claude Code integration docs, slash commands, CLAUDE.md deduplication.
+
+- **Claude Code Integration docs**: New [documentation page](envoy/claude-code.md) covering the generated `.claude/` directory — rules, skills, slash commands, and customization
+- **Slash commands**: Added `/run-tests`, `/status`, and `/explore-network` commands to `.claude/commands/` for common workflows
+- **CLAUDE.md deduplication**: Moved rules that were restated in both `CLAUDE.md` and `.claude/rules/` into rules only — reduced critical rules from 15 to 9. Skill prerequisites moved to dedicated `skill-prerequisites.md` rule
+- **Getting Started update**: `.gitignore` documentation updated to reflect specific `.claude/` entries instead of blanket directory exclusion
+
+## v5.0.206
+
+Metadata reconciliation, network layout tool, save_externalization fix.
+
+- **Metadata reconciliation**: New `ReconcileMetadata()` method runs at frame 75 on project open — re-applies tags, colors, file parameters, and readOnly flags to operators that exist in the externalizations table but lost their in-memory metadata (e.g. when TD was closed without saving after tagging)
+- **`get_network_layout` MCP tool**: Returns positions and sizes of all operators and annotations in a COMP in a single call — replaces the need for repeated `get_op_position` calls. Includes bounding box calculation
+- **`save_externalization` fix**: Now correctly handles TDN-strategy COMPs (calls `SaveTDN`) and file-synced DATs, instead of blindly calling `Save()` which only works for TOX-strategy COMPs
+- **`Save()` guard**: Validates target is a COMP before proceeding — prevents cryptic errors on non-COMP operators
+
+## v5.0.205
+
+Fix companion DAT duplication during TDN strip/restore save cycle.
+
+- **Companion DAT reuse on import**: `_createOps` now detects auto-created companion DATs (timerCHOP callbacks, rampTOP keys, etc.) and reuses them instead of creating duplicates that accumulate on each save
+- **Duplicate companion cleanup on export**: `_exportChildren` detects and skips accumulated companion duplicates (e.g. `timer1_callbacks1`, `timer1_callbacks2`) using docking-based detection — existing `.tdn` files self-clean on next save
+
+## v5.0.204
+
+Custom window header, path portability, TDN template cleanup.
+
+- **Custom window header**: Replaced `widgetCOMP` clone of TDBasicWidgets with a lightweight `containerCOMP` + `WindowHeaderExt` extension — minimize/maximize/close with hover-based button detection, no palette dependency
+- **Absolute path elimination**: Replaced hardcoded `/embody/...` paths with relative expressions (`=op('container_left')`, `=me.op('externalizations')`, etc.) in toolbar and root TDN files for full portability
+- **TDN template cleanup**: Removed unused `type_defaults` entries (baseCOMP, panelexecuteDAT, constantTOP, opexecuteDAT) and stale custom par pages (settings_2, expressions) from Embody.tdn — smaller, cleaner exports
+- **EmbodyExt.py**: `self.ownerComp.path` → `self.my.path` for consistency with codebase conventions
+
+## v5.0.203
+
+Multi-client AI config, TDN docking, robust init.
+
+## v5.0.201
+
+Robust first-install init, table schema expansion, release build hardening.
+
+- **Automatic init on drop**: `onCreate()` now disables Envoy before the table exists (prevents premature git-root detection), creates the externalizations table at frame 15, then runs `Verify()` at frame 30 — all fully async and idempotent
+- **`CreateExternalizationsTable()` (new public method)**: Safe to call at any time. No-op if the table is already connected; reconnects to a surviving sibling after an upgrade without duplicating; creates fresh only when truly absent. Also wired to the **Create Externalizations Table** pulse parameter
+- **`Verify()` — two-scenario detection**: Fresh install (empty table) runs `UpdateHandler` quietly and offers Envoy opt-in. Upgrade (table has prior data) prompts a re-scan dialog before offering Envoy opt-in
+- **Externalizations table schema**: Added `strategy`, `node_x`, `node_y`, and `node_color` columns. Existing tables are migrated automatically on first open
+- **Release build**: `execute_src_ctrl.py` now clears `Tdnfile` and `Networkpath` pars before `ExportPortableTox()` so the baked `.tox` doesn't carry stale TDN paths into new projects
+
 ## v5.0.190
 
 Automatic restoration, documentation overhaul.

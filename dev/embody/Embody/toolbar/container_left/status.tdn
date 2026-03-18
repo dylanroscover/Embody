@@ -1,0 +1,33 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 58,
+	"generator": "Embody/5.0.227",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-17T14:40:04Z",
+	"network_path": "/embody/Embody/toolbar/container_left/status",
+	"options": {
+		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "=str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''",
+		"callbacks": "new_status_callbacks",
+		"font": "Open Sans",
+		"fontsize": 9,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"w": 80,
+		"vmode": "fill",
+		"alignorder": -100,
+		"display": false,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr",
+		"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
+		"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
+		"marginl": 3
+	},
+	"operators": []
+}

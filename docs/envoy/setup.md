@@ -44,16 +44,16 @@ Change the **Envoy Port** parameter on the Embody COMP. If the server is running
 
 If the server is not running, changing the port simply updates the parameter value.
 
-## CLAUDE.md Auto-Generation
+## Claude Code Integration
 
-When Envoy starts, it generates a `CLAUDE.md` file in your project root. This file provides Claude Code with context about:
+When Envoy starts, it generates a full Claude Code configuration in your project root:
 
-- TouchDesigner development patterns and best practices
-- The MCP tool reference
-- Testing conventions
-- Project-specific guidance
+- **`CLAUDE.md`** — project context and critical rules
+- **`.claude/rules/`** — always-loaded conventions (TD Python, network layout, MCP safety)
+- **`.claude/skills/`** — on-demand workflow guides (operator creation, debugging, externalization)
+- **`.claude/commands/`** — slash commands (`/run-tests`, `/status`, `/explore-network`)
 
-This file is regenerated each time Envoy starts to stay up to date.
+These files are regenerated each time Envoy starts to stay up to date. See [Claude Code Integration](claude-code.md) for the full reference.
 
 ## Verifying the Connection
 

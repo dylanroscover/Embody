@@ -1,0 +1,64 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 16,
+	"generator": "Embody/5.0.227",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-17T14:40:04Z",
+	"network_path": "/embody/Embody/toolbar/tooltip",
+	"options": {
+		"include_dat_content": false
+	},
+	"parameters": {
+		"x": 9,
+		"y": 40,
+		"w": 162,
+		"h": 22,
+		"layer": 10,
+		"alignallow": "ignore",
+		"clickthrough": true,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": 0.13,
+		"bgcolorg": 0.13,
+		"bgcolorb": 0.13,
+		"bgalpha": 0.95
+	},
+	"operators": [
+		{
+			"name": "text",
+			"type": "textCOMP",
+			"parameters": {
+				"text": "Update externalizations",
+				"callbacks": "text_callbacks",
+				"font": "Open Sans",
+				"fontsize": 10,
+				"fontcolorr": 0.8,
+				"fontcolorg": 0.8,
+				"fontcolorb": 0.8,
+				"hmode": "fill",
+				"vmode": "fill",
+				"resizecomp": "=me",
+				"repocomp": "=me"
+			},
+			"size": [160, 130],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
+		},
+		{
+			"name": "text_callbacks",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/toolbar/tooltip/text_callbacks.py",
+				"syncfile": true,
+				"language": "python"
+			},
+			"flags": ["viewer"],
+			"position": [0, -160],
+			"size": [160, 130],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"],
+			"dock": "text"
+		}
+	]
+}

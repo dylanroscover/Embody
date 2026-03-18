@@ -1,0 +1,50 @@
+# GitHub Release (Post-Push)
+
+**When:** After a successful `git push`, check whether a GitHub release should be created. This step is OPTIONAL — only proceed if release artifacts exist. Do NOT prompt the user about releases if there is nothing to release.
+
+## 1. Detect Release Artifacts
+
+- Glob for a `release/` or `releases/` directory at the repo root.
+- If neither exists, skip this entire procedure silently.
+- List all files in the release directory. These are the assets to attach.
+- If the directory is empty, skip silently.
+
+## 2. Determine Version
+
+Detect the version using the **first strategy that succeeds**, in order:
+
+1. **Changelog heading**: Scan `CHANGELOG.md`, `changelog.md`, or `docs/changelog.md` for the most recent `## vX.Y.Z` or `## X.Y.Z` or `## Build NN` heading. Extract the version string.
+2. **Package metadata**: Check `package.json` (`version` field), `pyproject.toml` (`[project] version`), `Cargo.toml` (`[package] version`), `setup.cfg`, or similar.
+3. **Latest git tag**: Run `git describe --tags --abbrev=0`. Increment if it matches the previous release.
+4. **Ask the user**: If none of the above yield a version, ask before proceeding.
+
+## 3. Check for Existing Release
+
+- Run `gh release list --limit 10` and check if a release with this version tag already exists.
+- If it does, skip silently — do not create a duplicate.
+
+## 4. Extract Release Notes
+
+- If a changelog file exists, extract the section for the current version — everything under its heading until the next version heading or EOF.
+- If no changelog exists, generate notes from the commit log since the last tag: `git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --oneline`.
+- Present the release notes to the user for approval before creating the release.
+
+## 5. Create the Release
+
+```
+gh release create TAG ASSET_FILES... \
+  --title "RELEASE_TITLE" \
+  --notes "RELEASE_NOTES" \
+  --target BRANCH
+```
+
+- **TAG**: Use the version string, prefixed with `v` if not already (e.g., `v1.2.3`). Match existing tag conventions if tags already exist in the repo.
+- **ASSET_FILES**: All files from the release directory. Glob `release/*` or `releases/*`.
+- **TITLE**: Derive from the project name + version. Use the repo name or `package.json` name if available.
+- **NOTES**: The extracted changelog section or generated commit log, passed via HEREDOC for safe formatting.
+- **BRANCH**: The branch that was just pushed.
+
+## 6. Verify and Report
+
+- Run `gh release view TAG` to confirm creation.
+- Report the release URL to the user.

@@ -1,0 +1,241 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 12,
+	"generator": "Embody/5.0.224",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-17T03:13:26Z",
+	"network_path": "/embody/Embody/templates",
+	"options": {
+		"include_dat_content": false
+	},
+	"type_defaults": {
+		"textDAT": {
+			"parameters": {
+				"syncfile": true
+			},
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4]
+		}
+	},
+	"operators": [
+		{
+			"name": "text_claude",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_claude.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"flags": ["viewer"],
+			"position": [0, 1200],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_agents_md",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_agents_md.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [300, 1200],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_envoy_bridge",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_envoy_bridge.py",
+				"language": "python"
+			},
+			"position": [900, 1200],
+			"tags": ["py"]
+		},
+		{
+			"name": "text_rule_td_python",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_td_python.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [300, 400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_settings_local",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_settings_local.json",
+				"language": "json"
+			},
+			"position": [600, 1200],
+			"tags": ["json"]
+		},
+		{
+			"name": "text_rule_mcp_safety",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_mcp_safety.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [600, 400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_rule_parameters",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_parameters.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [900, 400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_skill_externalize",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_skill_externalize.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [600, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_rule_github_release",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_github_release.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [1500, 400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_rule_network_layout",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_network_layout.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [0, 400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_skill_debug_operator",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_skill_debug_operator.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [300, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_skill_create_operator",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_skill_create_operator.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [0, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_skill_create_extension",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_skill_create_extension.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [900, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_skill_td_api_reference",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_skill_td_api_reference.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [1500, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_skill_manage_annotations",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_skill_manage_annotations.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [1200, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_skill_mcp_tools_reference",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_skill_mcp_tools_reference.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [1800, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_rule_commit_push_checklist",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_commit_push_checklist.md",
+				"language": "text",
+				"extension": "md"
+			},
+			"position": [1200, 400],
+			"tags": ["md"]
+		}
+	],
+	"annotations": [
+		{
+			"name": "annotate1",
+			"mode": "annotate",
+			"title": "Config Templates",
+			"text": "CLAUDE.md, AGENTS.md, settings, bridge",
+			"position": [-70, 1130],
+			"size": [1170, 330],
+			"color": [0.45, 0.45, 0.45],
+			"opacity": 0.5
+		},
+		{
+			"name": "annotate2",
+			"mode": "annotate",
+			"title": "Rule Templates",
+			"text": "Auto-deployed rules for user projects",
+			"position": [-70, 330],
+			"size": [1770, 330],
+			"color": [0.45, 0.45, 0.45],
+			"opacity": 0.5
+		},
+		{
+			"name": "annotate3",
+			"mode": "annotate",
+			"title": "Skill Templates",
+			"text": "Auto-deployed skills for Claude Code",
+			"position": [-70, -470],
+			"size": [2070, 330],
+			"color": [0.45, 0.45, 0.45],
+			"opacity": 0.5
+		}
+	]
+}

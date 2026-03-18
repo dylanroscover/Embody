@@ -29,6 +29,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
   },
   "type_defaults": { ... },
   "par_templates": { ... },
+  "custom_pars": { ... },
+  "parameters": { ... },
   "operators": [ ... ],
   "annotations": [ ... ]
 }
@@ -47,6 +49,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |
 | `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
+| `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
+| `parameters` | object | No | Target COMP's own non-default built-in parameter values. Same format as operator-level [`parameters`](#parameters). Only present if the target COMP has non-default built-in parameters. |
 | `operators` | array | Yes | Array of [operator objects](#operator-object). |
 | `annotations` | array | No | Array of [annotation objects](#annotations). Only present if the root COMP contains annotations. |
 
@@ -68,6 +72,8 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
   "parameters": { ... },
   "custom_pars": { ... },
   "flags": [ ... ],
+  "storage": { ... },
+  "startup_storage": { ... },
   "inputs": [ ... ],
   "comp_inputs": [ ... ],
   "dat_content": "...",
@@ -88,9 +94,12 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]` (tolerance: 0.01 per channel). RGB values are floats from 0.0 to 1.0, rounded to 4 decimal places. |
 | `comment` | string | No | Only if non-empty. Annotation text on the node. |
 | `tags` | array of strings | No | Only if the operator has tags. |
+| `dock` | string | No | Only if the operator is docked to another operator. Sibling name or full path. |
 | `parameters` | object | No | Only if there are non-default [built-in parameters](#built-in-parameters) (after [type_defaults](#type-defaults) are factored out). |
 | `custom_pars` | object | No | Only if the operator has [custom parameters](#custom-parameters). Dict keyed by page name. |
 | `flags` | array | No | Only if any [flags](#flags) differ from their defaults. |
+| `storage` | object | No | Only if the operator has non-transient [storage entries](#operator-storage). Dict of key-value pairs. |
+| `startup_storage` | object | No | Only if the operator has [startup storage entries](#startup-storage). Values restored via `storeStartupValue()` on import. |
 | `inputs` | array | No | Only if the operator has [operator-level connections](#operator-connections). |
 | `comp_inputs` | array | No | Only if the operator has [COMP-level connections](#comp-connections). COMPs only. |
 | `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true`. See [DAT Content](#dat-content). |
@@ -278,6 +287,7 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 | `menuSource` | string | Dynamically populated menus | DAT path or expression that populates the menu. When present, `menuNames`/`menuLabels` are omitted. |
 | `startSection` | boolean | If `true` | Whether this parameter starts a new visual section. |
 | `readOnly` | boolean | If `true` | Whether the parameter is read-only. |
+| `help` | string | If non-empty | Tooltip help text shown when hovering the parameter in the dialog. Omitted when empty. |
 | `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default. |
 | `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults. |
 
@@ -486,7 +496,7 @@ The `flags` array contains string names of flags whose values differ from their 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `bypass` | `false` | Operator is skipped in the processing chain. |
-| `lock` | `false` | DAT content is locked and will not update. |
+| `lock` | `false` | Operator output is locked (frozen). See [Lock Flag Limitation](#lock-flag-limitation). |
 | `display` | `false` | Marks this operator as the display output (blue flag). |
 | `render` | `false` | Marks this operator for rendering (purple flag). |
 | `viewer` | `false` | Shows the operator's viewer on its node tile. |
@@ -509,6 +519,21 @@ Combined example — viewer on, cooking disabled:
 ```json
 "flags": ["viewer", "-allowCooking"]
 ```
+
+### Lock Flag Limitation
+
+The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, and SOPs — freezing their cooked output so it no longer updates from inputs or parameters. However, TDN only persists the frozen data for DATs.
+
+| Family | Flag persisted? | Frozen data persisted? | Notes |
+|--------|:-:|:-:|---|
+| **DAT** | Yes | Yes (via `dat_content`) | Full round-trip: both the lock state and text/table content are preserved. |
+| **TOP** | Yes | No | Pixel data is not stored. On import, the lock flag is set but no texture data exists. |
+| **CHOP** | Yes | No | Channel data is not stored. On import, the lock flag is set but no sample data exists. |
+| **SOP** | Yes | No | Geometry data is not stored. On import, the lock flag is set but no mesh data exists. |
+
+**Why not store the data?** Storing binary operator data (textures, audio waveforms, geometry meshes) would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
+
+**Practical effect:** When a `.tdn` file containing a locked non-DAT operator is imported, the lock flag is restored but the operator has no frozen data to display. The operator will need to be unlocked and allowed to re-cook to regenerate its output from parameters and inputs.
 
 ---
 
@@ -546,6 +571,34 @@ Each string element references the source operator:
 - `null` means no connection at that index.
 
 On import, the source is resolved by first looking for a sibling with that name, then falling back to interpreting it as a full path.
+
+---
+
+## Docking
+
+Operators in TouchDesigner can be visually docked to other operators. A docked operator moves with its host in the network editor and can be collapsed into the host's tile.
+
+When an operator is docked, TDN records a `"dock"` field on it:
+
+| Field | Type | Condition |
+|-------|------|-----------|
+| `dock` | string | Only if the operator is docked to another operator. |
+
+The value is the **sibling name** of the dock host when they share a parent COMP, or the **full operator path** for cross-hierarchy docking. This follows the same reference convention as [operator connections](#connections).
+
+Docking is a purely visual/organizational relationship — it has no effect on operator behavior, data flow, or cooking. It is omitted from `type_defaults` because docking is always instance-specific.
+
+**Example:**
+
+```json
+{
+  "name": "info1",
+  "type": "infoDAT",
+  "dock": "noise1"
+}
+```
+
+During import, the dock target is resolved by sibling name first, then full path fallback. If the target cannot be found, a warning is logged and docking is skipped gracefully.
 
 ---
 
@@ -596,6 +649,73 @@ DAT content is only included when:
 1. The operator belongs to the DAT family
 2. The `include_dat_content` option is `true`
 3. The DAT has content (non-empty text or at least one row)
+
+---
+
+## Operator Storage
+
+Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
+
+### Format
+
+```json
+{
+  "name": "my_comp",
+  "type": "baseCOMP",
+  "storage": {
+    "count": 42,
+    "label": "hello",
+    "items": [1, 2, 3],
+    "config": {"key": "value"},
+    "coords": {"$type": "tuple", "$value": [10, 20]},
+    "tags": {"$type": "set", "$value": ["a", "b", "c"]},
+    "raw": {"$type": "bytes", "$value": "AAEC/w=="}
+  }
+}
+```
+
+### Value Serialization
+
+Python types that map directly to JSON are stored as-is. Non-JSON types use a `$type`/`$value` wrapper:
+
+| Python Type | JSON Representation |
+|-------------|---------------------|
+| `str`, `int`, `float`, `bool` | Direct JSON value |
+| `None` | `null` |
+| `list` | JSON array (recursive) |
+| `dict` | JSON object (recursive, string keys only) |
+| `tuple` | `{"$type": "tuple", "$value": [...]}` |
+| `set` | `{"$type": "set", "$value": [...]}` (sorted for determinism) |
+| `bytes` | `{"$type": "bytes", "$value": "<base64>"}` |
+
+Values that cannot be serialized to JSON (threading objects, operator references, custom class instances) are silently skipped during export.
+
+### Skipped Keys
+
+The following storage keys are never exported (runtime/transient state managed by Embody):
+
+`_tdn_stripped_paths`, `_git_root`, `envoy_running`, `envoy_shutdown_event`, `expanded_paths`, `manage_file_path`, `visible_count`, `hover`
+
+### Startup Storage
+
+TouchDesigner supports `storeStartupValue(key, value)` — values that reset to their initial state on every project open, regardless of what they were when the file was saved. TDN supports this via an optional `startup_storage` field:
+
+```json
+{
+  "name": "my_comp",
+  "type": "baseCOMP",
+  "storage": {"runtime_count": 0},
+  "startup_storage": {"version": 1, "default_mode": "auto"}
+}
+```
+
+On import, keys in `startup_storage` are restored via `storeStartupValue()`, while keys in `storage` use `store()`.
+
+**Export limitation:** TouchDesigner provides no API to introspect which storage keys were set with `storeStartupValue()` vs `store()`. During automatic export, all entries go into `storage`. The `startup_storage` field must be populated manually or by tools that know the intent (e.g., code generators, StorageManager-aware exporters).
+
+### Import Behavior
+
+Storage is restored during Phase 6a (after DAT content, before positions). Keys in `storage` are restored via `op.store(key, value)`. Keys in `startup_storage` are restored via `op.storeStartupValue(key, value)`. `$type` wrappers are deserialized back to their Python types. Unknown `$type` values are treated as plain dicts with a warning logged.
 
 ---
 
@@ -726,7 +846,7 @@ An operator is excluded if its path equals one of these or starts with one follo
 
 ## Import Process
 
-Importing a `.tdn` file reconstructs the network in a pre-phase plus seven sequential phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
+Importing a `.tdn` file reconstructs the network in a pre-phase plus eight sequential phases. This ordering ensures that dependencies are satisfied — for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
 
 | Phase | Action | Details |
 |-------|--------|---------|
@@ -737,6 +857,7 @@ Importing a `.tdn` file reconstructs the network in a pre-phase plus seven seque
 | 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
 | 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
 | 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
+| 6a | **Restore storage** | Storage key-value pairs are restored via `op.store()`. `$type` wrappers are deserialized to Python types (tuple, set, bytes). |
 | 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. Missing position defaults to `[0, 0]`. |
 | 7a | **Create annotations** | Annotations are created from the `annotations` array (top-level and per-COMP). Each annotation is created as an `annotateCOMP` with `utility=True`, then its mode, title, body text, position, size, color, and opacity are set. |
 
@@ -764,6 +885,7 @@ For most networks, export → import → re-export produces identical `.tdn` out
 - Non-default parameter values (constant, expression, and bind modes)
 - Custom parameter definitions (all fields, all styles)
 - Flags, connections, positions, sizes, colors, comments, tags
+- Operator storage (serializable entries only — see [Operator Storage](#operator-storage))
 - Annotations (mode, title, body text, position, size, color, opacity)
 - DAT text and table content (byte-for-byte when `include_dat_content` is `true`)
 - Float values (stable after the first export — see below)
@@ -779,6 +901,8 @@ For most networks, export → import → re-export produces identical `.tdn` out
 
 **Type defaults recomputation** — Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the JSON structure may differ.
 
+**Locked non-DAT data** — When a TOP, CHOP, or SOP is locked, TDN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
+
 ### Intentionally Excluded
 
 The following are never exported and are not considered a loss:
@@ -787,6 +911,8 @@ The following are never exported and are not considered a loss:
 - **Pulse / Momentary / Header styles** — no persistent state
 - **Read-only parameters** — cannot be set on import
 - **COMP externalization parameters** (`externaltox`, `enableexternaltox`, `reloadtox`) — COMP `.tox` externalization is managed separately by Embody
+- **Transient storage keys** — runtime state used by Embody (`envoy_running`, `_git_root`, etc.)
+- **Non-serializable storage values** — threading objects, operator references, custom class instances
 
 ---
 
@@ -811,6 +937,9 @@ Developers should ignore unknown fields when parsing TDN documents. This ensures
 | Version mismatch (`version`, `td_build`) | Log a warning, proceed with import. |
 | Unknown `$t` template reference | Log a warning, skip that page. |
 | Missing `type_defaults` entry for a type | No-op (operator uses its own properties). |
+| Non-serializable storage value on export | Skip that value, log at DEBUG level. |
+| Unknown `$type` in storage on import | Treat as plain dict, log a warning. |
+| Failed `store()` call on import | Skip that key, log a warning. |
 
 ### General Principle
 

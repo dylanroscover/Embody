@@ -35,7 +35,7 @@ For the complete tool reference, see [Tools Reference](tools-reference.md).
 When Envoy starts, it:
 
 1. Creates a `.mcp.json` file in your git repo root (auto-detected)
-2. Generates a `CLAUDE.md` file with project context for Claude Code
+2. Generates a full [Claude Code configuration](claude-code.md) — rules, skills, slash commands, and project context
 3. Auto-manages `.gitignore` entries for generated files
 
 ## Key Features

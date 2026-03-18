@@ -1,0 +1,13 @@
+# MCP Server Safety
+
+## Thread Boundary
+
+The Envoy MCP server runs in a background thread. TouchDesigner objects (OPs, COMPs, parameters) must NEVER be accessed from background threads. All TD operations go through the main thread automatically via Envoy's MCP tools.
+
+## Localhost Only
+
+The MCP server binds to `127.0.0.1` only. It is not accessible from the network.
+
+## Operation Timeout
+
+MCP operations time out at 30 seconds. If an operation needs longer, break it into smaller steps.

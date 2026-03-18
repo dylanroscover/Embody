@@ -89,7 +89,7 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `tag_for_externalization` | `op_path`, `tag_type?` | Tag operator for externalization (auto-detects type if omitted) |
+| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
 | `remove_externalization_tag` | `op_path` | Remove externalization tag |
 | `get_externalizations` | _(none)_ | List all externalized operators with status |
 | `save_externalization` | `op_path` | Force save an externalized operator to disk |
@@ -101,6 +101,12 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 |------|-----------|-------------|
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Export network to `.tdn` JSON (non-default properties only) |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
+
+## TOP Capture
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?` | Capture a TOP's output as an image. Saves to temp file and returns the path. Small images (<20 KB) also include an inline MCP `ImageContent` preview. Default: JPEG at 80% quality, max 640px long edge. |
 
 ## Logging
 

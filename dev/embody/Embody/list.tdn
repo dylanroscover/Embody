@@ -1,0 +1,88 @@
+{
+	"format": "tdn",
+	"version": "1.0",
+	"build": 33,
+	"generator": "Embody/5.0.224",
+	"td_build": "099.2025.32280",
+	"exported_at": "2026-03-17T03:13:52Z",
+	"network_path": "/embody/Embody/list",
+	"options": {
+		"include_dat_content": false
+	},
+	"type_defaults": {
+		"textDAT": {
+			"parameters": {
+				"syncfile": true,
+				"language": "python"
+			},
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		}
+	},
+	"operators": [
+		{
+			"name": "list1",
+			"type": "listCOMP",
+			"parameters": {
+				"callbacks": "=op('list_callbacks')",
+				"rows": "=op('inject_parents').numRows",
+				"cols": 8,
+				"lockfirstrow": true,
+				"hscrollbar": false,
+				"offcellcallbacks": true,
+				"hmode": "fill",
+				"vmode": "fill",
+				"resizecomp": "=me",
+				"repocomp": "=me"
+			},
+			"position": [445, 0],
+			"size": [160, 130],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
+		},
+		{
+			"name": "select1",
+			"type": "selectDAT",
+			"parameters": {
+				"dat": "=parent.Embody.par.Externalizations",
+				"rowindexend": "=me.inputTable.numRows - 1",
+				"rowexpr": "=re.match('.*',me.inputCell.val) != None",
+				"colindexend": "=me.inputTable.numCols - 1",
+				"colexpr": "=re.match('.*',me.inputCell.val) != None"
+			},
+			"flags": ["viewer"],
+			"position": [-275, 0],
+			"size": [130, 90]
+		},
+		{
+			"name": "inject_parents",
+			"type": "scriptDAT",
+			"parameters": {
+				"callbacks": "inject_parents_callbacks"
+			},
+			"position": [-100, 0],
+			"size": [130, 90],
+			"color": [0.67, 0.67, 0.67],
+			"inputs": ["select1"]
+		},
+		{
+			"name": "list_callbacks",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/list/list_callbacks.py"
+			},
+			"position": [625, 0]
+		},
+		{
+			"name": "inject_parents_callbacks",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/list/inject_parents_callbacks.py"
+			},
+			"flags": ["viewer"],
+			"position": [-100, -120],
+			"dock": "inject_parents"
+		}
+	]
+}

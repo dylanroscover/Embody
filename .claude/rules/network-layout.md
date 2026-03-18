@@ -1,0 +1,46 @@
+# Network Layout Conventions
+
+## Placement Procedure (follow every time)
+
+1. **Read first**: `get_network_layout` + `get_annotations` on the parent COMP. Understand existing positions, groups, and flow before touching anything.
+2. **Flag problems**: If the existing layout is messy (overlapping ops, orphaned ops outside annotations, broken grid alignment), tell the user before adding to it. Do not silently work around a bad layout.
+3. **Identify the target group**: Determine which annotation group the new operator belongs to. If none fits, you will create a new one.
+4. **Compute position**: New operators extend the group to the **right** (highest X in the group + 300). If adding a parallel chain, go **down** (lowest Y in the group − 400). Always snap to the 200-unit grid.
+5. **Batch-compute all positions** before placing anything. Never place one operator, then figure out where the next one goes.
+6. **Place, connect, then update the annotation** to enclose the new operators. Use `set_annotation` to expand width/height if needed.
+7. **Verify**: After placing, call `get_network_layout` again. Confirm no overlaps, no ops outside annotations, and grid alignment is intact.
+
+## Grid and Spacing
+
+- **200-unit grid**: All positions snap to multiples of 200. No arbitrary coordinates.
+- **300 units horizontal** between connected operators in a chain.
+- **400 units vertical** between parallel chains or annotation groups.
+- **Y-axis increases upward**. New rows go downward (decreasing Y). Primary chain at top, secondary chains below.
+
+## Signal Flow
+
+- **Left to right**: Inputs on the left, outputs on the right. New additions go on the far right of their group.
+- **Branches split vertically**: Branches fan out downward, each continuing left-to-right. Minimize edge crossings.
+- **Same row = same stage** in a processing chain (same X). **Same column = same function** across parallel chains (same Y).
+
+## Annotations
+
+- **Every operator must be inside exactly one annotation.** No orphans. If a new op doesn't belong to an existing group, create a new annotation for it.
+- **Annotations must never overlap each other.** Maintain at least 400 units between annotation edges.
+- **Expand annotations when adding operators.** Recalculate the bounding box with padding after every addition.
+- **Title names the function, not the implementation.** "Audio Mixing" not "CHOP chain 2". A reader should understand the network from annotation titles alone.
+
+**STOP — you MUST invoke `/manage-annotations` before calling `create_annotation` or `set_annotation`.** It contains required coordinate math. Key point: `nodeX`/`nodeY` is the **bottom-left corner**.
+
+## Complexity Thresholds
+
+- **4–5 annotation groups** in one network: consider breaking into baseCOMPs (or containerCOMPs for UI).
+- **15–20 operators** in one group: consider encapsulating into a COMP.
+- When encapsulating, the COMP replaces the group in the parent network. Move the annotation title to the COMP's name or label.
+
+## Anti-Patterns
+
+- Placing at `[0, 0]` or the origin without reading existing layout.
+- Placing "near" a related op by picking a mathematically close but visually wrong position — filling a gap in the middle of a finished row instead of extending rightward.
+- Using TD's `COMP.layout()` — it produces overlapping, unreadable results.
+- Creating operators without updating the enclosing annotation.
