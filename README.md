@@ -7,7 +7,7 @@
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
 
-[YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s) &nbsp;|&nbsp; [Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
+[Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
 
 ---
 
