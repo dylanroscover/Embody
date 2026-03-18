@@ -1,5 +1,12 @@
 # Changelog
 
+## v5.0.228
+
+macOS timezone fix, toolbar hover highlight.
+
+- **macOS timezone abbreviation fix**: Local timestamp display in the manager list now shortens verbose macOS timezone names (e.g. "Pacific Daylight Time" → "PDT") by extracting initials
+- **Toolbar hover highlight**: Container right toolbar button background color now uses an expression to brighten on hover
+
 ## v5.0.227
 
 TDN crash safety, atomic writes, content-equal skip, About page filtering.

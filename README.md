@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.227-blue)
+![Version](https://img.shields.io/badge/version-5.0.228-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -179,6 +179,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.228**: macOS timezone fix, toolbar hover highlight
 - **5.0.227**: TDN crash safety — atomic writes, backup rotation, content-equal skip, About page filtering
 - **5.0.222**: Rename `tag_for_externalization` → `externalize_op`, clarify single-step workflow
 - **5.0.221**: TDN annotation properties, GitHub release rule, templates cleanup
