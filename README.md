@@ -4,7 +4,7 @@
 
 ![Version](https://img.shields.io/badge/version-5.0.228-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
-![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
+![MCP Tools](https://img.shields.io/badge/MCP_tools-44-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
 
 [Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
@@ -26,7 +26,7 @@ TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or
 | | Feature | What It Does |
 |---|---------|-------------|
 | 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores everything from disk on project open |
-| 🤖 | **Envoy MCP Server** | 40+ tools let AI assistants create operators, set parameters, wire connections, and more |
+| 🤖 | **Envoy MCP Server** | 44 tools let AI assistants create operators, set parameters, wire connections, and more |
 | 📄 | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
 | 📤 | **Portable Tox Export** | Export any COMP as a self-contained `.tox` with all external references stripped |
 
@@ -52,9 +52,8 @@ my-project/              ← git repo root
 ### 2. Install and Tag
 
 1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project
-2. **Tag operators** — select any COMP or DAT and press `lctrl` twice
-3. **Initialize** — press `ctrl + shift + u` to externalize all tagged operators
-4. **Work normally** — press `ctrl + shift + u` as you work to save changes. On project open, Embody restores everything from disk automatically
+2. **Tag operators** — select any COMP or DAT and press `lctrl` twice to tag and externalize it
+3. **Work normally** — press `ctrl + shift + u` to save all changes, or `ctrl + alt + u` to save only the current COMP. On project open, Embody restores everything from disk automatically
 
 > **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
@@ -109,7 +108,7 @@ If your project isn't in a git repo, add `.mcp.json` manually to your project ro
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 35+ more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
+...and 37 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
 When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD development patterns, the complete MCP tool reference, and project-specific guidance.
 
@@ -191,7 +190,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 - **5.0.204**: Custom window header, path portability, TDN cleanup
 - **5.0.201**: Robust first-install init, table schema expansion, release build hardening
 - **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs fully restored from disk on project open
-- **5.0**: Envoy MCP server (40+ tools), TDN format, test framework (30 suites), macOS support
+- **5.0**: Envoy MCP server (44 tools), TDN format, test framework (37 suites), macOS support
 
 ---
 
