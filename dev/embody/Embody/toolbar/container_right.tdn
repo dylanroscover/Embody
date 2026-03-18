@@ -74,9 +74,9 @@
 				"alignx": "left",
 				"w": 170,
 				"alignorder": 25,
-				"bgcolorr": 0.08,
-				"bgcolorg": 0.08,
-				"bgcolorb": 0.08
+				"bgcolorr": "=0.08 + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=0.08 + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=0.08 + (0.06 if me.fetch('hover', False) else 0)"
 			},
 			"position": [200, 0]
 		},

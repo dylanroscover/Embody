@@ -252,7 +252,12 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		if ts and parent.Embody.par.Localtimestamps.eval():
 			try:
 				utc_dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=timezone.utc)
-				ts = utc_dt.astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+				local_dt = utc_dt.astimezone()
+				tz_abbr = local_dt.strftime("%Z")
+				# macOS returns full names like "Pacific Daylight Time"; shorten to acronym
+				if len(tz_abbr) > 5:
+					tz_abbr = ''.join(w[0] for w in tz_abbr.split())
+				ts = local_dt.strftime("%Y-%m-%d %H:%M:%S") + ' ' + tz_abbr
 			except ValueError:
 				pass
 		attribs.text = ts
