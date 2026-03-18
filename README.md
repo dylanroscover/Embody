@@ -7,7 +7,7 @@
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-42-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
 
-[YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s) &nbsp;|&nbsp; [Full Documentation](docs/) &nbsp;|&nbsp; [Changelog](docs/changelog.md)
+[YouTube Demo/Tutorial](https://www.youtube.com/watch?v=lR3adD3Cw5s) &nbsp;|&nbsp; [Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
 
 ---
 
@@ -69,7 +69,7 @@ my-project/              ← git repo root
 | `ctrl + shift + e` | Export entire project to `.tdn` file |
 | `ctrl + alt + e` | Export current COMP to `.tdn` file |
 
-For supported formats, folder configuration, duplicate handling, Manager UI, and more — see the [Embody docs](docs/embody/).
+For supported formats, folder configuration, duplicate handling, Manager UI, and more — see the [Embody docs](https://dylanroscover.github.io/Embody/embody/).
 
 ---
 
@@ -109,7 +109,7 @@ If your project isn't in a git repo, add `.mcp.json` manually to your project ro
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 35+ more. See the [full tools reference](docs/envoy/tools-reference.md).
+...and 35+ more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
 When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD development patterns, the complete MCP tool reference, and project-specific guidance.
 
@@ -123,7 +123,7 @@ TDN (TouchDesigner Network) is a JSON-based format for exporting operator networ
 - **Current COMP**: `ctrl + alt + e`
 - **Via Envoy**: `export_network` / `import_network` MCP tools
 
-See the [full TDN specification](docs/tdn/specification.md) for format details, import process, and round-trip guarantees.
+See the [full TDN specification](https://dylanroscover.github.io/Embody/tdn/specification/) for format details, import process, and round-trip guarantees.
 
 ---
 
@@ -156,7 +156,7 @@ op.unit_tests.RunTests(suite_name='test_path_utils')   # Single suite
 op.unit_tests.RunTestsSync()                           # All in one frame (blocks TD)
 ```
 
-Via Envoy MCP: use the `run_tests` tool. See the [full testing docs](docs/testing.md) for coverage details and how to write new tests.
+Via Envoy MCP: use the `run_tests` tool. See the [full testing docs](https://dylanroscover.github.io/Embody/testing/) for coverage details and how to write new tests.
 
 </details>
 
@@ -167,7 +167,7 @@ Via Envoy MCP: use the `run_tests` tool. See the [full testing docs](docs/testin
 - **Clone/Replicant Operators**: Cannot be externalized. Embody warns if you try to tag them.
 - **Engine COMPs**: Engine, time, and annotate COMPs are not supported for externalization.
 
-For more, see [Troubleshooting](docs/embody/troubleshooting.md).
+For more, see [Troubleshooting](https://dylanroscover.github.io/Embody/embody/troubleshooting/).
 
 </details>
 
@@ -175,7 +175,7 @@ For more, see [Troubleshooting](docs/embody/troubleshooting.md).
 
 ## Version History
 
-See the [full changelog](docs/changelog.md) for detailed version history.
+See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for detailed version history.
 
 **Recent releases:**
 
