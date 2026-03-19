@@ -472,7 +472,9 @@ class EmbodyExt:
             '  - Generate AI config files in your project root\n'
             '    (CLAUDE.md, AGENTS.md, .mcp.json, .claude/ rules + skills)\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
-            'You can change this later via the Envoyenable parameter.',
+            'You can change this later via the Envoyenable parameter.\n\n'
+            'Note: TD will be unresponsive for a few seconds while\n'
+            'dependencies are installed.',
             buttons=['Skip', 'Enable Envoy'])
 
         if choice == 1:

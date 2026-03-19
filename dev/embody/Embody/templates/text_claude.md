@@ -18,7 +18,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 6. **Always use forward slashes** in file paths for cross-platform compatibility.
 7. **Always consult the TD wiki** before writing TD Python code OR claiming TD behavior — confirm API behavior, file formats, and application features against official Derivative documentation even if you're confident. Never assume a TD feature, file type, or convention exists without a verified source.
 8. **Binary files** (`.toe`, `.tox`) — use MCP tools to inspect contents, not the filesystem.
-9. **Always check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting.
+9. **Always check for errors and warnings after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting.
 10. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
 11. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
 12. **Load the relevant skill BEFORE acting** — skills are prerequisites, not optional reference:

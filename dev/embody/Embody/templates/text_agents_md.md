@@ -20,7 +20,7 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 4. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
 5. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
 6. **Always use forward slashes** in file paths.
-7. **Check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creation.
+7. **Check for errors and warnings after creating operators** — `get_op_errors` with `recurse=true` immediately after creation.
 8. **Thread boundary**: MCP server worker thread must never import TD modules. All TD access goes through `_execute_in_td()`.
 
 ---

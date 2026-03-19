@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.229
+
+Warning support in `get_op_errors`, Envoy enable dialog improvement, cleanup.
+
+- **`get_op_errors` now returns warnings**: The MCP tool calls both `OP.errors()` and `OP.warnings()`, returning structured `warnings`/`warningCount`/`hasWarnings` fields alongside existing error data. Cook dependency loops and other TD warnings are now surfaced to AI clients
+- **Envoy enable dialog note**: The first-run dialog now mentions that TD will be briefly unresponsive during dependency installation
+- **Cleanup**: Removed stale `base_tox.tdn` and test externalization entries from tracking table
+
 ## v5.0.228
 
 macOS timezone fix, toolbar hover highlight.

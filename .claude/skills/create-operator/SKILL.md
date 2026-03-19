@@ -14,7 +14,7 @@ Follow these steps every time you create operators via MCP:
 4. **Create the operator**: `create_op` with the desired type and name
 5. **Set position immediately**: `set_op_position` — never leave operators at `[0, 0]`
 6. **Connect if needed**: `connect_ops` to wire inputs/outputs
-7. **Verify**: `get_op_errors` with `recurse=true` to check for errors. Fix all errors before considering the task complete.
+7. **Verify**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete.
 
 ## Key Reminders
 

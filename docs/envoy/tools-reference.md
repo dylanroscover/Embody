@@ -79,7 +79,7 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_td_info` | _(none)_ | Get TD version, build, OS, and Envoy version |
-| `get_op_errors` | `op_path`, `recurse?` | Get error messages for an operator and its children |
+| `get_op_errors` | `op_path`, `recurse?` | Get error and warning messages for an operator and its children |
 | `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`) |
 | `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |

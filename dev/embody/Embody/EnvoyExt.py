@@ -331,15 +331,15 @@ class EnvoyMCPServer:
         @self.mcp.tool()
         def get_op_errors(op_path: str, recurse: bool = True) -> dict:
             """
-            Get error messages for an operator and optionally its children.
-            Useful for debugging TD networks.
+            Get error and warning messages for an operator and optionally its children.
+            Useful for debugging TD networks — returns both errors and warnings.
 
             Args:
                 op_path: Path to the operator to check
                 recurse: If True, also check children (default True)
 
             Returns:
-                Dict with error count and structured error list
+                Dict with structured error and warning lists
             """
             return self._execute_in_td('get_op_errors', {
                 'op_path': op_path,
@@ -424,8 +424,8 @@ class EnvoyMCPServer:
 
         @self.mcp.prompt()
         def check_op_errors(op_path: str) -> str:
-            """Check an operator and its children for errors in TouchDesigner."""
-            return f'Use the "get_op_errors" tool to inspect "{op_path}" and its children for error messages. If errors are found, examine the affected operators\' parameters and connections to resolve them.'
+            """Check an operator and its children for errors and warnings in TouchDesigner."""
+            return f'Use the "get_op_errors" tool to inspect "{op_path}" and its children for error and warning messages. If errors or warnings are found, examine the affected operators\' parameters and connections to resolve them.'
 
         @self.mcp.prompt()
         def connect_ops() -> str:
@@ -2270,56 +2270,64 @@ class EnvoyExt:
             return {'error': f'Failed to get TD info: {e}'}
 
     def _get_op_errors(self, op_path: str, recurse: bool = True) -> dict:
-        """Get error messages for an operator and its children"""
+        """Get error and warning messages for an operator and its children"""
         target = op(op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
 
         all_errors = []
-        if hasattr(target, 'errors') and callable(target.errors):
-            try:
-                error_output = target.errors(recurse=recurse)
-                if error_output:
-                    error_lines = error_output.strip().split('\n')
-                    for line in error_lines:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        # TD error format: "Error message (node_path)"
-                        if '(' in line and line.endswith(')'):
-                            message_part, path_part = line.rsplit('(', 1)
-                            error_node_path = path_part.rstrip(')')
-                            message = message_part.strip()
-                            error_node = op(error_node_path)
-                            if error_node and error_node.valid:
-                                all_errors.append({
-                                    'nodePath': error_node.path,
-                                    'nodeName': error_node.name,
-                                    'opType': error_node.OPType,
-                                    'message': message,
-                                })
+        all_warnings = []
+
+        for severity, method_name, output_list in [
+            ('error', 'errors', all_errors),
+            ('warning', 'warnings', all_warnings),
+        ]:
+            if hasattr(target, method_name) and callable(getattr(target, method_name)):
+                try:
+                    output = getattr(target, method_name)(recurse=recurse)
+                    if output:
+                        for line in output.strip().split('\n'):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            # TD format: "Message text (node_path)"
+                            if '(' in line and line.endswith(')'):
+                                message_part, path_part = line.rsplit('(', 1)
+                                node_path = path_part.rstrip(')')
+                                message = message_part.strip()
+                                node = op(node_path)
+                                if node and node.valid:
+                                    output_list.append({
+                                        'nodePath': node.path,
+                                        'nodeName': node.name,
+                                        'opType': node.OPType,
+                                        'message': message,
+                                    })
+                                else:
+                                    output_list.append({
+                                        'nodePath': node_path,
+                                        'nodeName': '',
+                                        'opType': '',
+                                        'message': message,
+                                    })
                             else:
-                                all_errors.append({
-                                    'nodePath': error_node_path,
-                                    'nodeName': '',
-                                    'opType': '',
-                                    'message': message,
+                                output_list.append({
+                                    'nodePath': target.path,
+                                    'nodeName': target.name,
+                                    'opType': target.OPType,
+                                    'message': line,
                                 })
-                        else:
-                            all_errors.append({
-                                'nodePath': target.path,
-                                'nodeName': target.name,
-                                'opType': target.OPType,
-                                'message': line,
-                            })
-            except Exception as e:
-                self._log(f'Error getting errors from {op_path}: {e}', 'WARNING')
+                except Exception as e:
+                    self._log(f'Error getting {severity}s from {op_path}: {e}', 'WARNING')
 
         return {
             'path': target.path,
             'errorCount': len(all_errors),
+            'warningCount': len(all_warnings),
             'hasErrors': bool(all_errors),
+            'hasWarnings': bool(all_warnings),
             'errors': all_errors,
+            'warnings': all_warnings,
         }
 
     def _exec_op_method(self, op_path: str, method: str,

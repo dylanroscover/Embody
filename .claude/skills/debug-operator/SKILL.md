@@ -8,7 +8,7 @@ description: "TRIGGER when operator errors appear or user reports broken behavio
 
 Systematic approach to diagnosing TD operator errors:
 
-1. **Get errors**: `get_op_errors` with `recurse=true` on the suspected operator and its children
+1. **Get errors and warnings**: `get_op_errors` with `recurse=true` on the suspected operator and its children
 2. **Inspect the operator**: `get_op` to see type, family, parameters, inputs, outputs, children
 3. **Check connections**: `get_connections` to verify input/output wiring is correct
 4. **Read DAT content**: `get_dat_content` if the operator is a DAT with script errors
