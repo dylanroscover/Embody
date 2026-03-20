@@ -1,4 +1,4 @@
-# me - this DAT
+﻿# me - this DAT
 # 
 # frame - the current frame
 # state - True if the timeline is paused
@@ -89,14 +89,14 @@ def onProjectPreSave():
 
 			new_tdn = result['tdn']
 
-			# Compare against existing file — skip write if content unchanged
+			# Compare against existing file â€” skip write if content unchanged
 			existing_tdn = parent.Embody.ext.TDN._read_existing_tdn(abs_path)
 			if existing_tdn and parent.Embody.ext.TDN._tdn_content_equal(
 					new_tdn, existing_tdn):
 				exported.append((comp_path, rel_tdn_path))
 				continue
 
-			# Content changed (or first export) — write to disk
+			# Content changed (or first export) â€” write to disk
 			scan_folder = str(project.folder)
 			before_tdn = parent.Embody.ext.TDN._collectExistingTDNFiles(
 				scan_folder, comp_path)

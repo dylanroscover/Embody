@@ -2,12 +2,22 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:27Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/tagger/replicator1",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"template": "tags",
+		"opprefix": "button",
+		"master": "button0",
+		"destination": "=parent()",
+		"callbacks": "replicator1_callbacks",
+		"layoutorigin1": "=me.nodeX",
+		"layoutorigin2": "=me.nodeY - 200",
+		"reloadbuiltin": false
 	},
 	"operators": []
 }

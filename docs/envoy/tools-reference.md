@@ -67,6 +67,7 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times, memory usage, cook counts |
+| `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
 
 ## Code Execution
 

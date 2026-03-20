@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 12,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:26Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
 		"include_dat_content": false
@@ -42,14 +42,38 @@
 			"tags": ["py"]
 		}
 	},
+	"parameters": {
+		"y": 368,
+		"w": 996,
+		"h": 40,
+		"layer": 1000,
+		"hmode": "fill",
+		"resizecomp": "=me",
+		"resizewmin": 400,
+		"resizewmax": 3840,
+		"resizehmin": 40,
+		"resizehmax": 2160,
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
+		"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
+		"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
+		"bgalpha": "=parent.Embody.par.Backgroundcolora",
+		"topsmoothness": "mipmap",
+		"borderover": false,
+		"justifyv": "center",
+		"ext0object": "op('./ToolbarExt').module.ToolbarExt(me)",
+		"ext0name": "ToolbarExt",
+		"ext0promote": true,
+		"reloadbuiltin": false
+	},
 	"operators": [
 		{
 			"name": "tooltip",
 			"type": "containerCOMP",
 			"parameters": {
-				"x": 998,
+				"x": 284,
 				"y": 40,
-				"w": 80,
+				"w": 169,
 				"h": 22,
 				"layer": 10,
 				"alignallow": "ignore",
@@ -80,7 +104,7 @@
 			"name": "tip_measure",
 			"type": "textTOP",
 			"parameters": {
-				"text": "Clear filter",
+				"text": "Toggle Envoy MCP server",
 				"font": "Open Sans",
 				"fontsizex": 10,
 				"fontsizey": 10,

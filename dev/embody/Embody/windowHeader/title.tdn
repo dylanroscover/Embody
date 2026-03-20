@@ -2,12 +2,29 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:11:37Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/windowHeader/title",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "=parent().par.Headerlabel",
+		"callbacks": "title_callbacks",
+		"font": "Open Sans",
+		"fontsize": 9,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"alignx": "left",
+		"hmode": "fill",
+		"vmode": "fill",
+		"resizecomp": "=me",
+		"reposition": "window",
+		"repocomp": "=me",
+		"offsetx": 10
 	},
 	"operators": []
 }

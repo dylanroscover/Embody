@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 27,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:14:17Z",
+	"exported_at": "2026-03-20T01:00:42Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false
@@ -251,6 +251,18 @@
 			}
 		]
 	},
+	"parameters": {
+		"w": 960,
+		"h": 880,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"top": "./out1",
+		"topsmoothness": "mipmap",
+		"borderover": false,
+		"ext0promote": true,
+		"parentshortcut": "Project",
+		"reloadbuiltin": false
+	},
 	"operators": [
 		{
 			"name": "Embody",
@@ -284,7 +296,7 @@
 						"style": "Str",
 						"readOnly": true,
 						"help": "Current Embody status (read-only). Shows whether Embody is initialized and running.",
-						"value": "Enabled"
+						"value": "Disabled"
 					},
 					{
 						"name": "Createexternalizationstable",
@@ -328,7 +340,8 @@
 					{
 						"name": "Refresh",
 						"style": "Pulse",
-						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
+						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
+						"value": true
 					},
 					{
 						"name": "Externalizeproject",
@@ -373,8 +386,7 @@
 						"default": "ask",
 						"menuNames": ["ask", "keep", "delete"],
 						"menuLabels": ["Ask", "Always Keep Files", "Always Delete Files"],
-						"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.",
-						"value": "delete"
+						"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file."
 					},
 					{
 						"name": "Openmanager",
@@ -612,8 +624,7 @@
 						"name": "Envoyenable",
 						"style": "Toggle",
 						"label": "Envoy Enable",
-						"help": "Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.",
-						"value": true
+						"help": "Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients."
 					},
 					{
 						"name": "Envoyport",
@@ -629,7 +640,7 @@
 						"label": "Envoy Status",
 						"readOnly": true,
 						"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-						"value": "Running on port 9870"
+						"value": "Error: port 9870 in use"
 					}
 				],
 				"Logs": [
@@ -795,7 +806,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.224"
+						"value": "5.0.230"
 					},
 					{
 						"name": "Touchbuild",
@@ -818,7 +829,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 200
+						"value": 210
 					},
 					{
 						"name": "Github",
@@ -833,7 +844,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-03-17 03:11:30 UTC"
+						"value": "2026-03-20 01:00:42 UTC"
 					},
 					{
 						"name": "Help",
@@ -850,68 +861,12 @@
 				"claudius_running": false,
 				"_tdn_restore_failures": ["/embody/base1"],
 				"expand_order": ["/embody"]
-			},
-			"annotations": [
-				{
-					"name": "annotate1",
-					"mode": "annotate",
-					"title": "Claude Config",
-					"text": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation.",
-					"position": [-770, -1270],
-					"size": [600, 370],
-					"color": [0.45, 0.45, 0.45]
-				},
-				{
-					"name": "annotation_logic",
-					"mode": "annotate",
-					"title": "Logic",
-					"text": "Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.",
-					"position": [-800, 0],
-					"size": [700, 800],
-					"color": [0.485, 0.0, 0.2748],
-					"opacity": 0.9
-				},
-				{
-					"name": "annotation_tagging",
-					"mode": "annotate",
-					"title": "Tagging",
-					"text": "Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection).",
-					"position": [-800, -700],
-					"size": [700, 600],
-					"color": [0.1981, 0.5, 0.1765],
-					"opacity": 0.9
-				},
-				{
-					"name": "annotation_ui",
-					"mode": "annotate",
-					"title": "UI",
-					"text": "All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.",
-					"size": [1300, 1000],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.9
-				},
-				{
-					"name": "annotation_windows",
-					"mode": "annotate",
-					"title": "Windows",
-					"text": "Popup windows for the tagging menu and externalization manager UI.",
-					"position": [100, 600],
-					"size": [1140, 310],
-					"color": [0.574, 0.574, 0.574],
-					"opacity": 0.9
-				}
-			]
+			}
 		},
 		{
 			"name": "base_tdn",
 			"type": "baseCOMP",
 			"position": [700, -325]
-		},
-		{
-			"name": "base_tox",
-			"type": "baseCOMP",
-			"flags": ["viewer"],
-			"position": [425, -300]
 		},
 		{
 			"name": "tdn_tests",
@@ -3329,69 +3284,7 @@
 						}
 					]
 				}
-			},
-			"annotations": [
-				{
-					"name": "annotate1",
-					"mode": "annotate",
-					"title": "Test Infrastructure",
-					"text": "Test runner, results table, and sandbox",
-					"position": [-70, -70],
-					"size": [871, 370],
-					"color": [0.22, 0.35, 0.22],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate2",
-					"mode": "annotate",
-					"title": "Embody Core Tests (13)",
-					"text": "Externalization, CRUD, file management, tagging,\nrename/move, delete, duplicates, sync, paths,\nparam tracking, operator queries, logging",
-					"position": [-70, -1070],
-					"size": [870, 930],
-					"color": [0.25, 0.3, 0.45],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate3",
-					"mode": "annotate",
-					"title": "MCP Tools Tests (13)",
-					"text": "Operators, parameters, DAT content, connections,\nannotations, extensions, diagnostics, flags/position,\ncode execution, externalization, performance, custom pars,\nTOP capture",
-					"position": [-70, -1870],
-					"size": [1070, 730],
-					"color": [0.45, 0.3, 0.25],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate4",
-					"mode": "annotate",
-					"title": "TDN Format Tests (5)",
-					"text": "Export/import, helpers, reconstruction, file I/O, crash safety",
-					"position": [-70, -2270],
-					"size": [1070, 330],
-					"color": [0.35, 0.35, 0.25],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate5",
-					"mode": "annotate",
-					"title": "Envoy Infrastructure Tests (3)",
-					"text": "Server lifecycle, STDIO bridge, thread communication,\nqueue processing, request throttling, log piggybacking",
-					"position": [-70, -2670],
-					"size": [670, 330],
-					"color": [0.35, 0.25, 0.35],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate6",
-					"mode": "annotate",
-					"title": "Claude Config Tests (1)",
-					"text": "Claude config generation pipeline, template DATs,\nwriteTemplate, writeClaudeMd, extractClaudeConfig",
-					"position": [-70, -3070],
-					"size": [270, 330],
-					"color": [0.3, 0.35, 0.4],
-					"opacity": 0.5
-				}
-			]
+			}
 		},
 		{
 			"name": "execute_src_ctrl",
@@ -3415,7 +3308,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 128,
+				"rows": 127,
 				"cols": 11
 			},
 			"flags": ["viewer"],
@@ -3448,7 +3341,8 @@
 				}
 			},
 			"position": [-700, -352],
-			"size": [329, 322]
+			"size": [329, 322],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_execute_src_ctrl",
@@ -3475,7 +3369,8 @@
 				}
 			},
 			"position": [-775, 50],
-			"size": [440, 480]
+			"size": [440, 480],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_externalizations",
@@ -3501,7 +3396,8 @@
 				}
 			},
 			"position": [-250, -50],
-			"size": [223, 279]
+			"size": [223, 279],
+			"palette_clone": true
 		}
 	],
 	"annotations": [

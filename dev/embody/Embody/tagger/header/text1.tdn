@@ -2,12 +2,32 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 6,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:27Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/tagger/header/text1",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "Actions",
+		"callbacks": "text1_callbacks",
+		"legacyfontselection": true,
+		"fontsize": 12,
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"fontalpha": "=parent.Embody.par.Textcolora",
+		"h": 30,
+		"hmode": "fill",
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
+		"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
+		"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
+		"bgalpha": "=parent.Embody.par.Backgroundcolora",
+		"borderover": false,
+		"reloadbuiltin": false
 	},
 	"operators": []
 }

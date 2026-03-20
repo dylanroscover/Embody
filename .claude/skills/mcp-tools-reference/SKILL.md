@@ -64,6 +64,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times, memory, cook counts |
+| `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
 
 ## Connections
 
