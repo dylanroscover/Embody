@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 205,
-	"generator": "Embody/5.0.227",
+	"build": 206,
+	"generator": "Embody/5.0.232",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T14:40:04Z",
+	"exported_at": "2026-03-20T01:26:39Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -15,7 +15,6 @@
 				"resizecomp": "=me",
 				"repocomp": "=me"
 			},
-			"flags": ["viewer"],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"]
 		},
@@ -24,7 +23,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4]
 		},
@@ -34,7 +32,8 @@
 				"order": "=me.digits or 0",
 				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
 				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
-			}
+			},
+			"flags": ["display"]
 		},
 		"windowCOMP": {
 			"parameters": {
@@ -43,7 +42,6 @@
 				"includedialog": false,
 				"reloadbuiltin": false
 			},
-			"flags": ["viewer"],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"]
 		}
@@ -790,7 +788,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.227"
+				"value": "5.0.232"
 			},
 			{
 				"name": "Touchbuild",
@@ -813,7 +811,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 205
+				"value": 206
 			},
 			{
 				"name": "Github",
@@ -828,7 +826,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-03-17 14:40:04 UTC"
+				"value": "2026-03-20 01:26:39 UTC"
 			},
 			{
 				"name": "Help",
@@ -868,7 +866,6 @@
 				"borderover": false,
 				"reloadbuiltin": false
 			},
-			"flags": ["viewer"],
 			"position": [196, 675],
 			"size": [142, 155],
 			"color": [0.3, 0.5, 0.9],
@@ -909,7 +906,6 @@
 				"fromop": "=parent()",
 				"maxlines": 100
 			},
-			"flags": ["viewer"],
 			"position": [-700, 400],
 			"size": [130, 90],
 			"color": [0.67, 0.67, 0.67]
@@ -921,7 +917,6 @@
 				"cooktype": "selective",
 				"autoexportroot": "=parent()"
 			},
-			"flags": ["viewer"],
 			"position": [-325, -525],
 			"size": [130, 90],
 			"inputs": ["select1"]
@@ -976,7 +971,6 @@
 				"exportmethod": "datname",
 				"autoexportroot": "=parent()"
 			},
-			"flags": ["viewer"],
 			"position": [-625, -275],
 			"size": [130, 90]
 		},
@@ -993,7 +987,7 @@
 				"defaultreadencoding": "cp1252",
 				"syncfile": true
 			},
-			"flags": ["display", "viewer"],
+			"flags": ["display"],
 			"position": [-375, 200],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -1038,7 +1032,6 @@
 				"defaultreadencoding": "cp1252",
 				"syncfile": true
 			},
-			"flags": ["viewer"],
 			"position": [-375, 100],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],
@@ -1051,7 +1044,6 @@
 				"channames": "click",
 				"autoexportroot": "=parent()"
 			},
-			"flags": ["viewer"],
 			"position": [-475, -525],
 			"size": [130, 90],
 			"inputs": ["mousein1"]
@@ -1109,7 +1101,7 @@
 				"file": "embody/Embody/EnvoyExt.py"
 			},
 			"position": [-375, 475],
-			"tags": ["py", "TDExtension"]
+			"tags": ["TDExtension", "py"]
 		},
 		{
 			"name": "mousein1",
@@ -1122,7 +1114,6 @@
 				"exportmethod": "datname",
 				"autoexportroot": "=parent()"
 			},
-			"flags": ["viewer"],
 			"position": [-625, -525],
 			"size": [130, 90]
 		},
@@ -1159,7 +1150,6 @@
 					"$t": "about"
 				}
 			},
-			"flags": ["display"],
 			"position": [-770, -1270],
 			"size": [600, 370],
 			"color": [0.45, 0.45, 0.45],
@@ -1181,7 +1171,6 @@
 				"callbacks": "keyboardin_callbacks",
 				"fromop": "=parent()"
 			},
-			"flags": ["viewer"],
 			"position": [-325, -275],
 			"size": [130, 90]
 		},
@@ -1248,10 +1237,37 @@
 					"$t": "about"
 				}
 			},
-			"flags": ["display", "viewer"],
 			"size": [1300, 1000],
 			"color": [0.45, 0.45, 0.45],
 			"palette_clone": true
+		},
+		{
+			"name": "_envoy_perform",
+			"type": "performCHOP",
+			"parameters": {
+				"msec": true,
+				"cook": true,
+				"droppedframes": true,
+				"gpumemused": true,
+				"totalgpumem": true,
+				"activeops": true,
+				"totalops": true,
+				"cpumemused": true,
+				"cookrealtime": true,
+				"cookrate": true,
+				"timeslicestep": true,
+				"timeslicemsec": true,
+				"performmode": true,
+				"gputemp": true,
+				"timeslice": true,
+				"exportmethod": "datname",
+				"autoexportroot": "=parent()"
+			},
+			"position": [-625, -650],
+			"size": [130, 90],
+			"color": [0.67, 0.67, 0.67],
+			"comment": "Envoy project performance monitor",
+			"tags": ["embody_internal"]
 		},
 		{
 			"name": "window_manager",
@@ -1310,7 +1326,6 @@
 					"$t": "about"
 				}
 			},
-			"flags": ["display", "viewer"],
 			"position": [-800, 0],
 			"size": [700, 800],
 			"color": [0.45, 0.45, 0.45],
@@ -1342,7 +1357,6 @@
 					"$t": "about"
 				}
 			},
-			"flags": ["display", "viewer"],
 			"position": [-800, -700],
 			"size": [700, 600],
 			"palette_clone": true
@@ -1370,7 +1384,6 @@
 					"$t": "about"
 				}
 			},
-			"flags": ["display", "viewer"],
 			"position": [100, 600],
 			"size": [1140, 310],
 			"color": [0.45, 0.45, 0.45],
@@ -1401,7 +1414,6 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"flags": ["viewer"],
 			"position": [-325, -650],
 			"size": [130, 90],
 			"color": [0.9, 0.3, 0.4],

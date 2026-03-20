@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 33,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:52Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/list",
 	"options": {
 		"include_dat_content": false
@@ -19,6 +19,28 @@
 			"color": [0.9, 0.3, 0.4],
 			"tags": ["py"]
 		}
+	},
+	"parameters": {
+		"w": 996,
+		"h": 40,
+		"hmode": "fill",
+		"vmode": "fill",
+		"alignorder": 1,
+		"resizeb": true,
+		"resizecomp": "=me",
+		"resizewmin": 400,
+		"resizewmax": 3840,
+		"resizehmin": 40,
+		"resizehmax": 2160,
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
+		"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
+		"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
+		"bgalpha": "=parent.Embody.par.Backgroundcolora",
+		"borderover": false,
+		"marginl": 5,
+		"marginr": 5,
+		"reloadbuiltin": false
 	},
 	"operators": [
 		{

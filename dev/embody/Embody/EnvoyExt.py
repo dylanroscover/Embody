@@ -331,15 +331,15 @@ class EnvoyMCPServer:
         @self.mcp.tool()
         def get_op_errors(op_path: str, recurse: bool = True) -> dict:
             """
-            Get error messages for an operator and optionally its children.
-            Useful for debugging TD networks.
+            Get error and warning messages for an operator and optionally its children.
+            Useful for debugging TD networks — returns both errors and warnings.
 
             Args:
                 op_path: Path to the operator to check
                 recurse: If True, also check children (default True)
 
             Returns:
-                Dict with error count and structured error list
+                Dict with structured error and warning lists
             """
             return self._execute_in_td('get_op_errors', {
                 'op_path': op_path,
@@ -424,8 +424,8 @@ class EnvoyMCPServer:
 
         @self.mcp.prompt()
         def check_op_errors(op_path: str) -> str:
-            """Check an operator and its children for errors in TouchDesigner."""
-            return f'Use the "get_op_errors" tool to inspect "{op_path}" and its children for error messages. If errors are found, examine the affected operators\' parameters and connections to resolve them.'
+            """Check an operator and its children for errors and warnings in TouchDesigner."""
+            return f'Use the "get_op_errors" tool to inspect "{op_path}" and its children for error and warning messages. If errors or warnings are found, examine the affected operators\' parameters and connections to resolve them.'
 
         @self.mcp.prompt()
         def connect_ops() -> str:
@@ -822,6 +822,29 @@ class EnvoyMCPServer:
             return self._execute_in_td('get_op_performance', {
                 'op_path': op_path,
                 'include_children': include_children
+            })
+
+        @self.mcp.tool()
+        def get_project_performance(include_hotspots: int = 0) -> dict:
+            """
+            Get project-level performance metrics: FPS, frame time, GPU/CPU memory,
+            dropped frames, active operators, and more.
+
+            Uses a Perform CHOP for accurate real-time measurements. The first call
+            creates the monitor operator (negligible overhead).
+
+            Args:
+                include_hotspots: Return the top N most expensive COMPs by cook time.
+                    0 (default) skips hotspot analysis. Recommended: 5-10.
+
+            Returns:
+                Dict with timing (fps, frameTimeMs, cookRate), memory (gpuMemUsedMB,
+                totalGpuMemMB, cpuMemUsedMB), frame health (droppedFrames, activeOps,
+                totalOps), GPU info (gpuTemp), performance mode status, and optionally
+                hotspots (ranked COMPs with cook times and memory).
+            """
+            return self._execute_in_td('get_project_performance', {
+                'include_hotspots': include_hotspots
             })
 
         # === Embody Integration Tools ===
@@ -1707,6 +1730,7 @@ class EnvoyExt:
             'cook_op': self._cook_op,
             'find_children': self._find_children,
             'get_op_performance': self._get_op_performance,
+            'get_project_performance': self._get_project_performance,
             # Introspection & diagnostics
             'get_td_info': self._get_td_info,
             'get_op_errors': self._get_op_errors,
@@ -2270,56 +2294,64 @@ class EnvoyExt:
             return {'error': f'Failed to get TD info: {e}'}
 
     def _get_op_errors(self, op_path: str, recurse: bool = True) -> dict:
-        """Get error messages for an operator and its children"""
+        """Get error and warning messages for an operator and its children"""
         target = op(op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
 
         all_errors = []
-        if hasattr(target, 'errors') and callable(target.errors):
-            try:
-                error_output = target.errors(recurse=recurse)
-                if error_output:
-                    error_lines = error_output.strip().split('\n')
-                    for line in error_lines:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        # TD error format: "Error message (node_path)"
-                        if '(' in line and line.endswith(')'):
-                            message_part, path_part = line.rsplit('(', 1)
-                            error_node_path = path_part.rstrip(')')
-                            message = message_part.strip()
-                            error_node = op(error_node_path)
-                            if error_node and error_node.valid:
-                                all_errors.append({
-                                    'nodePath': error_node.path,
-                                    'nodeName': error_node.name,
-                                    'opType': error_node.OPType,
-                                    'message': message,
-                                })
+        all_warnings = []
+
+        for severity, method_name, output_list in [
+            ('error', 'errors', all_errors),
+            ('warning', 'warnings', all_warnings),
+        ]:
+            if hasattr(target, method_name) and callable(getattr(target, method_name)):
+                try:
+                    output = getattr(target, method_name)(recurse=recurse)
+                    if output:
+                        for line in output.strip().split('\n'):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            # TD format: "Message text (node_path)"
+                            if '(' in line and line.endswith(')'):
+                                message_part, path_part = line.rsplit('(', 1)
+                                node_path = path_part.rstrip(')')
+                                message = message_part.strip()
+                                node = op(node_path)
+                                if node and node.valid:
+                                    output_list.append({
+                                        'nodePath': node.path,
+                                        'nodeName': node.name,
+                                        'opType': node.OPType,
+                                        'message': message,
+                                    })
+                                else:
+                                    output_list.append({
+                                        'nodePath': node_path,
+                                        'nodeName': '',
+                                        'opType': '',
+                                        'message': message,
+                                    })
                             else:
-                                all_errors.append({
-                                    'nodePath': error_node_path,
-                                    'nodeName': '',
-                                    'opType': '',
-                                    'message': message,
+                                output_list.append({
+                                    'nodePath': target.path,
+                                    'nodeName': target.name,
+                                    'opType': target.OPType,
+                                    'message': line,
                                 })
-                        else:
-                            all_errors.append({
-                                'nodePath': target.path,
-                                'nodeName': target.name,
-                                'opType': target.OPType,
-                                'message': line,
-                            })
-            except Exception as e:
-                self._log(f'Error getting errors from {op_path}: {e}', 'WARNING')
+                except Exception as e:
+                    self._log(f'Error getting {severity}s from {op_path}: {e}', 'WARNING')
 
         return {
             'path': target.path,
             'errorCount': len(all_errors),
+            'warningCount': len(all_warnings),
             'hasErrors': bool(all_errors),
+            'hasWarnings': bool(all_warnings),
             'errors': all_errors,
+            'warnings': all_warnings,
         }
 
     def _exec_op_method(self, op_path: str, method: str,
@@ -3182,6 +3214,69 @@ class EnvoyExt:
         except Exception as e:
             return {'error': f'Failed to get performance: {e}'}
 
+    def _get_project_performance(self, include_hotspots: int = 0) -> dict:
+        """Get project-level performance via Perform CHOP."""
+        try:
+            perform = self.ownerComp.op('_envoy_perform')
+            if not perform:
+                return {'error': 'Perform CHOP (_envoy_perform) not found inside Embody'}
+
+            def chan_val(name, default=0):
+                ch = perform.chan(name)
+                return ch.eval() if ch is not None else default
+
+            result = {
+                'timing': {
+                    'fps': chan_val('fps'),
+                    'frameTimeMs': chan_val('msec'),
+                    'cookRate': chan_val('cookrate'),
+                    'cookRealTime': bool(chan_val('cookrealtime')),
+                    'timeSliceMs': chan_val('timeslice_msec'),
+                    'timeSliceStep': chan_val('timeslice_step'),
+                },
+                'memory': {
+                    'gpuMemUsedMB': chan_val('gpu_mem_used'),
+                    'totalGpuMemMB': chan_val('total_gpu_mem'),
+                    'cpuMemUsedMB': chan_val('cpu_mem_used'),
+                },
+                'frameHealth': {
+                    'droppedFrames': int(chan_val('dropped_frames')),
+                    'cookedLastFrame': bool(chan_val('cook')),
+                    'activeOps': int(chan_val('active_ops')),
+                    'totalOps': int(chan_val('total_ops')),
+                },
+                'gpu': {
+                    'chipTemperatureC': chan_val('gpu0_chip_temp'),
+                    'boardTemperatureC': chan_val('gpu0_board_temp'),
+                },
+                'performMode': bool(chan_val('perform_mode')),
+            }
+
+            if include_hotspots > 0:
+                result['hotspots'] = self._get_performance_hotspots(include_hotspots)
+
+            return result
+        except Exception as e:
+            return {'error': f'Failed to get project performance: {e}'}
+
+    def _get_performance_hotspots(self, top_n: int) -> list:
+        """Return the top N most expensive COMPs by combined cook time."""
+        comps = []
+        for child in root.findChildren(type=COMP, maxDepth=1):
+            cpu_cook = child.childrenCPUCookTime
+            gpu_cook = child.childrenGPUCookTime
+            comps.append({
+                'path': child.path,
+                'name': child.name,
+                'cpuCookTimeMs': cpu_cook,
+                'gpuCookTimeMs': gpu_cook,
+                'combinedCookTimeMs': cpu_cook + gpu_cook,
+                'cpuMemoryBytes': child.childrenCPUMemory(),
+                'gpuMemoryBytes': child.childrenGPUMemory(),
+            })
+        comps.sort(key=lambda c: c['combinedCookTimeMs'], reverse=True)
+        return comps[:top_n]
+
     # === Embody Integration ===
 
     def _externalize_op(self, op_path: str, tag_type: str = None) -> dict:
@@ -3541,13 +3636,28 @@ class EnvoyExt:
             if sys.platform != 'win32':
                 bridge_path.chmod(0o755)
 
-            # macOS/Linux: 'python3'.  Windows: 'python' (no python3 command).
-            python_cmd = 'python' if sys.platform == 'win32' else 'python3'
+            # Prefer the venv Python (created from TD's Python) so the bridge
+            # works on machines without a system Python installation.
+            # Fall back to system PATH command if the venv doesn't exist yet.
+            if sys.platform == 'win32':
+                venv_python = project_dir / '.venv' / 'Scripts' / 'python.exe'
+            else:
+                venv_python = project_dir / '.venv' / 'bin' / 'python3'
+
+            if venv_python.is_file():
+                python_cmd = str(venv_python).replace('\\', '/')
+            else:
+                python_cmd = 'python' if sys.platform == 'win32' else 'python3'
+
+            # --- Write .envoy.json project config ---
+            self._writeEnvoyConfig(git_root, port)
 
             # --- Write .mcp.json with STDIO transport ---
             mcp_file = git_root / '.mcp.json'
             # Use forward slashes even on Windows for JSON portability
             bridge_abs = str(bridge_path).replace('\\', '/')
+            config_abs = str(
+                (git_root / '.envoy.json')).replace('\\', '/')
 
             # Read existing config to preserve other servers
             config = {}
@@ -3561,7 +3671,8 @@ class EnvoyExt:
             existing = servers.get('envoy', {})
 
             # Check if already configured with matching STDIO bridge
-            expected_args = ['-u', bridge_abs, '--port', str(port)]
+            expected_args = ['-u', bridge_abs, '--port', str(port),
+                             '--config', config_abs]
             if (existing.get('type') == 'stdio'
                     and existing.get('command') == python_cmd
                     and existing.get('args') == expected_args):
@@ -3727,6 +3838,74 @@ class EnvoyExt:
         self._log('Starting Envoy without git repo — auto-config skipped.', 'WARNING')
         return 'no-git'
 
+    def _writeEnvoyConfig(self, git_root, port):
+        """Write .envoy.json with project config for the bridge launcher.
+        Idempotent — only writes if values have changed.  Preserves any
+        user overrides for fields we don't manage."""
+        import td as _td
+        from pathlib import Path
+
+        config_path = git_root / '.envoy.json'
+
+        # Compute toe_path relative to git root
+        # project.name includes the .toe extension already
+        project_dir = Path(project.folder)
+        name = project.name
+        toe_file = project_dir / (name if name.endswith('.toe') else name + '.toe')
+        try:
+            toe_rel = str(toe_file.relative_to(git_root)).replace('\\', '/')
+        except ValueError:
+            toe_rel = str(toe_file).replace('\\', '/')
+
+        # Derive TD executable path from app.binFolder
+        bin_folder = Path(_td.app.binFolder)
+        if sys.platform == 'darwin':
+            # Walk up from Contents/MacOS/ to the .app bundle
+            td_executable = str(bin_folder.parent.parent)
+        elif sys.platform == 'win32':
+            # Find the exe in bin folder
+            exe = bin_folder / 'TouchDesigner.exe'
+            if not exe.exists():
+                exe = bin_folder / 'TouchDesigner099.exe'
+            td_executable = str(exe).replace('\\', '/')
+        else:
+            td_executable = str(bin_folder / 'TouchDesigner')
+
+        # Build desired config
+        new_config = {
+            'toe_path': toe_rel,
+            'port': port,
+            'td_executable': td_executable,
+        }
+
+        # Read existing config to check for changes and preserve overrides
+        existing = {}
+        if config_path.exists():
+            try:
+                existing = json.loads(
+                    config_path.read_text(encoding='utf-8'))
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        # Only write if our managed fields differ
+        needs_write = False
+        for key, value in new_config.items():
+            if existing.get(key) != value:
+                needs_write = True
+                break
+
+        if not needs_write:
+            self._log('.envoy.json already up to date', 'DEBUG')
+            return
+
+        # Merge: our fields overwrite, user fields preserved
+        merged = dict(existing)
+        merged.update(new_config)
+
+        config_path.write_text(
+            json.dumps(merged, indent=2) + '\n', encoding='utf-8')
+        self._log(f'Wrote .envoy.json (toe: {toe_rel}, port: {port})')
+
     def _configureGitignore(self, git_root):
         """Ensure .gitignore in the git root contains entries for
         Embody/Envoy auto-generated files.
@@ -3740,6 +3919,7 @@ class EnvoyExt:
             # Embody / Envoy
             '.venv/',
             '.mcp.json',
+            '.envoy.json',
             '.claude/settings.local.json',
             '.claude/projects/',
             '.claude/envoy-bridge.py',

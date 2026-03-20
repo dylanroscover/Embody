@@ -2,12 +2,22 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 24,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:11:32Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/window_tagging_menu",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"winop": "tagger",
+		"title": "=me",
+		"justifyh": "mouse",
+		"justifyv": "mouse",
+		"winoffsetx": 110,
+		"borders": false,
+		"includedialog": false,
+		"reloadbuiltin": false
 	},
 	"operators": []
 }

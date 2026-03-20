@@ -2,9 +2,9 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.228-blue)
+![Version](https://img.shields.io/badge/version-5.0.233-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
-![MCP Tools](https://img.shields.io/badge/MCP_tools-44-purple)
+![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
 
 [Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
@@ -26,7 +26,7 @@ TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or
 | | Feature | What It Does |
 |---|---------|-------------|
 | 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores everything from disk on project open |
-| 🤖 | **Envoy MCP Server** | 44 tools let AI assistants create operators, set parameters, wire connections, and more |
+| 🤖 | **Envoy MCP Server** | 45 tools let AI assistants create operators, set parameters, wire connections, and more |
 | 📄 | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
 | 📤 | **Portable Tox Export** | Export any COMP as a self-contained `.tox` with all external references stripped |
 
@@ -147,7 +147,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **37 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **38 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -178,6 +178,8 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.233**: Project-level performance monitoring, `/validate` command, test runner dialog fix
+- **5.0.229**: Warning support in `get_op_errors`, Envoy enable dialog improvement
 - **5.0.228**: macOS timezone fix, toolbar hover highlight
 - **5.0.227**: TDN crash safety — atomic writes, backup rotation, content-equal skip, About page filtering
 - **5.0.222**: Rename `tag_for_externalization` → `externalize_op`, clarify single-step workflow
@@ -190,7 +192,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 - **5.0.204**: Custom window header, path portability, TDN cleanup
 - **5.0.201**: Robust first-install init, table schema expansion, release build hardening
 - **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs fully restored from disk on project open
-- **5.0**: Envoy MCP server (44 tools), TDN format, test framework (37 suites), macOS support
+- **5.0**: Envoy MCP server (45 tools), TDN format, test framework (38 suites), macOS support
 
 ---
 

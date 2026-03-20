@@ -2,12 +2,36 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 13,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:36Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/manager",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"y": 13,
+		"w": 1080,
+		"h": 427,
+		"resizer": true,
+		"resizeb": true,
+		"resizecomp": "=me",
+		"resizewmin": 250,
+		"resizewmax": 3840,
+		"resizehmin": 50,
+		"resizehmax": 2160,
+		"repocomp": "=me",
+		"topsmoothness": "mipmap",
+		"borderar": "=parent.Embody.par.Textcolorr * 0.5",
+		"borderag": "=parent.Embody.par.Textcolorg * 0.5",
+		"borderab": "=parent.Embody.par.Textcolorb * 0.5",
+		"borderaalpha": "=parent.Embody.par.Textcolora",
+		"leftborder": "bordera",
+		"rightborder": "bordera",
+		"bottomborder": "bordera",
+		"topborder": "bordera",
+		"align": "verttb",
+		"reloadbuiltin": false
 	},
 	"operators": []
 }

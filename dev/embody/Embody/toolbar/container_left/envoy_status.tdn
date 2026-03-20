@@ -2,12 +2,31 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:24Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/toolbar/container_left/envoy_status",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "=':' + str(parent.Embody.par.Envoyport.eval()) if parent.Embody.par.Envoyenable.eval() else 'Off'",
+		"callbacks": "new_envoy_status_callbacks",
+		"font": "Open Sans",
+		"fontsize": 9,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"w": 55,
+		"vmode": "fill",
+		"alignorder": 1100,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr",
+		"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
+		"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
+		"marginl": 3
 	},
 	"operators": []
 }

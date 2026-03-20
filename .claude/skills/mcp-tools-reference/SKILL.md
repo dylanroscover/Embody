@@ -64,6 +64,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times, memory, cook counts |
+| `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
 
 ## Connections
 
@@ -84,7 +85,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_td_info` | _(none)_ | TD version, build, OS, Envoy version |
-| `get_op_errors` | `op_path`, `recurse?` | Get error messages for op and children |
+| `get_op_errors` | `op_path`, `recurse?` | Get error and warning messages for op and children |
 | `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator |
 | `get_td_classes` | _(none)_ | List all Python classes in `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, docs for a TD class |
@@ -95,7 +96,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Prompt | Parameters | Description |
 |--------|-----------|-------------|
 | `search_op` | `op_name`, `op_type?` | Guide for searching operators |
-| `check_op_errors` | `op_path` | Guide for inspecting/resolving errors |
+| `check_op_errors` | `op_path` | Guide for inspecting/resolving errors and warnings |
 | `connect_ops` | _(none)_ | Guide for wiring operators |
 | `create_extension_guide` | _(none)_ | Guide for creating extensions |
 

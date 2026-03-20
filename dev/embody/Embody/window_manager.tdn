@@ -2,12 +2,24 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 12,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:11:33Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/window_manager",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"winop": "manager",
+		"title": "=me",
+		"ignoretaskbar": false,
+		"justifyh": "center",
+		"justifyv": "center",
+		"winoffsetx": -12,
+		"borders": false,
+		"cursorvisible": "alwaysvisible",
+		"includedialog": false,
+		"reloadbuiltin": false
 	},
 	"operators": []
 }

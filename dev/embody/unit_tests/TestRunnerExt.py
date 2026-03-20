@@ -198,6 +198,25 @@ class TestRunnerExt:
         self._results = []
         self._deferred_queue = []
         self._deferred_test_filter = None
+        self._saved_filecleanup = None
+
+    def _suppressFileCleanupDialog(self):
+        """Set Filecleanup to 'delete' to prevent modal dialogs during tests."""
+        try:
+            par = op.Embody.par.Filecleanup
+            self._saved_filecleanup = par.eval()
+            op.Embody.par.Filecleanup = 'delete'
+        except Exception:
+            pass
+
+    def _restoreFileCleanupDialog(self):
+        """Restore the original Filecleanup preference after tests."""
+        try:
+            if self._saved_filecleanup is not None:
+                op.Embody.par.Filecleanup = self._saved_filecleanup
+                self._saved_filecleanup = None
+        except Exception:
+            pass
 
     # =========================================================================
     # PROMOTED METHODS
@@ -241,6 +260,7 @@ class TestRunnerExt:
             return {'error': 'Tests already running'}
 
         self._running = True
+        self._suppressFileCleanupDialog()
         self._results = []
         self._initResultsTable()
 
@@ -252,6 +272,7 @@ class TestRunnerExt:
                 self._runSuite(suite_class, module_name, test_name)
         finally:
             self._running = False
+            self._restoreFileCleanupDialog()
 
         self._reportSummary()
         return self._getSummary()
@@ -273,6 +294,7 @@ class TestRunnerExt:
             return
 
         self._running = True
+        self._suppressFileCleanupDialog()
         self._results = []
         self._delay_frames = delay_frames
         self._initResultsTable()
@@ -282,6 +304,7 @@ class TestRunnerExt:
 
         if not suites:
             self._running = False
+            self._restoreFileCleanupDialog()
             self._reportSummary()
             return
 
@@ -309,6 +332,7 @@ class TestRunnerExt:
             return
 
         self._running = True
+        self._suppressFileCleanupDialog()
         self._results = []
         self._delay_frames = delay_frames
         self._initResultsTable()
@@ -318,6 +342,7 @@ class TestRunnerExt:
 
         if not suites:
             self._running = False
+            self._restoreFileCleanupDialog()
             self._reportSummary()
             return
 
@@ -365,6 +390,7 @@ class TestRunnerExt:
         """Run the next suite in the deferred queue, then schedule the next."""
         if not self._deferred_queue:
             self._running = False
+            self._restoreFileCleanupDialog()
             self._reportSummary()
             return
 
@@ -379,6 +405,7 @@ class TestRunnerExt:
     def _finalizeDeferredRun(self):
         """Called after all deferred suites have completed."""
         self._running = False
+        self._restoreFileCleanupDialog()
         self._deferred_test_filter = None
         self._reportSummary()
 
@@ -453,6 +480,7 @@ class TestRunnerExt:
     def _finalizeDeferredPerTestRun(self):
         """Called after all per-test deferred tests have completed."""
         self._running = False
+        self._restoreFileCleanupDialog()
         self._deferred_per_test_queue = []
         self._reportSummary()
 

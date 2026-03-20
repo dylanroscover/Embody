@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:12:06Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/windowHeader",
 	"options": {
 		"include_dat_content": false
@@ -24,6 +24,41 @@
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"]
 		}
+	},
+	"custom_pars": {
+		"Header": [
+			{
+				"name": "Headerlabel",
+				"style": "Str",
+				"label": "Label",
+				"value": "=f'Embody v{parent.Embody.par.Version}'"
+			}
+		],
+		"Controls": [
+			{
+				"name": "Windowcomp",
+				"style": "COMP",
+				"label": "Window COMP",
+				"value": "/embody/Embody/window_manager"
+			}
+		]
+	},
+	"parameters": {
+		"h": 26,
+		"hmode": "fill",
+		"alignorder": -1,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
+		"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
+		"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
+		"bgalpha": "=parent.Embody.par.Backgroundcolora",
+		"align": "horizlr",
+		"marginl": 8,
+		"justifyh": "left",
+		"justifyv": "top",
+		"ext0object": "op('./WindowHeaderExt').module.WindowHeaderExt(me)",
+		"ext0promote": true
 	},
 	"operators": [
 		{

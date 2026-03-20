@@ -2,12 +2,33 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:15Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/toolbar/container_left/save_folder",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "=f'/{parent.Embody.par.Folder}'",
+		"callbacks": "new_save_folder_callbacks",
+		"font": "Open Sans",
+		"fontsize": 9,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"w": 100,
+		"vmode": "fill",
+		"alignorder": 700,
+		"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
+		"clickthrough": true,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
+		"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
+		"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+		"bgalpha": 1
 	},
 	"operators": []
 }

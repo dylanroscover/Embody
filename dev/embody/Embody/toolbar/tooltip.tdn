@@ -1,21 +1,22 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 16,
-	"generator": "Embody/5.0.227",
+	"build": 15,
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T14:40:04Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/toolbar/tooltip",
 	"options": {
 		"include_dat_content": false
 	},
 	"parameters": {
-		"x": 9,
+		"x": 284,
 		"y": 40,
-		"w": 162,
+		"w": 169,
 		"h": 22,
 		"layer": 10,
 		"alignallow": "ignore",
+		"display": false,
 		"clickthrough": true,
 		"resizecomp": "=me",
 		"repocomp": "=me",
@@ -29,7 +30,7 @@
 			"name": "text",
 			"type": "textCOMP",
 			"parameters": {
-				"text": "Update externalizations",
+				"text": "Toggle Envoy MCP server",
 				"callbacks": "text_callbacks",
 				"font": "Open Sans",
 				"fontsize": 10,

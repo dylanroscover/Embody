@@ -2,12 +2,32 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:23Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/toolbar/container_left/envoy_toggle",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "Envoy",
+		"callbacks": "new_envoy_toggle_callbacks",
+		"font": "Open Sans",
+		"fontsize": 9,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"w": 65,
+		"vmode": "fill",
+		"alignorder": 1050,
+		"clickthrough": true,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
+		"bgcolorg": "=(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
+		"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
+		"bgalpha": 1
 	},
 	"operators": []
 }

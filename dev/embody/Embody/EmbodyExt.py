@@ -472,7 +472,9 @@ class EmbodyExt:
             '  - Generate AI config files in your project root\n'
             '    (CLAUDE.md, AGENTS.md, .mcp.json, .claude/ rules + skills)\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
-            'You can change this later via the Envoyenable parameter.',
+            'You can change this later via the Envoyenable parameter.\n\n'
+            'Note: TD will be unresponsive for a few seconds while\n'
+            'dependencies are installed.',
             buttons=['Skip', 'Enable Envoy'])
 
         if choice == 1:
@@ -2996,9 +2998,11 @@ class EmbodyExt:
         # Suppress dialog during test runs to prevent modal spam —
         # rapid operator create/destroy cycles can trigger continuity
         # checks that find transient sandbox ops as "missing".
+        # Two-layer protection: runtime flag AND path-based filtering.
         try:
             runner = getattr(op, 'unit_tests', None)
             if runner:
+                # Layer 1: If test runner is actively running, suppress entirely
                 runner_ext = getattr(
                     getattr(runner, 'ext', None), 'TestRunnerExt', None)
                 if runner_ext and getattr(runner_ext, '_running', False):
@@ -3006,6 +3010,18 @@ class EmbodyExt:
                         f'Continuity dialog suppressed: test runner active '
                         f'({len(missing_ops)} missing ops)')
                     return
+                # Layer 2: Filter out sandbox paths even when runner isn't
+                # active (handles reinit, between-suite gaps, post-failure)
+                sandbox_prefix = runner.path + '/test_sandbox/'
+                filtered = [(p, f, r) for p, f, r in missing_ops
+                            if not p.startswith(sandbox_prefix)]
+                if len(filtered) < len(missing_ops):
+                    self.Debug(
+                        f'Filtered {len(missing_ops) - len(filtered)} '
+                        f'test sandbox ops from continuity check')
+                    missing_ops = filtered
+                    if not missing_ops:
+                        return
         except Exception:
             pass
 

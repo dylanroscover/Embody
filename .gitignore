@@ -30,3 +30,6 @@ site/
 Backup/
 logs/
 .tdn_backup/
+
+# Embody / Envoy (auto-managed)
+.envoy.json

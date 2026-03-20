@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 7,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:25Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/toolbar/container_left",
 	"options": {
 		"include_dat_content": false
@@ -36,6 +36,15 @@
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"]
 		}
+	},
+	"parameters": {
+		"w": 852,
+		"h": 26,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"borderover": false,
+		"align": "horizlr",
+		"reloadbuiltin": false
 	},
 	"operators": [
 		{

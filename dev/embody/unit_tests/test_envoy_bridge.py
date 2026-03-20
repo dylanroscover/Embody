@@ -41,24 +41,42 @@ class TestBridgeParseArgs(EmbodyTestCase):
 
     def test_default_port(self):
         with patch.object(sys, 'argv', ['envoy_bridge.py']):
-            self.assertEqual(bridge.parse_args(), bridge.DEFAULT_PORT)
+            port, config = bridge.parse_args()
+            self.assertEqual(port, bridge.DEFAULT_PORT)
+            self.assertIsNone(config)
 
     def test_custom_port(self):
         with patch.object(sys, 'argv', ['envoy_bridge.py', '--port', '9999']):
-            self.assertEqual(bridge.parse_args(), 9999)
+            port, config = bridge.parse_args()
+            self.assertEqual(port, 9999)
 
     def test_port_flag_at_end_without_value(self):
         """--port as last arg with no value — uses default."""
         with patch.object(sys, 'argv', ['envoy_bridge.py', '--port']):
-            self.assertEqual(bridge.parse_args(), bridge.DEFAULT_PORT)
+            port, config = bridge.parse_args()
+            self.assertEqual(port, bridge.DEFAULT_PORT)
 
     def test_ignores_unknown_args(self):
         with patch.object(sys, 'argv', ['envoy_bridge.py', '--verbose', '--port', '8080']):
-            self.assertEqual(bridge.parse_args(), 8080)
+            port, config = bridge.parse_args()
+            self.assertEqual(port, 8080)
 
     def test_port_zero(self):
         with patch.object(sys, 'argv', ['envoy_bridge.py', '--port', '0']):
-            self.assertEqual(bridge.parse_args(), 0)
+            port, config = bridge.parse_args()
+            self.assertEqual(port, 0)
+
+    def test_config_arg(self):
+        with patch.object(sys, 'argv', ['envoy_bridge.py', '--config', '/tmp/test.json']):
+            port, config = bridge.parse_args()
+            self.assertEqual(port, bridge.DEFAULT_PORT)
+            self.assertEqual(config, '/tmp/test.json')
+
+    def test_port_and_config(self):
+        with patch.object(sys, 'argv', ['envoy_bridge.py', '--port', '9999', '--config', '/tmp/c.json']):
+            port, config = bridge.parse_args()
+            self.assertEqual(port, 9999)
+            self.assertEqual(config, '/tmp/c.json')
 
 
 # =====================================================================
@@ -502,6 +520,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(sys, 'argv', argv), \
              patch.object(bridge, 'wait_for_envoy', return_value=wait_result), \
              patch.object(bridge, 'forward_to_http', fwd), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
@@ -541,14 +561,14 @@ class TestBridgeMainLoop(EmbodyTestCase):
         responses = self._run_main([msg], wait_result=False)
         self.assertLen(responses, 1)
         self.assertDictHasKey(responses[0], 'error')
-        self.assertIn('not reachable', responses[0]['error']['message'])
+        self.assertIn('connection lost', responses[0]['error']['message'].lower())
 
-    def test_initial_timeout_includes_port_in_message(self):
+    def test_initial_timeout_includes_actionable_hint(self):
         msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}
         responses = self._run_main(
             [msg], wait_result=False,
             port_args=['envoy_bridge.py', '--port', '1234'])
-        self.assertIn('1234', responses[0]['error']['message'])
+        self.assertIn('launch_td', responses[0]['error']['message'])
 
     def test_initial_timeout_notification_no_response(self):
         """Notification during connection failure produces no output."""
@@ -578,6 +598,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(bridge, 'wait_for_envoy', side_effect=mock_wait), \
              patch.object(bridge, 'forward_to_http',
                           return_value={'jsonrpc': '2.0', 'id': 2, 'result': 'ok'}), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
@@ -829,6 +851,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(sys, 'argv', ['envoy_bridge.py']), \
              patch.object(bridge, 'wait_for_envoy', side_effect=mock_wait), \
              patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
@@ -870,6 +894,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(sys, 'argv', ['envoy_bridge.py']), \
              patch.object(bridge, 'wait_for_envoy', side_effect=mock_wait), \
              patch.object(bridge, 'forward_to_http', side_effect=always_fail), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
@@ -879,7 +905,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 2)
         self.assertDictHasKey(responses[0], 'error')
         self.assertDictHasKey(responses[1], 'error')
-        self.assertIn('not reachable', responses[1]['error']['message'])
+        self.assertIn('connection lost', responses[1]['error']['message'].lower())
 
     def test_multiple_disconnect_reconnect_cycles(self):
         """Server goes down, comes back, goes down, comes back."""
@@ -913,6 +939,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(sys, 'argv', ['envoy_bridge.py']), \
              patch.object(bridge, 'wait_for_envoy', return_value=True), \
              patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
@@ -951,6 +979,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(sys, 'argv', ['envoy_bridge.py']), \
              patch.object(bridge, 'wait_for_envoy', return_value=True), \
              patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
@@ -1060,6 +1090,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(bridge, 'wait_for_envoy', return_value=True), \
              patch.object(bridge, 'forward_to_http',
                           return_value={'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
@@ -1155,3 +1187,355 @@ class TestBridgeEntrypoint(EmbodyTestCase):
                 bridge.main()
             except BrokenPipeError:
                 pass  # Should be silently caught
+
+
+# =====================================================================
+# Config Loading
+# =====================================================================
+
+class TestBridgeConfig(EmbodyTestCase):
+
+    def test_load_config_missing_file(self):
+        result = bridge.load_config('/nonexistent/path.json')
+        self.assertEqual(result, {})
+
+    def test_load_config_none_path(self):
+        result = bridge.load_config(None)
+        self.assertEqual(result, {})
+
+    def test_load_config_valid(self):
+        import tempfile
+        config = {'toe_path': 'dev/test.toe', 'port': 9870, 'td_executable': '/usr/bin/td'}
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            json.dump(config, f)
+            path = f.name
+        try:
+            result = bridge.load_config(path)
+            self.assertEqual(result['toe_path'], 'dev/test.toe')
+            self.assertEqual(result['port'], 9870)
+        finally:
+            os.unlink(path)
+
+    def test_load_config_malformed_json(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+            f.write('not json {{{')
+            path = f.name
+        try:
+            result = bridge.load_config(path)
+            self.assertEqual(result, {})
+        finally:
+            os.unlink(path)
+
+    def test_resolve_toe_path_absolute(self):
+        config = {'toe_path': '/abs/path/test.toe'}
+        result = bridge.resolve_toe_path(config, '/some/config.json')
+        self.assertEqual(result, '/abs/path/test.toe')
+
+    def test_resolve_toe_path_relative(self):
+        config = {'toe_path': 'dev/test.toe'}
+        result = bridge.resolve_toe_path(config, '/repo/.envoy.json')
+        self.assertEqual(result, '/repo/dev/test.toe')
+
+    def test_resolve_toe_path_missing(self):
+        result = bridge.resolve_toe_path({}, '/some/config.json')
+        self.assertIsNone(result)
+
+
+# =====================================================================
+# Process Management
+# =====================================================================
+
+class TestBridgeProcessManagement(EmbodyTestCase):
+
+    def test_is_process_alive_none_pid(self):
+        self.assertFalse(bridge.is_process_alive(None))
+
+    def test_is_process_alive_current_process(self):
+        self.assertTrue(bridge.is_process_alive(os.getpid()))
+
+    def test_is_process_alive_nonexistent_pid(self):
+        # PID 99999999 almost certainly doesn't exist
+        self.assertFalse(bridge.is_process_alive(99999999))
+
+
+# =====================================================================
+# Meta-Tool Interception
+# =====================================================================
+
+class TestBridgeMetaTools(EmbodyTestCase):
+
+    def _make_state(self, **overrides):
+        state = {
+            'connected': False,
+            'td_pid': None,
+            'last_connected_time': None,
+            'crash_detected': False,
+            'launch_timestamps': [],
+            'config': {},
+            'config_path': None,
+            'url': 'http://localhost:9870/mcp',
+        }
+        state.update(overrides)
+        return state
+
+    def test_get_td_status_disconnected(self):
+        state = self._make_state()
+        result = bridge.handle_get_td_status(state)
+        self.assertFalse(result['connected'])
+        self.assertFalse(result['td_process_alive'])
+        self.assertFalse(result['crash_detected'])
+        self.assertIsNone(result['last_connected'])
+
+    def test_get_td_status_connected(self):
+        state = self._make_state(connected=True, last_connected_time=time.time())
+        result = bridge.handle_get_td_status(state)
+        self.assertTrue(result['connected'])
+        self.assertIsNotNone(result['last_connected'])
+
+    def test_get_td_status_crash_detection(self):
+        """Dead PID should trigger crash_detected."""
+        state = self._make_state(td_pid=99999999)
+        result = bridge.handle_get_td_status(state)
+        self.assertTrue(result['crash_detected'])
+        self.assertTrue(state['crash_detected'])  # Side-effect on state
+
+    def test_get_td_status_restart_attempts(self):
+        state = self._make_state()
+        result = bridge.handle_get_td_status(state)
+        self.assertEqual(result['restart_attempts_remaining'], bridge.CRASH_LOOP_MAX)
+
+    def test_get_td_status_restart_attempts_depleted(self):
+        now = time.monotonic()
+        timestamps = [now - 10, now - 5, now - 1]
+        state = self._make_state(launch_timestamps=timestamps)
+        result = bridge.handle_get_td_status(state)
+        self.assertEqual(result['restart_attempts_remaining'], 0)
+
+    def test_launch_td_no_executable(self):
+        state = self._make_state(config={})
+        result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('.envoy.json', result['message'])
+
+    def test_launch_td_already_running(self):
+        """Refuses to launch if TD is already running."""
+        with patch.object(bridge, 'find_td_pid', return_value=os.getpid()):
+            state = self._make_state(
+                config={'td_executable': '/usr/bin/td', 'toe_path': 'test.toe'})
+            result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('already running', result['message'])
+
+    def test_launch_td_crash_loop_guard(self):
+        """Refuses after too many recent launches."""
+        now = time.monotonic()
+        timestamps = [now - 10, now - 5, now - 1]
+        state = self._make_state(
+            launch_timestamps=timestamps,
+            config={'td_executable': '/usr/bin/td', 'toe_path': 'test.toe'})
+        with patch.object(bridge, 'find_td_pid', return_value=None):
+            result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('crashed', result['message'])
+
+    def test_launch_td_missing_executable(self):
+        """Error when TD executable doesn't exist."""
+        state = self._make_state(
+            config={'td_executable': '/nonexistent/TD.app', 'toe_path': 'test.toe'},
+            config_path='/tmp/.envoy.json')
+        with patch.object(bridge, 'find_td_pid', return_value=None):
+            result = bridge.handle_launch_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('not found', result['message'].lower())
+
+    def test_handle_bridge_tool_dispatch(self):
+        state = self._make_state()
+        content = bridge.handle_bridge_tool('get_td_status', {}, state)
+        self.assertIsInstance(content, list)
+        self.assertEqual(content[0]['type'], 'text')
+        parsed = json.loads(content[0]['text'])
+        self.assertIn('connected', parsed)
+
+    def test_handle_bridge_tool_unknown(self):
+        state = self._make_state()
+        content = bridge.handle_bridge_tool('unknown_tool', {}, state)
+        parsed = json.loads(content[0]['text'])
+        self.assertIn('error', parsed)
+
+
+# =====================================================================
+# Tool List Augmentation
+# =====================================================================
+
+class TestBridgeToolListAugmentation(EmbodyTestCase):
+
+    def test_augment_adds_bridge_tools(self):
+        response = {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'result': {'tools': [{'name': 'create_op'}]}
+        }
+        bridge.augment_tools_list(response)
+        names = {t['name'] for t in response['result']['tools']}
+        self.assertIn('create_op', names)
+        self.assertIn('get_td_status', names)
+        self.assertIn('launch_td', names)
+
+    def test_augment_no_result_key(self):
+        response = {'jsonrpc': '2.0', 'id': 1, 'error': {'code': -1}}
+        bridge.augment_tools_list(response)  # Should not crash
+        self.assertNotIn('result', response)
+
+    def test_bridge_only_tools_list(self):
+        response = bridge.bridge_only_tools_list(42)
+        self.assertEqual(response['id'], 42)
+        names = {t['name'] for t in response['result']['tools']}
+        self.assertIn('get_td_status', names)
+        self.assertIn('launch_td', names)
+
+    def test_tools_list_augmented_in_main_loop(self):
+        """tools/list response from TD gets bridge tools appended."""
+        td_tools = {'jsonrpc': '2.0', 'id': 1,
+                     'result': {'tools': [{'name': 'create_op'}]}}
+
+        def forward(url, msg, **kw):
+            return td_tools
+
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}
+        stdin = io.StringIO(json.dumps(msg) + '\n')
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', stderr), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+
+        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
+        response = json.loads(lines[0])
+        names = {t['name'] for t in response['result']['tools']}
+        self.assertIn('create_op', names)
+        self.assertIn('get_td_status', names)
+        self.assertIn('launch_td', names)
+
+    def test_tools_list_bridge_only_when_td_down(self):
+        """When TD is down, tools/list returns bridge-only tools."""
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}
+        stdin = io.StringIO(json.dumps(msg) + '\n')
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', stderr), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=False), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+
+        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
+        response = json.loads(lines[0])
+        names = {t['name'] for t in response['result']['tools']}
+        self.assertIn('get_td_status', names)
+        self.assertIn('launch_td', names)
+        # TD tools should NOT be present
+        self.assertNotIn('create_op', names)
+
+    def test_meta_tool_call_intercepted(self):
+        """tools/call for get_td_status is handled locally, not forwarded."""
+        msg = {
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'tools/call',
+            'params': {'name': 'get_td_status', 'arguments': {}}
+        }
+        stdin = io.StringIO(json.dumps(msg) + '\n')
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        fwd = MagicMock()
+
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', stderr), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', fwd), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+
+        # Should NOT have forwarded to TD
+        fwd.assert_not_called()
+
+        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
+        response = json.loads(lines[0])
+        # Should have result with content array
+        self.assertIn('result', response)
+        content = response['result']['content']
+        self.assertIsInstance(content, list)
+        parsed = json.loads(content[0]['text'])
+        self.assertIn('connected', parsed)
+
+    def test_non_meta_tool_forwarded(self):
+        """tools/call for create_op is forwarded to TD, not intercepted."""
+        msg = {
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'tools/call',
+            'params': {'name': 'create_op', 'arguments': {}}
+        }
+
+        def forward(url, msg, **kw):
+            return {'jsonrpc': '2.0', 'id': 1, 'result': {'content': [{'type': 'text', 'text': 'ok'}]}}
+
+        stdin = io.StringIO(json.dumps(msg) + '\n')
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', stderr), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+
+        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
+        response = json.loads(lines[0])
+        self.assertEqual(response['result']['content'][0]['text'], 'ok')
+
+
+# =====================================================================
+# Connection Loss Messages
+# =====================================================================
+
+class TestBridgeConnectionLostMessage(EmbodyTestCase):
+
+    def test_message_no_pid(self):
+        state = {'td_pid': None, 'crash_detected': False}
+        msg = bridge.connection_lost_message(state)
+        self.assertIn('connection lost', msg.lower())
+        self.assertIn('launch_td', msg)
+
+    def test_message_dead_pid(self):
+        state = {'td_pid': 99999999, 'crash_detected': False}
+        msg = bridge.connection_lost_message(state)
+        self.assertIn('crashed', msg.lower())
+        self.assertTrue(state['crash_detected'])
+
+    def test_message_alive_pid(self):
+        state = {'td_pid': os.getpid(), 'crash_detected': False}
+        msg = bridge.connection_lost_message(state)
+        self.assertIn('not responding', msg.lower())
+        self.assertIn(str(os.getpid()), msg)

@@ -1,32 +1,37 @@
 {
 	"format": "tdn",
 	"version": "1.0",
-	"build": 2,
-	"generator": "Embody/5.0.224",
+	"build": 4,
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:45:53Z",
+	"exported_at": "2026-03-20T01:00:39Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false
 	},
 	"type_defaults": {
 		"baseCOMP": {
-			"size": [160, 130]
+			"size": [160, 130],
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"]
 		}
 	},
 	"operators": [
 		{
-			"name": "sandbox_test_mcp_externalization",
-			"type": "baseCOMP",
-			"color": [0.67, 0.67, 0.67],
-			"children": [
-				{
-					"name": "tag_ext_comp",
-					"type": "baseCOMP",
-					"color": [0.325, 0.8, 0.3],
-					"tags": ["tox"]
-				}
-			]
+			"name": "sandbox_test_dat_restoration",
+			"type": "baseCOMP"
+		},
+		{
+			"name": "sandbox_test_dat_restoration1",
+			"type": "baseCOMP"
+		},
+		{
+			"name": "sandbox_test_dat_restoration2",
+			"type": "baseCOMP"
+		},
+		{
+			"name": "sandbox_test_custom_parameters",
+			"type": "baseCOMP"
 		}
 	]
 }

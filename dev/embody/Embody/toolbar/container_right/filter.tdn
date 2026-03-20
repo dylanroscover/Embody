@@ -2,12 +2,35 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:12:47Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/toolbar/container_right/filter",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "",
+		"editmode": "editablecontinuous",
+		"placeholdertext": "Filter...",
+		"callbacks": "new_filter_callbacks",
+		"font": "Open Sans",
+		"fontsize": 9,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"textoffsetx": 8,
+		"alignx": "left",
+		"w": 170,
+		"vmode": "fill",
+		"alignorder": 25,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": 0.08,
+		"bgcolorg": 0.08,
+		"bgcolorb": 0.08,
+		"bgalpha": 1
 	},
 	"operators": []
 }

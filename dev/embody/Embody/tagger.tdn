@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 17,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:28Z",
+	"exported_at": "2026-03-20T01:00:41Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false
@@ -37,6 +37,23 @@
 			"flags": ["viewer"],
 			"size": [130, 90]
 		}
+	},
+	"parameters": {
+		"w": 180,
+		"h": "=28 * me.fetch('visible_count', op('./tags').numRows) + 2",
+		"display": false,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=parent.Embody.par.Listrowcolorr",
+		"bgcolorg": "=parent.Embody.par.Listrowcolorg",
+		"bgcolorb": "=parent.Embody.par.Listrowcolorb",
+		"bgalpha": 1,
+		"borderar": 0.26426,
+		"borderag": 0.298469,
+		"borderab": 0.362,
+		"align": "verttb",
+		"parentshortcut": "menu",
+		"reloadbuiltin": false
 	},
 	"operators": [
 		{
@@ -82,7 +99,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [-225, 175],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "button1",
@@ -97,7 +115,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [-225, -276],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "button2",
@@ -112,7 +131,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [25, -276],
-			"size": [160, 76]
+			"size": [160, 76],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_save",
@@ -126,7 +146,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [25, 100],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_embed",
@@ -140,7 +161,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [260, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_reload",
@@ -154,7 +176,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [-280, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_remove",
@@ -169,7 +192,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [-1000, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "parameter1",
@@ -196,7 +220,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [-640, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "replicator1",
@@ -238,7 +263,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [-820, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "btn_portable",
@@ -252,7 +278,8 @@
 				"relpath": "externaltox"
 			},
 			"position": [-460, 275],
-			"size": [160, 134]
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "select_comps",

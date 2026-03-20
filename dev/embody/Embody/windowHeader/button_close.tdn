@@ -2,12 +2,32 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 1,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:12:01Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/windowHeader/button_close",
 	"options": {
 		"include_dat_content": false
+	},
+	"parameters": {
+		"text": "󰖭",
+		"callbacks": "button_close_callbacks",
+		"font": "Material Design Icons",
+		"fontsize": 10,
+		"fontsizeunits": "points",
+		"fontcolorr": "=parent.Embody.par.Textcolorr",
+		"fontcolorg": "=parent.Embody.par.Textcolorg",
+		"fontcolorb": "=parent.Embody.par.Textcolorb",
+		"w": 32,
+		"vmode": "fill",
+		"alignorder": 3,
+		"clickthrough": true,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"bgcolorr": "=1.0",
+		"bgcolorg": "=1.0",
+		"bgcolorb": "=1.0",
+		"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 	},
 	"operators": []
 }

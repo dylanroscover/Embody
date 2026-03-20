@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.0",
 	"build": 14,
-	"generator": "Embody/5.0.224",
+	"generator": "Embody/5.0.230",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-17T03:13:01Z",
+	"exported_at": "2026-03-20T01:00:40Z",
 	"network_path": "/embody/Embody/toolbar/container_right",
 	"options": {
 		"include_dat_content": false
@@ -25,6 +25,15 @@
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"]
 		}
+	},
+	"parameters": {
+		"w": 270,
+		"h": 26,
+		"leftanchor": 1,
+		"horigin": 1,
+		"resizecomp": "=me",
+		"repocomp": "=me",
+		"align": "horizrl"
 	},
 	"operators": [
 		{
@@ -74,9 +83,9 @@
 				"alignx": "left",
 				"w": 170,
 				"alignorder": 25,
-				"bgcolorr": "=0.08 + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=0.08 + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=0.08 + (0.06 if me.fetch('hover', False) else 0)"
+				"bgcolorr": 0.08,
+				"bgcolorg": 0.08,
+				"bgcolorb": 0.08
 			},
 			"position": [200, 0]
 		},
