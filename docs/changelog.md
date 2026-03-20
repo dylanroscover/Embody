@@ -1,5 +1,15 @@
 # Changelog
 
+## v5.0.233
+
+Project-level performance monitoring, pre-handoff validation, Envoy bridge hardening, test runner dialog fix.
+
+- **`get_project_performance` MCP tool**: Reads a permanent Perform CHOP inside Embody to report FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temperature, and optional COMP hotspot ranking by cook time
+- **`/validate` command**: Pre-handoff checklist that snapshots performance, scans for errors, checks externalization health, evaluates thresholds, and reports a PASS/WARN/FAIL verdict with hotspot analysis
+- **Test runner dialog fix**: `Filecleanup` parameter is now suppressed to `delete` during test runs (save/restore across all entry points), preventing modal "Removed Operator Detected" dialogs from blocking test execution
+- **Continuity check sandbox filtering**: Path-based filtering for test sandbox operators as a second safety layer — sandbox ops are silently filtered even when the `_running` flag isn't active (handles reinit, between-suite gaps, post-failure)
+- **Envoy bridge hardening**: `.envoy.json` project config for bridge launcher, venv Python preference over system Python, stale process cleanup with orphan watchdog
+
 ## v5.0.229
 
 Warning support in `get_op_errors`, Envoy enable dialog improvement, cleanup.
