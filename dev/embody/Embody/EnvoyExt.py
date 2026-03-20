@@ -2868,7 +2868,24 @@ class EnvoyExt:
             if comment is not None:
                 target.comment = comment
 
-            return self._get_op_position(op_path)
+            result = self._get_op_position(op_path)
+
+            # Check for overlaps with siblings after repositioning
+            if (x is not None or y is not None) and target.parent():
+                MARGIN = 20
+                overlaps = []
+                tx, ty, tw, th = target.nodeX, target.nodeY, target.nodeWidth, target.nodeHeight
+                for sibling in target.parent().children:
+                    if sibling.path == target.path:
+                        continue
+                    sx, sy, sw, sh = sibling.nodeX, sibling.nodeY, sibling.nodeWidth, sibling.nodeHeight
+                    if (tx < sx + sw + MARGIN and tx + tw + MARGIN > sx and
+                            ty < sy + sh + MARGIN and ty + th + MARGIN > sy):
+                        overlaps.append(sibling.name)
+                if overlaps:
+                    result['overlap_warning'] = f'Overlaps with: {", ".join(overlaps)}. Reposition to avoid.'
+
+            return result
         except Exception as e:
             return {'error': f'Failed to set position: {e}'}
 

@@ -78,6 +78,22 @@ Discovers and reports the structure of a TouchDesigner network:
 
 Returns operators organized by annotation groups, signal flow direction, and any errors found.
 
+## STDIO Bridge
+
+Claude Code connects to Envoy through a STDIO bridge script (`.claude/envoy-bridge.py`) that translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. The bridge provides three meta-tools that work even when TouchDesigner is not running:
+
+| Tool | Description |
+|------|-------------|
+| `get_td_status` | Check if TD is running, whether Envoy is reachable, crash detection, and restart attempts remaining |
+| `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable |
+| `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy |
+
+This means Claude Code can start a TD session from scratch — no need to manually open TouchDesigner first. If TD crashes, Claude can detect it and restart automatically.
+
+The bridge also handles crash-loop protection (max 3 launches in 5 minutes), automatic retry with backoff on transient connection failures, and orphan process cleanup when Claude Code exits.
+
+See [Architecture](architecture.md) for technical details on the bridge's design.
+
 ## How It Works
 
 Embody stores master copies of all rules and skills as template DATs inside the `templates` baseCOMP. When Envoy starts in a user project, `_extractClaudeConfig()` reads these templates and writes them to the project's `.claude/` directory. This means:

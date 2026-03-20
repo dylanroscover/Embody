@@ -21,7 +21,9 @@ Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, et
 
 ## Manual Configuration
 
-If your project isn't in a git repo, create `.mcp.json` manually in your project directory:
+If your project isn't in a git repo, create `.mcp.json` manually in your project directory. You can use either the direct HTTP transport or the STDIO bridge:
+
+**HTTP transport** (simpler, requires TD to be running):
 
 ```json
 {
@@ -33,6 +35,23 @@ If your project isn't in a git repo, create `.mcp.json` manually in your project
   }
 }
 ```
+
+**STDIO bridge** (recommended — supports launching TD from Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "envoy": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-u", ".claude/envoy-bridge.py", "--port", "9870",
+               "--config", ".envoy.json"]
+    }
+  }
+}
+```
+
+The STDIO bridge provides meta-tools (`get_td_status`, `launch_td`, `restart_td`) that work even when TouchDesigner is not running. See [Claude Code Integration](claude-code.md#stdio-bridge) for details.
 
 ## Changing the Port
 

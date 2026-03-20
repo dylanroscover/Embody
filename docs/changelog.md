@@ -1,5 +1,15 @@
 # Changelog
 
+## v5.0.235
+
+`restart_td` bridge meta-tool, local MCP handshake when TD is down, operator overlap warnings, layout rules hardening.
+
+- **`restart_td` bridge meta-tool**: Gracefully quits TouchDesigner and relaunches with the project's `.toe` file. Sends platform-appropriate quit signal, waits for exit (force-kills if needed), then relaunches and waits for Envoy. Crash-loop aware — respects the existing 3-in-5-minutes limit
+- **Local MCP handshake when TD is down**: The STDIO bridge now handles `initialize`, `notifications/initialized`, and `tools/list` locally when Envoy is unreachable, so Claude Code always completes the MCP setup and discovers bridge meta-tools without waiting for a connection timeout
+- **`set_op_position` overlap warning**: After repositioning an operator, EnvoyExt checks for bounding-box overlaps with siblings (20-unit margin) and returns an `overlap_warning` field naming the conflicting operators
+- **Layout rules hardening**: Network-layout and create-operator rules now require dimension-aware spacing (`nodeWidth`/`nodeHeight` from `get_network_layout`), forward-flow wire direction, and flag the fixed-offset anti-pattern. OP-reference parameter values section added to parameter rules
+- **Bridge meta-tools documented**: Architecture, setup, claude-code, and tools-reference docs updated with STDIO bridge section, `.envoy.json` config reference, and meta-tool catalog
+
 ## v5.0.233
 
 Project-level performance monitoring, pre-handoff validation, Envoy bridge hardening, test runner dialog fix.
