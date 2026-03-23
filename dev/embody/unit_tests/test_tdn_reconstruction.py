@@ -922,6 +922,26 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(rc.bypass)
 		self.assertFalse(rc.expose)
 
+	def test_E08_locked_non_dat_warning(self):
+		"""Locked non-DAT operators survive round-trip with warning."""
+		t = self.sandbox.create(nullTOP, 't')
+		t.lock = True
+		c = self.sandbox.create(constantCHOP, 'c')
+		c.lock = True
+		self._roundTrip(self.sandbox)
+		# Lock flags preserved
+		self.assertTrue(self.sandbox.op('t').lock)
+		self.assertTrue(self.sandbox.op('c').lock)
+
+	def test_E09_locked_non_dat_in_export(self):
+		"""Locked non-DAT operators include lock in exported flags."""
+		t = self.sandbox.create(nullTOP, 't')
+		t.lock = True
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		entry = result['tdn']['operators'][0]
+		self.assertIn('lock', entry.get('flags', []))
+
 	# =================================================================
 	# F. Metadata Round-Trip (8 tests)
 	# =================================================================
@@ -1626,6 +1646,112 @@ class TestTDNReconstruction(EmbodyTestCase):
 		result = self.tdn.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn_doc, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+	# =================================================================
+	# K3. Target COMP Metadata Preservation — v1.1 (6 tests)
+	# =================================================================
+
+	def test_K14_target_comp_type_exported(self):
+		"""Top-level 'type' field must match OPType of target COMP."""
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		tdn = result['tdn']
+		self.assertEqual(tdn.get('type'), self.sandbox.OPType)
+
+	def test_K15_diverse_comp_types_roundtrip(self):
+		"""Different COMP types export their own type at top level."""
+		comp_types = [
+			'baseCOMP', 'containerCOMP',
+		]
+		for ct in comp_types:
+			name = ct.replace('COMP', '').lower()
+			c = self.sandbox.create(ct, name)
+			# Export this child as its own network
+			result = self.tdn.ExportNetwork(root_path=c.path)
+			self.assertTrue(result.get('success'), f'Export failed for {ct}')
+			tdn = result['tdn']
+			self.assertEqual(tdn.get('type'), ct,
+				f'type field mismatch for {ct}')
+
+	def test_K16_target_comp_flags_roundtrip(self):
+		"""Flags set on target COMP survive export/import."""
+		self.sandbox.viewer = True
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		self.assertIn('flags', tdn)
+		self.assertIn('viewer', tdn['flags'])
+
+		# Clear and reimport
+		self.sandbox.viewer = False
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+		self.assertTrue(self.sandbox.viewer, 'viewer flag not restored')
+
+	def test_K17_target_comp_color_tags_comment_roundtrip(self):
+		"""Color, tags, and comment on target COMP survive export/import."""
+		self.sandbox.color = (0.2, 0.8, 0.4)
+		self.sandbox.tags.add('test_tag')
+		self.sandbox.comment = 'Test comment'
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		self.assertIn('color', tdn)
+		self.assertIn('tags', tdn)
+		self.assertEqual(tdn['comment'], 'Test comment')
+
+		# Reset and reimport
+		self.sandbox.color = (0.545, 0.545, 0.545)
+		self.sandbox.tags.clear()
+		self.sandbox.comment = ''
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertAlmostEqual(self.sandbox.color[0], 0.2, places=3)
+		self.assertIn('test_tag', self.sandbox.tags)
+		self.assertEqual(self.sandbox.comment, 'Test comment')
+
+	def test_K18_target_comp_storage_roundtrip(self):
+		"""Storage on target COMP survives export/import."""
+		self.sandbox.store('portability_key', 42)
+		self.sandbox.store('config', {'nested': True})
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		self.assertIn('storage', tdn)
+
+		# Clear storage and reimport
+		self.sandbox.unstore('portability_key')
+		self.sandbox.unstore('config')
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertEqual(self.sandbox.fetch('portability_key', search=False), 42)
+		self.assertEqual(
+			self.sandbox.fetch('config', search=False), {'nested': True})
+
+	def test_K19_type_mismatch_warning(self):
+		"""Importing a TDN with mismatched type should warn but succeed."""
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Forge a different type
+		tdn['type'] = 'containerCOMP'
+
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		# Should still succeed (warning only)
 		self.assertTrue(result.get('success'))
 
 	# =================================================================

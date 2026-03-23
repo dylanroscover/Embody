@@ -471,6 +471,9 @@ class EmbodyExt:
             f'{self.my.par.Envoyport.eval()}\n'
             '  - Generate AI config files in your project root\n'
             '    (CLAUDE.md, AGENTS.md, .mcp.json, .claude/ rules + skills)\n\n'
+            'All Envoy MCP tools are auto-authorized for convenience.\n'
+            'To adjust permissions, edit .claude/settings.local.json\n'
+            'in your project root after setup.\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
             'You can change this later via the Envoyenable parameter.\n\n'
             'Note: TD will be unresponsive for a few seconds while\n'
@@ -962,9 +965,11 @@ class EmbodyExt:
             # just run UpdateHandler quietly; it will find nothing yet.
             run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
 
-        # Offer Envoy opt-in only if not already enabled
+        # Defer Envoy opt-in until after the full init/update cycle completes.
+        # Update() will check this flag and show the prompt once all other
+        # dialogs (deprecated patterns, re-scan, etc.) have resolved.
         if not self.my.par.Envoyenable.eval():
-            run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=15)
+            self._pending_envoy_prompt = True
 
     # ==========================================================================
     # SAFE FILE TRACKING
@@ -1357,6 +1362,13 @@ class EmbodyExt:
         self._reportResults(dirties, additions, subtractions)
         if not suppress_refresh:
             run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
+
+        # Chain the Envoy opt-in prompt AFTER init completes.
+        # Verify() sets this flag; we consume it here so the Envoy dialog
+        # appears only after deprecated-pattern and re-scan dialogs resolve.
+        if getattr(self, '_pending_envoy_prompt', False):
+            self._pending_envoy_prompt = False
+            run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=5)
 
     def _reportResults(self, dirties, additions, subtractions):
         """Report update results to log."""
@@ -4313,14 +4325,6 @@ class EmbodyExt:
         errors_total = 0
 
         for comp_path, rel_tdn_path in tdn_comps:
-            comp = op(comp_path)
-            if comp is None:
-                # COMP was tagged but .toe wasn't saved — create the shell
-                comp = self._createMissingCompShell(comp_path, 'tdn')
-                if comp is None:
-                    errors_total += 1
-                    continue
-
             abs_path = self.buildAbsolutePath(rel_tdn_path)
             if not abs_path.is_file():
                 self.Log(f'TDN file not found: {rel_tdn_path}', 'WARNING')
@@ -4333,6 +4337,17 @@ class EmbodyExt:
                 self.Log(f'Failed to read TDN for {comp_path}: {e}', 'ERROR')
                 errors_total += 1
                 continue
+
+            comp = op(comp_path)
+            if comp is None:
+                # COMP was tagged but .toe wasn't saved — create the shell.
+                # Prefer type from TDN file (v1.1+), then table, then 'base'.
+                tdn_type = tdn_doc.get('type')
+                comp = self._createMissingCompShell(
+                    comp_path, 'tdn', comp_type_override=tdn_type)
+                if comp is None:
+                    errors_total += 1
+                    continue
 
             # Import from TDN (phases 1-7 + phase 8 file-link restore)
             result = self.my.ext.TDN.ImportNetwork(
@@ -4489,7 +4504,8 @@ class EmbodyExt:
                 f'TDN reconstruction complete: {count} COMP(s) rebuilt successfully',
                 'SUCCESS')
 
-    def _createMissingCompShell(self, comp_path: str, strategy: str) -> 'OP | None':
+    def _createMissingCompShell(self, comp_path: str, strategy: str,
+                               comp_type_override: str = None) -> 'OP | None':
         """Create a missing COMP that was tagged but not saved in the .toe.
 
         Used by both ReconstructTDNComps and RestoreTOXComps when a tracked
@@ -4498,6 +4514,8 @@ class EmbodyExt:
         Args:
             comp_path: Full TD path (e.g., '/embody/base_tdn')
             strategy: 'tdn' or 'tox' — determines which tag/color to apply
+            comp_type_override: Full TD type string (e.g. 'containerCOMP')
+                from TDN file. Takes priority over externalizations table.
 
         Returns:
             The created COMP, or None on failure.
@@ -4509,9 +4527,13 @@ class EmbodyExt:
                      f'not found or not a COMP', 'WARNING')
             return None
 
-        comp_type = self._getCompTypeFromTable(comp_path) or 'base'
+        # Priority: TDN type override > externalizations table > 'baseCOMP'
+        if comp_type_override:
+            td_type = comp_type_override
+        else:
+            comp_type = self._getCompTypeFromTable(comp_path) or 'base'
+            td_type = f'{comp_type}COMP'
         comp_name = comp_path.rsplit('/', 1)[-1]
-        td_type = f'{comp_type}COMP'
 
         try:
             new_comp = parent_op.create(td_type, comp_name)

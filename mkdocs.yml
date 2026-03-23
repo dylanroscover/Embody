@@ -85,6 +85,7 @@ nav:
     - Claude Code Integration: envoy/claude-code.md
     - Tools Reference: envoy/tools-reference.md
     - Architecture: envoy/architecture.md
+    - Troubleshooting: envoy/troubleshooting.md
   - TDN:
     - tdn/index.md
     - Specification: tdn/specification.md

@@ -137,6 +137,23 @@ def onProjectPreSave():
 	if not parent.Embody.par.Tdnstriponsave.eval():
 		return
 
+	# Save pane owner paths that fall inside TDN COMPs before stripping.
+	# After restore, we re-navigate orphaned panes back to the rebuilt COMP.
+	tdn_paths = [cp for cp, _ in exported]
+	pane_restore = {}
+	try:
+		for pane in ui.panes:
+			if hasattr(pane, 'owner') and pane.owner:
+				owner_path = pane.owner.path
+				for tp in tdn_paths:
+					if owner_path == tp or owner_path.startswith(tp + '/'):
+						pane_restore[pane.id] = owner_path
+						break
+	except Exception:
+		pass  # Non-critical — pane restoration is best-effort
+	if pane_restore:
+		parent.Embody.store('_tdn_pane_restore', pane_restore)
+
 	stripped_info = []
 	for comp_path, rel_tdn_path in exported:
 		comp = op(comp_path)
@@ -202,6 +219,20 @@ def onProjectPostSave():
 					print(f'Embody > Rolled back {comp_path} from backup')
 			except Exception as rb_e:
 				print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')
+	# Restore pane owners that were orphaned during strip
+	pane_restore = parent.Embody.fetch('_tdn_pane_restore', {}, search=False)
+	if pane_restore:
+		parent.Embody.unstore('_tdn_pane_restore')
+		try:
+			for pane in ui.panes:
+				saved_path = pane_restore.get(pane.id)
+				if saved_path:
+					target = op(saved_path)
+					if target:
+						pane.owner = target
+		except Exception:
+			pass  # Non-critical — pane restoration is best-effort
+
 	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)
 	return

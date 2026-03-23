@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.235-blue)
+![Version](https://img.shields.io/badge/version-5.0.237-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -178,6 +178,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.237**: TDN v1.1 format, import error surfacing, save-cycle pane restoration, Envoy troubleshooting docs
 - **5.0.235**: `restart_td` meta-tool, local MCP handshake, operator overlap warnings
 - **5.0.233**: Project-level performance monitoring, `/validate` command, test runner dialog fix
 - **5.0.229**: Warning support in `get_op_errors`, Envoy enable dialog improvement

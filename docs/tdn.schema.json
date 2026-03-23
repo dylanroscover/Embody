@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.json",
   "title": "TDN (TouchDesigner Network)",
-  "description": "JSON schema for TDN v1.0 — a human-readable format for representing TouchDesigner operator networks.",
+  "description": "JSON schema for TDN v1.1 — a human-readable format for representing TouchDesigner operator networks.",
   "type": "object",
   "required": ["format", "version", "generator", "td_build", "exported_at", "network_path", "options", "operators"],
   "additionalProperties": false,
@@ -109,6 +109,35 @@
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/parameterValue" },
       "description": "Target COMP's own non-default built-in parameter values. Same format as operator-level parameters."
+    },
+    "type": {
+      "type": "string",
+      "description": "TouchDesigner operator type of the target COMP (e.g., \"baseCOMP\", \"containerCOMP\", \"geometryCOMP\"). Added in v1.1."
+    },
+    "flags": {
+      "$ref": "#/$defs/flagsArray",
+      "description": "Target COMP's own non-default flags. Same format as operator-level flags. Added in v1.1."
+    },
+    "color": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0, "maximum": 1 },
+      "minItems": 3,
+      "maxItems": 3,
+      "description": "Target COMP's node color [r, g, b] if different from default. Added in v1.1."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Target COMP's tags. Added in v1.1."
+    },
+    "comment": {
+      "type": "string",
+      "description": "Target COMP's node comment. Added in v1.1."
+    },
+    "storage": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Target COMP's persistent storage entries. Same format as operator-level storage. Added in v1.1."
     },
     "operators": {
       "type": "array",

@@ -1,6 +1,6 @@
 # TDN Specification
 
-**Version 1.0**
+**Version 1.1**
 
 TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
@@ -18,12 +18,13 @@ A `.tdn` file is a JSON object with the following top-level fields:
 ```json
 {
   "format": "tdn",
-  "version": "1.0",
+  "version": "1.1",
   "build": 1,
-  "generator": "Embody/5.0.93",
+  "generator": "Embody/5.0.237",
   "td_build": "2025.32050",
   "exported_at": "2025-02-19T12:34:56Z",
   "network_path": "/",
+  "type": "containerCOMP",
   "options": {
     "include_dat_content": true
   },
@@ -31,6 +32,11 @@ A `.tdn` file is a JSON object with the following top-level fields:
   "par_templates": { ... },
   "custom_pars": { ... },
   "parameters": { ... },
+  "flags": [ ... ],
+  "color": [0.3, 0.5, 0.9],
+  "tags": ["tdn"],
+  "comment": "Main UI container",
+  "storage": { ... },
   "operators": [ ... ],
   "annotations": [ ... ]
 }
@@ -39,18 +45,24 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
-| `version` | string | Yes | Format version. Currently `"1.0"`. |
+| `version` | string | Yes | Format version. Currently `"1.1"`. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
-| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.93"`). |
+| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
 | `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). |
 | `network_path` | string | Yes | The COMP path represented by this file (e.g., `"/"` for the entire project). |
+| `type` | string | No | TouchDesigner operator type of the target COMP (e.g., `"baseCOMP"`, `"containerCOMP"`, `"geometryCOMP"`). Added in v1.1. Makes the file self-describing for portable import into other projects. On import, a mismatch between this field and the destination COMP's type triggers a warning. |
 | `options` | object | Yes | Export settings used when generating this file. |
 | `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |
 | `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
 | `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
 | `parameters` | object | No | Target COMP's own non-default built-in parameter values. Same format as operator-level [`parameters`](#parameters). Only present if the target COMP has non-default built-in parameters. |
+| `flags` | array | No | Target COMP's own non-default [flags](#flags). Same format as operator-level flags. Added in v1.1. |
+| `color` | `[r, g, b]` | No | Target COMP's node color, if different from default gray. RGB floats 0.0–1.0, rounded to 4 decimal places. Added in v1.1. |
+| `tags` | array of strings | No | Target COMP's tags, if any. Added in v1.1. |
+| `comment` | string | No | Target COMP's node comment, if non-empty. Added in v1.1. |
+| `storage` | object | No | Target COMP's persistent [storage entries](#operator-storage). Same format as operator-level storage. Added in v1.1. |
 | `operators` | array | Yes | Array of [operator objects](#operator-object). |
 | `annotations` | array | No | Array of [annotation objects](#annotations). Only present if the root COMP contains annotations. |
 
@@ -522,18 +534,28 @@ Combined example — viewer on, cooking disabled:
 
 ### Lock Flag Limitation
 
+!!! warning "Locked content is NOT preserved for TOPs, CHOPs, or SOPs"
+
+    TDN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, or geometry data**. After a TDN round-trip (export + import), locked non-DAT operators will be locked but **empty** — no texture, no samples, no mesh.
+
+    **This is by design, not a bug.** Storing binary data would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
+
+    Embody warns you at save time if your network contains locked non-DAT operators.
+
 The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, and SOPs — freezing their cooked output so it no longer updates from inputs or parameters. However, TDN only persists the frozen data for DATs.
 
 | Family | Flag persisted? | Frozen data persisted? | Notes |
 |--------|:-:|:-:|---|
 | **DAT** | Yes | Yes (via `dat_content`) | Full round-trip: both the lock state and text/table content are preserved. |
-| **TOP** | Yes | No | Pixel data is not stored. On import, the lock flag is set but no texture data exists. |
-| **CHOP** | Yes | No | Channel data is not stored. On import, the lock flag is set but no sample data exists. |
-| **SOP** | Yes | No | Geometry data is not stored. On import, the lock flag is set but no mesh data exists. |
+| **TOP** | Yes | **No** | Pixel data is not stored. On import, the lock flag is set but no texture data exists. The operator will appear black. |
+| **CHOP** | Yes | **No** | Channel data is not stored. On import, the lock flag is set but no sample data exists. |
+| **SOP** | Yes | **No** | Geometry data is not stored. On import, the lock flag is set but no mesh data exists. |
 
-**Why not store the data?** Storing binary operator data (textures, audio waveforms, geometry meshes) would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
+**Workarounds:**
 
-**Practical effect:** When a `.tdn` file containing a locked non-DAT operator is imported, the lock flag is restored but the operator has no frozen data to display. The operator will need to be unlocked and allowed to re-cook to regenerate its output from parameters and inputs.
+- **Unlock before saving** — the operator will re-cook from its inputs on reload.
+- **Use TOX strategy** instead of TDN for COMPs containing locked non-DAT operators. TOX files are binary and preserve all locked content.
+- **Store data externally** — write pixel data to image files, channel data to CSV, etc., and reference them from your network.
 
 ---
 
@@ -881,6 +903,7 @@ For most networks, export → import → re-export produces identical `.tdn` out
 
 ### Preserved
 
+- **Target COMP metadata** (v1.1+): type, flags, color, tags, comment, storage
 - Operator names, types, and hierarchy
 - Non-default parameter values (constant, expression, and bind modes)
 - Custom parameter definitions (all fields, all styles)
@@ -935,6 +958,7 @@ Developers should ignore unknown fields when parsing TDN documents. This ensures
 | Unrecognized flag name | Ignore it. |
 | Invalid parameter value type | Attempt type coercion; if impossible, skip with a warning. |
 | Version mismatch (`version`, `td_build`) | Log a warning, proceed with import. |
+| Target COMP type mismatch (`type` vs destination) | Log a warning, proceed with import. The file's `type` field is informational — import does not change the destination COMP's type. |
 | Unknown `$t` template reference | Log a warning, skip that page. |
 | Missing `type_defaults` entry for a type | No-op (operator uses its own properties). |
 | Non-serializable storage value on export | Skip that value, log at DEBUG level. |
@@ -954,12 +978,13 @@ A realistic `.tdn` file demonstrating all major features:
 ```json
 {
   "format": "tdn",
-  "version": "1.0",
+  "version": "1.1",
   "build": 3,
-  "generator": "Embody/5.0.93",
+  "generator": "Embody/5.0.237",
   "td_build": "2025.32050",
   "exported_at": "2026-02-19T14:30:00Z",
   "network_path": "/",
+  "type": "baseCOMP",
   "options": {
     "include_dat_content": true
   },

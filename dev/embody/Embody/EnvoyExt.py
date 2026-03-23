@@ -3849,6 +3849,14 @@ class EnvoyExt:
                 return project_dir
             except Exception as e:
                 self._log(f'Failed to initialize git repo: {e}', 'ERROR')
+                ui.messageBox(
+                    'Envoy — Git Initialization Failed',
+                    f'Could not initialize a git repository:\n\n  {e}\n\n'
+                    'Envoy will start without git. Auto-config files\n'
+                    '(.mcp.json, CLAUDE.md, etc.) will not be generated.\n\n'
+                    'To fix: run "git init" manually in your project\n'
+                    f'directory ({project_dir}), then re-enable Envoy.',
+                    buttons=['OK'])
                 # Fall through to start-without-git
 
         # choice == 3 or git init failed — start without git

@@ -1,5 +1,20 @@
 # Changelog
 
+## v5.0.237
+
+TDN v1.1 format with target COMP metadata, import error surfacing, MCP permissions documentation, save-cycle pane restoration, git init error dialog, Envoy troubleshooting docs.
+
+- **TDN v1.1 format**: Exports now include the target COMP's `type`, `flags`, `color`, `tags`, `comment`, and `storage` at the top level. On import, type mismatches produce a warning. Existing v1.0 files remain fully importable
+- **Locked non-DAT operator warning**: Export and import now detect locked TOPs, CHOPs, and SOPs and warn that their frozen data won't survive a TDN round-trip. Documented in spec and externalization docs
+- **Import error surfacing**: `ImportNetwork()` and `ImportNetworkFromFile()` now set `ui.status` on failure, so TD users see errors in the status bar — not just in logs or MCP responses
+- **MCP auto-authorization documented**: The Envoy enable dialog now informs users that all MCP tools are auto-authorized and points to `.claude/settings.local.json` for adjustments. New "MCP Tool Permissions" section added to Envoy setup docs
+- **Save-cycle pane restoration**: When TDN strip/restore runs during project save, pane owners inside TDN COMPs are now saved before stripping and restored after import — no more orphaned panes
+- **Git init error dialog**: If `git init` fails during Envoy setup, a `ui.messageBox` now shows the error and manual fix instructions instead of silently falling through
+- **Envoy troubleshooting docs**: New troubleshooting page covering server startup failures, connection issues, git init problems, and log file locations
+- **Dialog sequencing fix**: The Envoy opt-in prompt now waits for all other init dialogs (deprecated patterns, re-scan) to resolve before appearing
+- **TDN reconstruction uses type from file**: `ReconstructTDNComps()` now reads the `type` field from v1.1 `.tdn` files when creating missing COMP shells, so the correct COMP type (geometryCOMP, containerCOMP, etc.) is used instead of defaulting to baseCOMP
+- **New tests**: Locked non-DAT warning test, target COMP metadata preservation tests (6 tests for type, flags, color, tags, comment, storage round-trips)
+
 ## v5.0.235
 
 `restart_td` bridge meta-tool, local MCP handshake when TD is down, operator overlap warnings, layout rules hardening.
