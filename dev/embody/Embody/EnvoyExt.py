@@ -22,6 +22,7 @@ from queue import Queue, Empty
 from threading import Lock, Event, Thread
 import json
 import sys
+import tempfile
 import time
 import asyncio
 
@@ -1043,7 +1044,7 @@ class EnvoyMCPServer:
 
             # Always save to temp file (Claude Code can Read images natively)
             ext = '.jpg' if result['format'] == 'jpeg' else f".{result['format']}"
-            file_path = f'/tmp/envoy_capture_{uuid.uuid4().hex[:8]}{ext}'
+            file_path = os.path.join(tempfile.gettempdir(), f'envoy_capture_{uuid.uuid4().hex[:8]}{ext}')
             with open(file_path, 'wb') as f:
                 f.write(image_bytes)
 
@@ -3776,7 +3777,7 @@ class EnvoyExt:
                 return parent
 
         # No git repo found — prompt user
-        choice = ui.messageBox(
+        choice = op.Embody.ext.Embody._messageBox(
             'Envoy — Git Repository Recommended',
             'Envoy auto-configures .mcp.json, .gitignore, and CLAUDE.md\n'
             'in your git repository root. No git repository was found.\n\n'
@@ -3803,7 +3804,7 @@ class EnvoyExt:
                 self._log(f'Using existing git repo at {chosen}', 'SUCCESS')
                 return chosen
             # No .git there — offer to initialize in that folder
-            init_choice = ui.messageBox(
+            init_choice = op.Embody.ext.Embody._messageBox(
                 'Envoy — Initialize Git',
                 f'No git repo found in:\n  {chosen}\n\nInitialize git here?',
                 buttons=['Cancel', 'Initialize Git'])
@@ -3849,7 +3850,7 @@ class EnvoyExt:
                 return project_dir
             except Exception as e:
                 self._log(f'Failed to initialize git repo: {e}', 'ERROR')
-                ui.messageBox(
+                op.Embody.ext.Embody._messageBox(
                     'Envoy — Git Initialization Failed',
                     f'Could not initialize a git repository:\n\n  {e}\n\n'
                     'Envoy will start without git. Auto-config files\n'
@@ -3998,8 +3999,10 @@ class EnvoyExt:
         import glob
         import os
 
-        patterns = ['/tmp/envoy_capture_*', '/tmp/envoy_query_network_*',
-                    '/tmp/envoy_get_op_*']
+        tmp = tempfile.gettempdir()
+        patterns = [os.path.join(tmp, 'envoy_capture_*'),
+                    os.path.join(tmp, 'envoy_query_network_*'),
+                    os.path.join(tmp, 'envoy_get_op_*')]
         cutoff = time.time() - 86400  # 24 hours ago
         removed = 0
         for pattern in patterns:
@@ -4011,18 +4014,18 @@ class EnvoyExt:
                 except OSError:
                     pass
         if removed:
-            self._log(f'Cleaned up {removed} stale temp file(s) from /tmp', 'DEBUG')
+            self._log(f'Cleaned up {removed} stale Envoy temp file(s)', 'DEBUG')
 
     def _maybe_offload_to_file(self, result: dict, label: str,
                                 threshold: int = 50000) -> dict:
         """If the JSON-serialized result exceeds threshold bytes, write it
         to a temp file and return a pointer instead. This prevents MCP
         transport/token-limit issues with very large payloads."""
-        import uuid
+        import os, uuid
         serialized = json.dumps(result)
         if len(serialized) <= threshold:
             return result
-        file_path = f'/tmp/envoy_{label}_{uuid.uuid4().hex[:8]}.json'
+        file_path = os.path.join(tempfile.gettempdir(), f'envoy_{label}_{uuid.uuid4().hex[:8]}.json')
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(serialized)
         return {

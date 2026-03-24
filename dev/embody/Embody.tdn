@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
-	"version": "1.0",
-	"build": 206,
-	"generator": "Embody/5.0.232",
+	"version": "1.1",
+	"build": 207,
+	"generator": "Embody/5.0.241",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-20T01:26:39Z",
+	"exported_at": "2026-03-24T18:11:12Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -271,6 +271,7 @@
 			}
 		]
 	},
+	"type": "containerCOMP",
 	"custom_pars": {
 		"Embody": [
 			{
@@ -788,7 +789,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.232"
+				"value": "5.0.241"
 			},
 			{
 				"name": "Touchbuild",
@@ -811,7 +812,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 206
+				"value": 207
 			},
 			{
 				"name": "Github",
@@ -826,7 +827,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-03-20 01:26:39 UTC"
+				"value": "2026-03-24 18:11:12 UTC"
 			},
 			{
 				"name": "Help",
@@ -850,6 +851,14 @@
 		"opshortcut": "Embody",
 		"opviewer": "./text_bg",
 		"reloadbuiltin": false
+	},
+	"flags": ["display", "viewer"],
+	"color": [0.3, 0.5, 0.9],
+	"tags": ["tdn"],
+	"storage": {
+		"claudius_running": false,
+		"_tdn_restore_failures": ["/embody/base1"],
+		"expand_order": ["/embody", "/embody/unit_tests"]
 	},
 	"operators": [
 		{

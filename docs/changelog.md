@@ -1,5 +1,23 @@
 # Changelog
 
+## v5.0.243
+
+Headless smoke testing, file cleanup preferences, specialized COMP support, portable .tox hardening, bridge project_path override.
+
+- **`_messageBox` auto-response system**: Dialog calls can be intercepted by seeding `_smoke_test_responses` in storage, enabling fully headless smoke testing of Embody's init sequence including Envoy opt-in and re-scan prompts. Responses are consumed on use
+- **File cleanup preference**: New `Filecleanup` parameter (ask/keep/delete) controls whether external files are deleted when un-tagging operators. "Always Keep" and "Always Delete" options persist the choice
+- **TDN default child filtering**: Uncustomized auto-created children (e.g. `torus1` inside a geometryCOMP) are now skipped during export — they carry only trivial keys (name, type, position, size) and TD recreates them on COMP creation
+- **Portable .tox export hardening**: `ExportPortableTox` now strips the target COMP's own `externaltox`/`enableexternaltox` params (not just descendants) and handles the `syncfile` parameter, preventing baked-in references from confusing recipients
+- **Bridge `project_path` override**: `launch_td` and `restart_td` meta-tools accept an optional `project_path` parameter to open a different `.toe` file, resolved relative to the git root
+- **Envoy start deferred**: `parexec.py` defers `Start()` by 5 frames so `onCreate` has time to suppress baked-in `Envoyenable=True` before the server launches
+- **SCM directory protection**: `deleteEmptyDirectories` and `_cleanupFolder` now skip `.git`, `.svn`, and `.hg` directories
+- **Cross-platform temp paths**: All Envoy temp file operations use `tempfile.gettempdir()` instead of hardcoded `/tmp`
+- **`findChildren()` fix**: Two calls using invalid `depth=-1` corrected to `findChildren()` (unlimited depth is the default)
+- **AGENTS.md rewrite**: Condensed from verbose rule duplication into a concise universal AI instructions file
+- **ENVOY.md updated**: TDN-first rule added, skill prerequisites section, verify-TD-claims rule
+- **Release smoke test infrastructure**: Bootstrap script (`smoke_bootstrap.py`) and template `.toe` for E2E release testing
+- **New tests**: 22 smoke release tests (post-init state, `_messageBox` mechanism, `_promptEnvoy` auto-response, Envoy state), 9 specialized COMP roundtrip tests (geometryCOMP children, flags, materials, strip/restore; cameraCOMP; lightCOMP). 39 test suites total
+
 ## v5.0.237
 
 TDN v1.1 format with target COMP metadata, import error surfacing, MCP permissions documentation, save-cycle pane restoration, git init error dialog, Envoy troubleshooting docs.

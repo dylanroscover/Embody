@@ -65,6 +65,14 @@ BRIDGE_TOOLS = [
                     ),
                     "default": 120,
                 },
+                "project_path": {
+                    "type": "string",
+                    "description": (
+                        "Override the .toe file to open. Absolute path or "
+                        "relative to git root. If omitted, uses the default "
+                        "toe_path from .envoy.json."
+                    ),
+                },
             },
             "required": [],
         },
@@ -86,6 +94,14 @@ BRIDGE_TOOLS = [
                         "after relaunch (default: 120)"
                     ),
                     "default": 120,
+                },
+                "project_path": {
+                    "type": "string",
+                    "description": (
+                        "Override the .toe file to open. Absolute path or "
+                        "relative to git root. If omitted, uses the default "
+                        "toe_path from .envoy.json."
+                    ),
                 },
             },
             "required": [],
@@ -248,8 +264,14 @@ def quit_td(pid, graceful_timeout=15):
     return True, f"TouchDesigner (PID {pid}) was force-killed"
 
 
-def launch_td(config, config_path):
-    """Launch TouchDesigner with the configured .toe file.
+def launch_td(config, config_path, project_path=None):
+    """Launch TouchDesigner with a .toe file.
+
+    Args:
+        config: Parsed .envoy.json config dict.
+        config_path: Path to .envoy.json (for resolving relative paths).
+        project_path: Optional override .toe path. If relative, resolved
+            against the git root (same directory as config_path).
 
     Returns (success: bool, message: str, pid: int|None).
     """
@@ -257,7 +279,14 @@ def launch_td(config, config_path):
     if not td_exe:
         return False, "No td_executable configured in .envoy.json", None
 
-    toe_path = resolve_toe_path(config, config_path)
+    if project_path:
+        # Resolve relative paths against git root
+        if not os.path.isabs(project_path) and config_path:
+            git_root = os.path.dirname(os.path.abspath(config_path))
+            project_path = os.path.join(git_root, project_path)
+        toe_path = project_path
+    else:
+        toe_path = resolve_toe_path(config, config_path)
     if not toe_path:
         return False, "No toe_path configured in .envoy.json", None
 
@@ -351,6 +380,7 @@ def handle_get_td_status(state):
 def handle_launch_td(params, state):
     """Handle the launch_td meta-tool."""
     timeout = params.get("timeout", 120)
+    project_path = params.get("project_path")
 
     # Safety: check if TD is already running
     existing_pid = find_td_pid()
@@ -378,7 +408,8 @@ def handle_launch_td(params, state):
         }
 
     # Launch
-    success, message, pid = launch_td(state["config"], state["config_path"])
+    success, message, pid = launch_td(state["config"], state["config_path"],
+                                      project_path=project_path)
     if not success:
         return {"status": "error", "message": message}
 
@@ -412,6 +443,7 @@ def handle_launch_td(params, state):
 def handle_restart_td(params, state):
     """Handle the restart_td meta-tool."""
     timeout = params.get("timeout", 120)
+    project_path = params.get("project_path")
 
     # Find and quit the running TD process
     pid = find_td_pid()
@@ -434,9 +466,10 @@ def handle_restart_td(params, state):
     state["td_pid"] = None
     state["crash_detected"] = False
 
-    # Launch fresh
+    # Launch fresh (optionally with a different .toe)
     success, launch_msg, new_pid = launch_td(state["config"],
-                                              state["config_path"])
+                                              state["config_path"],
+                                              project_path=project_path)
     if not success:
         return {"status": "error", "message": launch_msg}
 

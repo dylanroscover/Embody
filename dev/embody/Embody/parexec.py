@@ -23,7 +23,10 @@ def onValueChange(par, prev):
 
 	elif par.name == 'Envoyenable':
 		if par.eval():
-			parent.Embody.ext.Envoy.Start()
+			# Defer Start and re-check — gives onCreate time to suppress
+			# the baked-in Envoyenable=True before the server launches.
+			run("parent.Embody.ext.Envoy.Start() if parent.Embody.par.Envoyenable.eval() else None",
+				delayFrames=5)
 		else:
 			parent.Embody.ext.Envoy.Stop()
 

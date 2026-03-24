@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.237-blue)
+![Version](https://img.shields.io/badge/version-5.0.243-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -147,7 +147,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **38 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **39 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -178,10 +178,10 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.243**: Headless smoke testing, file cleanup preferences, specialized COMP support, portable .tox hardening
 - **5.0.237**: TDN v1.1 format, import error surfacing, save-cycle pane restoration, Envoy troubleshooting docs
 - **5.0.235**: `restart_td` meta-tool, local MCP handshake, operator overlap warnings
 - **5.0.233**: Project-level performance monitoring, `/validate` command, test runner dialog fix
-- **5.0.229**: Warning support in `get_op_errors`, Envoy enable dialog improvement
 - **5.0.228**: macOS timezone fix, toolbar hover highlight
 - **5.0.227**: TDN crash safety — atomic writes, backup rotation, content-equal skip, About page filtering
 - **5.0.222**: Rename `tag_for_externalization` → `externalize_op`, clarify single-step workflow

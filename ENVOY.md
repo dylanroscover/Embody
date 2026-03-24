@@ -10,16 +10,25 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 
 ## Critical Rules
 
-1. **ALWAYS use Envoy MCP tools to inspect and modify anything inside TouchDesigner** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." Use MCP tools for everything in the live TD environment. The filesystem holds externalized files (`.py`, `.tox`, `.tdn`, `.json`, `.xml`, etc.); MCP is for interacting with operators, parameters, and network state inside TD.
-2. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure.
-3. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
-4. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
-5. **Always use forward slashes** in file paths for cross-platform compatibility.
-6. **Always consult the TD wiki** before writing TD Python code — confirm API behavior even if you're confident.
-7. **Binary files** (`.toe`, `.tox`) — use MCP tools to inspect contents, not the filesystem.
-8. **Always check for errors after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting.
-9. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
-10. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
+1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) or call `get_externalizations` to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
+2. **Use Envoy MCP tools for live TD state and non-TDN operators** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." For operators not externalized as TDN, use MCP tools to inspect and modify them. The filesystem holds externalized files (`.py`, `.tox`, `.tdn`, `.json`, `.xml`, etc.); MCP is for interacting with live operator state inside TD.
+3. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure.
+4. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
+5. **Never edit `externalizations.tsv` directly** — managed exclusively by Embody's tracking system.
+6. **Always use forward slashes** in file paths for cross-platform compatibility.
+7. **Always consult the TD wiki** before writing TD Python code OR claiming TD behavior — confirm API behavior, file formats, and application features against official Derivative documentation even if you're confident. Never assume a TD feature, file type, or convention exists without a verified source.
+8. **Binary files** (`.toe`, `.tox`) — use MCP tools to inspect contents, not the filesystem.
+9. **Always check for errors and warnings after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting.
+10. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
+11. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
+12. **Load the relevant skill BEFORE acting** — skills are prerequisites, not optional reference:
+    - Before `create_op`: load `/create-operator`
+    - Before `create_annotation` or `set_annotation`: load `/manage-annotations`
+    - Before `create_extension`: load `/create-extension`
+    - Before `externalize_op` or `save_externalization`: load `/externalize-operator`
+    - Before writing TD Python (`execute_python`, `set_dat_content`): load `/td-api-reference`
+    - When diagnosing operator errors: load `/debug-operator`
+    - Before first MCP call in a new session: load `/mcp-tools-reference`
 
 ## Approach Guidelines
 
@@ -73,7 +82,7 @@ When creating Python files for TouchDesigner (scripts, extensions, callbacks):
 ## Key References
 
 - **TD Wiki**: https://docs.derivative.ca/Main_Page
-- **TD Python API**: See `.claude/skills/td-api-reference/` for full reference
-- **MCP Tools**: See `.claude/skills/mcp-tools-reference/` for the complete tool catalog
+- **TD Python API**: MUST load `/td-api-reference` before writing TD Python code
+- **MCP Tools**: MUST load `/mcp-tools-reference` before first MCP tool call in session
 - **Network Layout**: See `.claude/rules/network-layout.md` for placement conventions
 - **TD Python Rules**: See `.claude/rules/td-python.md` for critical gotchas

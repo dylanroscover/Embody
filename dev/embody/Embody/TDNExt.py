@@ -1230,6 +1230,11 @@ class TDNExt:
 					f'Skipping duplicate companion "{name}" '
 					f'(original: "{base}")', 'INFO')
 
+		# Keys that carry no user-meaningful data — operators with only
+		# these keys are auto-created defaults (e.g. torus1 inside a
+		# geoCOMP) that TD recreates automatically on COMP creation.
+		_TRIVIAL_KEYS = {'name', 'type', 'position', 'size'}
+
 		result = []
 		for child in children:
 			# Skip system/internal paths (exact match or children)
@@ -1242,6 +1247,13 @@ class TDNExt:
 
 			op_data = self._exportSingleOp(child, options, depth)
 			if op_data is not None:
+				# Skip bare auto-created defaults — TD recreates these
+				# when the parent COMP is created, so they're noise
+				if not (set(op_data.keys()) - _TRIVIAL_KEYS):
+					self._log(
+						f'Skipping default child "{child.name}" '
+						f'(no customizations)', 'DEBUG')
+					continue
 				result.append(op_data)
 
 		return result
@@ -3433,7 +3445,7 @@ class TDNExt:
 			context: 'export' shows ui.messageBox + log; 'import' logs only
 		"""
 		locked = []
-		for child in root_op.findChildren(depth=-1):
+		for child in root_op.findChildren():
 			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
 				locked.append(child)
 
