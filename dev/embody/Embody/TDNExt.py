@@ -21,7 +21,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Optional, Union
 
-TDN_VERSION = '1.0'
+TDN_VERSION = '1.1'
 
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
@@ -402,6 +402,9 @@ class TDNExt:
 				tdn['type_defaults'] = type_defaults
 			if par_templates:
 				tdn['par_templates'] = par_templates
+			# Target COMP's own type (v1.1+)
+			tdn['type'] = root_op.OPType
+
 			# Target COMP's own parameters (custom + non-default built-in)
 			root_custom_pars = self._exportCustomPars(root_op)
 			if root_custom_pars:
@@ -409,6 +412,22 @@ class TDNExt:
 			root_builtin_params = self._exportBuiltinParams(root_op)
 			if root_builtin_params:
 				tdn['parameters'] = root_builtin_params
+
+			# Target COMP's own metadata (v1.1+)
+			root_flags = self._exportFlags(root_op)
+			if root_flags:
+				tdn['flags'] = root_flags
+			root_color = tuple(root_op.color)
+			if self._colorsDiffer(root_color, DEFAULT_COLOR):
+				tdn['color'] = [round(c, 4) for c in root_color]
+			root_tags = list(root_op.tags)
+			if root_tags:
+				tdn['tags'] = root_tags
+			if root_op.comment:
+				tdn['comment'] = root_op.comment
+			root_storage = self._exportStorage(root_op)
+			if root_storage:
+				tdn['storage'] = root_storage
 
 			tdn['operators'] = operators
 
@@ -450,6 +469,10 @@ class TDNExt:
 					touch_build=f'{app.version}.{app.build}')
 				self._log(
 					f'Exported network to {filepath}', 'SUCCESS')
+
+				# Warn about locked non-DAT operators whose frozen
+				# content won't survive a TDN round-trip
+				self._warnLockedNonDATs(root_op, context='export')
 
 			return result
 
@@ -608,6 +631,26 @@ class TDNExt:
 				tdn['type_defaults'] = type_defaults
 			if par_templates:
 				tdn['par_templates'] = par_templates
+
+			# Target COMP's own metadata (captured on main thread)
+			root_meta = state.get('root_meta', {})
+			if root_meta.get('type'):
+				tdn['type'] = root_meta['type']
+			if root_meta.get('custom_pars'):
+				tdn['custom_pars'] = root_meta['custom_pars']
+			if root_meta.get('parameters'):
+				tdn['parameters'] = root_meta['parameters']
+			if root_meta.get('flags'):
+				tdn['flags'] = root_meta['flags']
+			if root_meta.get('color'):
+				tdn['color'] = root_meta['color']
+			if root_meta.get('tags'):
+				tdn['tags'] = root_meta['tags']
+			if root_meta.get('comment'):
+				tdn['comment'] = root_meta['comment']
+			if root_meta.get('storage'):
+				tdn['storage'] = root_meta['storage']
+
 			tdn['operators'] = operators
 
 			# Root-level annotations
@@ -746,6 +789,30 @@ class TDNExt:
 					root_anns = self._exportAnnotations(root_op)
 					if root_anns:
 						ann_results[state['root_path']] = root_anns
+					# Capture target COMP's own metadata (main thread only)
+					root_meta = {'type': root_op.OPType}
+					root_custom_pars = self._exportCustomPars(root_op)
+					if root_custom_pars:
+						root_meta['custom_pars'] = root_custom_pars
+					root_builtin = self._exportBuiltinParams(root_op)
+					if root_builtin:
+						root_meta['parameters'] = root_builtin
+					root_flags = self._exportFlags(root_op)
+					if root_flags:
+						root_meta['flags'] = root_flags
+					root_color = tuple(root_op.color)
+					if self._colorsDiffer(root_color, DEFAULT_COLOR):
+						root_meta['color'] = [
+							round(c, 4) for c in root_color]
+					root_tags = list(root_op.tags)
+					if root_tags:
+						root_meta['tags'] = root_tags
+					if root_op.comment:
+						root_meta['comment'] = root_op.comment
+					root_storage = self._exportStorage(root_op)
+					if root_storage:
+						root_meta['storage'] = root_storage
+					state['root_meta'] = root_meta
 				for path, data in state['results'].items():
 					target_op = op(path)
 					if target_op and target_op.isCOMP:
@@ -864,9 +931,13 @@ class TDNExt:
 		"""
 		dest = op(target_path)
 		if not dest:
-			return {'error': f'Destination not found: {target_path}'}
+			msg = f'Destination not found: {target_path}'
+			ui.status = f'TDN Import: {msg}'
+			return {'error': msg}
 		if not hasattr(dest, 'create'):
-			return {'error': f'{target_path} is not a COMP'}
+			msg = f'{target_path} is not a COMP'
+			ui.status = f'TDN Import: {msg}'
+			return {'error': msg}
 
 		# Accept full .tdn document or just the operators array
 		if isinstance(tdn, dict) and 'operators' in tdn:
@@ -892,6 +963,7 @@ class TDNExt:
 		elif isinstance(tdn, list):
 			op_defs = tdn
 		else:
+			ui.status = 'TDN Import: Invalid .tdn format'
 			return {'error': 'Invalid .tdn format'}
 
 		if clear_first:
@@ -950,6 +1022,9 @@ class TDNExt:
 			# Phase 4: Set flags
 			self._setFlags(dest, op_defs)
 
+			# Phase 4a: Warn about locked non-DAT operators
+			self._warnLockedNonDATs(dest, context='import')
+
 			# Phase 5: Wire connections
 			self._wireConnections(dest, op_defs)
 
@@ -989,19 +1064,84 @@ class TDNExt:
 						_cleanupRefs(children)
 			_cleanupRefs(op_defs)
 
-			# Phase 9: Apply target COMP's own parameters from TDN.
+			# Phase 9: Apply target COMP's own properties from TDN.
 			# Runs AFTER child creation so extension reinit (triggered by
 			# recreating extension source DATs) has already happened —
 			# this overwrites any defaults the extension set.
 			if isinstance(tdn, dict):
+				# Type validation (v1.1+) — warn if destination type differs
+				tdn_type = tdn.get('type')
+				if tdn_type and dest.OPType != tdn_type:
+					self._log(
+						f'Type mismatch: TDN expects {tdn_type} but '
+						f'destination is {dest.OPType}', 'WARNING')
+
+				# Custom parameters
 				tdn_custom = tdn.get('custom_pars', {})
 				if tdn_custom:
 					flat_defs = self._flattenCustomPars(tdn_custom)
 					self._createCustomParsOnOp(dest, flat_defs)
 					self._setCustomParValues(dest, flat_defs)
+
+				# Built-in parameters
 				tdn_params = tdn.get('parameters', {})
 				for par_name, value in tdn_params.items():
 					self._setParValue(dest, par_name, value)
+
+				# Flags (v1.1+)
+				tdn_flags = tdn.get('flags', [])
+				if tdn_flags:
+					if isinstance(tdn_flags, list):
+						for entry in tdn_flags:
+							try:
+								if entry.startswith('-'):
+									setattr(dest, entry[1:], False)
+								else:
+									setattr(dest, entry, True)
+							except Exception as e:
+								self._log(
+									f'Failed to set flag {entry} on '
+									f'{dest.path}: {e}', 'DEBUG')
+					elif isinstance(tdn_flags, dict):
+						for flag_name, value in tdn_flags.items():
+							try:
+								setattr(dest, flag_name, value)
+							except Exception as e:
+								self._log(
+									f'Failed to set flag {flag_name} on '
+									f'{dest.path}: {e}', 'DEBUG')
+
+				# Color (v1.1+)
+				tdn_color = tdn.get('color')
+				if tdn_color:
+					try:
+						dest.color = tdn_color
+					except Exception as e:
+						self._log(
+							f'Failed to set color on {dest.path}: {e}',
+							'DEBUG')
+
+				# Tags (v1.1+)
+				tdn_tags = tdn.get('tags')
+				if tdn_tags:
+					for tag in tdn_tags:
+						dest.tags.add(tag)
+
+				# Comment (v1.1+)
+				tdn_comment = tdn.get('comment')
+				if tdn_comment is not None:
+					dest.comment = tdn_comment
+
+				# Storage (v1.1+)
+				tdn_storage = tdn.get('storage', {})
+				for key, value in tdn_storage.items():
+					try:
+						deserialized = self._deserializeStorageValue(value)
+						dest.store(key, deserialized)
+					except Exception as e:
+						self._log(
+							f'Failed to restore storage key "{key}" '
+							f'on {dest.path}: {e}', 'WARNING')
 
 			self._log(
 				f'Imported {len(created)} operators into {target_path}',
@@ -1018,6 +1158,7 @@ class TDNExt:
 
 		except Exception as e:
 			self._log(f'Import failed: {e}', 'ERROR')
+			ui.status = f'TDN Import failed: {e}'
 			return {'error': f'Import failed: {e}'}
 
 	def ImportNetworkFromFile(self, file_path: str, target_path: str = '/',
@@ -1032,11 +1173,13 @@ class TDNExt:
 		"""
 		if not file_path:
 			self._log('No TDN file specified', 'WARNING')
+			ui.status = 'TDN Import: No file specified'
 			return {'error': 'No TDN file specified'}
 
 		import os
 		if not os.path.isfile(file_path):
 			self._log(f'TDN file not found: {file_path}', 'ERROR')
+			ui.status = f'TDN Import: File not found — {file_path}'
 			return {'error': f'TDN file not found: {file_path}'}
 
 		try:
@@ -1044,9 +1187,11 @@ class TDNExt:
 				tdn_data = json.load(f)
 		except json.JSONDecodeError as e:
 			self._log(f'Invalid JSON in TDN file: {e}', 'ERROR')
+			ui.status = f'TDN Import: Invalid JSON — {e}'
 			return {'error': f'Invalid JSON in TDN file: {e}'}
 		except Exception as e:
 			self._log(f'Failed to read TDN file: {e}', 'ERROR')
+			ui.status = f'TDN Import: {e}'
 			return {'error': f'Failed to read TDN file: {e}'}
 
 		self._log(f'Importing from {file_path} into {target_path}...', 'INFO')
@@ -1085,6 +1230,11 @@ class TDNExt:
 					f'Skipping duplicate companion "{name}" '
 					f'(original: "{base}")', 'INFO')
 
+		# Keys that carry no user-meaningful data — operators with only
+		# these keys are auto-created defaults (e.g. torus1 inside a
+		# geoCOMP) that TD recreates automatically on COMP creation.
+		_TRIVIAL_KEYS = {'name', 'type', 'position', 'size'}
+
 		result = []
 		for child in children:
 			# Skip system/internal paths (exact match or children)
@@ -1097,6 +1247,13 @@ class TDNExt:
 
 			op_data = self._exportSingleOp(child, options, depth)
 			if op_data is not None:
+				# Skip bare auto-created defaults — TD recreates these
+				# when the parent COMP is created, so they're noise
+				if not (set(op_data.keys()) - _TRIVIAL_KEYS):
+					self._log(
+						f'Skipping default child "{child.name}" '
+						f'(no customizations)', 'DEBUG')
+					continue
 				result.append(op_data)
 
 		return result
@@ -2137,8 +2294,26 @@ class TDNExt:
 						source.outputCOMPConnectors[0].connect(
 							target.inputCOMPConnectors[dest_index])
 				else:
-					source.outputConnectors[0].connect(
-						target.inputConnectors[dest_index])
+					src_conns = source.outputConnectors
+					tgt_conns = target.inputConnectors
+					if src_conns and dest_index < len(tgt_conns):
+						src_conns[0].connect(tgt_conns[dest_index])
+					elif (src_conns and target.isCOMP
+							and hasattr(target, 'inputCOMPConnectors')
+							and dest_index < len(
+								target.inputCOMPConnectors)):
+						# COMPs that accept SOP/TOP/CHOP wire inputs
+						# (geometryCOMP, cameraCOMP, lightCOMP, etc.)
+						# may not expose inputConnectors until a cook
+						# cycle runs. Fall back to COMP connectors.
+						src_conns[0].connect(
+							target.inputCOMPConnectors[dest_index])
+					else:
+						self._log(
+							f'No connector available: {source_ref} -> '
+							f'{target.name}[{dest_index}] '
+							f'(out={len(src_conns)}, '
+							f'in={len(tgt_conns)})', 'WARNING')
 			except Exception as e:
 				kind = 'COMP ' if comp else ''
 				self._log(
@@ -3275,6 +3450,59 @@ class TDNExt:
 								 '', build_str, tb_str])
 		except Exception as e:
 			self._log(f'Failed to track TDN export: {e}', 'WARNING')
+
+	def _warnLockedNonDATs(self, root_op, context='export'):
+		"""Scan a network for locked non-DAT operators and warn.
+
+		Locked TOPs, CHOPs, and SOPs will have their lock flag preserved
+		in TDN but their frozen content (pixels, channels, geometry) is
+		NOT stored. This warns users so they aren't surprised by data loss.
+
+		Args:
+			root_op: The COMP to scan (recursively)
+			context: 'export' shows ui.messageBox + log; 'import' logs only
+		"""
+		locked = []
+		for child in root_op.findChildren():
+			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
+				locked.append(child)
+
+		if not locked:
+			return
+
+		# Build summary
+		names = [f'{c.name} ({c.family})' for c in locked[:10]]
+		summary = ', '.join(names)
+		if len(locked) > 10:
+			summary += f', ... and {len(locked) - 10} more'
+
+		if context == 'export':
+			self._log(
+				f'Locked non-DAT operators in {root_op.path}: {summary} '
+				f'— frozen data will not persist through TDN', 'WARNING')
+			try:
+				ui.messageBox(
+					'Embody — Locked Content Warning',
+					f'{len(locked)} locked non-DAT operator(s) in '
+					f'{root_op.path}:\n\n{summary}\n\n'
+					f'TDN preserves the lock flag but cannot store '
+					f'frozen pixel, channel, or geometry data. '
+					f'After reload these operators will be locked '
+					f'but empty.\n\n'
+					f'To preserve locked content, either:\n'
+					f'  - Unlock the operator(s) (they will re-cook '
+					f'from inputs)\n'
+					f'  - Switch this COMP to TOX strategy instead '
+					f'of TDN',
+					buttons=['OK'])
+			except Exception:
+				pass  # Non-fatal if dialog fails
+		else:
+			# Import context — log only, no dialog (reconstruction is automated)
+			self._log(
+				f'Restored lock flag on {len(locked)} non-DAT operator(s) '
+				f'in {root_op.path}: {summary} — these operators have no '
+				f'frozen data and should be unlocked to re-cook', 'WARNING')
 
 	def _log(self, message, level='INFO'):
 		"""Log via Embody's centralized logger."""

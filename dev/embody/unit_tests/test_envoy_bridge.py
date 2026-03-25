@@ -531,7 +531,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Happy path ---
 
     def test_single_request_forwarded(self):
-        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}
         responses = self._run_main([msg])
         self.assertLen(responses, 1)
         self.assertEqual(responses[0]['result'], 'ok')
@@ -545,8 +545,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
                     'result': f'resp_{call_count[0]}'}
 
         msgs = [
-            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'},
-            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'prompts/list'},
             {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call'},
         ]
         responses = self._run_main(msgs, forward_side_effect=forward)
@@ -557,14 +557,15 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Initial connection failure ---
 
     def test_initial_connection_timeout_sends_error(self):
-        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}
+        """Non-protocol method gets error when Envoy is unreachable."""
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}
         responses = self._run_main([msg], wait_result=False)
         self.assertLen(responses, 1)
         self.assertDictHasKey(responses[0], 'error')
         self.assertIn('connection lost', responses[0]['error']['message'].lower())
 
     def test_initial_timeout_includes_actionable_hint(self):
-        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}
         responses = self._run_main(
             [msg], wait_result=False,
             port_args=['envoy_bridge.py', '--port', '1234'])
@@ -572,9 +573,52 @@ class TestBridgeMainLoop(EmbodyTestCase):
 
     def test_initial_timeout_notification_no_response(self):
         """Notification during connection failure produces no output."""
+        msg = {'jsonrpc': '2.0', 'method': 'some/notification'}
+        responses = self._run_main([msg], wait_result=False)
+        self.assertLen(responses, 0)
+
+    def test_initialize_handled_locally_when_disconnected(self):
+        """initialize responds with bridge server info, no Envoy needed."""
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}
+        responses = self._run_main([msg], wait_result=False)
+        self.assertLen(responses, 1)
+        result = responses[0]['result']
+        self.assertEqual(result['serverInfo']['name'], 'envoy-bridge')
+        self.assertIn('protocolVersion', result)
+        self.assertIn('capabilities', result)
+
+    def test_notifications_initialized_handled_locally_when_disconnected(self):
+        """notifications/initialized produces no output when disconnected."""
         msg = {'jsonrpc': '2.0', 'method': 'notifications/initialized'}
         responses = self._run_main([msg], wait_result=False)
         self.assertLen(responses, 0)
+
+    def test_tools_list_handled_locally_when_disconnected(self):
+        """tools/list returns bridge-only tools without waiting for Envoy."""
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}
+        responses = self._run_main([msg], wait_result=False)
+        self.assertLen(responses, 1)
+        names = {t['name'] for t in responses[0]['result']['tools']}
+        self.assertIn('launch_td', names)
+        self.assertIn('get_td_status', names)
+
+    def test_full_mcp_handshake_when_td_down(self):
+        """Full init → tools/list → launch_td works without Envoy."""
+        msgs = [
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'},
+            {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+            {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call',
+             'params': {'name': 'get_td_status', 'arguments': {}}},
+        ]
+        responses = self._run_main(msgs, wait_result=False)
+        # initialize + tools/list + get_td_status = 3 responses
+        # (notifications/initialized produces no response)
+        self.assertLen(responses, 3)
+        self.assertEqual(responses[0]['result']['serverInfo']['name'],
+                         'envoy-bridge')
+        self.assertIn('launch_td',
+                      {t['name'] for t in responses[1]['result']['tools']})
 
     def test_initial_timeout_then_next_message_retries_connect(self):
         """After initial timeout, the next message triggers wait_for_envoy again."""
@@ -1349,6 +1393,111 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertEqual(result['status'], 'error')
         self.assertIn('not found', result['message'].lower())
 
+    # --- quit_td ---
+
+    def test_quit_td_none_pid(self):
+        success, msg = bridge.quit_td(None)
+        self.assertFalse(success)
+
+    def test_quit_td_already_exited(self):
+        success, msg = bridge.quit_td(99999999)
+        self.assertTrue(success)
+        self.assertIn('already exited', msg)
+
+    def test_quit_td_graceful_exit(self):
+        """Graceful quit succeeds when process exits promptly."""
+        call_count = [0]
+        def mock_alive(pid):
+            call_count[0] += 1
+            # First call: alive (initial check), second call: dead (after quit)
+            return call_count[0] <= 1
+        with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
+             patch('subprocess.run'), \
+             patch('time.sleep'), \
+             patch('time.monotonic', side_effect=[100, 100, 101]):
+            success, msg = bridge.quit_td(12345)
+        self.assertTrue(success)
+        self.assertIn('gracefully', msg)
+
+    def test_quit_td_force_kill(self):
+        """Force kill when graceful quit times out."""
+        call_count = [0]
+        def mock_alive(pid):
+            call_count[0] += 1
+            # Alive through graceful period, dead after force kill
+            return call_count[0] <= 3
+        mono_values = [100]
+        # Exhaust graceful timeout, then continue
+        for i in range(50):
+            mono_values.append(100 + 16 + i)  # Past graceful_timeout=15
+        with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
+             patch('subprocess.run'), \
+             patch('time.sleep'), \
+             patch('time.monotonic', side_effect=mono_values):
+            success, msg = bridge.quit_td(12345, graceful_timeout=15)
+        self.assertTrue(success)
+        self.assertIn('force-killed', msg)
+
+    # --- restart_td ---
+
+    def test_restart_td_not_running(self):
+        """Error when TD is not running."""
+        with patch.object(bridge, 'find_td_pid', return_value=None):
+            state = self._make_state()
+            result = bridge.handle_restart_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('not running', result['message'])
+
+    def test_restart_td_quit_fails(self):
+        """Error when TD cannot be terminated."""
+        with patch.object(bridge, 'find_td_pid', return_value=12345), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, 'quit_td',
+                          return_value=(False, 'Could not terminate')):
+            state = self._make_state(td_pid=12345)
+            result = bridge.handle_restart_td({}, state)
+        self.assertEqual(result['status'], 'error')
+        self.assertIn('Could not terminate', result['message'])
+
+    def test_restart_td_success(self):
+        """Full restart: quit then launch, Envoy reachable."""
+        with patch.object(bridge, 'find_td_pid', return_value=12345), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, 'quit_td',
+                          return_value=(True, 'Exited gracefully')), \
+             patch.object(bridge, 'launch_td',
+                          return_value=(True, 'Launched', 67890)), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch('time.monotonic', return_value=100), \
+             patch('time.time', return_value=1000):
+            state = self._make_state(
+                td_pid=12345, connected=True,
+                config={'td_executable': '/td', 'toe_path': 't.toe'})
+            result = bridge.handle_restart_td({}, state)
+        self.assertEqual(result['status'], 'success')
+        self.assertIn('67890', result['message'])
+        self.assertTrue(state['connected'])
+        self.assertEqual(state['td_pid'], 67890)
+
+    def test_restart_td_clears_state(self):
+        """Restart clears connection state before relaunch."""
+        with patch.object(bridge, 'find_td_pid', return_value=12345), \
+             patch.object(bridge, 'is_process_alive', return_value=True), \
+             patch.object(bridge, 'quit_td',
+                          return_value=(True, 'Exited')), \
+             patch.object(bridge, 'launch_td',
+                          return_value=(True, 'Launched', 67890)), \
+             patch.object(bridge, 'wait_for_envoy', return_value=False), \
+             patch('time.monotonic', return_value=100):
+            state = self._make_state(
+                td_pid=12345, connected=True, crash_detected=True,
+                config={'td_executable': '/td', 'toe_path': 't.toe'})
+            result = bridge.handle_restart_td({}, state)
+        self.assertEqual(result['status'], 'partial')
+        self.assertFalse(state['crash_detected'])
+
+    # --- dispatch ---
+
     def test_handle_bridge_tool_dispatch(self):
         state = self._make_state()
         content = bridge.handle_bridge_tool('get_td_status', {}, state)
@@ -1356,6 +1505,14 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertEqual(content[0]['type'], 'text')
         parsed = json.loads(content[0]['text'])
         self.assertIn('connected', parsed)
+
+    def test_handle_bridge_tool_restart_dispatch(self):
+        """restart_td is dispatched through handle_bridge_tool."""
+        with patch.object(bridge, 'find_td_pid', return_value=None):
+            state = self._make_state()
+            content = bridge.handle_bridge_tool('restart_td', {}, state)
+        parsed = json.loads(content[0]['text'])
+        self.assertEqual(parsed['status'], 'error')  # Not running
 
     def test_handle_bridge_tool_unknown(self):
         state = self._make_state()

@@ -14,6 +14,9 @@ dev/TDImportCache/
 dev/logs/
 dev/embody/unit_tests/test_sandbox/
 dev/embody/unit_tests/results.tsv
+dev/release_testing/*
+!dev/release_testing/smoke_bootstrap.py
+!dev/release_testing/smoke_template.toe
 extglob.FullName
 
 # Embody / Envoy (auto-managed)
@@ -33,3 +36,6 @@ logs/
 
 # Embody / Envoy (auto-managed)
 .envoy.json
+
+# User sandboxes
+sandbox/

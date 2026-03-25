@@ -66,6 +66,25 @@ Common patterns:
 | Operator reference | `OP`, `COMP`, `TOP`, `CHOP`, `SOP`, `DAT`, `MAT` | Filtered by family |
 | Section header | `Header` | Visual label only, no value |
 
+## OP-Reference Parameter Values
+
+Parameters that reference operators (Camera, Geometry, Lights, TOP, CHOP, SOP, DAT, MAT) follow the same rules as code — **never use absolute paths**. Use the shortest relative reference that resolves from the parameter's owner:
+
+| Target location | Value format | Example |
+|---|---|---|
+| Sibling (same network) | Name only | `cam` |
+| Child of self | `./child` | `./render1` |
+| Up one level | `../name` | `../shared/lut` |
+
+For references needing shortcuts or complex resolution, use expression mode instead of constant mode:
+
+| Need | Expression |
+|---|---|
+| Parent shortcut | `parent.Scene.op('cam')` |
+| Global shortcut | `op.Assets.op('texture1')` |
+
+With `set_parameter`: use `value="cam"` for siblings, or `expr="parent.Scene.op('cam')"` for shortcut-based references.
+
 ## Numeric Ranges
 
 For `Float` and `Int` parameters, configure the range:

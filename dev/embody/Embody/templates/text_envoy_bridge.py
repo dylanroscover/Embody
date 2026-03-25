@@ -65,6 +65,44 @@ BRIDGE_TOOLS = [
                     ),
                     "default": 120,
                 },
+                "project_path": {
+                    "type": "string",
+                    "description": (
+                        "Override the .toe file to open. Absolute path or "
+                        "relative to git root. If omitted, uses the default "
+                        "toe_path from .envoy.json."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "restart_td",
+        "description": (
+            "Quit TouchDesigner gracefully and relaunch with the project's "
+            ".toe file. Waits for the process to exit before relaunching. "
+            "Use when TD is running but needs a fresh start."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "timeout": {
+                    "type": "integer",
+                    "description": (
+                        "Max seconds to wait for Envoy to become reachable "
+                        "after relaunch (default: 120)"
+                    ),
+                    "default": 120,
+                },
+                "project_path": {
+                    "type": "string",
+                    "description": (
+                        "Override the .toe file to open. Absolute path or "
+                        "relative to git root. If omitted, uses the default "
+                        "toe_path from .envoy.json."
+                    ),
+                },
             },
             "required": [],
         },
@@ -170,8 +208,70 @@ def is_process_alive(pid):
         return False
 
 
-def launch_td(config, config_path):
-    """Launch TouchDesigner with the configured .toe file.
+def quit_td(pid, graceful_timeout=15):
+    """Quit a running TouchDesigner process.
+
+    Sends a graceful termination first, then force-kills if needed.
+    Returns (success: bool, message: str).
+    """
+    if pid is None:
+        return False, "No TouchDesigner PID to quit"
+    if not is_process_alive(pid):
+        return True, "TouchDesigner already exited"
+
+    # Graceful quit
+    try:
+        if sys.platform == "darwin":
+            subprocess.run(
+                ["osascript", "-e", 'quit app "TouchDesigner"'],
+                capture_output=True, timeout=10,
+            )
+        elif sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/PID", str(pid)],
+                capture_output=True, timeout=10,
+            )
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        log(f"Graceful quit failed: {e}")
+
+    # Wait for exit
+    deadline = time.monotonic() + graceful_timeout
+    while time.monotonic() < deadline:
+        if not is_process_alive(pid):
+            return True, f"TouchDesigner (PID {pid}) exited gracefully"
+        time.sleep(0.5)
+
+    # Force kill
+    log(f"TouchDesigner (PID {pid}) did not exit gracefully, force killing")
+    try:
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/F", "/PID", str(pid)],
+                capture_output=True, timeout=10,
+            )
+        else:
+            os.kill(pid, signal.SIGKILL)
+    except (subprocess.TimeoutExpired, OSError) as e:
+        return False, f"Failed to kill TouchDesigner (PID {pid}): {e}"
+
+    # Brief wait after force kill
+    time.sleep(1)
+    if is_process_alive(pid):
+        return False, f"TouchDesigner (PID {pid}) could not be terminated"
+
+    return True, f"TouchDesigner (PID {pid}) was force-killed"
+
+
+def launch_td(config, config_path, project_path=None):
+    """Launch TouchDesigner with a .toe file.
+
+    Args:
+        config: Parsed .envoy.json config dict.
+        config_path: Path to .envoy.json (for resolving relative paths).
+        project_path: Optional override .toe path. If relative, resolved
+            against the git root (same directory as config_path).
 
     Returns (success: bool, message: str, pid: int|None).
     """
@@ -179,7 +279,14 @@ def launch_td(config, config_path):
     if not td_exe:
         return False, "No td_executable configured in .envoy.json", None
 
-    toe_path = resolve_toe_path(config, config_path)
+    if project_path:
+        # Resolve relative paths against git root
+        if not os.path.isabs(project_path) and config_path:
+            git_root = os.path.dirname(os.path.abspath(config_path))
+            project_path = os.path.join(git_root, project_path)
+        toe_path = project_path
+    else:
+        toe_path = resolve_toe_path(config, config_path)
     if not toe_path:
         return False, "No toe_path configured in .envoy.json", None
 
@@ -273,6 +380,7 @@ def handle_get_td_status(state):
 def handle_launch_td(params, state):
     """Handle the launch_td meta-tool."""
     timeout = params.get("timeout", 120)
+    project_path = params.get("project_path")
 
     # Safety: check if TD is already running
     existing_pid = find_td_pid()
@@ -300,7 +408,8 @@ def handle_launch_td(params, state):
         }
 
     # Launch
-    success, message, pid = launch_td(state["config"], state["config_path"])
+    success, message, pid = launch_td(state["config"], state["config_path"],
+                                      project_path=project_path)
     if not success:
         return {"status": "error", "message": message}
 
@@ -331,12 +440,76 @@ def handle_launch_td(params, state):
         }
 
 
+def handle_restart_td(params, state):
+    """Handle the restart_td meta-tool."""
+    timeout = params.get("timeout", 120)
+    project_path = params.get("project_path")
+
+    # Find and quit the running TD process
+    pid = find_td_pid()
+    if not pid or not is_process_alive(pid):
+        return {
+            "status": "error",
+            "message": (
+                "TouchDesigner is not running. Use launch_td to start it."
+            ),
+        }
+
+    log(f"Restarting TouchDesigner (PID {pid})")
+    success, quit_msg = quit_td(pid)
+    log(quit_msg)
+    if not success:
+        return {"status": "error", "message": quit_msg}
+
+    # Clear connection state
+    state["connected"] = False
+    state["td_pid"] = None
+    state["crash_detected"] = False
+
+    # Launch fresh (optionally with a different .toe)
+    success, launch_msg, new_pid = launch_td(state["config"],
+                                              state["config_path"],
+                                              project_path=project_path)
+    if not success:
+        return {"status": "error", "message": launch_msg}
+
+    state["td_pid"] = new_pid
+    state["launch_timestamps"].append(time.monotonic())
+    log(launch_msg)
+
+    # Wait for Envoy to become reachable
+    url = state["url"]
+    deadline = time.monotonic() + timeout
+    if wait_for_envoy(url, deadline):
+        state["connected"] = True
+        state["last_connected_time"] = time.time()
+        log("Envoy is reachable after TD restart")
+        return {
+            "status": "success",
+            "message": (
+                f"TouchDesigner restarted and Envoy is ready. "
+                f"Old PID: {pid}, New PID: {new_pid}"
+            ),
+        }
+    else:
+        return {
+            "status": "partial",
+            "message": (
+                f"TouchDesigner relaunched (PID {new_pid}) but Envoy not "
+                f"reachable after {timeout}s. TD may still be loading — "
+                "Embody needs ~75 frames to complete restoration."
+            ),
+        }
+
+
 def handle_bridge_tool(name, params, state):
     """Dispatch a bridge meta-tool call. Returns the tool result content."""
     if name == "get_td_status":
         result = handle_get_td_status(state)
     elif name == "launch_td":
         result = handle_launch_td(params, state)
+    elif name == "restart_td":
+        result = handle_restart_td(params, state)
     else:
         result = {"error": f"Unknown bridge tool: {name}"}
 
@@ -626,6 +799,35 @@ def main():
                 })
             continue
 
+        # --- MCP protocol messages handled locally when Envoy is down ---
+        # initialize, notifications/initialized, and tools/list must work
+        # without Envoy so that bridge meta-tools (launch_td, get_td_status)
+        # are available even when TD isn't running.
+        if not state["connected"]:
+            if method == "initialize":
+                if not is_notification:
+                    send_response({
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "result": {
+                            "protocolVersion": "2024-11-05",
+                            "capabilities": {"tools": {"listChanged": False}},
+                            "serverInfo": {
+                                "name": "envoy-bridge",
+                                "version": "1.0.0",
+                            },
+                        },
+                    })
+                continue
+
+            if method == "notifications/initialized":
+                continue  # Notification — no response needed
+
+            if method == "tools/list":
+                if not is_notification:
+                    send_response(bridge_only_tools_list(request_id))
+                continue
+
         # --- Connection management ---
         if not state["connected"]:
             log("Connecting to Envoy...")
@@ -640,10 +842,6 @@ def main():
                 log("Connected to Envoy")
             else:
                 log(f"Envoy not reachable after {CONNECT_TIMEOUT_S}s")
-                # For tools/list, return bridge-only tools instead of error
-                if method == "tools/list" and not is_notification:
-                    send_response(bridge_only_tools_list(request_id))
-                    continue
                 if not is_notification:
                     msg = connection_lost_message(state)
                     send_error(request_id, -32000, msg)

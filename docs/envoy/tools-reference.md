@@ -119,6 +119,19 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 !!! info "Auto-piggybacked logs"
     Every MCP tool response includes a `_logs` field with up to 20 log entries generated since the previous tool call. This lets you monitor operations in real-time without needing to call `get_logs` separately.
 
+## Bridge Meta-Tools
+
+These tools run locally on the STDIO bridge script, not inside TouchDesigner. They work even when TD is not running — this is how Claude Code can launch or restart TD without an active Envoy connection.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
+| `launch_td` | `timeout?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s) |
+| `restart_td` | `timeout?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s) |
+
+!!! info "Bridge architecture"
+    Claude Code connects to Envoy via a STDIO bridge script (`.claude/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.
+
 ## MCP Prompts
 
 | Prompt | Parameters | Description |

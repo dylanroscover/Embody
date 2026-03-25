@@ -25,7 +25,7 @@ See `parameters.md` for all parameter rules — reading/writing values, designin
 
 How you reference an operator matters. A wrong choice works today and breaks tomorrow — when the component is renamed, instanced, or moved. The goal is always to pick the **narrowest, most portable reference** that correctly resolves from where the code runs.
 
-**Absolute paths are always wrong.** `op('/embody/Embody/...')` or `op('/project1/...')` hardcodes the entire network hierarchy. The moment anything is renamed, relocated, or instanced, it breaks. If you see a `/` at the start of an operator path in an expression, it's a bug.
+**Absolute paths are always wrong — in code, expressions, AND parameter values.** `op('/embody/Embody/...')` or `op('/project1/...')` hardcodes the entire network hierarchy. The moment anything is renamed, relocated, or instanced, it breaks. If you see a `/` at the start of an operator path anywhere — an `op()` call, a parameter expression, or a `set_parameter` value — it's a bug.
 
 ### Relative Paths — for operators near you
 

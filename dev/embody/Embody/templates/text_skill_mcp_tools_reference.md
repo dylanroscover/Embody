@@ -130,3 +130,13 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
 **Auto-piggybacked logs**: Every MCP response includes a `_logs` field with up to 20 recent entries. Log files at `dev/logs/` have the complete picture.
+
+## Bridge Meta-Tools
+
+These run locally on the STDIO bridge — they work even when TD is not running.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness |
+| `launch_td` | `timeout?` | Launch TD with the project's `.toe` file, wait for Envoy (default: 120s) |
+| `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |

@@ -68,6 +68,9 @@ With TDN strategy:
 !!! important "Always save externalizations before saving the .toe"
     Since ++ctrl+s++ strips TDN children from the `.toe`, always press ++ctrl+shift+u++ first to ensure your `.tdn` files are up to date. If TD crashes mid-save, the `.tdn` files are what Embody uses to reconstruct your work.
 
+!!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
+    TDN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload**. Embody warns you at save time when this is detected. Use **TOX strategy** instead of TDN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
+
 See [TDN Format](../tdn/index.md) for more details.
 
 ## Automatic Restoration

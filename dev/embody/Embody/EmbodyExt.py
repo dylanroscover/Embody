@@ -459,9 +459,27 @@ class EmbodyExt:
     # ENVOY ONBOARDING
     # ==========================================================================
 
+    def _messageBox(self, title, message, buttons):
+        """ui.messageBox with auto-response support for headless testing.
+
+        Seed responses via:
+            op.Embody.store('_smoke_test_responses', {'Dialog Title': button_index})
+
+        Responses are consumed on use. Falls through to ui.messageBox
+        when no response is seeded.
+        """
+        responses = self.my.fetch('_smoke_test_responses', None, search=False)
+        if responses is not None and title in responses:
+            choice = responses.pop(title)
+            self.Log(f'[test] Auto-responded to "{title}" -> button {choice}')
+            if not responses:
+                self.my.unstore('_smoke_test_responses')
+            return choice
+        return ui.messageBox(title, message, buttons=buttons)
+
     def _promptEnvoy(self):
         """Prompt user to enable Envoy (AI coding assistant integration)."""
-        choice = ui.messageBox('Embody - AI Coding Assistant Integration',
+        choice = self._messageBox('Embody - AI Coding Assistant Integration',
             'Enable Envoy?\n\n'
             'Envoy is an MCP server that lets AI coding assistants\n'
             'create, modify, and query TouchDesigner operators.\n\n'
@@ -471,6 +489,9 @@ class EmbodyExt:
             f'{self.my.par.Envoyport.eval()}\n'
             '  - Generate AI config files in your project root\n'
             '    (CLAUDE.md, AGENTS.md, .mcp.json, .claude/ rules + skills)\n\n'
+            'All Envoy MCP tools are auto-authorized for convenience.\n'
+            'To adjust permissions, edit .claude/settings.local.json\n'
+            'in your project root after setup.\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
             'You can change this later via the Envoyenable parameter.\n\n'
             'Note: TD will be unresponsive for a few seconds while\n'
@@ -939,7 +960,7 @@ class EmbodyExt:
         other_embody = next((e for e in embodies if e != self.my), None)
 
         if other_embody:
-            ui.messageBox('Embody',
+            self._messageBox('Embody',
                 f'An instance of Embody already exists:\n{other_embody}\n'
                 'Please remove it first.', buttons=['Ok'])
             return
@@ -950,7 +971,7 @@ class EmbodyExt:
         if has_prior_data:
             # UPDATE scenario: reconnected to a surviving table with prior entries.
             # Offer a re-scan so Embody validates/updates all tracked operators.
-            choice = ui.messageBox('Embody',
+            choice = self._messageBox('Embody',
                 f'{table.numRows - 1} externalized operator(s) found.\n\n'
                 'Re-scan to validate tracked operators?\n'
                 '(Recommended after upgrading Embody)',
@@ -962,9 +983,11 @@ class EmbodyExt:
             # just run UpdateHandler quietly; it will find nothing yet.
             run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
 
-        # Offer Envoy opt-in only if not already enabled
+        # Defer Envoy opt-in until after the full init/update cycle completes.
+        # Update() will check this flag and show the prompt once all other
+        # dialogs (deprecated patterns, re-scan, etc.) have resolved.
         if not self.my.par.Envoyenable.eval():
-            run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=15)
+            self._pending_envoy_prompt = True
 
     # ==========================================================================
     # SAFE FILE TRACKING
@@ -1168,19 +1191,20 @@ class EmbodyExt:
         if not folder:
             return
             
-        # Remove empty top-level comp directories
+        # Remove empty top-level comp directories (skip SCM dirs)
         for comp in self.root.findChildren(depth=1, type=COMP):
-            if comp.name not in ['local', 'perform']:
-                comp_path = Path(f'{folder}/{comp.name}')
-                if comp_path.is_dir():
-                    try:
-                        # rmdir() only succeeds if directory is empty - this is safe
-                        comp_path.rmdir()
-                    except OSError:
-                        # Directory not empty - this is expected and safe to ignore
-                        pass
-                    except Exception as e:
-                        self.Log(f"Error removing directory: {comp_path}", "ERROR", str(e))
+            if comp.name in self._SCM_DIRS or comp.name in ['local', 'perform']:
+                continue
+            comp_path = Path(f'{folder}/{comp.name}')
+            if comp_path.is_dir():
+                try:
+                    # rmdir() only succeeds if directory is empty - this is safe
+                    comp_path.rmdir()
+                except OSError:
+                    # Directory not empty - this is expected and safe to ignore
+                    pass
+                except Exception as e:
+                    self.Log(f"Error removing directory: {comp_path}", "ERROR", str(e))
 
         # Try to remove main folder only if empty
         try:
@@ -1357,6 +1381,13 @@ class EmbodyExt:
         self._reportResults(dirties, additions, subtractions)
         if not suppress_refresh:
             run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
+
+        # Chain the Envoy opt-in prompt AFTER init completes.
+        # Verify() sets this flag; we consume it here so the Envoy dialog
+        # appears only after deprecated-pattern and re-scan dialogs resolve.
+        if getattr(self, '_pending_envoy_prompt', False):
+            self._pending_envoy_prompt = False
+            run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=5)
 
     def _reportResults(self, dirties, additions, subtractions):
         """Report update results to log."""
@@ -1683,46 +1714,49 @@ class EmbodyExt:
                 / f"{target.name}-v{version}.tox"
             )
 
-        # Phase 1: Collect relative file references to strip, warn about
-        # absolute paths that won't be portable.
+        # Phase 1: Collect file references and externalization params to strip.
+        # Include the target itself — its externaltox/enableexternaltox would
+        # be baked into the .tox and confuse recipients.
         saved_state = []
 
-        for child in target.findChildren():
-            if child.family == 'DAT' and hasattr(child.par, 'file'):
-                file_val = child.par.file.eval()
-                if not file_val:
+        for op_ref in [target] + target.findChildren():
+            if op_ref.family == 'DAT' and hasattr(op_ref.par, 'file'):
+                file_val = op_ref.par.file.eval()
+                sync_val = op_ref.par.syncfile.eval()
+                if not file_val and not sync_val:
                     continue
-                if file_val.startswith('/') or (len(file_val) > 1 and file_val[1] == ':'):
+                if file_val and (file_val.startswith('/') or (len(file_val) > 1 and file_val[1] == ':')):
                     # Absolute path — warn if not a TD system path
                     if not file_val.startswith('/sys/'):
                         self.Log(
                             f"Absolute path won't be portable: "
-                            f"{child.path} -> {file_val}", "WARNING")
+                            f"{op_ref.path} -> {file_val}", "WARNING")
                 else:
                     saved_state.append({
-                        'op': child,
+                        'op': op_ref,
                         'family': 'DAT',
                         'file': file_val,
-                        'file_readonly': child.par.file.readOnly,
-                        'syncfile': child.par.syncfile.eval(),
+                        'file_readonly': op_ref.par.file.readOnly,
+                        'syncfile': sync_val,
                     })
 
-            elif child.family == 'COMP' and hasattr(child.par, 'externaltox'):
-                tox_val = child.par.externaltox.eval()
-                if not tox_val:
+            elif op_ref.family == 'COMP' and hasattr(op_ref.par, 'externaltox'):
+                tox_val = op_ref.par.externaltox.eval()
+                enable_val = op_ref.par.enableexternaltox.eval()
+                if not tox_val and not enable_val:
                     continue
-                if tox_val.startswith('/') or (len(tox_val) > 1 and tox_val[1] == ':'):
+                if tox_val and (tox_val.startswith('/') or (len(tox_val) > 1 and tox_val[1] == ':')):
                     if not tox_val.startswith('/sys/'):
                         self.Log(
                             f"Absolute path won't be portable: "
-                            f"{child.path} -> {tox_val}", "WARNING")
+                            f"{op_ref.path} -> {tox_val}", "WARNING")
                 else:
                     saved_state.append({
-                        'op': child,
+                        'op': op_ref,
                         'family': 'COMP',
                         'externaltox': tox_val,
-                        'externaltox_readonly': child.par.externaltox.readOnly,
-                        'enableexternaltox': child.par.enableexternaltox.eval(),
+                        'externaltox_readonly': op_ref.par.externaltox.readOnly,
+                        'enableexternaltox': enable_val,
                     })
 
         # Phase 1b: Collect Embody tags to strip from all descendants
@@ -3657,32 +3691,73 @@ class EmbodyExt:
             oper.tags.remove(tag)
             self.resetOpColor(oper)
 
+            delete_file = self._shouldDeleteFile()
             if oper.family == 'COMP':
                 if tag == self.my.par.Toxtag.val:
                     rel_file_path = self.getExternalPath(oper)
-                    self.RemoveListerRow(oper.path, rel_file_path)
+                    self.RemoveListerRow(oper.path, rel_file_path,
+                                         delete_file=delete_file)
                     oper.par.externaltox = ''
                     oper.par.externaltox.readOnly = False
                 elif tag == self.my.par.Tdntag.val:
-                    self._removeTDNStrategy(oper.path)
+                    self._removeTDNStrategy(oper.path,
+                                            delete_file=delete_file)
             elif oper.family == 'DAT':
                 rel_file_path = self.getExternalPath(oper)
-                self.RemoveListerRow(oper.path, rel_file_path)
+                self.RemoveListerRow(oper.path, rel_file_path,
+                                     delete_file=delete_file)
                 oper.par.file = ''
                 oper.par.file.readOnly = False
 
         return True
 
+    def _shouldDeleteFile(self) -> bool:
+        """Check the File Cleanup preference parameter.
+
+        Returns True if external files should be deleted, False to keep them.
+        When set to 'ask', shows a confirmation dialog.
+        """
+        filecleanup_par = getattr(self.my.par, 'Filecleanup', None)
+        preference = filecleanup_par.eval() if filecleanup_par else 'ask'
+        if preference == 'keep':
+            return False
+        elif preference == 'delete':
+            return True
+        else:  # 'ask'
+            choice = ui.messageBox(
+                'Delete External File?',
+                'Also delete the external file from disk?',
+                buttons=['Keep File', 'Delete File',
+                         'Always Keep', 'Always Delete'])
+            if choice == 0:
+                return False
+            elif choice == 1:
+                return True
+            elif choice == 2:
+                if filecleanup_par:
+                    self.my.par.Filecleanup = 'keep'
+                    self.Log('File cleanup preference set to Always Keep', 'INFO')
+                return False
+            elif choice == 3:
+                if filecleanup_par:
+                    self.my.par.Filecleanup = 'delete'
+                    self.Log('File cleanup preference set to Always Delete', 'INFO')
+                return True
+            else:
+                return False  # Dialog closed
+
     def _removeCompStrategy(self, oper: OP, tag: str) -> None:
         """Remove a COMP strategy tag and clean up its externalization."""
+        delete_file = self._shouldDeleteFile()
         oper.tags.discard(tag)
         if tag == self.my.par.Toxtag.val:
             rel_file_path = self.getExternalPath(oper)
-            self.RemoveListerRow(oper.path, rel_file_path)
+            self.RemoveListerRow(oper.path, rel_file_path,
+                                 delete_file=delete_file)
             oper.par.externaltox = ''
             oper.par.externaltox.readOnly = False
         elif tag == self.my.par.Tdntag.val:
-            self._removeTDNStrategy(oper.path)
+            self._removeTDNStrategy(oper.path, delete_file=delete_file)
 
     def _removeTDNStrategy(self, op_path: str, delete_file: bool = True) -> None:
         """Remove TDN strategy entry from table and optionally delete .tdn file."""
@@ -4313,14 +4388,6 @@ class EmbodyExt:
         errors_total = 0
 
         for comp_path, rel_tdn_path in tdn_comps:
-            comp = op(comp_path)
-            if comp is None:
-                # COMP was tagged but .toe wasn't saved — create the shell
-                comp = self._createMissingCompShell(comp_path, 'tdn')
-                if comp is None:
-                    errors_total += 1
-                    continue
-
             abs_path = self.buildAbsolutePath(rel_tdn_path)
             if not abs_path.is_file():
                 self.Log(f'TDN file not found: {rel_tdn_path}', 'WARNING')
@@ -4333,6 +4400,17 @@ class EmbodyExt:
                 self.Log(f'Failed to read TDN for {comp_path}: {e}', 'ERROR')
                 errors_total += 1
                 continue
+
+            comp = op(comp_path)
+            if comp is None:
+                # COMP was tagged but .toe wasn't saved — create the shell.
+                # Prefer type from TDN file (v1.1+), then table, then 'base'.
+                tdn_type = tdn_doc.get('type')
+                comp = self._createMissingCompShell(
+                    comp_path, 'tdn', comp_type_override=tdn_type)
+                if comp is None:
+                    errors_total += 1
+                    continue
 
             # Import from TDN (phases 1-7 + phase 8 file-link restore)
             result = self.my.ext.TDN.ImportNetwork(
@@ -4457,7 +4535,7 @@ class EmbodyExt:
         """
         errors = []
         try:
-            for child in comp.findChildren(depth=-1):
+            for child in comp.findChildren():
                 if child.errors:
                     for err in child.errors.split('\n'):
                         err = err.strip()
@@ -4489,7 +4567,8 @@ class EmbodyExt:
                 f'TDN reconstruction complete: {count} COMP(s) rebuilt successfully',
                 'SUCCESS')
 
-    def _createMissingCompShell(self, comp_path: str, strategy: str) -> 'OP | None':
+    def _createMissingCompShell(self, comp_path: str, strategy: str,
+                               comp_type_override: str = None) -> 'OP | None':
         """Create a missing COMP that was tagged but not saved in the .toe.
 
         Used by both ReconstructTDNComps and RestoreTOXComps when a tracked
@@ -4498,6 +4577,8 @@ class EmbodyExt:
         Args:
             comp_path: Full TD path (e.g., '/embody/base_tdn')
             strategy: 'tdn' or 'tox' — determines which tag/color to apply
+            comp_type_override: Full TD type string (e.g. 'containerCOMP')
+                from TDN file. Takes priority over externalizations table.
 
         Returns:
             The created COMP, or None on failure.
@@ -4509,9 +4590,13 @@ class EmbodyExt:
                      f'not found or not a COMP', 'WARNING')
             return None
 
-        comp_type = self._getCompTypeFromTable(comp_path) or 'base'
+        # Priority: TDN type override > externalizations table > 'baseCOMP'
+        if comp_type_override:
+            td_type = comp_type_override
+        else:
+            comp_type = self._getCompTypeFromTable(comp_path) or 'base'
+            td_type = f'{comp_type}COMP'
         comp_name = comp_path.rsplit('/', 1)[-1]
-        td_type = f'{comp_type}COMP'
 
         try:
             new_comp = parent_op.create(td_type, comp_name)
@@ -5059,20 +5144,29 @@ class EmbodyExt:
             self.Log(f"Unexpected error deleting file {save_file}: {e}", "WARNING")
             pass
 
+    # Directories that must never be touched by empty-dir cleanup
+    _SCM_DIRS = {'.git', '.svn', '.hg'}
+
     def deleteEmptyDirectories(self, path: Union[str, Path]) -> None:
         """
         Recursively delete empty directories only.
         SAFETY: rmdir() only succeeds on empty directories.
+        Skips version-control directories (.git, .svn, .hg).
         """
         empty_dir_found = True
         iteration = 0
-        
+
         while empty_dir_found and iteration < 10:
             empty_dir_found = False
             iteration += 1
-            
+
             for root, dirs, files in os.walk(path, topdown=False):
+                # Skip version-control internals entirely
+                if any(part in self._SCM_DIRS for part in Path(root).parts):
+                    continue
                 for dir_name in dirs:
+                    if dir_name in self._SCM_DIRS:
+                        continue
                     dir_path = str(Path(root) / dir_name)
                     if not list(Path(dir_path).iterdir()):
                         try:

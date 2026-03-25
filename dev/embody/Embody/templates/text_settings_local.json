@@ -14,6 +14,7 @@
       "mcp__envoy__exec_op_method",
       "mcp__envoy__execute_python",
       "mcp__envoy__export_network",
+      "mcp__envoy__externalize_op",
       "mcp__envoy__find_children",
       "mcp__envoy__get_annotations",
       "mcp__envoy__get_connections",
@@ -44,8 +45,14 @@
       "mcp__envoy__set_dat_content",
       "mcp__envoy__set_op_flags",
       "mcp__envoy__set_op_position",
-      "mcp__envoy__set_parameter",
-      "mcp__envoy__externalize_op"
+      "mcp__envoy__set_parameter"
+    ],
+    "additionalDirectories": [
+      "/tmp"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "envoy"
+  ],
+  "enableAllProjectMcpServers": true
 }

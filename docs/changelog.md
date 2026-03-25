@@ -1,5 +1,55 @@
 # Changelog
 
+## v5.0.244
+
+Nested TDN save-cycle fix, SOP-to-COMP connection hardening.
+
+- **Nested TDN strip/restore ordering**: Save cycle now strips deepest-first and restores shallowest-first. Previously, stripping a parent TDN COMP destroyed nested TDN COMPs before they could be tracked, so post-save restore never rebuilt them — leaving default children (e.g. Torus SOP inside a geometryCOMP) instead of the correct TDN contents
+- **SOP-to-COMP connection fallback**: `_wireConnectionList` now bounds-checks `inputConnectors` before indexing and falls back to `inputCOMPConnectors` for COMPs that accept SOP/TOP/CHOP wire inputs (geometryCOMP, cameraCOMP, lightCOMP) where connectors may not be populated immediately after creation
+
+## v5.0.243
+
+Headless smoke testing, file cleanup preferences, specialized COMP support, portable .tox hardening, bridge project_path override.
+
+- **`_messageBox` auto-response system**: Dialog calls can be intercepted by seeding `_smoke_test_responses` in storage, enabling fully headless smoke testing of Embody's init sequence including Envoy opt-in and re-scan prompts. Responses are consumed on use
+- **File cleanup preference**: New `Filecleanup` parameter (ask/keep/delete) controls whether external files are deleted when un-tagging operators. "Always Keep" and "Always Delete" options persist the choice
+- **TDN default child filtering**: Uncustomized auto-created children (e.g. `torus1` inside a geometryCOMP) are now skipped during export — they carry only trivial keys (name, type, position, size) and TD recreates them on COMP creation
+- **Portable .tox export hardening**: `ExportPortableTox` now strips the target COMP's own `externaltox`/`enableexternaltox` params (not just descendants) and handles the `syncfile` parameter, preventing baked-in references from confusing recipients
+- **Bridge `project_path` override**: `launch_td` and `restart_td` meta-tools accept an optional `project_path` parameter to open a different `.toe` file, resolved relative to the git root
+- **Envoy start deferred**: `parexec.py` defers `Start()` by 5 frames so `onCreate` has time to suppress baked-in `Envoyenable=True` before the server launches
+- **SCM directory protection**: `deleteEmptyDirectories` and `_cleanupFolder` now skip `.git`, `.svn`, and `.hg` directories
+- **Cross-platform temp paths**: All Envoy temp file operations use `tempfile.gettempdir()` instead of hardcoded `/tmp`
+- **`findChildren()` fix**: Two calls using invalid `depth=-1` corrected to `findChildren()` (unlimited depth is the default)
+- **AGENTS.md rewrite**: Condensed from verbose rule duplication into a concise universal AI instructions file
+- **ENVOY.md updated**: TDN-first rule added, skill prerequisites section, verify-TD-claims rule
+- **Release smoke test infrastructure**: Bootstrap script (`smoke_bootstrap.py`) and template `.toe` for E2E release testing
+- **New tests**: 22 smoke release tests (post-init state, `_messageBox` mechanism, `_promptEnvoy` auto-response, Envoy state), 9 specialized COMP roundtrip tests (geometryCOMP children, flags, materials, strip/restore; cameraCOMP; lightCOMP). 39 test suites total
+
+## v5.0.237
+
+TDN v1.1 format with target COMP metadata, import error surfacing, MCP permissions documentation, save-cycle pane restoration, git init error dialog, Envoy troubleshooting docs.
+
+- **TDN v1.1 format**: Exports now include the target COMP's `type`, `flags`, `color`, `tags`, `comment`, and `storage` at the top level. On import, type mismatches produce a warning. Existing v1.0 files remain fully importable
+- **Locked non-DAT operator warning**: Export and import now detect locked TOPs, CHOPs, and SOPs and warn that their frozen data won't survive a TDN round-trip. Documented in spec and externalization docs
+- **Import error surfacing**: `ImportNetwork()` and `ImportNetworkFromFile()` now set `ui.status` on failure, so TD users see errors in the status bar — not just in logs or MCP responses
+- **MCP auto-authorization documented**: The Envoy enable dialog now informs users that all MCP tools are auto-authorized and points to `.claude/settings.local.json` for adjustments. New "MCP Tool Permissions" section added to Envoy setup docs
+- **Save-cycle pane restoration**: When TDN strip/restore runs during project save, pane owners inside TDN COMPs are now saved before stripping and restored after import — no more orphaned panes
+- **Git init error dialog**: If `git init` fails during Envoy setup, a `ui.messageBox` now shows the error and manual fix instructions instead of silently falling through
+- **Envoy troubleshooting docs**: New troubleshooting page covering server startup failures, connection issues, git init problems, and log file locations
+- **Dialog sequencing fix**: The Envoy opt-in prompt now waits for all other init dialogs (deprecated patterns, re-scan) to resolve before appearing
+- **TDN reconstruction uses type from file**: `ReconstructTDNComps()` now reads the `type` field from v1.1 `.tdn` files when creating missing COMP shells, so the correct COMP type (geometryCOMP, containerCOMP, etc.) is used instead of defaulting to baseCOMP
+- **New tests**: Locked non-DAT warning test, target COMP metadata preservation tests (6 tests for type, flags, color, tags, comment, storage round-trips)
+
+## v5.0.235
+
+`restart_td` bridge meta-tool, local MCP handshake when TD is down, operator overlap warnings, layout rules hardening.
+
+- **`restart_td` bridge meta-tool**: Gracefully quits TouchDesigner and relaunches with the project's `.toe` file. Sends platform-appropriate quit signal, waits for exit (force-kills if needed), then relaunches and waits for Envoy. Crash-loop aware — respects the existing 3-in-5-minutes limit
+- **Local MCP handshake when TD is down**: The STDIO bridge now handles `initialize`, `notifications/initialized`, and `tools/list` locally when Envoy is unreachable, so Claude Code always completes the MCP setup and discovers bridge meta-tools without waiting for a connection timeout
+- **`set_op_position` overlap warning**: After repositioning an operator, EnvoyExt checks for bounding-box overlaps with siblings (20-unit margin) and returns an `overlap_warning` field naming the conflicting operators
+- **Layout rules hardening**: Network-layout and create-operator rules now require dimension-aware spacing (`nodeWidth`/`nodeHeight` from `get_network_layout`), forward-flow wire direction, and flag the fixed-offset anti-pattern. OP-reference parameter values section added to parameter rules
+- **Bridge meta-tools documented**: Architecture, setup, claude-code, and tools-reference docs updated with STDIO bridge section, `.envoy.json` config reference, and meta-tool catalog
+
 ## v5.0.233
 
 Project-level performance monitoring, pre-handoff validation, Envoy bridge hardening, test runner dialog fix.

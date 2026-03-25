@@ -44,5 +44,10 @@ Use `op.Embody.Log(message, level)` from anywhere. Levels: `'DEBUG'`, `'INFO'`, 
 | `parexec.py` | MEDIUM | Every parameter change. Performance-sensitive. |
 | `externalizations.tsv` | NEVER EDIT | Managed exclusively by Embody. |
 
+## Project Save
+
+- **`project.save()`** is the Python equivalent of Ctrl+S. It saves the .toe and automatically exports the release .tox to `release/`. No separate `ExportPortableTox` call is needed.
+- **Save triggers the TDN strip/restore cycle** — this blocks the main thread for 15+ seconds. The Envoy MCP operation timeout is 30s, so save may appear to time out but still completes. Use a long timeout or fire-and-forget.
+
 ## Sync Requirement
 When updating a rule or skill in `.claude/`, also update the corresponding template DAT in `dev/embody/Embody/templates/` if one exists. The root CLAUDE.md and `text_claude.md` serve different audiences (Embody developers vs user projects) and are maintained independently. `text_help.py` covers UI-facing help only.

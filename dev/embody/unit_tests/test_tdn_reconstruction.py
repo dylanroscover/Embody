@@ -922,6 +922,26 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(rc.bypass)
 		self.assertFalse(rc.expose)
 
+	def test_E08_locked_non_dat_warning(self):
+		"""Locked non-DAT operators survive round-trip with warning."""
+		t = self.sandbox.create(nullTOP, 't')
+		t.lock = True
+		c = self.sandbox.create(constantCHOP, 'c')
+		c.lock = True
+		self._roundTrip(self.sandbox)
+		# Lock flags preserved
+		self.assertTrue(self.sandbox.op('t').lock)
+		self.assertTrue(self.sandbox.op('c').lock)
+
+	def test_E09_locked_non_dat_in_export(self):
+		"""Locked non-DAT operators include lock in exported flags."""
+		t = self.sandbox.create(nullTOP, 't')
+		t.lock = True
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		entry = result['tdn']['operators'][0]
+		self.assertIn('lock', entry.get('flags', []))
+
 	# =================================================================
 	# F. Metadata Round-Trip (8 tests)
 	# =================================================================
@@ -1626,6 +1646,112 @@ class TestTDNReconstruction(EmbodyTestCase):
 		result = self.tdn.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn_doc, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+	# =================================================================
+	# K3. Target COMP Metadata Preservation — v1.1 (6 tests)
+	# =================================================================
+
+	def test_K14_target_comp_type_exported(self):
+		"""Top-level 'type' field must match OPType of target COMP."""
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		tdn = result['tdn']
+		self.assertEqual(tdn.get('type'), self.sandbox.OPType)
+
+	def test_K15_diverse_comp_types_roundtrip(self):
+		"""Different COMP types export their own type at top level."""
+		comp_types = [
+			'baseCOMP', 'containerCOMP',
+		]
+		for ct in comp_types:
+			name = ct.replace('COMP', '').lower()
+			c = self.sandbox.create(ct, name)
+			# Export this child as its own network
+			result = self.tdn.ExportNetwork(root_path=c.path)
+			self.assertTrue(result.get('success'), f'Export failed for {ct}')
+			tdn = result['tdn']
+			self.assertEqual(tdn.get('type'), ct,
+				f'type field mismatch for {ct}')
+
+	def test_K16_target_comp_flags_roundtrip(self):
+		"""Flags set on target COMP survive export/import."""
+		self.sandbox.viewer = True
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		self.assertIn('flags', tdn)
+		self.assertIn('viewer', tdn['flags'])
+
+		# Clear and reimport
+		self.sandbox.viewer = False
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+		self.assertTrue(self.sandbox.viewer, 'viewer flag not restored')
+
+	def test_K17_target_comp_color_tags_comment_roundtrip(self):
+		"""Color, tags, and comment on target COMP survive export/import."""
+		self.sandbox.color = (0.2, 0.8, 0.4)
+		self.sandbox.tags.add('test_tag')
+		self.sandbox.comment = 'Test comment'
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		self.assertIn('color', tdn)
+		self.assertIn('tags', tdn)
+		self.assertEqual(tdn['comment'], 'Test comment')
+
+		# Reset and reimport
+		self.sandbox.color = (0.545, 0.545, 0.545)
+		self.sandbox.tags.clear()
+		self.sandbox.comment = ''
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertAlmostEqual(self.sandbox.color[0], 0.2, places=3)
+		self.assertIn('test_tag', self.sandbox.tags)
+		self.assertEqual(self.sandbox.comment, 'Test comment')
+
+	def test_K18_target_comp_storage_roundtrip(self):
+		"""Storage on target COMP survives export/import."""
+		self.sandbox.store('portability_key', 42)
+		self.sandbox.store('config', {'nested': True})
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		self.assertIn('storage', tdn)
+
+		# Clear storage and reimport
+		self.sandbox.unstore('portability_key')
+		self.sandbox.unstore('config')
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertEqual(self.sandbox.fetch('portability_key', search=False), 42)
+		self.assertEqual(
+			self.sandbox.fetch('config', search=False), {'nested': True})
+
+	def test_K19_type_mismatch_warning(self):
+		"""Importing a TDN with mismatched type should warn but succeed."""
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Forge a different type
+		tdn['type'] = 'containerCOMP'
+
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path,
+			tdn=tdn, clear_first=True)
+		# Should still succeed (warning only)
 		self.assertTrue(result.get('success'))
 
 	# =================================================================
@@ -2503,3 +2629,311 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'))
 		top_cp = orig['tdn'].get('custom_pars', {})
 		self.assertNotIn('About', top_cp, 'Root About page should be excluded')
+
+	# =================================================================
+	# T — Specialized COMP types (geometryCOMP, cameraCOMP, lightCOMP)
+	# =================================================================
+
+	def test_T01_geocomp_children_survive_roundtrip(self):
+		"""Geo COMP's SOP children survive export → clear → import."""
+		geo = self.sandbox.create(geometryCOMP, 'geo_test')
+		# Customize the auto-created torus1 SOP
+		torus = geo.op('torus1')
+		if torus:
+			torus.par.rows = 30
+			torus.par.cols = 30
+
+		orig = self.tdn.ExportNetwork(root_path=geo.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'), f'Export failed: {orig}')
+		tdn = orig['tdn']
+
+		# Verify torus1 is in the export (it has non-default params)
+		op_names = [o['name'] for o in tdn['operators']]
+		self.assertIn('torus1', op_names,
+			'Customized torus1 should be in TDN export')
+
+		# Clear and reimport
+		result = self.tdn.ImportNetwork(
+			target_path=geo.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'), f'Import failed: {result}')
+
+		# Verify torus1 restored with customizations
+		restored_torus = geo.op('torus1')
+		self.assertIsNotNone(restored_torus, 'torus1 should be restored')
+		self.assertEqual(int(restored_torus.par.rows), 30,
+			'torus1 rows param should survive roundtrip')
+		self.assertEqual(int(restored_torus.par.cols), 30,
+			'torus1 cols param should survive roundtrip')
+
+	def test_T02_geocomp_replaced_children_roundtrip(self):
+		"""Geo COMP with replaced SOP children survives roundtrip."""
+		geo = self.sandbox.create(geometryCOMP, 'geo_replaced')
+		# Delete default torus and add a box + transform
+		torus = geo.op('torus1')
+		if torus:
+			torus.destroy()
+		box = geo.create(boxSOP, 'box1')
+		xform = geo.create(transformSOP, 'xform1')
+		xform.par.tx = 2.5
+		xform.inputConnectors[0].connect(box)
+
+		orig = self.tdn.ExportNetwork(root_path=geo.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Verify children in export
+		op_names = [o['name'] for o in tdn['operators']]
+		self.assertIn('box1', op_names)
+		self.assertIn('xform1', op_names)
+		self.assertNotIn('torus1', op_names,
+			'Deleted torus1 should not be in export')
+
+		# Clear and reimport
+		result = self.tdn.ImportNetwork(
+			target_path=geo.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		# Verify restored state
+		self.assertIsNone(geo.op('torus1'),
+			'torus1 should NOT reappear after import')
+		self.assertIsNotNone(geo.op('box1'), 'box1 should be restored')
+		restored_xform = geo.op('xform1')
+		self.assertIsNotNone(restored_xform, 'xform1 should be restored')
+		self.assertAlmostEqual(float(restored_xform.par.tx), 2.5, places=3,
+			msg='xform tx param should survive roundtrip')
+		# Verify connection survived
+		self.assertTrue(len(restored_xform.inputs) > 0,
+			'xform1 should have an input connection')
+		self.assertEqual(restored_xform.inputs[0].name, 'box1',
+			'xform1 input should be box1')
+
+	def test_T03_geocomp_builtin_params_roundtrip(self):
+		"""Geo COMP's own built-in parameters survive roundtrip."""
+		geo = self.sandbox.create(geometryCOMP, 'geo_params')
+		# Set non-default built-in parameters on the Geo COMP itself
+		geo.par.tx = 3.0
+		geo.par.ty = -1.5
+		geo.par.sx = 2.0
+		geo.par.display = False
+
+		orig = self.tdn.ExportNetwork(root_path=geo.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Verify root-level parameters captured
+		self.assertIn('parameters', tdn,
+			'Geo COMP non-default built-in params should be in TDN')
+		self.assertIn('tx', tdn['parameters'])
+
+		# Reset and reimport
+		geo.par.tx = 0
+		geo.par.ty = 0
+		geo.par.sx = 1
+		geo.par.display = True
+		result = self.tdn.ImportNetwork(
+			target_path=geo.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		self.assertAlmostEqual(float(geo.par.tx.eval()), 3.0, places=3,
+			msg='tx should be restored')
+		self.assertAlmostEqual(float(geo.par.ty.eval()), -1.5, places=3,
+			msg='ty should be restored')
+		self.assertAlmostEqual(float(geo.par.sx.eval()), 2.0, places=3,
+			msg='sx should be restored')
+
+	def test_T04_geocomp_strip_restore_cycle(self):
+		"""Geo COMP survives the full strip/restore cycle (simulated save)."""
+		geo = self.sandbox.create(geometryCOMP, 'geo_save')
+		# Customize children
+		torus = geo.op('torus1')
+		if torus:
+			torus.par.rows = 20
+		# Customize root params
+		geo.par.tx = 5.0
+
+		# Simulate pre-save: export then strip
+		orig = self.tdn.ExportNetwork(root_path=geo.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Strip children (like onProjectPreSave)
+		for c in list(geo.findChildren(depth=1, includeUtility=True)):
+			c.destroy()
+		self.assertEqual(len(geo.children), 0,
+			'Children should be stripped')
+
+		# Root params should still be intact (strip only removes children)
+		self.assertAlmostEqual(float(geo.par.tx.eval()), 5.0, places=3,
+			msg='Root params should survive strip')
+
+		# Simulate post-save: reimport from TDN
+		result = self.tdn.ImportNetwork(
+			target_path=geo.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'),
+			f'Post-save restore failed: {result}')
+
+		# Verify everything survived
+		restored_torus = geo.op('torus1')
+		self.assertIsNotNone(restored_torus,
+			'torus1 should be restored after save cycle')
+		self.assertEqual(int(restored_torus.par.rows), 20,
+			'torus1 customization should survive save cycle')
+		self.assertAlmostEqual(float(geo.par.tx.eval()), 5.0, places=3,
+			msg='Root tx should survive save cycle')
+
+	def test_T05_geocomp_default_children_skipped_then_lost(self):
+		"""Uncustomized auto-created children are skipped in export.
+
+		This test documents the expected behavior: a fresh Geo COMP's
+		default torus1 (with no customizations) is intentionally skipped
+		during export. After strip/restore, it will NOT reappear because
+		TD only auto-creates default children when a COMP is first created,
+		not when children are cleared.
+		"""
+		geo = self.sandbox.create(geometryCOMP, 'geo_defaults')
+		# Do NOT customize torus1 — leave it fully default
+		torus = geo.op('torus1')
+		has_torus = torus is not None
+
+		if not has_torus:
+			return  # Some TD builds may not auto-create torus1
+
+		orig = self.tdn.ExportNetwork(root_path=geo.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Default torus1 should be SKIPPED (trivial keys only)
+		op_names = [o['name'] for o in tdn.get('operators', [])]
+		# Note: if torus1 has no non-trivial keys, it gets skipped
+		# This is the documented behavior — not a bug
+
+		# Strip and restore
+		for c in list(geo.findChildren(depth=1, includeUtility=True)):
+			c.destroy()
+		self.assertIsNone(geo.op('torus1'),
+			'torus1 should be gone after strip')
+
+		result = self.tdn.ImportNetwork(
+			target_path=geo.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		# After restore: torus1 is gone IF it was skipped in export
+		if 'torus1' not in op_names:
+			self.assertIsNone(geo.op('torus1'),
+				'Uncustomized torus1 should not reappear after restore '
+				'(this is expected — TD only creates defaults on COMP creation)')
+
+	def test_T06_geocomp_material_reference_roundtrip(self):
+		"""Geo COMP material parameter referencing an internal MAT survives roundtrip."""
+		geo = self.sandbox.create(geometryCOMP, 'geo_mat')
+		mat = geo.create(constantMAT, 'my_mat')
+		mat.par.colorr = 1.0
+		mat.par.colorg = 0.0
+		mat.par.colorb = 0.0
+		geo.par.material = 'my_mat'
+
+		orig = self.tdn.ExportNetwork(root_path=geo.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Verify material param is in the export
+		self.assertIn('parameters', tdn)
+		self.assertEqual(tdn['parameters'].get('material'), 'my_mat',
+			'material reference should be in TDN export')
+
+		# Clear and reimport
+		result = self.tdn.ImportNetwork(
+			target_path=geo.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		# Verify material reference restored
+		self.assertEqual(str(geo.par.material), 'my_mat',
+			'material param should reference my_mat after import')
+		# Verify the MAT itself is restored
+		restored_mat = geo.op('my_mat')
+		self.assertIsNotNone(restored_mat, 'my_mat should be restored')
+		self.assertAlmostEqual(float(restored_mat.par.colorr.eval()), 1.0,
+			places=3, msg='MAT color should survive roundtrip')
+
+	def test_T07_geocomp_sop_render_display_flags(self):
+		"""SOP render and display flags inside Geo COMP survive roundtrip."""
+		geo = self.sandbox.create(geometryCOMP, 'geo_flags')
+		torus = geo.op('torus1')
+		if not torus:
+			return
+		# Create a second SOP and give it the render/display flags
+		box = geo.create(boxSOP, 'box1')
+		box.render = True
+		box.display = True
+		torus.render = False
+		torus.display = False
+		# Customize torus so it exports (not trivial)
+		torus.par.rows = 10
+
+		orig = self.tdn.ExportNetwork(root_path=geo.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		result = self.tdn.ImportNetwork(
+			target_path=geo.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		restored_torus = geo.op('torus1')
+		restored_box = geo.op('box1')
+		self.assertIsNotNone(restored_box)
+		self.assertTrue(restored_box.render,
+			'box1 should have render flag after roundtrip')
+		self.assertTrue(restored_box.display,
+			'box1 should have display flag after roundtrip')
+		if restored_torus:
+			self.assertFalse(restored_torus.render,
+				'torus1 should NOT have render flag after roundtrip')
+			self.assertFalse(restored_torus.display,
+				'torus1 should NOT have display flag after roundtrip')
+
+	def test_T08_camera_comp_roundtrip(self):
+		"""Camera COMP parameters survive export/import roundtrip."""
+		cam = self.sandbox.create(cameraCOMP, 'cam_test')
+		cam.par.tx = 10.0
+		cam.par.tz = -5.0
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Clear and reimport
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		restored = self.sandbox.op('cam_test')
+		self.assertIsNotNone(restored, 'cameraCOMP should be restored')
+		self.assertEqual(restored.OPType, 'cameraCOMP')
+		self.assertAlmostEqual(float(restored.par.tx.eval()), 10.0, places=3)
+		self.assertAlmostEqual(float(restored.par.tz.eval()), -5.0, places=3)
+
+	def test_T09_light_comp_roundtrip(self):
+		"""Light COMP parameters survive export/import roundtrip."""
+		light = self.sandbox.create(lightCOMP, 'light_test')
+		light.par.dimmer = 0.5
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		restored = self.sandbox.op('light_test')
+		self.assertIsNotNone(restored, 'lightCOMP should be restored')
+		self.assertEqual(restored.OPType, 'lightCOMP')
+		self.assertAlmostEqual(float(restored.par.dimmer.eval()), 0.5,
+			places=3)

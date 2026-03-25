@@ -21,7 +21,9 @@ Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, et
 
 ## Manual Configuration
 
-If your project isn't in a git repo, create `.mcp.json` manually in your project directory:
+If your project isn't in a git repo, create `.mcp.json` manually in your project directory. You can use either the direct HTTP transport or the STDIO bridge:
+
+**HTTP transport** (simpler, requires TD to be running):
 
 ```json
 {
@@ -33,6 +35,23 @@ If your project isn't in a git repo, create `.mcp.json` manually in your project
   }
 }
 ```
+
+**STDIO bridge** (recommended — supports launching TD from Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "envoy": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-u", ".claude/envoy-bridge.py", "--port", "9870",
+               "--config", ".envoy.json"]
+    }
+  }
+}
+```
+
+The STDIO bridge provides meta-tools (`get_td_status`, `launch_td`, `restart_td`) that work even when TouchDesigner is not running. See [Claude Code Integration](claude-code.md#stdio-bridge) for details.
 
 ## Changing the Port
 
@@ -54,6 +73,14 @@ When Envoy starts, it generates a full Claude Code configuration in your project
 - **`.claude/commands/`** — slash commands (`/run-tests`, `/status`, `/explore-network`)
 
 These files are regenerated each time Envoy starts to stay up to date. See [Claude Code Integration](claude-code.md) for the full reference.
+
+## MCP Tool Permissions
+
+When Envoy is first enabled, it deploys a `.claude/settings.local.json` file that **auto-authorizes all Envoy MCP tools** — including write operations like `create_op`, `delete_op`, `execute_python`, and `set_dat_content`. This means your AI assistant can act without per-tool confirmation prompts.
+
+If you prefer finer control, edit `.claude/settings.local.json` in your project root after setup. The `allow` array lists tool permission patterns — remove any tools you want Claude Code to prompt you for before executing.
+
+For example, to allow only read-only tools and require confirmation for write operations, keep only the `query_*` and `get_*` entries in the allow list.
 
 ## Verifying the Connection
 
