@@ -1,5 +1,12 @@
 # Changelog
 
+## v5.0.244
+
+Nested TDN save-cycle fix, SOP-to-COMP connection hardening.
+
+- **Nested TDN strip/restore ordering**: Save cycle now strips deepest-first and restores shallowest-first. Previously, stripping a parent TDN COMP destroyed nested TDN COMPs before they could be tracked, so post-save restore never rebuilt them — leaving default children (e.g. Torus SOP inside a geometryCOMP) instead of the correct TDN contents
+- **SOP-to-COMP connection fallback**: `_wireConnectionList` now bounds-checks `inputConnectors` before indexing and falls back to `inputCOMPConnectors` for COMPs that accept SOP/TOP/CHOP wire inputs (geometryCOMP, cameraCOMP, lightCOMP) where connectors may not be populated immediately after creation
+
 ## v5.0.243
 
 Headless smoke testing, file cleanup preferences, specialized COMP support, portable .tox hardening, bridge project_path override.

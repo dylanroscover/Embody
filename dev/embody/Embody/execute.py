@@ -154,12 +154,20 @@ def onProjectPreSave():
 	if pane_restore:
 		parent.Embody.store('_tdn_pane_restore', pane_restore)
 
+	# Sort deepest-first so nested TDN COMPs (e.g. /META/geo1) are
+	# stripped before their parent (/META) destroys them. Without this,
+	# the parent's StripCompChildren destroys the nested COMP before it
+	# can be tracked in stripped_info, so post-save never restores it.
+	exported_by_depth = sorted(
+		exported, key=lambda x: x[0].count('/'), reverse=True)
 	stripped_info = []
-	for comp_path, rel_tdn_path in exported:
+	for comp_path, rel_tdn_path in exported_by_depth:
 		comp = op(comp_path)
 		if comp:
 			parent.Embody.ext.Embody.StripCompChildren(comp)
-			stripped_info.append((comp_path, rel_tdn_path))
+		# Always track — nested COMPs may already be destroyed by a
+		# parent strip earlier in this loop. They still need restoring.
+		stripped_info.append((comp_path, rel_tdn_path))
 	if stripped_info:
 		parent.Embody.store('_tdn_stripped_paths', stripped_info)
 	return
@@ -171,6 +179,14 @@ def onProjectPostSave():
 	if not stripped:
 		return
 	parent.Embody.unstore('_tdn_stripped_paths')
+	# Sort shallowest-first so parent COMPs (e.g. /META) are restored
+	# before their nested children (/META/geo1). The parent import
+	# recreates the child COMP shell; the child import then replaces
+	# its default contents (e.g. Torus) with the correct .tdn state.
+	def _depth_key(entry):
+		p = entry[0] if isinstance(entry, (list, tuple)) else entry
+		return p.count('/')
+	stripped = sorted(stripped, key=_depth_key)
 	for entry in stripped:
 		# Unpack stored (comp_path, rel_tdn_path) tuples.
 		# Fall back to legacy format (plain string) for safety.

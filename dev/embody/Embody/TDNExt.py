@@ -2294,8 +2294,26 @@ class TDNExt:
 						source.outputCOMPConnectors[0].connect(
 							target.inputCOMPConnectors[dest_index])
 				else:
-					source.outputConnectors[0].connect(
-						target.inputConnectors[dest_index])
+					src_conns = source.outputConnectors
+					tgt_conns = target.inputConnectors
+					if src_conns and dest_index < len(tgt_conns):
+						src_conns[0].connect(tgt_conns[dest_index])
+					elif (src_conns and target.isCOMP
+							and hasattr(target, 'inputCOMPConnectors')
+							and dest_index < len(
+								target.inputCOMPConnectors)):
+						# COMPs that accept SOP/TOP/CHOP wire inputs
+						# (geometryCOMP, cameraCOMP, lightCOMP, etc.)
+						# may not expose inputConnectors until a cook
+						# cycle runs. Fall back to COMP connectors.
+						src_conns[0].connect(
+							target.inputCOMPConnectors[dest_index])
+					else:
+						self._log(
+							f'No connector available: {source_ref} -> '
+							f'{target.name}[{dest_index}] '
+							f'(out={len(src_conns)}, '
+							f'in={len(tgt_conns)})', 'WARNING')
 			except Exception as e:
 				kind = 'COMP ' if comp else ''
 				self._log(
