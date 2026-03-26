@@ -137,6 +137,7 @@ These run locally on the STDIO bridge — they work even when TD is not running.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness |
+| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness. Includes instance registry |
 | `launch_td` | `timeout?` | Launch TD with the project's `.toe` file, wait for Envoy (default: 120s) |
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |
+| `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch the bridge to a different running instance (provide toe basename without `.toe`). See `/multi-instance` skill for workflow |

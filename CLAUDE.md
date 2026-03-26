@@ -50,7 +50,8 @@ Embody/
 │       ├── add-mcp-tool/               # Adding MCP tools (dev only)
 │       ├── run-tests/                   # Test suite runner (dev only)
 │       ├── td-api-reference/            # Full TD Python API reference
-│       └── mcp-tools-reference/         # Complete MCP tool catalog
+│       ├── mcp-tools-reference/         # Complete MCP tool catalog
+│       └── multi-instance/              # Multi-instance bridge workflow
 ├── docs/                                  # MkDocs documentation site
 │   ├── embody/                           # Embody feature docs
 │   ├── envoy/                            # Envoy MCP server docs

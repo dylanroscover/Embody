@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
-	"version": "1.0",
+	"version": "1.1",
 	"build": 12,
-	"generator": "Embody/5.0.230",
+	"generator": "Embody/5.0.255",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-20T01:00:41Z",
+	"exported_at": "2026-03-26T16:00:54Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
 		"include_dat_content": false
@@ -42,6 +42,7 @@
 			"tags": ["py"]
 		}
 	},
+	"type": "containerCOMP",
 	"parameters": {
 		"y": 368,
 		"w": 996,
@@ -66,14 +67,33 @@
 		"ext0promote": true,
 		"reloadbuiltin": false
 	},
+	"color": [0.3, 0.5, 0.9],
+	"tags": ["tdn"],
+	"storage": {
+		"_tip_trace": {
+			"btn": "close",
+			"text": "Clear filter",
+			"text_width": 60.3,
+			"tip_w": 80,
+			"container_x": 726,
+			"container_w": 270,
+			"btn_x": 244,
+			"btn_w": 26,
+			"tip_x": 914,
+			"toolbar_w": 996,
+			"btn_center": 983,
+			"tip_center": 954,
+			"offset": -29
+		}
+	},
 	"operators": [
 		{
 			"name": "tooltip",
 			"type": "containerCOMP",
 			"parameters": {
-				"x": 284,
+				"x": 998,
 				"y": 40,
-				"w": 169,
+				"w": 80,
 				"h": 22,
 				"layer": 10,
 				"alignallow": "ignore",
@@ -104,7 +124,7 @@
 			"name": "tip_measure",
 			"type": "textTOP",
 			"parameters": {
-				"text": "Toggle Envoy MCP server",
+				"text": "Clear filter",
 				"font": "Open Sans",
 				"fontsizex": 10,
 				"fontsizey": 10,

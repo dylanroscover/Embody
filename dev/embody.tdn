@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
-	"version": "1.0",
+	"version": "1.1",
 	"build": 27,
-	"generator": "Embody/5.0.230",
+	"generator": "Embody/5.0.255",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-20T01:00:42Z",
+	"exported_at": "2026-03-26T16:00:55Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false
@@ -251,6 +251,7 @@
 			}
 		]
 	},
+	"type": "containerCOMP",
 	"parameters": {
 		"w": 960,
 		"h": 880,
@@ -263,6 +264,9 @@
 		"parentshortcut": "Project",
 		"reloadbuiltin": false
 	},
+	"flags": ["viewer"],
+	"color": [0.3, 0.5, 0.9],
+	"tags": ["tdn"],
 	"operators": [
 		{
 			"name": "Embody",
@@ -296,7 +300,7 @@
 						"style": "Str",
 						"readOnly": true,
 						"help": "Current Embody status (read-only). Shows whether Embody is initialized and running.",
-						"value": "Disabled"
+						"value": "Enabled"
 					},
 					{
 						"name": "Createexternalizationstable",
@@ -386,7 +390,8 @@
 						"default": "ask",
 						"menuNames": ["ask", "keep", "delete"],
 						"menuLabels": ["Ask", "Always Keep Files", "Always Delete Files"],
-						"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file."
+						"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.",
+						"value": "delete"
 					},
 					{
 						"name": "Openmanager",
@@ -624,7 +629,8 @@
 						"name": "Envoyenable",
 						"style": "Toggle",
 						"label": "Envoy Enable",
-						"help": "Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients."
+						"help": "Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.",
+						"value": true
 					},
 					{
 						"name": "Envoyport",
@@ -640,7 +646,7 @@
 						"label": "Envoy Status",
 						"readOnly": true,
 						"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-						"value": "Error: port 9870 in use"
+						"value": "Starting..."
 					}
 				],
 				"Logs": [
@@ -806,7 +812,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.230"
+						"value": "5.0.255"
 					},
 					{
 						"name": "Touchbuild",
@@ -829,7 +835,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 210
+						"value": 222
 					},
 					{
 						"name": "Github",
@@ -844,7 +850,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-03-20 01:00:42 UTC"
+						"value": "2026-03-26 16:00:55 UTC"
 					},
 					{
 						"name": "Help",
@@ -860,7 +866,7 @@
 			"storage": {
 				"claudius_running": false,
 				"_tdn_restore_failures": ["/embody/base1"],
-				"expand_order": ["/embody"]
+				"expand_order": ["/embody", "/embody/unit_tests"]
 			}
 		},
 		{
@@ -3308,7 +3314,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 127,
+				"rows": 129,
 				"cols": 11
 			},
 			"flags": ["viewer"],

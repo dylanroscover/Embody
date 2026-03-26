@@ -107,7 +107,7 @@ class TestSmokeRelease(EmbodyTestCase):
 
     def test_no_script_errors(self):
         """Embody COMP has no script errors."""
-        errors = self.embody.scriptErrors
+        errors = self.embody.scriptErrors()
         self.assertEqual(len(errors), 0,
             f'Embody has script errors: {errors}')
 
@@ -223,15 +223,12 @@ class TestSmokeRelease(EmbodyTestCase):
     # =========================================================================
 
     def test_envoy_server_running_if_enabled(self):
-        """If Envoyenable is True, the MCP server thread should be alive."""
+        """If Envoyenable is True, the MCP server should be running."""
         if not self.embody.par.Envoyenable.eval():
             self.skip('Envoy not enabled in this session')
-        envoy_ext = self.embody.ext.Envoy
-        server_thread = getattr(envoy_ext, '_server_thread', None)
-        self.assertIsNotNone(server_thread,
-            'Server thread should exist when Envoy is enabled')
-        self.assertTrue(server_thread.is_alive(),
-            'Server thread should be alive')
+        running = self.embody.fetch('envoy_running', False)
+        self.assertTrue(running,
+            'Server should be running when Envoy is enabled')
 
     def test_envoy_port_valid(self):
         """Envoy port is in a valid range."""

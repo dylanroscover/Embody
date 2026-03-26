@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.1",
-	"build": 214,
-	"generator": "Embody/5.0.250",
+	"build": 230,
+	"generator": "Embody/5.0.256",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T07:10:31Z",
+	"exported_at": "2026-03-26T16:38:07Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -368,7 +368,8 @@
 				"default": "ask",
 				"menuNames": ["ask", "keep", "delete"],
 				"menuLabels": ["Ask", "Always Keep Files", "Always Delete Files"],
-				"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file."
+				"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.",
+				"value": "delete"
 			},
 			{
 				"name": "Openmanager",
@@ -618,6 +619,13 @@
 				"value": 9870
 			},
 			{
+				"name": "Envoyinstancename",
+				"style": "Str",
+				"label": "Instance Name",
+				"help": "Custom name for this Envoy instance in the registry. Leave blank to auto-generate from the .toe filename. Set a unique name when running multiple instances of the same project file.",
+				"value": ""
+			},
+			{
 				"name": "Envoystatus",
 				"style": "Str",
 				"label": "Envoy Status",
@@ -789,7 +797,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.250"
+				"value": "5.0.256"
 			},
 			{
 				"name": "Touchbuild",
@@ -812,7 +820,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 214
+				"value": 230
 			},
 			{
 				"name": "Github",
@@ -827,7 +835,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-03-26 07:10:31 UTC"
+				"value": "2026-03-26 16:38:07 UTC"
 			},
 			{
 				"name": "Help",
