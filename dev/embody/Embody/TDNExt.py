@@ -1920,6 +1920,16 @@ class TDNExt:
 			# Recurse into children for COMPs
 			children = op_def.get('children', [])
 			if children and new_op.isCOMP:
+				# Clear auto-created default children (e.g. torus1
+				# inside a geometryCOMP) before importing TDN children.
+				# These defaults aren't in the TDN (filtered by
+				# _TRIVIAL_KEYS on export) so they'd persist alongside
+				# the intended children if not removed here.
+				for default_child in list(new_op.children):
+					try:
+						default_child.destroy()
+					except Exception:
+						pass
 				self._createOps(new_op, children, created)
 
 	def _createCustomPars(self, parent, op_defs):

@@ -1,11 +1,12 @@
 # Changelog
 
-## v5.0.244
+## v5.0.247
 
-Nested TDN save-cycle fix, SOP-to-COMP connection hardening.
+Default-child cleanup on TDN import, nested TDN save-cycle fix, SOP-to-COMP connection hardening.
 
-- **Nested TDN strip/restore ordering**: Save cycle now strips deepest-first and restores shallowest-first. Previously, stripping a parent TDN COMP destroyed nested TDN COMPs before they could be tracked, so post-save restore never rebuilt them — leaving default children (e.g. Torus SOP inside a geometryCOMP) instead of the correct TDN contents
-- **SOP-to-COMP connection fallback**: `_wireConnectionList` now bounds-checks `inputConnectors` before indexing and falls back to `inputCOMPConnectors` for COMPs that accept SOP/TOP/CHOP wire inputs (geometryCOMP, cameraCOMP, lightCOMP) where connectors may not be populated immediately after creation
+- **Clear auto-created defaults on COMP creation during import**: When TDN import creates a COMP (e.g. geometryCOMP) that has inline children defined, auto-created default children (e.g. Torus POP) are now destroyed before recursing into the TDN children. Previously, default children persisted alongside imported ones because they were filtered out during export (`_TRIVIAL_KEYS`) and never visited during import. Verified at 10 levels of nesting depth
+- **Nested TDN strip/restore ordering**: Save cycle now strips deepest-first and restores shallowest-first. Previously, stripping a parent TDN COMP destroyed nested TDN COMPs before they could be tracked, so post-save restore never rebuilt them — leaving default children instead of the correct TDN contents
+- **SOP-to-COMP connection fallback**: `_wireConnectionList` now bounds-checks `inputConnectors` before indexing and falls back to `inputCOMPConnectors` for COMPs that accept SOP/TOP/CHOP wire inputs where connectors may not be populated immediately after creation
 
 ## v5.0.243
 
