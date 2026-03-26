@@ -128,6 +128,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 | `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
 | `launch_td` | `timeout?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s) |
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s) |
+| `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch to a different running instance. See [Multiple Instances](architecture.md#multiple-instances) |
 
 !!! info "Bridge architecture"
     Claude Code connects to Envoy via a STDIO bridge script (`.claude/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.

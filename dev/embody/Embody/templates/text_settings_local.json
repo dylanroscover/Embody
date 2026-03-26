@@ -45,7 +45,8 @@
       "mcp__envoy__set_dat_content",
       "mcp__envoy__set_op_flags",
       "mcp__envoy__set_op_position",
-      "mcp__envoy__set_parameter"
+      "mcp__envoy__set_parameter",
+      "WebFetch"
     ],
     "additionalDirectories": [
       "/tmp"

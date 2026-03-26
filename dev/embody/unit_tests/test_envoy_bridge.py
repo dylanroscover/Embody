@@ -28,6 +28,13 @@ _bridge_path = os.path.join(project.folder, 'embody', 'envoy_bridge.py')
 _spec = importlib.util.spec_from_file_location('envoy_bridge', _bridge_path)
 bridge = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(bridge)
+sys.modules[_spec.name] = bridge  # Register so @patch('envoy_bridge.X') works
+
+# Neutralize the orphan watchdog so it never spawns a daemon thread during
+# tests.  The watchdog calls time.sleep in an infinite loop; when tests
+# patch time.sleep with a recording mock, the unpatched watchdog thread
+# floods the mock with thousands of calls.
+bridge.start_orphan_watchdog = lambda: None
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
@@ -731,6 +738,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(sys, 'argv', ['envoy_bridge.py']), \
              patch.object(bridge, 'wait_for_envoy', return_value=True), \
              patch.object(bridge, 'forward_to_http', side_effect=forward), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep', side_effect=mock_sleep):
             bridge.main()
 
@@ -848,19 +857,21 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertEqual(attempts[0], 4)
 
     def test_non_connection_error_not_retried(self):
-        """ValueError from forward is NOT caught by retry — crashes the loop."""
+        """ValueError from forward is not retried — treated as malformed response."""
+        call_count = [0]
         def forward(url, msg, **kw):
+            call_count[0] += 1
             raise ValueError('unexpected error')
 
-        # ValueError is not in the except clause, so it propagates
-        raised = False
-        try:
-            self._run_main(
-                [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
-                forward_side_effect=forward)
-        except ValueError:
-            raised = True
-        self.assertTrue(raised, 'Non-connection errors should not be caught')
+        # ValueError is caught by the (JSONDecodeError, ValueError) handler,
+        # which sends an error response and marks disconnected — no retry.
+        responses = self._run_main(
+            [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
+            forward_side_effect=forward)
+        self.assertLen(responses, 1)
+        self.assertIn('error', responses[0])
+        # Only called once — no retry for non-connection errors
+        self.assertEqual(call_count[0], 1)
 
     # --- Disconnection and reconnection ---
 
@@ -1302,6 +1313,31 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         # PID 99999999 almost certainly doesn't exist
         self.assertFalse(bridge.is_process_alive(99999999))
 
+    @patch('envoy_bridge.sys')
+    def test_is_process_alive_win32_uses_openprocess(self, mock_sys):
+        """On Windows, uses OpenProcess(SYNCHRONIZE) instead of os.kill."""
+        mock_sys.platform = "win32"
+        mock_kernel32 = MagicMock()
+        mock_kernel32.OpenProcess.return_value = 42  # non-zero = valid handle
+        mock_ctypes = MagicMock()
+        mock_ctypes.windll.kernel32 = mock_kernel32
+        with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
+            self.assertTrue(bridge.is_process_alive(1234))
+        mock_kernel32.OpenProcess.assert_called_once_with(0x00100000, False, 1234)
+        mock_kernel32.CloseHandle.assert_called_once_with(42)
+
+    @patch('envoy_bridge.sys')
+    def test_is_process_alive_win32_dead_process(self, mock_sys):
+        """On Windows, returns False when OpenProcess returns 0 (dead PID)."""
+        mock_sys.platform = "win32"
+        mock_kernel32 = MagicMock()
+        mock_kernel32.OpenProcess.return_value = 0  # zero = failed / no process
+        mock_ctypes = MagicMock()
+        mock_ctypes.windll.kernel32 = mock_kernel32
+        with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
+            self.assertFalse(bridge.is_process_alive(9999))
+        mock_kernel32.CloseHandle.assert_not_called()
+
 
 # =====================================================================
 # Meta-Tool Interception
@@ -1424,14 +1460,16 @@ class TestBridgeMetaTools(EmbodyTestCase):
         call_count = [0]
         def mock_alive(pid):
             call_count[0] += 1
-            # Alive through graceful period, dead after force kill
+            # Alive through graceful period (calls 1-3), dead after force kill (call 4)
             return call_count[0] <= 3
-        mono_values = [100]
-        # Exhaust graceful timeout, then continue
-        for i in range(50):
-            mono_values.append(100 + 16 + i)  # Past graceful_timeout=15
+        # monotonic calls: deadline calc, then loop iterations, then past deadline
+        # deadline = 100 + 15 = 115
+        # Loop: check 105 (<115, iter), check 110 (<115, iter), check 116 (>=115, exit)
+        # is_process_alive calls: 1 (initial), 2 (loop iter 1), 3 (loop iter 2), 4 (post-kill)
+        mono_values = [100, 105, 110, 116]
         with patch.object(bridge, 'is_process_alive', side_effect=mock_alive), \
              patch('subprocess.run'), \
+             patch('os.kill'), \
              patch('time.sleep'), \
              patch('time.monotonic', side_effect=mono_values):
             success, msg = bridge.quit_td(12345, graceful_timeout=15)

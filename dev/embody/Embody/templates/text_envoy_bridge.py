@@ -107,15 +107,65 @@ BRIDGE_TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "switch_instance",
+        "description": (
+            "Switch the active TouchDesigner instance or list all registered "
+            "instances. Omit the instance parameter to list available "
+            "instances with their status. Provide an instance name (toe "
+            "basename) to switch the bridge to that instance."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "instance": {
+                    "type": "string",
+                    "description": (
+                        "Instance name to switch to (toe basename without "
+                        ".toe extension). Omit to list all instances."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
 ]
 
 BRIDGE_TOOL_NAMES = {t["name"] for t in BRIDGE_TOOLS}
 
 
+_log_file = None
+
+
+def _init_file_logging(config_path):
+    """Open a log file next to the config (e.g. dev/logs/envoy-bridge.log)."""
+    global _log_file
+    if _log_file is not None:
+        return
+    try:
+        if config_path:
+            log_dir = os.path.join(os.path.dirname(config_path), "dev", "logs")
+        else:
+            log_dir = os.path.join(os.getcwd(), "dev", "logs")
+        if os.path.isdir(log_dir):
+            path = os.path.join(log_dir, "envoy-bridge.log")
+            _log_file = open(path, "a", encoding="utf-8")
+    except OSError:
+        pass  # File logging is best-effort
+
+
 def log(msg):
-    """Log to stderr (visible in Claude Code's MCP server output)."""
-    sys.stderr.write(f"[envoy-bridge] {msg}\n")
+    """Log to stderr (visible in Claude Code's MCP output) and to file."""
+    ts = time.strftime("%H:%M:%S")
+    line = f"[envoy-bridge] {ts} {msg}"
+    sys.stderr.write(line + "\n")
     sys.stderr.flush()
+    if _log_file is not None:
+        try:
+            _log_file.write(line + "\n")
+            _log_file.flush()
+        except OSError:
+            pass
 
 
 def parse_args():
@@ -197,8 +247,24 @@ def find_td_pid():
 
 def is_process_alive(pid):
     """Check if a process is still running."""
-    if pid is None:
+    if not pid or pid <= 0:
         return False
+    if sys.platform == "win32":
+        # os.kill(pid, 0) on Windows calls TerminateProcess() — it KILLS the
+        # process instead of checking liveness.  Use OpenProcess(SYNCHRONIZE)
+        # which only requires the right to wait on the object.
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x00100000
+            handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            return False
+    # Unix: signal 0 is a no-op liveness check
     try:
         os.kill(pid, 0)
         return True
@@ -206,6 +272,62 @@ def is_process_alive(pid):
         return False
     except OSError:
         return False
+
+
+def ping_envoy_port(port):
+    """Check if an Envoy server is listening on the given port.
+    Returns True if something responds, False otherwise."""
+    if port is None:
+        return False
+    import socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            return s.connect_ex(('127.0.0.1', int(port))) == 0
+    except (OSError, ValueError):
+        return False
+
+
+def get_instance_status(config):
+    """Read the instance registry from config and check reachability.
+    Returns (instances_with_status: dict, active_name: str|None)."""
+    instances = config.get("instances", {})
+    active = config.get("active")
+    result = {}
+    for name, info in instances.items():
+        pid = info.get("td_pid")
+        pid_alive = is_process_alive(pid)
+        port_open = ping_envoy_port(info.get("port"))
+        # An instance is only reachable if its own PID is alive AND its port
+        # responds.  A dead PID with an open port means a different instance
+        # owns that port — this entry is stale.
+        reachable = pid_alive and port_open
+        result[name] = {
+            "toe_path": info.get("toe_path", ""),
+            "port": info.get("port"),
+            "td_pid": pid,
+            "reachable": reachable,
+            "active": name == active,
+        }
+    return result, active
+
+
+def atomic_write_json(path, data):
+    """Write JSON atomically via temp file + os.replace().
+    Retries on PermissionError (Windows file-in-use)."""
+    tmp = path + ".tmp"
+    content = json.dumps(data, indent=2) + "\n"
+    for attempt in range(3):
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt < 2:
+                time.sleep(0.1)
+            else:
+                raise
 
 
 def quit_td(pid, graceful_timeout=15):
@@ -366,14 +488,86 @@ def handle_get_td_status(state):
         if t > time.monotonic() - CRASH_LOOP_WINDOW_S
     ])
 
+    # Include instance registry with reachability
+    config = load_config(state["config_path"])
+    instance_status, active_name = get_instance_status(config)
+
     return {
         "connected": state["connected"],
         "td_process_alive": alive,
         "crash_detected": state["crash_detected"],
         "last_connected": last_ts,
-        "toe_path": state["config"].get("toe_path", ""),
-        "td_executable": state["config"].get("td_executable", ""),
+        "td_executable": config.get("td_executable", ""),
         "restart_attempts_remaining": max(0, remaining),
+        "active_instance": active_name,
+        "instances": instance_status,
+    }
+
+
+def handle_switch_instance(params, state):
+    """Handle the switch_instance meta-tool."""
+    config = load_config(state["config_path"])
+    instance_status, active_name = get_instance_status(config)
+
+    target = params.get("instance")
+
+    # List mode: no target specified
+    if not target:
+        return {
+            "status": "list",
+            "active_instance": active_name,
+            "instances": instance_status,
+        }
+
+    # Switch mode: target specified
+    if target not in config.get("instances", {}):
+        return {
+            "status": "error",
+            "message": f'Instance "{target}" not found in registry.',
+            "available": list(instance_status.keys()),
+        }
+
+    info = config["instances"][target]
+    target_port = info.get("port")
+
+    # Verify the target instance is reachable
+    if not ping_envoy_port(target_port):
+        return {
+            "status": "error",
+            "message": (
+                f'Instance "{target}" (port {target_port}) is not reachable. '
+                "Is TouchDesigner running with Envoy enabled?"
+            ),
+        }
+
+    # Switch the bridge's in-memory state
+    old_active = active_name
+    state["url"] = f"http://localhost:{target_port}/mcp"
+    state["connected"] = False  # Force reconnect + initialize handshake
+    config_pid = info.get("td_pid")
+    if config_pid and is_process_alive(config_pid):
+        state["td_pid"] = config_pid
+    else:
+        state["td_pid"] = find_td_pid()
+    state["crash_detected"] = False
+    state["config"] = config
+
+    # Update active in registry
+    config["active"] = target
+    if state["config_path"]:
+        try:
+            atomic_write_json(state["config_path"], config)
+        except Exception as e:
+            log(f"Warning: could not update .envoy.json: {e}")
+
+    log(f"Switched from '{old_active}' to '{target}' (port {target_port})")
+
+    return {
+        "status": "success",
+        "message": f'Switched to instance "{target}" on port {target_port}.',
+        "instance": target,
+        "port": target_port,
+        "toe_path": info.get("toe_path", ""),
     }
 
 
@@ -510,6 +704,8 @@ def handle_bridge_tool(name, params, state):
         result = handle_launch_td(params, state)
     elif name == "restart_td":
         result = handle_restart_td(params, state)
+    elif name == "switch_instance":
+        result = handle_switch_instance(params, state)
     else:
         result = {"error": f"Unknown bridge tool: {name}"}
 
@@ -542,7 +738,7 @@ def bridge_only_tools_list(request_id):
 # HTTP forwarding and connection management
 # ---------------------------------------------------------------------------
 
-def forward_to_http(url, message, timeout=60):
+def forward_to_http(url, message, timeout=300):
     """Forward a JSON-RPC message to the Envoy HTTP endpoint.
 
     Returns the parsed JSON-RPC response, or None for notifications
@@ -733,16 +929,43 @@ def connection_lost_message(state):
 # Main
 # ---------------------------------------------------------------------------
 
+def _resolve_from_registry(config, fallback_port):
+    """Resolve port and PID from the instance registry.
+    Returns (port, td_pid, active_name)."""
+    instances = config.get("instances", {})
+    active_name = config.get("active")
+
+    if active_name and active_name in instances:
+        active = instances[active_name]
+        port = active.get("port", fallback_port)
+        config_pid = active.get("td_pid")
+        if config_pid and is_process_alive(config_pid):
+            return port, config_pid, active_name
+        return port, find_td_pid(), active_name
+
+    # Old-format config or empty registry — use fallback
+    if "port" in config and "instances" not in config:
+        port = config.get("port", fallback_port)
+        config_pid = config.get("td_pid")
+        if config_pid and is_process_alive(config_pid):
+            return port, config_pid, None
+        return port, find_td_pid(), None
+
+    return fallback_port, find_td_pid(), None
+
+
 def main():
-    port, config_path = parse_args()
-    url = f"http://localhost:{port}/mcp"
+    cli_port, config_path = parse_args()
+    _init_file_logging(config_path)
 
     config = load_config(config_path)
+    port, td_pid, active_name = _resolve_from_registry(config, cli_port)
+    url = f"http://localhost:{port}/mcp"
 
     # Bridge state — shared with meta-tool handlers
     state = {
         "connected": False,
-        "td_pid": None,
+        "td_pid": td_pid,
         "last_connected_time": None,
         "crash_detected": False,
         "launch_timestamps": [],
@@ -751,7 +974,10 @@ def main():
         "url": url,
     }
 
-    log(f"Starting (target: localhost:{port})")
+    if active_name:
+        log(f"Starting (instance: {active_name}, port: {port})")
+    else:
+        log(f"Starting (target: localhost:{port})")
     if config_path:
         log(f"Config: {config_path}")
         td_exe = config.get("td_executable", "")
@@ -764,10 +990,8 @@ def main():
     # Self-terminate if our parent process (Claude Code) dies
     start_orphan_watchdog()
 
-    # Try to discover existing TD process
-    state["td_pid"] = find_td_pid()
     if state["td_pid"]:
-        log(f"Found existing TouchDesigner process (PID {state['td_pid']})")
+        log(f"Found TouchDesigner process (PID {state['td_pid']})")
 
     for line in sys.stdin:
         line = line.strip()
@@ -824,19 +1048,45 @@ def main():
                 continue  # Notification — no response needed
 
             if method == "tools/list":
-                if not is_notification:
-                    send_response(bridge_only_tools_list(request_id))
-                continue
+                # Try connecting to Envoy so we can return the full tool
+                # list (TD-proxied + bridge meta-tools).  If Envoy is not
+                # reachable, fall back to bridge-only meta-tools.
+                deadline = time.monotonic() + CONNECT_TIMEOUT_S
+                if wait_for_envoy(url, deadline):
+                    state["connected"] = True
+                    state["last_connected_time"] = time.time()
+                    state["crash_detected"] = False
+                    if not state["td_pid"]:
+                        state["td_pid"] = find_td_pid()
+                    log("Connected to Envoy (during tools/list)")
+                    # Fall through to the forwarding path below
+                else:
+                    if not is_notification:
+                        send_response(bridge_only_tools_list(request_id))
+                    continue
 
         # --- Connection management ---
         if not state["connected"]:
+            # Re-read config in case the user switched TD instances
+            fresh_config = load_config(state["config_path"])
+            new_port, new_pid, new_active = _resolve_from_registry(
+                fresh_config, cli_port)
+            if new_port != port:
+                port = new_port
+                url = f"http://localhost:{port}/mcp"
+                state["url"] = url
+                state["config"] = fresh_config
+                log(f"Config changed — now targeting port {port}"
+                    + (f" (instance: {new_active})" if new_active else ""))
+            if new_pid:
+                state["td_pid"] = new_pid
+
             log("Connecting to Envoy...")
             deadline = time.monotonic() + CONNECT_TIMEOUT_S
             if wait_for_envoy(url, deadline):
                 state["connected"] = True
                 state["last_connected_time"] = time.time()
                 state["crash_detected"] = False
-                # Refresh TD PID on reconnect
                 if not state["td_pid"]:
                     state["td_pid"] = find_td_pid()
                 log("Connected to Envoy")

@@ -63,6 +63,15 @@ Change the **Envoy Port** parameter on the Embody COMP. If the server is running
 
 If the server is not running, changing the port simply updates the parameter value.
 
+## Running Multiple Instances
+
+You can run multiple TouchDesigner instances with Envoy enabled in the same git repo. Each instance automatically claims a unique port from the range `[base_port, base_port + 9]` (default: 9870–9879).
+
+To switch between instances from Claude Code, use the `switch_instance` bridge meta-tool. See [Claude Code Integration](claude-code.md#working-with-multiple-instances) for usage details and [Architecture](architecture.md#multiple-instances) for how it works.
+
+!!! tip
+    Running two instances of the **same `.toe` file** works out of the box — Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.). For predictable names, set the **Instance Name** parameter (`Envoyinstancename`) on each Embody COMP.
+
 ## Claude Code Integration
 
 When Envoy starts, it generates a full Claude Code configuration in your project root:
