@@ -4496,6 +4496,10 @@ class EmbodyExt:
                     comp_path,
                     table[i, 'rel_file_path'].val,
                 ))
+        # Sort by path depth (fewest segments first) so parents are
+        # imported before their children during reconstruction. Each
+        # child's own .tdn file then overwrites the parent's snapshot.
+        result.sort(key=lambda x: x[0].count('/'))
         return result
 
     def StripCompChildren(self, comp: OP) -> int:

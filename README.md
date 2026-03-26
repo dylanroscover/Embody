@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.247-blue)
+![Version](https://img.shields.io/badge/version-5.0.251-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -178,6 +178,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.251**: Nested TDN child-skip on import, depth-sorted reconstruction ordering
 - **5.0.247**: Default-child cleanup on TDN import, nested save-cycle fix
 - **5.0.244**: Nested TDN save-cycle fix, SOP-to-COMP connection hardening
 - **5.0.243**: Headless smoke testing, file cleanup preferences, specialized COMP support, portable .tox hardening

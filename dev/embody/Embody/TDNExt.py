@@ -966,6 +966,11 @@ class TDNExt:
 			ui.status = 'TDN Import: Invalid .tdn format'
 			return {'error': 'Invalid .tdn format'}
 
+		if not isinstance(op_defs, list):
+			msg = f'operators must be a list, got {type(op_defs).__name__}'
+			ui.status = f'TDN Import: {msg}'
+			return {'error': msg}
+
 		if clear_first:
 			# Clear dock relationships before destroying — TD's engine
 			# raises an uncatchable tdError if a dock target is destroyed
@@ -1000,6 +1005,20 @@ class TDNExt:
 				TDNExt._resolve_par_templates(op_defs, par_templates)
 			if type_defaults:
 				TDNExt._merge_type_defaults(op_defs, type_defaults)
+
+		# Pre-phase: Skip children of nested TDN-externalized COMPs.
+		# If a child COMP has its own .tdn entry in the externalizations table,
+		# its own file is the source of truth — not the parent's snapshot.
+		tdn_paths = self._getTDNExternalizedPaths()
+		if tdn_paths:
+			tdn_paths.discard(target_path)  # We ARE importing this one
+			if tdn_paths:
+				skipped = self._stripNestedTDNChildren(
+					op_defs, target_path, tdn_paths)
+				for sp in skipped:
+					self._log(
+						f'Skipping children of {sp} — has its own TDN '
+						f'externalization (source of truth)', 'INFO')
 
 		try:
 			created = []
@@ -2909,6 +2928,53 @@ class TDNExt:
 		except Exception as e:
 			self._log(f'Error checking palette clone status for {target.path}: {e}', 'DEBUG')
 		return False
+
+	def _getTDNExternalizedPaths(self) -> set:
+		"""Return a set of all TDN-strategy COMP paths from the externalizations table."""
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if not table or table.numRows < 2:
+				return set()
+			if table[0, 'strategy'] is None:
+				return set()
+		except Exception:
+			return set()
+		paths = set()
+		for i in range(1, table.numRows):
+			if table[i, 'strategy'].val == 'tdn':
+				paths.add(table[i, 'path'].val)
+		return paths
+
+	def _stripNestedTDNChildren(self, op_defs: list, parent_path: str,
+								tdn_paths: set) -> list:
+		"""Remove children from op_defs for COMPs with their own TDN entry.
+
+		The child COMP shell is still created (its operator definition remains),
+		but its children array is emptied — the child's own .tdn file is the
+		source of truth for its internal network.
+
+		Args:
+			op_defs: List of operator definitions (mutated in place)
+			parent_path: TD path of the COMP being imported into
+			tdn_paths: Set of all TDN-strategy paths from externalizations table
+
+		Returns:
+			List of child paths that were skipped (for logging)
+		"""
+		skipped = []
+		for op_def in op_defs:
+			name = op_def.get('name')
+			if not name:
+				continue
+			child_path = f"{parent_path.rstrip('/')}/{name}"
+			children = op_def.get('children')
+			if children and child_path in tdn_paths:
+				op_def['children'] = []
+				skipped.append(child_path)
+			elif children:
+				skipped.extend(
+					self._stripNestedTDNChildren(children, child_path, tdn_paths))
+		return skipped
 
 	def _hasTDNTag(self, target):
 		"""Check if a COMP has its own TDN externalization tag."""

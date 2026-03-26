@@ -768,6 +768,20 @@ Note that `container1` omits `position` (defaults to `[0, 0]`) and `noise1` also
 
 Nesting is recursive — COMPs inside COMPs can have their own `children`. The optional `max_depth` export parameter limits recursion depth (`null` means unlimited). COMPs may also contain an `annotations` array alongside `children` — see [Annotations](#annotations).
 
+### Nested TDN-Externalized COMPs
+
+When a parent TDN file contains `children` for a child COMP that has its **own** TDN externalization entry in the externalizations table, the child's `children` array is **skipped during import**. The child COMP shell is still created (its operator definition — name, type, position, parameters — is applied), but its internal network is **not** populated from the parent's snapshot. The child's own `.tdn` file is the source of truth for its contents.
+
+This prevents a common problem: if a child COMP is updated and re-exported to its own `.tdn` file, but the parent is not re-exported, importing the parent would silently overwrite the child with stale data. By skipping nested TDN children, each `.tdn` file owns exactly one level of the hierarchy.
+
+**What this means in practice:**
+
+- **Export** is unchanged — parent TDN files still include the full recursive hierarchy in their `children` arrays. This keeps the file self-contained and useful as a portable snapshot.
+- **Import** detects child COMPs with their own TDN entries and skips their children. A log message is emitted for each skipped child (e.g., `Skipping children of /project/parent/child — has its own TDN externalization`).
+- **Reconstruction on project open** imports parents before children (sorted by path depth). Combined with the skip logic, this means each COMP's network is populated exactly once, from its own authoritative `.tdn` file.
+
+If a child COMP is removed from the externalizations table (no longer tagged for TDN), its `children` array in the parent TDN will be imported normally — no special handling needed.
+
 ### Palette Clones
 
 COMPs that are cloned from the TouchDesigner palette (i.e., their `clone` parameter points to `/sys/`) are marked with `"palette_clone": true`. Their children are **not** exported because TouchDesigner automatically recreates them from the clone source when the project loads.
