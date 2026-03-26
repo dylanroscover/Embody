@@ -199,6 +199,22 @@ def is_process_alive(pid):
     """Check if a process is still running."""
     if pid is None:
         return False
+    if sys.platform == "win32":
+        # os.kill(pid, 0) on Windows calls TerminateProcess() — it KILLS the
+        # process instead of checking liveness.  Use OpenProcess(SYNCHRONIZE)
+        # which only requires the right to wait on the object.
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            SYNCHRONIZE = 0x00100000
+            handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            return False
+    # Unix: signal 0 is a no-op liveness check
     try:
         os.kill(pid, 0)
         return True
