@@ -48,6 +48,27 @@ curl http://localhost:9870/mcp
 
 You should get a response (even if it's an error about missing JSON body). If you get "connection refused," the server isn't running or is on a different port.
 
+## MCP Disconnects Mid-Session
+
+**Symptoms:** Claude Code stops being able to call Envoy tools mid-conversation — tool calls fail with connection errors or timeouts, even though TD is still running and Envoy shows as enabled.
+
+This can happen if TouchDesigner restarts, the Envoy server cycles, or the bridge process exits unexpectedly.
+
+### Claude Code CLI
+
+Restart the session by exiting (`Ctrl+C` or `/exit`) and running `claude` again in your project directory. The bridge will reconnect to Envoy automatically.
+
+### Claude Code VS Code Extension
+
+1. **Close the conversation tab** in the editor.
+2. Open the **Claude Code sidebar** (click the Claude icon in the Activity Bar on the left).
+3. Click the conversation to reopen it — your full message history is restored.
+
+Reopening the conversation re-initializes the MCP connection. The message history is preserved, so you can continue where you left off.
+
+!!! tip
+    If you want a completely fresh start instead, type `/clear` in the conversation. This wipes the message history but keeps the tab open with a new MCP connection.
+
 ## Log Files
 
 Embody writes detailed logs to `dev/logs/` in your project directory. Check the most recent `Embody-*.log` file for the full picture — the Textport ring buffer only holds 200 entries.
