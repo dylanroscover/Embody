@@ -1302,6 +1302,31 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         # PID 99999999 almost certainly doesn't exist
         self.assertFalse(bridge.is_process_alive(99999999))
 
+    @patch('dev.embody.envoy_bridge.sys')
+    def test_is_process_alive_win32_uses_openprocess(self, mock_sys):
+        """On Windows, uses OpenProcess(SYNCHRONIZE) instead of os.kill."""
+        mock_sys.platform = "win32"
+        mock_kernel32 = MagicMock()
+        mock_kernel32.OpenProcess.return_value = 42  # non-zero = valid handle
+        mock_ctypes = MagicMock()
+        mock_ctypes.windll.kernel32 = mock_kernel32
+        with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
+            self.assertTrue(bridge.is_process_alive(1234))
+        mock_kernel32.OpenProcess.assert_called_once_with(0x00100000, False, 1234)
+        mock_kernel32.CloseHandle.assert_called_once_with(42)
+
+    @patch('dev.embody.envoy_bridge.sys')
+    def test_is_process_alive_win32_dead_process(self, mock_sys):
+        """On Windows, returns False when OpenProcess returns 0 (dead PID)."""
+        mock_sys.platform = "win32"
+        mock_kernel32 = MagicMock()
+        mock_kernel32.OpenProcess.return_value = 0  # zero = failed / no process
+        mock_ctypes = MagicMock()
+        mock_ctypes.windll.kernel32 = mock_kernel32
+        with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
+            self.assertFalse(bridge.is_process_alive(9999))
+        mock_kernel32.CloseHandle.assert_not_called()
+
 
 # =====================================================================
 # Meta-Tool Interception

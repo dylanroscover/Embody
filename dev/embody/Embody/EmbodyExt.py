@@ -4540,13 +4540,15 @@ class EmbodyExt:
         errors = []
         try:
             for child in comp.findChildren():
-                if child.errors:
-                    for err in child.errors.split('\n'):
+                err_str = child.errors()
+                if err_str:
+                    for err in err_str.split('\n'):
                         err = err.strip()
                         if err:
                             errors.append(f'{child.path}: {err}')
-                if child.warnings:
-                    for warn in child.warnings.split('\n'):
+                warn_str = child.warnings()
+                if warn_str:
+                    for warn in warn_str.split('\n'):
                         warn = warn.strip()
                         if warn:
                             self.Log(f'Warning in {child.path}: {warn}', 'WARNING')
