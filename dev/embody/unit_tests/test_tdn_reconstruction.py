@@ -2833,7 +2833,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		mat.par.colorr = 1.0
 		mat.par.colorg = 0.0
 		mat.par.colorb = 0.0
-		geo.par.material = 'my_mat'
+		# Use ./my_mat to reference a child MAT (plain 'my_mat' resolves
+		# as a sibling, not a child, so it would be unresolvable)
+		geo.par.material = './my_mat'
 
 		orig = self.tdn.ExportNetwork(root_path=geo.path,
 			include_dat_content=True)
@@ -2842,7 +2844,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		# Verify material param is in the export
 		self.assertIn('parameters', tdn)
-		self.assertEqual(tdn['parameters'].get('material'), 'my_mat',
+		self.assertEqual(tdn['parameters'].get('material'), './my_mat',
 			'material reference should be in TDN export')
 
 		# Clear and reimport
@@ -2850,9 +2852,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
-		# Verify material reference restored
-		self.assertEqual(str(geo.par.material), 'my_mat',
-			'material param should reference my_mat after import')
+		# Verify material reference restored (val holds the stored string)
+		self.assertEqual(geo.par.material.val, './my_mat',
+			'material param should reference ./my_mat after import')
 		# Verify the MAT itself is restored
 		restored_mat = geo.op('my_mat')
 		self.assertIsNotNone(restored_mat, 'my_mat should be restored')
@@ -2937,3 +2939,148 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(restored.OPType, 'lightCOMP')
 		self.assertAlmostEqual(float(restored.par.dimmer.eval()), 0.5,
 			places=3)
+
+	# =================================================================
+	# Section U: Nested TDN child-skip logic
+	# =================================================================
+	# When a parent TDN contains children for a child COMP that has its
+	# own TDN externalization entry, the child's children array must be
+	# skipped during import. The child's own .tdn file is the source of
+	# truth.
+	# =================================================================
+
+	def test_U01_nested_tdn_children_skipped(self):
+		"""Import skips children of child COMPs that have their own TDN entry."""
+		parent = self.sandbox.create(baseCOMP, 'parent_u01')
+		child = parent.create(baseCOMP, 'child_inner')
+		child.create(nullTOP, 'stale_op')
+
+		# Export parent (captures child_inner with stale_op inside)
+		orig = self.tdn.ExportNetwork(
+			root_path=parent.path, include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		parent_tdn = orig['tdn']
+
+		# Verify the parent TDN contains the nested child and its children
+		child_def = None
+		for od in parent_tdn['operators']:
+			if od.get('name') == 'child_inner':
+				child_def = od
+				break
+		self.assertIsNotNone(child_def, 'child_inner must be in parent TDN')
+		self.assertTrue(len(child_def.get('children', [])) > 0,
+			'child_inner must have children in parent TDN')
+
+		# Add child COMP to externalizations table as TDN strategy
+		child_path = child.path
+		self._addTableRow(child_path, 'base', 'tdn', 'dummy/child_inner.tdn')
+
+		try:
+			# Clear and reimport parent — child's children should be skipped
+			for c in list(parent.children):
+				c.destroy()
+
+			result = self.tdn.ImportNetwork(
+				target_path=parent.path, tdn=parent_tdn, clear_first=False)
+			self.assertTrue(result.get('success'), f'Import failed: {result}')
+
+			# child_inner COMP shell should exist
+			restored_child = parent.op('child_inner')
+			self.assertIsNotNone(restored_child,
+				'child COMP shell must be created')
+
+			# But its children should NOT have been imported from the parent TDN
+			self.assertEqual(len(restored_child.children), 0,
+				'child COMP children must be skipped — its own TDN is '
+				'source of truth')
+		finally:
+			self._removeTableRow(child_path)
+
+	def test_U02_non_tdn_children_imported_normally(self):
+		"""Import includes children of child COMPs without their own TDN entry."""
+		parent = self.sandbox.create(baseCOMP, 'parent_u02')
+		child = parent.create(baseCOMP, 'child_normal')
+		child.create(nullTOP, 'normal_op')
+
+		orig = self.tdn.ExportNetwork(
+			root_path=parent.path, include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		parent_tdn = orig['tdn']
+
+		# No TDN entry for child — children should be imported normally
+		for c in list(parent.children):
+			c.destroy()
+
+		result = self.tdn.ImportNetwork(
+			target_path=parent.path, tdn=parent_tdn, clear_first=False)
+		self.assertTrue(result.get('success'))
+
+		restored_child = parent.op('child_normal')
+		self.assertIsNotNone(restored_child)
+		self.assertIsNotNone(restored_child.op('normal_op'),
+			'Children of non-TDN COMPs must be imported normally')
+
+	def test_U03_depth_sorting_in_getTDNStrategyComps(self):
+		"""_getTDNStrategyComps returns entries sorted by path depth (parents first)."""
+		# Add entries at different depths
+		paths = [
+			('/project/a/b/c', 'base', 'tdn', 'p/a/b/c.tdn'),
+			('/project/a', 'base', 'tdn', 'p/a.tdn'),
+			('/project/a/b', 'base', 'tdn', 'p/a/b.tdn'),
+		]
+		for p in paths:
+			self._addTableRow(*p)
+
+		try:
+			result = self.embody_ext._getTDNStrategyComps()
+			tdn_paths = [r[0] for r in result]
+
+			# Filter to just our test paths
+			test_paths = [p for p in tdn_paths if p.startswith('/project/a')]
+			self.assertEqual(len(test_paths), 3,
+				'All three test paths must be present')
+
+			# Verify depth ordering: parent before child
+			self.assertEqual(test_paths[0], '/project/a')
+			self.assertEqual(test_paths[1], '/project/a/b')
+			self.assertEqual(test_paths[2], '/project/a/b/c')
+		finally:
+			for p in paths:
+				self._removeTableRow(p[0])
+
+	def test_U04_deeply_nested_skip(self):
+		"""Skip logic works for deeply nested TDN COMPs (grandchild)."""
+		grandparent = self.sandbox.create(baseCOMP, 'gp_u04')
+		parent_comp = grandparent.create(baseCOMP, 'parent_comp')
+		child_comp = parent_comp.create(baseCOMP, 'child_comp')
+		child_comp.create(nullTOP, 'deep_op')
+
+		orig = self.tdn.ExportNetwork(
+			root_path=grandparent.path, include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		gp_tdn = orig['tdn']
+
+		# Only the deepest child has its own TDN entry
+		child_path = child_comp.path
+		self._addTableRow(child_path, 'base', 'tdn', 'dummy/child_comp.tdn')
+
+		try:
+			for c in list(grandparent.children):
+				c.destroy()
+
+			result = self.tdn.ImportNetwork(
+				target_path=grandparent.path, tdn=gp_tdn, clear_first=False)
+			self.assertTrue(result.get('success'))
+
+			# parent_comp should have its children (it has no TDN entry)
+			restored_parent = grandparent.op('parent_comp')
+			self.assertIsNotNone(restored_parent)
+
+			# child_comp shell should exist but be empty
+			restored_child = restored_parent.op('child_comp')
+			self.assertIsNotNone(restored_child,
+				'child COMP shell must exist')
+			self.assertEqual(len(restored_child.children), 0,
+				'Deeply nested TDN COMP children must be skipped')
+		finally:
+			self._removeTableRow(child_path)

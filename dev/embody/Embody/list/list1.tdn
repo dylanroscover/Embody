@@ -1,14 +1,15 @@
 {
 	"format": "tdn",
-	"version": "1.0",
-	"build": 47,
-	"generator": "Embody/5.0.230",
+	"version": "1.1",
+	"build": 48,
+	"generator": "Embody/5.0.245",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-20T01:00:41Z",
+	"exported_at": "2026-03-26T01:57:53Z",
 	"network_path": "/embody/Embody/list/list1",
 	"options": {
 		"include_dat_content": false
 	},
+	"type": "listCOMP",
 	"parameters": {
 		"callbacks": "=op('list_callbacks')",
 		"rows": "=op('inject_parents').numRows",
@@ -21,5 +22,7 @@
 		"resizecomp": "=me",
 		"repocomp": "=me"
 	},
+	"color": [0.3, 0.5, 0.9],
+	"tags": ["tdn"],
 	"operators": []
 }

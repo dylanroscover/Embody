@@ -142,6 +142,16 @@ class EmbodyTestCase:
         if not str(s).endswith(suffix):
             raise AssertionError(msg or f'{repr(s)} does not end with {repr(suffix)}')
 
+    def assertAlmostEqual(self, first, second, places=7, msg=None, delta=None):
+        if delta is not None:
+            if abs(first - second) > delta:
+                raise AssertionError(
+                    msg or f'{first} != {second} within delta {delta}')
+        else:
+            if round(abs(first - second), places) != 0:
+                raise AssertionError(
+                    msg or f'{first} != {second} within {places} places')
+
     def assertApproxEqual(self, a, b, tolerance=1e-6, msg=None):
         if abs(a - b) > tolerance:
             raise AssertionError(msg or f'{a} != {b} (tolerance {tolerance})')

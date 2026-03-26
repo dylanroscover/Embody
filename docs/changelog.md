@@ -1,11 +1,25 @@
 # Changelog
 
-## v5.0.244
+## v5.0.251
 
-Nested TDN save-cycle fix, SOP-to-COMP connection hardening.
+Nested TDN child-skip on import, depth-sorted reconstruction ordering, material reference fix.
 
-- **Nested TDN strip/restore ordering**: Save cycle now strips deepest-first and restores shallowest-first. Previously, stripping a parent TDN COMP destroyed nested TDN COMPs before they could be tracked, so post-save restore never rebuilt them — leaving default children (e.g. Torus SOP inside a geometryCOMP) instead of the correct TDN contents
-- **SOP-to-COMP connection fallback**: `_wireConnectionList` now bounds-checks `inputConnectors` before indexing and falls back to `inputCOMPConnectors` for COMPs that accept SOP/TOP/CHOP wire inputs (geometryCOMP, cameraCOMP, lightCOMP) where connectors may not be populated immediately after creation
+- **Nested TDN child-skip during import**: When a parent TDN contains children for a child COMP that has its own TDN externalization entry, the child's `children` array is now skipped during import. The child COMP shell is still created, but its internal network is left to its own `.tdn` file — preventing stale parent snapshots from overwriting updated child networks. New `_getTDNExternalizedPaths()` and `_stripNestedTDNChildren()` helper methods handle detection and recursive stripping
+- **Depth-sorted TDN reconstruction**: `_getTDNStrategyComps()` now sorts entries by path depth (fewest segments first), ensuring parents are always imported before their children during project-open reconstruction. Combined with the child-skip logic, each COMP's network is populated exactly once from its authoritative `.tdn` file
+- **Import input validation**: `ImportNetwork()` now validates that `operators` is a list, returning a clear error instead of failing cryptically on malformed input
+- **Material reference test fix**: Corrected `test_T07_geometry_material_roundtrip` to use `./my_mat` (child reference) instead of `my_mat` (sibling reference), which was unresolvable from inside the geometryCOMP
+- **`assertAlmostEqual` added to test framework**: TestRunnerExt now supports `assertAlmostEqual(first, second, places=7, delta=None)` for floating-point comparisons
+- **TDN spec updated**: New "Nested TDN-Externalized COMPs" section documents the child-skip behavior, import/export semantics, and reconstruction ordering
+- **Externalizations table cleanup**: Removed stale test entries (tdn_geo_test, tdn_deep, etc.) from tracking table
+- **New tests**: 4 nested TDN child-skip tests (Section U: skip children of TDN-externalized COMPs, import non-TDN children normally, depth sorting verification, deeply nested skip). 39 test suites total
+
+## v5.0.247
+
+Default-child cleanup on TDN import, nested TDN save-cycle fix, SOP-to-COMP connection hardening.
+
+- **Clear auto-created defaults on COMP creation during import**: When TDN import creates a COMP (e.g. geometryCOMP) that has inline children defined, auto-created default children (e.g. Torus POP) are now destroyed before recursing into the TDN children. Previously, default children persisted alongside imported ones because they were filtered out during export (`_TRIVIAL_KEYS`) and never visited during import. Verified at 10 levels of nesting depth
+- **Nested TDN strip/restore ordering**: Save cycle now strips deepest-first and restores shallowest-first. Previously, stripping a parent TDN COMP destroyed nested TDN COMPs before they could be tracked, so post-save restore never rebuilt them — leaving default children instead of the correct TDN contents
+- **SOP-to-COMP connection fallback**: `_wireConnectionList` now bounds-checks `inputConnectors` before indexing and falls back to `inputCOMPConnectors` for COMPs that accept SOP/TOP/CHOP wire inputs where connectors may not be populated immediately after creation
 
 ## v5.0.243
 
