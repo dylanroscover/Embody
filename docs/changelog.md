@@ -1,5 +1,18 @@
 # Changelog
 
+## v5.0.258
+
+Multi-instance Envoy support, auto-suffix collision avoidance, `switch_instance` bridge meta-tool.
+
+- **Multi-instance port allocation**: Envoy now scans a 10-port range (`base` through `base+9`) when the preferred port is occupied by another instance. Each TD instance gets its own port automatically — up to 10 simultaneous instances per base port
+- **Instance registry collision avoidance**: `_instanceKey()` now checks PID liveness before reusing a registry key. When the same `.toe` file is opened in multiple instances, keys are auto-suffixed (`MyProject`, `MyProject-2`, etc.). Stale entries with dead PIDs are reclaimed automatically
+- **`Envoyinstancename` parameter**: Optional custom name for the Envoy instance registry. Overrides the auto-generated key from the `.toe` filename — useful for predictable `switch_instance` targets
+- **`switch_instance` bridge meta-tool**: List all registered TD instances or switch the bridge to a different running instance. Redirects the bridge's HTTP target in-memory for instant switching with no restart
+- **`_findAvailablePort()` refactor**: Extracted port-scanning logic from `Start()` into a dedicated method. Replaces the recursive retry loop with a clean single-pass scan
+- **Atomic JSON writes**: New `_atomicWriteJSON()` method for `.envoy.json` writes — uses temp file + `os.replace()` with Windows `PermissionError` retry to prevent corruption under concurrent access
+- **Graceful shutdown via MCP**: Documented `project.quit()` as the preferred way to close TD instances programmatically — triggers `onDestroyTD` for clean deregistration
+- **Multi-instance documentation**: New `/multi-instance` skill, updated architecture docs, setup guide, Claude Code integration docs, troubleshooting entries, and tools reference. All surfaces document `switch_instance`, port allocation, instance registry, and same-project behavior
+
 ## v5.0.252
 
 Windows process-kill fix, reconstruction verification fix.

@@ -1440,51 +1440,73 @@ class EnvoyExt:
                     pass
             sys._envoy_uvi_server = None
 
-    def Start(self, _retries_left: int = 10) -> None:
+    def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
+        """Find an available port in [base_port, base_port + range_size).
+
+        Tries the base port first (fast path for single-instance).  If busy,
+        attempts to force-close a stale server from the same TD process, then
+        scans the remaining range without force-close (those ports belong to
+        other instances).
+
+        Returns the first free port, or None if all are occupied.
+        """
+        import socket
+
+        def _port_in_use(port: int) -> bool:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                return s.connect_ex(('127.0.0.1', port)) == 0
+
+        # Fast path: preferred port is free
+        if not _port_in_use(base_port):
+            return base_port
+
+        # Base port busy — try to reclaim it from our own stale server
+        self._log(f'Port {base_port} in use, attempting to free it...')
+        self._forceCloseOldServer()
+
+        # Brief wait for socket to close (up to ~0.5s)
+        import time as _time
+        for _ in range(5):
+            _time.sleep(0.1)
+            if not _port_in_use(base_port):
+                self._log(f'Port {base_port} freed after force-close')
+                return base_port
+
+        # Still busy — it belongs to another process/instance.
+        # Scan the rest of the range without force-close.
+        self._log(f'Port {base_port} held by another instance, scanning range...')
+        for offset in range(1, range_size):
+            candidate = base_port + offset
+            if not _port_in_use(candidate):
+                return candidate
+
+        return None
+
+    def Start(self) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
         if self.ownerComp.fetch('envoy_running', False):
             self._log('Server already running (duplicate Start ignored)', 'DEBUG')
             return
 
-        # On first call (not port retry), check for git repo
-        if _retries_left == 10:
-            git_root = self._checkOrInitGitRepo()
-            if git_root is None:
-                return  # User cancelled
-            self.ownerComp.store('_git_root', git_root)
-        else:
-            git_root = self.ownerComp.fetch('_git_root', 'no-git')
+        git_root = self._checkOrInitGitRepo()
+        if git_root is None:
+            return  # User cancelled
+        self.ownerComp.store('_git_root', git_root)
 
         # Ensure Python environment is ready (idempotent fast path if already installed)
         op.Embody.ext.Embody._setupEnvironment()
 
-        port = self.ownerComp.par.Envoyport.eval()
-
-        # Check if port is available, retrying if old server is still shutting down.
-        # Use connect_ex() rather than bind() — it tests whether something is
-        # actively listening, which is immune to SO_REUSEADDR false-positives
-        # on macOS and avoids TIME_WAIT false-negatives.
-        import socket
-        port_in_use = False
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1)
-            port_in_use = s.connect_ex(('127.0.0.1', port)) == 0
-        if port_in_use:
-            if _retries_left > 0:
-                # On first detection, try to force-close a stuck old server
-                if _retries_left == 10:
-                    self._log(f'Port {port} in use, attempting to free it...')
-                    self.ownerComp.par.Envoystatus = 'Waiting for port...'
-                    self._forceCloseOldServer()
-                run(f"op('{self.ownerComp.path}').ext.Envoy.Start(_retries_left={_retries_left - 1})",
-                    delayFrames=15)
-                return
-            self._log(f'Port {port} is still in use after retries. Restart TouchDesigner to free it, or switch port via the Port parameter on Embody.', 'ERROR')
-            self.ownerComp.par.Envoystatus = f'Error: port {port} in use'
+        base_port = self.ownerComp.par.Envoyport.eval()
+        port = self._findAvailablePort(base_port)
+        if port is None:
+            self._log(
+                f'All ports {base_port}-{base_port + 9} in use. '
+                f'Close a TouchDesigner instance or change the Port parameter.', 'ERROR')
+            self.ownerComp.par.Envoystatus = f'Error: ports {base_port}\u2013{base_port + 9} in use'
             return
-
-        if _retries_left < 10:
-            self._log(f'Port {port} became available after ~{(10 - _retries_left) * 0.25:.1f}s')
+        if port != base_port:
+            self._log(f'Port {base_port} in use by another instance, using {port}')
 
         self.ownerComp.store('envoy_running', True)
 
@@ -1562,6 +1584,7 @@ class EnvoyExt:
         if git_root != 'no-git':
             self._configureMCPClient(port)
             self._configureGitignore(git_root)
+            self._configureGitattributes(git_root)
             try:
                 op.Embody.ext.Embody._upgradeEnvoy()
             except Exception as e:
@@ -1581,6 +1604,12 @@ class EnvoyExt:
         self._log('Stopping Envoy MCP server')
         self.ownerComp.store('envoy_running', False)
         self.shutdown_event.set()  # Signal uvicorn to exit
+
+        # Remove this instance from the registry
+        try:
+            self._removeFromRegistry()
+        except Exception as e:
+            self._log(f'Registry cleanup failed: {e}', 'WARNING')
 
         # Update status
         self.ownerComp.par.Envoystatus = 'Disabled'
@@ -3864,17 +3893,107 @@ class EnvoyExt:
         self._log('Starting Envoy without git repo — auto-config skipped.', 'WARNING')
         return 'no-git'
 
+    @staticmethod
+    def _atomicWriteJSON(path, data):
+        """Write JSON atomically via temp file + os.replace().
+        Retries on PermissionError (Windows file-in-use)."""
+        import os
+        from pathlib import Path
+        tmp = Path(str(path) + '.tmp')
+        content = json.dumps(data, indent=2) + '\n'
+        for attempt in range(3):
+            try:
+                tmp.write_text(content, encoding='utf-8')
+                os.replace(str(tmp), str(path))
+                return
+            except PermissionError:
+                if attempt < 2:
+                    import time as _time
+                    _time.sleep(0.1)
+                else:
+                    raise
+
+    def _instanceKey(self, toe_rel: str, existing_instances: dict) -> str:
+        """Compute a unique instance key from the toe filename.
+        Uses basename without .toe.  Appends -2, -3, etc. on collision
+        with a live instance (same or different toe_path).
+        If Envoyinstancename is set, uses that as the key instead."""
+        import os
+        from pathlib import Path
+
+        # User override via parameter
+        try:
+            custom = self.ownerComp.par.Envoyinstancename.eval()
+            if custom:
+                return custom
+        except:
+            pass
+
+        base = Path(toe_rel).stem  # e.g. 'Embody-5.251'
+        my_pid = os.getpid()
+
+        # Check if this PID already has a key (re-registration)
+        for key, info in existing_instances.items():
+            if info.get('td_pid') == my_pid:
+                return key
+
+        # Check if base key is free or held by a dead process
+        if base not in existing_instances:
+            return base
+        existing_pid = existing_instances[base].get('td_pid', 0)
+        if not self._isPidAlive(existing_pid):
+            return base  # Reclaim stale entry
+
+        # Base key is held by a live process — find a unique suffix
+        suffix = 2
+        while True:
+            candidate = f'{base}-{suffix}'
+            if candidate not in existing_instances:
+                return candidate
+            existing_pid = existing_instances[candidate].get('td_pid', 0)
+            if not self._isPidAlive(existing_pid):
+                return candidate  # Reclaim stale entry
+            suffix += 1
+
+    @staticmethod
+    def _isPidAlive(pid):
+        """Check if a process with the given PID is alive."""
+        import os
+        if not pid:
+            return False
+        try:
+            os.kill(pid, 0)
+            return True
+        except (OSError, ProcessLookupError):
+            return False
+
     def _writeEnvoyConfig(self, git_root, port):
-        """Write .envoy.json with project config for the bridge launcher.
-        Idempotent — only writes if values have changed.  Preserves any
-        user overrides for fields we don't manage."""
+        """Register this instance in the .envoy.json instance registry.
+
+        The registry tracks all running Envoy instances so the bridge can
+        discover and switch between them.  Atomic writes prevent corruption
+        when multiple TD instances write concurrently.
+
+        Format:
+            {
+                "active": "Embody-5.251",
+                "td_executable": "/path/to/TouchDesigner",
+                "instances": {
+                    "Embody-5.251": {
+                        "toe_path": "dev/Embody-5.251.toe",
+                        "port": 9870,
+                        "td_pid": 12345
+                    }
+                }
+            }
+        """
+        import os
         import td as _td
         from pathlib import Path
 
         config_path = git_root / '.envoy.json'
 
         # Compute toe_path relative to git root
-        # project.name includes the .toe extension already
         project_dir = Path(project.folder)
         name = project.name
         toe_file = project_dir / (name if name.endswith('.toe') else name + '.toe')
@@ -3886,10 +4005,8 @@ class EnvoyExt:
         # Derive TD executable path from app.binFolder
         bin_folder = Path(_td.app.binFolder)
         if sys.platform == 'darwin':
-            # Walk up from Contents/MacOS/ to the .app bundle
             td_executable = str(bin_folder.parent.parent)
         elif sys.platform == 'win32':
-            # Find the exe in bin folder
             exe = bin_folder / 'TouchDesigner.exe'
             if not exe.exists():
                 exe = bin_folder / 'TouchDesigner099.exe'
@@ -3897,14 +4014,7 @@ class EnvoyExt:
         else:
             td_executable = str(bin_folder / 'TouchDesigner')
 
-        # Build desired config
-        new_config = {
-            'toe_path': toe_rel,
-            'port': port,
-            'td_executable': td_executable,
-        }
-
-        # Read existing config to check for changes and preserve overrides
+        # Read existing config
         existing = {}
         if config_path.exists():
             try:
@@ -3913,24 +4023,93 @@ class EnvoyExt:
             except (json.JSONDecodeError, OSError):
                 pass
 
-        # Only write if our managed fields differ
-        needs_write = False
-        for key, value in new_config.items():
-            if existing.get(key) != value:
-                needs_write = True
-                break
+        # Migrate old flat format → registry format
+        if 'instances' not in existing:
+            instances = {}
+            if 'toe_path' in existing:
+                # Wrap old flat config as a single instance
+                old_key = Path(existing['toe_path']).stem
+                instances[old_key] = {
+                    'toe_path': existing.get('toe_path', ''),
+                    'port': existing.get('port', port),
+                    'td_pid': existing.get('td_pid', 0),
+                }
+            existing = {
+                'active': existing.get('active', ''),
+                'td_executable': existing.get('td_executable', td_executable),
+                'instances': instances,
+            }
 
-        if not needs_write:
+        instances = existing.get('instances', {})
+        key = self._instanceKey(toe_rel, instances)
+
+        # Build this instance's entry
+        new_entry = {
+            'toe_path': toe_rel,
+            'port': port,
+            'td_pid': os.getpid(),
+        }
+
+        # Check if already up-to-date
+        if instances.get(key) == new_entry and existing.get('active') == key:
             self._log('.envoy.json already up to date', 'DEBUG')
             return
 
-        # Merge: our fields overwrite, user fields preserved
-        merged = dict(existing)
-        merged.update(new_config)
+        instances[key] = new_entry
+        existing['instances'] = instances
+        existing['active'] = key
+        existing['td_executable'] = td_executable
 
-        config_path.write_text(
-            json.dumps(merged, indent=2) + '\n', encoding='utf-8')
-        self._log(f'Wrote .envoy.json (toe: {toe_rel}, port: {port})')
+        self._atomicWriteJSON(config_path, existing)
+        self._log(f'Registered instance "{key}" in .envoy.json (port {port})')
+
+    def _removeFromRegistry(self, git_root=None):
+        """Remove this instance from the .envoy.json registry on shutdown."""
+        import os
+        from pathlib import Path
+
+        if git_root is None:
+            git_root = self.ownerComp.fetch('_git_root', 'no-git')
+        if git_root == 'no-git':
+            return
+
+        config_path = Path(git_root) / '.envoy.json'
+        if not config_path.exists():
+            return
+
+        try:
+            config = json.loads(config_path.read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, OSError):
+            return
+
+        instances = config.get('instances', {})
+        if not instances:
+            return
+
+        # Find our entry by PID
+        my_pid = os.getpid()
+        my_key = None
+        for key, info in instances.items():
+            if info.get('td_pid') == my_pid:
+                my_key = key
+                break
+
+        if my_key is None:
+            return
+
+        del instances[my_key]
+        config['instances'] = instances
+
+        # If we were active, switch to first remaining instance (or null)
+        if config.get('active') == my_key:
+            remaining = list(instances.keys())
+            config['active'] = remaining[0] if remaining else None
+
+        try:
+            self._atomicWriteJSON(config_path, config)
+            self._log(f'Deregistered instance "{my_key}" from .envoy.json')
+        except Exception as e:
+            self._log(f'Could not deregister from .envoy.json: {e}', 'WARNING')
 
     def _configureGitignore(self, git_root):
         """Ensure .gitignore in the git root contains entries for
@@ -3992,6 +4171,43 @@ class EnvoyExt:
 
         except Exception as e:
             self._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
+
+    def _configureGitattributes(self, git_root):
+        """Ensure .gitattributes normalizes line endings for TD-exported files.
+        TouchDesigner writes CRLF on all platforms; this forces LF in git
+        so externalized files don't show as dirty after every TD save.
+        Idempotent — only writes if the managed block is missing."""
+        MANAGED_BLOCK = (
+            '\n# Embody / Envoy — normalize TD line endings (auto-managed)\n'
+            '*.py text eol=lf\n'
+            '*.md text eol=lf\n'
+            '*.tdn text eol=lf\n'
+            '*.json text eol=lf\n'
+            '*.tsv text eol=lf\n'
+            '*.xml text eol=lf\n'
+            '*.toe binary\n'
+            '*.tox binary\n'
+        )
+        MARKER = 'Embody / Envoy'
+
+        try:
+            gitattr = git_root / '.gitattributes'
+            existing = ''
+            if gitattr.exists():
+                existing = gitattr.read_text(encoding='utf-8')
+
+            if MARKER in existing:
+                self._log('.gitattributes already configured', 'DEBUG')
+                return
+
+            if existing and not existing.endswith('\n'):
+                existing += '\n'
+
+            gitattr.write_text(existing + MANAGED_BLOCK, encoding='utf-8')
+            self._log('Added line-ending normalization to .gitattributes')
+
+        except Exception as e:
+            self._log(f'Could not auto-configure .gitattributes: {e}', 'WARNING')
 
     def _cleanupTempFiles(self):
         """Remove stale Envoy temp files (captures, offloaded responses) from /tmp.

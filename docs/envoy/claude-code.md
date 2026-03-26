@@ -80,19 +80,32 @@ Returns operators organized by annotation groups, signal flow direction, and any
 
 ## STDIO Bridge
 
-Claude Code connects to Envoy through a STDIO bridge script (`.claude/envoy-bridge.py`) that translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. The bridge provides three meta-tools that work even when TouchDesigner is not running:
+Claude Code connects to Envoy through a STDIO bridge script (`.claude/envoy-bridge.py`) that translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. The bridge provides four meta-tools that work even when TouchDesigner is not running:
 
 | Tool | Description |
 |------|-------------|
-| `get_td_status` | Check if TD is running, whether Envoy is reachable, crash detection, and restart attempts remaining |
+| `get_td_status` | Check if TD is running, whether Envoy is reachable, crash detection, restart attempts remaining, and instance registry status |
 | `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable |
 | `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy |
+| `switch_instance` | List all registered TD instances or switch the bridge to a different running instance |
 
 This means Claude Code can start a TD session from scratch — no need to manually open TouchDesigner first. If TD crashes, Claude can detect it and restart automatically.
 
 The bridge also handles crash-loop protection (max 3 launches in 5 minutes), automatic retry with backoff on transient connection failures, and orphan process cleanup when Claude Code exits.
 
-See [Architecture](architecture.md) for technical details on the bridge's design.
+### Working with Multiple Instances
+
+If you have multiple TouchDesigner instances running with Envoy enabled (e.g., your main project and a test project), the bridge connects to one at a time. Use `switch_instance` to move between them:
+
+- **List instances**: Call `switch_instance` with no arguments to see all registered instances and their reachability
+- **Switch**: Call `switch_instance` with the instance name (`.toe` filename without the extension) to redirect all subsequent MCP calls to that instance
+
+Each instance gets its own port automatically (ports 9870–9879). Switching is instant — no restart required.
+
+!!! tip "Same-file instances"
+    Opening the same `.toe` file in multiple TD instances works — Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.). For predictable names, set the **Instance Name** parameter (`Envoyinstancename`) on each Embody COMP.
+
+See [Architecture](architecture.md#multiple-instances) for technical details.
 
 ## How It Works
 

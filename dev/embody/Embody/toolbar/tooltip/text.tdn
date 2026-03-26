@@ -1,16 +1,17 @@
 {
 	"format": "tdn",
-	"version": "1.0",
+	"version": "1.1",
 	"build": 13,
-	"generator": "Embody/5.0.230",
+	"generator": "Embody/5.0.255",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-20T01:00:40Z",
+	"exported_at": "2026-03-26T16:00:54Z",
 	"network_path": "/embody/Embody/toolbar/tooltip/text",
 	"options": {
 		"include_dat_content": false
 	},
+	"type": "textCOMP",
 	"parameters": {
-		"text": "Toggle Envoy MCP server",
+		"text": "Clear filter",
 		"callbacks": "text_callbacks",
 		"font": "Open Sans",
 		"fontsize": 10,
@@ -22,5 +23,7 @@
 		"resizecomp": "=me",
 		"repocomp": "=me"
 	},
+	"color": [0.3, 0.5, 0.9],
+	"tags": ["tdn"],
 	"operators": []
 }
