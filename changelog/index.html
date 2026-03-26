@@ -1,0 +1,3170 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Automated externalization, AI integration, and diffable network format for TouchDesigner">
+      
+      
+      
+        <link rel="canonical" href="https://dylanroscover.github.io/Embody/changelog/">
+      
+      
+        <link rel="prev" href="../testing/">
+      
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Changelog - Embody Documentation</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Open Sans";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Embody Documentation" class="md-header__button md-logo" aria-label="Embody Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Embody Documentation
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Changelog
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/dylanroscover/Embody" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Embody
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href=".." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../embody/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Embody
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../envoy/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Envoy
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../tdn/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  TDN
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../td-development/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  TD Development
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../testing/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Testing
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Changelog
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Embody Documentation" class="md-nav__button md-logo" aria-label="Embody Documentation" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Embody Documentation
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/dylanroscover/Embody" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Embody
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../embody/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Embody
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Embody
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embody/getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embody/externalization/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Externalization
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embody/keyboard-shortcuts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keyboard Shortcuts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embody/manager-ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Manager UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embody/supported-formats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Supported Formats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embody/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embody/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../envoy/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Envoy
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Envoy
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envoy/setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envoy/claude-code/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Claude Code Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envoy/tools-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envoy/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../envoy/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../tdn/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TDN
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    TDN
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tdn/specification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Specification
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tdn/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JSON Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tdn/import-export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Import & Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tdn/examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../td-development/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    TD Development
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    TD Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../td-development/extensions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Extensions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../td-development/parameters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../td-development/threading/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Threading
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../td-development/common-mistakes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Common Mistakes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Changelog
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#v50258" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.258
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50252" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.252
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50251" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.251
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50247" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.247
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50243" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.243
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50237" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.237
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50235" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.235
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50233" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.233
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50229" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.229
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50228" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.228
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50227" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.227
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.222
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50221" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.221
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50220" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.220
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50217" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.217
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50210" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.210
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50208" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.208
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50207" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.207
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50206" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.206
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50205" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.205
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50204" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.204
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50203" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.203
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50201" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.201
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50190" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.190
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50178" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.178
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50171" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.171
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50163" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.163
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50140" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.140
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50130" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.130
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5093" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.93
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5086" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.86
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5071" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.71
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5061" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.61
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5059" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.59
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5056" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.56
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4714" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.14
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4711" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.11
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v476" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.6
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v475" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.5
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v464" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.6.4
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4523" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.23
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4519" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.19
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4517" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.17
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v452" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.2
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44128" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.128
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44127" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.127
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44126" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.126
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44104" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.104
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4474" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.74
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v43128" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.3.128
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v43122" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.3.122
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4343" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.3.43
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v42101" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.2.101
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v400" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.0.0
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v300" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v3.0.0
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#v50258" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.258
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50252" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.252
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50251" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.251
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50247" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.247
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50243" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.243
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50237" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.237
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50235" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.235
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50233" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.233
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50229" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.229
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50228" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.228
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50227" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.227
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50222" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.222
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50221" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.221
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50220" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.220
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50217" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.217
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50210" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.210
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50208" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.208
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50207" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.207
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50206" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.206
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50205" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.205
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50204" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.204
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50203" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.203
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50201" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.201
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50190" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.190
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50178" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.178
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50171" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.171
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50163" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.163
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50140" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.140
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50130" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.130
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5093" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.93
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5086" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.86
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5071" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.71
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5061" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.61
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5059" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.59
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v5056" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0.56
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v50" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v5.0
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4714" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.14
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4711" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.11
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v476" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.6
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v475" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.7.5
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v464" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.6.4
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4523" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.23
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4519" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.19
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4517" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.17
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v452" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.5.2
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44128" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.128
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44127" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.127
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44126" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.126
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v44104" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.104
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4474" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.4.74
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v43128" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.3.128
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v43122" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.3.122
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v4343" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.3.43
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v42101" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.2.101
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v400" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v4.0.0
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#v300" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        v3.0.0
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<h2 id="v50258">v5.0.258<a class="headerlink" href="#v50258" title="Permanent link">&para;</a></h2>
+<p>Multi-instance Envoy support, auto-suffix collision avoidance, <code>switch_instance</code> bridge meta-tool.</p>
+<ul>
+<li><strong>Multi-instance port allocation</strong>: Envoy now scans a 10-port range (<code>base</code> through <code>base+9</code>) when the preferred port is occupied by another instance. Each TD instance gets its own port automatically — up to 10 simultaneous instances per base port</li>
+<li><strong>Instance registry collision avoidance</strong>: <code>_instanceKey()</code> now checks PID liveness before reusing a registry key. When the same <code>.toe</code> file is opened in multiple instances, keys are auto-suffixed (<code>MyProject</code>, <code>MyProject-2</code>, etc.). Stale entries with dead PIDs are reclaimed automatically</li>
+<li><strong><code>Envoyinstancename</code> parameter</strong>: Optional custom name for the Envoy instance registry. Overrides the auto-generated key from the <code>.toe</code> filename — useful for predictable <code>switch_instance</code> targets</li>
+<li><strong><code>switch_instance</code> bridge meta-tool</strong>: List all registered TD instances or switch the bridge to a different running instance. Redirects the bridge's HTTP target in-memory for instant switching with no restart</li>
+<li><strong><code>_findAvailablePort()</code> refactor</strong>: Extracted port-scanning logic from <code>Start()</code> into a dedicated method. Replaces the recursive retry loop with a clean single-pass scan</li>
+<li><strong>Atomic JSON writes</strong>: New <code>_atomicWriteJSON()</code> method for <code>.envoy.json</code> writes — uses temp file + <code>os.replace()</code> with Windows <code>PermissionError</code> retry to prevent corruption under concurrent access</li>
+<li><strong>Graceful shutdown via MCP</strong>: Documented <code>project.quit()</code> as the preferred way to close TD instances programmatically — triggers <code>onDestroyTD</code> for clean deregistration</li>
+<li><strong>Multi-instance documentation</strong>: New <code>/multi-instance</code> skill, updated architecture docs, setup guide, Claude Code integration docs, troubleshooting entries, and tools reference. All surfaces document <code>switch_instance</code>, port allocation, instance registry, and same-project behavior</li>
+</ul>
+<h2 id="v50252">v5.0.252<a class="headerlink" href="#v50252" title="Permanent link">&para;</a></h2>
+<p>Windows process-kill fix, reconstruction verification fix.</p>
+<ul>
+<li><strong>Windows <code>is_process_alive()</code> fix</strong>: <code>os.kill(pid, 0)</code> on Windows calls <code>TerminateProcess()</code>, killing TouchDesigner instead of checking liveness. Every <code>get_td_status</code>, <code>launch_td</code>, and <code>restart_td</code> call terminated TD on Windows. Now uses <code>OpenProcess(SYNCHRONIZE)</code> via ctypes on Windows, preserving the Unix signal-0 path for macOS/Linux</li>
+<li><strong>Reconstruction verification fix</strong>: <code>_verifyReconstructedComp()</code> accessed <code>child.errors</code> and <code>child.warnings</code> as properties instead of calling them as methods (<code>child.errors()</code>, <code>child.warnings()</code>). This caused <code>'builtin_function_or_method' object has no attribute 'split'</code> warnings on every TDN reconstruction — error and warning checking was silently skipped</li>
+<li><strong>New tests</strong>: 2 Windows <code>is_process_alive</code> tests (mocked OpenProcess for live and dead PIDs). 39 test suites total</li>
+</ul>
+<h2 id="v50251">v5.0.251<a class="headerlink" href="#v50251" title="Permanent link">&para;</a></h2>
+<p>Nested TDN child-skip on import, depth-sorted reconstruction ordering, material reference fix.</p>
+<ul>
+<li><strong>Nested TDN child-skip during import</strong>: When a parent TDN contains children for a child COMP that has its own TDN externalization entry, the child's <code>children</code> array is now skipped during import. The child COMP shell is still created, but its internal network is left to its own <code>.tdn</code> file — preventing stale parent snapshots from overwriting updated child networks. New <code>_getTDNExternalizedPaths()</code> and <code>_stripNestedTDNChildren()</code> helper methods handle detection and recursive stripping</li>
+<li><strong>Depth-sorted TDN reconstruction</strong>: <code>_getTDNStrategyComps()</code> now sorts entries by path depth (fewest segments first), ensuring parents are always imported before their children during project-open reconstruction. Combined with the child-skip logic, each COMP's network is populated exactly once from its authoritative <code>.tdn</code> file</li>
+<li><strong>Import input validation</strong>: <code>ImportNetwork()</code> now validates that <code>operators</code> is a list, returning a clear error instead of failing cryptically on malformed input</li>
+<li><strong>Material reference test fix</strong>: Corrected <code>test_T07_geometry_material_roundtrip</code> to use <code>./my_mat</code> (child reference) instead of <code>my_mat</code> (sibling reference), which was unresolvable from inside the geometryCOMP</li>
+<li><strong><code>assertAlmostEqual</code> added to test framework</strong>: TestRunnerExt now supports <code>assertAlmostEqual(first, second, places=7, delta=None)</code> for floating-point comparisons</li>
+<li><strong>TDN spec updated</strong>: New "Nested TDN-Externalized COMPs" section documents the child-skip behavior, import/export semantics, and reconstruction ordering</li>
+<li><strong>Externalizations table cleanup</strong>: Removed stale test entries (tdn_geo_test, tdn_deep, etc.) from tracking table</li>
+<li><strong>New tests</strong>: 4 nested TDN child-skip tests (Section U: skip children of TDN-externalized COMPs, import non-TDN children normally, depth sorting verification, deeply nested skip). 39 test suites total</li>
+</ul>
+<h2 id="v50247">v5.0.247<a class="headerlink" href="#v50247" title="Permanent link">&para;</a></h2>
+<p>Default-child cleanup on TDN import, nested TDN save-cycle fix, SOP-to-COMP connection hardening.</p>
+<ul>
+<li><strong>Clear auto-created defaults on COMP creation during import</strong>: When TDN import creates a COMP (e.g. geometryCOMP) that has inline children defined, auto-created default children (e.g. Torus POP) are now destroyed before recursing into the TDN children. Previously, default children persisted alongside imported ones because they were filtered out during export (<code>_TRIVIAL_KEYS</code>) and never visited during import. Verified at 10 levels of nesting depth</li>
+<li><strong>Nested TDN strip/restore ordering</strong>: Save cycle now strips deepest-first and restores shallowest-first. Previously, stripping a parent TDN COMP destroyed nested TDN COMPs before they could be tracked, so post-save restore never rebuilt them — leaving default children instead of the correct TDN contents</li>
+<li><strong>SOP-to-COMP connection fallback</strong>: <code>_wireConnectionList</code> now bounds-checks <code>inputConnectors</code> before indexing and falls back to <code>inputCOMPConnectors</code> for COMPs that accept SOP/TOP/CHOP wire inputs where connectors may not be populated immediately after creation</li>
+</ul>
+<h2 id="v50243">v5.0.243<a class="headerlink" href="#v50243" title="Permanent link">&para;</a></h2>
+<p>Headless smoke testing, file cleanup preferences, specialized COMP support, portable .tox hardening, bridge project_path override.</p>
+<ul>
+<li><strong><code>_messageBox</code> auto-response system</strong>: Dialog calls can be intercepted by seeding <code>_smoke_test_responses</code> in storage, enabling fully headless smoke testing of Embody's init sequence including Envoy opt-in and re-scan prompts. Responses are consumed on use</li>
+<li><strong>File cleanup preference</strong>: New <code>Filecleanup</code> parameter (ask/keep/delete) controls whether external files are deleted when un-tagging operators. "Always Keep" and "Always Delete" options persist the choice</li>
+<li><strong>TDN default child filtering</strong>: Uncustomized auto-created children (e.g. <code>torus1</code> inside a geometryCOMP) are now skipped during export — they carry only trivial keys (name, type, position, size) and TD recreates them on COMP creation</li>
+<li><strong>Portable .tox export hardening</strong>: <code>ExportPortableTox</code> now strips the target COMP's own <code>externaltox</code>/<code>enableexternaltox</code> params (not just descendants) and handles the <code>syncfile</code> parameter, preventing baked-in references from confusing recipients</li>
+<li><strong>Bridge <code>project_path</code> override</strong>: <code>launch_td</code> and <code>restart_td</code> meta-tools accept an optional <code>project_path</code> parameter to open a different <code>.toe</code> file, resolved relative to the git root</li>
+<li><strong>Envoy start deferred</strong>: <code>parexec.py</code> defers <code>Start()</code> by 5 frames so <code>onCreate</code> has time to suppress baked-in <code>Envoyenable=True</code> before the server launches</li>
+<li><strong>SCM directory protection</strong>: <code>deleteEmptyDirectories</code> and <code>_cleanupFolder</code> now skip <code>.git</code>, <code>.svn</code>, and <code>.hg</code> directories</li>
+<li><strong>Cross-platform temp paths</strong>: All Envoy temp file operations use <code>tempfile.gettempdir()</code> instead of hardcoded <code>/tmp</code></li>
+<li><strong><code>findChildren()</code> fix</strong>: Two calls using invalid <code>depth=-1</code> corrected to <code>findChildren()</code> (unlimited depth is the default)</li>
+<li><strong>AGENTS.md rewrite</strong>: Condensed from verbose rule duplication into a concise universal AI instructions file</li>
+<li><strong>ENVOY.md updated</strong>: TDN-first rule added, skill prerequisites section, verify-TD-claims rule</li>
+<li><strong>Release smoke test infrastructure</strong>: Bootstrap script (<code>smoke_bootstrap.py</code>) and template <code>.toe</code> for E2E release testing</li>
+<li><strong>New tests</strong>: 22 smoke release tests (post-init state, <code>_messageBox</code> mechanism, <code>_promptEnvoy</code> auto-response, Envoy state), 9 specialized COMP roundtrip tests (geometryCOMP children, flags, materials, strip/restore; cameraCOMP; lightCOMP). 39 test suites total</li>
+</ul>
+<h2 id="v50237">v5.0.237<a class="headerlink" href="#v50237" title="Permanent link">&para;</a></h2>
+<p>TDN v1.1 format with target COMP metadata, import error surfacing, MCP permissions documentation, save-cycle pane restoration, git init error dialog, Envoy troubleshooting docs.</p>
+<ul>
+<li><strong>TDN v1.1 format</strong>: Exports now include the target COMP's <code>type</code>, <code>flags</code>, <code>color</code>, <code>tags</code>, <code>comment</code>, and <code>storage</code> at the top level. On import, type mismatches produce a warning. Existing v1.0 files remain fully importable</li>
+<li><strong>Locked non-DAT operator warning</strong>: Export and import now detect locked TOPs, CHOPs, and SOPs and warn that their frozen data won't survive a TDN round-trip. Documented in spec and externalization docs</li>
+<li><strong>Import error surfacing</strong>: <code>ImportNetwork()</code> and <code>ImportNetworkFromFile()</code> now set <code>ui.status</code> on failure, so TD users see errors in the status bar — not just in logs or MCP responses</li>
+<li><strong>MCP auto-authorization documented</strong>: The Envoy enable dialog now informs users that all MCP tools are auto-authorized and points to <code>.claude/settings.local.json</code> for adjustments. New "MCP Tool Permissions" section added to Envoy setup docs</li>
+<li><strong>Save-cycle pane restoration</strong>: When TDN strip/restore runs during project save, pane owners inside TDN COMPs are now saved before stripping and restored after import — no more orphaned panes</li>
+<li><strong>Git init error dialog</strong>: If <code>git init</code> fails during Envoy setup, a <code>ui.messageBox</code> now shows the error and manual fix instructions instead of silently falling through</li>
+<li><strong>Envoy troubleshooting docs</strong>: New troubleshooting page covering server startup failures, connection issues, git init problems, and log file locations</li>
+<li><strong>Dialog sequencing fix</strong>: The Envoy opt-in prompt now waits for all other init dialogs (deprecated patterns, re-scan) to resolve before appearing</li>
+<li><strong>TDN reconstruction uses type from file</strong>: <code>ReconstructTDNComps()</code> now reads the <code>type</code> field from v1.1 <code>.tdn</code> files when creating missing COMP shells, so the correct COMP type (geometryCOMP, containerCOMP, etc.) is used instead of defaulting to baseCOMP</li>
+<li><strong>New tests</strong>: Locked non-DAT warning test, target COMP metadata preservation tests (6 tests for type, flags, color, tags, comment, storage round-trips)</li>
+</ul>
+<h2 id="v50235">v5.0.235<a class="headerlink" href="#v50235" title="Permanent link">&para;</a></h2>
+<p><code>restart_td</code> bridge meta-tool, local MCP handshake when TD is down, operator overlap warnings, layout rules hardening.</p>
+<ul>
+<li><strong><code>restart_td</code> bridge meta-tool</strong>: Gracefully quits TouchDesigner and relaunches with the project's <code>.toe</code> file. Sends platform-appropriate quit signal, waits for exit (force-kills if needed), then relaunches and waits for Envoy. Crash-loop aware — respects the existing 3-in-5-minutes limit</li>
+<li><strong>Local MCP handshake when TD is down</strong>: The STDIO bridge now handles <code>initialize</code>, <code>notifications/initialized</code>, and <code>tools/list</code> locally when Envoy is unreachable, so Claude Code always completes the MCP setup and discovers bridge meta-tools without waiting for a connection timeout</li>
+<li><strong><code>set_op_position</code> overlap warning</strong>: After repositioning an operator, EnvoyExt checks for bounding-box overlaps with siblings (20-unit margin) and returns an <code>overlap_warning</code> field naming the conflicting operators</li>
+<li><strong>Layout rules hardening</strong>: Network-layout and create-operator rules now require dimension-aware spacing (<code>nodeWidth</code>/<code>nodeHeight</code> from <code>get_network_layout</code>), forward-flow wire direction, and flag the fixed-offset anti-pattern. OP-reference parameter values section added to parameter rules</li>
+<li><strong>Bridge meta-tools documented</strong>: Architecture, setup, claude-code, and tools-reference docs updated with STDIO bridge section, <code>.envoy.json</code> config reference, and meta-tool catalog</li>
+</ul>
+<h2 id="v50233">v5.0.233<a class="headerlink" href="#v50233" title="Permanent link">&para;</a></h2>
+<p>Project-level performance monitoring, pre-handoff validation, Envoy bridge hardening, test runner dialog fix.</p>
+<ul>
+<li><strong><code>get_project_performance</code> MCP tool</strong>: Reads a permanent Perform CHOP inside Embody to report FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temperature, and optional COMP hotspot ranking by cook time</li>
+<li><strong><code>/validate</code> command</strong>: Pre-handoff checklist that snapshots performance, scans for errors, checks externalization health, evaluates thresholds, and reports a PASS/WARN/FAIL verdict with hotspot analysis</li>
+<li><strong>Test runner dialog fix</strong>: <code>Filecleanup</code> parameter is now suppressed to <code>delete</code> during test runs (save/restore across all entry points), preventing modal "Removed Operator Detected" dialogs from blocking test execution</li>
+<li><strong>Continuity check sandbox filtering</strong>: Path-based filtering for test sandbox operators as a second safety layer — sandbox ops are silently filtered even when the <code>_running</code> flag isn't active (handles reinit, between-suite gaps, post-failure)</li>
+<li><strong>Envoy bridge hardening</strong>: <code>.envoy.json</code> project config for bridge launcher, venv Python preference over system Python, stale process cleanup with orphan watchdog</li>
+</ul>
+<h2 id="v50229">v5.0.229<a class="headerlink" href="#v50229" title="Permanent link">&para;</a></h2>
+<p>Warning support in <code>get_op_errors</code>, Envoy enable dialog improvement, cleanup.</p>
+<ul>
+<li><strong><code>get_op_errors</code> now returns warnings</strong>: The MCP tool calls both <code>OP.errors()</code> and <code>OP.warnings()</code>, returning structured <code>warnings</code>/<code>warningCount</code>/<code>hasWarnings</code> fields alongside existing error data. Cook dependency loops and other TD warnings are now surfaced to AI clients</li>
+<li><strong>Envoy enable dialog note</strong>: The first-run dialog now mentions that TD will be briefly unresponsive during dependency installation</li>
+<li><strong>Cleanup</strong>: Removed stale <code>base_tox.tdn</code> and test externalization entries from tracking table</li>
+</ul>
+<h2 id="v50228">v5.0.228<a class="headerlink" href="#v50228" title="Permanent link">&para;</a></h2>
+<p>macOS timezone fix, toolbar hover highlight.</p>
+<ul>
+<li><strong>macOS timezone abbreviation fix</strong>: Local timestamp display in the manager list now shortens verbose macOS timezone names (e.g. "Pacific Daylight Time" → "PDT") by extracting initials</li>
+<li><strong>Toolbar hover highlight</strong>: Container right toolbar button background color now uses an expression to brighten on hover</li>
+</ul>
+<h2 id="v50227">v5.0.227<a class="headerlink" href="#v50227" title="Permanent link">&para;</a></h2>
+<p>TDN crash safety, atomic writes, content-equal skip, About page filtering.</p>
+<ul>
+<li><strong>Atomic TDN writes</strong>: <code>TDNExt._safe_write_tdn</code> now writes via temp file + <code>os.replace</code> + <code>fsync</code> to prevent partial writes corrupting <code>.tdn</code> files on crash or power loss</li>
+<li><strong>Backup rotation</strong>: Before each write, <code>.tdn</code> files are copied to <code>.tdn_backup/</code> (<code>.bak</code> and <code>.bak2</code> generations). <code>.tdn_backup/</code> is git-ignored</li>
+<li><strong>Post-write validation</strong>: After each atomic write, the file is read back and parsed. If validation fails, the previous backup is automatically restored</li>
+<li><strong>Rollback on reconstruction failure</strong>: <code>ReconstructTDNComps</code> and <code>onProjectPostSave</code> now attempt rollback from <code>.bak</code> if reconstruction fails after import</li>
+<li><strong>Content-equal skip</strong>: Pre-save export compares new TDN content against the existing file (ignoring volatile header fields: <code>build</code>, <code>generator</code>, <code>td_build</code>, <code>exported_at</code>). Unchanged COMPs are skipped, eliminating noisy git diffs</li>
+<li><strong>Structural dirty detection</strong>: <code>Refresh</code> now detects structural changes in TDN-strategy COMPs (not just parameter changes) and triggers <code>SaveTDN</code> when children are added/removed/renamed</li>
+<li><strong>About page filtering</strong>: <code>Build</code>, <code>Date</code>, and <code>Touchbuild</code> parameters are excluded from TDN export and reconstructed from <code>externalizations.tsv</code> at import time via <code>_reconstructAboutPage</code>. Prevents version metadata from polluting TDN diffs</li>
+<li><strong>Continuity dialog suppression</strong>: File cleanup dialog is suppressed when the test runner is active, preventing modal spam during rapid operator create/destroy cycles</li>
+<li><strong>Continuity check fix</strong>: Individually-externalized children are only skipped if the parent TDN COMP is completely absent (crash recovery). If the parent exists but is empty, genuine deletions are detected normally</li>
+<li><strong>Rules frontmatter strip</strong>: <code>_writeTemplate</code> now strips YAML frontmatter before writing rules to user projects (Claude Code doesn't read frontmatter in <code>.claude/rules/</code>)</li>
+<li><strong>New test suite</strong>: <code>test_tdn_crash_safety.py</code> — atomic write behavior, backup rotation, post-write validation, failure injection, and stress tests (37 total suites)</li>
+<li><strong>Expanded test coverage</strong>: <code>test_tdn_helpers.py</code> adds <code>_tdn_content_equal</code> and <code>_read_existing_tdn</code> tests; <code>test_tdn_reconstruction.py</code> adds S-series About page filtering tests</li>
+</ul>
+<h2 id="v50222">v5.0.222<a class="headerlink" href="#v50222" title="Permanent link">&para;</a></h2>
+<p>Rename <code>tag_for_externalization</code> to <code>externalize_op</code>, clarify single-step workflow.</p>
+<ul>
+<li><strong>MCP tool rename</strong>: <code>tag_for_externalization</code> → <code>externalize_op</code> across EnvoyExt, docs, skills, templates, and settings. The new name better reflects that the tool tags AND writes to disk in one step</li>
+<li><strong>Externalize workflow clarification</strong>: Skill and docs now explain that <code>externalize_op</code> is a single-step operation (no separate <code>save_externalization</code> needed), and that <code>save_externalization</code> is for re-exporting already-externalized operators</li>
+<li><strong>Test updates</strong>: Renamed test methods and references to match new tool name</li>
+</ul>
+<h2 id="v50221">v5.0.221<a class="headerlink" href="#v50221" title="Permanent link">&para;</a></h2>
+<p>TDN annotation properties, GitHub release rule, templates cleanup.</p>
+<ul>
+<li><strong>TDN annotation properties</strong>: Export and import now support <code>backAlpha</code>, <code>titleHeight</code>, and <code>bodyFontSize</code> annotation parameters, preserving non-default values through TDN round-trips</li>
+<li><strong>GitHub release rule</strong>: New <code>.claude/rules/github-release.md</code> with post-push workflow for detecting release artifacts, extracting version from changelog, and creating GitHub releases via <code>gh</code> CLI. Added to <code>EmbodyExt._TEMPLATE_MAP_RULES</code> for auto-deployment, template synced, release-commits.md updated with mapping</li>
+<li><strong>Templates TDN cleanup</strong>: Annotations in <code>templates.tdn</code> now use the native annotation format instead of being represented as annotateCOMP operators. Removed <code>annotateCOMP</code> type defaults and <code>par_templates</code> section. Expanded Rule Templates annotation to accommodate new template DAT</li>
+</ul>
+<h2 id="v50220">v5.0.220<a class="headerlink" href="#v50220" title="Permanent link">&para;</a></h2>
+<p>Network layout rule rewrite, commit-push checklist, expanded settings template, tooltip fix.</p>
+<ul>
+<li><strong>Network layout rule rewrite</strong>: Replaced verbose placement rules with a concise 7-step placement procedure, added anti-patterns section and complexity thresholds for when to encapsulate into COMPs. Template synced</li>
+<li><strong>Commit-push checklist rule</strong>: New <code>.claude/rules/commit-push-checklist.md</code> enforcing change evaluation, doc audit, test audit, and release detection before every commit. Added to <code>EmbodyExt._TEMPLATE_MAP_RULES</code> for auto-deployment, template synced, release-commits.md updated with mapping</li>
+<li><strong>Expanded MCP tool allowlist</strong>: Settings template (<code>text_settings_local.json</code>) now includes all 42 MCP tools sorted alphabetically, instead of only read-only tools</li>
+<li><strong>Tooltip fix</strong>: Toolbar tooltip text changed from "Refresh tracking state" to "Clear filter" with repositioned widget</li>
+<li><strong>Parameters template BOM fix</strong>: Restored missing BOM marker on <code>text_rule_parameters.md</code></li>
+</ul>
+<h2 id="v50217">v5.0.217<a class="headerlink" href="#v50217" title="Permanent link">&para;</a></h2>
+<p>TDN target COMP parameter preservation, user-prompted file cleanup, dock safety, companion reuse fix, git init hardening.</p>
+<ul>
+<li><strong>Target COMP parameter preservation</strong>: TDN export now captures the target COMP's own custom parameters (<code>custom_pars</code>) and non-default built-in parameters (<code>parameters</code>) at the root level of the TDN document. Import restores these in a new Phase 9 after child creation, so extension reinit doesn't clobber custom par values. 5 new tests cover roundtrip survival of custom pars, expressions, built-in params, bare shell creation, and backward compatibility</li>
+<li><strong>Help text in TDN</strong>: Custom parameter definitions now export and import <code>help</code> tooltip text. TDN schema and specification updated with the new <code>help</code> field</li>
+<li><strong>User-prompted file cleanup</strong>: When the continuity check detects externalized operators removed from the network whose backing files still exist on disk, Embody now prompts the user to keep or delete the files instead of silently skipping. Supports "Always Keep" / "Always Delete" persistent preferences via the new <code>Filecleanup</code> parameter</li>
+<li><strong>Dock safety on destroy</strong>: Both <code>_clearChildren</code> (EmbodyExt) and TDN import (<code>clear_first</code>) now clear <code>child.dock = None</code> before destroying child operators, preventing uncatchable <code>tdError</code> when a dock target is destroyed before its docked operator</li>
+<li><strong>Companion reuse fix</strong>: <code>_createOps</code> now tracks pre-existing operator names to distinguish them from auto-created companions during merge imports. Prevents merge (non-<code>clear_first</code>) imports from incorrectly reusing operators that existed before import started</li>
+<li><strong>Git init hardening</strong>: <code>_ensureGitRepo</code> strips <code>GIT_DIR</code>, <code>GIT_WORK_TREE</code>, and other git env vars before <code>git init</code> to prevent broken repos caused by TD's embedded Python environment. Verifies the init with <code>git rev-parse</code> and retries on failure</li>
+<li><strong><code>attrs&lt;25</code> version pin</strong>: MCP dependency install now pins <code>attrs&lt;25</code> to avoid conflicts with TD's bundled <code>attr</code> module. Startup detects and downgrades attrs 25.x automatically</li>
+<li><strong>Tagger refactoring</strong>: Extracted <code>_removeExternalization</code> (no-dialog removal) and <code>_dispatchTaggerButton</code> (label-based routing for manage-mode buttons) from inline handler code</li>
+<li><strong><code>RemoveListerRow</code> / <code>_removeTDNStrategy</code></strong>: Now accept <code>delete_file</code> parameter to optionally preserve files on disk when removing tracking entries</li>
+<li><strong>Parameter rules</strong>: New dedicated <code>.claude/rules/parameters.md</code> covering help text, sections, naming, ranges, styles, and page organization. <code>td-python.md</code> now points to it. TD API reference skill updated with post-creation property examples</li>
+<li><strong>New tests</strong>: <code>test_strategy_handlers.py</code> with 15 tests covering <code>_removeExternalization</code>, <code>HandleStrategySwitch</code>, <code>_dispatchTaggerButton</code>, and manage-mode button dispatch. <code>test_mcp_externalization.py</code> gains tearDown cleanup for sandbox entries</li>
+</ul>
+<h2 id="v50210">v5.0.210<a class="headerlink" href="#v50210" title="Permanent link">&para;</a></h2>
+<p>DAT restoration on startup, continuity check hardening, manager list row limiting.</p>
+<ul>
+<li><strong>Automatic DAT restoration</strong>: New <code>RestoreDATs()</code> method recreates missing DAT-strategy operators from externalized files on project open (frame 50). Controlled by <code>Datrestoreonstart</code> parameter. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs</li>
+<li><strong>Continuity check hardening</strong>: Before removing entries for missing operators, checks if the backing file exists on disk — recoverable entries are preserved for restoration instead of being deleted</li>
+<li><strong>Manager list row limiting</strong>: Tree starts collapsed by default. LRU-based auto-collapse keeps visible rows under 100, protecting the active branch from being collapsed</li>
+<li><strong>TDN structural cleanup</strong>: toolbar.tdn and tagger.tdn shed embedded child definitions in favor of externalized <code>.tdn</code> files — smaller diffs, cleaner hierarchy</li>
+<li><strong>base_test converted to TDN</strong>: Replaced binary <code>base_test.tox</code> with <code>base_test.tdn</code> for diffability</li>
+<li><strong>text_claude.md relocated</strong>: Template moved from <code>Embody/</code> root into <code>Embody/templates/</code> alongside other template DATs</li>
+<li><strong>New tests</strong>: <code>test_dat_restoration.py</code> with 13 tests covering DAT restoration, skip conditions, and continuity check recovery</li>
+</ul>
+<h2 id="v50208">v5.0.208<a class="headerlink" href="#v50208" title="Permanent link">&para;</a></h2>
+<p>Settings auto-deploy, bridge template, Envoy startup resilience.</p>
+<ul>
+<li><strong>settings.local.json auto-deploy</strong>: Read-only MCP tool permissions deployed automatically on Envoy startup</li>
+<li><strong>Bridge script template</strong>: <code>text_envoy_bridge.py</code> and settings template moved into the templates COMP for centralized management</li>
+<li><strong>Envoy startup resilience</strong>: <code>_upgradeEnvoy()</code> failure no longer blocks MCP server startup</li>
+<li><strong><code>.gitignore</code> managed entries</strong>: Expanded auto-managed entries to include <code>Backup/</code>, <code>logs/</code>, <code>CrashAutoSave*</code></li>
+</ul>
+<h2 id="v50207">v5.0.207<a class="headerlink" href="#v50207" title="Permanent link">&para;</a></h2>
+<p>Claude Code integration docs, slash commands, CLAUDE.md deduplication.</p>
+<ul>
+<li><strong>Claude Code Integration docs</strong>: New <a href="../envoy/claude-code/">documentation page</a> covering the generated <code>.claude/</code> directory — rules, skills, slash commands, and customization</li>
+<li><strong>Slash commands</strong>: Added <code>/run-tests</code>, <code>/status</code>, and <code>/explore-network</code> commands to <code>.claude/commands/</code> for common workflows</li>
+<li><strong>CLAUDE.md deduplication</strong>: Moved rules that were restated in both <code>CLAUDE.md</code> and <code>.claude/rules/</code> into rules only — reduced critical rules from 15 to 9. Skill prerequisites moved to dedicated <code>skill-prerequisites.md</code> rule</li>
+<li><strong>Getting Started update</strong>: <code>.gitignore</code> documentation updated to reflect specific <code>.claude/</code> entries instead of blanket directory exclusion</li>
+</ul>
+<h2 id="v50206">v5.0.206<a class="headerlink" href="#v50206" title="Permanent link">&para;</a></h2>
+<p>Metadata reconciliation, network layout tool, save_externalization fix.</p>
+<ul>
+<li><strong>Metadata reconciliation</strong>: New <code>ReconcileMetadata()</code> method runs at frame 75 on project open — re-applies tags, colors, file parameters, and readOnly flags to operators that exist in the externalizations table but lost their in-memory metadata (e.g. when TD was closed without saving after tagging)</li>
+<li><strong><code>get_network_layout</code> MCP tool</strong>: Returns positions and sizes of all operators and annotations in a COMP in a single call — replaces the need for repeated <code>get_op_position</code> calls. Includes bounding box calculation</li>
+<li><strong><code>save_externalization</code> fix</strong>: Now correctly handles TDN-strategy COMPs (calls <code>SaveTDN</code>) and file-synced DATs, instead of blindly calling <code>Save()</code> which only works for TOX-strategy COMPs</li>
+<li><strong><code>Save()</code> guard</strong>: Validates target is a COMP before proceeding — prevents cryptic errors on non-COMP operators</li>
+</ul>
+<h2 id="v50205">v5.0.205<a class="headerlink" href="#v50205" title="Permanent link">&para;</a></h2>
+<p>Fix companion DAT duplication during TDN strip/restore save cycle.</p>
+<ul>
+<li><strong>Companion DAT reuse on import</strong>: <code>_createOps</code> now detects auto-created companion DATs (timerCHOP callbacks, rampTOP keys, etc.) and reuses them instead of creating duplicates that accumulate on each save</li>
+<li><strong>Duplicate companion cleanup on export</strong>: <code>_exportChildren</code> detects and skips accumulated companion duplicates (e.g. <code>timer1_callbacks1</code>, <code>timer1_callbacks2</code>) using docking-based detection — existing <code>.tdn</code> files self-clean on next save</li>
+</ul>
+<h2 id="v50204">v5.0.204<a class="headerlink" href="#v50204" title="Permanent link">&para;</a></h2>
+<p>Custom window header, path portability, TDN template cleanup.</p>
+<ul>
+<li><strong>Custom window header</strong>: Replaced <code>widgetCOMP</code> clone of TDBasicWidgets with a lightweight <code>containerCOMP</code> + <code>WindowHeaderExt</code> extension — minimize/maximize/close with hover-based button detection, no palette dependency</li>
+<li><strong>Absolute path elimination</strong>: Replaced hardcoded <code>/embody/...</code> paths with relative expressions (<code>=op('container_left')</code>, <code>=me.op('externalizations')</code>, etc.) in toolbar and root TDN files for full portability</li>
+<li><strong>TDN template cleanup</strong>: Removed unused <code>type_defaults</code> entries (baseCOMP, panelexecuteDAT, constantTOP, opexecuteDAT) and stale custom par pages (settings_2, expressions) from Embody.tdn — smaller, cleaner exports</li>
+<li><strong>EmbodyExt.py</strong>: <code>self.ownerComp.path</code> → <code>self.my.path</code> for consistency with codebase conventions</li>
+</ul>
+<h2 id="v50203">v5.0.203<a class="headerlink" href="#v50203" title="Permanent link">&para;</a></h2>
+<p>Multi-client AI config, TDN docking, robust init.</p>
+<h2 id="v50201">v5.0.201<a class="headerlink" href="#v50201" title="Permanent link">&para;</a></h2>
+<p>Robust first-install init, table schema expansion, release build hardening.</p>
+<ul>
+<li><strong>Automatic init on drop</strong>: <code>onCreate()</code> now disables Envoy before the table exists (prevents premature git-root detection), creates the externalizations table at frame 15, then runs <code>Verify()</code> at frame 30 — all fully async and idempotent</li>
+<li><strong><code>CreateExternalizationsTable()</code> (new public method)</strong>: Safe to call at any time. No-op if the table is already connected; reconnects to a surviving sibling after an upgrade without duplicating; creates fresh only when truly absent. Also wired to the <strong>Create Externalizations Table</strong> pulse parameter</li>
+<li><strong><code>Verify()</code> — two-scenario detection</strong>: Fresh install (empty table) runs <code>UpdateHandler</code> quietly and offers Envoy opt-in. Upgrade (table has prior data) prompts a re-scan dialog before offering Envoy opt-in</li>
+<li><strong>Externalizations table schema</strong>: Added <code>strategy</code>, <code>node_x</code>, <code>node_y</code>, and <code>node_color</code> columns. Existing tables are migrated automatically on first open</li>
+<li><strong>Release build</strong>: <code>execute_src_ctrl.py</code> now clears <code>Tdnfile</code> and <code>Networkpath</code> pars before <code>ExportPortableTox()</code> so the baked <code>.tox</code> doesn't carry stale TDN paths into new projects</li>
+</ul>
+<h2 id="v50190">v5.0.190<a class="headerlink" href="#v50190" title="Permanent link">&para;</a></h2>
+<p>Automatic restoration, documentation overhaul.</p>
+<ul>
+<li><strong>Automatic restoration</strong>: TOX-strategy COMPs are restored from <code>.tox</code> files and TDN-strategy COMPs are reconstructed from <code>.tdn</code> files on project open — users no longer need to save their <code>.toe</code> to preserve externalized work</li>
+<li><strong>Documentation overhaul</strong>: Updated all documentation (README, docs site, help text, CLAUDE.md, text_claude.md) to reflect that externalized files on disk are the source of truth, removing outdated <code>ctrl+s</code> save workflow references</li>
+</ul>
+<h2 id="v50178">v5.0.178<a class="headerlink" href="#v50178" title="Permanent link">&para;</a></h2>
+<p>Reload from disk, full project TDN safety, continuity hardening.</p>
+<h2 id="v50171">v5.0.171<a class="headerlink" href="#v50171" title="Permanent link">&para;</a></h2>
+<p>Export Portable Tox, improved tag management, TDN error handling, window management refactor.</p>
+<ul>
+<li><strong>Export Portable Tox</strong>: New <code>ExportPortableTox()</code> method exports any COMP as a self-contained <code>.tox</code> with all external file references and Embody tags stripped. Available from the Manager UI Actions menu and used automatically for release builds</li>
+<li><strong>Improved tag stripping</strong>: Disable now sweeps all project operators for stale Embody tags, not just tracked ones</li>
+<li><strong>TDN error handling</strong>: <code>ImportNetworkFromFile</code> now returns structured error dicts instead of <code>None</code> on failure</li>
+<li><strong>TDN per-COMP split</strong>: Refactored <code>_splitPerComp</code> into a reusable static method</li>
+<li><strong>Window management</strong>: Tagging menu and manager UI refactored into standalone window COMPs (<code>window_tagging_menu</code>, <code>window_manager</code>)</li>
+<li><strong>Keyboard shortcut update</strong>: <code>lctrl-lctrl</code> now shows an Actions menu for already-tagged operators (tag, retag, export portable tox, etc.)</li>
+<li><strong>Release build</strong>: <code>execute_src_ctrl.py</code> now uses <code>ExportPortableTox()</code> instead of raw <code>comp.save()</code> for portable release <code>.tox</code> files</li>
+<li><strong>Test fixes</strong>: Updated test_custom_parameters (synchronous <code>ReexportAllTDNs</code> call, Envoy transitional state handling) and test_tdn_reconstruction (improved continuity check distinguishing pure TDN children from individually-externalized ones)</li>
+</ul>
+<h2 id="v50163">v5.0.163<a class="headerlink" href="#v50163" title="Permanent link">&para;</a></h2>
+<p>Re-export TDN files for list, manager, and container_right after param changes.</p>
+<h2 id="v50140">v5.0.140<a class="headerlink" href="#v50140" title="Permanent link">&para;</a></h2>
+<p>TDN strip/restore hardening, <code>file</code>/<code>syncfile</code> export, post-import validation, TDN restore UI, companion DAT reuse during import, bug fixes.</p>
+<ul>
+<li>Save-in-progress guard blocks mutating MCP operations during the strip/restore save window</li>
+<li>Pre-save verifies <code>.tdn</code> file exists before stripping children (prevents data loss)</li>
+<li>Post-save tracks restore failures for retry on next project open</li>
+<li><code>file</code> and <code>syncfile</code> parameters now exported in TDN for self-contained externalized DAT round-trips</li>
+<li>New "Restore from TDN" button in tagger actions menu for TDN-strategy COMPs</li>
+<li>Post-import validation checks for missing file references and cook errors</li>
+<li>Companion DATs (auto-created by rampTOP, timerCHOP, etc.) are reused during import instead of creating duplicates</li>
+<li>Component-level TDN files protected from stale-file cleanup during project-level exports</li>
+<li><code>StripCompChildren</code> now destroys annotations and respects Embody protection chain</li>
+<li>UI: midline ellipsis glyph for strategy column, active-menu state tracking, "Tag" label for unexternalized COMPs</li>
+<li>Fixed: <code>SaveDAT()</code> crash (undefined property), <code>_save_externalization</code> type mismatch, duplicate row corruption (missing strategy column)</li>
+</ul>
+<h2 id="v50130">v5.0.130<a class="headerlink" href="#v50130" title="Permanent link">&para;</a></h2>
+<p>TDN strategy externalization, strip/restore save cycle, compact TDN format.</p>
+<ul>
+<li>New externalization strategy: COMPs can use TDN (JSON export/import) instead of TOX, enabling human-readable diffs</li>
+<li>Strip/restore save cycle: TDN-strategy COMP children are stripped before <code>.toe</code> save and reconstructed from <code>.tdn</code> on project open, keeping the <code>.toe</code> small</li>
+<li>Compact TDN format: <code>type_defaults</code> hoists shared parameter values, <code>par_templates</code> deduplicates custom parameter definitions, expression shorthand (<code>=</code> prefix for expressions, <code>~</code> for binds)</li>
+<li>Per-COMP split export mode: large networks export as one <code>.tdn</code> file per COMP for git-friendly directory structures</li>
+<li><code>externalizations.tsv</code> gains <code>strategy</code> column (<code>tox</code>, <code>tdn</code>, <code>py</code>, <code>txt</code>, etc.)</li>
+<li>Continuity check skips TDN-strategy children (lifecycle managed by TDN, not individual externalization)</li>
+<li>30 test suites covering all functionality</li>
+</ul>
+<h2 id="v5093">v5.0.93<a class="headerlink" href="#v5093" title="Permanent link">&para;</a></h2>
+<p>Modular sub-components, TDN snapshots, README rewrite.</p>
+<ul>
+<li>Embody UI refactored into externalized sub-components (toolbar, tagger, manager, window manager)</li>
+<li>TDN network snapshot support added</li>
+<li>README comprehensively rewritten with full feature documentation</li>
+</ul>
+<h2 id="v5086">v5.0.86<a class="headerlink" href="#v5086" title="Permanent link">&para;</a></h2>
+<p>Manager UI refactored into modular externalized components.</p>
+<h2 id="v5071">v5.0.71<a class="headerlink" href="#v5071" title="Permanent link">&para;</a></h2>
+<p>Rename Claudius to Envoy, expand README and help text.</p>
+<h2 id="v5061">v5.0.61<a class="headerlink" href="#v5061" title="Permanent link">&para;</a></h2>
+<p>Rename MCP tools for consistency, add auto-restart on port change, expand testing documentation.</p>
+<h2 id="v5059">v5.0.59<a class="headerlink" href="#v5059" title="Permanent link">&para;</a></h2>
+<p>Migrate tests to externalized DATs, add deferred test runner (one test per frame).</p>
+<h2 id="v5056">v5.0.56<a class="headerlink" href="#v5056" title="Permanent link">&para;</a></h2>
+<p>Rewrite test runner, fix <code>run()</code> safety, add 6 new test suites, update documentation.</p>
+<h2 id="v50">v5.0<a class="headerlink" href="#v50" title="Permanent link">&para;</a></h2>
+<p>Major release — Envoy MCP server, TDN format, comprehensive testing.</p>
+<ul>
+<li><strong>Envoy MCP Server</strong>: 40+ tools for Claude Code integration</li>
+<li><strong>TDN Format</strong>: JSON export/import for operator networks</li>
+<li><strong>Test Framework</strong>: 26 test suites with sandbox isolation</li>
+<li><strong>Structured Logging</strong>: Multi-destination logging system</li>
+<li><strong>CLAUDE.md Auto-Generation</strong>: Project context for AI assistants</li>
+<li><strong>Cross-platform</strong>: macOS support</li>
+</ul>
+<h2 id="v4714">v4.7.14<a class="headerlink" href="#v4714" title="Permanent link">&para;</a></h2>
+<p>Safe file deletion — Embody now only deletes files it created. Untracked files preserved during disable/migration.</p>
+<h2 id="v4711">v4.7.11<a class="headerlink" href="#v4711" title="Permanent link">&para;</a></h2>
+<p>Cross-platform path handling (forward slashes on all platforms) + code cleanup.</p>
+<h2 id="v476">v4.7.6<a class="headerlink" href="#v476" title="Permanent link">&para;</a></h2>
+<p>Build save increment bug fix.</p>
+<h2 id="v475">v4.7.5<a class="headerlink" href="#v475" title="Permanent link">&para;</a></h2>
+<ul>
+<li>ui.rolloverOp refactor</li>
+<li>Restore handling of drag-and-drop COMP auto-populated externaltox pars</li>
+<li>Cache parameters correctly between tox saves</li>
+<li>Parameter updated coloring for dirty buttons in UI</li>
+<li>Path lib implementation improvements</li>
+<li>Auto refresh on UI maximize</li>
+<li>Ignore untagged COMPs when checking for duplicate paths</li>
+</ul>
+<h2 id="v464">v4.6.4<a class="headerlink" href="#v464" title="Permanent link">&para;</a></h2>
+<ul>
+<li>About page on externalized COMPs (Build Number, Touch Build, Build Date)</li>
+<li>Build/Touch Build in externalization table + Lister</li>
+<li>Window resizing support</li>
+</ul>
+<h2 id="v4523">v4.5.23<a class="headerlink" href="#v4523" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Fix deletion of old file storage after renaming</li>
+<li>Network cleanup, tagging optimization</li>
+<li>Fix duplicated rows from git merge conflicts</li>
+</ul>
+<h2 id="v4519">v4.5.19<a class="headerlink" href="#v4519" title="Permanent link">&para;</a></h2>
+<p>Allow master clones with clone pars to be externalized. Setup menu cleanup.</p>
+<h2 id="v4517">v4.5.17<a class="headerlink" href="#v4517" title="Permanent link">&para;</a></h2>
+<p>Bug fixes, smaller minimized window footprint.</p>
+<h2 id="v452">v4.5.2<a class="headerlink" href="#v452" title="Permanent link">&para;</a></h2>
+<ul>
+<li>TSV support</li>
+<li>Clone tag for shared external paths</li>
+<li>Handle drag-and-dropped COMP externaltox pars</li>
+<li>Detect dirty COMP parameter changes</li>
+</ul>
+<h2 id="v44128">v4.4.128<a class="headerlink" href="#v44128" title="Permanent link">&para;</a></h2>
+<p>Support for COMPs with empty/error-prone clone expressions.</p>
+<h2 id="v44127">v4.4.127<a class="headerlink" href="#v44127" title="Permanent link">&para;</a></h2>
+<p>Textport warning for paused timeline.</p>
+<h2 id="v44126">v4.4.126<a class="headerlink" href="#v44126" title="Permanent link">&para;</a></h2>
+<p>Clean up Save and dirtyHandler methods, auto set enableexternaltox.</p>
+<h2 id="v44104">v4.4.104<a class="headerlink" href="#v44104" title="Permanent link">&para;</a></h2>
+<p>TreeLister, improved Tagger stability, color theme updates.</p>
+<h2 id="v4474">v4.4.74<a class="headerlink" href="#v4474" title="Permanent link">&para;</a></h2>
+<ul>
+<li>Full project externalization</li>
+<li>Handle deletion and re-creation (redo) of COMPs/DATs</li>
+<li>Support renaming and moving COMPs/DATs</li>
+</ul>
+<h2 id="v43128">v4.3.128<a class="headerlink" href="#v43128" title="Permanent link">&para;</a></h2>
+<p>Fixed abs path bug, macOS Finder support, keyboard shortcuts.</p>
+<h2 id="v43122">v4.3.122<a class="headerlink" href="#v43122" title="Permanent link">&para;</a></h2>
+<p>Separated logic/data for easier Embody updates.</p>
+<h2 id="v4343">v4.3.43<a class="headerlink" href="#v4343" title="Permanent link">&para;</a></h2>
+<p>UTC timestamps, Save/Table DAT buttons, refactored tagging.</p>
+<h2 id="v42101">v4.2.101<a class="headerlink" href="#v42101" title="Permanent link">&para;</a></h2>
+<p>Fixed keyboard shortcut bug, updated to TouchDesigner 2023.</p>
+<h2 id="v400">v4.0.0<a class="headerlink" href="#v400" title="Permanent link">&para;</a></h2>
+<p>Support for various file formats, parameter improvements.</p>
+<h2 id="v300">v3.0.0<a class="headerlink" href="#v300" title="Permanent link">&para;</a></h2>
+<p>Initial release.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://github.com/dylanroscover/Embody" target="_blank" rel="noopener" title="github.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://www.youtube.com/watch?v=lR3adD3Cw5s" target="_blank" rel="noopener" title="www.youtube.com" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M549.7 124.1c-6.2-23.7-24.8-42.3-48.3-48.6C458.9 64 288.1 64 288.1 64S117.3 64 74.7 75.5c-23.5 6.3-42 24.9-48.3 48.6C15 167 15 256.4 15 256.4s0 89.4 11.4 132.3c6.3 23.6 24.8 41.5 48.3 47.8C117.3 448 288.1 448 288.1 448s170.8 0 213.4-11.5c23.5-6.3 42-24.2 48.3-47.8 11.4-42.9 11.4-132.3 11.4-132.3s0-89.4-11.4-132.3zM232.2 337.6V175.2l142.7 81.2z"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
