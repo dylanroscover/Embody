@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.260
+
+Bridge stability: signal diagnostics, conditional bridge-script writes, connectivity wording fix.
+
+- **Bridge signal diagnostics**: `envoy_bridge.py` now installs SIGTERM/SIGINT handlers that log PID, current parent PID, and original parent PID before exiting. Startup log messages also include PID/PPID. Helps diagnose what process kills the bridge (Claude Code file watcher, orphan reaping, etc.)
+- **Conditional bridge-script write**: `EnvoyExt._configureMCPClient()` now compares bridge script content before writing. If unchanged, the file is not rewritten — preventing Claude Code's file watcher from restarting the MCP server mid-connection
+- **Connectivity rule wording**: Updated recovery step 3 from "close this tab/session and reopen a fresh one" to "reopen this session/conversation" for clarity
+
 ## v5.0.259
 
 Mandatory operator layout rules, `/local` path prohibition, TD connectivity recovery rule.

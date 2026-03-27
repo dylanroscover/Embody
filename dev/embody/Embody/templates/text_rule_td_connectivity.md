@@ -24,7 +24,7 @@ When the bridge has no tools registered (ToolSearch returns nothing for Envoy to
 
 1. **If TD is not running**: Launch it directly — `open -a TouchDesigner /path/to/latest.toe`. Do NOT wait for the bridge to do it. Find the latest `.toe` with `ls -t dev/*.toe | head -1`.
 2. **If `.envoy.json` points to a dead instance**: Edit it — set `active` to the correct instance name. The bridge re-reads this file on each reconnection attempt.
-3. **If the bridge is stuck**: `kill PID` to terminate it. Tell the user to **close this tab/session and reopen a fresh one** — this is always the first recovery step. Only if that fails, suggest restarting the MCP server as a fallback.
+3. **If the bridge is stuck**: `kill PID` to terminate it. Tell the user to **reopen this session/conversation** — this is always the first recovery step. Only if that fails, suggest restarting the MCP server as a fallback.
 4. **Wait for Envoy**: Poll the port — `python3 -c "import socket; s=socket.socket(); s.settimeout(1); s.connect(('127.0.0.1', PORT)); s.close()"` in a loop.
 5. **Once Envoy responds**: The bridge (when restarted) will connect and register tools.
 

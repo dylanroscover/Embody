@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.259-blue)
+![Version](https://img.shields.io/badge/version-5.0.260-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -178,11 +178,11 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.260**: Bridge signal diagnostics, conditional bridge-script writes, connectivity wording fix
 - **5.0.259**: Mandatory operator layout rules, `/local` path prohibition, TD connectivity recovery
 - **5.0.258**: Multi-instance Envoy support, `switch_instance` tool, auto-suffix collision avoidance
 - **5.0.252**: Windows process-kill fix, reconstruction verification fix
 - **5.0.251**: Nested TDN child-skip on import, depth-sorted reconstruction ordering
-- **5.0.247**: Default-child cleanup on TDN import, nested save-cycle fix
 - **5.0.243**: Headless smoke testing, file cleanup preferences, specialized COMP support, portable .tox hardening
 - **5.0.237**: TDN v1.1 format, import error surfacing, save-cycle pane restoration, Envoy troubleshooting docs
 - **5.0.235**: `restart_td` meta-tool, local MCP handshake, operator overlap warnings
