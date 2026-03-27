@@ -8,13 +8,16 @@ description: "MUST READ before calling create_op. Contains required verification
 
 Follow these steps every time you create operators via MCP:
 
-1. **Discover the target network**: `query_network` on the target parent to confirm it exists and see existing operators
-2. **Scan existing layout**: Use `get_network_layout` on the parent COMP. Note each operator's `nodeX`, `nodeY`, `nodeWidth`, and `nodeHeight` — operators vary in size (100–300+ units wide)
-3. **Create the operator**: `create_op` with the desired type and name. This auto-places the op in a non-overlapping position
-4. **Reposition if needed**: Only call `set_op_position` when you need specific grid-aligned placement. Calculate using actual dimensions: `next_x = prev_nodeX + prev_nodeWidth + gap` (gap ≥ 200, snapped to 200-unit grid). **`set_op_position` has no overlap detection** — if you use it, you are responsible for ensuring no overlaps
-5. **Connect if needed**: `connect_ops` to wire inputs/outputs
-6. **Set OP-reference parameters with relative paths**: If the operator has parameters referencing other operators (Camera, Geometry, Lights, TOP, CHOP, etc.), use sibling names (`cam`) or relative paths (`../shared/lut`) — NEVER absolute paths (`/project1/scene/cam`). See `parameters.md` § OP-Reference Parameter Values.
-7. **Verify**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete
+1. **Choose the correct parent network**: NEVER create operators under `/local` or `/local/*`. The `/local` storage is not for project data. Always place new operators under the project root (e.g., `/project1/...`) or wherever the user's active network lives. If the user says "create in the current network," use `execute_python` with `result = ui.panes.current.owner.path` to find it — do NOT default to `/local`.
+2. **Discover the target network**: `query_network` on the target parent to confirm it exists and see existing operators
+3. **Scan existing layout**: Use `get_network_layout` on the parent COMP. Note each operator's `nodeX`, `nodeY`, `nodeWidth`, and `nodeHeight` — operators vary in size (100–300+ units wide)
+4. **Plan positions BEFORE creating**: Batch-compute grid-aligned positions for ALL operators you intend to create. Signal flow is left-to-right: inputs on the left, outputs on the right. Supporting operators (DATs feeding a TOP, CHOPs feeding parameters) go to the left of or below the operator they feed. Snap all coordinates to the 200-unit grid. See the Positioning Rules section below.
+5. **Create each operator**: `create_op` with the desired type and name
+6. **Position each operator**: `set_op_position` to place it at the pre-computed grid position. Auto-placement is NOT acceptable — it produces messy, unreadable networks. You MUST explicitly position every operator you create.
+7. **Connect**: `connect_ops` to wire inputs/outputs. Wires must flow left-to-right (positive X). If a wire would go backward, the downstream op is misplaced — reposition it.
+8. **Set OP-reference parameters with relative paths**: If the operator has parameters referencing other operators (Camera, Geometry, Lights, TOP, CHOP, etc.), use sibling names (`cam`) or relative paths (`../shared/lut`) — NEVER absolute paths (`/project1/scene/cam`). See `parameters.md` § OP-Reference Parameter Values.
+9. **Verify layout**: Call `get_network_layout` again. Confirm no overlaps, grid alignment is intact, and signal flows left-to-right.
+10. **Verify errors**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete
 
 ## Operator Type Preferences
 
@@ -22,15 +25,18 @@ Follow these steps every time you create operators via MCP:
 
 ## Positioning Rules
 
-- **Use actual dimensions, not assumptions.** Operators vary in size. Always base spacing on `nodeWidth`/`nodeHeight` from `get_network_layout`, never on a fixed offset like "+300 from nodeX"
-- **Spacing formula**: `next_x = rightmost_nodeX + rightmost_nodeWidth + 200` (minimum). Snap result to 200-unit grid
-- **After repositioning**, call `get_network_layout` to verify no overlaps were introduced
-- For bulk creation (10+ ops): batch-compute ALL positions before placing anything, using actual operator dimensions from the first `get_network_layout` call
+- **Every operator MUST be explicitly positioned** on the 200-unit grid. Do NOT rely on auto-placement.
+- **Use actual dimensions, not assumptions.** Operators vary in size (100–300+ units wide). Always base spacing on `nodeWidth`/`nodeHeight` from `get_network_layout`, never on a fixed offset like "+300 from nodeX".
+- **Horizontal spacing formula**: `next_x = prev_nodeX + prev_nodeWidth + 200` (minimum). Round up to the next multiple of 200.
+- **Vertical spacing**: 400 units between parallel chains.
+- **Signal flow is left-to-right**: Every connected operator must have a higher `nodeX` than the operator feeding it. Supporting DATs (pixel shaders, scripts) go to the left of or below the operator they feed into.
+- **Batch-compute ALL positions** before placing anything, using actual operator dimensions from the initial `get_network_layout` call.
+- **After placing**, call `get_network_layout` to verify no overlaps were introduced.
 
 ## Key Reminders
 
+- NEVER skip positioning — auto-placement produces unreadable networks
 - NEVER place an operator on top of another operator — always scan first
-- `create_op` auto-places safely; only override with `set_op_position` when you have a specific layout plan
 - Never rely on `layout()` for production networks
 - New operators go near related operators, not at origin
 - For current network location: `execute_python` with `result = ui.panes.current.owner.path`

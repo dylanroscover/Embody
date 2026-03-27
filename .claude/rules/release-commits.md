@@ -46,6 +46,7 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `rules/network-layout.md` | `templates/text_rule_network_layout.md` |
 | `rules/commit-push-checklist.md` | `templates/text_rule_commit_push_checklist.md` |
 | `rules/github-release.md` | `templates/text_rule_github_release.md` |
+| `rules/td-connectivity.md` | `templates/text_rule_td_connectivity.md` |
 | `skills/td-api-reference/SKILL.md` | `templates/text_skill_td_api_reference.md` |
 | `skills/create-operator/SKILL.md` | `templates/text_skill_create_operator.md` |
 | `skills/debug-operator/SKILL.md` | `templates/text_skill_debug_operator.md` |
