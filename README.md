@@ -11,7 +11,7 @@
 
 ---
 
-TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review in git. Embody makes your TD projects readable: by AI, by git, and by you.
+TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review. Embody makes your TD projects readable: by AI, by version control, and by you. **Git is not required** — Embody works in any project folder.
 
 ## What It Does
 
@@ -36,11 +36,10 @@ TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or
 
 ### 1. Project Setup
 
-Your TouchDesigner `.toe` file should live inside a **git repository**. Embody writes externalized files relative to the `.toe` location:
+Embody writes externalized files relative to your `.toe` location — no special folder structure required. A **git repository** is recommended if you want diffable history and collaboration, but Embody works in any project folder:
 
 ```
-my-project/              ← git repo root
-├── .gitignore
+my-project/              ← project folder (optionally a git repo)
 ├── my-project.toe       ← your TouchDesigner project
 ├── base1/               ← externalized operators
 │   ├── base2.tox        ← COMP (TOX strategy)
@@ -116,7 +115,7 @@ When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD 
 
 ## TDN Network Format
 
-TDN (TouchDesigner Network) is a JSON-based format for exporting operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in git.
+TDN (TouchDesigner Network) is a JSON-based format for exporting operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in any text tool — or in git if you use version control.
 
 - **Entire project**: `ctrl + shift + e`
 - **Current COMP**: `ctrl + alt + e`
