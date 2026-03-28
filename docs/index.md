@@ -7,7 +7,7 @@ hide:
 
 ### Converse with TouchDesigner
 
-TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review in git. Embody makes your TD projects readable: by AI, by git, and by you.
+TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review. Embody makes your TD projects readable: by AI, by version control, and by you. **Git is not required** — Embody works in any project folder.
 
 Embody is three things working together:
 
@@ -79,7 +79,7 @@ You describe what you want in plain language, and the AI works with your live ne
 ## Requirements
 
 - **TouchDesigner 2025.32280** or later (Windows / macOS)
-- A **git repository** containing your `.toe` project (recommended)
+- A **git repository** is optional — recommended for version history and collaboration, but not required
 
 ---
 

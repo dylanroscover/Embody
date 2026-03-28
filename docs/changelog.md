@@ -1,5 +1,21 @@
 # Changelog
 
+## v5.0.260
+
+Bridge stability: signal diagnostics, conditional bridge-script writes, connectivity wording fix.
+
+- **Bridge signal diagnostics**: `envoy_bridge.py` now installs SIGTERM/SIGINT handlers that log PID, current parent PID, and original parent PID before exiting. Startup log messages also include PID/PPID. Helps diagnose what process kills the bridge (Claude Code file watcher, orphan reaping, etc.)
+- **Conditional bridge-script write**: `EnvoyExt._configureMCPClient()` now compares bridge script content before writing. If unchanged, the file is not rewritten — preventing Claude Code's file watcher from restarting the MCP server mid-connection
+- **Connectivity rule wording**: Updated recovery step 3 from "close this tab/session and reopen a fresh one" to "reopen this session/conversation" for clarity
+
+## v5.0.259
+
+Mandatory operator layout rules, `/local` path prohibition, TD connectivity recovery rule.
+
+- **Mandatory operator positioning**: The create-operator workflow now requires explicit `set_op_position` for every operator created via MCP. Auto-placement is no longer acceptable — agents must batch-compute grid-aligned positions before creating operators, verify layout afterward, and ensure left-to-right signal flow. Previously, positioning was documented as optional ("reposition if needed"), which led to messy, unreadable networks
+- **`/local` path prohibition**: New critical rule (#3 in CLAUDE.md) and step 1 in the create-operator workflow: agents must NEVER create operators under `/local` or `/local/*`. The `/local` storage is volatile and not saved with the `.toe` file. Agents must place operators under the project root or use `ui.panes.current.owner.path` to find the active network
+- **TD connectivity recovery rule**: New always-loaded rule (`td-connectivity.md`) with session-start verification, recovery procedures for lost MCP tools, and fix sequences for stale `.envoy.json` entries, stuck bridges, and dead TD instances
+
 ## v5.0.258
 
 Multi-instance Envoy support, auto-suffix collision avoidance, `switch_instance` bridge meta-tool.

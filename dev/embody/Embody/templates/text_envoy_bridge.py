@@ -954,6 +954,25 @@ def _resolve_from_registry(config, fallback_port):
     return fallback_port, find_td_pid(), None
 
 
+def _install_signal_diagnostics():
+    """Install signal handlers that log before exiting, to diagnose what kills the bridge."""
+    my_pid = os.getpid()
+    ppid = os.getppid()
+
+    def _handle_sigterm(signum, frame):
+        log(f"Received SIGTERM (PID {my_pid}, parent {os.getppid()}, "
+            f"original parent {ppid})")
+        sys.exit(0)
+
+    def _handle_sigint(signum, frame):
+        log(f"Received SIGINT (PID {my_pid}, parent {os.getppid()}, "
+            f"original parent {ppid})")
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _handle_sigterm)
+    signal.signal(signal.SIGINT, _handle_sigint)
+
+
 def main():
     cli_port, config_path = parse_args()
     _init_file_logging(config_path)
@@ -974,15 +993,22 @@ def main():
         "url": url,
     }
 
+    my_pid = os.getpid()
+    ppid = os.getppid()
     if active_name:
-        log(f"Starting (instance: {active_name}, port: {port})")
+        log(f"Starting (instance: {active_name}, port: {port}) "
+            f"[PID {my_pid}, parent {ppid}]")
     else:
-        log(f"Starting (target: localhost:{port})")
+        log(f"Starting (target: localhost:{port}) "
+            f"[PID {my_pid}, parent {ppid}]")
     if config_path:
         log(f"Config: {config_path}")
         td_exe = config.get("td_executable", "")
         if td_exe and not os.path.exists(td_exe):
             log(f"WARNING: TouchDesigner not found at {td_exe}")
+
+    # Install signal handlers AFTER logging init so we can see what kills us
+    _install_signal_diagnostics()
 
     # Clean up stale bridge processes from previous Claude Code sessions
     kill_stale_bridges(port)

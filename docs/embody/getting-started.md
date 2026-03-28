@@ -2,11 +2,10 @@
 
 ## Project Setup
 
-Your TouchDesigner `.toe` file should live inside a **git repository**. Embody writes externalized files relative to the `.toe` location (`project.folder`), so your repo structure will typically look like:
+Embody writes externalized files relative to your `.toe` location (`project.folder`). Your project folder will typically look like:
 
 ```
-my-project/              ← git repo root
-├── .gitignore
+my-project/              ← project folder (optionally a git repo)
 ├── my-project.toe       ← your TouchDesigner project
 ├── base1/               ← externalized COMPs and DATs
 │   ├── base2.tox        ←   (folder structure mirrors your TD network)
@@ -14,9 +13,11 @@ my-project/              ← git repo root
 └── ...
 ```
 
+**Git is not required.** Embody's externalization, auto-restoration, and Envoy MCP features all work without version control. If you do use git, you get diffable history and collaboration — but it's entirely optional.
+
 ### Auto-managed `.gitignore`
 
-When Envoy starts, it automatically adds the following entries to your `.gitignore` if they're not already present:
+If your project is inside a git repository, Envoy automatically adds the following entries to your `.gitignore` when it starts:
 
 | Entry | Purpose |
 |-------|---------|

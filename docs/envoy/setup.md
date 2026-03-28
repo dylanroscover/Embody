@@ -13,15 +13,12 @@ Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, et
 
 1. **Enable Envoy**: Toggle the **Envoy Enable** parameter on the Embody COMP
 2. **Server starts**: Envoy runs on `localhost:9870` (configurable via **Envoy Port**)
-3. **Auto-configuration**: Envoy creates a `.mcp.json` file in your git repo root automatically
+3. **Auto-configuration**: If your project is in a git repo, Envoy creates a `.mcp.json` file in the repo root automatically. Otherwise, create it manually (see below).
 4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) — it picks up the `.mcp.json` automatically
 
-!!! tip
-    Auto-configuration requires your `.toe` project to be inside a **git repository** (see [Project Setup](../embody/getting-started.md#project-setup)). If your project isn't in a git repo, you'll need to create the config file manually.
+## Manual Configuration (No Git)
 
-## Manual Configuration
-
-If your project isn't in a git repo, create `.mcp.json` manually in your project directory. You can use either the direct HTTP transport or the STDIO bridge:
+If your project isn't in a git repo — or you prefer manual control — create `.mcp.json` in your project directory. You can use either the direct HTTP transport or the STDIO bridge:
 
 **HTTP transport** (simpler, requires TD to be running):
 

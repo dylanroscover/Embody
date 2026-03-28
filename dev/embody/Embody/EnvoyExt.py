@@ -3678,10 +3678,25 @@ class EnvoyExt:
                 self._configureMCPClientHTTP(git_root, port)
                 return
 
-            # Write bridge script (overwrite to pick up updates)
-            bridge_path.write_text(bridge_content, encoding='utf-8')
-            if sys.platform != 'win32':
-                bridge_path.chmod(0o755)
+            # Write bridge script only if content changed — preserving
+            # mtime prevents Claude Code's file watcher from restarting
+            # the MCP server mid-connection.
+            needs_write = True
+            if bridge_path.exists():
+                try:
+                    existing = bridge_path.read_text(encoding='utf-8')
+                    if existing == bridge_content:
+                        needs_write = False
+                except OSError:
+                    pass  # Can't read — overwrite
+
+            if needs_write:
+                bridge_path.write_text(bridge_content, encoding='utf-8')
+                if sys.platform != 'win32':
+                    bridge_path.chmod(0o755)
+            else:
+                if sys.platform != 'win32':
+                    bridge_path.chmod(0o755)
 
             # Prefer the venv Python (created from TD's Python) so the bridge
             # works on machines without a system Python installation.
