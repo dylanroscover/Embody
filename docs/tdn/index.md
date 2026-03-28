@@ -1,13 +1,13 @@
 # TDN Format
 
-**TDN** (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in git, making it easy to review changes to your network structure.
+**TDN** (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be opened in any text editor, compared with any diff tool, and — if you use git — meaningfully reviewed in pull requests.
 
 ## Why TDN?
 
-TouchDesigner's binary `.toe` files are opaque to version control tools. When you change a parameter or rewire operators, git shows "binary file changed" with no useful context. TDN solves this by being as **lean and efficient as possible** — both in file size and readability:
+TouchDesigner's binary `.toe` files are opaque to text-based tools. When you change a parameter or rewire operators, there's no way to see what changed by looking at the file. TDN solves this by being as **lean and efficient as possible** — both in file size and readability:
 
 - **Non-default only** — only parameters that differ from their defaults are exported. No bloat, no noise — just what you actually changed
-- **Human-readable JSON** — easy to read, diff, and review in pull requests
+- **Human-readable JSON** — easy to read, diff, and review (in pull requests or any text comparison tool)
 - **Aggressive deduplication** — shared properties are hoisted into type defaults and parameter templates, eliminating redundancy across operators
 - **Round-trip fidelity** — export a network, modify the JSON, import it back with identical results
 
