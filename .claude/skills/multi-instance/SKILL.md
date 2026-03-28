@@ -145,12 +145,10 @@ execute_python(code="project.quit()")         # user gets save prompt in TD
 
 When you open the same `.toe` file in multiple TD instances, Envoy auto-suffixes the registry key to avoid collisions. The first instance registers as `MyProject`, the second as `MyProject-2`, etc. Stale entries (dead PIDs) are automatically reclaimed.
 
-For predictable names, set the **Instance Name** parameter (`Envoyinstancename`) on the Embody COMP before starting Envoy. This overrides the auto-generated key — useful when you always want a specific instance to be addressable as e.g. `dev` or `staging`.
-
 ## Limitations
 
 - The bridge connects to **one instance at a time** — no parallel MCP calls to multiple instances
 - Maximum **10 instances** per base port range
 - `.envoy.json` is per git root — instances in different repos have separate registries
 - `launch_td` always launches the `.toe` configured in `.envoy.json` top-level `toe_path` — use TD directly to open additional files
-- Opening the same `.toe` file in multiple instances auto-suffixes keys (`MyProject-2`, `-3`, etc.) — use `Envoyinstancename` parameter for predictable names
+- Opening the same `.toe` file in multiple instances auto-suffixes keys (`MyProject-2`, `-3`, etc.)

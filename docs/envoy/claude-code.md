@@ -103,7 +103,7 @@ If you have multiple TouchDesigner instances running with Envoy enabled (e.g., y
 Each instance gets its own port automatically (ports 9870–9879). Switching is instant — no restart required.
 
 !!! tip "Same-file instances"
-    Opening the same `.toe` file in multiple TD instances works — Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.). For predictable names, set the **Instance Name** parameter (`Envoyinstancename`) on each Embody COMP.
+    Opening the same `.toe` file in multiple TD instances works — Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.).
 
 See [Architecture](architecture.md#multiple-instances) for technical details.
 

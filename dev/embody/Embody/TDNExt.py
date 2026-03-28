@@ -38,6 +38,11 @@ _EMBODY_ABOUT_PARS = {'Build', 'Date', 'Touchbuild'}
 # Built-in parameter styles to skip (actions, not state)
 SKIP_BUILTIN_STYLES = {'Pulse', 'Momentary', 'Header'}
 
+# Parameters to skip on palette clones — TD plumbing that interferes
+# with parameter round-tripping. The clone expression causes TD to
+# override user-set values (like buttontype) on rebuild.
+_PALETTE_CLONE_SKIP_PARAMS = {'clone', 'enablecloning'}
+
 # Suffix patterns for multi-component parameter groups
 STYLE_SUFFIXES = {
 	'XY': ['x', 'y'],
@@ -1359,6 +1364,26 @@ class TDNExt:
 		if recurse and hasattr(target, 'children'):
 			if self._isPaletteClone(target):
 				data['palette_clone'] = True
+				# For palette clones, the correct comparison baseline
+				# is the clone source's values, not p.default.
+				# _exportBuiltinParams uses p.default, which can differ
+				# from the clone source (e.g. buttontype: p.default is
+				# "momentary" but clone source is "toggledown"). This
+				# causes user-set values that match p.default to be
+				# silently dropped from the export, then lost on rebuild.
+				# Fix: re-check against clone source, add any diffs.
+				clone_source_params = self._getCloneSourceDiffs(target)
+				if clone_source_params:
+					if 'parameters' not in data:
+						data['parameters'] = {}
+					data['parameters'].update(clone_source_params)
+				# Strip clone/enablecloning — TD plumbing that
+				# parent.create() auto-sets on rebuild.
+				if 'parameters' in data:
+					for skip_par in _PALETTE_CLONE_SKIP_PARAMS:
+						data['parameters'].pop(skip_par, None)
+					if not data['parameters']:
+						del data['parameters']
 			elif self._hasTDNTag(target) and not options.get('embed_all'):
 				pass  # Child's network managed by its own .tdn file
 			else:
@@ -2125,7 +2150,13 @@ class TDNExt:
 				continue
 
 			# Built-in parameters
+			is_palette_clone = op_def.get('palette_clone', False)
 			for par_name, value in op_def.get('parameters', {}).items():
+				# Skip clone/enablecloning on palette clones — these
+				# are auto-set by parent.create() and should not be
+				# overwritten. Old TDN files may still contain them.
+				if is_palette_clone and par_name in _PALETTE_CLONE_SKIP_PARAMS:
+					continue
 				self._setParValue(target, par_name, value)
 
 			# Custom parameter values
@@ -2928,6 +2959,56 @@ class TDNExt:
 		except Exception as e:
 			self._log(f'Error checking palette clone status for {target.path}: {e}', 'DEBUG')
 		return False
+
+	def _getCloneSourceDiffs(self, target):
+		"""Find params that differ from the clone source but match p.default.
+
+		For palette clones, _exportBuiltinParams compares against p.default.
+		But p.default can differ from the clone source's actual value (e.g.
+		buttontype: p.default is "momentary" but clone source is "toggledown").
+		This method finds params that were wrongly skipped because they match
+		p.default but differ from the clone source — these need to be exported
+		so they survive the strip/restore rebuild cycle.
+		"""
+		clone_par = getattr(target.par, 'clone', None)
+		if not clone_par:
+			return {}
+		try:
+			clone_source = clone_par.eval()
+			if not clone_source or not hasattr(clone_source, 'par'):
+				return {}
+		except Exception:
+			return {}
+
+		op_type = target.OPType
+		if op_type not in self._exportable_cache:
+			self._buildParCache(target)
+		exportable = self._exportable_cache[op_type]
+		defaults = self._defaults_cache[op_type]
+
+		diffs = {}
+		for p in target.pars():
+			name = p.name
+			if name not in exportable:
+				continue
+			if name in _PALETTE_CLONE_SKIP_PARAMS:
+				continue
+			if p.mode != ParMode.CONSTANT:
+				continue  # Expressions already exported by _exportBuiltinParams
+			try:
+				current = p.val
+				builtin_default = defaults.get(name)
+				# Only interested in params that matched p.default
+				# (and were therefore skipped) but differ from clone source
+				if not self._valuesDiffer(current, builtin_default):
+					src_par = getattr(clone_source.par, name, None)
+					if src_par is not None:
+						src_val = src_par.val if src_par.mode == ParMode.CONSTANT else src_par.eval()
+						if self._valuesDiffer(current, src_val):
+							diffs[name] = self._serializeValue(current)
+			except Exception:
+				pass
+		return diffs
 
 	def _getTDNExternalizedPaths(self) -> set:
 		"""Return a set of all TDN-strategy COMP paths from the externalizations table."""

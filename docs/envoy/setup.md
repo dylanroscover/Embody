@@ -7,7 +7,7 @@ You'll need:
 - **TouchDesigner 2025.32280** or later
 - An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), or [Windsurf](https://windsurf.com/)
 
-Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled — no manual Python setup required.
+Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled — no manual Python setup required. Envoy validates the virtual environment on each startup and falls back to the system Python if the venv is broken (see [Broken Virtual Environment](troubleshooting.md#broken-virtual-environment)).
 
 ## Enabling Envoy
 
@@ -67,7 +67,7 @@ You can run multiple TouchDesigner instances with Envoy enabled in the same git 
 To switch between instances from Claude Code, use the `switch_instance` bridge meta-tool. See [Claude Code Integration](claude-code.md#working-with-multiple-instances) for usage details and [Architecture](architecture.md#multiple-instances) for how it works.
 
 !!! tip
-    Running two instances of the **same `.toe` file** works out of the box — Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.). For predictable names, set the **Instance Name** parameter (`Envoyinstancename`) on each Embody COMP.
+    Running two instances of the **same `.toe` file** works out of the box — Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.).
 
 ## Claude Code Integration
 

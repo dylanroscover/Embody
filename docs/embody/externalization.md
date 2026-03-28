@@ -73,6 +73,24 @@ With TDN strategy:
 
 See [TDN Format](../tdn/index.md) for more details.
 
+### DAT Content Safety
+
+When you save a project (++ctrl+s++), Embody checks for **unprotected DATs** inside TDN-managed COMPs — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs in TDNs** parameter is OFF). These DATs would lose their content during the TDN strip/restore save cycle.
+
+If at-risk DATs are found, Embody prompts you with four options:
+
+| Button | Behavior |
+|--------|----------|
+| **Externalize** | Tag and externalize the at-risk DATs so their content is saved to files on disk |
+| **Skip** | Proceed with the save — content may be lost |
+| **Always Externalize** | Externalize now, and do so automatically on future saves without asking |
+| **Never Ask** | Suppress the check permanently |
+
+The preference is stored in the **DAT Safety** parameter (`Tdndatsafety`) and can be changed at any time from the Embody COMP's TDN settings.
+
+!!! tip
+    To avoid this prompt entirely, either enable **Embed DATs in TDNs** (stores DAT content directly in the `.tdn` file) or externalize your DATs with Embody tags before saving.
+
 ## Automatic Restoration
 
 Embody automatically restores all externalized operators when a project is opened. Your externalized files on disk are the source of truth — you do not need to save your `.toe` file to preserve externalized work.

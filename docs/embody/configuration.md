@@ -26,6 +26,7 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 ### TDN
 
 - **Embed DATs in TDNs** — Include DAT content in TDN exports
+- **DAT Safety** — What to do when TDN COMPs contain DATs with unprotected content: *Ask Each Save* (default) prompts before each save, *Always Externalize* auto-externalizes without asking, *Never Ask* suppresses the check
 - **Export Project TDN** — Pulse to export the entire project network
 
 ### Logs

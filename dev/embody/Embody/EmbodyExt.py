@@ -1842,13 +1842,17 @@ class EmbodyExt:
         return success
 
     @staticmethod
-    def _computeTDNFingerprint(comp) -> tuple:
+    def _computeTDNFingerprint(comp, tdn_paths: set = None) -> tuple:
         """Compute a hashable fingerprint of a TDN COMP's network structure.
 
         Used instead of oper.dirty for TDN COMPs (which always reads True
         because externaltox is empty). Captures all visual and metadata
         properties that a TDN export records: name, type, position, size,
         color, tags, flags, comment, connections, and annotations.
+
+        Recurses into child COMPs that are NOT separately TDN-externalized,
+        so changes deep inside nested COMPs (e.g. editing a POP inside a
+        geometryCOMP) are detected by the parent's fingerprint.
         """
         parts = []
         for c in sorted(comp.children, key=lambda c: c.name):
@@ -1867,6 +1871,10 @@ class EmbodyExt:
             for i, conn in enumerate(c.inputConnectors):
                 for link in conn.connections:
                     parts.append((c.name, 'in', i, link.owner.name))
+            # Recurse into child COMPs that don't have their own TDN file
+            if c.isCOMP and (tdn_paths is None or c.path not in tdn_paths):
+                child_fp = EmbodyExt._computeTDNFingerprint(c, tdn_paths)
+                parts.append((c.name, 'children', child_fp))
         # All annotations (utility=True or False) — uses annotation-specific attrs
         for ann in sorted(comp.findChildren(type=annotateCOMP, depth=1,
                                             includeUtility=True),
@@ -1885,9 +1893,14 @@ class EmbodyExt:
             ))
         return tuple(parts)
 
+    def _getTDNPaths(self) -> set:
+        """Return the set of all TDN-externalized COMP paths."""
+        return {path for path, _ in self._getTDNStrategyComps()}
+
     def _isTDNDirty(self, comp) -> bool:
         """Check if a TDN COMP's network has changed since last export."""
-        current = self._computeTDNFingerprint(comp)
+        tdn_paths = self._getTDNPaths()
+        current = self._computeTDNFingerprint(comp, tdn_paths)
         stored = self._tdn_fingerprints.get(comp.path)
         if stored is None:
             # No stored fingerprint — assume clean (just initialized)
@@ -1897,7 +1910,9 @@ class EmbodyExt:
 
     def _storeTDNFingerprint(self, comp) -> None:
         """Snapshot the TDN COMP's network structure after export."""
-        self._tdn_fingerprints[comp.path] = self._computeTDNFingerprint(comp)
+        tdn_paths = self._getTDNPaths()
+        self._tdn_fingerprints[comp.path] = self._computeTDNFingerprint(
+            comp, tdn_paths)
 
     def _getStrategyFilePath(self, op_path: str, strategy: str) -> Optional[str]:
         """Return the rel_file_path for a given operator + strategy, or None."""
@@ -4501,6 +4516,160 @@ class EmbodyExt:
         # child's own .tdn file then overwrites the parent's snapshot.
         result.sort(key=lambda x: x[0].count('/'))
         return result
+
+    # ------------------------------------------------------------------
+    # DAT Content Safety
+    # ------------------------------------------------------------------
+
+    def _findAtRiskDATs(self) -> list:
+        """Find DATs inside TDN COMPs that will lose content during save.
+
+        Returns list of (comp_path, [dat_ops]) tuples for TDN COMPs where
+        Embed DATs is OFF and unexternalized DATs have non-empty content.
+        """
+        tdn_comps = self._getTDNStrategyComps()
+        if not tdn_comps:
+            return []
+
+        tdn_paths = {path for path, _ in tdn_comps}
+        dat_tags = set(self.getTags('DAT'))
+        result = []
+
+        for comp_path, _ in tdn_comps:
+            comp = op(comp_path)
+            if not comp:
+                continue
+
+            # Resolve embed_dats: per-COMP override → global parameter
+            per_comp = comp.fetch('embed_dats_in_tdn', None, search=False)
+            embed_on = (per_comp if per_comp is not None
+                        else self.my.par.Embeddatsintdns.eval())
+            if embed_on:
+                continue  # Content will be preserved in TDN
+
+            at_risk = []
+            for dat in comp.findChildren(type=DAT):
+                # Skip DATs inside a deeper TDN COMP — covered by that
+                # COMP's own settings
+                inside_nested = False
+                parent_op = dat.parent()
+                while parent_op and parent_op.path != comp_path:
+                    if parent_op.path in tdn_paths:
+                        inside_nested = True
+                        break
+                    parent_op = parent_op.parent()
+                if inside_nested:
+                    continue
+
+                # Skip DATs that already have an Embody tag
+                if dat.tags & dat_tags:
+                    continue
+
+                # Skip DATs with a file parameter already set
+                if hasattr(dat.par, 'file') and dat.par.file.eval():
+                    continue
+
+                # Check for non-empty content
+                try:
+                    if dat.isTable:
+                        if dat.numRows > 0:
+                            at_risk.append(dat)
+                    else:
+                        if dat.text and dat.text.strip():
+                            at_risk.append(dat)
+                except Exception:
+                    pass  # Unreadable DAT — skip
+
+            if at_risk:
+                result.append((comp_path, at_risk))
+
+        return result
+
+    def _promptDATSafety(self, at_risk: list) -> str:
+        """Show dialog for at-risk DATs. Returns 'externalize' or 'skip'."""
+        all_dats = [d for _, dats in at_risk for d in dats]
+        count = len(all_dats)
+        noun = 'DAT' if count == 1 else 'DATs'
+
+        # Build list (cap at 10 to avoid giant dialog)
+        lines = []
+        for dat in all_dats[:10]:
+            fmt = 'table' if dat.isTable else 'text'
+            lines.append(f'  \u2022 {dat.path} ({fmt})')
+        if count > 10:
+            lines.append(f'  \u2026 and {count - 10} more')
+
+        dat_list = '\n'.join(lines)
+        msg = (f'{count} {noun} in TDN-managed COMP(s) contain content that\n'
+               f'will be lost on save (Embed DATs is OFF, {noun} not externalized):\n\n'
+               f'{dat_list}\n\n'
+               f'Externalize {"this" if count == 1 else "these"} {noun} '
+               f'to preserve content?')
+
+        choice = self._messageBox(
+            'DAT Content at Risk', msg,
+            buttons=['Externalize', 'Skip',
+                     'Always Externalize', 'Never Ask'])
+
+        if choice == 0:
+            return 'externalize'
+        elif choice == 2:
+            self.my.par.Tdndatsafety = 'externalize'
+            self.Log('DAT safety preference set to Always Externalize', 'INFO')
+            return 'externalize'
+        elif choice == 3:
+            self.my.par.Tdndatsafety = 'ignore'
+            self.Log('DAT safety preference set to Never Ask', 'INFO')
+            return 'skip'
+        return 'skip'
+
+    def _externalizeDATs(self, dats: list) -> int:
+        """Bulk-externalize a list of DAT operators. Returns success count."""
+        count = 0
+        for dat in dats:
+            try:
+                # Infer tag from DAT type
+                tag_par_name = self.dat_type_to_tag.get(dat.type)
+                if not tag_par_name:
+                    continue
+                tag_value = getattr(self.my.par, tag_par_name).val
+                if not tag_value:
+                    continue
+
+                self.applyTagToOperator(dat, tag_value)
+                self.ExternalizeImmediate(dat)
+                count += 1
+            except Exception as e:
+                self.Log(f'Failed to externalize {dat.path}: {e}', 'WARNING')
+        return count
+
+    def _checkDATContentSafety(self) -> None:
+        """Check for at-risk DATs in TDN COMPs and prompt/auto-externalize.
+
+        Called from onProjectPreSave() before the TDN export/strip cycle.
+        """
+        safety_par = getattr(self.my.par, 'Tdndatsafety', None)
+        preference = safety_par.eval() if safety_par else 'ask'
+
+        if preference == 'ignore':
+            return
+
+        at_risk = self._findAtRiskDATs()
+        if not at_risk:
+            return
+
+        all_dats = [d for _, dats in at_risk for d in dats]
+
+        if preference == 'externalize':
+            count = self._externalizeDATs(all_dats)
+            self.Log(f'Auto-externalized {count} at-risk DAT(s)', 'SUCCESS')
+            return
+
+        # preference == 'ask'
+        choice = self._promptDATSafety(at_risk)
+        if choice == 'externalize':
+            count = self._externalizeDATs(all_dats)
+            self.Log(f'Externalized {count} at-risk DAT(s)', 'SUCCESS')
 
     def StripCompChildren(self, comp: OP) -> int:
         """Remove children from a TDN-strategy COMP (for smaller .toe).
