@@ -79,9 +79,9 @@
 				"fontsize": 11,
 				"w": 36,
 				"clickthrough": true,
-				"bgcolorr": "=(0.13 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=(0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=(0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=(0.13 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=(0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=(0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			}
 		},
@@ -97,9 +97,9 @@
 				"alignorder": 400,
 				"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
 			"position": [200, 0]
@@ -115,9 +115,9 @@
 				"w": 36,
 				"alignorder": 1000,
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
 			"position": [0, -200]
@@ -133,9 +133,9 @@
 				"w": 36,
 				"alignorder": 925,
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
 			"position": [400, -200]
@@ -151,9 +151,9 @@
 				"w": 36,
 				"alignorder": 600,
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
 			"position": [600, 0]
@@ -178,9 +178,9 @@
 				"alignorder": 700,
 				"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
 			"position": [400, 0]
@@ -213,9 +213,9 @@
 				"w": 65,
 				"alignorder": 1050,
 				"clickthrough": true,
-				"bgcolorr": "=(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
 			"position": [800, 0]
@@ -239,9 +239,9 @@
 				"w": 36,
 				"alignorder": 950,
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
 			"position": [200, -200]

@@ -77,7 +77,7 @@ Envoy supports running multiple TouchDesigner instances simultaneously in the sa
 
 **Instance reachability**: The bridge verifies instances by checking both PID liveness and port responsiveness. An instance is only considered reachable when both checks pass. This filters out stale registry entries from crashed or closed instances.
 
-**Same-project instances**: When you open the same `.toe` file in multiple TD instances, Envoy auto-suffixes the registry key to keep them distinct — the first registers as `MyProject`, the second as `MyProject-2`, etc. Stale entries (dead PIDs) are automatically reclaimed. For predictable names, set the **Instance Name** parameter (`Envoyinstancename`) on the Embody COMP.
+**Same-project instances**: When you open the same `.toe` file in multiple TD instances, Envoy auto-suffixes the registry key to keep them distinct — the first registers as `MyProject`, the second as `MyProject-2`, etc. Stale entries (dead PIDs) are automatically reclaimed.
 
 ## Design Decisions
 

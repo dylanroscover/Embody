@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.1",
-	"build": 71,
-	"generator": "Embody/5.0.255",
+	"build": 75,
+	"generator": "Embody/5.0.262",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:01:10Z",
+	"exported_at": "2026-03-28T20:29:51Z",
 	"network_path": "/embody/Embody/toolbar/container_left/status",
 	"options": {
 		"include_dat_content": false

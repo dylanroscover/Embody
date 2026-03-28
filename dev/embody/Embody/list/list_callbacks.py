@@ -33,6 +33,9 @@ TEXT_PAD_X = 6  # horizontal padding for left-justified cells
 # Row whose Strategy cell is "active" (menu open) — shows "..." while menu visible
 _active_strategy_row = -1
 
+# Persistent selection — tracks the selected operator path (survives refresh/reorder)
+_selected_path = ''
+
 # --- Theme colors (loaded from Embody UI pars in onInitTable) ---
 _t = {}
 
@@ -180,7 +183,8 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 	if row >= data.numRows:
 		return
 	path = data[row, 'path'].val
-	bg = _t['select'] if highlight else _row_bg(row)
+	is_selected = (_selected_path and path == _selected_path)
+	bg = _t['select'] if (highlight or is_selected) else _row_bg(row)
 
 	if col == COL_EXPANDO:
 		attribs.text = ''
@@ -403,6 +407,23 @@ def onSelect(comp, startRow, startCol, startCoords,
 		return
 
 	path = data[row, 'path'].val
+	ncols = min(NUM_COLS, comp.par.cols.eval())
+
+	# Clear old selection and repaint that row
+	global _selected_path
+	prev_path = _selected_path
+	_selected_path = ''
+	if prev_path and prev_path != path:
+		for r in range(1, data.numRows):
+			if data[r, 'path'].val == prev_path:
+				for c in range(ncols):
+					_apply_cell(comp.cellAttribs[r, c], r, c, data)
+				break
+
+	# Set new selection and repaint it
+	_selected_path = path
+	for c in range(ncols):
+		_apply_cell(comp.cellAttribs[row, c], row, c, data)
 
 	if col in (COL_EXPANDO, COL_PATH):
 		hc = data[row, 'has_children'].val == '1'

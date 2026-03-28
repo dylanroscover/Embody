@@ -1,5 +1,6 @@
 def onOffToOn(panelValue):
 	if panelValue.name == 'lselect':
+		me.parent().ext.WindowHeaderExt.OnPress()
 		me.parent().ext.WindowHeaderExt.OnClick()
 
 def whileOn(panelValue):
@@ -8,6 +9,8 @@ def whileOn(panelValue):
 def onOnToOff(panelValue):
 	if panelValue.name == 'rollover':
 		me.parent().ext.WindowHeaderExt.OnRollover(False)
+	if panelValue.name == 'lselect':
+		me.parent().ext.WindowHeaderExt.OnRelease()
 
 def whileOff(panelValue):
 	return

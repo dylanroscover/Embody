@@ -21,6 +21,7 @@ from typing import Optional, Any, Callable
 from queue import Queue, Empty
 from threading import Lock, Event, Thread
 import json
+import subprocess
 import sys
 import tempfile
 import time
@@ -3707,7 +3708,22 @@ class EnvoyExt:
                 venv_python = project_dir / '.venv' / 'bin' / 'python3'
 
             if venv_python.is_file():
-                python_cmd = str(venv_python).replace('\\', '/')
+                # Verify the venv Python actually executes — catches stale
+                # pyvenv.cfg pointing to an uninstalled TD version.
+                try:
+                    subprocess.run(
+                        [str(venv_python), '-c',
+                         'import sys; print(sys.version)'],
+                        capture_output=True, timeout=10, check=True)
+                    python_cmd = str(venv_python).replace('\\', '/')
+                except (subprocess.CalledProcessError,
+                        subprocess.TimeoutExpired, OSError) as e:
+                    self._log(
+                        f'Venv Python at {venv_python} exists but failed to '
+                        f'execute: {e}. Delete the .venv directory and '
+                        f'restart Envoy to recreate it.', 'WARNING')
+                    python_cmd = ('python' if sys.platform == 'win32'
+                                  else 'python3')
             else:
                 python_cmd = 'python' if sys.platform == 'win32' else 'python3'
 

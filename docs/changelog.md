@@ -1,5 +1,20 @@
 # Changelog
 
+## v5.0.263
+
+DAT content safety, palette clone fidelity, recursive TDN fingerprinting, toolbar press states, venv validation.
+
+- **DAT content safety**: Pre-save check detects unexternalized DATs inside TDN COMPs that would lose content during the strip/restore cycle. Prompts with Externalize / Skip / Always Externalize / Never Ask options. New `Tdndatsafety` parameter stores the user's preference. Called from `onProjectPreSave()` before TDN export
+- **Palette clone parameter fidelity**: TDN export now compares parameters against both `p.default` and the clone source's actual value. Parameters that match `p.default` but differ from the clone source are preserved, fixing silent data loss on rebuild (e.g., `buttontype` defaulting to `"momentary"` when clone source is `"toggledown"`). `clone`/`enablecloning` parameters are excluded from export — TD auto-sets these
+- **Recursive TDN fingerprinting**: `_computeTDNFingerprint()` now recurses into child COMPs that don't have their own TDN externalization, so edits deep inside nested COMPs (e.g., editing a POP inside a geometryCOMP) trigger the parent's dirty detection
+- **Toolbar and window header press states**: Buttons now show a pressed visual on mousedown and restore hover on release, providing immediate click feedback
+- **Manager list selection persistence**: Selected row is tracked by operator path and survives list refreshes and reorders
+- **Envoy venv validation**: `EnvoyExt` now validates that the `.venv` Python actually executes before using it for the bridge. Catches stale `pyvenv.cfg` pointing to uninstalled TD versions and falls back to system Python with a warning
+- **Bridge Python logging**: Bridge now logs the Python executable path and version at startup for diagnostics
+- **`Envoyinstancename` parameter removed**: Auto-suffixed instance naming (`MyProject`, `MyProject-2`) is the sole mechanism. References removed from docs and skills
+- **Documentation updates**: New DAT Content Safety section in externalization docs, Broken Virtual Environment troubleshooting, expanded palette clone and fingerprint documentation in TDN specification, removed stale `Envoyinstancename` references across 5 docs
+- **New tests**: 12 palette clone round-trip fidelity tests (Section V in `test_tdn_reconstruction.py`). 39 test suites total
+
 ## v5.0.260
 
 Bridge stability: signal diagnostics, conditional bridge-script writes, connectivity wording fix.

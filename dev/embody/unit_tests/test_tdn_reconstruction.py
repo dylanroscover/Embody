@@ -3084,3 +3084,241 @@ class TestTDNReconstruction(EmbodyTestCase):
 				'Deeply nested TDN COMP children must be skipped')
 		finally:
 			self._removeTableRow(child_path)
+
+	# =================================================================
+	# V. Palette Clone Round-Trip Fidelity (12 tests)
+	# =================================================================
+	# Palette clones are COMPs (buttonCOMP, sliderCOMP) cloned from
+	# /sys/TDTox/defaultCOMPs/. On export, params matching p.default
+	# but differing from the clone source must be captured. On import,
+	# clone/enablecloning params must be skipped. Children come from
+	# the clone source and are not stored in TDN.
+	# =================================================================
+
+	def test_V01_button_roundtrip_basic(self):
+		"""buttonCOMP palette clone survives round-trip."""
+		self.sandbox.create(buttonCOMP, 'btn1')
+		self._roundTrip(self.sandbox)
+		restored = self.sandbox.op('btn1')
+		self.assertIsNotNone(restored)
+		self.assertEqual(restored.OPType, 'buttonCOMP')
+		self.assertGreater(len(restored.children), 0,
+			'Button children should be recreated from clone source')
+		clone_op = restored.par.clone.eval()
+		self.assertIsNotNone(clone_op)
+		self.assertTrue(clone_op.path.startswith('/sys/'),
+			f'Clone should point to /sys/, got {clone_op.path}')
+
+	def test_V02_slider_roundtrip_basic(self):
+		"""sliderCOMP palette clone survives round-trip."""
+		self.sandbox.create(sliderCOMP, 'sl1')
+		self._roundTrip(self.sandbox)
+		restored = self.sandbox.op('sl1')
+		self.assertIsNotNone(restored)
+		self.assertEqual(restored.OPType, 'sliderCOMP')
+		self.assertGreater(len(restored.children), 0,
+			'Slider children should be recreated from clone source')
+		clone_op = restored.par.clone.eval()
+		self.assertIsNotNone(clone_op)
+		self.assertTrue(clone_op.path.startswith('/sys/'),
+			f'Clone should point to /sys/, got {clone_op.path}')
+
+	def test_V03_palette_clone_flag_in_export(self):
+		"""Export marks palette clones and skips children."""
+		btn = self.sandbox.create(buttonCOMP, 'btn3')
+		actual_name = btn.name
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		ops = orig['tdn']['operators']
+		btn_entry = next(e for e in ops if e['name'] == actual_name)
+		self.assertTrue(btn_entry.get('palette_clone'),
+			'palette_clone flag must be True')
+		self.assertNotIn('children', btn_entry,
+			'Children must not be exported for palette clones')
+
+	def test_V04_buttontype_matches_default_preserved(self):
+		"""Params matching p.default but differing from clone source survive round-trip.
+
+		This is the core bug: buttontype p.default is "momentary" (menu index 0)
+		but the clone source sets it to "toggledown". Without the fix,
+		_exportBuiltinParams skips params matching p.default, so buttontype
+		is silently dropped and reverts to "toggledown" on rebuild.
+		"""
+		btn = self.sandbox.create(buttonCOMP, 'btn4')
+		actual_name = btn.name
+		# Capture the original value before round-trip
+		orig_val = str(btn.par.buttontype.eval())
+		self._roundTrip(self.sandbox)
+		restored = self.sandbox.op(actual_name)
+		self.assertIsNotNone(restored)
+		self.assertEqual(str(restored.par.buttontype.eval()), orig_val,
+			f'buttontype should survive round-trip, expected {orig_val}')
+
+	def test_V05_clone_source_diff_in_export(self):
+		"""Params differing from clone source appear in export even if they match p.default."""
+		btn = self.sandbox.create(buttonCOMP, 'btn5')
+		actual_name = btn.name
+		# buttontype.default is "momentary", clone source is "toggledown"
+		# The current value matches the clone source ("toggledown")
+		# so _exportBuiltinParams already exports it (differs from p.default).
+		# Now set it to p.default value to trigger the bug scenario:
+		btn.par.buttontype = btn.par.buttontype.default
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		# Find buttontype in either per-op params or type_defaults
+		ops = tdn['operators']
+		btn_entry = next(e for e in ops if e['name'] == actual_name)
+		per_op = btn_entry.get('parameters', {})
+		td = tdn.get('type_defaults', {}).get('buttonCOMP', {}).get(
+			'parameters', {})
+		all_params = dict(td)
+		all_params.update(per_op)
+		self.assertIn('buttontype', all_params,
+			'buttontype must be exported even when it matches p.default '
+			'(it differs from clone source)')
+
+	def test_V06_custom_label_preserved(self):
+		"""Custom label on palette clone survives round-trip."""
+		btn = self.sandbox.create(buttonCOMP, 'btn6')
+		actual_name = btn.name
+		btn.par.label = 'Custom'
+		self._roundTrip(self.sandbox)
+		restored = self.sandbox.op(actual_name)
+		self.assertEqual(str(restored.par.label.eval()), 'Custom')
+
+	def test_V07_clone_enablecloning_excluded_from_export(self):
+		"""clone and enablecloning params must not appear in TDN export."""
+		btn = self.sandbox.create(buttonCOMP, 'btn7')
+		actual_name = btn.name
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		# Check per-op params
+		ops = tdn['operators']
+		btn_entry = next(e for e in ops if e['name'] == actual_name)
+		per_op = btn_entry.get('parameters', {})
+		self.assertNotIn('clone', per_op,
+			'clone must not appear in per-op params')
+		self.assertNotIn('enablecloning', per_op,
+			'enablecloning must not appear in per-op params')
+		# Check type_defaults
+		td_params = tdn.get('type_defaults', {}).get(
+			'buttonCOMP', {}).get('parameters', {})
+		self.assertNotIn('clone', td_params,
+			'clone must not appear in type_defaults')
+		self.assertNotIn('enablecloning', td_params,
+			'enablecloning must not appear in type_defaults')
+
+	def test_V08_old_tdn_clone_params_skipped_on_import(self):
+		"""Old TDN files with clone/enablecloning params don't overwrite auto-set values."""
+		crafted_tdn = {
+			'format': 'tdn',
+			'version': '1.1',
+			'operators': [{
+				'name': 'btn8',
+				'type': 'buttonCOMP',
+				'palette_clone': True,
+				'parameters': {
+					'clone': "=op.TDTox.op('NONEXISTENT')",
+					'enablecloning': True,
+					'label': 'OldFile',
+				},
+			}],
+		}
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path, tdn=crafted_tdn,
+			clear_first=False)
+		self.assertTrue(result.get('success'))
+		restored = self.sandbox.op('btn8')
+		self.assertIsNotNone(restored)
+		# clone should point to /sys/ (auto-set), not NONEXISTENT
+		clone_op = restored.par.clone.eval()
+		self.assertIsNotNone(clone_op,
+			'Clone should resolve to /sys/ default, not NONEXISTENT')
+		self.assertTrue(clone_op.path.startswith('/sys/'))
+		# label should still be applied
+		self.assertEqual(str(restored.par.label.eval()), 'OldFile')
+
+	def test_V09_expression_param_on_palette_clone(self):
+		"""Expression-mode parameters on palette clones survive round-trip."""
+		btn = self.sandbox.create(buttonCOMP, 'btn9')
+		actual_name = btn.name
+		btn.par.label.expr = "'hello_' + 'world'"
+		btn.par.label.mode = ParMode.EXPRESSION
+		self._roundTrip(self.sandbox)
+		restored = self.sandbox.op(actual_name)
+		self.assertEqual(restored.par.label.mode, ParMode.EXPRESSION)
+		self.assertEqual(restored.par.label.expr, "'hello_' + 'world'")
+
+	def test_V10_reconstruction_preserves_palette_clone(self):
+		"""Palette clone params survive the strip + reimport reconstruction cycle."""
+		btn = self.sandbox.create(buttonCOMP, 'btn10')
+		actual_name = btn.name
+		orig_buttontype = str(btn.par.buttontype.eval())
+		btn.par.label = 'Reconstructed'
+		self._simulateReconstruction(self.sandbox)
+		restored = self.sandbox.op(actual_name)
+		self.assertIsNotNone(restored)
+		self.assertGreater(len(restored.children), 0,
+			'Children must be recreated')
+		self.assertEqual(str(restored.par.buttontype.eval()), orig_buttontype,
+			'buttontype must survive reconstruction')
+		self.assertEqual(str(restored.par.label.eval()), 'Reconstructed')
+		clone_op = restored.par.clone.eval()
+		self.assertIsNotNone(clone_op)
+		self.assertTrue(clone_op.path.startswith('/sys/'))
+
+	def test_V11_multiple_palette_clones_type_defaults(self):
+		"""Clone-source-diff params hoist to type_defaults when unanimous."""
+		names = []
+		for i in range(3):
+			btn = self.sandbox.create(buttonCOMP, f'btn{20 + i}')
+			names.append(btn.name)
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+		td = tdn.get('type_defaults', {}).get('buttonCOMP', {})
+		td_params = td.get('parameters', {})
+		# buttontype should be hoisted to type_defaults (unanimous across 3)
+		self.assertIn('buttontype', td_params,
+			'Unanimous clone-source-diff param should hoist to type_defaults')
+		# Round-trip should preserve all three
+		self._roundTrip(self.sandbox)
+		for name in names:
+			restored = self.sandbox.op(name)
+			self.assertIsNotNone(restored, f'{name} must survive round-trip')
+			self.assertGreater(len(restored.children), 0)
+
+	def test_V12_mixed_network_no_interference(self):
+		"""Palette clone handling does not interfere with regular operators."""
+		btn = self.sandbox.create(buttonCOMP, 'btn30')
+		btn_name = btn.name
+		btn.par.label = 'Mixed'
+		sl = self.sandbox.create(sliderCOMP, 'slider30')
+		sl_name = sl.name
+		base = self.sandbox.create(baseCOMP, 'base30')
+		base.create(nullTOP, 'inner1')
+		null = self.sandbox.create(nullTOP, 'null30')
+
+		# Export and check palette_clone flags
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(orig.get('success'))
+		ops = orig['tdn']['operators']
+		by_name = {e['name']: e for e in ops}
+		self.assertTrue(by_name[btn_name].get('palette_clone'))
+		self.assertTrue(by_name[sl_name].get('palette_clone'))
+		self.assertFalse(by_name.get('base30', {}).get('palette_clone', False),
+			'baseCOMP must NOT be marked as palette clone')
+		self.assertFalse(by_name.get('null30', {}).get('palette_clone', False))
+
+		# Round-trip
+		self._roundTrip(self.sandbox)
+		# Palette clones intact
+		self.assertGreater(len(self.sandbox.op(btn_name).children), 0)
+		self.assertGreater(len(self.sandbox.op(sl_name).children), 0)
+		self.assertEqual(str(self.sandbox.op(btn_name).par.label.eval()), 'Mixed')
+		# Regular ops intact
+		self.assertIsNotNone(self.sandbox.op('base30'))
+		self.assertIsNotNone(self.sandbox.op('base30').op('inner1'))
+		self.assertIsNotNone(self.sandbox.op('null30'))

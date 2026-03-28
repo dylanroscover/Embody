@@ -1007,6 +1007,8 @@ def main():
         if td_exe and not os.path.exists(td_exe):
             log(f"WARNING: TouchDesigner not found at {td_exe}")
 
+    log(f"Python: {sys.executable} ({sys.version.split()[0]})")
+
     # Install signal handlers AFTER logging init so we can see what kills us
     _install_signal_diagnostics()
 

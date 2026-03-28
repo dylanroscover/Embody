@@ -51,9 +51,9 @@
 				"w": 51,
 				"alignorder": 350,
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)"
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)"
 			},
 			"position": [600, 0]
 		},
@@ -68,9 +68,9 @@
 				"w": 26,
 				"alignorder": -200,
 				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)"
+				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)",
+				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (-0.04 if me.fetch('pressed', False) else 0.06 if me.fetch('hover', False) else 0)"
 			}
 		},
 		{

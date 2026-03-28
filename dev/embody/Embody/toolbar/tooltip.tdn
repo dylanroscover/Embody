@@ -1,19 +1,19 @@
 {
 	"format": "tdn",
 	"version": "1.1",
-	"build": 15,
-	"generator": "Embody/5.0.255",
+	"build": 18,
+	"generator": "Embody/5.0.262",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:54Z",
+	"exported_at": "2026-03-28T20:25:52Z",
 	"network_path": "/embody/Embody/toolbar/tooltip",
 	"options": {
 		"include_dat_content": false
 	},
 	"type": "containerCOMP",
 	"parameters": {
-		"x": 998,
+		"x": 759,
 		"y": 40,
-		"w": 80,
+		"w": 178,
 		"h": 22,
 		"layer": 10,
 		"alignallow": "ignore",
@@ -33,7 +33,7 @@
 			"name": "text",
 			"type": "textCOMP",
 			"parameters": {
-				"text": "Clear filter",
+				"text": "Open Embody parameters",
 				"callbacks": "text_callbacks",
 				"font": "Open Sans",
 				"fontsize": 10,

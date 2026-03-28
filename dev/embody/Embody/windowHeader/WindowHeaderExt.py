@@ -6,6 +6,7 @@ class WindowHeaderExt:
 	def __init__(self, ownerComp):
 		self.ownerComp = ownerComp
 		self._lastHovered = None
+		self._lastPressed = None
 
 		self.min_width = 370
 		self.min_height = 72
@@ -56,6 +57,32 @@ class WindowHeaderExt:
 	def _filter(self):
 		return self._tools.op('container_right') if self._tools else None
 
+	# ── Press / Release ─────────────────────────────────────────────
+
+	def OnPress(self):
+		"""Called by panelexec1 on lselect offToOn — set pressed visual."""
+		btn = self._findClickedButton()
+		if btn:
+			self._setPressed(btn)
+
+	def OnRelease(self):
+		"""Called by panelexec1 on lselect onToOff — clear pressed visual."""
+		self._clearPressed()
+
+	def _setPressed(self, btn):
+		if self._lastPressed and self._lastPressed.valid and self._lastPressed != btn:
+			self._lastPressed.store('pressed', False)
+		btn.store('pressed', True)
+		btn.store('hover', False)
+		self._lastPressed = btn
+
+	def _clearPressed(self, restore_hover=True):
+		if self._lastPressed and self._lastPressed.valid:
+			self._lastPressed.store('pressed', False)
+			if restore_hover:
+				self._lastPressed.store('hover', True)
+		self._lastPressed = None
+
 	# ── Click dispatch ──────────────────────────────────────────────
 
 	def OnClick(self):
@@ -93,6 +120,7 @@ class WindowHeaderExt:
 		if self._lastHovered and self._lastHovered.valid:
 			self._lastHovered.store('hover', False)
 		self._lastHovered = None
+		self._clearPressed(restore_hover=False)
 
 	# ── Window actions ──────────────────────────────────────────────
 

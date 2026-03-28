@@ -1,6 +1,7 @@
 def onOffToOn(panelValue):
 	if panelValue.name == 'lselect':
 		container = me.par.panels.eval()
+		me.parent().ext.ToolbarExt.OnContainerPress(container)
 		me.parent().ext.ToolbarExt.OnContainerClick(container)
 
 def whileOn(panelValue):
@@ -10,6 +11,9 @@ def onOnToOff(panelValue):
 	if panelValue.name == 'rollover':
 		container = me.par.panels.eval()
 		me.parent().ext.ToolbarExt.OnContainerRollover(container, False)
+	if panelValue.name == 'lselect':
+		container = me.par.panels.eval()
+		me.parent().ext.ToolbarExt.OnContainerRelease(container)
 
 def whileOff(panelValue):
 	return
