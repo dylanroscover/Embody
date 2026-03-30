@@ -1,17 +1,17 @@
 {
 	"format": "tdn",
 	"version": "1.1",
-	"build": 13,
-	"generator": "Embody/5.0.255",
+	"build": 15,
+	"generator": "Embody/5.0.262",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:54Z",
+	"exported_at": "2026-03-28T20:25:52Z",
 	"network_path": "/embody/Embody/toolbar/tooltip/text",
 	"options": {
 		"include_dat_content": false
 	},
 	"type": "textCOMP",
 	"parameters": {
-		"text": "Clear filter",
+		"text": "Open Embody parameters",
 		"callbacks": "text_callbacks",
 		"font": "Open Sans",
 		"fontsize": 10,

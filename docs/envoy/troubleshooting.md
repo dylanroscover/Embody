@@ -83,13 +83,28 @@ Reopening the conversation re-initializes the MCP connection. The message histor
 
 **Symptoms:** You opened the same `.toe` file in two TD instances and want predictable names for `switch_instance`.
 
-Envoy auto-suffixes duplicate keys (`MyProject`, `MyProject-2`, etc.), so both instances are addressable. If you want predictable names instead of auto-suffixed ones, set the **Instance Name** parameter (`Envoyinstancename`) on each Embody COMP before starting Envoy.
+Envoy auto-suffixes duplicate keys (`MyProject`, `MyProject-2`, etc.), so both instances are addressable.
 
 ### Port exhaustion
 
 **Symptoms:** Envoy fails to start with a message about no available ports.
 
 Envoy scans 10 ports (default: 9870–9879). If all are occupied, it can't start. Close unused TD instances or change the **Envoy Port** parameter to a different base (e.g., 9880).
+
+## Broken Virtual Environment
+
+**Symptoms:** Bridge process doesn't start at all, or starts and immediately exits. `dev/logs/envoy-bridge.log` is empty or shows a Python traceback about a missing interpreter. `.mcp.json` command points to a `.venv/` Python that doesn't work.
+
+**Cause:** The `.venv` was created from a TouchDesigner Python installation that has since been upgraded or removed. The `home` key in `.venv/pyvenv.cfg` points to a path that no longer exists (common on Windows with versioned TD directories like `TouchDesigner.2025.32460/`).
+
+**Fix:**
+
+1. Delete the broken venv: `rm -rf <project_dir>/.venv`
+2. Toggle Envoy off and on in TouchDesigner (or restart TD) — Envoy will recreate the venv automatically
+3. Reopen your Claude Code session so the bridge reconnects with the new venv Python
+
+!!! note
+    Envoy validates the venv Python on startup. If the venv interpreter fails to execute, Envoy falls back to the system Python and logs a warning to the Textport. Check for "failed to execute" warnings after TD upgrades.
 
 ## Log Files
 

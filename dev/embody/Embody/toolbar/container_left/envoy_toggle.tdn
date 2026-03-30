@@ -25,9 +25,9 @@
 		"clickthrough": true,
 		"resizecomp": "=me",
 		"repocomp": "=me",
-		"bgcolorr": "=(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-		"bgcolorg": "=(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-		"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
+		"bgcolorr": "=(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
+		"bgcolorg": "=(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
+		"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (-0.04 if me.fetch('pressed', False) else 0.08 if me.fetch('hover', False) else 0)",
 		"bgalpha": 1
 	},
 	"color": [0.3, 0.5, 0.9],

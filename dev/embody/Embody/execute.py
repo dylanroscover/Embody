@@ -58,6 +58,9 @@ def onProjectPreSave():
 	# temporarily-missing operators inside TDN COMPs.
 	parent.Embody.ext.Embody.Update(suppress_refresh=True)
 
+	# DAT content safety — detect unprotected DATs before strip/restore
+	parent.Embody.ext.Embody._checkDATContentSafety()
+
 	tdn_comps = parent.Embody.ext.Embody._getTDNStrategyComps()
 	if not tdn_comps:
 		return

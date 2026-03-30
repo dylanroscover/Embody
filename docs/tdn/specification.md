@@ -786,6 +786,8 @@ If a child COMP is removed from the externalizations table (no longer tagged for
 
 COMPs that are cloned from the TouchDesigner palette (i.e., their `clone` parameter points to `/sys/`) are marked with `"palette_clone": true`. Their children are **not** exported because TouchDesigner automatically recreates them from the clone source when the project loads.
 
+**Parameter handling for palette clones**: During export, parameters are compared against two baselines — the built-in default (`p.default`) and the clone source's actual value. If a parameter matches `p.default` but differs from the clone source, it is still exported. This prevents user-set values from being silently dropped when they happen to match the built-in default but not the clone source (e.g., a `buttontype` whose `p.default` is `"momentary"` but whose clone source is `"toggledown"`). The `clone` and `enablecloning` parameters are always excluded — TD auto-sets these during rebuild.
+
 ---
 
 ## Annotations
@@ -930,7 +932,7 @@ For most networks, export → import → re-export produces identical `.tdn` out
 
 ### Known Exceptions
 
-**Palette clones** — On first export, a palette-cloned COMP is marked `"palette_clone": true` and its children are skipped. After import, TouchDesigner materializes the children from the clone source. A subsequent re-export will include those children as regular operators. This means the second export is larger than the first.
+**Palette clones** — On first export, a palette-cloned COMP is marked `"palette_clone": true` and its children are skipped. After import, TouchDesigner materializes the children from the clone source. A subsequent re-export will include those children as regular operators. This means the second export is larger than the first. Parameters that match `p.default` but differ from the clone source are preserved (see [Palette Clones](#palette-clones)).
 
 **Color tolerance** — Colors within `0.01` per channel of the default gray `[0.545, 0.545, 0.545]` are treated as default and not exported. A color of `[0.55, 0.55, 0.55]` survives; `[0.546, 0.546, 0.546]` is dropped.
 

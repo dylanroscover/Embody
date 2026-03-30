@@ -28,7 +28,7 @@
 		"bgcolorr": "=1.0",
 		"bgcolorg": "=1.0",
 		"bgcolorb": "=1.0",
-		"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
+		"bgalpha": "=0.18 if me.fetch('pressed', False) else 0.1 if me.fetch('hover', False) else 0"
 	},
 	"color": [0.3, 0.5, 0.9],
 	"tags": ["tdn"],

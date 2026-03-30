@@ -6,6 +6,7 @@ class ToolbarExt:
 	def __init__(self, ownerComp):
 		self.ownerComp = ownerComp
 		self._lastHovered = None
+		self._lastPressed = None
 		self._ensureMeasureTOP()
 
 	def _ensureMeasureTOP(self):
@@ -53,6 +54,34 @@ class ToolbarExt:
 		except Exception as e:
 			debug(f'ToolbarExt error calling {action}: {e}')
 
+	# ── Press / Release ─────────────────────────────────────────────
+
+	def OnContainerPress(self, container):
+		"""Called by panelexec on lselect offToOn — set pressed visual."""
+		btn = self._findClickedButton(container)
+		if btn:
+			self._setPressed(btn)
+
+	def OnContainerRelease(self, container):
+		"""Called by panelexec on lselect onToOff — clear pressed visual."""
+		self._clearPressed()
+
+	def _setPressed(self, btn):
+		"""Set pressed state on a button via store(), clear previous."""
+		if self._lastPressed and self._lastPressed.valid and self._lastPressed != btn:
+			self._lastPressed.store('pressed', False)
+		btn.store('pressed', True)
+		btn.store('hover', False)
+		self._lastPressed = btn
+
+	def _clearPressed(self, restore_hover=True):
+		"""Clear pressed state from last pressed button."""
+		if self._lastPressed and self._lastPressed.valid:
+			self._lastPressed.store('pressed', False)
+			if restore_hover:
+				self._lastPressed.store('hover', True)
+		self._lastPressed = None
+
 	# ── Rollover / Hover ────────────────────────────────────────────
 
 	def OnContainerRollover(self, container, state):
@@ -86,6 +115,7 @@ class ToolbarExt:
 		if self._lastHovered and self._lastHovered.valid:
 			self._lastHovered.store('hover', False)
 		self._lastHovered = None
+		self._clearPressed(restore_hover=False)
 
 	# ── Tooltip ──────────────────────────────────────────────────────
 

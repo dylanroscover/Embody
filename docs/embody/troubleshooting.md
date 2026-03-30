@@ -31,6 +31,16 @@ If externalized files aren't updating on save:
 3. Try a manual save with ++ctrl+shift+u++
 4. Check the textport/logs for error messages
 
+### DAT Content Lost After Save (TDN)
+
+If DATs inside TDN-managed COMPs lose their content after saving:
+
+1. **Enable Embed DATs in TDNs**: This stores DAT content directly in the `.tdn` file, preserving it through the strip/restore cycle.
+2. **Externalize the DATs**: Tag them with an Embody DAT tag so their content is saved to files on disk.
+3. **Check the DAT Safety parameter**: If set to *Never Ask*, Embody won't warn you about at-risk DATs. Change it to *Ask Each Save* or *Always Externalize* to catch unprotected DATs before they lose content.
+
+See [DAT Content Safety](externalization.md#dat-content-safety) for details on how the safety check works.
+
 ### Cross-Platform Issues
 
 Embody normalizes all paths to forward slashes (`/`). If you're collaborating across Windows and macOS and encountering path issues, ensure you're using a recent version of Embody with cross-platform path handling.

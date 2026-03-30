@@ -29,3 +29,21 @@ When the bridge has no tools registered (ToolSearch returns nothing for Envoy to
 The most frequent cause is `.envoy.json` having `active` set to an instance whose TD process is no longer running. The bridge tries to connect for 60 seconds, fails, returns an error, and tries again on the next request — but Claude Code may not retry `tools/list`, so no tools ever appear.
 
 **Prevention**: When switching instances or ending a session, ensure `.envoy.json` points to a running instance or the primary dev project.
+
+### Common failure: broken venv
+
+**Symptoms**: Bridge process doesn't start at all, or starts and immediately exits. `dev/logs/envoy-bridge.log` is empty or shows a Python traceback about a missing interpreter. `.mcp.json` command points to a `.venv/` Python that doesn't work.
+
+**Cause**: The venv was created from a TD Python installation that has since been upgraded or removed. The `home` key in `.venv/pyvenv.cfg` points to a dead path (common on Windows with versioned TD directories like `TouchDesigner.2025.32460/`).
+
+**Diagnosis**:
+1. Read `.mcp.json` — find the `command` path for the envoy server.
+2. Test it: run `<command> -c "print(1)"` via Bash. If it fails with "No Python at ..." or similar, the venv is broken.
+3. Confirm by reading `.venv/pyvenv.cfg` — check if the `home` path points to an existing directory.
+
+**Fix**:
+1. Delete the broken venv: `rm -rf <project_dir>/.venv`
+2. Envoy will recreate it on next startup. Tell the user to toggle Envoy off and on in TD, or restart TD.
+3. After recreation, reopen the Claude Code session so the bridge reconnects with the new venv Python.
+
+**Prevention**: Envoy validates the venv Python on startup and logs a warning if broken. Check TD textport for "failed to execute" warnings after TD upgrades.
