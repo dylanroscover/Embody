@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
-	"version": "1.1",
+	"version": "1.2",
 	"build": 27,
-	"generator": "Embody/5.0.255",
+	"generator": "Embody/5.0.266",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:55Z",
+	"exported_at": "2026-03-30T06:55:44Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false
@@ -19,8 +19,7 @@
 			"parameters": {
 				"includeinorder": true,
 				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
-				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
 			"flags": ["display"],
 			"color": [0.45, 0.45, 0.45]
@@ -394,6 +393,15 @@
 						"value": "delete"
 					},
 					{
+						"name": "Tdndatsafety",
+						"style": "Menu",
+						"label": "DAT Safety",
+						"default": "ask",
+						"menuNames": ["ask", "externalize", "ignore"],
+						"menuLabels": ["Ask Each Save", "Always Externalize", "Never Ask"],
+						"help": "What to do when TDN COMPs contain DATs with content that isn't externalized or embedded. 'Ask Each Save' prompts on each save, 'Always Externalize' auto-externalizes without asking, 'Never Ask' suppresses the check."
+					},
+					{
 						"name": "Openmanager",
 						"style": "Pulse",
 						"label": "Open Manager",
@@ -568,15 +576,33 @@
 				],
 				"TDN": [
 					{
+						"name": "Tdncascade",
+						"style": "Toggle",
+						"label": "Cascade to Children",
+						"startSection": true,
+						"help": "When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file."
+					},
+					{
+						"name": "Tdncascadewarn",
+						"style": "Menu",
+						"label": "Large TDN Warning",
+						"default": "ask",
+						"menuNames": ["ask", "quiet"],
+						"menuLabels": ["Ask", "Quiet"],
+						"help": "Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed."
+					},
+					{
 						"name": "Embeddatsintdns",
 						"style": "Toggle",
 						"label": "Embed DATs (default)",
+						"startSection": true,
 						"help": "When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content."
 					},
 					{
 						"name": "Tdncreateonstart",
 						"style": "Toggle",
 						"label": "TDN Create on Start",
+						"startSection": true,
 						"default": true,
 						"help": "When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save."
 					},
@@ -812,7 +838,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.255"
+						"value": "5.0.266"
 					},
 					{
 						"name": "Touchbuild",
@@ -835,7 +861,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 222
+						"value": 308
 					},
 					{
 						"name": "Github",
@@ -850,7 +876,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-03-26 16:00:55 UTC"
+						"value": "2026-03-30 06:55:44 UTC"
 					},
 					{
 						"name": "Help",
@@ -866,13 +892,15 @@
 			"storage": {
 				"claudius_running": false,
 				"_tdn_restore_failures": ["/embody/base1"],
-				"expand_order": ["/embody", "/embody/unit_tests"]
-			}
+				"expand_order": ["/embody"]
+			},
+			"tdn_ref": "embody/Embody.tdn"
 		},
 		{
 			"name": "base_tdn",
 			"type": "baseCOMP",
-			"position": [700, -325]
+			"position": [700, -325],
+			"tdn_ref": "embody/base_tdn.tdn"
 		},
 		{
 			"name": "tdn_tests",
@@ -881,7 +909,8 @@
 			"position": [0, -500],
 			"storage": {
 				"embed_dats_in_tdn": true
-			}
+			},
+			"tdn_ref": "embody/tdn_tests.tdn"
 		},
 		{
 			"name": "unit_tests",
@@ -3290,7 +3319,8 @@
 						}
 					]
 				}
-			}
+			},
+			"tdn_ref": "embody/unit_tests.tdn"
 		},
 		{
 			"name": "execute_src_ctrl",
@@ -3314,7 +3344,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 129,
+				"rows": 130,
 				"cols": 11
 			},
 			"flags": ["viewer"],

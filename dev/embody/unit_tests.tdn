@@ -1,13 +1,14 @@
 {
 	"format": "tdn",
-	"version": "1.1",
+	"version": "1.2",
 	"build": 24,
-	"generator": "Embody/5.0.255",
+	"generator": "Embody/5.0.266",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:53Z",
+	"exported_at": "2026-03-30T08:56:20Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"textDAT": {
@@ -2434,7 +2435,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/results.tsv",
 				"syncfile": true,
-				"rows": 282,
+				"rows": 849,
 				"cols": 5
 			},
 			"flags": ["viewer"],
@@ -2458,7 +2459,8 @@
 			"position": [400, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/unit_tests/test_sandbox.tdn"
 		},
 		{
 			"name": "TestRunnerExt",
@@ -2779,68 +2781,6 @@
 			},
 			"flags": ["viewer"],
 			"position": [200, -600]
-		}
-	],
-	"annotations": [
-		{
-			"name": "annotate1",
-			"mode": "annotate",
-			"title": "u",
-			"text": "Test runner, results table, and sandbox",
-			"position": [-70, -70],
-			"size": [871, 370],
-			"color": [0.22, 0.35, 0.22],
-			"opacity": 0.5
-		},
-		{
-			"name": "annotate2",
-			"mode": "annotate",
-			"title": "Embody Core Tests (13)",
-			"text": "Externalization, CRUD, file management, tagging,\nrename/move, delete, duplicates, sync, paths,\nparam tracking, operator queries, logging",
-			"position": [-70, -1070],
-			"size": [870, 930],
-			"color": [0.25, 0.3, 0.45],
-			"opacity": 0.5
-		},
-		{
-			"name": "annotate3",
-			"mode": "annotate",
-			"title": "MCP Tools Tests (13)",
-			"text": "Operators, parameters, DAT content, connections,\nannotations, extensions, diagnostics, flags/position,\ncode execution, externalization, performance, custom pars,\nTOP capture",
-			"position": [-70, -1870],
-			"size": [1070, 730],
-			"color": [0.45, 0.3, 0.25],
-			"opacity": 0.5
-		},
-		{
-			"name": "annotate4",
-			"mode": "annotate",
-			"title": "TDN Format Tests (5)",
-			"text": "Export/import, helpers, reconstruction, file I/O, crash safety",
-			"position": [-70, -2270],
-			"size": [1070, 330],
-			"color": [0.35, 0.35, 0.25],
-			"opacity": 0.5
-		},
-		{
-			"name": "annotate5",
-			"mode": "annotate",
-			"title": "Envoy Infrastructure Tests (3)",
-			"text": "Server lifecycle, STDIO bridge, thread communication,\nqueue processing, request throttling, log piggybacking",
-			"position": [-70, -2670],
-			"size": [670, 330],
-			"color": [0.35, 0.25, 0.35],
-			"opacity": 0.5
-		},
-		{
-			"name": "annotate6",
-			"mode": "annotate",
-			"title": "Claude Config Tests (1)",
-			"text": "Claude config generation pipeline, template DATs,\nwriteTemplate, writeClaudeMd, extractClaudeConfig",
-			"position": [-70, -3070],
-			"size": [270, 330],
-			"color": [0.3, 0.35, 0.4],
-			"opacity": 0.5
 		}
 	]
 }

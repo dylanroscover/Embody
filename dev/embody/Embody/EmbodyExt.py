@@ -810,6 +810,85 @@ class EmbodyExt:
         }
         return checks.get(client, lambda d: False)(target_dir)
 
+    def InitEnvoy(self) -> None:
+        """(Re)generate all Envoy and AI client config files.
+
+        Writes MCP config (.mcp.json, .envoy.json, bridge script,
+        settings.local.json) and AI client files (CLAUDE.md, AGENTS.md,
+        .claude/rules/, .claude/skills/, or equivalent for Cursor/Copilot/
+        Windsurf) to the git root or project folder.
+
+        Safe to call at any time — idempotent. Use this after initializing
+        a git repo, changing the AI client setting, or updating Embody to
+        refresh generated files.
+
+        Requires Envoy to be enabled (par.Envoyenable = True).
+        """
+        if not self.my.par.Envoyenable.eval():
+            self.Log('Envoy is not enabled. Set Envoyenable = True first.', 'WARNING')
+            return
+
+        target_dir = self._findProjectRoot()
+
+        # MCP config (port comes from the running server, or the parameter)
+        envoy = self.my.ext.Envoy
+        if self.my.fetch('envoy_running', False):
+            # Extract port from current status string
+            status = str(self.my.par.Envoystatus.eval())
+            import re
+            match = re.search(r'port\s+(\d+)', status)
+            port = int(match.group(1)) if match else self.my.par.Envoyport.eval()
+        else:
+            port = self.my.par.Envoyport.eval()
+
+        envoy._configureMCPClient(port, target_dir=target_dir)
+
+        # AI client config (CLAUDE.md, AGENTS.md, rules, skills, etc.)
+        self._extractAIConfig()
+
+        client_label = self.my.par.Aiclient.label
+        self.Log(
+            f'Envoy config regenerated for {client_label} at {target_dir}',
+            'SUCCESS')
+
+    def InitGit(self) -> None:
+        """Initialize or reconnect to a git repository, then generate
+        git-related config files (.gitignore, .gitattributes).
+
+        If no git repo exists, prompts the user to initialize one.
+        After git is available, also regenerates MCP and AI client config
+        so paths point to the git root.
+
+        Safe to call at any time. Use this after creating a git repo
+        manually, or to refresh .gitignore/.gitattributes entries.
+
+        Requires Envoy to be enabled (par.Envoyenable = True).
+        """
+        if not self.my.par.Envoyenable.eval():
+            self.Log('Envoy is not enabled. Set Envoyenable = True first.', 'WARNING')
+            return
+
+        envoy = self.my.ext.Envoy
+        git_root = envoy._checkOrInitGitRepo()
+
+        if git_root is None:
+            return  # User cancelled
+
+        if git_root == 'no-git':
+            self.Log('No git repo — .gitignore/.gitattributes skipped.', 'INFO')
+            return
+
+        # Store git root so Envoy can find it later (e.g. for deregistration)
+        self.my.store('_git_root', git_root)
+
+        # Git-specific config
+        envoy._configureGitignore(git_root)
+        envoy._configureGitattributes(git_root)
+        self.Log(f'Git config generated at {git_root}', 'SUCCESS')
+
+        # Regenerate MCP + AI config so paths point to git root
+        self.InitEnvoy()
+
     # ==========================================================================
     # INITIALIZATION & RESET
     # ==========================================================================
@@ -2179,8 +2258,24 @@ class EmbodyExt:
             self._addToTable(oper, str(rel_path), timestamp, False,
                              build_num, touch_build, 'tdn')
             self.Log(f"Added TDN '{oper.path}'", "SUCCESS")
+
+            # Cascade: auto-tag child COMPs if enabled
+            if self.my.par.Tdncascade.eval():
+                self._cascadeTDNTag(oper)
         else:
             self.Log(f"TDN export failed for {oper.path}: {result.get('error')}", "ERROR")
+
+    def _cascadeTDNTag(self, parent_comp: OP) -> None:
+        """Auto-tag direct child COMPs for TDN externalization.
+
+        Uses depth=1 (direct children only). Recursion happens naturally
+        through the applyTagToOperator -> _handleTDNAddition ->
+        _cascadeTDNTag chain, processing each level in order.
+        """
+        tdn_tag = self.my.par.Tdntag.val
+        for child in parent_comp.findChildren(type=COMP, depth=1):
+            if tdn_tag not in child.tags:
+                self.applyTagToOperator(child, tdn_tag)
 
     def _buildTDNRelPath(self, oper: OP) -> Path:
         """Generate a relative .tdn file path for a COMP."""
@@ -3060,10 +3155,18 @@ class EmbodyExt:
                         f'({len(missing_ops)} missing ops)')
                     return
                 # Layer 2: Filter out sandbox paths even when runner isn't
-                # active (handles reinit, between-suite gaps, post-failure)
-                sandbox_prefix = runner.path + '/test_sandbox/'
+                # active (handles reinit, between-suite gaps, post-failure).
+                # Covers both the standard sandbox COMP and root-level
+                # test sandboxes (e.g. /_test_dat_restore).
+                sandbox_comp = getattr(runner, 'op', lambda x: None)(
+                    'test_sandbox')
+                sandbox_prefixes = []
+                if sandbox_comp:
+                    sandbox_prefixes.append(sandbox_comp.path + '/')
+                sandbox_prefixes.append('/_test_')
                 filtered = [(p, f, r) for p, f, r in missing_ops
-                            if not p.startswith(sandbox_prefix)]
+                            if not any(p.startswith(px)
+                                       for px in sandbox_prefixes)]
                 if len(filtered) < len(missing_ops):
                     self.Debug(
                         f'Filtered {len(missing_ops) - len(filtered)} '
@@ -3499,6 +3602,18 @@ class EmbodyExt:
                 btn_embed.par.colorg = self.my.par.Taggingmenucolorg.eval()
                 btn_embed.par.colorb = self.my.par.Taggingmenucolorb.eval()
 
+        # Show Embed Storage toggle (TDN COMPs only)
+        btn_embed_storage = self.tagger.op('btn_embed_storage')
+        if btn_embed_storage:
+            btn_embed_storage.par.display = embed_visible
+            if embed_visible:
+                per_comp = oper.fetch('embed_storage_in_tdn', None, search=False)
+                effective = per_comp if per_comp is not None else self.my.par.Embedstorageintdns.eval()
+                btn_embed_storage.par.label = '\u229e  Embed storage in tdn  \u2713' if effective else '\u229e  Embed storage in tdn'
+                btn_embed_storage.par.colorr = self.my.par.Taggingmenucolorr.eval()
+                btn_embed_storage.par.colorg = self.my.par.Taggingmenucolorg.eval()
+                btn_embed_storage.par.colorb = self.my.par.Taggingmenucolorb.eval()
+
         # Show Export portable tox button
         btn_portable = self.tagger.op('btn_portable')
         if btn_portable:
@@ -3529,8 +3644,8 @@ class EmbodyExt:
             title.par.text = 'Actions'
 
         # Update height: header + 2 tag buttons + Save + Reload + Export Portable
-        # (+ Embed DATs for TDN) (+ Open file if applicable)
-        visible_count = 6 + (1 if embed_visible else 0) + (1 if rel_fp else 0)
+        # (+ Embed DATs for TDN) (+ Embed Storage for TDN) (+ Open file if applicable)
+        visible_count = 6 + (2 if embed_visible else 0) + (1 if rel_fp else 0)
         self.tagger.store('visible_count', visible_count)
 
     def SetupTaggerDATManageMode(self, oper: OP, active_tag: str) -> None:
@@ -3589,6 +3704,9 @@ class EmbodyExt:
         btn_embed = self.tagger.op('btn_embed')
         if btn_embed:
             btn_embed.par.display = False
+        btn_embed_storage = self.tagger.op('btn_embed_storage')
+        if btn_embed_storage:
+            btn_embed_storage.par.display = False
 
         # Show Reveal in Finder/Explorer
         btn_openfile = self.tagger.op('btn_openfile')
@@ -3619,12 +3737,15 @@ class EmbodyExt:
         btn_openfile = self.tagger.op('btn_openfile')
         btn_portable = self.tagger.op('btn_portable')
         btn_embed = self.tagger.op('btn_embed')
+        btn_embed_storage = self.tagger.op('btn_embed_storage')
         if btn_save:
             btn_save.par.display = False
         if btn_reload:
             btn_reload.par.display = False
         if btn_embed:
             btn_embed.par.display = False
+        if btn_embed_storage:
+            btn_embed_storage.par.display = False
         if btn_remove:
             btn_remove.par.display = False
         if btn_openfile:
@@ -4074,6 +4195,32 @@ class EmbodyExt:
 
         state = 'on' if new_val else 'off'
         self.Log(f"Embed DATs set to {state} for {oper.path}", 'SUCCESS')
+        self.Refresh()
+
+    def HandleEmbedStorage(self, oper: OP) -> None:
+        """Toggle per-COMP 'embed storage' setting and re-export the .tdn."""
+        # Read current effective value
+        per_comp = oper.fetch('embed_storage_in_tdn', None, search=False)
+        if per_comp is not None:
+            effective = per_comp
+        else:
+            effective = self.my.par.Embedstorageintdns.eval()
+
+        # Toggle to explicit opposite
+        new_val = not effective
+        oper.store('embed_storage_in_tdn', new_val)
+
+        # Re-export the .tdn with the new setting
+        rel_tdn_path = self._getStrategyFilePath(oper.path, 'tdn')
+        if rel_tdn_path:
+            abs_path = str(self.buildAbsolutePath(rel_tdn_path))
+            protected = self._getAllTrackedTDNFiles(exclude_path=oper.path)
+            self.my.ext.TDN.ExportNetwork(
+                root_path=oper.path, output_file=abs_path,
+                cleanup_protected=protected)
+
+        state = 'on' if new_val else 'off'
+        self.Log(f"Embed storage set to {state} for {oper.path}", 'SUCCESS')
         self.Refresh()
 
     def HandlePortableExport(self, oper: OP) -> None:

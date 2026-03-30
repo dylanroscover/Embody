@@ -810,3 +810,240 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertIn('textDAT', types)
 		self.assertIn('noiseTOP', types)
 		self.assertIn('waveCHOP', types)
+
+	# =================================================================
+	# tdn_ref — export, import, and cross-validation
+	# =================================================================
+
+	def _get_log_id(self):
+		return self.embody_ext._log_counter
+
+	def _get_logs_since(self, since_id):
+		return [e for e in self.embody_ext._log_buffer if e['id'] > since_id]
+
+	def _has_log_message(self, since_id, substring):
+		for entry in self._get_logs_since(since_id):
+			if substring in entry.get('message', ''):
+				return True
+		return False
+
+	def test_tdn_ref_written_on_export(self):
+		"""Export of parent with TDN-tagged child should include tdn_ref."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'child_comp')
+		child.create(textDAT, 'leaf')
+		# Tag the child for TDN
+		tdn_tag = self.embody.par.Tdntag.val
+		child.tags.add(tdn_tag)
+		# Export the child first so it's in the table
+		child_path = self.embody_ext._buildTDNRelPath(child)
+		child_abs = self.embody_ext.buildAbsolutePath(child_path)
+		child_abs.parent.mkdir(parents=True, exist_ok=True)
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=child.path, output_file=str(child_abs))
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, str(child_path), timestamp,
+			False, 1, str(app.build), 'tdn')
+		# Now export the parent
+		fp = str(Path(self._temp_dir) / 'parent.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'child_comp'][0]
+		self.assertIn('tdn_ref', child_entry)
+		self.assertNotIn('children', child_entry)
+
+	def test_tdn_ref_absent_without_tag(self):
+		"""Export of parent with non-TDN child should not include tdn_ref."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'child_comp')
+		child.create(textDAT, 'leaf')
+		fp = str(Path(self._temp_dir) / 'no_ref.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'child_comp'][0]
+		self.assertNotIn('tdn_ref', child_entry)
+		self.assertIn('children', child_entry)
+
+	def test_tdn_ref_absent_with_embed_all(self):
+		"""embed_all=True should suppress tdn_ref even for tagged children."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'child_comp')
+		child.create(textDAT, 'leaf')
+		tdn_tag = self.embody.par.Tdntag.val
+		child.tags.add(tdn_tag)
+		# Add child to table
+		child_path = self.embody_ext._buildTDNRelPath(child)
+		child_abs = self.embody_ext.buildAbsolutePath(child_path)
+		child_abs.parent.mkdir(parents=True, exist_ok=True)
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=child.path, output_file=str(child_abs))
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, str(child_path), timestamp,
+			False, 1, str(app.build), 'tdn')
+		# Export parent with embed_all
+		fp = str(Path(self._temp_dir) / 'embed.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp, embed_all=True)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'child_comp'][0]
+		self.assertNotIn('tdn_ref', child_entry)
+		self.assertIn('children', child_entry)
+
+	def test_validateTDNRefs_happy_path(self):
+		"""Valid tdn_refs matching table entries and disk files produce no warnings."""
+		# Create child and add to table with a real file
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'child_comp')
+		child.create(textDAT, 'leaf')
+		tdn_tag = self.embody.par.Tdntag.val
+		child.tags.add(tdn_tag)
+		child_path = self.embody_ext._buildTDNRelPath(child)
+		child_abs = self.embody_ext.buildAbsolutePath(child_path)
+		child_abs.parent.mkdir(parents=True, exist_ok=True)
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=child.path, output_file=str(child_abs))
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, str(child_path), timestamp,
+			False, 1, str(app.build), 'tdn')
+		# Build op_defs with tdn_ref
+		op_defs = [{'name': 'child_comp', 'tdn_ref': str(child_path)}]
+		warnings = self.embody.ext.TDN._validateTDNRefs(
+			op_defs, parent.path)
+		self.assertLen(warnings, 0)
+
+	def test_validateTDNRefs_missing_table_entry(self):
+		"""tdn_ref for a COMP not in the table produces a warning."""
+		# Use a unique name that can't collide with other test entries
+		parent = self.sandbox.create(baseCOMP, 'orphan_ref_parent')
+		orphan = parent.create(baseCOMP, 'orphan_ref_child')
+		# File exists on disk but orphan is NOT in externalizations table
+		fake_file = Path(self._temp_dir) / 'orphan.tdn'
+		fake_file.write_text('{}')
+		op_defs = [{'name': 'orphan_ref_child', 'tdn_ref': str(fake_file)}]
+		warnings = self.embody.ext.TDN._validateTDNRefs(
+			op_defs, parent.path)
+		has_table_warning = any('externalizations table' in w for w in warnings)
+		self.assertTrue(has_table_warning, f'Expected table warning, got: {warnings}')
+
+	def test_validateTDNRefs_missing_file(self):
+		"""tdn_ref pointing to a non-existent file produces a warning."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'child_comp')
+		# Add to table but no file on disk
+		tdn_tag = self.embody.par.Tdntag.val
+		child.tags.add(tdn_tag)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'nonexistent/child.tdn',
+			timestamp, False, 1, str(app.build), 'tdn')
+		op_defs = [{'name': 'child_comp', 'tdn_ref': 'nonexistent/child.tdn'}]
+		warnings = self.embody.ext.TDN._validateTDNRefs(
+			op_defs, parent.path)
+		has_file_warning = any('file not found' in w for w in warnings)
+		self.assertTrue(has_file_warning)
+
+	def test_cascade_tags_children(self):
+		"""_cascadeTDNTag should add TDN tag to direct child COMPs."""
+		parent = self.sandbox.create(baseCOMP, 'cascade_parent')
+		child1 = parent.create(baseCOMP, 'child1')
+		child2 = parent.create(baseCOMP, 'child2')
+		parent.create(textDAT, 'leaf_dat')  # DATs should not be tagged
+		tdn_tag = self.embody.par.Tdntag.val
+		# Directly add tag to parent (skip full externalization pipeline
+		# to avoid file writes that reinitialize the extension)
+		parent.tags.add(tdn_tag)
+		orig_cascade = self.embody.par.Tdncascade.eval()
+		self.embody.par.Tdncascade = True
+		try:
+			self.embody_ext._cascadeTDNTag(parent)
+			self.assertIn(tdn_tag, child1.tags)
+			self.assertIn(tdn_tag, child2.tags)
+			# DATs should NOT be tagged
+			leaf = parent.op('leaf_dat')
+			self.assertNotIn(tdn_tag, leaf.tags)
+		finally:
+			self.embody.par.Tdncascade = orig_cascade
+			parent.tags.discard(tdn_tag)
+			child1.tags.discard(tdn_tag)
+			child2.tags.discard(tdn_tag)
+
+	def test_cascade_off_no_children_tagged(self):
+		"""With cascade OFF, tagging a parent should not tag children."""
+		parent = self.sandbox.create(baseCOMP, 'nocascade_parent')
+		child = parent.create(baseCOMP, 'child')
+		tdn_tag = self.embody.par.Tdntag.val
+		orig_cascade = self.embody.par.Tdncascade.eval()
+		self.embody.par.Tdncascade = False
+		try:
+			self.embody_ext.applyTagToOperator(parent, tdn_tag)
+			self.assertNotIn(tdn_tag, child.tags)
+		finally:
+			self.embody.par.Tdncascade = orig_cascade
+
+	def test_large_tdn_warning_suppressed(self):
+		"""Tdncascadewarn='quiet' should prevent the dialog from showing."""
+		# Create a file over threshold
+		big_file = Path(self._temp_dir) / 'big.tdn'
+		big_file.write_text('x' * 5_100_000)  # > 5 MB
+		orig_warn = self.embody.par.Tdncascadewarn.eval()
+		orig_cascade = self.embody.par.Tdncascade.eval()
+		self.embody.par.Tdncascadewarn = 'quiet'
+		self.embody.par.Tdncascade = False
+		try:
+			log_id = self._get_log_id()
+			self.embody.ext.TDN._warnLargeTDN(str(big_file), '/test')
+			# No dialog shown, no log about silencing
+			has_silence = self._has_log_message(log_id, 'warning silenced')
+			self.assertFalse(has_silence)
+		finally:
+			self.embody.par.Tdncascadewarn = orig_warn
+			self.embody.par.Tdncascade = orig_cascade
+
+	def test_large_tdn_warning_shown(self):
+		"""Tdncascadewarn='ask' with large file should show dialog."""
+		big_file = Path(self._temp_dir) / 'big.tdn'
+		big_file.write_text('x' * 5_100_000)  # > 5 MB
+		orig_warn = self.embody.par.Tdncascadewarn.eval()
+		orig_cascade = self.embody.par.Tdncascade.eval()
+		self.embody.par.Tdncascadewarn = 'ask'
+		self.embody.par.Tdncascade = False
+		# Seed auto-response: button 0 = OK (dismiss without silencing)
+		self.embody.store('_smoke_test_responses', {
+			'Large TDN File': 0})
+		try:
+			self.embody.ext.TDN._warnLargeTDN(str(big_file), '/test')
+			# Dialog was intercepted — warn pref should still be 'ask'
+			self.assertEqual(self.embody.par.Tdncascadewarn.eval(), 'ask')
+		finally:
+			self.embody.par.Tdncascadewarn = orig_warn
+			self.embody.par.Tdncascade = orig_cascade
+			try:
+				self.embody.unstore('_smoke_test_responses')
+			except Exception:
+				pass
+
+	def test_createOps_skips_children_with_tdn_ref(self):
+		"""Import with tdn_ref should create shell but no children."""
+		parent = self.sandbox.create(baseCOMP, 'import_target')
+		op_defs = [{
+			'name': 'ref_comp',
+			'type': 'baseCOMP',
+			'tdn_ref': 'some/path.tdn',
+		}]
+		created = []
+		self.embody.ext.TDN._createOps(parent, op_defs, created)
+		ref_comp = parent.op('ref_comp')
+		self.assertIsNotNone(ref_comp)
+		# Should have no children (tdn_ref = separate file manages them)
+		self.assertLen(list(ref_comp.children), 0)

@@ -116,7 +116,11 @@ programmatically. When enabled, Envoy lets you:
 
 To enable: toggle the Envoyenable parameter ON. The server
 starts on port 9870 by default and auto-creates a .mcp.json
-file in your git repo root for AI coding assistants to discover.
+file in your project root for AI coding assistants to discover.
+
+You can regenerate Envoy config files at any time:
+  op.Embody.InitEnvoy()  — MCP + AI client config
+  op.Embody.InitGit()    — git repo + .gitignore/.gitattributes
 
 TDN Network Format
 ------------------
@@ -126,6 +130,13 @@ connections, and layout in a diffable format.
 
 Use ctrl-shift-e to export the full project, or ctrl-alt-e
 to export just the current network.
+
+Cascade TDN to child COMPs (Tdncascade toggle on TDN page):
+When enabled, tagging a COMP for TDN automatically tags all
+child COMPs too, so each gets its own .tdn file. This keeps
+individual files small and git-friendly instead of producing
+one large monolithic .tdn. Parent files store lightweight
+tdn_ref pointers to each child's .tdn file.
 
 Manager UI
 ----------

@@ -1,6 +1,6 @@
 # TDN Specification
 
-**Version 1.1**
+**Version 1.2**
 
 TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
@@ -18,7 +18,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 ```json
 {
   "format": "tdn",
-  "version": "1.1",
+  "version": "1.2",
   "build": 1,
   "generator": "Embody/5.0.237",
   "td_build": "2025.32050",
@@ -26,7 +26,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
   "network_path": "/",
   "type": "containerCOMP",
   "options": {
-    "include_dat_content": true
+    "include_dat_content": true,
+    "include_storage": true
   },
   "type_defaults": { ... },
   "par_templates": { ... },
@@ -45,7 +46,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
-| `version` | string | Yes | Format version. Currently `"1.1"`. |
+| `version` | string | Yes | Format version. Currently `"1.2"`. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
@@ -54,6 +55,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | `type` | string | No | TouchDesigner operator type of the target COMP (e.g., `"baseCOMP"`, `"containerCOMP"`, `"geometryCOMP"`). Added in v1.1. Makes the file self-describing for portable import into other projects. On import, a mismatch between this field and the destination COMP's type triggers a warning. |
 | `options` | object | Yes | Export settings used when generating this file. |
 | `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |
+| `options.include_storage` | boolean | No | Whether operator storage entries were included in the export. Absent means `true` (included). Added in v1.2. Can be toggled per-COMP via the `embed_storage_in_tdn` storage key. |
 | `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
 | `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
@@ -119,6 +121,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `children` | array | No | Only for COMPs with child operators (excluding palette clones). Contains nested operator objects. See [Children and Hierarchy](#children-and-hierarchy). |
 | `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
+| `tdn_ref` | string | No | Only for COMPs with their own TDN externalization. Relative file path to the child's `.tdn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
 
 ### Compact Formatting
 
@@ -678,6 +681,10 @@ DAT content is only included when:
 
 Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
 
+### Per-COMP Storage Toggle
+
+Storage export can be disabled per-COMP by setting the `embed_storage_in_tdn` storage key to `false` on the target COMP, or globally via Embody's `Embedstorageintdns` parameter. When disabled, the `options.include_storage` field is `false` and operator storage entries are omitted — except for Embody control keys (`embed_dats_in_tdn`, `embed_storage_in_tdn`) which are always preserved to maintain round-trip fidelity of export preferences.
+
 ### Format
 
 ```json
@@ -781,6 +788,42 @@ This prevents a common problem: if a child COMP is updated and re-exported to it
 - **Reconstruction on project open** imports parents before children (sorted by path depth). Combined with the skip logic, this means each COMP's network is populated exactly once, from its own authoritative `.tdn` file.
 
 If a child COMP is removed from the externalizations table (no longer tagged for TDN), its `children` array in the parent TDN will be imported normally — no special handling needed.
+
+### COMP References (`tdn_ref`)
+
+*Added in TDN v1.2.*
+
+When a parent COMP is exported and a child COMP has its own TDN externalization, the parent's operator definition for that child includes a `tdn_ref` field instead of a `children` array:
+
+```json
+{
+  "name": "audio_mixer",
+  "type": "baseCOMP",
+  "tdn_ref": "Embody/project1/audio_mixer.tdn",
+  "position": [600, 0]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `tdn_ref` | `string` | Relative file path from the externalization folder to the child's `.tdn` file. Includes the COMP name in the path for cross-validation. |
+
+**Mutually exclusive with `children`**: When `tdn_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced file.
+
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. The referenced `.tdn` file is imported separately during reconstruction (sorted by path depth — parents before children).
+
+**Cross-validation**: The `tdn_ref` value is checked against two independent sources:
+
+1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdn'` and a matching `rel_file_path`.
+2. **Disk**: The referenced `.tdn` file must exist at the resolved absolute path.
+
+Mismatches produce warnings, not errors — the COMP shell is always created regardless. This ensures graceful degradation when files are moved or the table is out of sync.
+
+**Backward compatibility**:
+
+- Files **without** `tdn_ref` (TDN v1.1 and earlier) continue to work. The existing `_stripNestedTDNChildren` mechanism handles them via the externalizations table.
+- Files **with** `tdn_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The `_stripNestedTDNChildren` path handles the nested COMP correctly as a fallback.
+- The `embed_all=True` export option suppresses `tdn_ref` and inlines all children, producing a fully self-contained file regardless of child externalization status.
 
 ### Palette Clones
 
@@ -994,7 +1037,7 @@ A realistic `.tdn` file demonstrating all major features:
 ```json
 {
   "format": "tdn",
-  "version": "1.1",
+  "version": "1.2",
   "build": 3,
   "generator": "Embody/5.0.237",
   "td_build": "2025.32050",
@@ -1002,7 +1045,8 @@ A realistic `.tdn` file demonstrating all major features:
   "network_path": "/",
   "type": "baseCOMP",
   "options": {
-    "include_dat_content": true
+    "include_dat_content": true,
+    "include_storage": true
   },
   "type_defaults": {
     "baseCOMP": {

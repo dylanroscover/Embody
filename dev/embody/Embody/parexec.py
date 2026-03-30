@@ -51,6 +51,13 @@ def onValueChange(par, prev):
 	elif par.name == 'Embeddatsintdns':
 		parent.Embody.ext.TDN.ReexportAllTDNs()
 
+	elif par.name == 'Embedstorageintdns':
+		parent.Embody.ext.TDN.ReexportAllTDNs()
+
+	elif par.name == 'Tdncascade':
+		state = 'enabled' if par.eval() else 'disabled'
+		parent.Embody.ext.Embody.Log(f'TDN cascade {state}', 'INFO')
+
 	return
 
 def onPulse(par):

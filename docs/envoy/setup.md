@@ -13,12 +13,23 @@ Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, et
 
 1. **Enable Envoy**: Toggle the **Envoy Enable** parameter on the Embody COMP
 2. **Server starts**: Envoy runs on `localhost:9870` (configurable via **Envoy Port**)
-3. **Auto-configuration**: If your project is in a git repo, Envoy creates a `.mcp.json` file in the repo root automatically. Otherwise, create it manually (see below).
+3. **Auto-configuration**: Envoy creates `.mcp.json` and AI client config files in your git repo root (if available) or project folder. If your project is in a git repo, Envoy also generates `.gitignore` and `.gitattributes` entries.
 4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) — it picks up the `.mcp.json` automatically
 
-## Manual Configuration (No Git)
+## Regenerating Config Files
 
-If your project isn't in a git repo — or you prefer manual control — create `.mcp.json` in your project directory. You can use either the direct HTTP transport or the STDIO bridge:
+You can regenerate Envoy's config files at any time from the TD textport or a script:
+
+```python
+op.Embody.InitEnvoy()   # Regenerate MCP + AI client config
+op.Embody.InitGit()     # Init/reconnect git repo + .gitignore/.gitattributes
+```
+
+Use `InitEnvoy()` after updating Embody, changing the AI Client parameter, or if config files were accidentally deleted. Use `InitGit()` after creating a git repo manually, or to refresh `.gitignore`/`.gitattributes` entries. `InitGit()` also calls `InitEnvoy()` to update paths.
+
+## Manual Configuration
+
+If you prefer manual control, create `.mcp.json` in your project directory. You can use either the direct HTTP transport or the STDIO bridge:
 
 **HTTP transport** (simpler, requires TD to be running):
 

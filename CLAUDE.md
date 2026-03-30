@@ -97,7 +97,7 @@ All externalized operators are fully recoverable from disk, regardless of `.toe`
 
 ### Envoy MCP Architecture
 
-Dual-thread design: worker thread runs MCP server (no TD imports), main thread executes TD operations via `_onRefresh()`. Communication via `threading.Event` + `Queue`. Server auto-configures `.mcp.json` in the git root on startup.
+Dual-thread design: worker thread runs MCP server (no TD imports), main thread executes TD operations via `_onRefresh()`. Communication via `threading.Event` + `Queue`. Server auto-configures `.mcp.json` in the git root (or project folder if no git) on startup.
 
 ### TDN Network Format
 
@@ -109,6 +109,8 @@ JSON-based format for representing TD networks as diffable text. Non-default par
 # Promoted methods (uppercase) — called directly on the component:
 op.Embody.Update()
 op.Embody.Save()
+op.Embody.InitEnvoy()    # Regenerate MCP + AI client config files
+op.Embody.InitGit()      # Init/reconnect git repo + .gitignore/.gitattributes
 op.Embody.ExportPortableTox(target=some_comp, save_path='/path/to/output.tox')
 
 # Non-promoted (lowercase) — through ext:

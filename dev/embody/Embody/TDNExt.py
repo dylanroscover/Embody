@@ -21,7 +21,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Optional, Union
 
-TDN_VERSION = '1.1'
+TDN_VERSION = '1.2'
 
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
@@ -339,7 +339,8 @@ class TDNExt:
 	def ExportNetwork(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 					  output_file: Optional[str] = None, max_depth: Optional[int] = None,
 					  cleanup_protected: Optional[list[str]] = None,
-					  embed_all: bool = False) -> dict[str, Any]:
+					  embed_all: bool = False,
+					  include_storage: Optional[bool] = None) -> dict[str, Any]:
 		"""
 		Export a TouchDesigner network to .tdn JSON format.
 
@@ -372,8 +373,16 @@ class TDNExt:
 			else:
 				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
 
+		if include_storage is None:
+			per_comp = root_op.fetch('embed_storage_in_tdn', None, search=False)
+			if per_comp is not None:
+				include_storage = per_comp
+			else:
+				include_storage = self.ownerComp.par.Embedstorageintdns.eval()
+
 		options = {
 			'include_dat_content': include_dat_content,
+			'include_storage': include_storage,
 			'max_depth': max_depth,
 			'embed_all': embed_all,
 		}
@@ -401,6 +410,7 @@ class TDNExt:
 				'network_path': root_path,
 				'options': {
 					'include_dat_content': include_dat_content,
+					'include_storage': include_storage,
 				},
 			}
 			if type_defaults:
@@ -430,9 +440,17 @@ class TDNExt:
 				tdn['tags'] = root_tags
 			if root_op.comment:
 				tdn['comment'] = root_op.comment
-			root_storage = self._exportStorage(root_op)
-			if root_storage:
-				tdn['storage'] = root_storage
+			if options.get('include_storage', True):
+				root_storage = self._exportStorage(root_op)
+				if root_storage:
+					tdn['storage'] = root_storage
+			else:
+				# Preserve Embody control keys even when storage is excluded
+				root_storage = self._exportStorage(root_op)
+				control_keys = {k: v for k, v in root_storage.items()
+								if k in ('embed_dats_in_tdn', 'embed_storage_in_tdn')}
+				if control_keys:
+					tdn['storage'] = control_keys
 
 			tdn['operators'] = operators
 
@@ -479,6 +497,10 @@ class TDNExt:
 				# content won't survive a TDN round-trip
 				self._warnLockedNonDATs(root_op, context='export')
 
+				# One-time warning for large monolithic TDN files
+				if not options.get('embed_all'):
+					self._warnLargeTDN(filepath, root_path)
+
 			return result
 
 		except Exception as e:
@@ -487,7 +509,8 @@ class TDNExt:
 
 	def ExportNetworkAsync(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 						   output_file: Optional[str] = None, max_depth: Optional[int] = None,
-						   embed_all: bool = False) -> None:
+						   embed_all: bool = False,
+						   include_storage: Optional[bool] = None) -> None:
 		"""
 		Non-blocking export using Thread Manager. Processes operators in
 		batches across frames so TouchDesigner stays responsive.
@@ -547,6 +570,13 @@ class TDNExt:
 			else:
 				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
 
+		if include_storage is None:
+			per_comp = root_op.fetch('embed_storage_in_tdn', None, search=False)
+			if per_comp is not None:
+				include_storage = per_comp
+			else:
+				include_storage = self.ownerComp.par.Embedstorageintdns.eval()
+
 		done_event = Event()
 
 		# Pre-collect existing .tdn files on the main thread.
@@ -571,6 +601,7 @@ class TDNExt:
 			'results': {},
 			'options': {
 				'include_dat_content': include_dat_content,
+				'include_storage': include_storage,
 				'max_depth': max_depth,
 				'embed_all': embed_all,
 			},
@@ -630,6 +661,8 @@ class TDNExt:
 				'options': {
 					'include_dat_content':
 						state['options']['include_dat_content'],
+					'include_storage':
+						state['options'].get('include_storage', True),
 				},
 			}
 			if type_defaults:
@@ -814,9 +847,18 @@ class TDNExt:
 						root_meta['tags'] = root_tags
 					if root_op.comment:
 						root_meta['comment'] = root_op.comment
-					root_storage = self._exportStorage(root_op)
-					if root_storage:
-						root_meta['storage'] = root_storage
+					if state['options'].get('include_storage', True):
+						root_storage = self._exportStorage(root_op)
+						if root_storage:
+							root_meta['storage'] = root_storage
+					else:
+						root_storage = self._exportStorage(root_op)
+						control_keys = {
+							k: v for k, v in root_storage.items()
+							if k in ('embed_dats_in_tdn',
+									 'embed_storage_in_tdn')}
+						if control_keys:
+							root_meta['storage'] = control_keys
 					state['root_meta'] = root_meta
 				for path, data in state['results'].items():
 					target_op = op(path)
@@ -1024,6 +1066,11 @@ class TDNExt:
 					self._log(
 						f'Skipping children of {sp} — has its own TDN '
 						f'externalization (source of truth)', 'INFO')
+
+		# Cross-validate tdn_ref pointers against table and disk
+		ref_warnings = self._validateTDNRefs(op_defs, target_path)
+		for w in ref_warnings:
+			self._log(w, 'WARNING')
 
 		try:
 			created = []
@@ -1335,9 +1382,17 @@ class TDNExt:
 				data['dock'] = dock_op.path
 
 		# Storage (all serializable entries, skipping transient/internal keys)
-		storage = self._exportStorage(target)
-		if storage:
-			data['storage'] = storage
+		if options.get('include_storage', True):
+			storage = self._exportStorage(target)
+			if storage:
+				data['storage'] = storage
+		else:
+			# Preserve Embody control keys even when storage is excluded
+			storage = self._exportStorage(target)
+			control_keys = {k: v for k, v in storage.items()
+							if k in ('embed_dats_in_tdn', 'embed_storage_in_tdn')}
+			if control_keys:
+				data['storage'] = control_keys
 
 		# Operator connections (left/right wires)
 		connections = self._exportConnections(target)
@@ -1385,7 +1440,11 @@ class TDNExt:
 					if not data['parameters']:
 						del data['parameters']
 			elif self._hasTDNTag(target) and not options.get('embed_all'):
-				pass  # Child's network managed by its own .tdn file
+				# Child's network managed by its own .tdn file.
+				# Write a tdn_ref pointer for cross-validation.
+				tdn_ref = self._resolveTDNRef(target)
+				if tdn_ref:
+					data['tdn_ref'] = tdn_ref
 			else:
 				max_depth = options.get('max_depth')
 				if max_depth is None or depth < max_depth:
@@ -1950,12 +2009,17 @@ class TDNExt:
 
 			try:
 				new_op = parent.create(op_type, name)
+				# TD ignores the name param for some palette types
+				# (e.g. annotateCOMP). Explicitly rename to match the TDN.
+				if new_op.name != name:
+					try:
+						new_op.name = name
+					except Exception:
+						self._log(
+							f'Operator "{name}" auto-named to '
+							f'"{new_op.name}"', 'WARNING')
 				created.append(new_op.path)
 				op_def['_created_op'] = new_op
-				if new_op.name != name:
-					self._log(
-						f'Operator "{name}" renamed to "{new_op.name}" '
-						f'(name conflict)', 'WARNING')
 			except Exception as e:
 				self._log(
 					f'Failed to create {op_type} "{name}": {e}', 'WARNING')
@@ -1963,7 +2027,15 @@ class TDNExt:
 
 			# Recurse into children for COMPs
 			children = op_def.get('children', [])
-			if children and new_op.isCOMP:
+			tdn_ref = op_def.get('tdn_ref')
+			if tdn_ref and new_op.isCOMP:
+				# This COMP's children come from a separate .tdn file.
+				# Shell created here; network populated by
+				# ReconstructTDNComps() in depth-sorted order.
+				self._log(
+					f'Skipping children of {new_op.path} — '
+					f'managed by {tdn_ref}', 'DEBUG')
+			elif children and new_op.isCOMP:
 				# Clear auto-created default children (e.g. torus1
 				# inside a geometryCOMP) before importing TDN children.
 				# These defaults aren't in the TDN (filtered by
@@ -1985,9 +2057,14 @@ class TDNExt:
 
 			custom_pars = op_def.get('custom_pars', {})
 			if custom_pars and target.isCOMP:
-				# Normalize to flat list with page info
-				flat_defs = self._flattenCustomPars(custom_pars)
-				self._createCustomParsOnOp(target, flat_defs)
+				# Palette clones already have their custom parameters from
+				# the clone source. Replacing them with appendXXX(replace=True)
+				# destroys the internal parameter bindings that the clone's
+				# rendering network depends on. Skip creation; Phase 3 sets
+				# values on the existing parameters directly.
+				if not op_def.get('palette_clone', False):
+					flat_defs = self._flattenCustomPars(custom_pars)
+					self._createCustomParsOnOp(target, flat_defs)
 
 			# Recurse
 			children = op_def.get('children', [])
@@ -3064,6 +3141,70 @@ class TDNExt:
 		tdn_tag = self.ownerComp.par.Tdntag.val
 		return tdn_tag in target.tags
 
+	def _resolveTDNRef(self, target) -> 'Optional[str]':
+		"""Look up a TDN-tagged child COMP's relative file path.
+
+		Returns the child's .tdn file path (relative to the project
+		externalization folder) from the externalizations table, or
+		None if the child isn't tracked.
+		"""
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if not table or table.numRows < 2:
+				return None
+			for i in range(1, table.numRows):
+				if (table[i, 'path'].val == target.path
+						and table[i, 'strategy'].val == 'tdn'):
+					return table[i, 'rel_file_path'].val
+		except Exception:
+			pass
+		return None
+
+	def _validateTDNRefs(self, op_defs: list, parent_path: str) -> list:
+		"""Cross-validate tdn_ref pointers against the externalizations table.
+
+		Checks two independent sources of truth:
+		1. Each tdn_ref in the file corresponds to a table entry
+		2. Each referenced .tdn file exists on disk
+
+		Returns list of warning messages (empty = all valid).
+		"""
+		warnings = []
+		tdn_paths = self._getTDNExternalizedPaths()
+
+		for op_def in op_defs:
+			tdn_ref = op_def.get('tdn_ref')
+			name = op_def.get('name', '?')
+			child_path = f"{parent_path.rstrip('/')}/{name}"
+
+			if tdn_ref:
+				# Check 1: table entry exists for this child
+				if child_path not in tdn_paths:
+					warnings.append(
+						f'tdn_ref for {child_path} points to {tdn_ref} '
+						f'but no matching entry in externalizations table')
+
+				# Check 2: referenced file exists on disk
+				try:
+					abs_path = self.ownerComp.ext.Embody.buildAbsolutePath(
+						tdn_ref)
+					if not abs_path.is_file():
+						warnings.append(
+							f'tdn_ref for {child_path}: file not found: '
+							f'{tdn_ref}')
+				except Exception:
+					warnings.append(
+						f'tdn_ref for {child_path}: cannot resolve path: '
+						f'{tdn_ref}')
+
+			# Recurse into children
+			children = op_def.get('children', [])
+			if children:
+				warnings.extend(
+					self._validateTDNRefs(children, child_path))
+
+		return warnings
+
 	def _serializeValue(self, val):
 		"""Convert a parameter value to a JSON-safe type.
 
@@ -3607,6 +3748,46 @@ class TDNExt:
 								 '', build_str, tb_str])
 		except Exception as e:
 			self._log(f'Failed to track TDN export: {e}', 'WARNING')
+
+	def _warnLargeTDN(self, filepath: str, root_path: str) -> None:
+		"""Show a one-time warning when a TDN file exceeds the size threshold.
+
+		Uses the Tdncascadewarn parameter (ask/quiet) to control whether
+		the dialog is shown. 'Don't show again' sets the parameter to
+		'quiet' permanently.
+		"""
+		LARGE_TDN_THRESHOLD = 5_000_000  # 5 MB
+
+		# Already using cascade — no point warning
+		if self.ownerComp.par.Tdncascade.eval():
+			return
+
+		warn_pref = getattr(self.ownerComp.par, 'Tdncascadewarn', None)
+		if warn_pref is None or warn_pref.eval() != 'ask':
+			return
+
+		try:
+			file_size = Path(filepath).stat().st_size
+		except Exception:
+			return
+
+		if file_size < LARGE_TDN_THRESHOLD:
+			return
+
+		size_mb = file_size / (1024 * 1024)
+		msg = (
+			f'The TDN file for {root_path} is {size_mb:.1f} MB.\n\n'
+			f'Large TDN files are difficult to diff in git. '
+			f'Enable "Cascade to Children" on the TDN page '
+			f'to split each child COMP into its own .tdn file.')
+		choice = self.ownerComp.ext.Embody._messageBox(
+			'Large TDN File',
+			msg,
+			buttons=['OK', "Don't show again"])
+
+		if choice == 1:  # Don't show again
+			self.ownerComp.par.Tdncascadewarn = 'quiet'
+			self._log('Large TDN warning silenced', 'INFO')
 
 	def _warnLockedNonDATs(self, root_op, context='export'):
 		"""Scan a network for locked non-DAT operators and warn.

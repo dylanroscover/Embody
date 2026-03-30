@@ -1,13 +1,14 @@
 {
 	"format": "tdn",
-	"version": "1.1",
-	"build": 16,
-	"generator": "Embody/5.0.262",
+	"version": "1.2",
+	"build": 17,
+	"generator": "Embody/5.0.266",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-28T20:29:51Z",
+	"exported_at": "2026-03-30T08:56:20Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"baseCOMP": {
@@ -23,23 +24,28 @@
 	"operators": [
 		{
 			"name": "sandbox_test_dat_restoration",
-			"type": "baseCOMP"
+			"type": "baseCOMP",
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration.tdn"
 		},
 		{
 			"name": "sandbox_test_dat_restoration1",
-			"type": "baseCOMP"
+			"type": "baseCOMP",
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration1.tdn"
 		},
 		{
 			"name": "sandbox_test_dat_restoration2",
-			"type": "baseCOMP"
+			"type": "baseCOMP",
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration2.tdn"
 		},
 		{
 			"name": "sandbox_test_custom_parameters",
-			"type": "baseCOMP"
+			"type": "baseCOMP",
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn"
 		},
 		{
 			"name": "sandbox_test_custom_parameters1",
-			"type": "baseCOMP"
+			"type": "baseCOMP",
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1.tdn"
 		}
 	]
 }

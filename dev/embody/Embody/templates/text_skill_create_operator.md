@@ -1,4 +1,4 @@
----
+﻿---
 name: create-operator
 description: "MUST READ before calling create_op. Contains required verification, positioning, and error-checking steps."
 ---

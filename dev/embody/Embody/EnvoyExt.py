@@ -1311,6 +1311,7 @@ class EnvoyExt:
         # was already set before the worker started polling.
         pending_test = getattr(sys, '_envoy_pending_test', None)
         if pending_test is not None:
+            self._restoreStatusAfterTests()
             pending_test['holder']['result'] = {
                 'error': 'Extension reinitialized during test run'}
             pending_test['event'].set()
@@ -1580,16 +1581,20 @@ class EnvoyExt:
         # Update status
         self.ownerComp.par.Envoystatus = f'Running on port {port}'
 
-        # Auto-configure git repo (MCP client, .gitignore, CLAUDE.md)
+        # Auto-configure project files.
         # Each step is independent — one failure must not block the others.
+        # MCP + AI config: always (uses git root if available, else project.folder)
+        target_dir = git_root if git_root != 'no-git' else None
+        self._configureMCPClient(port, target_dir=target_dir)
+        try:
+            op.Embody.ext.Embody._upgradeEnvoy()
+        except Exception as e:
+            self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
+
+        # Git config: only when a git repo exists
         if git_root != 'no-git':
-            self._configureMCPClient(port)
             self._configureGitignore(git_root)
             self._configureGitattributes(git_root)
-            try:
-                op.Embody.ext.Embody._upgradeEnvoy()
-            except Exception as e:
-                self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
 
     def Stop(self) -> None:
         """Stop MCP server"""
@@ -1861,13 +1866,27 @@ class EnvoyExt:
             self._signalTestError(pending, 'Test framework extension not ready')
             return None
         try:
+            # Suppress Embody's Update/Refresh cycle during tests to
+            # prevent extension reinit from TDN re-exports triggered by
+            # test-created operators making COMPs structurally dirty.
+            embody = op.Embody
+            self._test_saved_status = embody.par.Status.eval()
+            embody.par.Status = 'Testing'
             test_comp.RunTestsDeferredPerTest(
                 suite_name=suite_name, test_name=test_name)
             self._schedulePollTestCompletion()
             return None  # Deferred — worker thread waits on sys._envoy_pending_test['event']
         except Exception as e:
+            self._restoreStatusAfterTests()
             self._signalTestError(pending, f'Test run failed: {e}')
             return None
+
+    def _restoreStatusAfterTests(self):
+        """Re-enable Embody's Update cycle after tests complete."""
+        saved = getattr(self, '_test_saved_status', None)
+        if saved is not None:
+            op.Embody.par.Status = saved
+            self._test_saved_status = None
 
     def _signalTestError(self, pending, message):
         """Signal an error to the waiting worker thread via the test Event."""
@@ -1892,6 +1911,7 @@ class EnvoyExt:
             return
         runner = getattr(test_comp.ext, 'TestRunnerExt', None)
         if runner and not runner._running:
+            self._restoreStatusAfterTests()
             result = runner._getSummary()
             # Piggyback logs
             log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
@@ -3629,30 +3649,34 @@ class EnvoyExt:
 
     # === Utility Methods ===
 
-    def _configureMCPClient(self, port):
+    def _configureMCPClient(self, port, target_dir=None):
         """Auto-configure MCP client by writing .mcp.json and the STDIO bridge
-        script in the project root.  Uses STDIO transport so Claude Code always
-        has tools available (the bridge retries until Envoy is reachable).
-        Idempotent — safe to call on every start."""
+        script.  Uses STDIO transport so Claude Code always has tools available
+        (the bridge retries until Envoy is reachable).
+        Idempotent — safe to call on every start.
+
+        Args:
+            port: The port Envoy is running on.
+            target_dir: Directory to write config files into. Defaults to
+                git root if available, else project.folder.
+        """
         from pathlib import Path
         try:
-            # Find the git root by walking up from the .toe directory
             project_dir = Path(project.folder)
-            git_root = None
-            for parent in [project_dir] + list(project_dir.parents):
-                if (parent / '.git').exists():
-                    git_root = parent
-                    break
 
-            if git_root is None:
-                self._log(
-                    'No .git directory found. Place your .toe inside a git '
-                    'repo for auto-config, or create .mcp.json manually.',
-                    'WARNING')
-                return
+            if target_dir is None:
+                # Find the git root by walking up from the .toe directory
+                for parent_path in [project_dir] + list(project_dir.parents):
+                    if (parent_path / '.git').exists():
+                        target_dir = parent_path
+                        break
+                if target_dir is None:
+                    target_dir = project_dir
+
+            target_dir = Path(target_dir)
 
             # --- Deploy the STDIO bridge script ---
-            bridge_dir = git_root / '.claude'
+            bridge_dir = target_dir / '.claude'
             bridge_dir.mkdir(parents=True, exist_ok=True)
             bridge_path = bridge_dir / 'envoy-bridge.py'
 
@@ -3676,7 +3700,7 @@ class EnvoyExt:
                 self._log(
                     'Bridge script source not found — falling back to HTTP transport',
                     'WARNING')
-                self._configureMCPClientHTTP(git_root, port)
+                self._configureMCPClientHTTP(target_dir, port)
                 return
 
             # Write bridge script only if content changed — preserving
@@ -3728,14 +3752,14 @@ class EnvoyExt:
                 python_cmd = 'python' if sys.platform == 'win32' else 'python3'
 
             # --- Write .envoy.json project config ---
-            self._writeEnvoyConfig(git_root, port)
+            self._writeEnvoyConfig(target_dir, port)
 
             # --- Write .mcp.json with STDIO transport ---
-            mcp_file = git_root / '.mcp.json'
+            mcp_file = target_dir / '.mcp.json'
             # Use forward slashes even on Windows for JSON portability
             bridge_abs = str(bridge_path).replace('\\', '/')
             config_abs = str(
-                (git_root / '.envoy.json')).replace('\\', '/')
+                (target_dir / '.envoy.json')).replace('\\', '/')
 
             # Read existing config to preserve other servers
             config = {}
@@ -3774,11 +3798,11 @@ class EnvoyExt:
         except Exception as e:
             self._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
 
-    def _configureMCPClientHTTP(self, git_root, port):
+    def _configureMCPClientHTTP(self, target_dir, port):
         """Fallback: configure .mcp.json with direct HTTP transport.
         Used when the STDIO bridge script cannot be deployed."""
         url = f'http://localhost:{port}/mcp'
-        mcp_file = git_root / '.mcp.json'
+        mcp_file = target_dir / '.mcp.json'
 
         config = {}
         if mcp_file.exists():
@@ -3839,11 +3863,12 @@ class EnvoyExt:
         # No git repo found — prompt user
         choice = op.Embody.ext.Embody._messageBox(
             'Envoy — Git Repository Recommended',
-            'Envoy auto-configures .mcp.json, .gitignore, and CLAUDE.md\n'
-            'in your git repository root. No git repository was found.\n\n'
+            'A git repository is recommended for .gitignore and\n'
+            '.gitattributes management. No git repository was found.\n\n'
+            'MCP and AI client config files will be generated either way.\n\n'
             f'Initialize a git repo in:\n  {project_dir}\n\n'
             'Or browse to select a different folder (e.g. an existing repo root).\n'
-            'You can also create one manually and re-enable Envoy.',
+            'You can also run op.Embody.InitGit() later.',
             buttons=['Cancel', 'Initialize Git Here', 'Browse for Folder', 'Start Without Git'])
 
         if choice not in (1, 2, 3):  # Cancel or closed dialog
@@ -3913,10 +3938,11 @@ class EnvoyExt:
                 op.Embody.ext.Embody._messageBox(
                     'Envoy — Git Initialization Failed',
                     f'Could not initialize a git repository:\n\n  {e}\n\n'
-                    'Envoy will start without git. Auto-config files\n'
-                    '(.mcp.json, CLAUDE.md, etc.) will not be generated.\n\n'
-                    'To fix: run "git init" manually in your project\n'
-                    f'directory ({project_dir}), then re-enable Envoy.',
+                    'Envoy will start without git. MCP and AI client\n'
+                    'config will be generated in the project folder.\n'
+                    '.gitignore and .gitattributes will be skipped.\n\n'
+                    'To add git later: run "git init" manually, then\n'
+                    'call op.Embody.InitGit() from the textport.',
                     buttons=['OK'])
                 # Fall through to start-without-git
 

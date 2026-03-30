@@ -34,9 +34,11 @@ For the complete tool reference, see [Tools Reference](tools-reference.md).
 
 When Envoy starts, it:
 
-1. Creates a `.mcp.json` file in your git repo root (auto-detected)
+1. Creates `.mcp.json` and MCP bridge files in your git repo root or project folder
 2. Generates a full [Claude Code configuration](claude-code.md) — rules, skills, slash commands, and project context
-3. Auto-manages `.gitignore` entries for generated files
+3. Auto-manages `.gitignore` and `.gitattributes` entries (when a git repo is present)
+
+You can regenerate these files at any time with `op.Embody.InitEnvoy()` (MCP + AI config) or `op.Embody.InitGit()` (git config + re-run InitEnvoy). See [Setup](setup.md#regenerating-config-files) for details.
 
 ## Key Features
 
