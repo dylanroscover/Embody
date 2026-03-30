@@ -51,6 +51,30 @@ class EmbodyExt:
         'text_skill_mcp_tools_reference': 'mcp-tools-reference',
     }
 
+    # Parameters persisted to .embody.json across upgrades.
+    # Explicit whitelist — new params default to "not persisted" until added.
+    _PERSISTED_PARAMS = frozenset({
+        # Core
+        'Folder', 'Envoyenable', 'Envoyport', 'Aiclient',
+        # Tag names
+        'Toxtag', 'Tdntag', 'Pytag', 'Csvtag', 'Dattag',
+        'Htmltag', 'Jsontag', 'Mdtag', 'Rtftag', 'Txttag',
+        'Xmltag', 'Glsltag', 'Tsvtag',
+        # Tag colors
+        'Toxtagcolorr', 'Toxtagcolorg', 'Toxtagcolorb',
+        'Tdntagcolorr', 'Tdntagcolorg', 'Tdntagcolorb',
+        'Clonetagcolorr', 'Clonetagcolorg', 'Clonetagcolorb',
+        'Taggingmenucolorr', 'Taggingmenucolorg', 'Taggingmenucolorb',
+        'Dattagcolorr', 'Dattagcolorg', 'Dattagcolorb',
+        # Behavior
+        'Logfolder', 'Logtofile', 'Verbose', 'Print',
+        'Detectduplicatepaths', 'Localtimestamps',
+        # TDN
+        'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
+        'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
+        'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
+    })
+
     # ==========================================================================
     # INITIALIZATION
     # ==========================================================================
@@ -1024,6 +1048,103 @@ class EmbodyExt:
         if migrations:
             self.Log(f'Schema migration: added {", ".join(migrations)}', 'SUCCESS')
 
+    # ==========================================================================
+    # SETTINGS PERSISTENCE
+    # ==========================================================================
+
+    def _settingsPath(self) -> Path:
+        """Path to .embody.json — git root if available, else project folder."""
+        # Check stored git root first (set by InitGit)
+        git_root = self.my.fetch('_git_root', None, search=False)
+        if git_root and git_root != 'no-git':
+            return Path(git_root) / '.embody.json'
+        # Walk up from project folder looking for .git/
+        folder = Path(project.folder)
+        for parent in [folder] + list(folder.parents):
+            if (parent / '.git').exists():
+                return parent / '.embody.json'
+        return folder / '.embody.json'
+
+    def _saveSettings(self) -> None:
+        """Persist whitelisted parameter values to .embody.json."""
+        self._settings_save_pending = False
+        params = {}
+        for name in self._PERSISTED_PARAMS:
+            par = getattr(self.my.par, name, None)
+            if par is None:
+                continue
+            entry = {'val': par.eval()}
+            if par.mode != ParMode.CONSTANT:
+                entry['mode'] = str(par.mode)
+                if par.expr:
+                    entry['expr'] = par.expr
+                if par.bindExpr:
+                    entry['bindExpr'] = par.bindExpr
+            params[name] = entry
+        data = {'version': 1, 'params': params}
+        try:
+            import json, os
+            path = self._settingsPath()
+            tmp = Path(str(path) + '.tmp')
+            content = json.dumps(data, indent=2) + '\n'
+            for attempt in range(3):
+                try:
+                    tmp.write_text(content, encoding='utf-8')
+                    os.replace(str(tmp), str(path))
+                    return
+                except PermissionError:
+                    if attempt < 2:
+                        import time as _time
+                        _time.sleep(0.1)
+                    else:
+                        raise
+        except Exception as e:
+            self.Log(f'Failed to save settings: {e}', 'WARNING')
+
+    def _deferSaveSettings(self) -> None:
+        """Schedule a settings save on the next frame. Coalesces rapid changes."""
+        if not getattr(self, '_settings_save_pending', False):
+            self._settings_save_pending = True
+            run(f"op('{self.my}').ext.Embody._saveSettings()", delayFrames=1)
+
+    def _restoreSettings(self) -> bool:
+        """Restore parameter values from .embody.json. Returns True if restored.
+        Sets _restoring_settings flag to suppress onValueChange side effects."""
+        path = self._settingsPath()
+        if not path.is_file():
+            return False
+        try:
+            import json
+            data = json.loads(path.read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, OSError) as e:
+            self.Log(f'Settings file corrupt or unreadable: {e}', 'WARNING')
+            return False
+        if not isinstance(data, dict) or 'params' not in data:
+            return False
+        params = data['params']
+        restored = 0
+        self._restoring_settings = True
+        try:
+            for name, entry in params.items():
+                par = getattr(self.my.par, name, None)
+                if par is None or name not in self._PERSISTED_PARAMS:
+                    continue
+                try:
+                    mode = entry.get('mode')
+                    if mode and 'expr' in entry:
+                        par.expr = entry['expr']
+                    elif mode and 'bindExpr' in entry:
+                        par.bindExpr = entry['bindExpr']
+                    else:
+                        par.val = entry['val']
+                    restored += 1
+                except Exception:
+                    pass
+        finally:
+            self._restoring_settings = False
+        self.Log(f'Restored {restored} settings from .embody.json', 'INFO')
+        return restored > 0
+
     def Verify(self) -> None:
         """Initialize or reconnect Embody on install or update.
 
@@ -1035,6 +1156,9 @@ class EmbodyExt:
         - Update install: table has prior data — offer a re-scan to validate
           tracked operators after upgrading Embody.
         """
+        # Restore saved settings from a previous install before any dialogs.
+        settings_restored = self._restoreSettings()
+
         embodies = op('/').findChildren(name='Embody', parName='Addtagshort')
         other_embody = next((e for e in embodies if e != self.my), None)
 
@@ -1063,9 +1187,13 @@ class EmbodyExt:
             run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
 
         # Defer Envoy opt-in until after the full init/update cycle completes.
-        # Update() will check this flag and show the prompt once all other
-        # dialogs (deprecated patterns, re-scan, etc.) have resolved.
-        if not self.my.par.Envoyenable.eval():
+        # Skip if settings were restored — user already configured Envoy previously.
+        if settings_restored:
+            # Kick Envoy start if the restored settings have it enabled.
+            # onValueChange was suppressed during restore, so Start() never fired.
+            if self.my.par.Envoyenable.eval():
+                run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=10)
+        elif not self.my.par.Envoyenable.eval():
             self._pending_envoy_prompt = True
 
     # ==========================================================================

@@ -39,3 +39,6 @@ logs/
 
 # User sandboxes
 sandbox/
+
+# Embody / Envoy (auto-managed)
+.embody.json

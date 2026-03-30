@@ -8,6 +8,10 @@
 import webbrowser
 
 def onValueChange(par, prev):
+	# Suppress all side effects while restoring settings from disk
+	if getattr(parent.Embody.ext.Embody, '_restoring_settings', False):
+		return
+
 	# use par.eval() to get current value
 	if par.name == 'Folder':
 		parent.Embody.Disable(prev, removeTags=False)
@@ -57,6 +61,9 @@ def onValueChange(par, prev):
 	elif par.name == 'Tdncascade':
 		state = 'enabled' if par.eval() else 'disabled'
 		parent.Embody.ext.Embody.Log(f'TDN cascade {state}', 'INFO')
+
+	if par.name in parent.Embody.ext.Embody._PERSISTED_PARAMS:
+		parent.Embody.ext.Embody._deferSaveSettings()
 
 	return
 

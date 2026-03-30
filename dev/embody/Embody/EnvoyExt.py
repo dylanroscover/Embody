@@ -4182,6 +4182,7 @@ class EnvoyExt:
             '.venv/',
             '.mcp.json',
             '.envoy.json',
+            '.embody.json',
             '.claude/settings.local.json',
             '.claude/projects/',
             '.claude/envoy-bridge.py',

@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 17,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.271",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T08:56:20Z",
+	"exported_at": "2026-03-30T20:09:22Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false,
@@ -46,6 +46,11 @@
 			"name": "sandbox_test_custom_parameters1",
 			"type": "baseCOMP",
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1.tdn"
+		},
+		{
+			"name": "sandbox_test_custom_parameters2",
+			"type": "baseCOMP",
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2.tdn"
 		}
 	]
 }

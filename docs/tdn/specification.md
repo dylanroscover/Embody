@@ -944,6 +944,47 @@ Importing a `.tdn` file reconstructs the network in a pre-phase plus eight seque
 
 The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
 
+### Extension Initialization Timing
+
+!!! danger "Extensions initialize BEFORE TDN import"
+    When a TDN COMP is reconstructed (on project open or after save), the COMP shell is created first and any extensions on it initialize immediately. The TDN import runs **after** extension initialization, calling `ImportNetwork` with `clear_first=True` — which deletes all children and recreates them from the `.tdn` file. This means any state set up by `onInitTD` inside the COMP is **overwritten**.
+
+**Timeline on project open:**
+
+| Step | Frame | What happens |
+|------|-------|--------------|
+| 1 | Early | COMP shell created (exists but empty) |
+| 2 | Early | Extension `__init__` runs |
+| 3 | End of frame | `onInitTD` fires — network may not exist yet |
+| 4 | Frame 60 | `ReconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
+| 5 | Frame 60+ | All children deleted and recreated from `.tdn` |
+
+**Timeline on save (strip/restore cycle):**
+
+| Step | What happens |
+|------|--------------|
+| 1 | Pre-save: children stripped from TDN COMPs |
+| 2 | `.toe` saved without TDN children |
+| 3 | Post-save: `ImportNetwork` re-imports children from `.tdn` |
+| 4 | Extensions may reinitialize during restore |
+
+**Impact:** If an extension's `onInitTD` creates operators, sets parameter values, writes to storage, or builds any state inside the COMP, that work is destroyed by the import. This affects extensions that live inside TDN COMPs **and** extensions whose ownerComp is a TDN-strategy COMP.
+
+**Solution:** Defer initialization using `run()` with `delayFrames`:
+
+```python
+def onInitTD(self):
+    run('args[0].postInit()', self, delayFrames=5)
+
+def postInit(self):
+    """Runs after TDN import completes. Safe to set up state."""
+    pass
+```
+
+The deferred method must be **idempotent** — it will run on every project open, after every save, and on manual reimport. Use a delay of at least 5 frames to ensure all import phases have completed.
+
+For full guidance on writing extensions that coexist with TDN, see the [Extensions](../td-development/extensions.md#initialization-and-tdn-import-timing) documentation.
+
 ### Version Compatibility
 
 When importing a full `.tdn` document, the importer checks the metadata fields for compatibility:

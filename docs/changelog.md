@@ -1,5 +1,25 @@
 # Changelog
 
+## v5.0.274
+
+Settings persistence across upgrades, extension initialization timing documentation.
+
+- **Settings persistence (`.embody.json`)**: Embody now saves user-configured parameters to a `.embody.json` file at the git root (or project folder if no git). Settings are written automatically on every parameter change and restored on project open (`onStart`) and fresh install (`onCreate`). Survives `.tox` upgrades, crashes, and force-quits. Whitelisted parameters include folder, Envoy config, tag names, tag colors, TDN settings, and logging options. Restore runs silently (no `onValueChange` side effects) via `_restoring_settings` flag
+- **Crash-safe restore**: `_restoreSettings()` runs at frame 5 on every project open, not just on fresh install. If the `.toe` has stale values (unsaved session, crash), `.embody.json` wins
+- **Extension initialization timing docs**: New documentation covering the critical `onInitTD` / TDN import timing issue — extensions inside TDN COMPs must defer initialization because `ImportNetwork(clear_first=True)` overwrites any state set during `onInitTD`. Added to `td-python.md` rule, `create-extension` skill, `extensions.md` doc, and TDN specification
+- **Template sync**: Updated `text_rule_td_python.md` and `text_skill_create_extension.md` templates to match their `.claude/` counterparts
+
+## v5.0.269
+
+Fix annotation loss on save, TDN v1.2, poisoned zero value guards, bridge improvements.
+
+- **Fix TDN annotation loss on Ctrl+S**: Two import-path bugs caused annotations to disappear after save. Phase 2 (`_createCustomPars`) called `appendXXX(replace=True)` on palette clone operators (annotateCOMP), destroying internal parameter bindings that the clone's rendering network depends on — fix: skip Phase 2 for `palette_clone` operators. Phase 1 (`_createOps`) only logged a warning when TD ignored the name param for annotateCOMP creates, causing Phase 7a to create duplicates — fix: explicitly rename after creation
+- **Guard annotation import/export against poisoned zero values**: Previous palette clone bug exported `titleHeight=0`, `bodyFontSize=0`, `backAlpha=0.0` from broken annotations, making them invisible on reimport. Both import and export now skip zero values, letting palette clone defaults apply
+- **TDN v1.2**: Storage options, `tdn_ref` cross-validation, large TDN warning
+- **Envoy bridge improvements**: Signal diagnostics, startup log improvements
+- **Toolbar/UI updates**: Press state improvements, button interactions
+- **New test coverage**: `test_tdn_file_io.py` added for TDN file I/O operations
+
 ## v5.0.263
 
 DAT content safety, palette clone fidelity, recursive TDN fingerprinting, toolbar press states, venv validation.
