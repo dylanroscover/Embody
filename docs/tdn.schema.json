@@ -44,6 +44,10 @@
         "include_dat_content": {
           "type": "boolean",
           "description": "Whether DAT text/table content was included in the export."
+        },
+        "include_storage": {
+          "type": "boolean",
+          "description": "Whether operator storage entries were included in the export. Absent means true (included). Added in v1.2."
         }
       }
     },
@@ -523,6 +527,10 @@
           "type": "boolean",
           "const": true,
           "description": "true if this COMP is cloned from the TD palette (/sys/). Children are not exported."
+        },
+        "tdn_ref": {
+          "type": "string",
+          "description": "Relative path to the child COMP's own .tdn file. Mutually exclusive with children. Added in v1.2."
         }
       }
     }

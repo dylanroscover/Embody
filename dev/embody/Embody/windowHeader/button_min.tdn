@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
-	"version": "1.1",
+	"version": "1.2",
 	"build": 1,
-	"generator": "Embody/5.0.255",
+	"generator": "Embody/5.0.266",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:53Z",
+	"exported_at": "2026-03-30T06:55:43Z",
 	"network_path": "/embody/Embody/windowHeader/button_min",
 	"options": {
 		"include_dat_content": false
@@ -28,7 +28,7 @@
 		"bgcolorr": "=1.0",
 		"bgcolorg": "=1.0",
 		"bgcolorb": "=1.0",
-		"bgalpha": "=0.18 if me.fetch('pressed', False) else 0.1 if me.fetch('hover', False) else 0"
+		"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 	},
 	"color": [0.3, 0.5, 0.9],
 	"tags": ["tdn"],

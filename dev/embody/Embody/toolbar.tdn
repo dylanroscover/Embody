@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
-	"version": "1.1",
+	"version": "1.2",
 	"build": 12,
-	"generator": "Embody/5.0.255",
+	"generator": "Embody/5.0.266",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:54Z",
+	"exported_at": "2026-03-30T06:55:44Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
 		"include_dat_content": false
@@ -91,9 +91,9 @@
 			"name": "tooltip",
 			"type": "containerCOMP",
 			"parameters": {
-				"x": 998,
+				"x": 759,
 				"y": 40,
-				"w": 80,
+				"w": 178,
 				"h": 22,
 				"layer": 10,
 				"alignallow": "ignore",
@@ -105,7 +105,8 @@
 				"bgalpha": 0.95
 			},
 			"position": [800, -200],
-			"size": [160, 130]
+			"size": [160, 130],
+			"tdn_ref": "embody/Embody/toolbar/tooltip.tdn"
 		},
 		{
 			"name": "ToolbarExt",
@@ -124,7 +125,7 @@
 			"name": "tip_measure",
 			"type": "textTOP",
 			"parameters": {
-				"text": "Clear filter",
+				"text": "Open Embody parameters",
 				"font": "Open Sans",
 				"fontsizex": 10,
 				"fontsizey": 10,
@@ -145,7 +146,8 @@
 				"reloadbuiltin": false
 			},
 			"flags": ["viewer"],
-			"size": [160, 76]
+			"size": [160, 76],
+			"tdn_ref": "embody/Embody/toolbar/container_left.tdn"
 		},
 		{
 			"name": "panelexec_left",
@@ -193,7 +195,8 @@
 			},
 			"flags": ["viewer"],
 			"position": [175, 0],
-			"size": [160, 76]
+			"size": [160, 76],
+			"tdn_ref": "embody/Embody/toolbar/container_right.tdn"
 		},
 		{
 			"name": "panelexec_right",

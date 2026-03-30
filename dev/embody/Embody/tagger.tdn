@@ -1,13 +1,14 @@
 {
 	"format": "tdn",
-	"version": "1.1",
-	"build": 17,
-	"generator": "Embody/5.0.255",
+	"version": "1.2",
+	"build": 18,
+	"generator": "Embody/5.0.266",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:54Z",
+	"exported_at": "2026-03-30T08:55:52Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"buttonCOMP": {
@@ -20,8 +21,7 @@
 				"resizecomp": "=me",
 				"repocomp": "=me",
 				"borderover": false,
-				"enablecloning": false,
-				"clone": "=op.TDTox.op('defaultCOMPs/button')"
+				"buttontype": "momentary"
 			},
 			"flags": ["viewer"]
 		},
@@ -86,7 +86,8 @@
 			"position": [0, 275],
 			"size": [160, 76],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/tagger/header.tdn"
 		},
 		{
 			"name": "button0",
@@ -99,7 +100,8 @@
 				"alignorder": 1,
 				"display": false,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false
+				"reloadbuiltin": false,
+				"relpath": "inherit"
 			},
 			"position": [-225, 175],
 			"size": [160, 76],
@@ -115,7 +117,8 @@
 				"colorb": 0.2,
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false
+				"reloadbuiltin": false,
+				"relpath": "inherit"
 			},
 			"position": [-225, -276],
 			"size": [160, 76],
@@ -131,7 +134,8 @@
 				"colorb": 0.2,
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false
+				"reloadbuiltin": false,
+				"relpath": "inherit"
 			},
 			"position": [25, -276],
 			"size": [160, 76],
@@ -156,7 +160,7 @@
 			"name": "btn_embed",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "⊞  Embed DATs in tdn",
+				"label": "⊞  Embed DATs in tdn  ✓",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
@@ -243,7 +247,8 @@
 			"position": [-225, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/tagger/replicator1.tdn"
 		},
 		{
 			"name": "select_dats",
@@ -303,6 +308,21 @@
 			"position": [-600, 0],
 			"size": [130, 90],
 			"inputs": ["parameter1", "select_dats", "select_comps"]
+		},
+		{
+			"name": "btn_embed_storage",
+			"type": "buttonCOMP",
+			"parameters": {
+				"label": "⊞  Embed storage in tdn  ✓",
+				"colorr": 0.2,
+				"colorg": 0.2,
+				"colorb": 0.2,
+				"alignorder": 0.66,
+				"relpath": "externaltox"
+			},
+			"position": [440, 275],
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "replicator1_callbacks",

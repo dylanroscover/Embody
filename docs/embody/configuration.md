@@ -35,6 +35,20 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Print to Textport** — Echo logs to the textport
 - **Log to File** — Enabled by default, writes to `logs/<project_name>_YYMMDD.log`
 
+## Settings Persistence
+
+Embody automatically saves your parameter settings to a `.embody.json` file so they survive upgrades, crashes, and force-quits.
+
+- **Location**: Git root (next to `.envoy.json` and `.mcp.json`), or the project folder if no git repo
+- **When saved**: Automatically on every parameter change (debounced to 1 frame)
+- **When restored**: On every project open (frame 5), and on fresh install after dropping in a new `.tox`
+- **What's saved**: Folder path, Envoy config, tag names, tag colors, TDN settings, logging options, and other user-configurable parameters. Read-only status fields and runtime state are excluded
+
+The file is created on your first parameter change — no `.embody.json` exists until you customize something. If the file is missing or corrupt, Embody uses its built-in defaults.
+
+!!! tip "Upgrading Embody"
+    When you drop a new Embody `.tox` into your project, your saved settings are automatically restored. No manual reconfiguration needed.
+
 ## Logging System
 
 Embody provides a multi-destination logging system:

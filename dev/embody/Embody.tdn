@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
-	"version": "1.1",
-	"build": 232,
-	"generator": "Embody/5.0.262",
+	"version": "1.2",
+	"build": 312,
+	"generator": "Embody/5.0.266",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-28T20:25:53Z",
+	"exported_at": "2026-03-30T06:55:56Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false
@@ -554,15 +554,33 @@
 		],
 		"TDN": [
 			{
+				"name": "Tdncascade",
+				"style": "Toggle",
+				"label": "Cascade to Children",
+				"startSection": true,
+				"help": "When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file."
+			},
+			{
+				"name": "Tdncascadewarn",
+				"style": "Menu",
+				"label": "Large TDN Warning",
+				"default": "ask",
+				"menuNames": ["ask", "quiet"],
+				"menuLabels": ["Ask", "Quiet"],
+				"help": "Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed."
+			},
+			{
 				"name": "Embeddatsintdns",
 				"style": "Toggle",
 				"label": "Embed DATs (default)",
+				"startSection": true,
 				"help": "When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content."
 			},
 			{
 				"name": "Tdncreateonstart",
 				"style": "Toggle",
 				"label": "TDN Create on Start",
+				"startSection": true,
 				"default": true,
 				"help": "When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save."
 			},
@@ -798,7 +816,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.262"
+				"value": "5.0.266"
 			},
 			{
 				"name": "Touchbuild",
@@ -821,7 +839,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 232
+				"value": 312
 			},
 			{
 				"name": "Github",
@@ -836,7 +854,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-03-28 20:25:53 UTC"
+				"value": "2026-03-30 06:55:56 UTC"
 			},
 			{
 				"name": "Help",
@@ -887,7 +905,8 @@
 			"position": [196, 675],
 			"size": [142, 155],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/help.tdn"
 		},
 		{
 			"name": "list",
@@ -914,7 +933,8 @@
 			},
 			"position": [250, 50],
 			"size": [257, 250],
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/list.tdn"
 		},
 		{
 			"name": "fifo1",
@@ -967,7 +987,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [900, 225],
-			"size": [108, 155]
+			"size": [108, 155],
+			"tdn_ref": "embody/Embody/tagger.tdn"
 		},
 		{
 			"name": "timer1",
@@ -1037,7 +1058,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [650, 250],
-			"size": [160, 92]
+			"size": [160, 92],
+			"tdn_ref": "embody/Embody/manager.tdn"
 		},
 		{
 			"name": "parexec",
@@ -1110,7 +1132,8 @@
 					"offset": -29
 				}
 			},
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/toolbar.tdn"
 		},
 		{
 			"name": "EnvoyExt",
@@ -1179,7 +1202,8 @@
 			"position": [-400, -1200],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/templates.tdn"
 		},
 		{
 			"name": "keyboardin1",
@@ -1230,7 +1254,8 @@
 			},
 			"position": [300, 475],
 			"size": [160, 130],
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/windowHeader.tdn"
 		},
 		{
 			"name": "annotation_ui",
@@ -1299,7 +1324,8 @@
 				"cursorvisible": "alwaysvisible"
 			},
 			"position": [500, 675],
-			"size": [154, 89]
+			"size": [154, 89],
+			"tdn_ref": "embody/Embody/window_manager.tdn"
 		},
 		{
 			"name": "fifo1_callbacks",
@@ -1417,7 +1443,8 @@
 				"winoffsetx": 110
 			},
 			"position": [900, 675],
-			"size": [110, 157]
+			"size": [110, 157],
+			"tdn_ref": "embody/Embody/window_tagging_menu.tdn"
 		},
 		{
 			"name": "chopexec_exit_tagger",

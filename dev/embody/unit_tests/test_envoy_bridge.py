@@ -740,7 +740,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
              patch.object(bridge, 'forward_to_http', side_effect=forward), \
              patch.object(bridge, 'find_td_pid', return_value=None), \
              patch.object(bridge, 'kill_stale_bridges'), \
-             patch('time.sleep', side_effect=mock_sleep):
+             patch.object(bridge, 'start_orphan_watchdog'), \
+             patch.object(bridge.time, 'sleep', side_effect=mock_sleep):
             bridge.main()
 
         # 2 retries before success: sleep(0.5*1)=0.5, sleep(0.5*2)=1.0

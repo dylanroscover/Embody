@@ -12,6 +12,10 @@ def init():
 
 def onStart():
 	init()
+	# Restore settings from .embody.json — recovers user config after
+	# crash, force-quit, or any unsaved session. On normal open where
+	# .toe was saved, values match and this is a no-op.
+	run(f"op('{parent.Embody}').ext.Embody._restoreSettings()", delayFrames=5)
 	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
