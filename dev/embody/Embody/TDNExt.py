@@ -1857,15 +1857,15 @@ class TDNExt:
 				data['opacity'] = round(opacity, 4)
 
 			alpha = ann.par.Backcoloralpha.eval()
-			if abs(alpha - 1.0) > 1e-6:
+			if abs(alpha - 1.0) > 1e-6 and alpha > 0:
 				data['backAlpha'] = round(alpha, 4)
 
 			titleHeight = ann.par.Titleheight.eval()
-			if abs(titleHeight - 30) > 1e-6:
+			if abs(titleHeight - 30) > 1e-6 and titleHeight > 0:
 				data['titleHeight'] = titleHeight
 
 			bodyFontSize = ann.par.Bodyfontsize.eval()
-			if abs(bodyFontSize - 10) > 1e-6:
+			if abs(bodyFontSize - 10) > 1e-6 and bodyFontSize > 0:
 				data['bodyFontSize'] = bodyFontSize
 
 			result.append(data)
@@ -2665,15 +2665,15 @@ class TDNExt:
 					ann.par.Opacity = opacity
 
 				backAlpha = ann_def.get('backAlpha')
-				if backAlpha is not None:
+				if backAlpha is not None and backAlpha > 0:
 					ann.par.Backcoloralpha = backAlpha
 
 				titleHeight = ann_def.get('titleHeight')
-				if titleHeight is not None:
+				if titleHeight is not None and titleHeight > 0:
 					ann.par.Titleheight = titleHeight
 
 				bodyFontSize = ann_def.get('bodyFontSize')
-				if bodyFontSize is not None:
+				if bodyFontSize is not None and bodyFontSize > 0:
 					ann.par.Bodyfontsize = bodyFontSize
 
 				created.append(ann.path)
