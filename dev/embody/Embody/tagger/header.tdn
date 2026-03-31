@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 2,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:44Z",
+	"exported_at": "2026-03-31T05:57:13Z",
 	"network_path": "/embody/Embody/tagger/header",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type": "containerCOMP",
 	"parameters": {
@@ -53,8 +54,7 @@
 			"position": [-200, 0],
 			"size": [160, 129],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/tagger/header/text1.tdn"
+			"tags": ["tdn"]
 		},
 		{
 			"name": "button_close",
@@ -79,14 +79,13 @@
 				"bgalpha": "=parent.Embody.par.Backgroundcolora",
 				"topsmoothness": "mipmap",
 				"borderover": false,
-				"reloadbuiltin": false,
-				"buttontype": "momentary",
-				"relpath": "inherit"
+				"enablecloning": false,
+				"clone": "=op.TDTox.op('defaultCOMPs/button')",
+				"reloadbuiltin": false
 			},
 			"flags": ["viewer"],
 			"position": [50, 0],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "text1_callbacks",

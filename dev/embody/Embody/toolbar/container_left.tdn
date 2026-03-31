@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 7,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:44Z",
+	"exported_at": "2026-03-31T05:57:09Z",
 	"network_path": "/embody/Embody/toolbar/container_left",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"textCOMP": {
@@ -67,8 +68,7 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
 				"marginl": 3
 			},
-			"position": [800, -200],
-			"tdn_ref": "embody/Embody/toolbar/container_left/status.tdn"
+			"position": [800, -200]
 		},
 		{
 			"name": "disable",
@@ -84,8 +84,7 @@
 				"bgcolorg": "=(0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
 				"bgcolorb": "=(0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_left/disable.tdn"
+			}
 		},
 		{
 			"name": "refresh",
@@ -107,8 +106,7 @@
 			"position": [200, 0],
 			"storage": {
 				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_left/refresh.tdn"
+			}
 		},
 		{
 			"name": "export_tdn",
@@ -126,8 +124,7 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"position": [0, -200],
-			"tdn_ref": "embody/Embody/toolbar/container_left/export_tdn.tdn"
+			"position": [0, -200]
 		},
 		{
 			"name": "import_tdn",
@@ -145,8 +142,7 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"position": [400, -200],
-			"tdn_ref": "embody/Embody/toolbar/container_left/import_tdn.tdn"
+			"position": [400, -200]
 		},
 		{
 			"name": "initialize",
@@ -167,8 +163,7 @@
 			"position": [600, 0],
 			"storage": {
 				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_left/initialize.tdn"
+			}
 		},
 		{
 			"name": "spacer_tdn",
@@ -176,8 +171,7 @@
 			"parameters": {
 				"alignorder": 800
 			},
-			"position": [600, -200],
-			"tdn_ref": "embody/Embody/toolbar/container_left/spacer_tdn.tdn"
+			"position": [600, -200]
 		},
 		{
 			"name": "save_folder",
@@ -196,8 +190,7 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"position": [400, 0],
-			"tdn_ref": "embody/Embody/toolbar/container_left/save_folder.tdn"
+			"position": [400, 0]
 		},
 		{
 			"name": "envoy_status",
@@ -214,8 +207,7 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
 				"marginl": 3
 			},
-			"position": [1000, 0],
-			"tdn_ref": "embody/Embody/toolbar/container_left/envoy_status.tdn"
+			"position": [1000, 0]
 		},
 		{
 			"name": "envoy_toggle",
@@ -233,8 +225,7 @@
 				"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"position": [800, 0],
-			"tdn_ref": "embody/Embody/toolbar/container_left/envoy_toggle.tdn"
+			"position": [800, 0]
 		},
 		{
 			"name": "spacer_envoy",
@@ -242,8 +233,7 @@
 			"parameters": {
 				"alignorder": 1025
 			},
-			"position": [1200, 0],
-			"tdn_ref": "embody/Embody/toolbar/container_left/spacer_envoy.tdn"
+			"position": [1200, 0]
 		},
 		{
 			"name": "export_comp_tdn",
@@ -261,8 +251,7 @@
 				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
 				"bgalpha": 1
 			},
-			"position": [200, -200],
-			"tdn_ref": "embody/Embody/toolbar/container_left/export_comp_tdn.tdn"
+			"position": [200, -200]
 		}
 	]
 }

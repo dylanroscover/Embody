@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 18,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T08:55:52Z",
+	"exported_at": "2026-03-31T05:57:13Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false,
@@ -21,7 +21,8 @@
 				"resizecomp": "=me",
 				"repocomp": "=me",
 				"borderover": false,
-				"buttontype": "momentary"
+				"enablecloning": false,
+				"clone": "=op.TDTox.op('defaultCOMPs/button')"
 			},
 			"flags": ["viewer"]
 		},
@@ -86,8 +87,7 @@
 			"position": [0, 275],
 			"size": [160, 76],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/tagger/header.tdn"
+			"tags": ["tdn"]
 		},
 		{
 			"name": "button0",
@@ -100,12 +100,10 @@
 				"alignorder": 1,
 				"display": false,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
+				"reloadbuiltin": false
 			},
 			"position": [-225, 175],
-			"size": [160, 76],
-			"palette_clone": true
+			"size": [160, 76]
 		},
 		{
 			"name": "button1",
@@ -117,12 +115,10 @@
 				"colorb": 0.2,
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
+				"reloadbuiltin": false
 			},
 			"position": [-225, -276],
-			"size": [160, 76],
-			"palette_clone": true
+			"size": [160, 76]
 		},
 		{
 			"name": "button2",
@@ -134,12 +130,10 @@
 				"colorb": 0.2,
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
+				"reloadbuiltin": false
 			},
 			"position": [25, -276],
-			"size": [160, 76],
-			"palette_clone": true
+			"size": [160, 76]
 		},
 		{
 			"name": "btn_save",
@@ -153,8 +147,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [25, 100],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "btn_embed",
@@ -168,8 +161,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [260, 275],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "btn_reload",
@@ -183,8 +175,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [-280, 275],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "btn_remove",
@@ -199,8 +190,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [-1000, 275],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "parameter1",
@@ -227,8 +217,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [-640, 275],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "replicator1",
@@ -247,8 +236,7 @@
 			"position": [-225, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/tagger/replicator1.tdn"
+			"tags": ["tdn"]
 		},
 		{
 			"name": "select_dats",
@@ -271,8 +259,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [-820, 275],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "btn_portable",
@@ -286,8 +273,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [-460, 275],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "select_comps",
@@ -321,8 +307,7 @@
 				"relpath": "externaltox"
 			},
 			"position": [440, 275],
-			"size": [160, 134],
-			"palette_clone": true
+			"size": [160, 134]
 		},
 		{
 			"name": "replicator1_callbacks",

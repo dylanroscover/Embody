@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 1,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:43Z",
+	"exported_at": "2026-03-31T05:57:05Z",
 	"network_path": "/embody/Embody/toolbar/container_left/export_comp_tdn",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type": "textCOMP",
 	"parameters": {

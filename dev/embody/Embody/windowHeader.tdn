@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 1,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:43Z",
+	"exported_at": "2026-03-31T05:56:58Z",
 	"network_path": "/embody/Embody/windowHeader",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"textCOMP": {
@@ -76,8 +77,7 @@
 				"hmode": "fill",
 				"reposition": "window",
 				"offsetx": 10
-			},
-			"tdn_ref": "embody/Embody/windowHeader/title.tdn"
+			}
 		},
 		{
 			"name": "button_max",
@@ -95,8 +95,7 @@
 				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
-			"position": [600, 0],
-			"tdn_ref": "embody/Embody/windowHeader/button_max.tdn"
+			"position": [600, 0]
 		},
 		{
 			"name": "button_min",
@@ -114,8 +113,7 @@
 				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
-			"position": [300, 0],
-			"tdn_ref": "embody/Embody/windowHeader/button_min.tdn"
+			"position": [300, 0]
 		},
 		{
 			"name": "panelexec1",
@@ -154,8 +152,7 @@
 			"position": [900, 0],
 			"storage": {
 				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/windowHeader/button_close.tdn"
+			}
 		},
 		{
 			"name": "WindowHeaderExt",

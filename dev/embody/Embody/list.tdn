@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 33,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:44Z",
+	"exported_at": "2026-03-31T05:57:15Z",
 	"network_path": "/embody/Embody/list",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"textDAT": {
@@ -64,8 +65,7 @@
 			"position": [445, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/list/list1.tdn"
+			"tags": ["tdn"]
 		},
 		{
 			"name": "select1",

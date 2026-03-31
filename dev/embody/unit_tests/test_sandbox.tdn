@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.2",
-	"build": 17,
-	"generator": "Embody/5.0.271",
+	"build": 35,
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T20:09:22Z",
+	"exported_at": "2026-03-31T05:57:54Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false,
@@ -12,9 +12,7 @@
 	},
 	"type_defaults": {
 		"baseCOMP": {
-			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"size": [160, 130]
 		}
 	},
 	"type": "baseCOMP",
@@ -25,32 +23,97 @@
 		{
 			"name": "sandbox_test_dat_restoration",
 			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration.tdn"
 		},
 		{
 			"name": "sandbox_test_dat_restoration1",
 			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration1.tdn"
 		},
 		{
 			"name": "sandbox_test_dat_restoration2",
 			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration2.tdn"
 		},
 		{
 			"name": "sandbox_test_custom_parameters",
 			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn"
 		},
 		{
 			"name": "sandbox_test_custom_parameters1",
 			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1.tdn"
 		},
 		{
 			"name": "sandbox_test_custom_parameters2",
 			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2.tdn"
+		},
+		{
+			"name": "sandbox_test_tdn_reconstruction",
+			"type": "baseCOMP",
+			"parameters": {
+				"parentshortcut": "mycomp"
+			},
+			"custom_pars": {
+				"Creds": [
+					{
+						"name": "Privatekey",
+						"style": "File",
+						"label": "Private Key",
+						"value": "/path/to/key.json"
+					},
+					{
+						"name": "Databaseid",
+						"style": "Str",
+						"label": "Database ID",
+						"value": "my-project-id"
+					},
+					{
+						"name": "Autoconnect",
+						"style": "Toggle",
+						"label": "Auto Connect",
+						"value": true
+					}
+				],
+				"Test": [
+					{
+						"name": "Speed",
+						"style": "Float",
+						"value": "=absTime.seconds"
+					}
+				],
+				"Config": [
+					{
+						"name": "Threshold",
+						"style": "Float",
+						"value": 0.75
+					}
+				]
+			},
+			"flags": ["viewer"],
+			"color": [0.2, 0.8, 0.4],
+			"comment": "Test comment",
+			"tags": ["test_tag"],
+			"storage": {
+				"portability_key": 42,
+				"config": {
+					"nested": true
+				}
+			}
 		}
 	]
 }
