@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 27,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:44Z",
+	"exported_at": "2026-03-31T05:57:16Z",
 	"network_path": "/embody",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"baseCOMP": {
@@ -19,7 +20,8 @@
 			"parameters": {
 				"includeinorder": true,
 				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
+				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
 			},
 			"flags": ["display"],
 			"color": [0.45, 0.45, 0.45]
@@ -343,8 +345,7 @@
 					{
 						"name": "Refresh",
 						"style": "Pulse",
-						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
-						"value": true
+						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
 					},
 					{
 						"name": "Externalizeproject",
@@ -599,6 +600,13 @@
 						"help": "When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content."
 					},
 					{
+						"name": "Embedstorageintdns",
+						"style": "Toggle",
+						"label": "Embed Storage (default)",
+						"default": true,
+						"help": "Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu."
+					},
+					{
 						"name": "Tdncreateonstart",
 						"style": "Toggle",
 						"label": "TDN Create on Start",
@@ -612,13 +620,6 @@
 						"label": "Strip on Save",
 						"default": true,
 						"help": "When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal."
-					},
-					{
-						"name": "Exportprojecttdn",
-						"style": "Pulse",
-						"label": "Export Project TDN",
-						"startSection": true,
-						"help": "Exports the entire project network to a single .tdn JSON file. Captures all operators, parameters, connections, and layout."
 					},
 					{
 						"name": "Tdnfile",
@@ -672,7 +673,7 @@
 						"label": "Envoy Status",
 						"readOnly": true,
 						"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-						"value": "Starting..."
+						"value": "Running on port 9870"
 					}
 				],
 				"Logs": [
@@ -744,6 +745,23 @@
 						"readOnly": true,
 						"help": "Keyboard shortcut for updating/saving the current COMP to its externalized file.",
 						"value": "ctrl/cmd + alt + u"
+					},
+					{
+						"name": "Exportprojecttdn",
+						"style": "Str",
+						"label": "Export Project to TDN",
+						"startSection": true,
+						"default": "ctrl/cmd + lshift + e",
+						"readOnly": true,
+						"help": "Export the entire project network to a single .tdn file at your project root."
+					},
+					{
+						"name": "Exportcomptdn",
+						"style": "Str",
+						"label": "Export Current COMP to TDN",
+						"default": "ctrl/cmd + alt + e",
+						"readOnly": true,
+						"help": "Export the current COMP network to a .tdn file."
 					},
 					{
 						"name": "Textcolor",
@@ -838,7 +856,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.266"
+						"value": "5.0.275"
 					},
 					{
 						"name": "Touchbuild",
@@ -861,7 +879,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 308
+						"value": 326
 					},
 					{
 						"name": "Github",
@@ -876,7 +894,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-03-30 06:55:44 UTC"
+						"value": "2026-03-31 05:57:11 UTC"
 					},
 					{
 						"name": "Help",
@@ -894,13 +912,61 @@
 				"_tdn_restore_failures": ["/embody/base1"],
 				"expand_order": ["/embody"]
 			},
-			"tdn_ref": "embody/Embody.tdn"
+			"annotations": [
+				{
+					"name": "annotate1",
+					"mode": "annotate",
+					"title": "Claude Config",
+					"text": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation.",
+					"position": [-770, -1270],
+					"size": [600, 370],
+					"color": [0.45, 0.45, 0.45]
+				},
+				{
+					"name": "annotation_logic",
+					"mode": "annotate",
+					"title": "Logic",
+					"text": "Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.",
+					"position": [-800, 0],
+					"size": [700, 800],
+					"color": [0.485, 0.0, 0.2748],
+					"opacity": 0.9
+				},
+				{
+					"name": "annotation_tagging",
+					"mode": "annotate",
+					"title": "Tagging",
+					"text": "Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection).",
+					"position": [-800, -700],
+					"size": [700, 600],
+					"color": [0.1981, 0.5, 0.1765],
+					"opacity": 0.9
+				},
+				{
+					"name": "annotation_ui",
+					"mode": "annotate",
+					"title": "UI",
+					"text": "All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.",
+					"size": [1300, 1000],
+					"color": [0.45, 0.45, 0.45],
+					"opacity": 0.9
+				},
+				{
+					"name": "annotation_windows",
+					"mode": "annotate",
+					"title": "Windows",
+					"text": "Popup windows for the tagging menu and externalization manager UI.",
+					"position": [100, 600],
+					"size": [1140, 310],
+					"color": [0.574, 0.574, 0.574],
+					"opacity": 0.9
+				}
+			]
 		},
 		{
 			"name": "base_tdn",
 			"type": "baseCOMP",
-			"position": [700, -325],
-			"tdn_ref": "embody/base_tdn.tdn"
+			"position": [700, -325]
 		},
 		{
 			"name": "tdn_tests",
@@ -909,8 +975,7 @@
 			"position": [0, -500],
 			"storage": {
 				"embed_dats_in_tdn": true
-			},
-			"tdn_ref": "embody/tdn_tests.tdn"
+			}
 		},
 		{
 			"name": "unit_tests",
@@ -3319,8 +3384,7 @@
 						}
 					]
 				}
-			},
-			"tdn_ref": "embody/unit_tests.tdn"
+			}
 		},
 		{
 			"name": "execute_src_ctrl",
@@ -3344,7 +3408,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 130,
+				"rows": 133,
 				"cols": 11
 			},
 			"flags": ["viewer"],
@@ -3377,8 +3441,7 @@
 				}
 			},
 			"position": [-700, -352],
-			"size": [329, 322],
-			"palette_clone": true
+			"size": [329, 322]
 		},
 		{
 			"name": "annotation_execute_src_ctrl",
@@ -3405,8 +3468,7 @@
 				}
 			},
 			"position": [-775, 50],
-			"size": [440, 480],
-			"palette_clone": true
+			"size": [440, 480]
 		},
 		{
 			"name": "annotation_externalizations",
@@ -3432,8 +3494,7 @@
 				}
 			},
 			"position": [-250, -50],
-			"size": [223, 279],
-			"palette_clone": true
+			"size": [223, 279]
 		}
 	],
 	"annotations": [

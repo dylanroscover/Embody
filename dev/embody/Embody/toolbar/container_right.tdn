@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 14,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:43Z",
+	"exported_at": "2026-03-31T05:57:00Z",
 	"network_path": "/embody/Embody/toolbar/container_right",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"textCOMP": {
@@ -58,8 +59,7 @@
 			"position": [600, 0],
 			"storage": {
 				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_right/pars.tdn"
+			}
 		},
 		{
 			"name": "close",
@@ -78,8 +78,7 @@
 			},
 			"storage": {
 				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_right/close.tdn"
+			}
 		},
 		{
 			"name": "filter",
@@ -99,8 +98,7 @@
 				"bgcolorg": 0.08,
 				"bgcolorb": 0.08
 			},
-			"position": [200, 0],
-			"tdn_ref": "embody/Embody/toolbar/container_right/filter.tdn"
+			"position": [200, 0]
 		},
 		{
 			"name": "spacer_pars",
@@ -116,8 +114,7 @@
 			"position": [400, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_right/spacer_pars.tdn"
+			"tags": ["tdn"]
 		}
 	]
 }

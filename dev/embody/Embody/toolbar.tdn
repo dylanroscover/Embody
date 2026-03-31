@@ -2,12 +2,13 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 12,
-	"generator": "Embody/5.0.266",
+	"generator": "Embody/5.0.275",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-30T06:55:44Z",
+	"exported_at": "2026-03-31T05:57:10Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"containerCOMP": {
@@ -105,8 +106,7 @@
 				"bgalpha": 0.95
 			},
 			"position": [800, -200],
-			"size": [160, 130],
-			"tdn_ref": "embody/Embody/toolbar/tooltip.tdn"
+			"size": [160, 130]
 		},
 		{
 			"name": "ToolbarExt",
@@ -146,8 +146,7 @@
 				"reloadbuiltin": false
 			},
 			"flags": ["viewer"],
-			"size": [160, 76],
-			"tdn_ref": "embody/Embody/toolbar/container_left.tdn"
+			"size": [160, 76]
 		},
 		{
 			"name": "panelexec_left",
@@ -195,8 +194,7 @@
 			},
 			"flags": ["viewer"],
 			"position": [175, 0],
-			"size": [160, 76],
-			"tdn_ref": "embody/Embody/toolbar/container_right.tdn"
+			"size": [160, 76]
 		},
 		{
 			"name": "panelexec_right",
