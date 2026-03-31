@@ -55,8 +55,8 @@ DATs:  .py, .json, .xml, .html, .glsl, .frag, .vert,
 Workflow
 --------
 Embody keeps your external files up to date as you work.
-Press ctrl-shift-u to save all dirty externalizations, or
-ctrl-alt-u to save just the COMP you're currently inside.
+Press ctrl-shift-u to update all dirty externalizations, or
+ctrl-alt-u to update just the COMP you're currently inside.
 DATs are automatically synchronized by TouchDesigner via
 their Sync to File parameter.
 
@@ -153,8 +153,9 @@ Keyboard Shortcuts
 ctrl-shift-o :   Open the Manager UI
 lctrl-lctrl :    Tag or manage the operator under the cursor
                  (shows Actions menu for already-tagged operators)
-ctrl-shift-u :   Initialize/update all externalizations
-ctrl-alt-u :     Save only the current COMP you are inside
+ctrl-shift-u :   Update all externalizations
+ctrl-alt-u :     Update only the current COMP you are inside
+ctrl-shift-r :   Refresh tracking state
 ctrl-shift-e :   Export the full project network to .tdn
 ctrl-alt-e :     Export the current network to .tdn
 

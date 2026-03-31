@@ -8,8 +8,8 @@ class WindowHeaderExt:
 		self._lastHovered = None
 		self._lastPressed = None
 
-		self.min_width = 370
-		self.min_height = 72
+		self.min_width = 410
+		self.min_height = 66
 		self.max_width = 1080
 		self.max_height = 440
 		self.status_compact_w = 80
@@ -28,6 +28,7 @@ class WindowHeaderExt:
 			'initialize':       {'mode': 'constant', 'val': 1},
 			'refresh':          {'mode': 'expression',
 				'expr': "1 if parent.Embody.par.Status == 'Enabled' else 0"},
+			'save_comp':        {'mode': 'constant', 'val': 1},
 			'save_folder':      {'mode': 'expression',
 				'expr': "1 if parent.Embody.par.Status == 'Enabled' else 0"},
 			'export_comp_tdn':  {'mode': 'constant', 'val': 1},

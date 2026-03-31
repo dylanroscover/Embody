@@ -108,7 +108,14 @@ def onCook(scriptOp):
 	# Get expand/collapse state
 	expanded = parent.Embody.fetch('expanded_paths', None)
 	if expanded is None:
-		expanded = set()  # Start collapsed — users expand what they need
+		# Start with root-level items expanded
+		roots = set()
+		for path in all_paths:
+			parts = path.strip('/').split('/')
+			parent_p = '/' + '/'.join(parts[:-1]) if len(parts) > 1 else None
+			if parent_p is None or parent_p not in all_paths:
+				roots.add(path)
+		expanded = roots & has_children
 		parent.Embody.store('expanded_paths', expanded)
 
 	# LRU tracking for row limit enforcement

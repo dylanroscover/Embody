@@ -39,7 +39,11 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 	elif state and key == 'u' and ctrl_or_cmd and lShift:
 		parent.Embody.UpdateHandler()
 
-	# Save current COMP only
+	# Refresh tracking state
+	elif state and key == 'r' and ctrl_or_cmd and lShift:
+		parent.Embody.Refresh()
+
+	# Update current COMP only
 	elif state and key == 'u' and ctrl_or_cmd and alt:
 	    parent.Embody.SaveCurrentComp()
 

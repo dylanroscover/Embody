@@ -2174,7 +2174,7 @@ class EmbodyExt:
         return None
 
     def SaveCurrentComp(self) -> None:
-        """Save only the COMP we're currently working inside of (Ctrl/Cmd+Alt+U)."""
+        """Update only the COMP we're currently working inside of (Ctrl/Cmd+Alt+U)."""
         current_comp = None
         
         try:

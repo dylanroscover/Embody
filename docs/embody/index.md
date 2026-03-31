@@ -5,12 +5,12 @@
 ## How It Works
 
 1. **Tag** any operator with a double-tap of ++lctrl++
-2. **Save** with ++ctrl+shift+u++ — Embody writes tagged operators to external files
+2. **Update** with ++ctrl+shift+u++ — Embody writes tagged operators to external files
 3. **Diff and merge** those files in git like any other source code
 
 Embody maintains a bidirectional sync between your `.toe` project and external files:
 
-- **Sync out**: Press ++ctrl+shift+u++ to write all dirty COMPs and DATs to external files (`.tox` for COMPs, `.py`/`.json`/etc. for DATs)
+- **Sync out**: Press ++ctrl+shift+u++ to update all dirty COMPs and DATs to external files (`.tox` for COMPs, `.py`/`.json`/etc. for DATs)
 - **Sync in**: On project open, Embody automatically restores all externalized operators from disk — TOX-strategy COMPs from `.tox` files, TDN-strategy COMPs from `.tdn` JSON files, and DATs via TouchDesigner's native file parameter
 - **Tracking**: An `externalizations.tsv` table tracks all externalized ops with path, type, timestamp, dirty state, and build number
 
