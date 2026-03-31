@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.274-blue)
+![Version](https://img.shields.io/badge/version-5.0.275-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -177,6 +177,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.275**: TDN export keyboard shortcut pars, keyboard shortcuts documentation
 - **5.0.274**: Settings persistence across upgrades, extension initialization timing docs
 - **5.0.269**: Fix annotation loss on save, TDN v1.2, poisoned zero value guards
 - **5.0.263**: DAT content safety, palette clone fidelity, recursive TDN fingerprinting, venv validation
