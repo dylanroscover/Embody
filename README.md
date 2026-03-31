@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.275-blue)
+![Version](https://img.shields.io/badge/version-5.0.277-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -17,7 +17,7 @@ TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or
 
 **Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, lets AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire connections, set parameters, write extensions, and debug errors — all through natural conversation. No copy-pasting code. No describing your network in chat.
 
-**Embody** externalizes your operators to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. Tag operators, save with `ctrl + shift + u`, and everything restores from disk automatically on project open — your externalized files are the source of truth.
+**Embody** externalizes your operators to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. Tag operators, update with `ctrl + shift + u`, and everything restores from disk automatically on project open — your externalized files are the source of truth.
 
 **TDN** (TouchDesigner Network) exports your entire operator network to human-readable JSON — a structured language that both humans and LLMs can read, diff, and reconstruct. Review structural changes in pull requests, snapshot configurations, or hand an LLM a complete picture of your network.
 
@@ -52,7 +52,7 @@ my-project/              ← project folder (optionally a git repo)
 
 1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project
 2. **Tag operators** — select any COMP or DAT and press `lctrl` twice to tag and externalize it
-3. **Work normally** — press `ctrl + shift + u` to save all changes, or `ctrl + alt + u` to save only the current COMP. On project open, Embody restores everything from disk automatically
+3. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. On project open, Embody restores everything from disk automatically
 
 > **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
@@ -61,8 +61,9 @@ my-project/              ← project folder (optionally a git repo)
 | Shortcut | Action |
 |----------|--------|
 | `lctrl + lctrl` | Tag or manage the operator under the cursor |
-| `ctrl + shift + u` | Initialize / update all externalizations |
-| `ctrl + alt + u` | Save only the current COMP |
+| `ctrl + shift + u` | Update all externalizations |
+| `ctrl + alt + u` | Update only the current COMP |
+| `ctrl + shift + r` | Refresh tracking state |
 | `ctrl + shift + o` | Open the Manager UI |
 | `ctrl + shift + e` | Export entire project to `.tdn` file |
 | `ctrl + alt + e` | Export current COMP to `.tdn` file |
@@ -177,6 +178,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.277**: Manager UI improvements, Ctrl+Shift+R shortcut, consistent "Update" terminology
 - **5.0.275**: TDN export keyboard shortcut pars, keyboard shortcuts documentation
 - **5.0.274**: Settings persistence across upgrades, extension initialization timing docs
 - **5.0.269**: Fix annotation loss on save, TDN v1.2, poisoned zero value guards

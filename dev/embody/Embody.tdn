@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.2",
-	"build": 326,
-	"generator": "Embody/5.0.275",
+	"build": 341,
+	"generator": "Embody/5.0.277",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-31T05:57:16Z",
+	"exported_at": "2026-03-31T07:08:27Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -31,8 +31,7 @@
 			"parameters": {
 				"includeinorder": true,
 				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
-				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
 			"flags": ["display"]
 		},
@@ -835,7 +834,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.275"
+				"value": "5.0.277"
 			},
 			{
 				"name": "Touchbuild",
@@ -858,7 +857,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 326
+				"value": 341
 			},
 			{
 				"name": "Github",
@@ -873,7 +872,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-03-31 05:57:11 UTC"
+				"value": "2026-03-31 07:08:27 UTC"
 			},
 			{
 				"name": "Help",
@@ -924,7 +923,8 @@
 			"position": [196, 675],
 			"size": [142, 155],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/help.tdn"
 		},
 		{
 			"name": "list",
@@ -951,7 +951,8 @@
 			},
 			"position": [250, 50],
 			"size": [257, 250],
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/list.tdn"
 		},
 		{
 			"name": "fifo1",
@@ -1004,7 +1005,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [900, 225],
-			"size": [108, 155]
+			"size": [108, 155],
+			"tdn_ref": "embody/Embody/tagger.tdn"
 		},
 		{
 			"name": "timer1",
@@ -1054,7 +1056,7 @@
 			"parameters": {
 				"y": 13,
 				"w": 1080,
-				"h": 427,
+				"h": 440,
 				"resizer": true,
 				"resizeb": true,
 				"resizewmin": 250,
@@ -1074,7 +1076,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [650, 250],
-			"size": [160, 92]
+			"size": [160, 92],
+			"tdn_ref": "embody/Embody/manager.tdn"
 		},
 		{
 			"name": "parexec",
@@ -1147,7 +1150,8 @@
 					"offset": -29
 				}
 			},
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/toolbar.tdn"
 		},
 		{
 			"name": "EnvoyExt",
@@ -1207,7 +1211,8 @@
 			},
 			"position": [-770, -1270],
 			"size": [600, 370],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "templates",
@@ -1216,38 +1221,7 @@
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"],
-			"annotations": [
-				{
-					"name": "annotate1",
-					"mode": "annotate",
-					"title": "Config Templates",
-					"text": "CLAUDE.md, AGENTS.md, settings, bridge",
-					"position": [-70, 1130],
-					"size": [1170, 330],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate2",
-					"mode": "annotate",
-					"title": "Rule Templates",
-					"text": "Auto-deployed rules for user projects",
-					"position": [-70, 330],
-					"size": [1770, 330],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate3",
-					"mode": "annotate",
-					"title": "Skill Templates",
-					"text": "Auto-deployed skills for Claude Code",
-					"position": [-70, -470],
-					"size": [2070, 330],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.5
-				}
-			]
+			"tdn_ref": "embody/Embody/templates.tdn"
 		},
 		{
 			"name": "keyboardin1",
@@ -1298,7 +1272,8 @@
 			},
 			"position": [300, 475],
 			"size": [160, 130],
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/windowHeader.tdn"
 		},
 		{
 			"name": "annotation_ui",
@@ -1324,7 +1299,8 @@
 				}
 			},
 			"size": [1300, 1000],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "_envoy_perform",
@@ -1366,7 +1342,8 @@
 				"cursorvisible": "alwaysvisible"
 			},
 			"position": [500, 675],
-			"size": [154, 89]
+			"size": [154, 89],
+			"tdn_ref": "embody/Embody/window_manager.tdn"
 		},
 		{
 			"name": "fifo1_callbacks",
@@ -1413,7 +1390,8 @@
 			},
 			"position": [-800, 0],
 			"size": [700, 800],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_tagging",
@@ -1442,7 +1420,8 @@
 				}
 			},
 			"position": [-800, -700],
-			"size": [700, 600]
+			"size": [700, 600],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_windows",
@@ -1469,7 +1448,8 @@
 			},
 			"position": [100, 600],
 			"size": [1140, 310],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "window_tagging_menu",
@@ -1481,7 +1461,8 @@
 				"winoffsetx": 110
 			},
 			"position": [900, 675],
-			"size": [110, 157]
+			"size": [110, 157],
+			"tdn_ref": "embody/Embody/window_tagging_menu.tdn"
 		},
 		{
 			"name": "chopexec_exit_tagger",

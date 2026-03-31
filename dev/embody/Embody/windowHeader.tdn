@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 1,
-	"generator": "Embody/5.0.275",
+	"generator": "Embody/5.0.277",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-31T05:56:58Z",
+	"exported_at": "2026-03-31T07:07:59Z",
 	"network_path": "/embody/Embody/windowHeader",
 	"options": {
 		"include_dat_content": false,
@@ -95,7 +95,10 @@
 				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
-			"position": [600, 0]
+			"position": [600, 0],
+			"storage": {
+				"pressed": false
+			}
 		},
 		{
 			"name": "button_min",
@@ -113,7 +116,10 @@
 				"bgcolorb": "=1.0",
 				"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
 			},
-			"position": [300, 0]
+			"position": [300, 0],
+			"storage": {
+				"pressed": false
+			}
 		},
 		{
 			"name": "panelexec1",

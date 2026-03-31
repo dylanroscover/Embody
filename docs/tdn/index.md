@@ -75,7 +75,7 @@ Use the `import_network` MCP tool:
 
 COMPs can use TDN as their externalization strategy (instead of `.tox`). With TDN strategy:
 
-1. Press ++ctrl+shift+u++ to export children to `.tdn` files
+1. Press ++ctrl+shift+u++ to update — children are exported to `.tdn` files
 2. On project save (++ctrl+s++), children are stripped from the `.toe` to keep it small, then restored after save completes
 3. On project open, children are automatically reconstructed from the `.tdn` file — no need to save your `.toe` to preserve them
 4. In git, you see readable JSON diffs instead of binary changes

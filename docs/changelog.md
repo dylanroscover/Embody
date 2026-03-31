@@ -1,5 +1,18 @@
 # Changelog
 
+## v5.0.277
+
+Manager UI improvements, new keyboard shortcut, consistent terminology.
+
+- **"Update current COMP" toolbar button**: New button (floppy disk icon) in the toolbar directly after "Update externalizations", calls `SaveCurrentComp()` — equivalent to Ctrl+Alt+U. Visible in both full and minimized manager views
+- **Ctrl+Shift+R keyboard shortcut**: New shortcut to refresh tracking state, added to keyboard callbacks, toolbar tooltip, and all documentation
+- **Consistent "Update" terminology**: Replaced mixed "Save"/"Update" language across all user-facing text — tooltips, help text, docs, and README now consistently use "Update" for externalization operations (Ctrl+Shift+U, Ctrl+Alt+U)
+- **Minimized UI fix**: Reduced `min_height` from 72 to 66 to eliminate black bar at bottom of minimized manager (header 26px + toolbar 40px = 66px exactly). Increased `min_width` from 370 to 410 to accommodate the new button
+- **Manager list default expand**: Root-level items in the externalization list now start expanded on first launch instead of fully collapsed
+- **Restored unit_tests annotations**: 6 annotation groups accidentally removed in v5.0.269 commit (irony: the "fix annotation loss" commit) have been restored from git history
+- **TDN reload rule**: CLAUDE.md rule #1 strengthened — editing `.tdn` files on disk now mandates an immediate `import_network` MCP call to reload in TD
+- **Manager toolbar docs**: New toolbar button reference table added to `manager-ui.md` with all buttons, actions, and keyboard shortcuts
+
 ## v5.0.275
 
 TDN export keyboard shortcut pars, keyboard shortcuts documentation.

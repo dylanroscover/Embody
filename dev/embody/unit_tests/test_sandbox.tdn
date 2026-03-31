@@ -2,9 +2,9 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 35,
-	"generator": "Embody/5.0.275",
+	"generator": "Embody/5.0.277",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-31T05:57:54Z",
+	"exported_at": "2026-03-31T07:08:29Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false,
@@ -21,46 +21,9 @@
 	"tags": ["tdn"],
 	"operators": [
 		{
-			"name": "sandbox_test_dat_restoration",
+			"name": "sandbox_test_mcp_flags_position",
 			"type": "baseCOMP",
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration.tdn"
-		},
-		{
-			"name": "sandbox_test_dat_restoration1",
-			"type": "baseCOMP",
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration1.tdn"
-		},
-		{
-			"name": "sandbox_test_dat_restoration2",
-			"type": "baseCOMP",
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_dat_restoration2.tdn"
-		},
-		{
-			"name": "sandbox_test_custom_parameters",
-			"type": "baseCOMP",
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn"
-		},
-		{
-			"name": "sandbox_test_custom_parameters1",
-			"type": "baseCOMP",
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1.tdn"
-		},
-		{
-			"name": "sandbox_test_custom_parameters2",
-			"type": "baseCOMP",
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2.tdn"
+			"color": [0.67, 0.67, 0.67]
 		},
 		{
 			"name": "sandbox_test_tdn_reconstruction",

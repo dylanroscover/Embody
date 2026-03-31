@@ -5,15 +5,15 @@
 	"generator": "Embody/5.0.277",
 	"td_build": "099.2025.32280",
 	"exported_at": "2026-03-31T07:08:18Z",
-	"network_path": "/embody/Embody/toolbar/container_left/refresh",
+	"network_path": "/embody/Embody/toolbar/container_left/save_comp",
 	"options": {
 		"include_dat_content": false,
 		"include_storage": true
 	},
 	"type": "textCOMP",
 	"parameters": {
-		"text": "󰑐",
-		"callbacks": "new_refresh_callbacks",
+		"text": "󰆓",
+		"callbacks": "new_save_comp_callbacks",
 		"font": "Material Design Icons",
 		"fontsize": 11,
 		"fontsizeunits": "points",
@@ -22,8 +22,7 @@
 		"fontcolorb": "=parent.Embody.par.Textcolorb",
 		"w": 36,
 		"vmode": "fill",
-		"alignorder": 400,
-		"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
+		"alignorder": 650,
 		"clickthrough": true,
 		"resizecomp": "=me",
 		"repocomp": "=me",

@@ -60,12 +60,12 @@ COMPs can also be externalized using the **TDN strategy** instead of `.tox`. Thi
 
 With TDN strategy:
 
-- **On save** (++ctrl+shift+u++): The COMP's children are exported to a `.tdn` file
+- **On update** (++ctrl+shift+u++): The COMP's children are exported to a `.tdn` file
 - **On project save** (++ctrl+s++): Children are **stripped from the `.toe`** to keep it small, then restored immediately after save completes. This means the `.toe` does not contain TDN children — they live entirely in `.tdn` files on disk.
 - **On project open**: Children are automatically reconstructed from the `.tdn` file
 - **In git**: You see readable JSON diffs instead of binary changes
 
-!!! important "Always save externalizations before saving the .toe"
+!!! important "Always update externalizations before saving the .toe"
     Since ++ctrl+s++ strips TDN children from the `.toe`, always press ++ctrl+shift+u++ first to ensure your `.tdn` files are up to date. If TD crashes mid-save, the `.tdn` files are what Embody uses to reconstruct your work.
 
 !!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"

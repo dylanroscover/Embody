@@ -1,8 +1,9 @@
 ﻿name	container	type	text	tooltip	font	fontsize	width	alignorder	action	enable_expr	bg_r_expr	bg_g_expr	bg_b_expr	text_expr	marginl
 status	left	label		Dirty externalization count	Open Sans	11	80	-100	-					str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''	3
 disable	left	button	󰐥	Toggle externalization	Material Design Icons	11	36	0	toggle_disable		0.13 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorr.eval()	0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()	0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()		0
-initialize	left	button	󰓦	Update externalizations	Material Design Icons	11	36	600	UpdateHandler						0
-refresh	left	button	󰑐	Refresh tracking state	Material Design Icons	11	36	400	Refresh	parent.Embody.par.Status.eval() != 'Disabled'					0
+initialize	left	button	󰓦	Update externalizations (Ctrl+Shift+U)	Material Design Icons	11	36	600	UpdateHandler						0
+save_comp	left	button	󰆓	Update current COMP (Ctrl+Alt+U)	Material Design Icons	11	36	650	SaveCurrentComp						0
+refresh	left	button	󰑐	Refresh tracking state (Ctrl+Shift+R)	Material Design Icons	11	36	400	Refresh	parent.Embody.par.Status.eval() != 'Disabled'					0
 save_folder	left	button		Open save folder	Open Sans	9	100	700	OpenSaveFolder					f'/{parent.Embody.par.Folder}'	0
 import_tdn	left	button	󰋺	Import TDN file	Material Design Icons	11	36	925	ImportTDNFromDialog						10
 export_comp_tdn	left	button	󰈝	Export current COMP TDN (Ctrl+Alt+E)	Material Design Icons	11	36	950	export_comp_tdn						0

@@ -28,7 +28,7 @@ If externalized files aren't updating on save:
 
 1. Check that the operator is tagged (look for the tag indicator)
 2. Verify the operator is marked as dirty
-3. Try a manual save with ++ctrl+shift+u++
+3. Try a manual update with ++ctrl+shift+u++
 4. Check the textport/logs for error messages
 
 ### DAT Content Lost After Save (TDN)

@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.2",
-	"build": 15,
-	"generator": "Embody/5.0.275",
+	"build": 16,
+	"generator": "Embody/5.0.277",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-31T05:56:58Z",
+	"exported_at": "2026-03-31T07:08:12Z",
 	"network_path": "/embody/Embody/toolbar/tooltip/text",
 	"options": {
 		"include_dat_content": false,
@@ -12,7 +12,7 @@
 	},
 	"type": "textCOMP",
 	"parameters": {
-		"text": "Open Embody parameters",
+		"text": "Export project TDN (Ctrl+Shift+E)",
 		"callbacks": "text_callbacks",
 		"font": "Open Sans",
 		"fontsize": 10,
