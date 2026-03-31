@@ -1,5 +1,12 @@
 # Changelog
 
+## v5.0.275
+
+TDN export keyboard shortcut pars, keyboard shortcuts documentation.
+
+- **TDN export shortcut pars**: Added `Export Project to TDN` and `Export Current COMP to TDN` read-only parameters to the UI custom page, displaying the `ctrl/cmd + lshift + e` and `ctrl/cmd + alt + e` shortcuts alongside the existing four shortcut pars
+- **Keyboard shortcuts docs**: Added an info callout to `keyboard-shortcuts.md` clearly explaining the difference between Save shortcuts (update tracked externalizations) and Export shortcuts (standalone TDN snapshot of any network)
+
 ## v5.0.274
 
 Settings persistence across upgrades, extension initialization timing documentation.

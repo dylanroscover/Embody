@@ -33,3 +33,8 @@ The double-tap ++lctrl++ shortcut works on the currently selected operator in th
 
 - **++ctrl+shift+e++** — Exports the entire project network to a single `.tdn` file at your project root
 - **++ctrl+alt+e++** — Exports only the current COMP's network to a `.tdn` file
+
+!!! info "Export vs Save — what's the difference?"
+    The **Save** shortcuts (++ctrl+shift+u++ / ++ctrl+alt+u++) save operators that are **already tagged and tracked** by Embody. They update build numbers, timestamps, and dirty state — this is your daily "save my work" workflow.
+
+    The **Export** shortcuts (++ctrl+shift+e++ / ++ctrl+alt+e++) create a standalone `.tdn` snapshot of **any** network, whether or not it's externalized. No tracking, no build increment, no side effects. Use these when you want to grab a snapshot of a network you haven't tagged — like exporting someone else's component, creating a one-off backup, or sharing a network as a `.tdn` file.
