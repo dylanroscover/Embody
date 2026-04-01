@@ -1375,7 +1375,11 @@ class EmbodyExt:
             self.Log(f"Deleted {deleted_count} tracked file(s)", "SUCCESS")
 
         # Clean up empty directories only (safe operation)
-        self._cleanupEmptyDirectories(folder, prevFolder)
+        # SAFETY: Never clean directories outside the externalization folder.
+        # When prevFolder is empty, folder falls back to project.folder — which
+        # is far too broad and can delete unrelated empty directories (issue #3).
+        if folder and folder != project.folder:
+            self._cleanupEmptyDirectories(folder, prevFolder)
 
         # Clear externalizations table synchronously (no delay — delayed clear
         # creates a race condition if re-enabled before the callback fires)
@@ -1383,10 +1387,13 @@ class EmbodyExt:
             self.Externalizations.clear(keepFirstRow=True)
 
         self.my.par.Status = 'Disabled'
-        
-        if folder:
+
+        # Schedule deferred empty-dir cleanup only for the specific externalization
+        # folder — never for project.folder or empty paths (prevents deleting
+        # newly-created target folders when changing the Folder parameter).
+        if folder and folder != project.folder:
             run(lambda: self.deleteEmptyDirectories(folder), delayFrames=60)
-        
+
         self.Log("Disabled", "SUCCESS")
 
     def _cleanupEmptyDirectories(self, folder, prevFolder):
@@ -1413,11 +1420,13 @@ class EmbodyExt:
                 except Exception as e:
                     self.Log(f"Error removing directory: {comp_path}", "ERROR", str(e))
 
-        # Try to remove main folder only if empty
+        # Try to remove main externalization folder only if empty
+        # SAFETY: Never remove project.folder itself
         try:
             if folder:
-                folder_path = Path(folder)
-                if folder_path.is_dir():
+                folder_path = Path(folder).resolve()
+                project_path = Path(project.folder).resolve()
+                if folder_path != project_path and folder_path.is_dir():
                     folder_path.rmdir()  # Only succeeds if empty
         except OSError:
             # Directory not empty - this is expected and safe
@@ -1459,13 +1468,13 @@ class EmbodyExt:
             self.my.par.Status = 'Enabled'
             self.param_tracker.initializeTracking(self)
             
-            # Create externalization folder
+            # Create externalization folder (makedirs handles missing parents)
             folder = self.getProjectFolder()
             try:
-                os.mkdir(folder)
+                os.makedirs(folder, exist_ok=True)
                 self.Log(f"Created folder '{folder}'", "SUCCESS")
-            except FileExistsError:
-                pass
+            except Exception as e:
+                self.Log(f"Failed to create folder '{folder}': {e}", "ERROR")
 
         # Migrate table schema if needed (adds strategy column)
         self._migrateTableSchema()
@@ -5602,7 +5611,20 @@ class EmbodyExt:
         Recursively delete empty directories only.
         SAFETY: rmdir() only succeeds on empty directories.
         Skips version-control directories (.git, .svn, .hg).
+        Never operates on project.folder or its parents.
         """
+        path = Path(path)
+        if not path.is_dir():
+            return
+
+        # SAFETY: Never walk project.folder — too broad, can delete
+        # unrelated empty directories (e.g. newly-created target folders)
+        try:
+            if path.resolve() == Path(project.folder).resolve():
+                return
+        except Exception:
+            pass
+
         empty_dir_found = True
         iteration = 0
 
@@ -5610,7 +5632,7 @@ class EmbodyExt:
             empty_dir_found = False
             iteration += 1
 
-            for root, dirs, files in os.walk(path, topdown=False):
+            for root, dirs, files in os.walk(str(path), topdown=False):
                 # Skip version-control internals entirely
                 if any(part in self._SCM_DIRS for part in Path(root).parts):
                     continue

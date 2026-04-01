@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.2",
-	"build": 30,
-	"generator": "Embody/5.0.277",
+	"build": 31,
+	"generator": "Embody/5.0.278",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-31T07:08:26Z",
+	"exported_at": "2026-04-01T20:05:19Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false,
@@ -301,7 +301,7 @@
 						"style": "Str",
 						"readOnly": true,
 						"help": "Current Embody status (read-only). Shows whether Embody is initialized and running.",
-						"value": "Enabled"
+						"value": "Testing"
 					},
 					{
 						"name": "Createexternalizationstable",
@@ -345,8 +345,7 @@
 					{
 						"name": "Refresh",
 						"style": "Pulse",
-						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
-						"value": true
+						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
 					},
 					{
 						"name": "Externalizeproject",
@@ -857,7 +856,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.277"
+						"value": "5.0.278"
 					},
 					{
 						"name": "Touchbuild",
@@ -880,7 +879,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 340
+						"value": 352
 					},
 					{
 						"name": "Github",
@@ -895,7 +894,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-03-31 07:08:24 UTC"
+						"value": "2026-04-01 20:04:39 UTC"
 					},
 					{
 						"name": "Help",
@@ -3471,7 +3470,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 139,
+				"rows": 144,
 				"cols": 11
 			},
 			"flags": ["viewer"],
