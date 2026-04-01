@@ -1,5 +1,12 @@
 # Changelog
 
+## v5.0.278
+
+Fix folder change crash, regression tests.
+
+- **Fix: Changing externalization folder deletes target directory** (GitHub issue #3): When changing the Folder parameter, `Disable()` would fall back to `project.folder` when the previous folder was empty, then `deleteEmptyDirectories` would walk the entire project tree and delete the newly-created target directory. `UpdateHandler` then failed with `FileNotFoundError`. Fixed by guarding all directory cleanup to never operate on `project.folder`, and switching `os.mkdir` to `os.makedirs(exist_ok=True)` for robustness
+- **Regression tests**: Two new tests in `test_custom_parameters.py` — `test_zz_folder_10_empty_dir_survives_disable` reproduces the exact issue #3 scenario, `test_zz_folder_11_disable_empty_prev_skips_project_folder` verifies empty prevFolder doesn't walk project.folder (39 test suites)
+
 ## v5.0.277
 
 Manager UI improvements, new keyboard shortcut, consistent terminology.
