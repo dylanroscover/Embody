@@ -2,9 +2,10 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 25,
-	"generator": "Embody/5.0.302",
+	"generator": "Embody/5.0.304",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-04-03T06:46:50Z",
+	"source_file": "Embody-5.305.toe",
+	"exported_at": "2026-04-03T17:59:37Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false,
@@ -2459,7 +2460,8 @@
 			"position": [400, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/unit_tests/test_sandbox.tdn"
 		},
 		{
 			"name": "TestRunnerExt",

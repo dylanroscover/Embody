@@ -2,9 +2,10 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 79,
-	"generator": "Embody/5.0.302",
+	"generator": "Embody/5.0.304",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-04-03T06:47:40Z",
+	"source_file": "Embody-5.305.toe",
+	"exported_at": "2026-04-03T17:59:37Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false,
@@ -73,6 +74,13 @@
 			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2.tdn"
 		},
 		{
+			"name": "sandbox_test_custom_parameters3",
+			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters3.tdn"
+		},
+		{
 			"name": "sandbox_test_tdn_reconstruction",
 			"type": "baseCOMP",
 			"parameters": {
@@ -97,7 +105,7 @@
 			"flags": ["viewer"],
 			"color": [0.3, 0.5, 0.9],
 			"comment": "Test comment",
-			"tags": ["test_tag", "tdn"],
+			"tags": ["tdn", "test_tag"],
 			"storage": {
 				"portability_key": 42,
 				"config": {

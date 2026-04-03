@@ -89,6 +89,65 @@ class TestDuplicateHandling(EmbodyTestCase):
         self.assertFalse(result)
 
 
+class TestReplicantHandling(EmbodyTestCase):
+    """Tests for replicant filtering in duplicate detection."""
+
+    def test_resolve_replicants_returns_false_for_non_replicants(self):
+        """_resolveReplicants returns False when no ops are replicants."""
+        comp1 = self.sandbox.create(baseCOMP, 'non_rep_a')
+        comp2 = self.sandbox.create(baseCOMP, 'non_rep_b')
+        result = self.embody_ext._resolveReplicants([comp1, comp2])
+        self.assertFalse(result)
+
+    def test_resolve_replicants_returns_false_for_dats(self):
+        """_resolveReplicants returns False for DATs (no replicator)."""
+        dat1 = self.sandbox.create(textDAT, 'rep_dat_a')
+        dat2 = self.sandbox.create(textDAT, 'rep_dat_b')
+        result = self.embody_ext._resolveReplicants([dat1, dat2])
+        self.assertFalse(result)
+
+    def test_is_replicant_false_for_regular_comp(self):
+        """isReplicant returns False for a regular COMP."""
+        comp = self.sandbox.create(baseCOMP, 'regular_comp')
+        self.assertFalse(self.embody_ext.isReplicant(comp))
+
+    def test_build_path_groups_skips_replicants(self):
+        """_buildPathGroups must not include replicant COMPs."""
+        # Create a replicator with a tagged master
+        host = self.sandbox.create(baseCOMP, 'rep_host')
+        master = host.create(baseCOMP, 'rep_master')
+        tox_tag = self.embody.par.Toxtag.val
+        master.tags.add(tox_tag)
+        master.par.externaltox = 'test/replicated.tox'
+        # Drive the replicator with a table
+        table = host.create(tableDAT, 'rep_table')
+        table.appendRow(['name'])
+        for i in range(5):
+            table.appendRow([f'item{i}'])
+        replicator = host.create(replicatorCOMP, 'rep1')
+        replicator.par.template = table.name
+        replicator.par.master = master.name
+        replicator.cook(force=True)
+
+        # Verify replicants were created and are detected
+        replicants = [
+            c for c in host.children
+            if c is not master and c is not replicator
+            and c.family == 'COMP' and c.type != 'tableDAT']
+        # Filter to only actual replicants (not the table DAT)
+        replicants = [c for c in replicants if self.embody_ext.isReplicant(c)]
+        if not replicants:
+            self.skip('Replicator did not produce replicants (timing?)')
+
+        result = self.embody_ext._buildPathGroups()
+        # None of the replicants should appear in the groups
+        for ops in result.values():
+            for o in ops:
+                self.assertFalse(
+                    self.embody_ext.isReplicant(o),
+                    f'Replicant {o.path} should not appear in path groups')
+
+
 class TestCheckForDuplicates(EmbodyTestCase):
     """Tests for checkForDuplicates and its dialog-driven helpers."""
 

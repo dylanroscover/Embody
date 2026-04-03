@@ -369,13 +369,15 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"Expected suffix '{expected_suffix}', got '{resolved}'")
 
 	def test_resolve_auto_root_uses_project_name(self):
-		"""Root export should use the .toe project name."""
+		"""Root export should use build-stripped project name."""
 		root_op = op('/')
 		resolved = self.embody.ext.TDN._resolveOutputPath('auto', root_op)
-		proj_name = project.name.removesuffix('.toe')
+		raw_name = project.name.removesuffix('.toe')
+		stable_name = self.embody.ext.TDN._stripBuildSuffix(raw_name)
 		self.assertTrue(
-			resolved.replace('\\', '/').endswith(f'{proj_name}.tdn'),
-			f"Expected project name in path, got '{resolved}'")
+			resolved.replace('\\', '/').endswith(f'{stable_name}.tdn'),
+			f"Expected build-stripped name '{stable_name}.tdn' in path, "
+			f"got '{resolved}'")
 
 	def test_resolve_explicit_path_returned_as_is(self):
 		"""Explicit path should be returned unchanged."""
@@ -407,6 +409,40 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"TD path segment appears twice in '{normalized}'")
 
 	# =================================================================
+	# _stripBuildSuffix — stable project TDN filenames
+	# =================================================================
+
+	def test_strip_build_suffix_dotted(self):
+		"""Build number (e.g. .302) should be stripped."""
+		strip = self.embody.ext.TDN._stripBuildSuffix
+		self.assertEqual(strip('Embody-5.302'), 'Embody-5')
+
+	def test_strip_build_suffix_no_build(self):
+		"""Name without build suffix should be unchanged."""
+		strip = self.embody.ext.TDN._stripBuildSuffix
+		self.assertEqual(strip('Embody-5'), 'Embody-5')
+
+	def test_strip_build_suffix_plain_name(self):
+		"""Plain name without any version should be unchanged."""
+		strip = self.embody.ext.TDN._stripBuildSuffix
+		self.assertEqual(strip('demo'), 'demo')
+
+	def test_strip_build_suffix_number_no_dot(self):
+		"""Trailing number without dot should be preserved."""
+		strip = self.embody.ext.TDN._stripBuildSuffix
+		self.assertEqual(strip('Embody5'), 'Embody5')
+
+	def test_strip_build_suffix_underscore_number(self):
+		"""Underscore-separated number should be preserved."""
+		strip = self.embody.ext.TDN._stripBuildSuffix
+		self.assertEqual(strip('Embody_5'), 'Embody_5')
+
+	def test_strip_build_suffix_preserves_user_version(self):
+		"""Hyphenated user version should be preserved."""
+		strip = self.embody.ext.TDN._stripBuildSuffix
+		self.assertEqual(strip('my-cool-project-3'), 'my-cool-project-3')
+
+	# =================================================================
 	# ExportNetwork file output — end-to-end
 	# =================================================================
 
@@ -420,6 +456,18 @@ class TestTDNFileIO(EmbodyTestCase):
 		with open(fp, 'r', encoding='utf-8') as f:
 			data = json.load(f)
 		self.assertEqual(data['format'], 'tdn')
+
+	def test_export_file_includes_source_file(self):
+		"""Exported TDN should contain source_file with the .toe filename."""
+		self.sandbox.create(baseCOMP, 'src_check')
+		fp = str(Path(self._temp_dir) / 'source.tdn')
+		result = self.embody.ext.TDN.ExportNetwork(
+			root_path=self.sandbox.path, output_file=fp)
+		self.assertTrue(result.get('success'))
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		self.assertIn('source_file', data)
+		self.assertEqual(data['source_file'], project.name)
 
 	def test_export_file_contains_all_operators(self):
 		self.sandbox.create(baseCOMP, 'op_a')
