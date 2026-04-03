@@ -3547,7 +3547,7 @@ class EmbodyExt:
         """Map normalized external paths to lists of operators sharing them.
 
         Only includes operators with Embody tags that are not inside
-        TD clone hierarchies.
+        TD clone hierarchies or replicator outputs.
         """
         embody_tags = self.getTags()
         path_groups = {}
@@ -3555,7 +3555,7 @@ class EmbodyExt:
         for oper in self.root.findChildren(type=COMP, parName='externaltox'):
             if not any(tag in oper.tags for tag in embody_tags):
                 continue
-            if self.isInsideClone(oper):
+            if self.isInsideClone(oper) or self.isReplicant(oper):
                 continue
             path = self.normalizePath(oper.par.externaltox.eval())
             if path:
@@ -3564,7 +3564,7 @@ class EmbodyExt:
         for oper in self.root.findChildren(type=DAT, parName='file'):
             if not any(tag in oper.tags for tag in embody_tags):
                 continue
-            if self.isInsideClone(oper):
+            if self.isInsideClone(oper) or self.isReplicant(oper):
                 continue
             path = self.normalizePath(oper.par.file.eval())
             if path:
@@ -3576,6 +3576,7 @@ class EmbodyExt:
         """Check for and handle duplicate external file paths.
 
         Groups all operators sharing the same external path, then:
+        - For replicants: auto-tags all replicants (master is the template)
         - For COMPs with TD clone relationships: auto-tags clones
         - For others: prompts the user once per group
         """
@@ -3583,6 +3584,8 @@ class EmbodyExt:
             if len(ops) < 2:
                 continue
             if any('clone' in o.tags for o in ops):
+                continue
+            if self._resolveReplicants(ops):
                 continue
             if self._resolveClonesByCloningAPI(ops):
                 continue
@@ -3629,6 +3632,29 @@ class EmbodyExt:
         self.Log(
             f"Auto-resolved clone master '{master.path}' for path "
             f"shared by {len(ops)} operators", "SUCCESS")
+        return True
+
+    def _resolveReplicants(self, ops: list) -> bool:
+        """Auto-resolve replicant groups without prompting.
+
+        If any op in the group is a replicant (has a replicator ancestor),
+        tag all replicants as clones. The non-replicant op (if any) is
+        treated as master.
+
+        Returns True if any replicants were found and tagged.
+        """
+        replicants = [o for o in ops if self.isReplicant(o)]
+        if not replicants:
+            return False
+
+        for o in replicants:
+            self._handleDuplicateAsReference(o)
+
+        non_replicants = len(ops) - len(replicants)
+        self.Log(
+            f"Auto-tagged {len(replicants)} replicant{'s' if len(replicants) != 1 else ''} "
+            f"as clones ({non_replicants} master{'s' if non_replicants != 1 else ''} retained)",
+            "SUCCESS")
         return True
 
     def _promptForDuplicateGroup(self, path: str, ops: list) -> None:
@@ -4610,15 +4636,21 @@ class EmbodyExt:
 
     def ExternalizeProject(self) -> None:
         """Externalize all compatible COMPs and DATs in project."""
-        choice = ui.messageBox('Embody',
+        choice = ui.messageBox('Embody — Externalize Full Project',
             'Add all compatible COMPs and DATs to Embody?\n'
-            '(Palette components, clones, and replicants will be ignored)',
-            buttons=['Cancel', 'TOX', 'TDN'])
+            '(Palette components, clones, and replicants will be ignored)\n\n'
+            '  TOX: Externalize each COMP as a .tox file.\n'
+            '  TDN: Externalize each COMP as a .tdn file.\n\n'
+            'Optionally, also export a single project-wide .tdn\n'
+            'snapshot of your entire network (Ctrl+Shift+E).',
+            buttons=['Cancel', 'TOX', 'TDN', 'TOX + Project TDN',
+                     'TDN + Project TDN'])
 
-        if choice not in (1, 2):
+        if choice < 1:
             return
 
-        use_tdn = (choice == 2)
+        use_tdn = choice in (2, 4)
+        export_project_tdn = choice in (3, 4)
 
         # Find system COMPs to exclude
         sys_comps = self.root.findChildren(
@@ -4656,6 +4688,11 @@ class EmbodyExt:
                 self.applyTagToOperator(oper, comp_tag)
 
         self.UpdateHandler()
+
+        # Export project-wide TDN snapshot if requested
+        if export_project_tdn:
+            self.my.ext.TDN.ExportNetworkAsync(
+                output_file='auto', embed_all=True)
 
     def _shouldSkipOp(self, oper, paths_to_exclude):
         """Check if operator should be skipped in project externalization."""

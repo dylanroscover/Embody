@@ -405,6 +405,7 @@ class TDNExt:
 				'build': build_num,
 				'generator': f'Embody/{self._getEmbodyVersion()}',
 				'td_build': f'{app.version}.{app.build}',
+				'source_file': project.name,
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
 				'network_path': root_path,
@@ -556,6 +557,7 @@ class TDNExt:
 		metadata = {
 			'generator': f'Embody/{self._getEmbodyVersion()}',
 			'td_build': f'{app.version}.{app.build}',
+			'source_file': project.name,
 			'build': self._getBuildNumber(root_op),
 			'project_name': project.name.removesuffix('.toe'),
 			'project_folder': str(project.folder),
@@ -655,6 +657,7 @@ class TDNExt:
 				'build': state['metadata'].get('build'),
 				'generator': state['metadata']['generator'],
 				'td_build': state['metadata']['td_build'],
+				'source_file': state['metadata'].get('source_file', ''),
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
 				'network_path': state['root_path'],
@@ -3670,6 +3673,19 @@ class TDNExt:
 				pass
 		return None
 
+	@staticmethod
+	def _stripBuildSuffix(name: str) -> str:
+		"""Strip trailing build number (.NNN) from a project name for stable filenames.
+
+		Only removes a trailing dot-digits suffix — the auto-incrementing build
+		number that TD appends on save. Preserves deliberate user versioning.
+
+		Examples: 'Embody-5.302' -> 'Embody-5', 'Embody-5' -> 'Embody-5',
+		'demo' -> 'demo', 'Embody5' -> 'Embody5', 'Embody_5' -> 'Embody_5'.
+		"""
+		import re
+		return re.sub(r'\.\d+$', '', name)
+
 	def _resolveOutputPath(self, output_file, root_op):
 		"""Resolve the output file path, matching the operator's TD path structure."""
 		from pathlib import Path
@@ -3678,8 +3694,9 @@ class TDNExt:
 			project_dir = Path(project.folder)
 
 			if root_op.path == '/':
-				# Root export: place in externalizations folder if configured
-				safe_name = project.name.removesuffix('.toe')
+				# Root export: strip build number for stable git-diffable name
+				raw_name = project.name.removesuffix('.toe')
+				safe_name = TDNExt._stripBuildSuffix(raw_name)
 				try:
 					ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
 					if ext_folder:

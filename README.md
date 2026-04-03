@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.302-blue)
+![Version](https://img.shields.io/badge/version-5.0.305-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-TEC_Friendly-green)
@@ -178,6 +178,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.305**: Replicant duplicate detection fix (issue #4), TDN export improvements, ExternalizeProject dialog
 - **5.0.302**: Fix duplicate path clone detection (issue #4), config file location (issue #5), Envoy startup flow
 - **5.0.278**: Fix folder change crash (issue #3), regression tests
 - **5.0.277**: Manager UI improvements, Ctrl+Shift+R shortcut, consistent "Update" terminology

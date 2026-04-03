@@ -1,5 +1,16 @@
 # Changelog
 
+## v5.0.305
+
+Replicant duplicate detection fix (issue #4 update), TDN export improvements, ExternalizeProject dialog enhancement.
+
+- **Fix: Replicant duplicate detection** (GitHub issue #4 follow-up): `_buildPathGroups()` now filters out replicants alongside clones, preventing replicator outputs from entering the duplicate detection flow. Previously, 100 replicants sharing the same `externaltox` path would trigger a massive popup with 100+ buttons. Added `_resolveReplicants()` safety net that auto-tags replicants as clones without prompting if they reach `checkForDuplicates()` through another code path
+- **Improved: ExternalizeProject dialog**: Expanded the "Externalize Full Project" dialog with clearer descriptions and new combined options (`TOX + Project TDN`, `TDN + Project TDN`) that externalize operators and also export a project-wide `.tdn` snapshot in one step
+- **Improved: TDN export `source_file` field**: All TDN exports now include the originating `.toe` filename for traceability
+- **Improved: Stable project TDN filenames**: New `_stripBuildSuffix()` strips the auto-incrementing build number (e.g. `.302`) from project names, so root TDN exports produce a stable filename across saves (e.g. `Embody-5.tdn` instead of `Embody-5.305.tdn`)
+- **Test: Replicant handling tests**: 4 new tests in `test_duplicate_handling.py` covering `_resolveReplicants`, `isReplicant`, and replicator integration with `_buildPathGroups`
+- **Test: TDN file I/O tests**: 7 new tests in `test_tdn_file_io.py` for `_stripBuildSuffix` edge cases and `source_file` export verification
+
 ## v5.0.302
 
 Fix duplicate path clone detection (issue #4), config file location (issue #5), Envoy startup flow on fresh .tox install.
