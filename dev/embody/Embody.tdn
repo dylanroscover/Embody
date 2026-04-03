@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.2",
-	"build": 352,
-	"generator": "Embody/5.0.278",
+	"build": 362,
+	"generator": "Embody/5.0.302",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-04-01T20:05:13Z",
+	"exported_at": "2026-04-03T06:47:09Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -280,7 +280,7 @@
 				"style": "Str",
 				"readOnly": true,
 				"help": "Current Embody status (read-only). Shows whether Embody is initialized and running.",
-				"value": "Testing"
+				"value": "Enabled"
 			},
 			{
 				"name": "Createexternalizationstable",
@@ -835,7 +835,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.278"
+				"value": "5.0.302"
 			},
 			{
 				"name": "Touchbuild",
@@ -858,7 +858,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 352
+				"value": 362
 			},
 			{
 				"name": "Github",
@@ -873,7 +873,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-04-01 20:04:39 UTC"
+				"value": "2026-04-03 06:46:59 UTC"
 			},
 			{
 				"name": "Help",
@@ -904,7 +904,8 @@
 	"storage": {
 		"claudius_running": false,
 		"_tdn_restore_failures": ["/embody/base1"],
-		"expand_order": ["/embody"]
+		"expand_order": ["/embody"],
+		"_start_in_progress": true
 	},
 	"operators": [
 		{

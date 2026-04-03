@@ -1297,9 +1297,13 @@ class EnvoyExt:
         self.ownerComp.store('envoy_running', False)
 
         # Defer auto-start so all init/recompile cycles finish first.
-        # parexec.py also calls Start() on parameter change, but the
-        # COMP-stored running flag prevents duplicate launches.
-        if self.ownerComp.par.Envoyenable.eval():
+        # Guard: only auto-start if init() has already run. On fresh .tox
+        # drop, __init__ fires BEFORE init() can reset the baked Envoyenable
+        # to False — without this guard, Start() bypasses the opt-in prompt.
+        # On code recompile (extension reinit during a running session),
+        # _init_complete is already True so auto-start proceeds correctly.
+        if (self.ownerComp.par.Envoyenable.eval()
+                and getattr(self.ownerComp.ext.Embody, '_init_complete', False)):
             self.ownerComp.par.Envoystatus = 'Starting...'
             run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
                 delayFrames=30)
@@ -1490,11 +1494,22 @@ class EnvoyExt:
         if self.ownerComp.fetch('envoy_running', False):
             self._log('Server already running (duplicate Start ignored)', 'DEBUG')
             return
+        # The envoy_running store can be lost on extension reinit (file sync
+        # replaces baked-in code → extension reinitializes → storage cleared).
+        # Check the status parameter as a backup — it survives reinit.
+        status = str(self.ownerComp.par.Envoystatus.eval())
+        if status.startswith(('Running', 'Starting')):
+            self._log(f'Server already active (status: {status})', 'DEBUG')
+            if status.startswith('Running'):
+                self.ownerComp.store('envoy_running', True)
+            return
 
-        git_root = self._checkOrInitGitRepo()
-        if git_root is None:
-            return  # User cancelled
-        self.ownerComp.store('_git_root', git_root)
+        # Resolve git root silently — Start() never prompts. Dialogs belong only
+        # in _enableEnvoy() / InitGit() which are explicitly user-initiated.
+        git_root = self.ownerComp.fetch('_git_root', None, search=False)
+        if not git_root:
+            git_root = self._findGitRoot()
+            self.ownerComp.store('_git_root', git_root)
 
         # Ensure Python environment is ready (idempotent fast path if already installed)
         op.Embody.ext.Embody._setupEnvironment()
@@ -1642,7 +1657,21 @@ class EnvoyExt:
                 shutdown_event=shutdown_event
             )
             server.run()
+        except OSError as e:
+            if e.errno == 48 or 'address already in use' in str(e).lower():
+                raise RuntimeError(
+                    f'Port {port} is already in use. '
+                    f'Another Envoy instance or process may be bound to it.'
+                ) from e
+            raise RuntimeError(f'MCP server failed on port {port}: {e}') from e
         except Exception as e:
+            # uvicorn raises UnboundLocalError when bind fails — surface
+            # the underlying cause if possible.
+            if 'address already in use' in str(e).lower():
+                raise RuntimeError(
+                    f'Port {port} is already in use. '
+                    f'Another Envoy instance or process may be bound to it.'
+                ) from e
             raise RuntimeError(f'MCP server failed on port {port}: {e}') from e
 
     # === Thread Manager Callbacks (run on main thread) ===
@@ -3847,108 +3876,143 @@ class EnvoyExt:
         settings_path.write_text(settings_content, encoding='utf-8')
         self._log(f'Deployed settings.local.json to {settings_path}')
 
+    def _findGitRoot(self):
+        """Silently find the git repo root. Returns Path or 'no-git'. Never prompts."""
+        from pathlib import Path
+        project_dir = Path(project.folder)
+        home_dir = Path.home()
+        for parent in [project_dir] + list(project_dir.parents):
+            if parent == home_dir or len(parent.parts) <= len(home_dir.parts):
+                break
+            if (parent / '.git').exists():
+                self._log(f'Found git repo at {parent}', 'INFO')
+                return parent
+        self._log(f'No git repo found for {project_dir} (stopped at {home_dir})', 'INFO')
+        return 'no-git'
+
     def _checkOrInitGitRepo(self):
         """Check for a git repo. If missing, prompt user to initialize one.
-        Returns the git root Path, or None if user cancelled."""
+        Only call from user-initiated flows (_enableEnvoy, InitGit) — never
+        from automatic startup paths. Returns Path, 'no-git', or None (cancelled)."""
         from pathlib import Path
         import os, subprocess
 
         project_dir = Path(project.folder)
+        home_dir = Path.home()
 
-        # Walk up looking for .git
+        # Walk up looking for .git, but stop before the home directory —
+        # a .git in ~ (e.g. dotfiles repo) is never the intended project repo.
         for parent in [project_dir] + list(project_dir.parents):
+            if parent == home_dir or len(parent.parts) <= len(home_dir.parts):
+                break
             if (parent / '.git').exists():
+                self._log(f'Found git repo at {parent}', 'INFO')
                 return parent
 
-        # No git repo found — prompt user
-        choice = op.Embody.ext.Embody._messageBox(
-            'Envoy — Git Repository Recommended',
-            'A git repository is recommended for .gitignore and\n'
-            '.gitattributes management. No git repository was found.\n\n'
-            'MCP and AI client config files will be generated either way.\n\n'
-            f'Initialize a git repo in:\n  {project_dir}\n\n'
-            'Or browse to select a different folder (e.g. an existing repo root).\n'
-            'You can also run op.Embody.InitGit() later.',
-            buttons=['Cancel', 'Initialize Git Here', 'Browse for Folder', 'Start Without Git'])
+        # No git repo found between project folder and home directory.
+        self._log(
+            f'No git repo found for {project_dir} (stopped at {home_dir})',
+            'INFO')
 
-        if choice not in (1, 2, 3):  # Cancel or closed dialog
-            self.ownerComp.par.Envoyenable = False
-            self._log('Envoy cancelled — no git repository.', 'INFO')
-            return None
+        # Prompt user.
+        # Guard against concurrent calls: ui.messageBox blocks the main
+        # thread but TD's run() callbacks still fire, so a second Start()
+        # can reach here while the first dialog is open.
+        if getattr(self, '_git_prompt_active', False):
+            self._log('Git prompt already active (duplicate suppressed)', 'DEBUG')
+            return 'no-git'
+        self._git_prompt_active = True
+        try:
+            choice = op.Embody.ext.Embody._messageBox(
+                'Envoy — Git Repository Recommended',
+                'A git repository is recommended for .gitignore and\n'
+                '.gitattributes management. No git repository was found.\n\n'
+                'MCP and AI client config files will be generated either way.\n\n'
+                f'Initialize a git repo in:\n  {project_dir}\n\n'
+                'Or browse to select a different folder (e.g. an existing repo root).\n'
+                'You can also run op.Embody.InitGit() later.',
+                buttons=['Cancel', 'Initialize Git Here', 'Browse for Folder', 'Start Without Git'])
 
-        if choice == 2:  # Browse for Folder
-            result = ui.chooseFolder(
-                title='Select Git Repository Root', start=str(project_dir))
-            if not result:
+            if choice not in (1, 2, 3):  # Cancel or closed dialog
                 self.ownerComp.par.Envoyenable = False
-                self._log('Envoy cancelled — folder selection aborted.', 'INFO')
+                self._log('Envoy cancelled — no git repository.', 'INFO')
                 return None
-            chosen = Path(result)
-            # If the chosen folder already contains a .git, use it directly
-            if (chosen / '.git').exists():
-                self._log(f'Using existing git repo at {chosen}', 'SUCCESS')
-                return chosen
-            # No .git there — offer to initialize in that folder
-            init_choice = op.Embody.ext.Embody._messageBox(
-                'Envoy — Initialize Git',
-                f'No git repo found in:\n  {chosen}\n\nInitialize git here?',
-                buttons=['Cancel', 'Initialize Git'])
-            if init_choice not in (1,):
-                self.ownerComp.par.Envoyenable = False
-                return None
-            project_dir = chosen  # use chosen folder for init below
 
-        if choice in (1, 2):  # Initialize Git Here, or Browse → confirmed init
-            try:
-                # Strip git env vars that TD's embedded Python may set —
-                # these can cause git init to produce a broken repository.
-                clean_env = {
-                    k: v for k, v in os.environ.items()
-                    if k not in (
-                        'GIT_DIR', 'GIT_WORK_TREE',
-                        'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES',
+            if choice == 2:  # Browse for Folder
+                result = ui.chooseFolder(
+                    title='Select Git Repository Root', start=str(project_dir))
+                if not result:
+                    self.ownerComp.par.Envoyenable = False
+                    self._log('Envoy cancelled — folder selection aborted.', 'INFO')
+                    return None
+                chosen = Path(result)
+                # If the chosen folder already contains a .git, use it directly
+                if (chosen / '.git').exists():
+                    self._log(f'Using existing git repo at {chosen}', 'SUCCESS')
+                    return chosen
+                # No .git there — offer to initialize in that folder
+                init_choice = op.Embody.ext.Embody._messageBox(
+                    'Envoy — Initialize Git',
+                    f'No git repo found in:\n  {chosen}\n\nInitialize git here?',
+                    buttons=['Cancel', 'Initialize Git'])
+                if init_choice not in (1,):
+                    self.ownerComp.par.Envoyenable = False
+                    return None
+                project_dir = chosen  # use chosen folder for init below
+
+            if choice in (1, 2):  # Initialize Git Here, or Browse → confirmed init
+                try:
+                    # Strip git env vars that TD's embedded Python may set —
+                    # these can cause git init to produce a broken repository.
+                    clean_env = {
+                        k: v for k, v in os.environ.items()
+                        if k not in (
+                            'GIT_DIR', 'GIT_WORK_TREE',
+                            'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES',
+                        )
+                    }
+                    git_kwargs = dict(
+                        capture_output=True, text=True,
+                        cwd=str(project_dir), env=clean_env,
                     )
-                }
-                git_kwargs = dict(
-                    capture_output=True, text=True,
-                    cwd=str(project_dir), env=clean_env,
-                )
-                subprocess.run(['git', 'init'], check=True, **git_kwargs)
-                self._log(f'Initialized git repo in {project_dir}', 'SUCCESS')
-
-                # Verify the init produced a working repository
-                verify = subprocess.run(
-                    ['git', 'rev-parse', '--is-inside-work-tree'],
-                    **git_kwargs)
-                if verify.returncode != 0:
-                    self._log('Git verify failed after init — retrying', 'WARNING')
                     subprocess.run(['git', 'init'], check=True, **git_kwargs)
+                    self._log(f'Initialized git repo in {project_dir}', 'SUCCESS')
+
+                    # Verify the init produced a working repository
                     verify = subprocess.run(
                         ['git', 'rev-parse', '--is-inside-work-tree'],
                         **git_kwargs)
                     if verify.returncode != 0:
-                        raise RuntimeError(
-                            f'git rev-parse failed after retry: '
-                            f'{verify.stderr.strip()}')
-                    self._log('Git repo verified after retry', 'SUCCESS')
+                        self._log('Git verify failed after init — retrying', 'WARNING')
+                        subprocess.run(['git', 'init'], check=True, **git_kwargs)
+                        verify = subprocess.run(
+                            ['git', 'rev-parse', '--is-inside-work-tree'],
+                            **git_kwargs)
+                        if verify.returncode != 0:
+                            raise RuntimeError(
+                                f'git rev-parse failed after retry: '
+                                f'{verify.stderr.strip()}')
+                        self._log('Git repo verified after retry', 'SUCCESS')
 
-                return project_dir
-            except Exception as e:
-                self._log(f'Failed to initialize git repo: {e}', 'ERROR')
-                op.Embody.ext.Embody._messageBox(
-                    'Envoy — Git Initialization Failed',
-                    f'Could not initialize a git repository:\n\n  {e}\n\n'
-                    'Envoy will start without git. MCP and AI client\n'
-                    'config will be generated in the project folder.\n'
-                    '.gitignore and .gitattributes will be skipped.\n\n'
-                    'To add git later: run "git init" manually, then\n'
-                    'call op.Embody.InitGit() from the textport.',
-                    buttons=['OK'])
-                # Fall through to start-without-git
+                    return project_dir
+                except Exception as e:
+                    self._log(f'Failed to initialize git repo: {e}', 'ERROR')
+                    op.Embody.ext.Embody._messageBox(
+                        'Envoy — Git Initialization Failed',
+                        f'Could not initialize a git repository:\n\n  {e}\n\n'
+                        'Envoy will start without git. MCP and AI client\n'
+                        'config will be generated in the project folder.\n'
+                        '.gitignore and .gitattributes will be skipped.\n\n'
+                        'To add git later: run "git init" manually, then\n'
+                        'call op.Embody.InitGit() from the textport.',
+                        buttons=['OK'])
+                    # Fall through to start-without-git
 
-        # choice == 3 or git init failed — start without git
-        self._log('Starting Envoy without git repo — auto-config skipped.', 'WARNING')
-        return 'no-git'
+            # choice == 3 or git init failed — start without git
+            self._log('Starting Envoy without git repo — auto-config skipped.', 'WARNING')
+            return 'no-git'
+        finally:
+            self._git_prompt_active = False
 
     @staticmethod
     def _atomicWriteJSON(path, data):

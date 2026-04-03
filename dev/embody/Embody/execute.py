@@ -6,16 +6,31 @@
 # Make sure the corresponding toggle is enabled in the Execute DAT.
 
 def init():
-	
-	pass
-	
+	# Log version info for debugging user issues
+	parent.Embody.Log(
+		f"Embody v{parent.Embody.par.Version.eval()} | "
+		f"TouchDesigner {app.version}.{app.build} | "
+		f"{app.osName} {app.osVersion}"
+	)
+	# Prevent Envoy from auto-starting before init completes.
+	# The release .tox may bake in Envoyenable=True and Envoystatus=Running;
+	# reset both so the git dialog doesn't fire before the externalizations
+	# table is ready and Start() isn't blocked by a stale status.
+	# Suppress parexec side effects (settings save, Start trigger) during reset.
+	parent.Embody.par.Envoyenable = False
+	parent.Embody.par.Envoystatus = 'Disabled'
+	# Signal parexec that init is done -- safe to process param changes.
+	# Before this flag, parexec suppresses all side effects because .tox
+	# param loading fires onValueChange BEFORE init() runs.
+	parent.Embody.ext.Embody._init_complete = True
+
 
 def onStart():
 	init()
 	# Restore settings from .embody.json — recovers user config after
 	# crash, force-quit, or any unsaved session. On normal open where
 	# .toe was saved, values match and this is a no-op.
-	run(f"op('{parent.Embody}').ext.Embody._restoreSettings()", delayFrames=5)
+	run(f"op('{parent.Embody}').ext.Embody._restoreSettings(kick_envoy=True)", delayFrames=5)
 	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
@@ -31,10 +46,6 @@ def onStart():
 
 def onCreate():
 	init()
-	# Prevent Envoy from auto-starting before init completes.
-	# The release .tox may bake in Envoyenable=True; reset it so the git
-	# dialog doesn't fire before the externalizations table is ready.
-	parent.Embody.par.Envoyenable = False
 	# Auto-create (or reconnect) the externalizations table before Verify()
 	run(f"op('{parent.Embody}').ext.Embody.CreateExternalizationsTable()", delayFrames=15)
 	# Verify handles update-scenario detection and Envoy opt-in
@@ -57,6 +68,16 @@ def onDeviceChange():
 	return
 
 def onProjectPreSave():
+	# Clear runtime-only storage that must not bake into the .tox.
+	# _git_root is computed fresh at Start() time — baking it in would cause
+	# every user's project to inherit the dev repo path from the release .tox.
+	parent.Embody.unstore('_git_root')
+	# Clear session-only stores before the save so they never bake into the
+	# .tox. _tdn_stripped_paths and _tdn_pane_restore are written and consumed
+	# within a single Ctrl+S cycle — they have no meaning across sessions.
+	parent.Embody.unstore('_tdn_stripped_paths')
+	parent.Embody.unstore('_tdn_pane_restore')
+
 	# Suppress the delayed Refresh pulse - the continuity check must NOT
 	# fire during the strip/restore window or it will delete files for
 	# temporarily-missing operators inside TDN COMPs.

@@ -157,10 +157,10 @@ class EmbodyExt:
         # (which is always True when externaltox is empty)
         self._tdn_fingerprints = {}
 
-        # Set up Python environment (uv + venv) for Envoy dependencies
-        # Only install if Envoy is enabled (user opted in during Verify)
-        if self.my.par.Envoyenable.eval():
-            self._setupEnvironment()
+        # NOTE: _setupEnvironment() is NOT called here.
+        # It runs inside EnvoyExt.Start(), which is invoked after init() and
+        # _restoreSettings() have run. Calling it here (based on the baked
+        # Envoyenable value) would bypass the opt-in prompt on fresh .tox drop.
 
     # ==========================================================================
     # PYTHON ENVIRONMENT SETUP (uv)
@@ -529,8 +529,19 @@ class EmbodyExt:
             self.Log('Envoy skipped. Enable later via Envoyenable parameter.', 'INFO')
 
     def _enableEnvoy(self):
-        """Enable Envoy: install deps, extract AI config, start server."""
+        """Enable Envoy: git check, install deps, extract AI config, start server."""
         self.Log('Setting up Envoy...', 'INFO')
+
+        # Git check runs FIRST — immediately after the user clicks "Enable Envoy",
+        # before the slow deps install. This keeps all dialogs at the start of the
+        # setup flow so nothing surprising appears after TD goes unresponsive.
+        git_root = self.my.ext.Envoy._checkOrInitGitRepo()
+        if git_root is None:
+            # User cancelled — abort Envoy setup entirely.
+            self.Log('Envoy setup cancelled.', 'INFO')
+            return
+        # Store so Start() skips re-prompting for git.
+        self.my.store('_git_root', str(git_root))
 
         # Install Python dependencies
         self._setupEnvironment()
@@ -549,16 +560,22 @@ class EmbodyExt:
         )
 
     def _findProjectRoot(self):
-        """Find the git root, or fall back to project.folder."""
+        """Find the git root, or fall back to project.folder.
+
+        Checks the stored git root first (set by Start/InitGit), then
+        walks up from project.folder but stops before the home directory
+        to avoid picking up unrelated repos (e.g. dotfiles in ~).
+        """
+        git_root = self.my.fetch('_git_root', None, search=False)
+        if git_root and git_root != 'no-git':
+            return Path(git_root) if not isinstance(git_root, Path) else git_root
         project_dir = Path(project.folder)
+        home_dir = Path.home()
         for parent_dir in [project_dir] + list(project_dir.parents):
+            if parent_dir == home_dir or len(parent_dir.parts) <= len(home_dir.parts):
+                break
             if (parent_dir / '.git').exists():
                 return parent_dir
-        self.Log(
-            'No git repo found. Writing config to project folder. '
-            'For best results, place your .toe inside a git repo.',
-            'INFO'
-        )
         return project_dir
 
     def _extractAIConfig(self):
@@ -1053,17 +1070,8 @@ class EmbodyExt:
     # ==========================================================================
 
     def _settingsPath(self) -> Path:
-        """Path to .embody.json — git root if available, else project folder."""
-        # Check stored git root first (set by InitGit)
-        git_root = self.my.fetch('_git_root', None, search=False)
-        if git_root and git_root != 'no-git':
-            return Path(git_root) / '.embody.json'
-        # Walk up from project folder looking for .git/
-        folder = Path(project.folder)
-        for parent in [folder] + list(folder.parents):
-            if (parent / '.git').exists():
-                return parent / '.embody.json'
-        return folder / '.embody.json'
+        """Path to .embody.json — consistent with _findProjectRoot()."""
+        return self._findProjectRoot() / '.embody.json'
 
     def _saveSettings(self) -> None:
         """Persist whitelisted parameter values to .embody.json."""
@@ -1107,9 +1115,12 @@ class EmbodyExt:
             self._settings_save_pending = True
             run(f"op('{self.my}').ext.Embody._saveSettings()", delayFrames=1)
 
-    def _restoreSettings(self) -> bool:
+    def _restoreSettings(self, kick_envoy: bool = False) -> bool:
         """Restore parameter values from .embody.json. Returns True if restored.
-        Sets _restoring_settings flag to suppress onValueChange side effects."""
+        Sets _restoring_settings flag to suppress onValueChange side effects.
+
+        kick_envoy: if True and Envoyenable is restored to True, defer Start().
+        Only set this on the onStart() path — Verify() owns startup on onCreate()."""
         path = self._settingsPath()
         if not path.is_file():
             return False
@@ -1143,6 +1154,12 @@ class EmbodyExt:
         finally:
             self._restoring_settings = False
         self.Log(f'Restored {restored} settings from .embody.json', 'INFO')
+        # If Envoyenable was restored to True, kick Start() — parexec was
+        # suppressed during restore so onValueChange never fired.
+        # Only do this on the onStart() path (kick_envoy=True).
+        # Verify() owns Envoy startup on the onCreate() path.
+        if kick_envoy and self.my.par.Envoyenable.eval():
+            run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=3)
         return restored > 0
 
     def Verify(self) -> None:
@@ -1187,13 +1204,19 @@ class EmbodyExt:
             run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
 
         # Defer Envoy opt-in until after the full init/update cycle completes.
-        # Skip if settings were restored — user already configured Envoy previously.
-        if settings_restored:
-            # Kick Envoy start if the restored settings have it enabled.
-            # onValueChange was suppressed during restore, so Start() never fired.
+        if settings_restored and has_prior_data:
+            # Returning user: settings exist AND table has prior data — this is
+            # a genuine re-install or upgrade into an established project. Skip
+            # the prompt; kick Envoy start if the restored settings have it
+            # enabled (onValueChange was suppressed during restore).
             if self.my.par.Envoyenable.eval():
                 run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=10)
-        elif not self.my.par.Envoyenable.eval():
+        else:
+            # Fresh install (empty table). Always prompt — even if a leftover
+            # .embody.json from a previous install in the same folder was
+            # restored, the user must explicitly opt in for this new project.
+            # Reset Envoyenable so the prompt is the gate, not old settings.
+            self.my.par.Envoyenable = False
             self._pending_envoy_prompt = True
 
     # ==========================================================================
@@ -3520,90 +3543,178 @@ class EmbodyExt:
 
         return kept_row
 
-    def checkForDuplicates(self) -> None:
-        """Check for and handle duplicate external file paths."""
-        embody_tags = self.getTags()
-        external_paths = {}
-        duplicate_ops = []
+    def _buildPathGroups(self) -> dict:
+        """Map normalized external paths to lists of operators sharing them.
 
-        # Check COMPs
+        Only includes operators with Embody tags that are not inside
+        TD clone hierarchies.
+        """
+        embody_tags = self.getTags()
+        path_groups = {}
+
         for oper in self.root.findChildren(type=COMP, parName='externaltox'):
             if not any(tag in oper.tags for tag in embody_tags):
                 continue
             if self.isInsideClone(oper):
                 continue
-            
             path = self.normalizePath(oper.par.externaltox.eval())
             if path:
-                if path in external_paths:
-                    duplicate_ops.append((oper, external_paths[path]))
-                else:
-                    external_paths[path] = oper
+                path_groups.setdefault(path, []).append(oper)
 
-        # Check DATs
         for oper in self.root.findChildren(type=DAT, parName='file'):
             if not any(tag in oper.tags for tag in embody_tags):
                 continue
             if self.isInsideClone(oper):
                 continue
-            
             path = self.normalizePath(oper.par.file.eval())
             if path:
-                if path in external_paths:
-                    duplicate_ops.append((oper, external_paths[path]))
-                else:
-                    external_paths[path] = oper
+                path_groups.setdefault(path, []).append(oper)
 
-        # Handle duplicates
-        for new_op, existing_op in duplicate_ops:
-            if 'clone' in new_op.tags:
+        return path_groups
+
+    def checkForDuplicates(self) -> None:
+        """Check for and handle duplicate external file paths.
+
+        Groups all operators sharing the same external path, then:
+        - For COMPs with TD clone relationships: auto-tags clones
+        - For others: prompts the user once per group
+        """
+        for path, ops in self._buildPathGroups().items():
+            if len(ops) < 2:
                 continue
+            if any('clone' in o.tags for o in ops):
+                continue
+            if self._resolveClonesByCloningAPI(ops):
+                continue
+            self._promptForDuplicateGroup(path, ops)
 
-            choice = ui.messageBox('Duplicate Path Detected',
-                f"Duplicate path for {new_op.family} '{new_op.path}'.\n\n"
-                "'Reference': Use same file (adds 'clone' tag)\n"
-                "'Duplicate': Create new externalization",
-                buttons=['Cancel', 'Reference', 'Duplicate'])
+    def _resolveClonesByCloningAPI(self, ops: list) -> bool:
+        """Try to resolve master/clone using TD's native clone API.
 
-            if choice == 1:  # Reference
-                self._handleDuplicateAsReference(new_op)
-            elif choice == 2:  # Duplicate
-                self._handleDuplicateAsNew(new_op)
+        Returns True if resolution succeeded (all clones tagged),
+        False if the API doesn't apply (DATs, or COMPs without
+        clone relationships).
+        """
+        if not all(o.family == 'COMP' for o in ops):
+            return False
+
+        master = None
+        ops_set = set(ops)
+
+        # Check .clones property — master is the op whose clones overlap
+        for o in ops:
+            try:
+                clones = o.clones
+                if clones and ops_set.intersection(clones):
+                    master = o
+                    break
+            except Exception:
+                pass
+
+        # Fallback: check par.clone — it points FROM clone TO master
+        if not master:
+            for o in ops:
+                clone_ref = o.par.clone.eval()
+                if clone_ref and clone_ref in ops_set and clone_ref is not o:
+                    master = clone_ref
+                    break
+
+        if not master:
+            return False
+
+        for o in ops:
+            if o is not master:
+                self._handleDuplicateAsReference(o)
+
+        self.Log(
+            f"Auto-resolved clone master '{master.path}' for path "
+            f"shared by {len(ops)} operators", "SUCCESS")
+        return True
+
+    def _promptForDuplicateGroup(self, path: str, ops: list) -> None:
+        """Show a single dialog for a group of operators sharing the same path.
+
+        The user picks which operator is the master; all others get
+        clone tags. Dismiss skips without tagging (will re-prompt on
+        next cycle).
+        """
+        op_list = '\n'.join(
+            f"  {i+1}. {o.path} ({o.family})" for i, o in enumerate(ops))
+        buttons = ['Dismiss'] + [o.name for o in ops]
+
+        choice = self._messageBox(
+            'Duplicate Path Detected',
+            f"Multiple operators share the external path:\n"
+            f"  {path}\n\n"
+            f"Operators:\n{op_list}\n\n"
+            f"Select the MASTER (others will be tagged as clones).\n"
+            f"'Dismiss' to skip for now.",
+            buttons=buttons)
+
+        if choice == 0:
+            return
+
+        master_idx = choice - 1
+        if 0 <= master_idx < len(ops):
+            for i, o in enumerate(ops):
+                if i != master_idx:
+                    self._handleDuplicateAsReference(o)
+            self.Log(
+                f"User selected '{ops[master_idx].path}' as master "
+                f"for '{path}'", "SUCCESS")
 
     def _handleDuplicateAsReference(self, oper):
         """Mark duplicate as intentional clone reference."""
         oper.tags.add('clone')
-        oper.color = (self.my.par.Clonetagcolorr, self.my.par.Clonetagcolorg, self.my.par.Clonetagcolorb)
-        
+        oper.color = (self.my.par.Clonetagcolorr,
+                      self.my.par.Clonetagcolorg,
+                      self.my.par.Clonetagcolorb)
+
         rel_file_path = self.getExternalPath(oper)
-        
-        # Add to table if not exists
+
+        # Add to table if not already present
         row_exists = any(
             self.Externalizations[row, 'path'] == oper.path
             for row in range(1, self.Externalizations.numRows)
         )
-        
+
         if not row_exists:
             timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-            build_num = int(oper.par.Build.eval()) if hasattr(oper.par, 'Build') else 1
-            touch_build = str(oper.par.Touchbuild.eval()) if hasattr(oper.par, 'Touchbuild') else app.build
-            
-            self.Externalizations.appendRow([
-                oper.path, oper.type, rel_file_path, timestamp, 
-                '', build_num if oper.family == 'COMP' else '', 
-                touch_build if oper.family == 'COMP' else ''
-            ])
-        
+            if oper.family == 'COMP':
+                strategy = 'tox'
+                build_num = int(oper.par.Build.eval())
+                touch_build = str(oper.par.Touchbuild.eval())
+            else:
+                strategy = oper.type
+                build_num = ''
+                touch_build = ''
+
+            has_strategy_col = self.Externalizations[0, 'strategy'] is not None
+            has_position_cols = self.Externalizations[0, 'node_x'] is not None
+
+            node_x = str(int(oper.nodeX)) if has_position_cols else ''
+            node_y = str(int(oper.nodeY)) if has_position_cols else ''
+            node_color = ''
+            if has_position_cols:
+                c = oper.color
+                node_color = f'{c[0]:.4f},{c[1]:.4f},{c[2]:.4f}'
+
+            if has_strategy_col:
+                row_data = [
+                    oper.path, oper.type, strategy, rel_file_path,
+                    timestamp, '', build_num, touch_build
+                ]
+                if has_position_cols:
+                    row_data.extend([node_x, node_y, node_color])
+                self.Externalizations.appendRow(row_data)
+            else:
+                self.Externalizations.appendRow([
+                    oper.path, oper.type, rel_file_path, timestamp,
+                    '', build_num, touch_build
+                ])
+
         self.Log(f"Added 'clone' tag to {oper.path}", "SUCCESS")
 
-    def _handleDuplicateAsNew(self, oper):
-        """Create new externalization for duplicate."""
-        if oper.family == 'COMP':
-            oper.par.externaltox = ''
-        else:
-            oper.par.file = ''
-        self.Update()
-        self.Log(f"Created new externalization for {oper.path}", "SUCCESS")
 
     # ==========================================================================
     # TAGGING UI

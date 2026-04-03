@@ -226,9 +226,11 @@ class TestSmokeRelease(EmbodyTestCase):
         """If Envoyenable is True, the MCP server should be running."""
         if not self.embody.par.Envoyenable.eval():
             self.skip('Envoy not enabled in this session')
-        running = self.embody.fetch('envoy_running', False)
-        self.assertTrue(running,
-            'Server should be running when Envoy is enabled')
+        # Check status parameter (survives extension reinit) rather than
+        # envoy_running store (reset to False on every __init__).
+        status = str(self.embody.par.Envoystatus.eval())
+        self.assertTrue(status.startswith('Running'),
+            f'Server should be running when Envoy is enabled, got: {status}')
 
     def test_envoy_port_valid(self):
         """Envoy port is in a valid range."""
