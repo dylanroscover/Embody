@@ -1,10 +1,10 @@
 {
 	"format": "tdn",
 	"version": "1.2",
-	"build": 1,
-	"generator": "Embody/5.0.278",
+	"build": 79,
+	"generator": "Embody/5.0.302",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-04-01T20:04:40Z",
+	"exported_at": "2026-04-03T06:47:40Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false,
@@ -12,9 +12,39 @@
 	},
 	"type_defaults": {
 		"baseCOMP": {
-			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9]
+			"size": [160, 130]
 		}
+	},
+	"par_templates": {
+		"creds": [
+			{
+				"label": "Private Key",
+				"name": "Privatekey",
+				"style": "File"
+			},
+			{
+				"label": "Database ID",
+				"name": "Databaseid",
+				"style": "Str"
+			},
+			{
+				"label": "Auto Connect",
+				"name": "Autoconnect",
+				"style": "Toggle"
+			}
+		],
+		"test": [
+			{
+				"name": "Speed",
+				"style": "Float"
+			}
+		],
+		"config": [
+			{
+				"name": "Threshold",
+				"style": "Float"
+			}
+		]
 	},
 	"type": "baseCOMP",
 	"flags": ["viewer"],
@@ -24,7 +54,23 @@
 		{
 			"name": "sandbox_test_custom_parameters",
 			"type": "baseCOMP",
-			"tags": ["tdn"]
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn"
+		},
+		{
+			"name": "sandbox_test_custom_parameters1",
+			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1.tdn"
+		},
+		{
+			"name": "sandbox_test_custom_parameters2",
+			"type": "baseCOMP",
+			"color": [0.3, 0.5, 0.9],
+			"tags": ["tdn"],
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2.tdn"
 		},
 		{
 			"name": "sandbox_test_tdn_reconstruction",
@@ -33,44 +79,59 @@
 				"parentshortcut": "mycomp"
 			},
 			"custom_pars": {
-				"Creds": [
-					{
-						"name": "Privatekey",
-						"style": "File",
-						"label": "Private Key",
-						"value": "/path/to/key.json"
-					},
-					{
-						"name": "Databaseid",
-						"style": "Str",
-						"label": "Database ID",
-						"value": "my-project-id"
-					},
-					{
-						"name": "Autoconnect",
-						"style": "Toggle",
-						"label": "Auto Connect",
-						"value": true
-					}
-				],
-				"Test": [
-					{
-						"name": "Speed",
-						"style": "Float",
-						"value": "=absTime.seconds"
-					}
-				],
-				"Config": [
-					{
-						"name": "Threshold",
-						"style": "Float",
-						"value": 0.75
-					}
-				]
+				"Creds": {
+					"$t": "creds",
+					"Privatekey": "/path/to/key.json",
+					"Databaseid": "my-project-id",
+					"Autoconnect": true
+				},
+				"Test": {
+					"$t": "test",
+					"Speed": "=absTime.seconds"
+				},
+				"Config": {
+					"$t": "config",
+					"Threshold": 0.75
+				}
 			},
 			"flags": ["viewer"],
+			"color": [0.3, 0.5, 0.9],
 			"comment": "Test comment",
 			"tags": ["test_tag", "tdn"],
+			"storage": {
+				"portability_key": 42,
+				"config": {
+					"nested": true
+				}
+			},
+			"tdn_ref": "embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction.tdn"
+		},
+		{
+			"name": "sandbox_test_tdn_reconstruction1",
+			"type": "baseCOMP",
+			"parameters": {
+				"parentshortcut": "mycomp"
+			},
+			"custom_pars": {
+				"Creds": {
+					"$t": "creds",
+					"Privatekey": "/path/to/key.json",
+					"Databaseid": "my-project-id",
+					"Autoconnect": true
+				},
+				"Test": {
+					"$t": "test",
+					"Speed": "=absTime.seconds"
+				},
+				"Config": {
+					"$t": "config",
+					"Threshold": 0.75
+				}
+			},
+			"flags": ["viewer"],
+			"color": [0.2, 0.8, 0.4],
+			"comment": "Test comment",
+			"tags": ["test_tag"],
 			"storage": {
 				"portability_key": 42,
 				"config": {

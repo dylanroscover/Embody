@@ -23,11 +23,16 @@ The externalization folder can be configured in several ways:
 
 ## Duplicate Path Handling
 
-When Embody detects two operators pointing to the same external file, it prompts you with options:
+When Embody detects multiple operators pointing to the same external file, it groups them and resolves the duplicates:
 
-- **Reference**: Both operators share the same external file. The new operator receives a `clone` tag and changes to either will affect the shared file.
-- **Duplicate**: Create a new, separate externalization for the operator with its own file path.
-- **Cancel**: Take no action.
+**Automatic resolution (COMPs):** If the operators are COMPs with TouchDesigner clone relationships (`enablecloning` / `clone` parameter), Embody automatically identifies the clone master and tags the others with a `clone` tag — no dialog needed.
+
+**Manual resolution:** For DATs or COMPs without TD clone relationships, Embody shows a single dialog listing all operators that share the path. You select which operator is the **master**; the others receive a `clone` tag.
+
+- Selecting a master tags all other operators as clones. Changes to the shared file affect all of them.
+- **Dismiss** skips the group for now. Embody will re-prompt on the next Update cycle.
+
+Once any operator in a group has a `clone` tag, the entire group is considered resolved and Embody will not prompt again.
 
 Enable or disable this check with the `Detect Duplicate Paths` parameter.
 

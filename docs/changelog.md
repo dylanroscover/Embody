@@ -1,5 +1,21 @@
 # Changelog
 
+## v5.0.302
+
+Fix duplicate path clone detection (issue #4), config file location (issue #5), Envoy startup flow on fresh .tox install.
+
+- **Fix: Clone assignment for duplicate paths** (GitHub issue #4): Rewrote duplicate detection to use group-based path mapping (`_buildPathGroups`) and TD's `.clones`/`par.clone` API for automatic master identification. COMPs that are clones of each other are resolved silently; non-clone duplicates show a single per-group dialog with Dismiss option. Eliminated infinite cancel loop and wrong-operator tagging
+- **Fix: Config files written to home directory** (GitHub issue #5): Bounded `_findProjectRoot()` and `_checkOrInitGitRepo()` walk-up to stop at `Path.home()`, preventing accidental discovery of unrelated git repos (e.g. dotfiles in `~`). Added `_git_prompt_active` guard against concurrent git dialogs
+- **Fix: Envoy auto-start on fresh .tox drop**: `EnvoyExt.__init__` was scheduling `Start()` based on the baked `Envoyenable=True` before `init()` could reset it. Added `_init_complete` guard so auto-start only fires during extension reinit in a running session, never on fresh install. Removed `_setupEnvironment()` from `EmbodyExt.__init__` (now runs inside `Start()`)
+- **Fix: Envoy opt-in prompt not appearing**: `_restoreSettings()` finding a leftover `.embody.json` caused `Verify()` to skip the "Enable Envoy?" dialog. Fresh installs (empty externalizations table) now always prompt, regardless of prior settings files
+- **Fix: Sequential dialog flow**: Moved git repo check into `_enableEnvoy()` so it runs immediately after the user clicks "Enable Envoy" — before deps install. `Start()` now uses silent `_findGitRoot()` and never shows dialogs
+- **Fix: Runtime-only storage baking into .tox**: `onProjectPreSave` now unstores `_git_root`, `_tdn_stripped_paths`, and `_tdn_pane_restore` — these are session-only values that caused spurious warnings (e.g. "Post-save restore: .tdn file missing: unit_tests.tdn") when baked into the release .tox
+- **Fix: parexec SyntaxError on save**: Fixed non-ASCII bytes (smart quotes, em dashes) in parexec.py that caused `SyntaxError` when TD reads externalized files with CP1252 encoding
+- **Improved: `_restoreSettings()` kick_envoy parameter**: `onStart()` passes `kick_envoy=True` to defer Envoy start after settings restore; `Verify()` (onCreate path) uses default `kick_envoy=False` since it owns the Envoy startup flow
+- **Test: Duplicate handling tests**: 5 new tests in `test_duplicate_handling.py` covering `_buildPathGroups`, `_resolveClonesByCloningAPI`, group dialog, and user-selects-master flow
+- **Test: Smoke release fix**: `test_envoy_server_running_if_enabled` now checks `Envoystatus` parameter (survives extension reinit) instead of `envoy_running` store
+- **Docs**: Updated duplicate path handling section in `externalization.md` (39 test suites, 1390 tests)
+
 ## v5.0.278
 
 Fix folder change crash, regression tests.
