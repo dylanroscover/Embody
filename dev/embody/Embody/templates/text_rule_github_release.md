@@ -31,6 +31,7 @@ Detect the version using the **first strategy that succeeds**, in order:
 
 - If a changelog file exists, extract the section for the current version — everything under its heading until the next version heading or EOF.
 - If no changelog exists, generate notes from the commit log since the last tag: `git log $(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --oneline`.
+- **Prepend a project intro paragraph** before the changelog section. This serves as a landing page for visitors arriving from MCP registries or awesome lists who have no context. Use 2-3 sentences covering both Embody (externalization) and Envoy (MCP server). Include links to the docs site and changelog.
 - Present the release notes to the user for approval before creating the release.
 
 ## 5. Create the Release

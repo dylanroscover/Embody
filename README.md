@@ -5,7 +5,8 @@
 ![Version](https://img.shields.io/badge/version-5.0.305-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
-![License](https://img.shields.io/badge/license-TEC_Friendly-green)
+![License](https://img.shields.io/badge/license-MIT-green)
+![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody)
 
 [Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
 
@@ -215,4 +216,4 @@ Originally derived from [External Tox Saver](https://github.com/franklin113/Exte
 
 ## License
 
-[TEC Friendly License v1.0](LICENSE)
+[MIT License](LICENSE)
