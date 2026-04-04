@@ -37,6 +37,9 @@ logs/
 # Embody / Envoy (auto-managed)
 .envoy.json
 
+# Promotion
+SUBMISSIONS.md
+
 # User sandboxes
 sandbox/
 
