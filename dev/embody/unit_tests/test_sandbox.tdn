@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.2",
 	"build": 79,
-	"generator": "Embody/5.0.304",
+	"generator": "Embody/5.0.309",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.305.toe",
-	"exported_at": "2026-04-03T17:59:37Z",
+	"source_file": "Embody-5.310.toe",
+	"exported_at": "2026-04-05T02:27:58Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false,
@@ -105,7 +105,7 @@
 			"flags": ["viewer"],
 			"color": [0.3, 0.5, 0.9],
 			"comment": "Test comment",
-			"tags": ["tdn", "test_tag"],
+			"tags": ["test_tag", "tdn"],
 			"storage": {
 				"portability_key": 42,
 				"config": {

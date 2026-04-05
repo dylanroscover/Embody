@@ -22,7 +22,9 @@ def init():
 	# Signal parexec that init is done -- safe to process param changes.
 	# Before this flag, parexec suppresses all side effects because .tox
 	# param loading fires onValueChange BEFORE init() runs.
-	parent.Embody.ext.Embody._init_complete = True
+	# Stored on the COMP (not the extension instance) so it survives
+	# extension reinit caused by file sync recompiling DATs.
+	parent.Embody.store('_init_complete', True)
 
 
 def onStart():
@@ -72,6 +74,7 @@ def onProjectPreSave():
 	# _git_root is computed fresh at Start() time — baking it in would cause
 	# every user's project to inherit the dev repo path from the release .tox.
 	parent.Embody.unstore('_git_root')
+	parent.Embody.unstore('_init_complete')
 	# Clear session-only stores before the save so they never bake into the
 	# .tox. _tdn_stripped_paths and _tdn_pane_restore are written and consumed
 	# within a single Ctrl+S cycle — they have no meaning across sessions.
@@ -276,6 +279,10 @@ def onProjectPostSave():
 						pane.owner = target
 		except Exception:
 			pass  # Non-critical — pane restoration is best-effort
+
+	# Re-store _init_complete — pre-save cleared it to avoid baking into
+	# the .tox, but the running session still needs it for parexec.
+	parent.Embody.store('_init_complete', True)
 
 	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)

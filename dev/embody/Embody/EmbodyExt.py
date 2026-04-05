@@ -551,6 +551,7 @@ class EmbodyExt:
 
         # Enable Envoy (triggers Start() via parexec.py)
         self.my.par.Envoyenable = True
+        self.my.par.Envoystatus = 'Starting...'
 
         client_label = self.my.par.Aiclient.label
         self.Log(

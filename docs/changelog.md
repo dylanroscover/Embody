@@ -1,5 +1,15 @@
 # Changelog
 
+## v5.0.310
+
+Fix first-time Envoy setup permanently stuck on "Enabled + Disabled" (issues #8, #9).
+
+- **Fix: Envoy permanently stuck "Disabled" after first-time install** (GitHub issue #9): `_init_complete` was stored as an instance attribute on EmbodyExt, destroyed when file sync recompiled DATs during first-time setup. Parexec silently dropped all parameter changes — including `Envoyenable = True` — so `Start()` was never scheduled. Moved `_init_complete` to COMP storage (`.store()`/`.fetch()`) which survives extension reinit. Added pre-save unstore and post-save re-store to prevent baking into the `.tox`
+- **Fix: `Start()` status guard self-poisoning** (GitHub issue #9): `EnvoyExt.__init__` set `Envoystatus = 'Starting...'` before deferring `Start()` by 30 frames. `Start()` then saw `'Starting...'` in its status guard and assumed another start was in progress — permanent deadlock. Removed the premature status from `__init__`; narrowed the guard to only block on `'Running'` (actual server activity), not `'Starting...'` (UI hint)
+- **Fix: `.gitignore` and `.gitattributes` not generated on first-time git init** (GitHub issue #8): Git config files are now created inside `_checkOrInitGitRepo()` immediately after `git init` succeeds, instead of relying on `Start()` which may not run in the same session
+- **Fix: Type error in `Start()` git config** (pre-existing): `_configureGitignore`/`_configureGitattributes` expect a `Path` object but `Start()` passed a string from COMP storage. Wrapped with `Path()` conversion
+- **Improved: `Start()` status guard visibility**: Upgraded the `Envoystatus` backup guard from DEBUG to WARNING so state inconsistencies are visible in logs
+
 ## v5.0.305
 
 Replicant duplicate detection fix (issue #4 update), TDN export improvements, ExternalizeProject dialog enhancement.

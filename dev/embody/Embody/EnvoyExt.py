@@ -1303,8 +1303,7 @@ class EnvoyExt:
         # On code recompile (extension reinit during a running session),
         # _init_complete is already True so auto-start proceeds correctly.
         if (self.ownerComp.par.Envoyenable.eval()
-                and getattr(self.ownerComp.ext.Embody, '_init_complete', False)):
-            self.ownerComp.par.Envoystatus = 'Starting...'
+                and self.ownerComp.fetch('_init_complete', False, search=False)):
             run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
                 delayFrames=30)
 
@@ -1497,11 +1496,12 @@ class EnvoyExt:
         # The envoy_running store can be lost on extension reinit (file sync
         # replaces baked-in code → extension reinitializes → storage cleared).
         # Check the status parameter as a backup — it survives reinit.
+        # Only 'Running' means the server thread is actually active.
+        # 'Starting...' is just a UI hint — not proof of an active thread.
         status = str(self.ownerComp.par.Envoystatus.eval())
-        if status.startswith(('Running', 'Starting')):
-            self._log(f'Server already active (status: {status})', 'DEBUG')
-            if status.startswith('Running'):
-                self.ownerComp.store('envoy_running', True)
+        if status.startswith('Running'):
+            self._log(f'Server already active (status: {status})', 'WARNING')
+            self.ownerComp.store('envoy_running', True)
             return
 
         # Resolve git root silently — Start() never prompts. Dialogs belong only
@@ -1608,8 +1608,10 @@ class EnvoyExt:
 
         # Git config: only when a git repo exists
         if git_root != 'no-git':
-            self._configureGitignore(git_root)
-            self._configureGitattributes(git_root)
+            from pathlib import Path
+            git_path = Path(git_root)
+            self._configureGitignore(git_path)
+            self._configureGitattributes(git_path)
 
     def Stop(self) -> None:
         """Stop MCP server"""
@@ -3993,6 +3995,10 @@ class EnvoyExt:
                                 f'git rev-parse failed after retry: '
                                 f'{verify.stderr.strip()}')
                         self._log('Git repo verified after retry', 'SUCCESS')
+
+                    # Git config files belong with git init (issue #8).
+                    self._configureGitignore(project_dir)
+                    self._configureGitattributes(project_dir)
 
                     return project_dir
                 except Exception as e:

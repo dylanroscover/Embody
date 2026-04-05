@@ -15,7 +15,7 @@ def onValueChange(par, prev):
 	ext = parent.Embody.ext.Embody
 	if getattr(ext, '_restoring_settings', False):
 		return
-	if not getattr(ext, '_init_complete', False):
+	if not parent.Embody.fetch('_init_complete', False, search=False):
 		return
 
 	# use par.eval() to get current value
