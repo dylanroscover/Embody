@@ -1,5 +1,18 @@
 # Changelog
 
+## v5.0.320
+
+TDN v1.3: parameter sequence round-trip + companion DAT handling. Operators with resizable parameter blocks (mathmixPOP, glslPOP, constantCHOP, etc.) and companion DATs (GLSL `_pixel`/`_compute`/`_info`, Timer/Script CHOP `_callbacks`, Ramp TOP `_keys`, etc.) now round-trip cleanly through TDN export/import.
+
+- **Feature: TDN parameter sequence support** (TDN v1.3): Operators with built-in parameter sequences (mathmixPOP Combine blocks, glslPOP/glslTOP uniform sequences, attributePOP attribute blocks, constantCHOP channel blocks, etc.) now export their sequence data in a new `sequences` key and restore it on import. Previously, adding parameter blocks (e.g., a new Combine block on mathmixPOP) would silently lose the added blocks after TDN round-trip
+- **Feature: Custom parameter sequence support**: Custom sequences defined via `page.appendSequence()` are now round-tripped correctly. Template parameters are exported with their base name and a `sequence` field; on import, `blockSize` is set from the template par count before `numBlocks` populates the block instances. Includes a fallback resolver for custom-sequence block parameters where TD's `block.par.{base}` lookup returns `None`
+- **Feature: Read-only DAT detection**: Auto-generated companion DATs (e.g. `glsl1_info`, `popto1`) that reject `dat.text = ...` writes are now probed at export time and tagged with `dat_read_only: true`. Their content is excluded from the export, and importers no longer log "not editable" warnings when restoring them. Older `.tdn` files without the flag are also handled silently
+- **Fix: Parameter cache silently dropping sequence parameters**: `_buildParCache()` cached exportable parameters per OPType from the first instance encountered. Sequence parameters with dynamic names (e.g., `comb2oper` on a 3-block mathmixPOP) were silently skipped on other instances whose block count exceeded the cached set. Sequence parameters are now excluded from the flat parameter cache and handled by the dedicated sequence export path
+- **Improved: Import Phase 2.5**: New `_expandSequences()` phase runs between custom parameter creation (Phase 2) and parameter value setting (Phase 3), ensuring dynamically-created sequence parameter slots exist before values are applied
+- **Improved: Network layout rule — Docked Callback DATs**: New section in `.claude/rules/network-layout.md` (and the matching template) defines a deterministic placement formula for the companion DATs that TD auto-spawns and docks to operators (chopExecuteDAT, glsl info DATs, keyboardinDAT, etc.). Includes a center-out alternation pattern and a procedure for repositioning every dock after `create_op`
+- **Test: Sequence round-trip tests**: 12 new tests in `test_tdn_sequences.py` covering export format, round-trip fidelity, expression values, nested COMPs, type_defaults exclusion, and backward compatibility
+- **Test: Companion DAT round-trip tests**: 14 new tests (Section W) in `test_tdn_reconstruction.py` covering GLSL TOP/multi/POP/copy/advanced companions, Timer/Script CHOP/SOP/DAT callbacks, Ramp TOP keys, read-only info DAT handling, and a comprehensive no-duplicates check across all companion-creating ops
+
 ## v5.0.310
 
 Fix first-time Envoy setup permanently stuck on "Enabled + Disabled" (issues #8, #9).

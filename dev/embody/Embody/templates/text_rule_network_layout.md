@@ -29,6 +29,26 @@ description: "Grid spacing, signal flow, operator placement, and annotation rule
 - **Branches split vertically**: Branches fan out downward, each continuing left-to-right. Minimize edge crossings.
 - **Same row = same stage** in a processing chain (same X). **Same column = same function** across parallel chains (same Y).
 
+## Docked Callback DATs
+
+Some operators auto-spawn companion DATs that are **docked** to them via `op.dock` / `op.docked` — callbacks, info, keys. Common families: `chopExecuteDAT`, `datExecuteDAT`, `panelExecuteDAT`, `parameterExecuteDAT`, `executeDAT`, `keyboardinDAT`, `mouseinDAT`, `oscinDAT`/`oscoutDAT`, `glslTOP` / `glslmultiTOP` / `glslMAT` (info DAT). TD drops these at arbitrary coordinates — they must be repositioned, every time.
+
+**Layout formula** — given source op bottom-left (`sx`,`sy`), size (`sw`,`sh`), and `N` docks (use the max `dw`,`dh` across docks for uniform spacing):
+
+- Row Y: `row_y = snap(sy − dh − 200, 200)` — one full grid step below the source's bottom edge.
+- Center X: `center_x = snap(sx + (sw − dw) / 2, 200)` — first dock horizontally centered under source.
+- Slot step: `dw + 200`. Each subsequent dock alternates outward: index `i=0` → center, `i=1` → +1 right, `i=2` → −1 left, `i=3` → +2, `i=4` → −2 …  General: `((i + 1) // 2) * (+1 if i odd else −1)`.
+
+| N | Pattern |
+|---|---|
+| 1 | `[C]` |
+| 2 | `[C, R]` |
+| 3 | `[L, C, R]` |
+| 4 | `[L, C, R, R2]` |
+| 5 | `[L2, L, C, R, R2]` |
+
+**Procedure**: After every `create_op` for any op in the families above, query `op.docked` (via `execute_python` returning `[d.path for d in op('PATH').docked]`), reposition each dock per the formula using `set_op_position`, then `get_network_layout` to confirm the row landed cleanly. If a target slot collides with a non-dock sibling, **move the source op** to a clear region and recompute the whole row — never thread docks around obstacles, never overlap. TDN export captures whatever's live, so following this rule is the only way docked DAT positions stay clean across saves.
+
 ## Annotations
 
 - **Every operator must be inside exactly one annotation.** No orphans. If a new op doesn't belong to an existing group, create a new annotation for it.
@@ -52,3 +72,4 @@ description: "Grid spacing, signal flow, operator placement, and annotation rule
 - Using TD's `COMP.layout()` — it produces overlapping, unreadable results.
 - Creating operators without updating the enclosing annotation.
 - Calling `set_op_position` without verifying the target coordinates are clear — `set_op_position` has no overlap detection.
+- **Leaving docked callback/info DATs at their auto-spawn position.** TD drops them at arbitrary coordinates. After `create_op` on any op that spawns docks, reposition them per "Docked Callback DATs".

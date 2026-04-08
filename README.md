@@ -2,7 +2,7 @@
 
 **Have a conversation with TouchDesigner.**
 
-![Version](https://img.shields.io/badge/version-5.0.310-blue)
+![Version](https://img.shields.io/badge/version-5.0.320-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -148,7 +148,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **39 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **40 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -179,6 +179,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.320**: TDN v1.3 — parameter sequence round-trip + companion DAT handling (GLSL/Timer/Script/Ramp companions)
 - **5.0.310**: Fix first-time Envoy setup stuck on "Disabled" (issues #8, #9), git config generation on fresh install
 - **5.0.305**: Replicant duplicate detection fix (issue #4), TDN export improvements, ExternalizeProject dialog
 - **5.0.302**: Fix duplicate path clone detection (issue #4), config file location (issue #5), Envoy startup flow

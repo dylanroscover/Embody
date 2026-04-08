@@ -1,10 +1,11 @@
 {
 	"format": "tdn",
-	"version": "1.2",
-	"build": 362,
-	"generator": "Embody/5.0.302",
+	"version": "1.3",
+	"build": 369,
+	"generator": "Embody/5.0.319",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-04-03T06:47:09Z",
+	"source_file": "Embody-5.320.toe",
+	"exported_at": "2026-04-08T06:55:31Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -31,8 +32,7 @@
 			"parameters": {
 				"includeinorder": true,
 				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
-				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
 			"flags": ["display"]
 		},
@@ -835,7 +835,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.302"
+				"value": "5.0.319"
 			},
 			{
 				"name": "Touchbuild",
@@ -858,7 +858,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 362
+				"value": 369
 			},
 			{
 				"name": "Github",
@@ -873,7 +873,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-04-03 06:46:59 UTC"
+				"value": "2026-04-08 06:55:31 UTC"
 			},
 			{
 				"name": "Help",
@@ -890,13 +890,30 @@
 		"repocomp": "=me",
 		"borderover": false,
 		"align": "horizlr",
-		"ext0object": "op('./EmbodyExt').module.EmbodyExt(me)",
-		"ext0name": "Embody",
-		"ext0promote": true,
 		"parentshortcut": "Embody",
 		"opshortcut": "Embody",
 		"opviewer": "./text_bg",
 		"reloadbuiltin": false
+	},
+	"sequences": {
+		"ext": [
+			{
+				"object": "op('./EmbodyExt').module.EmbodyExt(me)",
+				"name": "Embody",
+				"promote": true
+			},
+			{
+				"object": "op('./EnvoyExt').module.EnvoyExt(me)",
+				"name": "Envoy",
+				"promote": true
+			},
+			{
+				"object": "op('./TDNExt').module.TDNExt(me)",
+				"name": "TDN",
+				"promote": true
+			},
+			{}
+		]
 	},
 	"flags": ["display", "viewer"],
 	"color": [0.3, 0.5, 0.9],
@@ -925,7 +942,8 @@
 			"position": [196, 675],
 			"size": [142, 155],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/help.tdn"
 		},
 		{
 			"name": "list",
@@ -952,7 +970,8 @@
 			},
 			"position": [250, 50],
 			"size": [257, 250],
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/list.tdn"
 		},
 		{
 			"name": "fifo1",
@@ -1005,7 +1024,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [900, 225],
-			"size": [108, 155]
+			"size": [108, 155],
+			"tdn_ref": "embody/Embody/tagger.tdn"
 		},
 		{
 			"name": "timer1",
@@ -1075,7 +1095,8 @@
 				"reloadbuiltin": false
 			},
 			"position": [650, 250],
-			"size": [160, 92]
+			"size": [160, 92],
+			"tdn_ref": "embody/Embody/manager.tdn"
 		},
 		{
 			"name": "parexec",
@@ -1124,10 +1145,16 @@
 				"topsmoothness": "mipmap",
 				"borderover": false,
 				"justifyv": "center",
-				"ext0object": "op('./ToolbarExt').module.ToolbarExt(me)",
-				"ext0name": "ToolbarExt",
-				"ext0promote": true,
 				"reloadbuiltin": false
+			},
+			"sequences": {
+				"ext": [
+					{
+						"object": "op('./ToolbarExt').module.ToolbarExt(me)",
+						"name": "ToolbarExt",
+						"promote": true
+					}
+				]
 			},
 			"position": [300, 350],
 			"size": [160, 76],
@@ -1148,7 +1175,8 @@
 					"offset": -29
 				}
 			},
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/toolbar.tdn"
 		},
 		{
 			"name": "EnvoyExt",
@@ -1157,7 +1185,7 @@
 				"file": "embody/Embody/EnvoyExt.py"
 			},
 			"position": [-375, 475],
-			"tags": ["py", "TDExtension"]
+			"tags": ["TDExtension", "py"]
 		},
 		{
 			"name": "mousein1",
@@ -1187,6 +1215,14 @@
 		{
 			"name": "annotate1",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -1208,7 +1244,8 @@
 			},
 			"position": [-770, -1270],
 			"size": [600, 370],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "templates",
@@ -1217,38 +1254,7 @@
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"],
-			"annotations": [
-				{
-					"name": "annotate1",
-					"mode": "annotate",
-					"title": "Config Templates",
-					"text": "CLAUDE.md, AGENTS.md, settings, bridge",
-					"position": [-70, 1130],
-					"size": [1170, 330],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate2",
-					"mode": "annotate",
-					"title": "Rule Templates",
-					"text": "Auto-deployed rules for user projects",
-					"position": [-70, 330],
-					"size": [1770, 330],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate3",
-					"mode": "annotate",
-					"title": "Skill Templates",
-					"text": "Auto-deployed skills for Claude Code",
-					"position": [-70, -470],
-					"size": [2070, 330],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.5
-				}
-			]
+			"tdn_ref": "embody/Embody/templates.tdn"
 		},
 		{
 			"name": "keyboardin1",
@@ -1275,9 +1281,15 @@
 				"align": "horizlr",
 				"marginl": 8,
 				"justifyh": "left",
-				"justifyv": "top",
-				"ext0object": "op('./WindowHeaderExt').module.WindowHeaderExt(me)",
-				"ext0promote": true
+				"justifyv": "top"
+			},
+			"sequences": {
+				"ext": [
+					{
+						"object": "op('./WindowHeaderExt').module.WindowHeaderExt(me)",
+						"promote": true
+					}
+				]
 			},
 			"custom_pars": {
 				"Header": [
@@ -1299,11 +1311,20 @@
 			},
 			"position": [300, 475],
 			"size": [160, 130],
-			"comp_inputs": ["manager"]
+			"comp_inputs": ["manager"],
+			"tdn_ref": "embody/Embody/windowHeader.tdn"
 		},
 		{
 			"name": "annotation_ui",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -1325,7 +1346,8 @@
 				}
 			},
 			"size": [1300, 1000],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "_envoy_perform",
@@ -1367,7 +1389,8 @@
 				"cursorvisible": "alwaysvisible"
 			},
 			"position": [500, 675],
-			"size": [154, 89]
+			"size": [154, 89],
+			"tdn_ref": "embody/Embody/window_manager.tdn"
 		},
 		{
 			"name": "fifo1_callbacks",
@@ -1392,6 +1415,14 @@
 		{
 			"name": "annotation_logic",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -1414,13 +1445,22 @@
 			},
 			"position": [-800, 0],
 			"size": [700, 800],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_tagging",
 			"type": "annotateCOMP",
 			"parameters": {
 				"reloadbuiltin": false
+			},
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
 			},
 			"custom_pars": {
 				"Text": {
@@ -1443,11 +1483,20 @@
 				}
 			},
 			"position": [-800, -700],
-			"size": [700, 600]
+			"size": [700, 600],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_windows",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -1470,7 +1519,8 @@
 			},
 			"position": [100, 600],
 			"size": [1140, 310],
-			"color": [0.45, 0.45, 0.45]
+			"color": [0.45, 0.45, 0.45],
+			"palette_clone": true
 		},
 		{
 			"name": "window_tagging_menu",
@@ -1482,7 +1532,8 @@
 				"winoffsetx": 110
 			},
 			"position": [900, 675],
-			"size": [110, 157]
+			"size": [110, 157],
+			"tdn_ref": "embody/Embody/window_tagging_menu.tdn"
 		},
 		{
 			"name": "chopexec_exit_tagger",

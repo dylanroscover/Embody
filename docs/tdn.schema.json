@@ -523,6 +523,17 @@
           "items": { "$ref": "#/$defs/annotation" },
           "description": "Annotations within this COMP (COMPs only)."
         },
+        "sequences": {
+          "type": "object",
+          "description": "Built-in parameter sequences. Keyed by sequence name, each value is an array of block objects with base-name parameter values. Added in v1.3.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
         "palette_clone": {
           "type": "boolean",
           "const": true,

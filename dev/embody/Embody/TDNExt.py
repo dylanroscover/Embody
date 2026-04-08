@@ -21,7 +21,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Optional, Union
 
-TDN_VERSION = '1.2'
+TDN_VERSION = '1.3'
 
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
@@ -129,6 +129,7 @@ class TDNExt:
 		# so we cache them to avoid repeated Python-to-C++ bridge calls.
 		self._defaults_cache: dict[str, dict[str, Any]] = {}
 		self._exportable_cache: dict[str, set[str]] = {}
+		self._seq_default_blocks_cache: dict[tuple[str, str], int] = {}
 
 	# =========================================================================
 	# CRASH SAFETY — atomic writes, backup rotation, validation
@@ -390,6 +391,7 @@ class TDNExt:
 		try:
 			self._defaults_cache.clear()
 			self._exportable_cache.clear()
+			self._seq_default_blocks_cache.clear()
 			operators = self._exportChildren(root_op, options, depth=0)
 
 			# Post-processing optimizations
@@ -428,6 +430,10 @@ class TDNExt:
 			root_builtin_params = self._exportBuiltinParams(root_op)
 			if root_builtin_params:
 				tdn['parameters'] = root_builtin_params
+			# Target COMP's own built-in/custom sequences (v1.3+)
+			root_sequences = self._exportBuiltinSequences(root_op)
+			if root_sequences:
+				tdn['sequences'] = root_sequences
 
 			# Target COMP's own metadata (v1.1+)
 			root_flags = self._exportFlags(root_op)
@@ -681,6 +687,8 @@ class TDNExt:
 				tdn['custom_pars'] = root_meta['custom_pars']
 			if root_meta.get('parameters'):
 				tdn['parameters'] = root_meta['parameters']
+			if root_meta.get('sequences'):
+				tdn['sequences'] = root_meta['sequences']
 			if root_meta.get('flags'):
 				tdn['flags'] = root_meta['flags']
 			if root_meta.get('color'):
@@ -838,6 +846,9 @@ class TDNExt:
 					root_builtin = self._exportBuiltinParams(root_op)
 					if root_builtin:
 						root_meta['parameters'] = root_builtin
+					root_sequences = self._exportBuiltinSequences(root_op)
+					if root_sequences:
+						root_meta['sequences'] = root_sequences
 					root_flags = self._exportFlags(root_op)
 					if root_flags:
 						root_meta['flags'] = root_flags
@@ -1090,6 +1101,9 @@ class TDNExt:
 			# Phase 2: Create custom parameters
 			self._createCustomPars(dest, op_defs)
 
+			# Phase 2.5: Expand built-in parameter sequences (v1.3+)
+			self._expandSequences(dest, op_defs)
+
 			# Phase 3: Set parameter values
 			self._setParameters(dest, op_defs)
 
@@ -1161,6 +1175,30 @@ class TDNExt:
 				tdn_params = tdn.get('parameters', {})
 				for par_name, value in tdn_params.items():
 					self._setParValue(dest, par_name, value)
+
+				# Built-in parameter sequences (v1.3+)
+				tdn_sequences = tdn.get('sequences', {})
+				for seq_name, blocks in tdn_sequences.items():
+					try:
+						seq = dest.seq[seq_name]
+						seq.numBlocks = len(blocks)
+						for i, block_data in enumerate(blocks):
+							if not block_data:
+								continue
+							block = seq[i]
+							for base_name, value in block_data.items():
+								par = getattr(block.par, base_name, None)
+								if par is None:
+									try:
+										par = block.par[base_name]
+									except Exception:
+										par = None
+								if par is not None:
+									self._setParValue(dest, par.name, value)
+					except Exception as e:
+						self._log(
+							f'Failed to set sequence {seq_name} on '
+							f'{dest.path}: {e}', 'WARNING')
 
 				# Flags (v1.1+)
 				tdn_flags = tdn.get('flags', [])
@@ -1344,6 +1382,11 @@ class TDNExt:
 		if params:
 			data['parameters'] = params
 
+		# Built-in parameter sequences (v1.3+)
+		sequences = self._exportBuiltinSequences(target)
+		if sequences:
+			data['sequences'] = sequences
+
 		# Custom parameters (always all of them)
 		custom_pars = self._exportCustomPars(target)
 		if custom_pars:
@@ -1409,10 +1452,15 @@ class TDNExt:
 				data['comp_inputs'] = comp_conns
 
 		# DAT content — include when the include_dat_content option is True.
+		# Skip content for read-only DATs (e.g. glsl1_info, popto1) —
+		# TD auto-generates their content and rejects writes on import.
 		if target.family == 'DAT' and options.get('include_dat_content', True):
-			content_data = self._exportDATContent(target)
-			if content_data:
-				data.update(content_data)
+			if self._isDATEditable(target):
+				content_data = self._exportDATContent(target)
+				if content_data:
+					data.update(content_data)
+			else:
+				data['dat_read_only'] = True
 
 		# Recurse into COMP children (sync mode only)
 		# Skip children of palette clones — they come from /sys/ and
@@ -1477,6 +1525,8 @@ class TDNExt:
 		for p in target.pars():
 			if p.isCustom:
 				continue
+			if p.sequence is not None:
+				continue
 			if p.readOnly and p.name != 'file':
 				continue
 			if p.name in SKIP_PARAMS:
@@ -1525,11 +1575,114 @@ class TDNExt:
 
 		return params
 
+	def _exportBuiltinSequences(self, target):
+		"""Export built-in parameter sequences with non-default block data.
+
+		Discovers all sequences on the operator via par.isSequence headers,
+		then exports each sequence's blocks as an array of base-name dicts.
+
+		Returns dict of {seq_name: [block_data, ...]} or empty dict.
+		Only includes sequences where numBlocks differs from default OR
+		any block parameter has a non-default value.
+		"""
+		sequences = {}
+		seen = set()
+
+		for p in target.pars():
+			if not p.isSequence:
+				continue
+			seq = p.sequence
+			if seq is None or seq.name in seen:
+				continue
+			seen.add(seq.name)
+
+			seq_data = self._exportSequenceBlocks(target, seq)
+			if seq_data is not None:
+				sequences[seq.name] = seq_data
+
+		return sequences
+
+	def _exportSequenceBlocks(self, target, seq):
+		"""Export blocks for a single sequence.
+
+		Returns list of block dicts ({base_name: value}), or None if
+		the sequence is entirely at defaults and can be omitted.
+
+		Note: TD creates new wrapper objects for p.sequenceBlock on each
+		access, so identity (``is``) and equality (``==``) comparisons
+		fail. We compare by block index instead.
+		"""
+		# Group sequence parameters by block index
+		block_pars = {}  # {block_index: [par, ...]}
+		for p in target.pars():
+			if p.sequence is None or p.sequence.name != seq.name:
+				continue
+			if p.isSequence:
+				continue  # Skip the header par
+			sb = p.sequenceBlock
+			if sb is None:
+				continue
+			idx = sb.index
+			block_pars.setdefault(idx, []).append(p)
+
+		blocks = []
+		has_any_nondefault = False
+
+		for block in seq.blocks:
+			block_data = {}
+			for p in block_pars.get(block.index, []):
+				base_name = self._getSequenceBaseName(p, seq)
+				value = self._getParValue(p)
+
+				if value is not None:
+					default = self._serializeValue(p.default)
+					if self._valuesDiffer(value, default):
+						block_data[base_name] = value
+						has_any_nondefault = True
+
+			blocks.append(block_data)
+
+		default_count = self._getDefaultSequenceBlockCount(target, seq)
+
+		if len(blocks) == default_count and not has_any_nondefault:
+			return None
+
+		return blocks
+
+	@staticmethod
+	def _getSequenceBaseName(par, seq):
+		"""Extract base name from a sequence parameter's full name.
+
+		E.g., 'comb2oper' with seq.name='comb' → 'oper'
+		"""
+		after_prefix = par.name[len(seq.name):]
+		return after_prefix.lstrip('0123456789')
+
+	def _getDefaultSequenceBlockCount(self, target, seq):
+		"""Get default numBlocks for a sequence on this op type.
+
+		Cached per (OPType, seq_name). Defaults to 1 — most built-in
+		sequences start with 1 block. The worst case of a wrong default
+		is a redundant [{}] in the TDN output (harmless).
+		"""
+		cache_key = (target.OPType, seq.name)
+		if cache_key not in self._seq_default_blocks_cache:
+			self._seq_default_blocks_cache[cache_key] = 1
+		return self._seq_default_blocks_cache[cache_key]
+
 	def _exportCustomPars(self, target):
 		"""Export ALL custom parameters grouped by page.
 
 		Returns a dict keyed by page name, where each value is a list of
 		parameter definitions (without the 'page' field — the key IS the page).
+
+		For custom sequences: only the sequence header and the block 0 template
+		parameters are exported as custom par definitions. Per-block instance
+		parameters (block index > 0) are skipped — their values are stored in
+		the operator's `sequences` key by `_exportBuiltinSequences`. The
+		template par's `name` field is normalized to its base name (the
+		original capitalized form, e.g. `Itemlabel` instead of `Items0itemlabel`)
+		so import can call `page.appendStr('Itemlabel')` correctly.
 		"""
 		if not hasattr(target, 'customPages'):
 			return {}
@@ -1541,6 +1694,14 @@ class TDNExt:
 			page_pars = []
 			for p in page.pars:
 				if p.name in seen_names:
+					continue
+
+				# Skip per-block instance parameters (block index > 0).
+				# Only block 0 represents the template; the rest are
+				# auto-generated by TD's sequence machinery.
+				sb = p.sequenceBlock
+				if sb is not None and sb.index > 0:
+					seen_names.add(p.name)
 					continue
 
 				# Get the tuplet (group of related pars)
@@ -1557,6 +1718,20 @@ class TDNExt:
 				# Export the group as a single definition (without page)
 				par_def = self._exportCustomParGroup(page, group)
 				if par_def:
+					# For sequence template pars, normalize the name to its
+					# base form (strip "{seqName}0" prefix). The base name
+					# must start with an uppercase letter for appendStr/etc.
+					if sb is not None and sb.index == 0 and p.sequence is not None:
+						base = self._getSequenceBaseName(p, p.sequence)
+						# Capitalize first letter to satisfy TD's naming
+						if base:
+							base = base[0].upper() + base[1:]
+							par_def['name'] = base
+							par_def['sequence'] = p.sequence.name
+							# Sequence template values are stored in
+							# the `sequences` key, not `value` here
+							par_def.pop('value', None)
+							par_def.pop('values', None)
 					page_pars.append(par_def)
 
 			if page_pars:
@@ -1928,6 +2103,22 @@ class TDNExt:
 
 		return inputs
 
+	def _isDATEditable(self, dat_op):
+		"""Test whether a DAT's text content is writable.
+
+		Some auto-created companion DATs (e.g. glsl1_info, popto1) are
+		read-only — TD auto-generates their content and rejects writes
+		with "The operator is not editable".  This probe is per-instance
+		(not per-OPType) because read-only companions share OPType
+		'textDAT' with regular editable text DATs.
+		"""
+		try:
+			original = dat_op.text
+			dat_op.text = original
+			return True
+		except Exception:
+			return False
+
 	def _exportDATContent(self, target):
 		"""Export DAT text or table content."""
 		try:
@@ -2096,14 +2287,35 @@ class TDNExt:
 		return []
 
 	def _createCustomParsOnOp(self, target, custom_par_defs):
-		"""Create custom parameters on a single operator."""
+		"""Create custom parameters on a single operator.
+
+		Custom sequences (Sequence-style headers + template pars marked
+		with a `sequence` field) are created in this order:
+		  1. Sequence header via appendSequence(name)
+		  2. Template pars (each with a `sequence` field) via their normal
+		     append method — they auto-join the sequence because they
+		     follow the sequence header in the page
+		  3. After all template pars for a sequence are added, blockSize
+		     is set to the count of template ParGroups for that sequence.
+		Block-instance values (numBlocks + per-block values) are restored
+		later in Phase 2.5 (_expandSequences).
+		"""
 		pages = {}  # Cache pages by name
+		# Track template par counts per sequence for blockSize setting
+		seq_template_counts = {}  # {seq_name: count}
 
 		for par_def in custom_par_defs:
 			style = par_def.get('style', 'Float')
 			par_name = par_def.get('name', '')
 			label = par_def.get('label', par_name)
 			page_name = par_def.get('page', 'Custom')
+
+			# Track template par counts: each par with a `sequence` field
+			# is one ParGroup in that sequence's block template
+			belongs_to_seq = par_def.get('sequence')
+			if belongs_to_seq:
+				seq_template_counts[belongs_to_seq] = (
+					seq_template_counts.get(belongs_to_seq, 0) + 1)
 
 			# Get or create page
 			if page_name not in pages:
@@ -2221,6 +2433,108 @@ class TDNExt:
 				self._log(
 					f'Failed to create custom par "{par_name}": {e}',
 					'WARNING')
+
+		# After all custom pars are created, set blockSize for each
+		# custom sequence so its template is fully formed before
+		# Phase 2.5 sets numBlocks and block values.
+		for seq_name, count in seq_template_counts.items():
+			try:
+				seq = target.seq[seq_name]
+				seq.blockSize = count
+			except Exception as e:
+				self._log(
+					f'Failed to set blockSize={count} on sequence '
+					f'{seq_name} of {target.path}: {e}', 'WARNING')
+
+	def _expandSequences(self, parent, op_defs):
+		"""Phase 2.5: Expand built-in and custom parameter sequences.
+
+		Sets numBlocks for each sequence (creating parameter slots),
+		then sets non-default block parameter values. Must run before
+		Phase 3 (_setParameters) so the sequence parameters exist.
+
+		Custom sequences (defined via page.appendSequence) require
+		blockSize to be set before numBlocks. This is done in
+		_createCustomParsOnOp during Phase 2 based on the template
+		par count from the TDN.
+		"""
+		for op_def in op_defs:
+			sequences = op_def.get('sequences')
+			target = self._resolveOp(parent, op_def) if sequences else None
+
+			if sequences and target:
+				for seq_name, blocks in sequences.items():
+					try:
+						seq = target.seq[seq_name]
+					except Exception:
+						self._log(
+							f'Sequence "{seq_name}" not found on '
+							f'{target.path}', 'WARNING')
+						continue
+
+					try:
+						seq.numBlocks = len(blocks)
+					except Exception as e:
+						self._log(
+							f'Failed to set numBlocks={len(blocks)} on '
+							f'sequence {seq_name} of {target.path}: {e}',
+							'WARNING')
+						continue
+
+					for i, block_data in enumerate(blocks):
+						if not block_data:
+							continue
+						block = seq[i]
+						for base_name, value in block_data.items():
+							par = self._resolveSequenceBlockPar(
+								target, seq, block, i, base_name)
+							if par is None:
+								self._log(
+									f'Sequence param "{base_name}" not found '
+									f'in {seq_name}[{i}] on {target.path}',
+									'WARNING')
+								continue
+							self._setParValue(target, par.name, value)
+
+			# Recurse into children
+			children = op_def.get('children', [])
+			if children:
+				resolved = target or self._resolveOp(parent, op_def)
+				if resolved and resolved.isCOMP:
+					self._expandSequences(resolved, children)
+
+	@staticmethod
+	def _resolveSequenceBlockPar(target, seq, block, block_index, base_name):
+		"""Find a parameter inside a sequence block by base name.
+
+		Tries (in order):
+		  1. block.par.{baseName} — works for built-in sequences
+		  2. block.par[{baseName}] — bracket access fallback
+		  3. target.par.{seqName}{blockIndex}{lowercase baseName} — works
+		     for custom sequences where block.par attribute access returns
+		     None (TD's custom-sequence block.par lookup is broken).
+		"""
+		# Try attribute access first (works for built-in seqs)
+		par = getattr(block.par, base_name, None)
+		if par is not None:
+			return par
+		# Try bracket access
+		try:
+			par = block.par[base_name]
+			if par is not None:
+				return par
+		except Exception:
+			pass
+		# Try full prefixed name on the target (works for custom seqs).
+		# Custom sequence pars are stored as {seqName}{blockIndex}{baseName_lower}
+		full_lower = f'{seq.name}{block_index}{base_name.lower()}'
+		par = getattr(target.par, full_lower, None)
+		if par is not None:
+			return par
+		# Last resort: try without lowercasing (in case of edge cases)
+		full_orig = f'{seq.name}{block_index}{base_name}'
+		par = getattr(target.par, full_orig, None)
+		return par
 
 	def _setParameters(self, parent, op_defs):
 		"""Phase 3: Set parameter values on all operators."""
@@ -2467,6 +2781,13 @@ class TDNExt:
 			if not target:
 				continue
 
+			# Skip DATs marked as read-only during export (v1.2+).
+			if op_def.get('dat_read_only'):
+				children = op_def.get('children', [])
+				if children and target.isCOMP:
+					self._setDATContent(target, children)
+				continue
+
 			if 'dat_content' in op_def and target.family == 'DAT':
 				try:
 					fmt = op_def.get('dat_content_format', 'text')
@@ -2478,9 +2799,18 @@ class TDNExt:
 					else:
 						target.text = content
 				except Exception as e:
-					self._log(
-						f'Failed to set DAT content on {target.path}: {e}',
-						'WARNING')
+					# Downgrade "not editable" errors to DEBUG — expected
+					# for auto-generated companion DATs (info DATs, etc.)
+					# from older .tdn files without the dat_read_only flag.
+					err_str = str(e).lower()
+					if 'not editable' in err_str:
+						self._log(
+							f'Skipping read-only DAT {target.path} '
+							f'(auto-generated content)', 'DEBUG')
+					else:
+						self._log(
+							f'Failed to set DAT content on '
+							f'{target.path}: {e}', 'WARNING')
 
 			# Recurse
 			children = op_def.get('children', [])

@@ -1,10 +1,11 @@
 {
 	"format": "tdn",
-	"version": "1.2",
-	"build": 30,
-	"generator": "Embody/5.0.302",
+	"version": "1.3",
+	"build": 31,
+	"generator": "Embody/5.0.319",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-04-03T06:47:09Z",
+	"source_file": "Embody-5.319.toe",
+	"exported_at": "2026-04-08T06:53:55Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false,
@@ -20,8 +21,7 @@
 			"parameters": {
 				"includeinorder": true,
 				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
-				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
 			"flags": ["display"],
 			"color": [0.45, 0.45, 0.45]
@@ -261,9 +261,16 @@
 		"top": "./out1",
 		"topsmoothness": "mipmap",
 		"borderover": false,
-		"ext0promote": true,
 		"parentshortcut": "Project",
 		"reloadbuiltin": false
+	},
+	"sequences": {
+		"ext": [
+			{
+				"promote": true
+			},
+			{}
+		]
 	},
 	"flags": ["viewer"],
 	"color": [0.3, 0.5, 0.9],
@@ -280,19 +287,30 @@
 				"repocomp": "=me",
 				"borderover": false,
 				"align": "horizlr",
-				"ext0object": "op('./EmbodyExt').module.EmbodyExt(me)",
-				"ext0name": "Embody",
-				"ext0promote": true,
 				"parentshortcut": "Embody",
 				"opshortcut": "Embody",
 				"opviewer": "./text_bg",
-				"reloadbuiltin": false,
-				"ext1object": "op('./EnvoyExt').module.EnvoyExt(me)",
-				"ext1name": "Envoy",
-				"ext1promote": true,
-				"ext2object": "op('./TDNExt').module.TDNExt(me)",
-				"ext2name": "TDN",
-				"ext2promote": true
+				"reloadbuiltin": false
+			},
+			"sequences": {
+				"ext": [
+					{
+						"object": "op('./EmbodyExt').module.EmbodyExt(me)",
+						"name": "Embody",
+						"promote": true
+					},
+					{
+						"object": "op('./EnvoyExt').module.EnvoyExt(me)",
+						"name": "Envoy",
+						"promote": true
+					},
+					{
+						"object": "op('./TDNExt').module.TDNExt(me)",
+						"name": "TDN",
+						"promote": true
+					},
+					{}
+				]
 			},
 			"custom_pars": {
 				"Embody": [
@@ -345,7 +363,8 @@
 					{
 						"name": "Refresh",
 						"style": "Pulse",
-						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
+						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
+						"value": true
 					},
 					{
 						"name": "Externalizeproject",
@@ -856,7 +875,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.302"
+						"value": "5.0.319"
 					},
 					{
 						"name": "Touchbuild",
@@ -879,7 +898,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 362
+						"value": 364
 					},
 					{
 						"name": "Github",
@@ -894,7 +913,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-04-03 06:46:59 UTC"
+						"value": "2026-04-08 06:53:55 UTC"
 					},
 					{
 						"name": "Help",
@@ -911,63 +930,16 @@
 				"claudius_running": false,
 				"_tdn_restore_failures": ["/embody/base1"],
 				"expand_order": ["/embody"],
-				"_start_in_progress": true
+				"_start_in_progress": true,
+				"_init_complete": true
 			},
-			"annotations": [
-				{
-					"name": "annotate1",
-					"mode": "annotate",
-					"title": "Claude Config",
-					"text": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation.",
-					"position": [-770, -1270],
-					"size": [600, 370],
-					"color": [0.45, 0.45, 0.45]
-				},
-				{
-					"name": "annotation_logic",
-					"mode": "annotate",
-					"title": "Logic",
-					"text": "Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.",
-					"position": [-800, 0],
-					"size": [700, 800],
-					"color": [0.485, 0.0, 0.2748],
-					"opacity": 0.9
-				},
-				{
-					"name": "annotation_tagging",
-					"mode": "annotate",
-					"title": "Tagging",
-					"text": "Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection).",
-					"position": [-800, -700],
-					"size": [700, 600],
-					"color": [0.1981, 0.5, 0.1765],
-					"opacity": 0.9
-				},
-				{
-					"name": "annotation_ui",
-					"mode": "annotate",
-					"title": "UI",
-					"text": "All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.",
-					"size": [1300, 1000],
-					"color": [0.45, 0.45, 0.45],
-					"opacity": 0.9
-				},
-				{
-					"name": "annotation_windows",
-					"mode": "annotate",
-					"title": "Windows",
-					"text": "Popup windows for the tagging menu and externalization manager UI.",
-					"position": [100, 600],
-					"size": [1140, 310],
-					"color": [0.574, 0.574, 0.574],
-					"opacity": 0.9
-				}
-			]
+			"tdn_ref": "embody/Embody.tdn"
 		},
 		{
 			"name": "base_tdn",
 			"type": "baseCOMP",
-			"position": [700, -325]
+			"position": [700, -325],
+			"tdn_ref": "embody/base_tdn.tdn"
 		},
 		{
 			"name": "tdn_tests",
@@ -976,16 +948,25 @@
 			"position": [0, -500],
 			"storage": {
 				"embed_dats_in_tdn": true
-			}
+			},
+			"tdn_ref": "embody/tdn_tests.tdn"
 		},
 		{
 			"name": "unit_tests",
 			"type": "baseCOMP",
 			"parameters": {
-				"ext0object": "op('./TestRunnerExt').module.TestRunnerExt(me)",
-				"ext0name": "TestRunnerExt",
-				"ext0promote": true,
 				"opshortcut": "unit_tests"
+			},
+			"sequences": {
+				"ext": [
+					{
+						"object": "op('./TestRunnerExt').module.TestRunnerExt(me)",
+						"name": "TestRunnerExt",
+						"promote": true
+					},
+					{},
+					{}
+				]
 			},
 			"position": [-600, -300],
 			"storage": {
@@ -3386,68 +3367,7 @@
 					]
 				}
 			},
-			"annotations": [
-				{
-					"name": "annotate1",
-					"mode": "annotate",
-					"title": "u",
-					"text": "Test runner, results table, and sandbox",
-					"position": [-70, -70],
-					"size": [871, 370],
-					"color": [0.22, 0.35, 0.22],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate2",
-					"mode": "annotate",
-					"title": "Embody Core Tests (13)",
-					"text": "Externalization, CRUD, file management, tagging,\nrename/move, delete, duplicates, sync, paths,\nparam tracking, operator queries, logging",
-					"position": [-70, -1070],
-					"size": [870, 930],
-					"color": [0.25, 0.3, 0.45],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate3",
-					"mode": "annotate",
-					"title": "MCP Tools Tests (13)",
-					"text": "Operators, parameters, DAT content, connections,\nannotations, extensions, diagnostics, flags/position,\ncode execution, externalization, performance, custom pars,\nTOP capture",
-					"position": [-70, -1870],
-					"size": [1070, 730],
-					"color": [0.45, 0.3, 0.25],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate4",
-					"mode": "annotate",
-					"title": "TDN Format Tests (5)",
-					"text": "Export/import, helpers, reconstruction, file I/O, crash safety",
-					"position": [-70, -2270],
-					"size": [1070, 330],
-					"color": [0.35, 0.35, 0.25],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate5",
-					"mode": "annotate",
-					"title": "Envoy Infrastructure Tests (3)",
-					"text": "Server lifecycle, STDIO bridge, thread communication,\nqueue processing, request throttling, log piggybacking",
-					"position": [-70, -2670],
-					"size": [670, 330],
-					"color": [0.35, 0.25, 0.35],
-					"opacity": 0.5
-				},
-				{
-					"name": "annotate6",
-					"mode": "annotate",
-					"title": "Claude Config Tests (1)",
-					"text": "Claude config generation pipeline, template DATs,\nwriteTemplate, writeClaudeMd, extractClaudeConfig",
-					"position": [-70, -3070],
-					"size": [270, 330],
-					"color": [0.3, 0.35, 0.4],
-					"opacity": 0.5
-				}
-			]
+			"tdn_ref": "embody/unit_tests.tdn"
 		},
 		{
 			"name": "execute_src_ctrl",
@@ -3471,7 +3391,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 143,
+				"rows": 146,
 				"cols": 11
 			},
 			"flags": ["viewer"],
@@ -3483,6 +3403,14 @@
 		{
 			"name": "annotation_unit_tests",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -3504,11 +3432,20 @@
 				}
 			},
 			"position": [-700, -352],
-			"size": [329, 322]
+			"size": [329, 322],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_execute_src_ctrl",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -3531,11 +3468,20 @@
 				}
 			},
 			"position": [-775, 50],
-			"size": [440, 480]
+			"size": [440, 480],
+			"palette_clone": true
 		},
 		{
 			"name": "annotation_externalizations",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -3557,7 +3503,8 @@
 				}
 			},
 			"position": [-250, -50],
-			"size": [223, 279]
+			"size": [223, 279],
+			"palette_clone": true
 		}
 	],
 	"annotations": [

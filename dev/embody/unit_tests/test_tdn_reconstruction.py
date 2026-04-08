@@ -3322,3 +3322,379 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertIsNotNone(self.sandbox.op('base30'))
 		self.assertIsNotNone(self.sandbox.op('base30').op('inner1'))
 		self.assertIsNotNone(self.sandbox.op('null30'))
+
+	# =================================================================
+	# Section W: Companion DAT handling
+	# =================================================================
+
+	def test_W01_glsl_top_pixel_dat_roundtrip(self):
+		"""GLSL TOP companion pixel shader DAT content survives round-trip."""
+		try:
+			g = self.sandbox.create(glslTOP, 'glsl1')
+		except Exception:
+			self.skip('glslTOP not available')
+			return
+
+		pixel_dat = self.sandbox.op('glsl1_pixel')
+		if pixel_dat is None:
+			self.skip('glslTOP did not create pixel companion')
+			return
+
+		pixel_dat.text = '// custom pixel shader\nvoid main() {}'
+		orig, reimp, result = self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('glsl1_pixel')
+		self.assertIsNotNone(restored, 'pixel companion must survive round-trip')
+		self.assertIn('custom pixel shader', restored.text,
+			'Custom pixel shader content must survive round-trip')
+
+	def test_W02_glsl_top_info_dat_read_only(self):
+		"""GLSL TOP info DAT is marked read-only in export, not WARNING on import."""
+		try:
+			g = self.sandbox.create(glslTOP, 'glsl1')
+		except Exception:
+			self.skip('glslTOP not available')
+			return
+
+		info_dat = self.sandbox.op('glsl1_info')
+		if info_dat is None:
+			self.skip('glslTOP did not create info companion')
+			return
+
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Find glsl1_info in the exported operators
+		info_def = None
+		for op_def in tdn.get('operators', []):
+			if op_def.get('name') == 'glsl1_info':
+				info_def = op_def
+				break
+
+		if info_def is None:
+			# Info DAT may have been filtered as trivial — that's fine too
+			return
+
+		# If it's in the export, it must be marked read-only with no content
+		self.assertTrue(info_def.get('dat_read_only'),
+			'Info DAT must have dat_read_only=True')
+		self.assertNotIn('dat_content', info_def,
+			'Read-only DAT must not have dat_content exported')
+
+	def test_W03_timer_callbacks_roundtrip(self):
+		"""Timer CHOP companion callbacks DAT content survives round-trip."""
+		try:
+			t = self.sandbox.create(timerCHOP, 'timer1')
+		except Exception:
+			self.skip('timerCHOP not available')
+			return
+
+		cb_dat = self.sandbox.op('timer1_callbacks')
+		if cb_dat is None:
+			self.skip('timerCHOP did not create callbacks companion')
+			return
+
+		cb_dat.text = '# custom callbacks\ndef onStart():\n\tpass'
+		orig, reimp, result = self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('timer1_callbacks')
+		self.assertIsNotNone(restored,
+			'callbacks companion must survive round-trip')
+		self.assertIn('custom callbacks', restored.text,
+			'Custom callbacks content must survive round-trip')
+
+	def test_W04_companion_no_duplicate_after_roundtrip(self):
+		"""Companion DATs must not accumulate duplicates after round-trip."""
+		try:
+			self.sandbox.create(timerCHOP, 'timer1')
+		except Exception:
+			self.skip('timerCHOP not available')
+			return
+
+		cb_dat = self.sandbox.op('timer1_callbacks')
+		if cb_dat is None:
+			self.skip('timerCHOP did not create callbacks companion')
+			return
+
+		self._roundTrip(self.sandbox)
+
+		# Check no timer1_callbacks1, timer1_callbacks2, etc.
+		children = [c.name for c in self.sandbox.children]
+		callback_variants = [n for n in children
+			if n.startswith('timer1_callbacks')]
+		self.assertEqual(len(callback_variants), 1,
+			f'Expected exactly 1 callbacks DAT, got: {callback_variants}')
+
+	def test_W05_glsl_pop_companion_roundtrip(self):
+		"""GLSL POP companion compute shader DAT content survives round-trip."""
+		try:
+			g = self.sandbox.create(glslPOP, 'glsl1')
+		except Exception:
+			self.skip('glslPOP not available')
+			return
+
+		compute_dat = self.sandbox.op('glsl1_compute')
+		if compute_dat is None:
+			self.skip('glslPOP did not create compute companion')
+			return
+
+		compute_dat.text = '// custom compute shader\nvoid main() {}'
+		orig, reimp, result = self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('glsl1_compute')
+		self.assertIsNotNone(restored,
+			'compute companion must survive round-trip')
+		self.assertIn('custom compute shader', restored.text,
+			'Custom compute shader content must survive round-trip')
+
+	def test_W06_read_only_dat_content_not_exported(self):
+		"""Read-only companion DATs have no dat_content in export."""
+		try:
+			self.sandbox.create(glslTOP, 'glsl1')
+		except Exception:
+			self.skip('glslTOP not available')
+			return
+
+		orig = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+
+		for op_def in orig['tdn'].get('operators', []):
+			if op_def.get('dat_read_only'):
+				self.assertNotIn('dat_content', op_def,
+					f'Read-only DAT "{op_def["name"]}" must not have '
+					f'dat_content exported')
+
+	def test_W07_glsl_multi_top_roundtrip(self):
+		"""GLSL Multi TOP companions survive round-trip with no duplicates."""
+		try:
+			self.sandbox.create(glslmultiTOP, 'glsl1')
+		except Exception:
+			self.skip('glslmultiTOP not available')
+			return
+
+		pixel_dat = self.sandbox.op('glsl1_pixel')
+		if pixel_dat is None:
+			self.skip('glslmultiTOP did not create pixel companion')
+			return
+		pixel_dat.text = '// custom multi pixel\nvoid main() {}'
+
+		self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('glsl1_pixel')
+		self.assertIsNotNone(restored)
+		self.assertIn('custom multi pixel', restored.text)
+
+		# No duplicate companions
+		children = [c.name for c in self.sandbox.children]
+		self.assertEqual(children.count('glsl1_pixel'), 1)
+		self.assertEqual(children.count('glsl1_compute'), 1)
+		info_variants = [n for n in children if n.startswith('glsl1_info')]
+		self.assertEqual(len(info_variants), 1,
+			f'Expected 1 info DAT, got: {info_variants}')
+
+	def test_W08_glsl_advanced_pop_roundtrip(self):
+		"""GLSL Advanced POP companions survive round-trip with no duplicates."""
+		try:
+			self.sandbox.create(glsladvancedPOP, 'glsl1')
+		except Exception:
+			self.skip('glsladvancedPOP not available')
+			return
+
+		compute_dat = self.sandbox.op('glsl1_compute')
+		if compute_dat is None:
+			self.skip('glsladvancedPOP did not create compute companion')
+			return
+		compute_dat.text = '// custom advanced compute\nvoid main() {}'
+
+		self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('glsl1_compute')
+		self.assertIsNotNone(restored)
+		self.assertIn('custom advanced compute', restored.text)
+
+		children = [c.name for c in self.sandbox.children]
+		compute_variants = [n for n in children
+			if n.startswith('glsl1_compute')]
+		self.assertEqual(len(compute_variants), 1,
+			f'Expected 1 compute DAT, got: {compute_variants}')
+
+	def test_W09_glsl_copy_pop_roundtrip(self):
+		"""GLSL Copy POP companions survive round-trip with no duplicates."""
+		try:
+			self.sandbox.create(glslcopyPOP, 'glsl1')
+		except Exception:
+			self.skip('glslcopyPOP not available')
+			return
+
+		pt_dat = self.sandbox.op('glsl1_ptCompute')
+		if pt_dat is None:
+			self.skip('glslcopyPOP did not create ptCompute companion')
+			return
+		pt_dat.text = '// custom copy pt compute\nvoid main() {}'
+
+		self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('glsl1_ptCompute')
+		self.assertIsNotNone(restored)
+		self.assertIn('custom copy pt compute', restored.text)
+
+		# glslcopyPOP creates ptCompute, primCompute, vertCompute, info
+		children = [c.name for c in self.sandbox.children]
+		for suffix in ['ptCompute', 'primCompute', 'vertCompute', 'info']:
+			name = f'glsl1_{suffix}'
+			variants = [n for n in children if n.startswith(name)]
+			self.assertLessEqual(len(variants), 1,
+				f'Expected at most 1 {name}, got: {variants}')
+
+	def test_W10_ramp_top_keys_roundtrip(self):
+		"""Ramp TOP companion keys table DAT survives round-trip."""
+		try:
+			self.sandbox.create(rampTOP, 'ramp1')
+		except Exception:
+			self.skip('rampTOP not available')
+			return
+
+		keys_dat = self.sandbox.op('ramp1_keys')
+		if keys_dat is None:
+			self.skip('rampTOP did not create keys companion')
+			return
+
+		# Modify the keys table
+		keys_dat.clear()
+		keys_dat.appendRow(['pos', 'r', 'g', 'b', 'a'])
+		keys_dat.appendRow([0.0, 1.0, 0.0, 0.0, 1.0])
+		keys_dat.appendRow([1.0, 0.0, 0.0, 1.0, 1.0])
+
+		self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('ramp1_keys')
+		self.assertIsNotNone(restored)
+		self.assertEqual(restored.numRows, 3,
+			'Keys table must have header + 2 key rows')
+
+		children = [c.name for c in self.sandbox.children]
+		keys_variants = [n for n in children if n.startswith('ramp1_keys')]
+		self.assertEqual(len(keys_variants), 1,
+			f'Expected 1 keys DAT, got: {keys_variants}')
+
+	def test_W11_script_chop_callbacks_roundtrip(self):
+		"""Script CHOP companion callbacks DAT survives round-trip."""
+		try:
+			self.sandbox.create(scriptCHOP, 'script1')
+		except Exception:
+			self.skip('scriptCHOP not available')
+			return
+
+		cb_dat = self.sandbox.op('script1_callbacks')
+		if cb_dat is None:
+			self.skip('scriptCHOP did not create callbacks companion')
+			return
+		cb_dat.text = '# custom script chop callbacks'
+
+		self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('script1_callbacks')
+		self.assertIsNotNone(restored)
+		self.assertIn('custom script chop', restored.text)
+
+		children = [c.name for c in self.sandbox.children]
+		cb_variants = [n for n in children
+			if n.startswith('script1_callbacks')]
+		self.assertEqual(len(cb_variants), 1,
+			f'Expected 1 callbacks DAT, got: {cb_variants}')
+
+	def test_W12_script_sop_callbacks_roundtrip(self):
+		"""Script SOP companion callbacks DAT survives round-trip."""
+		try:
+			self.sandbox.create(scriptSOP, 'script1')
+		except Exception:
+			self.skip('scriptSOP not available')
+			return
+
+		cb_dat = self.sandbox.op('script1_callbacks')
+		if cb_dat is None:
+			self.skip('scriptSOP did not create callbacks companion')
+			return
+		cb_dat.text = '# custom script sop callbacks'
+
+		self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('script1_callbacks')
+		self.assertIsNotNone(restored)
+		self.assertIn('custom script sop', restored.text)
+
+		children = [c.name for c in self.sandbox.children]
+		cb_variants = [n for n in children
+			if n.startswith('script1_callbacks')]
+		self.assertEqual(len(cb_variants), 1,
+			f'Expected 1 callbacks DAT, got: {cb_variants}')
+
+	def test_W13_script_dat_callbacks_roundtrip(self):
+		"""Script DAT companion callbacks DAT survives round-trip."""
+		try:
+			self.sandbox.create(scriptDAT, 'script1')
+		except Exception:
+			self.skip('scriptDAT not available')
+			return
+
+		cb_dat = self.sandbox.op('script1_callbacks')
+		if cb_dat is None:
+			self.skip('scriptDAT did not create callbacks companion')
+			return
+		cb_dat.text = '# custom script dat callbacks'
+
+		self._roundTrip(self.sandbox)
+
+		restored = self.sandbox.op('script1_callbacks')
+		self.assertIsNotNone(restored)
+		self.assertIn('custom script dat', restored.text)
+
+		children = [c.name for c in self.sandbox.children]
+		cb_variants = [n for n in children
+			if n.startswith('script1_callbacks')]
+		self.assertEqual(len(cb_variants), 1,
+			f'Expected 1 callbacks DAT, got: {cb_variants}')
+
+	def test_W14_all_companion_types_no_duplicates(self):
+		"""Comprehensive: all companion-creating ops produce no duplicates.
+
+		Creates one of each companion-creating operator type in a single
+		network, round-trips, and verifies no duplicate companion DATs
+		accumulated. This mirrors the real-world scenario where a TDN
+		COMP contains multiple GLSL/script operators.
+		"""
+		created = []
+		# GLSL / POP types
+		for op_type, name in [
+			(glslTOP, 'gt1'), (glslmultiTOP, 'gm1'),
+			(glslPOP, 'gp1'), (glslcopyPOP, 'gc1'),
+			(glsladvancedPOP, 'ga1'),
+			(timerCHOP, 'tm1'), (rampTOP, 'rp1'),
+			(scriptCHOP, 'sc1'), (scriptSOP, 'ss1'),
+			(scriptDAT, 'sd1'),
+		]:
+			try:
+				self.sandbox.create(op_type, name)
+				created.append(name)
+			except Exception:
+				pass  # Skip unavailable types
+
+		if len(created) < 3:
+			self.skip('Too few companion-creating ops available')
+			return
+
+		# Snapshot companion names before round-trip
+		pre_names = sorted(c.name for c in self.sandbox.children)
+
+		self._roundTrip(self.sandbox)
+
+		# Snapshot after round-trip
+		post_names = sorted(c.name for c in self.sandbox.children)
+
+		self.assertEqual(pre_names, post_names,
+			f'Operator names changed after round-trip.\n'
+			f'Before: {pre_names}\n'
+			f'After:  {post_names}')

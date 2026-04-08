@@ -121,6 +121,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `children` | array | No | Only for COMPs with child operators (excluding palette clones). Contains nested operator objects. See [Children and Hierarchy](#children-and-hierarchy). |
 | `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
+| `sequences` | object | No | Only if the operator has built-in parameter sequences with non-default block counts or values. See [Built-in Parameter Sequences](#built-in-parameter-sequences). *Added in v1.3.* |
 | `tdn_ref` | string | No | Only for COMPs with their own TDN externalization. Relative file path to the child's `.tdn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
 
 ### Compact Formatting
@@ -217,6 +218,46 @@ A constant parameter is included only if its current value differs from its defa
 - **Floats**: considered different if `abs(current - default) > 1e-9`
 - **OP-reference parameters**: `None` and `""` are treated as equivalent (both mean "no operator connected")
 - **All other types**: standard equality comparison (`!=`)
+
+---
+
+## Built-in Parameter Sequences
+
+*Added in v1.3.*
+
+Many TouchDesigner operators have **resizable parameter blocks** — mathmixPOP Combine blocks, glslPOP/glslTOP uniform sequences, attributePOP attribute blocks, constantCHOP channel blocks, etc. These are called **parameter sequences** in TD's API.
+
+The `sequences` object stores per-operator sequence data. It is keyed by sequence name, where each value is an array of block objects containing only non-default parameter values using **base names** (without the sequence prefix or block index):
+
+```json
+{
+  "name": "mathmix1",
+  "type": "mathmixPOP",
+  "sequences": {
+    "comb": [
+      {"oper": "A", "scopea": "P", "result": "startPos"},
+      {"oper": "A + B", "scopea": "vel", "scopeb": "direction", "result": "vel"},
+      {}
+    ]
+  }
+}
+```
+
+### Design
+
+- **Array length = `numBlocks`**: The importer sets `seq.numBlocks = len(blocks)` to create the right number of parameter slots before setting values.
+- **Base names**: `"oper"` rather than `"comb0oper"`. The full parameter name is `{seqName}{blockIndex}{baseName}` (e.g., `comb2oper`), but only the base name is stored. This makes the format portable and readable.
+- **Empty objects `{}`**: Represent blocks where all parameters are at their default values. Included to preserve correct block count and ordering.
+- **Omission**: The `sequences` key is omitted entirely when all sequences on the operator have their default block count and all block values are defaults.
+- **Value shorthand**: Same as built-in parameters — `=` prefix for expressions, `~` prefix for binds, literal values for constants.
+
+### Import Phase
+
+Sequences are expanded in **Phase 2.5** (between custom parameter creation and parameter value setting). This ensures the dynamically-created sequence parameters exist before Phase 3 attempts to set values on them.
+
+### Exclusion from type_defaults
+
+Sequence data is **never included in `type_defaults`**. Sequences are inherently per-instance (different operators have different block counts), so they cannot be compressed into per-type defaults.
 
 ---
 
@@ -1224,3 +1265,4 @@ Key observations:
 | 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact JSON formatting. |
 | 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |
 | 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDN exports. Pre-save now auto-exports current state before stripping TDN COMPs. |
+| 1.3 | 2026-04-07 | Added built-in parameter sequence support (`sequences` key on operator objects). Operators with resizable parameter blocks (mathmixPOP, glslPOP, attributePOP, constantCHOP, etc.) now round-trip correctly. Added Phase 2.5 to import process. Sequence parameters excluded from `type_defaults` compression and `_buildParCache`. |
