@@ -1,4 +1,4 @@
-"""
+﻿"""
 Test suite: TDN built-in parameter sequence round-trip (v1.3).
 
 Tests export, import, and round-trip fidelity for operators with
