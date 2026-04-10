@@ -1,5 +1,28 @@
 # Changelog
 
+## v5.0.330
+
+Envoy bridge v2: proactive reconciliation, multi-session safety, and zero forced restarts. The bridge now survives TD crashes, instance switches, and multi-session concurrency without requiring Claude Code session restarts.
+
+- **Feature: Background reconciler thread**: Polls `.envoy.json` every 1 second (unconditionally, regardless of connection state) and pings the backend every 5–30 seconds (dynamic backoff). Detects instance switches within seconds — opening a new TD instance mid-session automatically routes MCP calls to the new instance
+- **Feature: Disk-based tool cache**: Persists the full tool list to `.envoy-tools-cache.json` so new sessions always start with all 45+ tools, even if TD hasn't finished loading. Works around Claude Code's `list_changed` notification bug (#13646)
+- **Feature: HTTP connection pooling**: Replaced per-request `urllib.request.urlopen()` with a persistent `http.client.HTTPConnection` per URL. Eliminates socket churn that was causing `ClientDisconnect` tracebacks in starlette and crashing Envoy's HTTP server under load
+- **Feature: Dynamic heartbeat backoff**: Pings every 5s while unstable or recently changed, slows to 30s once connected stably for 30+ seconds. Reduces textport noise by 6x in steady state
+- **Feature: Proactive TD process discovery**: `find_all_td_pids()` scans for new TouchDesigner processes every heartbeat, forces config re-read when new TDs appear. Filters out bridge processes that use TD's bundled Python (false positive fix)
+- **Feature: `notifications/tools/list_changed` emission**: Bridge advertises `listChanged: true` and sends the MCP notification on every backend state transition and explicit instance switch
+- **Feature: Local `ping` handler**: Answers MCP `ping` requests locally with zero latency, regardless of backend state
+- **Feature: Multi-session safety**: `kill_stale_bridges()` now checks parent PID before killing peers — only orphans (parent dead/reparented to launchd) are terminated. Multiple Claude Code sessions can safely coexist against the same project
+- **Fix: Port conflict detection in multi-instance startup**: `_findAvailablePort()` now checks the `.envoy.json` registry in addition to socket probes, preventing two TD instances from racing on the same port during near-simultaneous startup
+- **Fix: Restart loop on port fallback**: Removed `Envoyport` parameter update during `Start()` that triggered `parexec.py` Stop+Start cycle when the port shifted (e.g., 9870→9871)
+- **Fix: Ghost TD detection**: `find_all_td_pids()` now excludes bridge processes whose cmdline contains `envoy-bridge`, preventing false "TD is alive" reports when only bridge processes remain
+- **Fix: Orphan watchdog hardening**: Added `is_process_alive(parent_pid)` belt-and-suspenders check alongside ppid comparison, catches cases where ppid doesn't update immediately on reparenting
+- **Improved: 3-second initial probe** (was 60s): First `tools/list` response returns in ≤3 seconds with the best available tools (live, cached, or bridge-only). Reconciler handles recovery in the background
+- **Improved: Single-attempt forwarding** (was 4 retries): Failed MCP forwards return immediately instead of blocking 7.5 seconds on retries. The reconciler drives reconnection
+- **Improved: PID-tagged log lines**: `[envoy-bridge:PID]` format makes multi-session logs distinguishable
+- **Improved: PID-tagged temp files**: `atomic_write_json()` uses per-PID temp files to prevent collisions between concurrent bridge processes
+- **Improved: Server-side log filter**: Suppresses FastMCP's per-request `Processing request of type PingRequest` messages from flooding TD's textport
+- **Test: 136 bridge unit tests** across 19 suites, covering BridgeState locking, tool hash detection, reconciler state transitions, listChanged capability, cache hits, stdout serialization, single-attempt forwarding, and connection lifecycle
+
 ## v5.0.320
 
 TDN v1.3: parameter sequence round-trip + companion DAT handling. Operators with resizable parameter blocks (mathmixPOP, glslPOP, constantCHOP, etc.) and companion DATs (GLSL `_pixel`/`_compute`/`_info`, Timer/Script CHOP `_callbacks`, Ramp TOP `_keys`, etc.) now round-trip cleanly through TDN export/import.

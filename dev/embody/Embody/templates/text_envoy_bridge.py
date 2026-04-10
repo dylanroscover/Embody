@@ -27,7 +27,8 @@ from urllib.parse import urlparse
 
 DEFAULT_PORT = 9870
 RETRY_INTERVALS = [0.5, 0.5, 1, 1, 2, 2, 3, 3, 5, 5, 8, 8]
-CONNECT_TIMEOUT_S = 60  # Max seconds to wait for Envoy on first connect
+CONNECT_TIMEOUT_S = 60  # Max seconds to wait for Envoy during launch_td/restart_td
+INITIAL_PROBE_TIMEOUT_S = 3  # Quick probe on first tools/list — reconciler handles recovery
 ORPHAN_CHECK_INTERVAL_S = 30  # How often to check if parent process is alive
 CRASH_LOOP_WINDOW_S = 300  # 5 minutes
 CRASH_LOOP_MAX = 3  # Max launches within the window
@@ -298,10 +299,13 @@ def _init_file_logging(config_path):
         pass  # File logging is best-effort
 
 
+_MY_PID = os.getpid()
+
+
 def log(msg):
     """Log to stderr (visible in Claude Code's MCP output) and to file."""
     ts = time.strftime("%H:%M:%S")
-    line = f"[envoy-bridge] {ts} {msg}"
+    line = f"[envoy-bridge:{_MY_PID}] {ts} {msg}"
     sys.stderr.write(line + "\n")
     sys.stderr.flush()
     if _log_file is not None:
@@ -354,10 +358,35 @@ def resolve_toe_path(config, config_path):
 # Process management
 # ---------------------------------------------------------------------------
 
+def _is_bridge_process(pid):
+    """Check if a PID is an envoy-bridge process (not actual TouchDesigner).
+
+    The bridge runs TD's bundled Python, so pgrep -f TouchDesigner matches
+    it.  This helper reads the process cmdline and returns True if it
+    contains 'envoy-bridge' or 'envoy_bridge'.
+    """
+    try:
+        cmdline_path = f"/proc/{pid}/cmdline"
+        if os.path.exists(cmdline_path):
+            with open(cmdline_path, "r") as f:
+                cmdline = f.read()
+        else:
+            # macOS
+            result = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "args="],
+                capture_output=True, text=True, timeout=5,
+            )
+            cmdline = result.stdout
+        return "envoy-bridge" in cmdline or "envoy_bridge" in cmdline
+    except (OSError, subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
 def find_all_td_pids():
     """Return a list of all running TouchDesigner PIDs.
 
-    Pure function — no shared state, safe to call from any thread.
+    Excludes the bridge's own PID and any other envoy-bridge processes,
+    which run TD's bundled Python and would otherwise false-match.
     """
     pids = []
     my_pid = os.getpid()
@@ -378,9 +407,12 @@ def find_all_td_pids():
                             pass
         except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
             pass
+        # Windows tasklist filters by image name (TouchDesigner*.exe),
+        # so bridge processes (python.exe) won't appear.
         return pids
 
-    # macOS / Linux
+    # macOS / Linux — pgrep -f matches cmdline, which catches bridges
+    # running TD's bundled Python.  Filter them out.
     try:
         result = subprocess.run(
             ["pgrep", "-f", "TouchDesigner"],
@@ -395,8 +427,11 @@ def find_all_td_pids():
                     pid = int(line)
                 except ValueError:
                     continue
-                if pid != my_pid:
-                    pids.append(pid)
+                if pid == my_pid:
+                    continue
+                if _is_bridge_process(pid):
+                    continue
+                pids.append(pid)
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         pass
     return pids
@@ -484,8 +519,9 @@ def get_instance_status(config):
 
 def atomic_write_json(path, data):
     """Write JSON atomically via temp file + os.replace().
-    Retries on PermissionError (Windows file-in-use)."""
-    tmp = path + ".tmp"
+    Retries on PermissionError (Windows file-in-use).
+    Uses PID-tagged temp file so concurrent bridges don't collide."""
+    tmp = path + f".{os.getpid()}.tmp"
     content = json.dumps(data, indent=2) + "\n"
     for attempt in range(3):
         try:
@@ -749,11 +785,13 @@ def handle_switch_instance(params, state):
     with _http_pool_lock:
         _close_http_connection(old_url)
 
-    # Update active in registry
-    config["active"] = target
+    # Update active in registry.  Re-read from disk to minimize race
+    # window with other bridges doing the same switch simultaneously.
     if config_path:
         try:
-            atomic_write_json(config_path, config)
+            fresh = load_config(config_path) or {}
+            fresh["active"] = target
+            atomic_write_json(config_path, fresh)
         except Exception as e:
             log(f"Warning: could not update .envoy.json: {e}")
 
@@ -951,6 +989,72 @@ def bridge_only_tools_list(request_id):
 
 
 # ---------------------------------------------------------------------------
+# Tool list disk cache — survives bridge restarts
+# ---------------------------------------------------------------------------
+# Claude Code caches the tool list from the first tools/list response and
+# does NOT refresh it when notifications/tools/list_changed is sent (known
+# bug anthropics/claude-code#13646).  To work around this, we persist the
+# last-known full tool list (TD tools + bridge meta-tools) to disk.  On
+# startup, if Envoy isn't reachable within the quick probe, we return the
+# cached list instead of bridge-only tools.
+
+_TOOLS_CACHE_FILENAME = ".envoy-tools-cache.json"
+
+
+def _tools_cache_path(config_path):
+    """Return the path to the tools cache file (next to .envoy.json)."""
+    if not config_path:
+        return None
+    return os.path.join(os.path.dirname(os.path.abspath(config_path)),
+                        _TOOLS_CACHE_FILENAME)
+
+
+def save_tools_cache(config_path, tools):
+    """Persist the full tool list to disk.  Best-effort, never raises."""
+    path = _tools_cache_path(config_path)
+    if not path:
+        return
+    try:
+        atomic_write_json(path, {"tools": tools})
+    except Exception:
+        pass
+
+
+def load_tools_cache(config_path):
+    """Load the cached tool list from disk.  Returns list or None."""
+    path = _tools_cache_path(config_path)
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        tools = data.get("tools")
+        if isinstance(tools, list) and len(tools) > 0:
+            return tools
+    except (json.JSONDecodeError, OSError, KeyError):
+        pass
+    return None
+
+
+def best_available_tools_list(request_id, config_path):
+    """Return the best tools/list response we can without Envoy.
+
+    If a disk cache exists from a previous session, return the full cached
+    list (TD tools + bridge meta-tools).  Otherwise fall back to bridge-only.
+    """
+    cached = load_tools_cache(config_path)
+    if cached:
+        log(f"Returning {len(cached)} tools from disk cache "
+            "(Envoy not yet reachable)")
+        return {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "result": {"tools": cached},
+        }
+    return bridge_only_tools_list(request_id)
+
+
+# ---------------------------------------------------------------------------
 # HTTP forwarding and connection management
 # ---------------------------------------------------------------------------
 
@@ -1065,25 +1169,74 @@ def send_error(request_id, code, message):
     })
 
 
-def kill_stale_bridges(port):
-    """Find and terminate other envoy-bridge processes targeting the same port.
+def _get_parent_pid(pid):
+    """Return the parent PID of a given process, or None on failure."""
+    if sys.platform == "win32":
+        try:
+            ps_cmd = (
+                f'(Get-CimInstance Win32_Process -Filter '
+                f'"ProcessId = {pid}").ParentProcessId'
+            )
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, timeout=5,
+            )
+            val = result.stdout.strip()
+            return int(val) if val.isdigit() else None
+        except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, OSError):
+            return None
+    # Linux: /proc/<pid>/stat field 4 is ppid
+    try:
+        stat_path = f"/proc/{pid}/stat"
+        if os.path.exists(stat_path):
+            with open(stat_path, "r") as f:
+                fields = f.read().split()
+            return int(fields[3]) if len(fields) > 3 else None
+    except (OSError, ValueError, IndexError):
+        pass
+    # macOS: ps -p PID -o ppid=
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "ppid="],
+            capture_output=True, text=True, timeout=5,
+        )
+        val = result.stdout.strip()
+        return int(val) if val else None
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, OSError):
+        return None
 
-    Claude Code spawns a new bridge process for each session but doesn't
-    always clean up old ones when sessions end.  This prevents dozens of
-    zombie bridges from accumulating and fighting over the port.
+
+def _is_orphan(pid):
+    """Return True if the given bridge process is an orphan (parent dead)."""
+    ppid = _get_parent_pid(pid)
+    if ppid is None:
+        return True  # Can't determine — assume orphan (safe to kill)
+    if ppid <= 1:
+        return True  # Reparented to init/launchd
+    return not is_process_alive(ppid)
+
+
+def kill_stale_bridges(port):
+    """Find and terminate orphaned envoy-bridge processes targeting the same port.
+
+    Claude Code spawns a new bridge process for each session.  When a session
+    closes cleanly, its bridge exits via the orphan watchdog.  But if the
+    session crashes or the watchdog doesn't fire, orphan bridges accumulate.
+    This function kills only orphans — bridges whose parent process is dead.
+    Active bridges (parent alive) are left alone so multiple concurrent
+    sessions can coexist.
     """
     my_pid = os.getpid()
     if sys.platform == "win32":
         try:
-            # Use PowerShell to find Python processes running envoy-bridge.py
-            # with our port in the command line
             ps_cmd = (
                 f'Get-CimInstance Win32_Process -Filter '
                 f'"Name like \'%python%\'" | '
                 f'Where-Object {{ $_.CommandLine -match "envoy.bridge" -and '
                 f'$_.CommandLine -match "--port {port}" -and '
                 f'$_.ProcessId -ne {my_pid} }} | '
-                f'Select-Object -ExpandProperty ProcessId'
+                f'Select-Object ProcessId, ParentProcessId | '
+                f'ForEach-Object {{ "$($_.ProcessId),$($_.ParentProcessId)" }}'
             )
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-Command", ps_cmd],
@@ -1091,21 +1244,28 @@ def kill_stale_bridges(port):
             )
             for line in result.stdout.strip().split("\n"):
                 line = line.strip()
-                if line.isdigit():
-                    pid = int(line)
-                    try:
-                        subprocess.run(
-                            ["taskkill", "/F", "/PID", str(pid)],
-                            capture_output=True, timeout=5,
-                        )
-                        log(f"Terminated stale bridge process (PID {pid})")
-                    except (subprocess.TimeoutExpired, OSError):
-                        pass
+                if not line:
+                    continue
+                parts = line.split(",")
+                if len(parts) < 2 or not parts[0].isdigit():
+                    continue
+                pid = int(parts[0])
+                ppid = int(parts[1]) if parts[1].isdigit() else 0
+                # Only kill if parent is dead (orphan)
+                if ppid > 1 and is_process_alive(ppid):
+                    continue
+                try:
+                    subprocess.run(
+                        ["taskkill", "/F", "/PID", str(pid)],
+                        capture_output=True, timeout=5,
+                    )
+                    log(f"Terminated orphan bridge (PID {pid}, parent {ppid} dead)")
+                except (subprocess.TimeoutExpired, OSError):
+                    pass
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-            pass  # PowerShell not available or other issue — not critical
+            pass
         return
     try:
-        # Find all envoy-bridge processes via pgrep
         result = subprocess.run(
             ["pgrep", "-f", "envoy-bridge.py"],
             capture_output=True, text=True, timeout=5,
@@ -1116,28 +1276,27 @@ def kill_stale_bridges(port):
             pid = int(line.strip())
             if pid == my_pid:
                 continue
-            # Verify this process is actually targeting our port by reading
-            # its command line.  This avoids killing bridges for other ports.
             try:
                 cmdline_path = f"/proc/{pid}/cmdline"
                 if os.path.exists(cmdline_path):
-                    # Linux
                     with open(cmdline_path, "r") as f:
                         cmdline = f.read()
                 else:
-                    # macOS: use ps
                     ps = subprocess.run(
                         ["ps", "-p", str(pid), "-o", "args="],
                         capture_output=True, text=True, timeout=5,
                     )
                     cmdline = ps.stdout.strip()
                 if f"--port" in cmdline and str(port) in cmdline:
-                    os.kill(pid, signal.SIGTERM)
-                    log(f"Terminated stale bridge process (PID {pid})")
+                    if _is_orphan(pid):
+                        os.kill(pid, signal.SIGTERM)
+                        log(f"Terminated orphan bridge (PID {pid})")
+                    else:
+                        log(f"Skipping active peer bridge (PID {pid}, parent alive)")
             except (ProcessLookupError, PermissionError, OSError):
-                pass  # Already gone or not ours
+                pass
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
-        pass  # pgrep not available or other issue — not critical
+        pass
 
 
 def start_orphan_watchdog():
@@ -1155,9 +1314,14 @@ def start_orphan_watchdog():
         while True:
             time.sleep(ORPHAN_CHECK_INTERVAL_S)
             current_ppid = os.getppid()
-            if current_ppid != parent_pid:
-                # Parent changed (reparented to init/launchd) — we're orphaned
+            # Detect orphaning: parent changed OR reparented to init/launchd
+            if current_ppid != parent_pid or current_ppid <= 1:
                 log(f"Parent process died (was {parent_pid}, now {current_ppid}). Exiting.")
+                os._exit(0)
+            # Belt-and-suspenders: check if original parent is actually alive.
+            # On some systems ppid doesn't change immediately on reparenting.
+            if not is_process_alive(parent_pid):
+                log(f"Parent process {parent_pid} no longer alive. Exiting.")
                 os._exit(0)
 
     t = threading.Thread(target=watchdog, daemon=True)
@@ -1409,11 +1573,14 @@ def reconcile(state, on_tools_change, *, heartbeat):
         # If identical, this is a silent switch — no notification.
         new_tools = fetch_tools_list(url)
         if new_tools is not None:
-            new_hash = _hash_tools(new_tools)
+            augmented = list(new_tools) + list(BRIDGE_TOOLS)
+            new_hash = _hash_tools(augmented)
             with state:
                 old_hash = state.cached_tools_hash
-                state.cached_tools = new_tools
+                state.cached_tools = augmented
                 state.cached_tools_hash = new_hash
+                cp = state.config_path
+            save_tools_cache(cp, augmented)
             if old_hash is None or old_hash != new_hash:
                 notify_changed = True
             else:
@@ -1673,14 +1840,16 @@ def main():
                 continue  # Notification — no response needed
 
             if method == "tools/list":
-                # Try connecting to Envoy so we can return the full tool
-                # list (TD-proxied + bridge meta-tools).  If Envoy is not
-                # reachable, fall back to bridge-only meta-tools.
-                deadline = time.monotonic() + CONNECT_TIMEOUT_S
+                # Quick probe — if Envoy is already up, connect and return
+                # the full tool list.  If not, return the best available
+                # tools (disk cache or bridge-only) immediately.  The
+                # reconciler handles recovery in the background.
+                deadline = time.monotonic() + INITIAL_PROBE_TIMEOUT_S
                 if wait_for_envoy(current_url, deadline):
                     with state:
                         state.connected = True
                         state.last_connected_time = time.time()
+                        state.last_state_change_time = time.time()
                         state.crash_detected = False
                         if not state.td_pid:
                             state.td_pid = find_td_pid()
@@ -1688,8 +1857,11 @@ def main():
                     log("Connected to Envoy (during tools/list)")
                     # Fall through to the forwarding path below
                 else:
+                    log("Envoy not reachable within quick probe — "
+                        "returning cached/bridge-only tools (reconciler will recover)")
                     if not is_notification:
-                        send_response(bridge_only_tools_list(request_id))
+                        send_response(best_available_tools_list(
+                            request_id, state.config_path))
                     continue
 
         # --- Tool list cache hit (connected path) ---
@@ -1734,17 +1906,18 @@ def main():
                     state.td_pid = new_pid
 
             log("Connecting to Envoy...")
-            deadline = time.monotonic() + CONNECT_TIMEOUT_S
+            deadline = time.monotonic() + INITIAL_PROBE_TIMEOUT_S
             if wait_for_envoy(current_url, deadline):
                 with state:
                     state.connected = True
                     state.last_connected_time = time.time()
+                    state.last_state_change_time = time.time()
                     state.crash_detected = False
                     if not state.td_pid:
                         state.td_pid = find_td_pid()
                 log("Connected to Envoy")
             else:
-                log(f"Envoy not reachable after {CONNECT_TIMEOUT_S}s")
+                log(f"Envoy not reachable after {INITIAL_PROBE_TIMEOUT_S}s")
                 if not is_notification:
                     msg = connection_lost_message(state)
                     send_error(request_id, -32000, msg)
@@ -1795,6 +1968,8 @@ def main():
                     state.cached_tools = list(all_tools)
                     state.cached_tools_hash = _hash_tools(all_tools)
                     state.last_heartbeat_ok = time.time()
+                    cp = state.config_path
+                save_tools_cache(cp, all_tools)
             except (AttributeError, TypeError):
                 pass
 

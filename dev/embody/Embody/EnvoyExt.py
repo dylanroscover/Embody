@@ -1468,6 +1468,12 @@ class EnvoyExt:
     def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
         """Find an available port in [base_port, base_port + range_size).
 
+        Checks BOTH the socket state AND the .envoy.json registry so that
+        two TD instances starting near-simultaneously don't race on the same
+        port.  A port is considered taken if:
+          - A TCP connect succeeds (something is listening), OR
+          - Another instance is registered on it with a live PID.
+
         Tries the base port first (fast path for single-instance).  If busy,
         attempts to force-close a stale server from the same TD process, then
         scans the remaining range without force-close (those ports belong to
@@ -1476,14 +1482,43 @@ class EnvoyExt:
         Returns the first free port, or None if all are occupied.
         """
         import socket
+        import os as _os
 
         def _port_in_use(port: int) -> bool:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1)
                 return s.connect_ex(('127.0.0.1', port)) == 0
 
-        # Fast path: preferred port is free
-        if not _port_in_use(base_port):
+        def _port_registered_by_other(port: int) -> bool:
+            """Check if another live instance claims this port in .envoy.json."""
+            try:
+                git_root = self.ownerComp.fetch('_git_root', 'no-git')
+                if git_root == 'no-git':
+                    return False
+                from pathlib import Path
+                config_path = Path(git_root) / '.envoy.json'
+                if not config_path.exists():
+                    return False
+                config = json.loads(config_path.read_text(encoding='utf-8'))
+                my_pid = _os.getpid()
+                for name, info in config.get('instances', {}).items():
+                    if info.get('port') == port:
+                        other_pid = info.get('td_pid', 0)
+                        if other_pid and other_pid != my_pid:
+                            try:
+                                _os.kill(other_pid, 0)
+                                return True  # Another live instance owns this port
+                            except (ProcessLookupError, PermissionError):
+                                pass  # Dead PID, stale entry
+            except Exception:
+                pass
+            return False
+
+        def _port_taken(port: int) -> bool:
+            return _port_in_use(port) or _port_registered_by_other(port)
+
+        # Fast path: preferred port is free AND not claimed by another instance
+        if not _port_taken(base_port):
             return base_port
 
         # Base port busy — try to reclaim it from our own stale server
@@ -1494,7 +1529,7 @@ class EnvoyExt:
         import time as _time
         for _ in range(5):
             _time.sleep(0.1)
-            if not _port_in_use(base_port):
+            if not _port_taken(base_port):
                 self._log(f'Port {base_port} freed after force-close')
                 return base_port
 
@@ -1503,7 +1538,7 @@ class EnvoyExt:
         self._log(f'Port {base_port} held by another instance, scanning range...')
         for offset in range(1, range_size):
             candidate = base_port + offset
-            if not _port_in_use(candidate):
+            if not _port_taken(candidate):
                 return candidate
 
         return None
@@ -1544,6 +1579,10 @@ class EnvoyExt:
             return
         if port != base_port:
             self._log(f'Port {base_port} in use by another instance, using {port}')
+            # Note: do NOT set self.ownerComp.par.Envoyport = port here.
+            # Envoyport is the user's *preferred* port; parexec.py watches it
+            # and triggers Stop+Start on change, causing a restart loop.
+            # The actual runtime port is shown in Envoystatus instead.
 
         self.ownerComp.store('envoy_running', True)
 
