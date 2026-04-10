@@ -141,3 +141,25 @@ These run locally on the STDIO bridge — they work even when TD is not running.
 | `launch_td` | `timeout?` | Launch TD with the project's `.toe` file, wait for Envoy (default: 120s) |
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |
 | `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch the bridge to a different running instance (provide toe basename without `.toe`). See `/multi-instance` skill for workflow |
+
+## Batch Operations
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `batch_operations` | `operations` | Execute multiple operations in a single request. Reduces latency and token overhead |
+
+**`operations`** is a list of `{"tool": str, "params": dict}` objects. Each entry maps to an existing tool name and its parameters. Stops on first error.
+
+**When to use**: 3+ calls to the same tool type (positioning, connecting, parameter setting, flags). Use `execute_python` instead when you need conditionals, loops, or computed values between operations.
+
+**Example** — position 4 operators + connect them in one call:
+```json
+{"operations": [
+  {"tool": "set_op_position", "params": {"op_path": "/project1/noise1", "x": 400, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/comp1", "x": 800, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/level1", "x": 1200, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/null1", "x": 1600, "y": 0}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/noise1", "dest_path": "/project1/comp1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/comp1", "dest_path": "/project1/level1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/level1", "dest_path": "/project1/null1"}}
+]}

@@ -286,4 +286,14 @@ def onProjectPostSave():
 
 	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)
+
+	# Restart Envoy if it was enabled — the save strip kills the server
+	# thread (extension reinit signals the old shutdown event). The status
+	# parameter still says "Running" but the thread is gone.
+	if parent.Embody.par.Envoyenable.eval():
+		# Clear stale state so Start() doesn't bail with "already running"
+		parent.Embody.store('envoy_running', False)
+		parent.Embody.par.Envoystatus = 'Restarting after save...'
+		run(f"op('{parent.Embody}').ext.Envoy.Start()",
+			fromOP=parent.Embody, delayFrames=30)
 	return

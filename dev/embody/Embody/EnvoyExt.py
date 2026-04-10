@@ -1133,6 +1133,26 @@ class EnvoyMCPServer:
             sys._envoy_pending_test = None
             return result
 
+        # --- Batch Operations ---
+
+        @self.mcp.tool()
+        def batch_operations(operations: list) -> dict:
+            """
+            Execute multiple operations in a single request.
+
+            Combines several tool calls into one round-trip, reducing latency
+            and token overhead. Stops on first error by default.
+
+            Args:
+                operations: List of dicts, each with 'tool' (str) and 'params' (dict).
+                    Example: [{"tool": "set_op_position", "params": {"op_path": "/project1/noise1", "x": 400}},
+                              {"tool": "connect_ops", "params": {"source_path": "/project1/noise1", "dest_path": "/project1/null1"}}]
+
+            Returns:
+                Dict with 'results' (list in same order), 'count', and 'success' (false if any failed)
+            """
+            return self._execute_in_td('batch_operations', {'operations': operations})
+
     def run(self) -> None:
         """Run the MCP server (blocking) with graceful shutdown support"""
         import logging
@@ -1290,6 +1310,10 @@ class EnvoyExt:
         self.current_task: Optional[Any] = None
         self._server_gen: int = 0  # Generation counter for stale callback detection
         self._last_served_log_id: int = 0
+        self._restart_count: int = 0
+        self._last_start_time: float = 0.0  # time.time() when Start() was called
+        self._MAX_RESTARTS: int = 3
+        self._RESTART_RESET_SECONDS: float = 120.0  # Reset counter after 2 min uptime
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -1598,6 +1622,7 @@ class EnvoyExt:
 
         self._server_gen += 1
         gen = self._server_gen
+        self._last_start_time = time.time()
 
         self._log(f'Starting Envoy MCP server on port {port}')
 
@@ -1685,6 +1710,7 @@ class EnvoyExt:
 
         self._log('Stopping Envoy MCP server')
         self.ownerComp.store('envoy_running', False)
+        self._restart_count = 0  # Manual stop — reset auto-restart counter
         self.shutdown_event.set()  # Signal uvicorn to exit
 
         # Remove this instance from the registry
@@ -1804,14 +1830,11 @@ class EnvoyExt:
 
     def _onServerSuccess(self, returnValue=None):
         """SuccessHook - Called when the thread task completes successfully"""
-        self._log('Server thread completed')
+        self._log('Server thread exited')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
         if self.ownerComp.par.Envoyenable.eval():
-            # Server stopped unexpectedly while still enabled —
-            # turn off the toggle so toolbar UI stays in sync
-            self.ownerComp.par.Envoystatus = 'Stopped'
-            self.ownerComp.par.Envoyenable = False
+            self._scheduleRestart('Server exited unexpectedly')
         # If Envoyenable is already off, Stop() set the status — don't overwrite
 
     def _onServerError(self, error):
@@ -1819,10 +1842,32 @@ class EnvoyExt:
         self._log(f'Server error: {error}', 'ERROR')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
-        self.ownerComp.par.Envoystatus = f'Error: {error}'
         if self.ownerComp.par.Envoyenable.eval():
-            # Turn off the toggle so toolbar UI stays in sync
+            self._scheduleRestart(f'Server error: {error}')
+
+    def _scheduleRestart(self, reason: str):
+        """Auto-restart the MCP server after a crash, with backoff and cap."""
+        uptime = time.time() - self._last_start_time
+        if uptime > self._RESTART_RESET_SECONDS:
+            self._restart_count = 0  # Stable long enough — reset
+
+        self._restart_count += 1
+        if self._restart_count > self._MAX_RESTARTS:
+            self._log(
+                f'Server failed {self._restart_count} times — giving up. '
+                f'Last: {reason}. Toggle Envoy off/on to retry.', 'ERROR')
+            self.ownerComp.par.Envoystatus = f'Error: {reason} (restart limit reached)'
             self.ownerComp.par.Envoyenable = False
+            return
+
+        delay_frames = 60 * self._restart_count  # ~1s, 2s, 3s at 60fps
+        self._log(
+            f'Auto-restarting server (attempt {self._restart_count}/{self._MAX_RESTARTS}): '
+            f'{reason}', 'WARNING')
+        self.ownerComp.par.Envoystatus = (
+            f'Restarting ({self._restart_count}/{self._MAX_RESTARTS})...')
+        run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
+            fromOP=self.ownerComp, delayFrames=delay_frames)
 
     # === Operation Routing ===
 
@@ -1886,6 +1931,8 @@ class EnvoyExt:
             'capture_top': self._capture_top,
             # Testing
             'run_tests': self._run_tests,
+            # Batch
+            'batch_operations': self._batch_operations,
         }
 
         handler = handlers.get(operation)
@@ -2016,6 +2063,36 @@ class EnvoyExt:
             pending['event'].set()
         else:
             self._schedulePollTestCompletion()
+
+    # --- Batch Operations ---
+
+    def _batch_operations(self, operations: list) -> dict:
+        """Execute multiple operations sequentially in one request.
+
+        Each entry is {'tool': str, 'params': dict}. Stops on first error.
+        Returns {'success': bool, 'results': [...], 'count': int}.
+        """
+        if not isinstance(operations, list):
+            return {'error': 'operations must be a list'}
+        results = []
+        for i, op_spec in enumerate(operations):
+            if not isinstance(op_spec, dict) or 'tool' not in op_spec:
+                results.append({'error': f'Invalid operation at index {i}'})
+                break
+            tool = op_spec['tool']
+            params = op_spec.get('params', {})
+            if tool == 'batch_operations':
+                results.append({'error': 'Nested batch_operations not allowed'})
+                break
+            result = self._execute_operation(tool, params)
+            results.append(result)
+            if 'error' in result:
+                break
+        return {
+            'success': not any('error' in r for r in results),
+            'results': results,
+            'count': len(results),
+        }
 
     # --- Operator Management ---
 

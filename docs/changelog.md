@@ -1,5 +1,15 @@
 # Changelog
 
+## v5.0.336
+
+Batch MCP operations, Envoy auto-restart on crash and save, 46 MCP tools.
+
+- **Feature: `batch_operations` MCP tool**: Combine multiple tool calls into a single request — positions, connections, parameters, flags, etc. Stops on first error, returns per-operation results. Cuts token overhead and latency for repetitive operations
+- **Fix: Envoy dies on Ctrl+S**: The save cycle's TDN strip/restore killed the server thread via extension reinit, leaving status stuck on "Running" with a dead port. `onProjectPostSave` now explicitly restarts Envoy after restoration completes
+- **Fix: Envoy auto-restart on crash**: Server thread failures (SuccessHook/ExceptHook) now trigger automatic restart with exponential backoff (1s, 2s, 3s) up to 3 attempts. Counter resets after 2 minutes of stable uptime. Manual Stop() resets the counter
+- **Rule: Batch repetitive MCP operations** (CLAUDE.md #12): Never make 3+ individual calls to the same tool — use `batch_operations` or `execute_python` instead
+- **Test: 41 test suites** including new `test_mcp_batch` (9 tests covering success, error handling, nested prevention, practical create+query patterns)
+
 ## v5.0.330
 
 Envoy bridge v2: proactive reconciliation, multi-session safety, and zero forced restarts. The bridge now survives TD crashes, instance switches, and multi-session concurrency without requiring Claude Code session restarts.

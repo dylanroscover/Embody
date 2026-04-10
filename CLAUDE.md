@@ -19,6 +19,7 @@
 9. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
 10. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
 11. **Always update unit tests when modifying project code** — check whether existing tests assert against changed behavior.
+12. **Batch repetitive MCP operations** — never make 3+ individual calls to the same tool. Use `batch_operations` to combine `set_op_position`, `connect_ops`, `set_parameter`, `set_op_flags`, etc. into a single request. For complex logic (conditionals, loops, computed values), use `execute_python` instead. Each MCP round-trip costs tokens and latency — minimize them.
 
 ## Approach Guidelines
 

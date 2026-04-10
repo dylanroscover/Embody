@@ -2,9 +2,9 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.330-blue)
+![Version](https://img.shields.io/badge/version-5.0.336-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
-![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
+![MCP Tools](https://img.shields.io/badge/MCP_tools-46-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody)
 
@@ -26,7 +26,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 45 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 46 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
 | 📦 | **Automatic Restoration** | Externalized operators rebuild themselves from disk on every project open. The `.toe` is no longer the source of truth — your files are. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.336**: Batch MCP operations, Envoy auto-restart on crash and save, 46 MCP tools
 - **5.0.330**: Envoy bridge v2 — proactive reconciliation, multi-session safety, zero forced restarts
 - **5.0.320**: TDN v1.3 — parameter sequence round-trip + companion DAT handling (GLSL/Timer/Script/Ramp companions)
 - **5.0.310**: Fix first-time Envoy setup stuck on "Disabled" (issues #8, #9), git config generation on fresh install
@@ -211,7 +212,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 - **5.0.204**: Custom window header, path portability, TDN cleanup
 - **5.0.201**: Robust first-install init, table schema expansion, release build hardening
 - **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs fully restored from disk on project open
-- **5.0**: Envoy MCP server (45 tools), TDN format, test framework (38 suites), macOS support
+- **5.0**: Envoy MCP server (46 tools), TDN format, test framework (38 suites), macOS support
 
 ---
 

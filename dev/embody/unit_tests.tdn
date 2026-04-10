@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.3",
 	"build": 26,
-	"generator": "Embody/5.0.330",
+	"generator": "Embody/5.0.335",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.331.toe",
-	"exported_at": "2026-04-10T17:12:29Z",
+	"source_file": "Embody-5.336.toe",
+	"exported_at": "2026-04-10T18:39:30Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false,
@@ -17,9 +17,7 @@
 				"syncfile": true,
 				"language": "python"
 			},
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
+			"size": [130, 90]
 		}
 	},
 	"type": "baseCOMP",
@@ -2459,7 +2457,9 @@
 				"file": "embody/unit_tests/test_logging.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -1000]
+			"position": [0, -1000],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_sandbox",
@@ -2478,7 +2478,17 @@
 				"file": "embody/unit_tests/TestRunnerExt.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, 0]
+			"position": [200, 0],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
+		},
+		{
+			"name": "test_mcp_batch",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/unit_tests/test_mcp_batch.py"
+			},
+			"color": [0.67, 0.67, 0.67]
 		},
 		{
 			"name": "test_path_utils",
@@ -2487,7 +2497,9 @@
 				"file": "embody/unit_tests/test_path_utils.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, -800]
+			"position": [200, -800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tdn_file_io",
@@ -2496,7 +2508,9 @@
 				"file": "embody/unit_tests/test_tdn_file_io.py"
 			},
 			"flags": ["viewer"],
-			"position": [600, -2200]
+			"position": [600, -2200],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tdn_helpers",
@@ -2505,7 +2519,9 @@
 				"file": "embody/unit_tests/test_tdn_helpers.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, -2200]
+			"position": [200, -2200],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_update_sync",
@@ -2514,7 +2530,9 @@
 				"file": "embody/unit_tests/test_update_sync.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -800]
+			"position": [0, -800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_envoy_bridge",
@@ -2522,7 +2540,9 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_envoy_bridge.py"
 			},
-			"position": [400, -2600]
+			"position": [400, -2600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_claude_config",
@@ -2530,7 +2550,9 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_claude_config.py"
 			},
-			"position": [0, -3000]
+			"position": [0, -3000],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_operators",
@@ -2539,7 +2561,9 @@
 				"file": "embody/unit_tests/test_mcp_operators.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -1400]
+			"position": [0, -1400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_param_tracker",
@@ -2548,7 +2572,9 @@
 				"file": "embody/unit_tests/test_param_tracker.py"
 			},
 			"flags": ["viewer"],
-			"position": [400, -800]
+			"position": [400, -800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tag_lifecycle",
@@ -2557,7 +2583,9 @@
 				"file": "embody/unit_tests/test_tag_lifecycle.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -600]
+			"position": [0, -600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tdn_sequences",
@@ -2567,7 +2595,9 @@
 				"extension": "py"
 			},
 			"flags": ["viewer"],
-			"position": [1075, -2200]
+			"position": [1075, -2200],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_crud_operators",
@@ -2576,7 +2606,9 @@
 				"file": "embody/unit_tests/test_crud_operators.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, -400]
+			"position": [200, -400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_delete_cleanup",
@@ -2585,7 +2617,9 @@
 				"file": "embody/unit_tests/test_delete_cleanup.py"
 			},
 			"flags": ["viewer"],
-			"position": [400, -600]
+			"position": [400, -600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_extensions",
@@ -2594,7 +2628,9 @@
 				"file": "embody/unit_tests/test_mcp_extensions.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, -1600]
+			"position": [200, -1600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_parameters",
@@ -2603,7 +2639,9 @@
 				"file": "embody/unit_tests/test_mcp_parameters.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, -1400]
+			"position": [200, -1400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tag_management",
@@ -2612,7 +2650,9 @@
 				"file": "embody/unit_tests/test_tag_management.py"
 			},
 			"flags": ["viewer"],
-			"position": [600, -400]
+			"position": [600, -400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_externalization",
@@ -2621,7 +2661,9 @@
 				"file": "embody/unit_tests/test_externalization.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -400]
+			"position": [0, -400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_file_management",
@@ -2630,7 +2672,9 @@
 				"file": "embody/unit_tests/test_file_management.py"
 			},
 			"flags": ["viewer"],
-			"position": [400, -400]
+			"position": [400, -400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_annotations",
@@ -2639,7 +2683,9 @@
 				"file": "embody/unit_tests/test_mcp_annotations.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -1600]
+			"position": [0, -1600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_connections",
@@ -2648,7 +2694,9 @@
 				"file": "embody/unit_tests/test_mcp_connections.py"
 			},
 			"flags": ["viewer"],
-			"position": [600, -1400]
+			"position": [600, -1400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_dat_content",
@@ -2657,7 +2705,9 @@
 				"file": "embody/unit_tests/test_mcp_dat_content.py"
 			},
 			"flags": ["viewer"],
-			"position": [400, -1400]
+			"position": [400, -1400],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_diagnostics",
@@ -2666,7 +2716,9 @@
 				"file": "embody/unit_tests/test_mcp_diagnostics.py"
 			},
 			"flags": ["viewer"],
-			"position": [400, -1600]
+			"position": [400, -1600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_performance",
@@ -2675,7 +2727,9 @@
 				"file": "embody/unit_tests/test_mcp_performance.py"
 			},
 			"flags": ["viewer"],
-			"position": [400, -1800]
+			"position": [400, -1800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_top_capture",
@@ -2684,7 +2738,9 @@
 				"file": "embody/unit_tests/test_mcp_top_capture.py"
 			},
 			"flags": ["viewer"],
-			"position": [800, -1800]
+			"position": [800, -1800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_operator_queries",
@@ -2693,7 +2749,9 @@
 				"file": "embody/unit_tests/test_operator_queries.py"
 			},
 			"flags": ["viewer"],
-			"position": [600, -800]
+			"position": [600, -800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_server_lifecycle",
@@ -2702,7 +2760,9 @@
 				"file": "embody/unit_tests/test_server_lifecycle.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -2600]
+			"position": [0, -2600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tdn_crash_safety",
@@ -2711,7 +2771,9 @@
 				"file": "embody/unit_tests/test_tdn_crash_safety.py",
 				"extension": "py"
 			},
-			"position": [800, -2200]
+			"position": [800, -2200],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_custom_parameters",
@@ -2720,7 +2782,9 @@
 				"file": "embody/unit_tests/test_custom_parameters.py"
 			},
 			"flags": ["viewer"],
-			"position": [600, -1800]
+			"position": [600, -1800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_envoy_thread_comm",
@@ -2728,7 +2792,9 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_envoy_thread_comm.py"
 			},
-			"position": [200, -2600]
+			"position": [200, -2600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_strategy_handlers",
@@ -2736,7 +2802,9 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_strategy_handlers.py"
 			},
-			"position": [600, 0]
+			"position": [600, 0],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tdn_export_import",
@@ -2745,7 +2813,9 @@
 				"file": "embody/unit_tests/test_tdn_export_import.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -2200]
+			"position": [0, -2200],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_duplicate_handling",
@@ -2754,7 +2824,9 @@
 				"file": "embody/unit_tests/test_duplicate_handling.py"
 			},
 			"flags": ["viewer"],
-			"position": [600, -600]
+			"position": [600, -600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_code_execution",
@@ -2763,7 +2835,9 @@
 				"file": "embody/unit_tests/test_mcp_code_execution.py"
 			},
 			"flags": ["viewer"],
-			"position": [0, -1800]
+			"position": [0, -1800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_flags_position",
@@ -2772,7 +2846,9 @@
 				"file": "embody/unit_tests/test_mcp_flags_position.py"
 			},
 			"flags": ["viewer"],
-			"position": [600, -1600]
+			"position": [600, -1600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_tdn_reconstruction",
@@ -2781,7 +2857,9 @@
 				"file": "embody/unit_tests/test_tdn_reconstruction.py"
 			},
 			"flags": ["viewer"],
-			"position": [400, -2200]
+			"position": [400, -2200],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_mcp_externalization",
@@ -2790,7 +2868,9 @@
 				"file": "embody/unit_tests/test_mcp_externalization.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, -1800]
+			"position": [200, -1800],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		},
 		{
 			"name": "test_rename_move_lifecycle",
@@ -2799,7 +2879,9 @@
 				"file": "embody/unit_tests/test_rename_move_lifecycle.py"
 			},
 			"flags": ["viewer"],
-			"position": [200, -600]
+			"position": [200, -600],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["py"]
 		}
 	],
 	"annotations": [
