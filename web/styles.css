@@ -1,0 +1,797 @@
+/* ============================================================
+   EMBODY — landing page
+   Sibling brand to owlette.app. Quiet, confident, lowercase.
+   ============================================================ */
+
+
+/* ------------------------------------------------------------
+   1. Tokens
+   ------------------------------------------------------------ */
+:root {
+  /* Surfaces */
+  --bg:            #181e1e;
+  --bg-elevated:   #1f2321;
+  --bg-elevated-2: #283028;
+  --bg-code:       #161e1a;
+
+  /* Text */
+  --text:          #c8d0c9;
+  --text-muted:    #97a098;
+  --text-faint:    #6b756c;
+
+  /* Accent */
+  --accent:        #6ee668;
+  --accent-hover:  #a0f09c;
+  --accent-dim:    #6ee66833;
+
+  /* Lines */
+  --border:        #2a4a42;
+  --border-faint:  #283028;
+
+  /* Type */
+  --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-body:    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', 'Menlo', 'Consolas', monospace;
+
+  /* Layout */
+  --content-max:  1100px;
+  --content-narrow: 760px;
+  --section-pad:  clamp(5rem, 10vw, 9rem);
+  --gutter:       clamp(1.5rem, 4vw, 3rem);
+  --radius:       14px;
+  --radius-sm:    8px;
+}
+
+
+/* ------------------------------------------------------------
+   2. Reset
+   ------------------------------------------------------------ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.65;
+  font-feature-settings: 'kern', 'liga';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+img, svg { display: block; max-width: 100%; }
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+a:hover { color: var(--accent-hover); }
+
+/* Keyboard focus rings — visible only for keyboard users, not mouse clicks */
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+.btn:focus-visible { border-radius: 999px; }
+
+p { margin: 0 0 1em; }
+
+ul, ol { margin: 0; padding: 0; list-style: none; }
+
+code, kbd, pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--accent-hover);
+}
+
+
+/* ------------------------------------------------------------
+   3. Layout primitives
+   ------------------------------------------------------------ */
+.container {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+.container--narrow { max-width: var(--content-narrow); }
+
+.section {
+  padding: var(--section-pad) 0;
+}
+
+
+/* ------------------------------------------------------------
+   4. Typography utilities
+   ------------------------------------------------------------ */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  color: var(--accent);
+  text-transform: uppercase;
+  margin: 0 0 2.5rem;
+  font-weight: 500;
+}
+.eyebrow__sep {
+  color: var(--text-faint);
+  margin: 0 0.4em;
+}
+
+.section__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2rem, 4.5vw, 3.25rem);
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  margin: 0 0 3rem;
+  text-transform: lowercase;
+}
+
+.lede {
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 70ch;
+  margin: 0 0 3rem;
+}
+.lede strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.lede code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.1em 0.45em;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.dot {
+  color: var(--text-faint);
+  margin: 0 0.3em;
+}
+
+
+/* ------------------------------------------------------------
+   5. Buttons
+   ------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.95rem 1.6rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.005em;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.btn--primary {
+  background: var(--accent);
+  color: #0e1612;
+}
+.btn--primary:hover {
+  background: var(--accent-hover);
+  color: #0e1612;
+}
+.btn--ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+.btn--ghost:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+
+/* ------------------------------------------------------------
+   6. Mark (sticky top-left logo)
+   ------------------------------------------------------------ */
+.mark {
+  position: fixed;
+  top: clamp(1rem, 2vw, 1.6rem);
+  left: clamp(1.25rem, 3vw, 2rem);
+  z-index: 100;
+}
+.mark__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  padding: 0.5rem 1rem 0.5rem 0.75rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: rgba(24, 30, 30, 0.92);
+  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+}
+.mark__link:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: rgba(30, 40, 30, 0.95);
+}
+.mark__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.mark__word { line-height: 1; }
+
+
+/* ------------------------------------------------------------
+   7. Hero
+   ------------------------------------------------------------ */
+.hero {
+  position: relative;
+  padding: clamp(8rem, 14vw, 11rem) 0 clamp(2.5rem, 5vw, 4rem);
+  overflow: hidden;
+}
+
+/* Faint radial green wash, off-center */
+.hero__glow {
+  position: absolute;
+  top: -10%;
+  right: clamp(-30%, -8vw, -10%);
+  width: clamp(40rem, 60vw, 70rem);
+  height: 70vw;
+  max-width: 1100px;
+  max-height: 1100px;
+  background: radial-gradient(circle at center,
+              rgba(110, 230, 104, 0.06) 0%,
+              rgba(110, 230, 104, 0.02) 30%,
+              transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.hero__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+.hero__inner .eyebrow {
+  margin: 0;
+}
+
+.hero__headline {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.5rem, 7vw, 6rem);
+  line-height: 1.0;
+  letter-spacing: -0.035em;
+  color: var(--text);
+  margin: 0;
+  text-transform: lowercase;
+  max-width: 18ch;
+}
+
+.hero__sub {
+  font-size: clamp(1.1rem, 1.8vw, 1.4rem);
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 56ch;
+  margin: 0 0 2.5rem;
+}
+
+.hero__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+/* Screenshot — full-width below the headline (simpler + always elegant) */
+.hero__shot {
+  margin: 0;
+  position: relative;
+}
+.hero__shot img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 30px 80px -25px rgba(0, 0, 0, 0.7);
+}
+.hero__shot__caption {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  margin-top: 1rem;
+  text-align: center;
+}
+
+
+/* ------------------------------------------------------------
+   8. Pillars (Envoy / Embody / TDN)
+   ------------------------------------------------------------ */
+.pillars {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+.pillar {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  padding: 2rem 1.85rem 2.1rem;
+  transition: border-color 200ms ease, background 200ms ease, transform 200ms ease;
+}
+.pillar:hover {
+  border-color: var(--border);
+  background: var(--bg-elevated-2);
+}
+.pillar__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.4rem;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+  /* preserve casing — Envoy/Embody/TDN are proper names */
+}
+.pillar__claim {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+  margin: 0 0 1.25rem;
+  letter-spacing: 0.005em;
+}
+.pillar__body {
+  font-size: 0.97rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+
+/* ------------------------------------------------------------
+   9. Practice (chat-style capability list)
+   ------------------------------------------------------------ */
+.practice {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--border-faint);
+}
+.practice__row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 2.5rem;
+  align-items: baseline;
+  padding: 1.4rem 0;
+  border-bottom: 1px solid var(--border-faint);
+  transition: background 160ms ease;
+}
+.practice__row:hover {
+  background: rgba(40, 48, 40, 0.3);
+}
+.practice__what {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 500;
+}
+.practice__say {
+  color: var(--text);
+  font-style: italic;
+  font-size: 1rem;
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+.practice__say::before {
+  content: '› ';
+  color: var(--accent);
+  margin-right: 0.5em;
+}
+
+
+/* ------------------------------------------------------------
+   10. TDN section
+   ------------------------------------------------------------ */
+.tdn__grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 2.5rem;
+  align-items: start;
+  margin-bottom: 3rem;
+}
+
+.code {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  padding: 1.6rem 1.8rem;
+  margin: 0;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: var(--text);
+  white-space: pre;
+  -webkit-overflow-scrolling: touch;
+}
+.code code {
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* JSON token coloring */
+.c-k { color: var(--text); }          /* keys */
+.c-s { color: var(--text); }          /* strings */
+.c-n { color: #6ee668; }              /* numbers */
+.c-p { color: var(--text-faint); }    /* punctuation */
+
+.tdn__callout {
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  color: var(--text);
+  text-align: left;
+  margin: 3rem 0;
+  border-left: 3px solid var(--accent);
+  padding-left: 1.75rem;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+.tdn__callout-lead {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tdn__bullets {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.tdn__bullets li {
+  position: relative;
+  padding-left: 1.4rem;
+  color: var(--text-muted);
+  font-size: 0.97rem;
+  line-height: 1.55;
+}
+.tdn__bullets li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.tdn__bullets strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.tdn__bullets code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+.tdn__closer {
+  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+  color: var(--text-muted);
+  max-width: 60ch;
+  margin: 3rem 0 1.5rem;
+  line-height: 1.55;
+}
+
+.tdn__link {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  letter-spacing: 0.005em;
+}
+
+
+/* ------------------------------------------------------------
+   11. Steps (get started)
+   ------------------------------------------------------------ */
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 760px;
+}
+.step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.75rem;
+  align-items: start;
+  padding: 1.5rem 1.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  transition: border-color 180ms ease, background 180ms ease;
+}
+.step:hover {
+  border-color: var(--border);
+  background: var(--bg-elevated-2);
+}
+.step__num {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  padding-top: 0.15rem;
+}
+.step__body {
+  min-width: 0;
+}
+.step__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text);
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.01em;
+}
+.step__body p {
+  color: var(--text-muted);
+  margin: 0;
+  font-size: 0.97rem;
+  line-height: 1.55;
+}
+.step__body code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+.step__body kbd {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  padding: 0.1em 0.5em;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 0.8em;
+}
+
+.start__meta {
+  margin-top: 2rem;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  letter-spacing: 0.01em;
+}
+
+
+/* ------------------------------------------------------------
+   12. Manifesto pull quote
+   ------------------------------------------------------------ */
+.pullquote {
+  margin: 0 0 2rem;
+  padding: 0;
+  border-left: 2px solid var(--accent);
+  padding-left: 1.75rem;
+}
+.pullquote p {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+  line-height: 1.45;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  margin: 0;
+}
+.manifesto__link {
+  margin: 0;
+  padding-left: 1.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+}
+
+
+/* ------------------------------------------------------------
+   13. Footer
+   ------------------------------------------------------------ */
+.footer {
+  border-top: 1px solid var(--border-faint);
+  padding: clamp(4rem, 7vw, 6rem) 0 2.5rem;
+  margin-top: 0;
+}
+.footer__inner {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr;
+  gap: 3rem;
+  margin-bottom: 4rem;
+}
+.footer__col h4,
+.footer__h {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 1.25rem;
+  font-weight: 500;
+}
+.footer__col ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.footer__col a {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+.footer__col a:hover { color: var(--accent); }
+
+.footer__mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--text);
+  margin-bottom: 1rem;
+}
+.footer__mark .mark__dot {
+  width: 9px;
+  height: 9px;
+}
+.footer__word {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  text-transform: lowercase;
+  letter-spacing: -0.01em;
+}
+.footer__tag {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin: 0 0 0.5rem;
+}
+.footer__tec {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+}
+
+.footer__bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-faint);
+}
+.footer__bottom p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+}
+.footer__sig { font-style: italic; }
+.footer__city { color: var(--text-muted); }
+
+
+/* ------------------------------------------------------------
+   14. Responsive
+   ------------------------------------------------------------ */
+
+/* Tablet large — 1024 */
+@media (max-width: 1024px) {
+  .pillars { gap: 1.25rem; }
+  .tdn__grid { gap: 2rem; }
+}
+
+/* Tablet — 768 */
+@media (max-width: 820px) {
+  .pillars {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .tdn__grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .practice__row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 1.2rem 0;
+  }
+  .footer__inner {
+    grid-template-columns: 1fr 1fr;
+    gap: 2.5rem;
+  }
+  .footer__col--brand {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Mobile — 540 */
+@media (max-width: 540px) {
+  body { font-size: 16px; }
+
+  .mark__link {
+    padding: 0.4rem 0.7rem 0.4rem 0.5rem;
+    font-size: 0.88rem;
+  }
+  .mark__glyph { width: 18px; height: 18px; }
+
+  .hero { padding-top: clamp(7rem, 18vw, 9rem); }
+  .hero__headline {
+    font-size: clamp(2.4rem, 11vw, 3.4rem);
+    letter-spacing: -0.03em;
+  }
+  .hero__sub { font-size: 1.05rem; }
+  .hero__ctas { gap: 0.7rem; }
+  .btn { padding: 0.85rem 1.35rem; font-size: 0.92rem; }
+
+  .section { padding: clamp(4rem, 12vw, 6rem) 0; }
+  .section__title { margin-bottom: 2.25rem; }
+
+  .pillar { padding: 1.65rem 1.5rem 1.85rem; }
+
+  .step {
+    padding: 1.25rem 1.4rem;
+    gap: 1rem;
+  }
+  .code {
+    padding: 1.25rem 1.35rem;
+    font-size: 0.76rem;
+  }
+
+  .footer__inner {
+    grid-template-columns: 1fr;
+    gap: 2.25rem;
+    margin-bottom: 3rem;
+  }
+  .footer__col--brand { grid-column: auto; }
+  .footer__bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+}
+
+
+/* ------------------------------------------------------------
+   15. Reduced motion
+   ------------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,6 +1,6 @@
 # 💬 Embody
 
-**Have a conversation with TouchDesigner.**
+**Create at the speed of thought.**
 
 ![Version](https://img.shields.io/badge/version-5.0.320-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
@@ -8,28 +8,28 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody)
 
-[Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
+[Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Manifesto](https://dylanroscover.github.io/Embody/manifesto/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
 
 ---
 
-TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review. Embody makes your TD projects readable: by AI, by version control, and by you. **Git is not required** — Embody works in any project folder.
+The gap between what you imagine and what's on the screen is where ideas die. Embody collapses it. Describe a network in plain language and watch it appear — operators, connections, parameters, the works. Don't like it? Throw it away in seconds and try a different approach. Compare attempts side by side. Branch off the one that works. **The tool keeps up with you, instead of the other way around.**
 
-## What It Does
+## Three Tools, One Idea
 
-**Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, lets AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire connections, set parameters, write extensions, and debug errors — all through natural conversation. No copy-pasting code. No describing your network in chat.
+**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
 
-**Embody** externalizes your operators to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. Tag operators, update with `ctrl + shift + u`, and everything restores from disk automatically on project open — your externalized files are the source of truth.
+**Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Throw away an experiment, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
 
-**TDN** (TouchDesigner Network) exports your entire operator network to human-readable JSON — a structured language that both humans and LLMs can read, diff, and reconstruct. Review structural changes in pull requests, snapshot configurations, or hand an LLM a complete picture of your network.
+**TDN** — *the substrate that makes both possible.* TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. Without TDN, the rest of this is impossible.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 
-| | Feature | What It Does |
-|---|---------|-------------|
-| 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores everything from disk on project open |
-| 🤖 | **Envoy MCP Server** | 45 tools let AI assistants create operators, set parameters, wire connections, and more |
-| 📄 | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
-| 📤 | **Portable Tox Export** | Export any COMP as a self-contained `.tox` with all external references stripped |
+| | What | Why it matters |
+|---|---|---|
+| 🤖 | **Envoy MCP Server** | 45 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 📄 | **TDN Network Format** | Networks become text. Diff two versions, revert a bad idea, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
+| 📦 | **Automatic Restoration** | Externalized operators rebuild themselves from disk on every project open. The `.toe` is no longer the source of truth — your files are. |
+| 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
 
 ---
 
@@ -37,7 +37,7 @@ TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or
 
 ### 1. Project Setup
 
-Embody writes externalized files relative to your `.toe` location — no special folder structure required. A **git repository** is recommended if you want diffable history and collaboration, but Embody works in any project folder:
+Embody writes externalized files relative to your `.toe` location — no special folder structure required. Embody works in any project folder; if you happen to use git, every change is also a clean diff for free.
 
 ```
 my-project/              ← project folder (optionally a git repo)
@@ -117,7 +117,9 @@ When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD 
 
 ## TDN Network Format
 
-TDN (TouchDesigner Network) is a JSON-based format for exporting operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in any text tool — or in git if you use version control.
+TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable JSON file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it on the next project open.
+
+This is the substrate. Without it, "create at the speed of thought" is a tagline. With it, every other capability falls out for free.
 
 - **Entire project**: `ctrl + shift + e`
 - **Current COMP**: `ctrl + alt + e`

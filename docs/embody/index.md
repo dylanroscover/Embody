@@ -1,12 +1,12 @@
 # Embody
 
-**Embody** is a TouchDesigner extension that automates externalization of COMP and DAT operators to version-control-friendly files. It solves the fundamental problem of TouchDesigner's binary `.toe` files being impossible to diff or merge in git.
+**Embody** is the lateral velocity layer of the project. It pulls your operators out of the binary `.toe` and into files on disk that mirror your network hierarchy. Once they live there, you can throw away an experiment, branch off a good one, restore yesterday's state, or hand a snapshot to your AI agent — all in seconds. The `.toe` is no longer the source of truth; the files are.
 
 ## How It Works
 
 1. **Tag** any operator with a double-tap of ++lctrl++
 2. **Update** with ++ctrl+shift+u++ — Embody writes tagged operators to external files
-3. **Diff and merge** those files in git like any other source code
+3. **Re-open** the project — every externalized operator rebuilds itself from disk automatically. Use any text tool (or git) to compare, revert, or branch between versions.
 
 Embody maintains a bidirectional sync between your `.toe` project and external files:
 

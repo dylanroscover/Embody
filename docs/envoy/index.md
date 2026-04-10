@@ -1,6 +1,6 @@
 # Envoy MCP Server
 
-**Envoy** is an embedded [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server that lets AI coding assistants interact with TouchDesigner programmatically. With Envoy running, an MCP-compatible client can create operators, set parameters, wire connections, export networks, manage externalizations, and more — all through natural language conversation.
+**Envoy** is the forward velocity layer of the project. It's an embedded [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server that lets your AI assistant build directly inside your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes, even tests — and watch it happen on the screen in front of you. The distance between an idea and a working network collapses to the time it takes to type a sentence.
 
 ## Compatible Clients
 

@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Embody — create at the speed of thought.</title>
+  <meta name="description" content="An AI that builds inside your live TouchDesigner session. A file format that makes every version diffable. Open source, MIT, TouchDesigner 2025+." />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Embody — create at the speed of thought." />
+  <meta property="og:description" content="An AI that builds inside your live TouchDesigner session. A file format that makes every version diffable. That's the whole pitch." />
+  <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
+  <meta property="og:url" content="https://embody.tools/" />
+  <meta property="og:site_name" content="Embody" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Embody — create at the speed of thought." />
+  <meta name="twitter:description" content="An AI that builds inside your live TouchDesigner session. A file format that makes every version diffable. That's the whole pitch." />
+  <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
+
+  <!-- Theme -->
+  <meta name="theme-color" content="#181e1e" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- Favicon: inline SVG green dot -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23181e1e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%236ee668'/%3E%3C/svg%3E" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       STICKY MARK (top-left only — no nav)
+       ============================================================ -->
+  <header class="mark" aria-label="Embody">
+    <a href="#top" class="mark__link">
+      <span class="mark__dot" aria-hidden="true"></span>
+      <span class="mark__word">embody</span>
+    </a>
+  </header>
+
+  <main id="top">
+
+    <!-- ============================================================
+         HERO
+         ============================================================ -->
+    <section class="hero">
+      <div class="hero__glow" aria-hidden="true"></div>
+
+      <div class="container hero__inner">
+        <p class="eyebrow">OPEN SOURCE · MIT · TOUCHDESIGNER 2025+</p>
+
+        <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
+
+
+        <div class="hero__ctas">
+          <a class="btn btn--primary" href="https://github.com/dylanroscover/Embody/releases/latest">
+            Download the .tox <span aria-hidden="true">→</span>
+          </a>
+          <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/manifesto/">
+            Read the manifesto
+          </a>
+        </div>
+
+        <figure class="hero__shot">
+          <img
+            src="assets/embody-screenshot.png"
+            alt="Embody running inside TouchDesigner — the extension panel docked beside a live network."
+            loading="eager"
+            decoding="async"
+          />
+          <figcaption class="hero__shot__caption">Demo video coming soon — until then, here's the manager UI.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         THREE TOOLS, ONE IDEA
+         ============================================================ -->
+    <section class="section section--pillars">
+      <div class="container">
+        <p class="eyebrow">THE TOOLSET</p>
+        <h2 class="section__title">three tools, one idea.</h2>
+
+        <div class="pillars">
+          <article class="pillar">
+            <h3 class="pillar__name">Envoy</h3>
+            <p class="pillar__claim">forward velocity.</p>
+            <p class="pillar__body">
+              45 MCP tools that plug Claude, Cursor, or Windsurf straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
+            </p>
+          </article>
+
+          <article class="pillar">
+            <h3 class="pillar__name">Embody</h3>
+            <p class="pillar__claim">lateral velocity.</p>
+            <p class="pillar__body">
+              Tag any operator and Embody externalizes it to version-control-friendly files on disk. Diff what changed, track who changed it, collaborate across branches, and restore any previous state. Your externalized files are the source of truth — not the binary `.toe`.
+            </p>
+          </article>
+
+          <article class="pillar">
+            <h3 class="pillar__name">TDN</h3>
+            <p class="pillar__claim">the substrate.</p>
+            <p class="pillar__body">
+              TouchDesigner networks as human-readable JSON. Your agent can read it. You can read it. Git can read it.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         IN PRACTICE — say it. watch it happen.
+         ============================================================ -->
+    <section class="section section--practice">
+      <div class="container">
+        <p class="eyebrow">IN PRACTICE</p>
+        <h2 class="section__title">say it. watch it happen.</h2>
+
+        <ul class="practice">
+          <li class="practice__row">
+            <span class="practice__what">Build entire networks from a sentence</span>
+            <span class="practice__say">"Build me a noise-driven particle system."</span>
+          </li>
+          <li class="practice__row">
+            <span class="practice__what">Throw it away and try a different approach</span>
+            <span class="practice__say">"Actually, make it react to audio instead."</span>
+          </li>
+          <li class="practice__row">
+            <span class="practice__what">Set any parameter</span>
+            <span class="practice__say">"Set the noise frequency to match the audio input."</span>
+          </li>
+          <li class="practice__row">
+            <span class="practice__what">Write extensions</span>
+            <span class="practice__say">"Create an extension class that manages scene transitions."</span>
+          </li>
+          <li class="practice__row">
+            <span class="practice__what">Debug errors</span>
+            <span class="practice__say">"Why is my render chain producing a black output?"</span>
+          </li>
+          <li class="practice__row">
+            <span class="practice__what">Compare attempts</span>
+            <span class="practice__say">"Show me what changed between this version and the last."</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         TDN
+         ============================================================ -->
+    <section class="section section--tdn">
+      <div class="container">
+        <p class="eyebrow">THE FORMAT THAT MAKES IT POSSIBLE</p>
+        <h2 class="section__title">meet TDN.</h2>
+
+        <p class="lede">
+          TouchDesigner projects live in <code>.toe</code> files — opaque binary blobs that no diff tool can read, no AI can understand, and no version control system can meaningfully compare. TDN is a new file format we built to fix that. Entire networks exported as a single human-readable JSON file. Operators, parameters, connections, layout, annotations, DAT content — all of it, in text.
+        </p>
+
+        <div class="tdn__grid">
+          <pre class="code" aria-label="Sample TDN file"><code><span class="c-p">{</span>
+  <span class="c-k">"format"</span><span class="c-p">:</span> <span class="c-s">"tdn"</span><span class="c-p">,</span>
+  <span class="c-k">"version"</span><span class="c-p">:</span> <span class="c-s">"1.2"</span><span class="c-p">,</span>
+  <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"containerCOMP"</span><span class="c-p">,</span>
+  <span class="c-k">"type_defaults"</span><span class="c-p">:</span> <span class="c-p">{</span>
+    <span class="c-k">"movieFileIn"</span><span class="c-p">:</span> <span class="c-p">{</span> <span class="c-k">"playmode"</span><span class="c-p">:</span> <span class="c-s">"sequential"</span> <span class="c-p">}</span>
+  <span class="c-p">},</span>
+  <span class="c-k">"operators"</span><span class="c-p">:</span> <span class="c-p">[</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"noise1"</span><span class="c-p">,</span>
+      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"noiseTOP"</span><span class="c-p">,</span>
+      <span class="c-k">"pos"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">0</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">],</span>
+      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span>
+        <span class="c-k">"amp"</span><span class="c-p">:</span> <span class="c-n">0.8</span><span class="c-p">,</span>
+        <span class="c-k">"period"</span><span class="c-p">:</span> <span class="c-s">"=absTime.frame * 0.1"</span>
+      <span class="c-p">}</span>
+    <span class="c-p">},</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"blur1"</span><span class="c-p">,</span>
+      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"blurTOP"</span><span class="c-p">,</span>
+      <span class="c-k">"pos"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">200</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">],</span>
+      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span> <span class="c-k">"size"</span><span class="c-p">:</span> <span class="c-n">8</span> <span class="c-p">},</span>
+      <span class="c-k">"inputs"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"noise1"</span><span class="c-p">]</span>
+    <span class="c-p">}</span>
+  <span class="c-p">],</span>
+  <span class="c-k">"annotations"</span><span class="c-p">:</span> <span class="c-p">[</span>
+    <span class="c-p">{</span> <span class="c-k">"title"</span><span class="c-p">:</span> <span class="c-s">"audio chain"</span><span class="c-p">,</span> <span class="c-k">"ops"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"noise1"</span><span class="c-p">,</span> <span class="c-s">"blur1"</span><span class="c-p">]</span> <span class="c-p">}</span>
+  <span class="c-p">]</span>
+<span class="c-p">}</span></code></pre>
+
+          <ul class="tdn__bullets">
+            <li><strong>Non-default-only</strong> — only what you actually changed gets written.</li>
+            <li><strong>Type defaults hoisted</strong> — shared properties dedupe across operators.</li>
+            <li><strong>Expression shorthand</strong> — <code>=absTime.frame * 0.1</code> instead of verbose wrapper objects.</li>
+            <li><strong>Round-trip safe</strong> — export → edit → import yields the same network.</li>
+            <li><strong>The substrate</strong> for the entire workflow — forward velocity AND lateral velocity depend on it.</li>
+          </ul>
+        </div>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">Diffable.</span> Any text tool, any diff viewer, any AI agent can read it.</p>
+
+        <p class="tdn__closer">
+          Without TDN, the rest of this is impossible.
+        </p>
+
+        <p class="tdn__link">
+          <a href="https://dylanroscover.github.io/Embody/tdn/specification/">Read the full TDN specification <span aria-hidden="true">→</span></a>
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         GET STARTED
+         ============================================================ -->
+    <section class="section section--start">
+      <div class="container">
+        <p class="eyebrow">GET STARTED</p>
+        <h2 class="section__title">four steps to flow.</h2>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="step__num">01</span>
+            <div class="step__body">
+              <h3 class="step__title">download</h3>
+              <p>Grab the Embody <code>.tox</code> from <a href="https://github.com/dylanroscover/Embody/releases/latest">GitHub Releases</a>.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">02</span>
+            <div class="step__body">
+              <h3 class="step__title">drag and drop</h3>
+              <p>Drop it into your TouchDesigner project. That's the install.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">03</span>
+            <div class="step__body">
+              <h3 class="step__title">enable Envoy</h3>
+              <p>Connect your AI assistant to the session with one toggle.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">04</span>
+            <div class="step__body">
+              <h3 class="step__title">tag operators</h3>
+              <p>Double-tap <kbd>lctrl</kbd> on any operator to externalize it. Start building.</p>
+            </div>
+          </li>
+        </ol>
+
+        <p class="start__meta">Requires TouchDesigner 2025.32280 or later. Works on macOS and Windows.</p>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         MANIFESTO TEASER
+         ============================================================ -->
+    <section class="section section--manifesto">
+      <div class="container container--narrow">
+        <p class="eyebrow">WHY THIS EXISTS</p>
+
+        <blockquote class="pullquote">
+          <p>
+            Everything is moving faster now. Everyone is shipping. We're entering the golden age of digital media, and TouchDesigner is positioned to become one of the leading platforms of content creation. Embody exists to help our community build faster and better than ever — open source, no strings attached, nothing SaaSy.
+          </p>
+        </blockquote>
+
+        <p class="manifesto__link">
+          <a href="https://dylanroscover.github.io/Embody/manifesto/">Read the full manifesto <span aria-hidden="true">→</span></a>
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+
+      <div class="footer__col footer__col--brand">
+        <div class="footer__mark">
+          <span class="mark__dot" aria-hidden="true"></span>
+          <span class="footer__word">embody</span>
+        </div>
+        <p class="footer__tag">natural language tools for TouchDesigner.</p>
+      </div>
+
+      <nav class="footer__col" aria-label="Project">
+        <h4 class="footer__h">Toolkit</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/manifesto/">manifesto</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
+          <li><a href="https://github.com/dylanroscover/Embody">github</a></li>
+        </ul>
+      </nav>
+
+      <nav class="footer__col" aria-label="Reference">
+        <h4 class="footer__h">Reference</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/envoy/">Envoy setup</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/#getting-started">get started</a></li>
+        </ul>
+      </nav>
+
+    </div>
+
+    <div class="container footer__bottom">
+      <p>© 2026 <a href="https://tec.design">TEC</a> <span class="dot">·</span> MIT License</p>
+      <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+    </div>
+  </footer>
+
+</body>
+</html>

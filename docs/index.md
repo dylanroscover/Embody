@@ -5,35 +5,35 @@ hide:
 
 # Embody
 
-### Converse with TouchDesigner
+### Create at the speed of thought
 
-TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review. Embody makes your TD projects readable: by AI, by version control, and by you. **Git is not required** — Embody works in any project folder.
+The gap between what you imagine and what's on the screen is where ideas die. Embody collapses it. Describe a network in plain language and watch it appear. Throw it away. Try a different approach. Branch off the one that works. The tool keeps up with you, instead of the other way around.
 
-Embody is three things working together:
+Embody is three tools working together — *forward velocity*, *lateral velocity*, and the substrate that makes both possible.
 
 <div class="grid cards" markdown>
 
--   :material-sync:{ .lg .middle } **Embody** — Version Control for TD
+-   :material-robot:{ .lg .middle } **Envoy** — Forward Velocity
 
     ---
 
-    Tag any operator and Embody externalizes it to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) that mirror your network hierarchy. On project open, everything auto-restores from disk — your externalized files are the source of truth.
-
-    [:octicons-arrow-right-24: Get started](embody/getting-started.md)
-
--   :material-robot:{ .lg .middle } **Envoy** — AI Meets TouchDesigner
-
-    ---
-
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **42 tools** that connects AI assistants like Claude Code, Cursor, and Windsurf to your live TD session. Create operators, set parameters, wire connections, write extensions, inspect errors, export networks — all through natural conversation.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **45 tools** that lets Claude Code, Cursor, and Windsurf talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen. Idea → network in seconds.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
--   :material-file-document:{ .lg .middle } **TDN** — Networks as JSON
+-   :material-sync:{ .lg .middle } **Embody** — Lateral Velocity
 
     ---
 
-    Export your operator network to human-readable JSON. Review structural changes in git diffs, snapshot configurations, and reconstruct entire networks from text — a structured language that both humans and LLMs can read.
+    Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Throw away an experiment, branch off a good one, restore yesterday's state — all in seconds. Externalized files are the source of truth, so every project opens already in flow.
+
+    [:octicons-arrow-right-24: Get started](embody/getting-started.md)
+
+-   :material-file-document:{ .lg .middle } **TDN** — The Substrate
+
+    ---
+
+    TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. Without TDN, the rest of this is impossible.
 
     [:octicons-arrow-right-24: Learn about TDN](tdn/index.md)
 
@@ -43,20 +43,21 @@ Embody is three things working together:
 
 ## What You Can Do
 
-With Embody installed, you and your AI assistant can:
+You and your AI assistant, in the same session, with full context of your live network:
 
 | | Capability | Example |
 |---|-----------|---------|
-| :material-plus-circle: | **Create & connect operators** | "Build me a noise-driven particle system" |
-| :material-tune: | **Read & set any parameter** | "Set the noise frequency to match the audio input" |
-| :material-code-braces: | **Write extensions** | "Create an extension class that manages scene transitions" |
+| :material-plus-circle: | **Build entire networks from a sentence** | "Build me a noise-driven particle system." |
+| :material-refresh: | **Throw it away and try a different approach** | "Actually, make it react to audio instead." |
+| :material-tune: | **Read & set any parameter** | "Set the noise frequency to match the audio input." |
+| :material-code-braces: | **Write extensions** | "Create an extension class that manages scene transitions." |
 | :material-bug: | **Debug errors** | "Why is my render chain producing a black output?" |
-| :material-export: | **Export & import networks** | "Export this COMP to TDN so I can review the diff" |
+| :material-source-branch: | **Compare attempts side by side** | "Show me what changed between this version and the last one." |
 | :material-magnify: | **Inspect anything** | "What parameters are non-default on this operator?" |
-| :material-annotation: | **Document networks** | "Add annotations to group and label these operators" |
-| :material-test-tube: | **Run tests** | "Run the test suite and fix any failures" |
+| :material-annotation: | **Document networks** | "Add annotations to group and label these operators." |
+| :material-test-tube: | **Run tests** | "Run the test suite and fix any failures." |
 
-You describe what you want in plain language, and the AI works with your live network — operators, connections, parameters, hierarchy — with full context.
+You describe what you want. The AI works with your live network — operators, connections, parameters, hierarchy — with the whole picture. The result is a network you can read, revert, and rebuild from text.
 
 [:octicons-arrow-right-24: Full tool reference](envoy/tools-reference.md)
 
@@ -79,7 +80,7 @@ You describe what you want in plain language, and the AI works with your live ne
 ## Requirements
 
 - **TouchDesigner 2025.32280** or later (Windows / macOS)
-- A **git repository** is optional — recommended for version history and collaboration, but not required
+- A **git repository** is optional. Embody works in any project folder; if you happen to use git, every change is also a clean diff for free.
 
 ---
 
