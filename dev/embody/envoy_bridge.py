@@ -1061,74 +1061,25 @@ def best_available_tools_list(request_id, config_path):
 def forward_to_http(url, message, timeout=300):
     """Forward a JSON-RPC message to the Envoy HTTP endpoint.
 
-    Uses a persistent ``http.client.HTTPConnection`` per URL (pooled in
-    ``_http_pool``) to avoid the per-call socket churn that was causing
-    ``ClientDisconnect`` tracebacks on the server side.  Every call
-    holds ``_http_pool_lock`` for the full request/response lifecycle —
-    http.client connections are not thread-safe, so we cannot let two
-    requests share one connection.
+    Uses a fresh connection per call via ``urllib.request.urlopen``.
+    This is simple, reliable, and avoids the connection-pool state bugs
+    that caused persistent "not responding" errors when a pooled
+    ``http.client.HTTPConnection`` got into a half-closed state.
 
     Returns the parsed JSON-RPC response, or None for notifications
     that return no data.
-
-    Raises ``OSError`` (or a subclass like ``ConnectionError``,
-    ``BrokenPipeError``, ``TimeoutError``, ``socket.timeout``) on any
-    network or HTTP-level failure.  ``http.client.HTTPException`` is
-    wrapped in an ``OSError`` so the retry path above catches it.
     """
     data = json.dumps(message).encode("utf-8")
-    parsed = urlparse(url)
-    path = parsed.path or "/"
-    if parsed.query:
-        path = f"{path}?{parsed.query}"
-    headers = {
-        "Content-Type": "application/json",
-        "Accept": "application/json, text/event-stream",
-        "Connection": "keep-alive",
-    }
-
-    with _http_pool_lock:
-        conn = _get_http_connection(url)
-        # Honor per-call timeout: apply to the live socket if connected,
-        # and to the next connect() via conn.timeout.  Both are
-        # best-effort — socket may not exist yet and setting timeout on
-        # some platforms can raise OSError.
-        try:
-            conn.timeout = timeout
-        except Exception:
-            pass
-        try:
-            if conn.sock is not None:
-                conn.sock.settimeout(timeout)
-        except OSError:
-            pass
-
-        body_bytes = b""
-        try:
-            conn.request("POST", path, body=data, headers=headers)
-            resp = conn.getresponse()
-            body_bytes = resp.read()
-            status = resp.status
-            reason = resp.reason
-        except http.client.HTTPException as e:
-            _close_http_connection(url)
-            raise OSError(f"HTTP protocol error: {e}") from e
-        except OSError:
-            # ConnectionError, BrokenPipeError, TimeoutError,
-            # socket.timeout, socket.gaierror — all subclasses of
-            # OSError.  Drop the pooled connection and re-raise so the
-            # existing retry path in main() catches it.
-            _close_http_connection(url)
-            raise
-
-        if status >= 400:
-            # Drain already happened via resp.read() above.  Close the
-            # pooled connection and surface the error as an OSError so
-            # the retry path catches it.
-            _close_http_connection(url)
-            raise OSError(f"HTTP {status}: {reason}")
-
-    body = body_bytes.decode("utf-8", errors="replace")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        headers={
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        },
+    )
+    resp = urllib.request.urlopen(req, timeout=timeout)
+    body = resp.read().decode("utf-8")
 
     # Streamable HTTP returns SSE format: "event: message\ndata: {...}\n\n"
     for line in body.split("\n"):
@@ -1884,8 +1835,14 @@ def main():
                 continue
 
         # --- Connection management ---
+        # When disconnected, DON'T block waiting for Envoy.  Just update
+        # the URL from config (in case the instance changed) and fall
+        # through to the forward path.  If the forward succeeds, we mark
+        # connected.  If it fails, the error handler marks disconnected
+        # and the reconciler drives recovery.  This avoids the 3-second
+        # blocking probe that was causing cascading "not responding"
+        # errors during normal TD operations.
         if not is_connected:
-            # Re-read config in case the user switched TD instances
             with state:
                 fresh_config_path = state.config_path
             fresh_config = load_config(fresh_config_path)
@@ -1904,24 +1861,7 @@ def main():
             if new_pid:
                 with state:
                     state.td_pid = new_pid
-
-            log("Connecting to Envoy...")
-            deadline = time.monotonic() + INITIAL_PROBE_TIMEOUT_S
-            if wait_for_envoy(current_url, deadline):
-                with state:
-                    state.connected = True
-                    state.last_connected_time = time.time()
-                    state.last_state_change_time = time.time()
-                    state.crash_detected = False
-                    if not state.td_pid:
-                        state.td_pid = find_td_pid()
-                log("Connected to Envoy")
-            else:
-                log(f"Envoy not reachable after {INITIAL_PROBE_TIMEOUT_S}s")
-                if not is_notification:
-                    msg = connection_lost_message(state)
-                    send_error(request_id, -32000, msg)
-                continue
+            # Fall through to the forward path — no blocking wait.
 
         # --- Forward to TD (single attempt — reconciler handles recovery) ---
         response = None
