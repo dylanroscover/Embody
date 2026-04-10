@@ -1172,6 +1172,26 @@ class EnvoyMCPServer:
             _DisconnectCrashFilter()
         )
 
+        # Drop the per-request "Processing request of type X" log lines from
+        # FastMCP's lowlevel server.  The bridge's background reconciler
+        # pings the backend every few seconds, which would otherwise flood
+        # TD's textport with one "Processing request of type PingRequest"
+        # line per ping.  These messages have zero diagnostic value at
+        # runtime — real errors come through different log paths — so we
+        # filter them out instead of raising the logger level (which would
+        # also drop legitimate warnings).
+        class _RequestProcessingFilter(logging.Filter):
+            def filter(self, record):
+                try:
+                    msg = record.getMessage()
+                except Exception:
+                    return True
+                return not msg.startswith("Processing request of type ")
+
+        logging.getLogger("mcp.server.lowlevel.server").addFilter(
+            _RequestProcessingFilter()
+        )
+
         # Response checker is pure Python (no TD objects), so a plain thread is fine
         def response_checker():
             import time  # local import survives DAT recompilation

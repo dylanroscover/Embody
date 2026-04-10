@@ -5,11 +5,12 @@ Comprehensive tests for the STDIO-to-HTTP proxy including:
 - Argument parsing
 - HTTP forwarding with SSE format parsing
 - STDIO response writing
-- Wait/retry/reconnection logic with exponential backoff
-- Full event loop: disconnection, retry, reconnection scenarios
+- Wait/reconnection logic with exponential backoff
+- Full event loop: disconnection, single-attempt forwarding, reconnection
 - Error type handling (URLError, ConnectionError, OSError)
 - Malformed input resilience
 - Notification vs request distinction
+- Proactive TD process discovery
 
 The bridge is pure Python (no TD dependencies), so these tests
 use unittest.mock extensively to simulate network conditions.
@@ -30,11 +31,18 @@ bridge = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(bridge)
 sys.modules[_spec.name] = bridge  # Register so @patch('envoy_bridge.X') works
 
-# Neutralize the orphan watchdog so it never spawns a daemon thread during
-# tests.  The watchdog calls time.sleep in an infinite loop; when tests
-# patch time.sleep with a recording mock, the unpatched watchdog thread
-# floods the mock with thousands of calls.
+# Neutralize background daemon threads so they never spawn during tests.
+# Both threads run infinite sleep loops; when tests patch time.sleep with a
+# recording mock, the unpatched threads flood the mock with thousands of
+# calls AND race the foreground main loop, breaking forward_to_http call
+# count assertions and many other expectations.
+#   - start_orphan_watchdog: v1, polls parent PID every 30s
+#   - start_reconciler:      v2, polls .envoy.json + pings backend every 1-5s
+# Tests that need to exercise the reconciler call bridge.reconcile()
+# directly with explicit heartbeat=True instead.
 bridge.start_orphan_watchdog = lambda: None
+if hasattr(bridge, 'start_reconciler'):
+    bridge.start_reconciler = lambda *args, **kwargs: None
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
@@ -91,38 +99,59 @@ class TestBridgeParseArgs(EmbodyTestCase):
 # =====================================================================
 
 class TestBridgeForwardToHttp(EmbodyTestCase):
+    """
+    v2 forward_to_http uses a pooled ``http.client.HTTPConnection`` per
+    URL (see bridge._http_pool) instead of ``urllib.request.urlopen``.
+    Tests mock the pooled connection directly via
+    ``_get_http_connection`` so they exercise the real code path
+    without opening real sockets.
+    """
 
-    def _mock_urlopen(self, body, status=200):
-        """Create a mock urllib response with the given body text."""
+    def setUp(self):
+        # Clear the pool between tests so mocks don't leak state and
+        # unreachable connections from earlier tests don't linger.
+        with bridge._http_pool_lock:
+            bridge._http_pool.clear()
+
+    def _make_conn(self, body, status=200, reason='OK'):
+        """Build a mock HTTPConnection that returns ``body`` as the response."""
         resp = MagicMock()
         resp.read.return_value = body.encode('utf-8')
         resp.status = status
-        return resp
+        resp.reason = reason
+        conn = MagicMock()
+        conn.sock = None
+        conn.getresponse.return_value = resp
+        return conn
 
     # --- SSE format ---
 
     def test_sse_format_single_event(self):
         body = 'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n'
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen(body)):
+        conn = self._make_conn(body)
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertTrue(result['result']['ok'])
 
     def test_sse_data_only_no_event_line(self):
         """SSE with just data: line, no event: prefix."""
         body = 'data: {"id":1,"result":"bare"}\n\n'
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen(body)):
+        conn = self._make_conn(body)
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'bare')
 
     def test_sse_multiple_events_returns_first(self):
         body = 'data: {"first":true}\n\ndata: {"second":true}\n\n'
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen(body)):
+        conn = self._make_conn(body)
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertTrue(result.get('first'))
 
     def test_sse_with_extra_whitespace(self):
         body = '  data: {"id":1}  \n\n'
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen(body)):
+        conn = self._make_conn(body)
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['id'], 1)
 
@@ -130,101 +159,133 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
 
     def test_plain_json_response(self):
         body = '{"jsonrpc":"2.0","id":1,"result":"hello"}'
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen(body)):
+        conn = self._make_conn(body)
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'hello')
 
     def test_plain_json_with_surrounding_whitespace(self):
         body = '  \n  {"jsonrpc":"2.0","id":1,"result":"padded"}  \n  '
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen(body)):
+        conn = self._make_conn(body)
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'padded')
 
     # --- Empty / malformed responses ---
 
     def test_empty_response_body(self):
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen('')):
+        conn = self._make_conn('')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     def test_whitespace_only_response(self):
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen('   \n  ')):
+        conn = self._make_conn('   \n  ')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     def test_malformed_json_in_plain_body(self):
         """Garbled non-JSON body returns None, doesn't crash."""
-        with patch('urllib.request.urlopen', return_value=self._mock_urlopen('not json at all')):
+        conn = self._make_conn('not json at all')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     # --- Error propagation ---
 
-    def test_http_error_propagates(self):
-        """HTTPError from server (500) propagates to caller."""
-        import urllib.error
-        exc = urllib.error.HTTPError('url', 500, 'Internal Server Error', {}, None)
-        with patch('urllib.request.urlopen', side_effect=exc):
+    def test_http_error_raises_oserror(self):
+        """HTTP status >= 400 raises OSError so the retry path catches it."""
+        conn = self._make_conn('error body', status=500, reason='Internal Server Error')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-            except urllib.error.HTTPError:
+            except OSError:
                 raised = True
-            self.assertTrue(raised, 'HTTPError should propagate')
+            self.assertTrue(raised, 'HTTP 500 should raise OSError')
 
-    def test_url_error_propagates(self):
-        """URLError (connection refused) propagates to caller."""
-        import urllib.error
-        with patch('urllib.request.urlopen',
-                   side_effect=urllib.error.URLError('Connection refused')):
+    def test_connection_error_propagates(self):
+        """ConnectionRefusedError (subclass of OSError) propagates."""
+        conn = MagicMock()
+        conn.sock = None
+        conn.request.side_effect = ConnectionRefusedError('refused')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-            except urllib.error.URLError:
+            except OSError:
                 raised = True
-            self.assertTrue(raised, 'URLError should propagate')
+            self.assertTrue(raised, 'ConnectionRefusedError should propagate as OSError')
 
     def test_timeout_propagates(self):
-        """Socket timeout propagates to caller."""
+        """Socket timeout (OSError subclass) propagates."""
         import socket
-        with patch('urllib.request.urlopen',
-                   side_effect=socket.timeout('timed out')):
+        conn = MagicMock()
+        conn.sock = None
+        conn.request.side_effect = socket.timeout('timed out')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-            except socket.timeout:
+            except OSError:
                 raised = True
-            self.assertTrue(raised, 'socket.timeout should propagate')
+            self.assertTrue(raised, 'socket.timeout should propagate as OSError')
+
+    def test_http_exception_wrapped_as_oserror(self):
+        """http.client.HTTPException is wrapped so retry path catches it."""
+        import http.client
+        conn = MagicMock()
+        conn.sock = None
+        conn.request.side_effect = http.client.BadStatusLine('oops')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
+            raised = False
+            try:
+                bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
+            except OSError:
+                raised = True
+            self.assertTrue(raised, 'HTTPException should be wrapped as OSError')
 
     # --- Request correctness ---
 
     def test_request_content_type_header(self):
-        with patch('urllib.request.urlopen',
-                   return_value=self._mock_urlopen('{}')) as mock_open:
+        conn = self._make_conn('{}')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        req = mock_open.call_args[0][0]
-        self.assertEqual(req.get_header('Content-type'), 'application/json')
+        call_kwargs = conn.request.call_args
+        headers = call_kwargs[1].get('headers') if call_kwargs[1] else None
+        if headers is None and len(call_kwargs[0]) >= 4:
+            headers = call_kwargs[0][3]
+        self.assertEqual(headers.get('Content-Type'), 'application/json')
 
     def test_request_accept_header(self):
-        with patch('urllib.request.urlopen',
-                   return_value=self._mock_urlopen('{}')) as mock_open:
+        conn = self._make_conn('{}')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        req = mock_open.call_args[0][0]
-        self.assertIn('text/event-stream', req.get_header('Accept'))
+        call_kwargs = conn.request.call_args
+        headers = call_kwargs[1].get('headers') if call_kwargs[1] else None
+        if headers is None and len(call_kwargs[0]) >= 4:
+            headers = call_kwargs[0][3]
+        self.assertIn('text/event-stream', headers.get('Accept', ''))
 
     def test_request_body_is_valid_json(self):
         msg = {'jsonrpc': '2.0', 'id': 42, 'method': 'tools/call'}
-        with patch('urllib.request.urlopen',
-                   return_value=self._mock_urlopen('{}')) as mock_open:
+        conn = self._make_conn('{}')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             bridge.forward_to_http('http://localhost:9870/mcp', msg)
-        req = mock_open.call_args[0][0]
-        self.assertDictEqual(json.loads(req.data), msg)
+        call_args = conn.request.call_args
+        body = call_args[1].get('body') if call_args[1] else None
+        if body is None and len(call_args[0]) >= 3:
+            body = call_args[0][2]
+        self.assertDictEqual(json.loads(body), msg)
 
     def test_custom_timeout_passed(self):
-        with patch('urllib.request.urlopen',
-                   return_value=self._mock_urlopen('{}')) as mock_open:
+        conn = self._make_conn('{}')
+        with patch.object(bridge, '_get_http_connection', return_value=conn):
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1}, timeout=5)
-        self.assertEqual(mock_open.call_args[1].get('timeout', mock_open.call_args[0][1] if len(mock_open.call_args[0]) > 1 else None), 5)
+        # Timeout is applied to conn.timeout; conn.sock is None so no settimeout call.
+        # conn is a MagicMock so conn.timeout = 5 was set via attribute assignment.
+        self.assertEqual(conn.timeout, 5)
 
 
 # =====================================================================
@@ -662,97 +723,10 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertDictHasKey(responses[0], 'error')
         self.assertEqual(responses[1]['result'], 'ok')
 
-    # --- Transient failures with retry ---
+    # --- Single-attempt forwarding (v2: no per-request retries) ---
 
-    def test_one_transient_failure_recovers(self):
-        """Single URLError then success — recovered via retry."""
-        import urllib.error
-        attempts = [0]
-
-        def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] == 1:
-                raise urllib.error.URLError('Connection refused')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'recovered'}
-
-        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'test'}
-        responses = self._run_main([msg], forward_side_effect=forward)
-        self.assertLen(responses, 1)
-        self.assertEqual(responses[0]['result'], 'recovered')
-
-    def test_two_transient_failures_then_success(self):
-        import urllib.error
-        attempts = [0]
-
-        def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] <= 2:
-                raise urllib.error.URLError('refused')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
-
-        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'test'}
-        responses = self._run_main([msg], forward_side_effect=forward)
-        self.assertLen(responses, 1)
-        self.assertEqual(responses[0]['result'], 'ok')
-
-    def test_three_transient_failures_then_success(self):
-        """max_retries=3, so attempt 0 fails, 1 fails, 2 fails, 3 succeeds."""
-        import urllib.error
-        attempts = [0]
-
-        def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] <= 3:
-                raise urllib.error.URLError('refused')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
-
-        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'test'}
-        responses = self._run_main([msg], forward_side_effect=forward)
-        self.assertLen(responses, 1)
-        self.assertEqual(responses[0]['result'], 'ok')
-        self.assertEqual(attempts[0], 4)  # 1 initial + 3 retries
-
-    def test_retry_backoff_intervals(self):
-        """Verify retry sleeps use 0.5*(attempt+1) backoff."""
-        import urllib.error
-        sleeps = []
-
-        def mock_sleep(d):
-            sleeps.append(d)
-
-        attempts = [0]
-
-        def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] <= 2:
-                raise urllib.error.URLError('refused')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
-
-        stdin = self._make_stdin([{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}])
-        stdout = io.StringIO()
-        stderr = io.StringIO()
-
-        with patch.object(sys, 'stdin', stdin), \
-             patch.object(sys, 'stdout', stdout), \
-             patch.object(sys, 'stderr', stderr), \
-             patch.object(sys, 'argv', ['envoy_bridge.py']), \
-             patch.object(bridge, 'wait_for_envoy', return_value=True), \
-             patch.object(bridge, 'forward_to_http', side_effect=forward), \
-             patch.object(bridge, 'find_td_pid', return_value=None), \
-             patch.object(bridge, 'kill_stale_bridges'), \
-             patch.object(bridge, 'start_orphan_watchdog'), \
-             patch.object(bridge.time, 'sleep', side_effect=mock_sleep):
-            bridge.main()
-
-        # 2 retries before success: sleep(0.5*1)=0.5, sleep(0.5*2)=1.0
-        self.assertLen(sleeps, 2)
-        self.assertApproxEqual(sleeps[0], 0.5, tolerance=0.01)
-        self.assertApproxEqual(sleeps[1], 1.0, tolerance=0.01)
-
-    # --- All retries exhausted (permanent failure) ---
-
-    def test_all_retries_exhausted_sends_error(self):
-        """4 consecutive failures (1+3) — error response, marks disconnected."""
+    def test_single_failure_sends_error(self):
+        """Single URLError immediately returns error — no retries."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -764,8 +738,8 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertDictHasKey(responses[0], 'error')
         self.assertIn('connection lost', responses[0]['error']['message'].lower())
 
-    def test_all_retries_exhausted_notification_no_response(self):
-        """Notification with all retries failing — no error sent."""
+    def test_failure_notification_no_response(self):
+        """Notification with forward failure — no error sent."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -775,115 +749,85 @@ class TestBridgeMainLoop(EmbodyTestCase):
         responses = self._run_main([msg], forward_side_effect=always_fail)
         self.assertLen(responses, 0)
 
-    # --- Different connection error types in retry path ---
-
-    def test_url_error_triggers_retry(self):
+    def test_single_attempt_only(self):
+        """forward_to_http is called exactly once per request — no retries."""
         import urllib.error
-        attempts = [0]
+        call_count = [0]
 
         def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] == 1:
-                raise urllib.error.URLError('Connection refused')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
+            call_count[0] += 1
+            raise urllib.error.URLError('refused')
+
+        msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'test'}
+        self._run_main([msg], forward_side_effect=forward)
+        self.assertEqual(call_count[0], 1)
+
+    # --- Different connection error types ---
+
+    def test_url_error_sends_error(self):
+        import urllib.error
+        def forward(url, msg, **kw):
+            raise urllib.error.URLError('Connection refused')
 
         responses = self._run_main(
             [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
             forward_side_effect=forward)
-        self.assertEqual(responses[0]['result'], 'ok')
+        self.assertDictHasKey(responses[0], 'error')
 
-    def test_connection_error_triggers_retry(self):
-        attempts = [0]
-
+    def test_connection_error_sends_error(self):
         def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] == 1:
-                raise ConnectionError('Connection reset by peer')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
+            raise ConnectionError('Connection reset by peer')
 
         responses = self._run_main(
             [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
             forward_side_effect=forward)
-        self.assertEqual(responses[0]['result'], 'ok')
+        self.assertDictHasKey(responses[0], 'error')
 
-    def test_os_error_triggers_retry(self):
-        attempts = [0]
-
+    def test_os_error_sends_error(self):
         def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] == 1:
-                raise OSError('Network unreachable')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
+            raise OSError('Network unreachable')
 
         responses = self._run_main(
             [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
             forward_side_effect=forward)
-        self.assertEqual(responses[0]['result'], 'ok')
+        self.assertDictHasKey(responses[0], 'error')
 
-    def test_connection_reset_error_triggers_retry(self):
+    def test_connection_reset_error_sends_error(self):
         """ConnectionResetError (server crashed mid-response)."""
-        attempts = [0]
-
         def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] == 1:
-                raise ConnectionResetError('Connection reset by peer')
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
+            raise ConnectionResetError('Connection reset by peer')
 
         responses = self._run_main(
             [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
             forward_side_effect=forward)
-        self.assertEqual(responses[0]['result'], 'ok')
-
-    def test_mixed_error_types_all_trigger_retry(self):
-        """Different error types across retries — all caught."""
-        import urllib.error
-        attempts = [0]
-        errors = [
-            urllib.error.URLError('Connection refused'),
-            ConnectionError('Connection reset'),
-            OSError('Network unreachable'),
-        ]
-
-        def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] <= 3:
-                raise errors[attempts[0] - 1]
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'ok'}
-
-        responses = self._run_main(
-            [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
-            forward_side_effect=forward)
-        self.assertEqual(responses[0]['result'], 'ok')
-        self.assertEqual(attempts[0], 4)
+        self.assertDictHasKey(responses[0], 'error')
 
     def test_non_connection_error_not_retried(self):
-        """ValueError from forward is not retried — treated as malformed response."""
+        """ValueError from forward is treated as malformed response."""
         call_count = [0]
         def forward(url, msg, **kw):
             call_count[0] += 1
             raise ValueError('unexpected error')
 
         # ValueError is caught by the (JSONDecodeError, ValueError) handler,
-        # which sends an error response and marks disconnected — no retry.
+        # which sends an error response and marks disconnected.
         responses = self._run_main(
             [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
             forward_side_effect=forward)
         self.assertLen(responses, 1)
         self.assertIn('error', responses[0])
-        # Only called once — no retry for non-connection errors
         self.assertEqual(call_count[0], 1)
 
     # --- Disconnection and reconnection ---
 
     def test_disconnect_triggers_reconnect_on_next_message(self):
-        """After all retries fail, next message calls wait_for_envoy again."""
+        """After failure, next message calls wait_for_envoy again."""
         import urllib.error
         call_count = [0]
 
         def forward(url, msg, **kw):
             call_count[0] += 1
-            if call_count[0] <= 4:  # First msg: all 4 attempts fail
+            if call_count[0] == 1:  # First msg fails (single attempt)
                 raise urllib.error.URLError('refused')
             return {'jsonrpc': '2.0', 'id': msg.get('id'), 'result': 'back'}
 
@@ -1017,7 +961,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
 
         def forward(url, msg, **kw):
             call_count[0] += 1
-            if call_count[0] <= 4:  # First message fails all retries
+            if call_count[0] == 1:  # First message fails (single attempt)
                 raise urllib.error.URLError('down')
             return {'jsonrpc': '2.0', 'id': msg['id'], 'result': 'up'}
 
@@ -1046,24 +990,20 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertDictHasKey(responses[0], 'error')
         self.assertEqual(responses[1]['result'], 'up')
 
-    # --- HTTP 500 during forward triggers retry (unlike wait_for_envoy) ---
+    # --- HTTP 500 during forward (single attempt, no retry) ---
 
-    def test_http_500_triggers_retry_in_forward_path(self):
-        """HTTPError (subclass of URLError) is caught by retry loop."""
+    def test_http_500_sends_error(self):
+        """HTTPError (subclass of URLError) is caught and returns error."""
         import urllib.error
-        attempts = [0]
 
         def forward(url, msg, **kw):
-            attempts[0] += 1
-            if attempts[0] == 1:
-                raise urllib.error.HTTPError('url', 500, 'Server Error', {}, None)
-            return {'jsonrpc': '2.0', 'id': 1, 'result': 'recovered'}
+            raise urllib.error.HTTPError('url', 500, 'Server Error', {}, None)
 
         responses = self._run_main(
             [{'jsonrpc': '2.0', 'id': 1, 'method': 'x'}],
             forward_side_effect=forward)
         self.assertLen(responses, 1)
-        self.assertEqual(responses[0]['result'], 'recovered')
+        self.assertDictHasKey(responses[0], 'error')
 
     # --- Notification handling ---
 
@@ -1347,17 +1287,23 @@ class TestBridgeProcessManagement(EmbodyTestCase):
 class TestBridgeMetaTools(EmbodyTestCase):
 
     def _make_state(self, **overrides):
-        state = {
-            'connected': False,
-            'td_pid': None,
-            'last_connected_time': None,
-            'crash_detected': False,
-            'launch_timestamps': [],
-            'config': {},
-            'config_path': None,
-            'url': 'http://localhost:9870/mcp',
+        """Construct a BridgeState (v2) for handler tests.
+
+        Accepts the same kwargs the v1 dict-based factory did.  Fields not
+        in BridgeState's constructor signature are applied via setattr after
+        construction so the call sites in this file don't need to change.
+        """
+        # BridgeState requires url as a kwarg; the rest are optional.
+        constructor_kwargs = {
+            'url': overrides.pop('url', 'http://localhost:9870/mcp'),
         }
-        state.update(overrides)
+        for k in ('td_pid', 'config', 'config_path', 'active_name'):
+            if k in overrides:
+                constructor_kwargs[k] = overrides.pop(k)
+        state = bridge.BridgeState(**constructor_kwargs)
+        # Apply remaining attribute overrides directly
+        for k, v in overrides.items():
+            setattr(state, k, v)
         return state
 
     def test_get_td_status_disconnected(self):
@@ -1379,7 +1325,8 @@ class TestBridgeMetaTools(EmbodyTestCase):
         state = self._make_state(td_pid=99999999)
         result = bridge.handle_get_td_status(state)
         self.assertTrue(result['crash_detected'])
-        self.assertTrue(state['crash_detected'])  # Side-effect on state
+        with state:
+            self.assertTrue(state.crash_detected)  # Side-effect on state
 
     def test_get_td_status_restart_attempts(self):
         state = self._make_state()
@@ -1394,8 +1341,13 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertEqual(result['restart_attempts_remaining'], 0)
 
     def test_launch_td_no_executable(self):
-        state = self._make_state(config={})
-        result = bridge.handle_launch_td({}, state)
+        # Mock find_td_pid → None so the "already running" guard doesn't
+        # short-circuit before we reach the missing-config check.  Without
+        # this the test fails on any machine actually running TD (e.g. the
+        # Embody dev project itself).
+        with patch.object(bridge, 'find_td_pid', return_value=None):
+            state = self._make_state(config={})
+            result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
         self.assertIn('.envoy.json', result['message'])
 
@@ -1515,8 +1467,9 @@ class TestBridgeMetaTools(EmbodyTestCase):
             result = bridge.handle_restart_td({}, state)
         self.assertEqual(result['status'], 'success')
         self.assertIn('67890', result['message'])
-        self.assertTrue(state['connected'])
-        self.assertEqual(state['td_pid'], 67890)
+        with state:
+            self.assertTrue(state.connected)
+            self.assertEqual(state.td_pid, 67890)
 
     def test_restart_td_clears_state(self):
         """Restart clears connection state before relaunch."""
@@ -1533,7 +1486,8 @@ class TestBridgeMetaTools(EmbodyTestCase):
                 config={'td_executable': '/td', 'toe_path': 't.toe'})
             result = bridge.handle_restart_td({}, state)
         self.assertEqual(result['status'], 'partial')
-        self.assertFalse(state['crash_detected'])
+        with state:
+            self.assertFalse(state.crash_detected)
 
     # --- dispatch ---
 
@@ -1718,20 +1672,577 @@ class TestBridgeToolListAugmentation(EmbodyTestCase):
 
 class TestBridgeConnectionLostMessage(EmbodyTestCase):
 
+    def _state(self, td_pid):
+        return bridge.BridgeState(url='http://localhost:9870/mcp', td_pid=td_pid)
+
     def test_message_no_pid(self):
-        state = {'td_pid': None, 'crash_detected': False}
+        state = self._state(None)
         msg = bridge.connection_lost_message(state)
         self.assertIn('connection lost', msg.lower())
         self.assertIn('launch_td', msg)
 
     def test_message_dead_pid(self):
-        state = {'td_pid': 99999999, 'crash_detected': False}
+        state = self._state(99999999)
         msg = bridge.connection_lost_message(state)
         self.assertIn('crashed', msg.lower())
-        self.assertTrue(state['crash_detected'])
+        with state:
+            self.assertTrue(state.crash_detected)
 
     def test_message_alive_pid(self):
-        state = {'td_pid': os.getpid(), 'crash_detected': False}
+        state = self._state(os.getpid())
         msg = bridge.connection_lost_message(state)
         self.assertIn('not responding', msg.lower())
         self.assertIn(str(os.getpid()), msg)
+
+
+# =====================================================================
+# Bridge v2 — BridgeState, notify_stdout, reconciler, caching, hashing
+# =====================================================================
+#
+# These tests cover the v2 upgrade described in
+# /Users/rosco/.claude/plans/inherited-seeking-cosmos.md
+# (items 1-6: BridgeState class, notify_stdout helper, listChanged=true,
+# tool list caching, tool hash diff detection, reconciler thread).
+#
+# Every v2 symbol is probed at import time so the existing v1 tests
+# keep running cleanly even before the parallel implementation lands.
+# A test class using a missing symbol raises SkipTest in setUp via the
+# _require_v2(...) helper.
+# =====================================================================
+
+import threading
+
+# --- v2 symbol probing --------------------------------------------------
+#
+# Each feature probed independently so partial v2 landings still run
+# whichever tests they support.
+
+_V2_BRIDGE_STATE = hasattr(bridge, 'BridgeState')
+_V2_NOTIFY_STDOUT = hasattr(bridge, 'notify_stdout')
+_V2_HASH_TOOLS = hasattr(bridge, '_hash_tools') or hasattr(bridge, 'hash_tools')
+_V2_RECONCILE = hasattr(bridge, 'reconcile')
+_V2_LIST_CHANGED_TRUE = True  # checked at runtime from initialize response
+
+
+def _get_hash_tools():
+    """Return whichever hash-tools symbol exists (private or public)."""
+    return getattr(bridge, '_hash_tools', None) or getattr(bridge, 'hash_tools', None)
+
+
+def _require_v2(flag, feature):
+    """Call from setUp to skip the whole class if a v2 symbol is missing."""
+    if not flag:
+        raise SkipTest(f'bridge v2 {feature} not yet implemented')
+
+
+# =====================================================================
+# Shared v2 fixtures
+# =====================================================================
+
+def _make_v2_state(**overrides):
+    """
+    Build a mock state object for reconciler tests.
+
+    Prefers the real BridgeState if available; otherwise returns a
+    SimpleNamespace-ish object supporting both attribute access and
+    a context-manager protocol (for `with state:` lock scoping).
+    """
+    defaults = dict(
+        connected=False,
+        td_pid=None,
+        url='http://localhost:9870/mcp',
+        config={},
+        config_path=None,
+        config_mtime=0,
+        cached_tools=None,
+        cached_tools_hash=None,
+        last_heartbeat_ok=0,
+        last_connected_time=None,
+        launch_timestamps=[],
+        crash_detected=False,
+        active_name=None,
+        known_td_pids=set(),
+    )
+    defaults.update(overrides)
+
+    if _V2_BRIDGE_STATE:
+        # BridgeState's __init__ only accepts a small set of constructor
+        # kwargs (url, td_pid, config, config_path, active_name). Apply
+        # the rest via setattr after construction.
+        BS = bridge.BridgeState
+        ctor_keys = ('url', 'td_pid', 'config', 'config_path', 'active_name')
+        ctor_kwargs = {k: defaults[k] for k in ctor_keys if k in defaults}
+        try:
+            inst = BS(**ctor_kwargs)
+        except TypeError:
+            # Implementation may differ — try constructing with just url.
+            inst = BS(url=defaults.get('url', 'http://localhost:9870/mcp'))
+        for k, v in defaults.items():
+            if k in ctor_keys:
+                continue
+            try:
+                setattr(inst, k, v)
+            except Exception:
+                pass
+        return inst
+
+    # v1 fallback — plain object with lock-compatible context manager
+    class _FauxState:
+        def __init__(self, d):
+            self.__dict__.update(d)
+            self._lock = threading.RLock()
+
+        def __enter__(self):
+            self._lock.acquire()
+            return self
+
+        def __exit__(self, *a):
+            self._lock.release()
+
+    return _FauxState(defaults)
+
+
+class _StdoutCapture:
+    """Thread-safe stdout collector used by notify_stdout tests."""
+
+    def __init__(self):
+        self._buf = io.StringIO()
+        self._lock = threading.Lock()
+
+    def write(self, s):
+        with self._lock:
+            self._buf.write(s)
+
+    def flush(self):
+        pass
+
+    def getvalue(self):
+        with self._lock:
+            return self._buf.getvalue()
+
+
+# =====================================================================
+# Test case 1 — BridgeState locking under contention
+# =====================================================================
+
+class TestBridgeStateLocking(EmbodyTestCase):
+    """Two threads hammering a BridgeState counter produce no corruption."""
+
+    def setUp(self):
+        _require_v2(_V2_BRIDGE_STATE, 'BridgeState')
+
+    def test_concurrent_increment_no_corruption(self):
+        state = _make_v2_state()
+        # Seed a counter field. BridgeState may not declare this attribute
+        # by default — setattr should succeed either way.
+        setattr(state, 'counter', 0)
+
+        iterations = 10_000
+        errors = []
+
+        def hammer():
+            try:
+                for _ in range(iterations):
+                    with state:
+                        state.counter = state.counter + 1
+            except Exception as e:
+                errors.append(e)
+
+        t1 = threading.Thread(target=hammer, name='hammer-1')
+        t2 = threading.Thread(target=hammer, name='hammer-2')
+        t1.start()
+        t2.start()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        self.assertFalse(t1.is_alive(), 'Thread 1 did not finish within 5s')
+        self.assertFalse(t2.is_alive(), 'Thread 2 did not finish within 5s')
+        self.assertEqual(
+            errors, [],
+            f'Threads raised: {[type(e).__name__ + ": " + str(e) for e in errors]}')
+        self.assertEqual(
+            state.counter, 2 * iterations,
+            f'Expected {2 * iterations}, got {state.counter} — lock did not serialize writes')
+
+
+# =====================================================================
+# Test case 2 — Tool hash diff detection
+# =====================================================================
+
+class TestBridgeHashTools(EmbodyTestCase):
+    """_hash_tools produces stable, order-independent, name/description-sensitive hashes."""
+
+    def setUp(self):
+        _require_v2(_V2_HASH_TOOLS, '_hash_tools')
+        self.hash_tools = _get_hash_tools()
+
+    def _tool(self, name, description=''):
+        return {'name': name, 'description': description}
+
+    def test_identical_lists_same_hash(self):
+        a = [self._tool('create_op', 'Create an operator'),
+             self._tool('delete_op', 'Delete an operator')]
+        b = [self._tool('create_op', 'Create an operator'),
+             self._tool('delete_op', 'Delete an operator')]
+        self.assertEqual(self.hash_tools(a), self.hash_tools(b))
+
+    def test_reordered_lists_same_hash(self):
+        """Order must not affect the hash — plan says 'sort by name first'."""
+        a = [self._tool('create_op', 'Create an operator'),
+             self._tool('delete_op', 'Delete an operator'),
+             self._tool('cook_op', 'Cook an operator')]
+        b = [self._tool('cook_op', 'Cook an operator'),
+             self._tool('create_op', 'Create an operator'),
+             self._tool('delete_op', 'Delete an operator')]
+        self.assertEqual(
+            self.hash_tools(a), self.hash_tools(b),
+            'Reordered tool lists must produce identical hashes')
+
+    def test_added_tool_changes_hash(self):
+        a = [self._tool('create_op', 'x')]
+        b = [self._tool('create_op', 'x'),
+             self._tool('delete_op', 'y')]
+        self.assertNotEqual(self.hash_tools(a), self.hash_tools(b))
+
+    def test_removed_tool_changes_hash(self):
+        a = [self._tool('create_op', 'x'),
+             self._tool('delete_op', 'y')]
+        b = [self._tool('create_op', 'x')]
+        self.assertNotEqual(self.hash_tools(a), self.hash_tools(b))
+
+    def test_renamed_tool_changes_hash(self):
+        a = [self._tool('create_op', 'x')]
+        b = [self._tool('create_operator', 'x')]
+        self.assertNotEqual(
+            self.hash_tools(a), self.hash_tools(b),
+            'Renamed tool must produce a different hash')
+
+    def test_description_change_changes_hash(self):
+        """Description is part of the hash per the plan — any change matters."""
+        a = [self._tool('create_op', 'Create an operator')]
+        b = [self._tool('create_op', 'Create an op')]
+        self.assertNotEqual(self.hash_tools(a), self.hash_tools(b))
+
+    def test_empty_list_produces_stable_hash(self):
+        self.assertEqual(self.hash_tools([]), self.hash_tools([]))
+
+
+# =====================================================================
+# Test case 3 — Reconciler state transitions
+# =====================================================================
+
+class TestBridgeReconcilerTransitions(EmbodyTestCase):
+    """
+    Verify that reconcile() fires the on_tools_change callback only
+    on connection transitions (False→True and True→False), never on
+    steady-state ticks (True→True).
+
+    Mock ping sequence: False, True, True, False.
+    Expected notifications: 0, 1 (became connected), 1 (unchanged), 2 (became disconnected).
+    """
+
+    def setUp(self):
+        _require_v2(_V2_RECONCILE, 'reconcile')
+        _require_v2(_V2_BRIDGE_STATE, 'BridgeState')
+
+    def test_fires_on_each_transition_exactly_once(self):
+        state = _make_v2_state(
+            connected=False,
+            url='http://localhost:9870/mcp',
+            config_path=None,  # disable phase-1 config reconciliation
+        )
+
+        ping_sequence = [False, True, True, False]
+        ping_idx = [0]
+
+        def fake_ping(url, timeout=2):
+            i = ping_idx[0]
+            ping_idx[0] = i + 1
+            return ping_sequence[i]
+
+        # Mock tool fetch to return a stable list — avoids hash-mismatch noise.
+        # Using ONE stable list means on_tools_change fires only on transitions,
+        # not on in-place tool-list changes.
+        stable_tools = [{'name': 't1', 'description': 'd1'}]
+
+        notify_count = [0]
+
+        def on_tools_change():
+            notify_count[0] += 1
+
+        # Patch only the functions that actually exist on the module —
+        # the reconciler may use any subset depending on implementation.
+        patches_spec = {
+            'ping_backend_mcp': fake_ping,
+            'fetch_tools_list': lambda url, *a, **kw: stable_tools,
+            'find_all_td_pids': lambda: [],
+            'is_process_alive': lambda pid: False,
+        }
+        p_list = [
+            patch.object(bridge, name, new=impl)
+            for name, impl in patches_spec.items()
+            if hasattr(bridge, name)
+        ]
+        # Also kill time.sleep just in case reconcile is called in a loop.
+        p_list.append(patch('time.sleep'))
+
+        for p in p_list:
+            p.start()
+        try:
+            # Tick 1: ping=False. was_connected=False -> no transition. notify=0.
+            bridge.reconcile(state, on_tools_change, heartbeat=True)
+            # Tick 2: ping=True. was=False -> became_connected. notify=1.
+            bridge.reconcile(state, on_tools_change, heartbeat=True)
+            # Tick 3: ping=True. was=True -> no transition. notify=1.
+            bridge.reconcile(state, on_tools_change, heartbeat=True)
+            # Tick 4: ping=False. was=True -> became_disconnected. notify=2.
+            bridge.reconcile(state, on_tools_change, heartbeat=True)
+        finally:
+            for p in p_list:
+                p.stop()
+
+        self.assertEqual(
+            notify_count[0], 2,
+            f'Expected exactly 2 transitions (connect + disconnect), got {notify_count[0]}')
+
+
+# =====================================================================
+# Test case 5 — listChanged: true in initialize response
+# =====================================================================
+
+class TestBridgeListChangedCapability(EmbodyTestCase):
+    """The initialize response must declare capabilities.tools.listChanged = true."""
+
+    def _run_initialize(self, wait_result):
+        """Feed a single initialize message through main(), return parsed response.
+
+        The v2 background reconciler is neutralized at module load (see top
+        of file), so this test exercises only the main-thread initialize
+        handler.
+        """
+        stdin = io.StringIO(json.dumps(
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'}) + '\n')
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', stderr), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=wait_result), \
+             patch.object(bridge, 'forward_to_http',
+                          return_value={'jsonrpc': '2.0', 'id': 1,
+                                        'result': {}}), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'):
+            bridge.main()
+
+        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
+        if not lines:
+            return None
+        return json.loads(lines[0])
+
+    def test_list_changed_true_when_disconnected(self):
+        """Bridge should advertise listChanged=true even when TD is down.
+
+        v1 answers initialize locally when disconnected but hardcodes
+        listChanged=False at line 1066 of envoy-bridge.py. v2 step 3
+        flips this to True. This is the primary assertion for the
+        listChanged capability change.
+        """
+        resp = self._run_initialize(wait_result=False)
+        self.assertIsNotNone(resp, 'initialize must produce a response')
+        self.assertIn('result', resp)
+        caps = resp['result'].get('capabilities', {})
+        tools_cap = caps.get('tools', {})
+        self.assertEqual(
+            tools_cap.get('listChanged'), True,
+            f'capabilities.tools.listChanged must be True (got {tools_cap!r}). '
+            'This is bridge v2 step 3 in the plan.')
+
+
+# =====================================================================
+# Test case 7 — tools/list cache hit within 5s
+# =====================================================================
+
+class TestBridgeToolsListCache(EmbodyTestCase):
+    """Second tools/list within 5s returns cached response, no HTTP forward."""
+
+    def setUp(self):
+        # The cache feature is step 6 in the plan. If the implementation
+        # doesn't yet have caching (no `cached_tools` attribute path),
+        # skip rather than fail. We probe by running a quick introspection.
+        if not _V2_BRIDGE_STATE:
+            raise SkipTest('bridge v2 caching depends on BridgeState (step 1)')
+
+    def test_second_tools_list_within_window_uses_cache(self):
+        """
+        Send two tools/list requests back-to-back. Only the first should
+        forward to TD; the second should return the cached response.
+
+        We count tools/list-specific forwards (ignoring any initialize or
+        notification forwards) so implementation details around other
+        methods don't affect the assertion.
+        """
+        td_tools_result = {
+            'tools': [{'name': 'create_op', 'description': 'create'}],
+        }
+
+        tools_list_forward_count = [0]
+
+        def forward_counter(url, msg, **kw):
+            if msg.get('method') == 'tools/list':
+                tools_list_forward_count[0] += 1
+            return {'jsonrpc': '2.0', 'id': msg.get('id'),
+                    'result': td_tools_result}
+
+        msgs = [
+            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'},
+            {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
+            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
+            {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/list'},
+        ]
+        stdin = io.StringIO('\n'.join(json.dumps(m) for m in msgs) + '\n')
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+
+        # The v2 background reconciler is neutralized at module load
+        # (see top of file), so forward_to_http calls only come from the
+        # main-thread tools/list path.
+        # Freeze time.time so both requests land within the 5s cache window.
+        # Also freeze time.monotonic in case the cache uses it.
+        with patch.object(sys, 'stdin', stdin), \
+             patch.object(sys, 'stdout', stdout), \
+             patch.object(sys, 'stderr', stderr), \
+             patch.object(sys, 'argv', ['envoy_bridge.py']), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
+             patch.object(bridge, 'forward_to_http', side_effect=forward_counter), \
+             patch.object(bridge, 'find_td_pid', return_value=None), \
+             patch.object(bridge, 'kill_stale_bridges'), \
+             patch('time.sleep'), \
+             patch('time.time', return_value=1000.0), \
+             patch('time.monotonic', return_value=1000.0):
+            bridge.main()
+
+        # Sanity: both tools/list responses should have been written.
+        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
+        responses = [json.loads(l) for l in lines]
+        tools_list_responses = [
+            r for r in responses
+            if 'result' in r and isinstance(r['result'], dict)
+            and 'tools' in r['result']
+        ]
+        self.assertGreaterEqual(
+            len(tools_list_responses), 2,
+            'Expected two tools/list responses (both should succeed)')
+
+        self.assertEqual(
+            tools_list_forward_count[0], 1,
+            f'Expected exactly 1 tools/list forward (second should hit cache), '
+            f'got {tools_list_forward_count[0]}. '
+            'This is bridge v2 step 6 in the plan.')
+
+
+# =====================================================================
+# Test case 9 — Stdout serialization under concurrent writers
+# =====================================================================
+
+class TestBridgeStdoutSerialization(EmbodyTestCase):
+    """
+    10 threads × 100 concurrent calls to notify_stdout must produce
+    only valid newline-delimited JSON (no interleaved bytes).
+    """
+
+    def setUp(self):
+        _require_v2(_V2_NOTIFY_STDOUT, 'notify_stdout')
+
+    def test_concurrent_notify_stdout_produces_valid_jsonl(self):
+        capture = _StdoutCapture()
+        errors = []
+
+        def hammer(thread_id):
+            try:
+                for i in range(100):
+                    # Mix methods + params so every line is a distinct object.
+                    bridge.notify_stdout(
+                        'notifications/tools/list_changed',
+                        params={'thread': thread_id, 'seq': i},
+                    )
+            except TypeError:
+                # If notify_stdout doesn't accept params, retry without.
+                try:
+                    for i in range(100):
+                        bridge.notify_stdout('notifications/tools/list_changed')
+                except Exception as e:
+                    errors.append(e)
+            except Exception as e:
+                errors.append(e)
+
+        with patch.object(sys, 'stdout', capture):
+            threads = [
+                threading.Thread(target=hammer, args=(tid,), name=f'notif-{tid}')
+                for tid in range(10)
+            ]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=5)
+                self.assertFalse(t.is_alive(), f'{t.name} did not finish')
+
+        self.assertEqual(
+            errors, [],
+            f'Worker threads raised: {[type(e).__name__ + ": " + str(e) for e in errors]}')
+
+        raw = capture.getvalue()
+        lines = [l for l in raw.split('\n') if l.strip()]
+
+        # Expect exactly 10 × 100 = 1000 lines (unless notify_stdout was
+        # called with fewer args due to TypeError fallback — still should
+        # be 1000).
+        self.assertEqual(
+            len(lines), 1000,
+            f'Expected 1000 notification lines, got {len(lines)}')
+
+        # The critical assertion: every line parses as valid JSON.
+        bad_lines = []
+        for idx, line in enumerate(lines):
+            try:
+                obj = json.loads(line)
+                # Must be a notification — no id, has method
+                if not isinstance(obj, dict) or 'method' not in obj:
+                    bad_lines.append((idx, f'not a notification: {line[:80]}'))
+                if obj.get('jsonrpc') != '2.0':
+                    bad_lines.append((idx, f'missing jsonrpc=2.0: {line[:80]}'))
+            except json.JSONDecodeError as e:
+                bad_lines.append((idx, f'invalid JSON: {e}: {line[:80]}'))
+
+        self.assertEqual(
+            bad_lines, [],
+            f'{len(bad_lines)} corrupt lines (lock not serializing stdout writes): '
+            f'{bad_lines[:5]}')
+
+
+# =====================================================================
+# Stubs for tests that depend on implementation steps 7-9
+# (deferred to a later bridge v2 pass)
+# =====================================================================
+
+class TestBridgeV2DeferredStubs(EmbodyTestCase):
+    """
+    Stubs for plan test cases 4, 6, 8 — left intentionally as SkipTest
+    so they show up in the runner as a visible reminder that the next
+    bridge v2 phase still needs coverage.
+    """
+
+    def test_local_ping_handler_stub(self):
+        """Plan case 4 — depends on bridge v2 step 4 (local ping handling)."""
+        raise SkipTest('depends on bridge v2 step 4: local ping handler')
+
+    def test_find_all_td_pids_stub(self):
+        """Plan case 6 — depends on bridge v2 step 8 (find_all_td_pids)."""
+        raise SkipTest('depends on bridge v2 step 8: find_all_td_pids')
+
+    def test_initial_probe_3s_stub(self):
+        """Plan case 8 — depends on bridge v2 step 7 (3s initial probe)."""
+        raise SkipTest('depends on bridge v2 step 7: 3s initial probe + bridge-only fallback')

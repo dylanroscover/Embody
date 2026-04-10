@@ -4,31 +4,31 @@
 
 Before any MCP tool call, verify TD is running and reachable:
 
-1. **Check for MCP tools**: Search for `get_td_status` or any Envoy tool. If no MCP tools are available, the bridge is stuck or disconnected — go to Recovery.
-2. **If tools exist**: Call `get_td_status`. If TD is not running, call `launch_td`.
+1. **Check for MCP tools**: Search for `get_td_status` or any Envoy tool. The bridge v2 disk cache means tools are always available at session start — even if TD is down, bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`) are served from cache.
+2. **If tools exist**: Call `get_td_status`. If TD is not running, call `launch_td`. The bridge's reconciler auto-detects TD state changes every 1-5 seconds and handles reconnection automatically.
 
-## Recovery — No MCP Tools Available
+## How the Bridge Works (v2)
 
-When the bridge has no tools registered (ToolSearch returns nothing for Envoy tools), the bridge failed to connect during startup. Fix it:
+The bridge runs a background reconciler thread that continuously manages connectivity:
 
-1. **Check the bridge process**: `pgrep -f envoy-bridge` — is it running?
-2. **Check the bridge log**: Read `dev/logs/envoy-bridge.log` (tail). Look for "Waiting for Envoy" loops (stuck on dead instance) or "stdin closed" (bridge died).
-3. **Check `.envoy.json`**: Is `active` pointing to a dead instance? Is the registered `td_pid` alive? (`ps -p PID`)
-4. **Check if TD is running**: `pgrep -f TouchDesigner` and `lsof -iTCP:PORT -sTCP:LISTEN` for the instance's port.
+- **Config polling** (every 1s): Watches `.envoy.json` for mtime changes. Automatically switches to the new active instance when the config is updated.
+- **Heartbeat** (every 3-30s, dynamic): Pings the backend to detect connect/disconnect transitions. Fast cadence (3s) while disconnected, slow cadence (30s) once stable.
+- **Process discovery**: Detects new and exited TD processes via `find_all_td_pids()`. Forces a config re-read when new TDs appear.
+- **Tool cache**: Persists the tool list to disk so new sessions start with full tools immediately, without waiting for a backend round-trip.
+- **Single-attempt forwarding**: Failed requests return an error immediately — no per-request retry loop. The reconciler handles recovery in the background.
 
-### Fix sequence
+## Recovery — Manual Intervention
 
-1. **If TD is not running**: Launch it directly — `open -a TouchDesigner /path/to/latest.toe`. Do NOT wait for the bridge to do it. Find the latest `.toe` with `ls -t dev/*.toe | head -1`.
-2. **If `.envoy.json` points to a dead instance**: Edit it — set `active` to the correct instance name. The bridge re-reads this file on each reconnection attempt.
-3. **If the bridge is stuck**: `kill PID` to terminate it. Tell the user to **reopen this session/conversation** — this is always the first recovery step. Only if that fails, suggest restarting the MCP server as a fallback.
-4. **Wait for Envoy**: Poll the port — `python3 -c "import socket; s=socket.socket(); s.settimeout(1); s.connect(('127.0.0.1', PORT)); s.close()"` in a loop.
-5. **Once Envoy responds**: The bridge (when restarted) will connect and register tools.
+Most connectivity issues are now handled automatically by the bridge. Manual recovery is only needed when the bridge process itself is broken.
+
+1. **Call `get_td_status`**: This is always available (even when TD is down). It shows connection state, process liveness, instance registry, and any unregistered TD processes.
+2. **If TD is not running**: Call `launch_td`. The bridge will launch TD with the configured `.toe` file and wait for Envoy to become reachable.
+3. **If the wrong instance is active**: Call `switch_instance` to list or switch instances. The reconciler also auto-switches when `.envoy.json` is edited.
+4. **If the bridge process is stuck**: Tell the user to **reopen this session/conversation** — this is always the first recovery step. Only if that fails, suggest restarting the MCP server as a fallback.
 
 ### Common failure: stale active instance
 
-The most frequent cause is `.envoy.json` having `active` set to an instance whose TD process is no longer running. The bridge tries to connect for 60 seconds, fails, returns an error, and tries again on the next request — but Claude Code may not retry `tools/list`, so no tools ever appear.
-
-**Prevention**: When switching instances or ending a session, ensure `.envoy.json` points to a running instance or the primary dev project.
+The most frequent cause of connectivity issues is `.envoy.json` having `active` set to an instance whose TD process is no longer running. The bridge's reconciler detects this automatically via heartbeat failures and reports it in `get_td_status`. Use `launch_td` or `switch_instance` to recover.
 
 ### Common failure: broken venv
 

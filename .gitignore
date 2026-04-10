@@ -36,6 +36,7 @@ logs/
 
 # Embody / Envoy (auto-managed)
 .envoy.json
+.envoy-tools-cache.json
 
 # Promotion
 SUBMISSIONS.md
