@@ -13,7 +13,7 @@ Envoy works with any MCP client, including:
 
 ## Capabilities
 
-Envoy exposes **40+ MCP tools** organized into categories:
+Envoy exposes **46 MCP tools** organized into categories:
 
 | Category | Examples |
 |----------|---------|
@@ -27,6 +27,7 @@ Envoy exposes **40+ MCP tools** organized into categories:
 | **Embody Integration** | Tag, save, query externalizations |
 | **TDN Export/Import** | Export/import network snapshots as JSON |
 | **Code Execution** | Run arbitrary Python in TouchDesigner |
+| **Batch Operations** | Combine multiple tool calls into a single request |
 
 For the complete tool reference, see [Tools Reference](tools-reference.md).
 
@@ -43,7 +44,7 @@ You can regenerate these files at any time with `op.Embody.InitEnvoy()` (MCP + A
 ## Key Features
 
 - **Zero setup** — Embody auto-installs all dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled
-- **Auto-restarts** on port change
+- **Auto-restarts** on port change or crash (exponential backoff, up to 3 attempts)
 - **Localhost-only** binding (127.0.0.1) for security
 - **Piggybacked logs** — every MCP response includes recent log entries
 - **30-second timeout** per operation to prevent hangs
