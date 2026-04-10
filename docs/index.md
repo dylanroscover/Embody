@@ -7,7 +7,7 @@ hide:
 
 ### Create at the speed of thought
 
-The gap between what you imagine and what's on the screen is where ideas die. Embody collapses it. Describe a network in plain language and watch it appear. Throw it away. Try a different approach. Branch off the one that works. The tool keeps up with you, instead of the other way around.
+Embody puts your ideas on screen as fast as you can describe them. Describe a network in plain language and watch it appear. Want to try a different direction? Spin up a new approach in seconds. Branch off the one that works. The tool keeps up with you, instead of the other way around.
 
 Embody is three tools working together — *forward velocity*, *lateral velocity*, and the substrate that makes both possible.
 
@@ -25,7 +25,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Throw away an experiment, branch off a good one, restore yesterday's state — all in seconds. Externalized files are the source of truth, so every project opens already in flow.
+    Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore yesterday's state — all in seconds. Externalized files are the source of truth, so every project opens already in flow.
 
     [:octicons-arrow-right-24: Get started](embody/getting-started.md)
 
@@ -33,7 +33,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. Without TDN, the rest of this is impossible.
+    TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. TDN is what makes the rest of this possible.
 
     [:octicons-arrow-right-24: Learn about TDN](tdn/index.md)
 
@@ -48,7 +48,7 @@ You and your AI assistant, in the same session, with full context of your live n
 | | Capability | Example |
 |---|-----------|---------|
 | :material-plus-circle: | **Build entire networks from a sentence** | "Build me a noise-driven particle system." |
-| :material-refresh: | **Throw it away and try a different approach** | "Actually, make it react to audio instead." |
+| :material-refresh: | **Try a different approach in seconds** | "Actually, make it react to audio instead." |
 | :material-tune: | **Read & set any parameter** | "Set the noise frequency to match the audio input." |
 | :material-code-braces: | **Write extensions** | "Create an extension class that manages scene transitions." |
 | :material-bug: | **Debug errors** | "Why is my render chain producing a black output?" |

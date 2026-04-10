@@ -12,22 +12,22 @@
 
 ---
 
-The gap between what you imagine and what's on the screen is where ideas die. Embody collapses it. Describe a network in plain language and watch it appear — operators, connections, parameters, the works. Don't like it? Throw it away in seconds and try a different approach. Compare attempts side by side. Branch off the one that works. **The tool keeps up with you, instead of the other way around.**
+Embody puts your ideas on screen as fast as you can describe them. Operators, connections, parameters, the works. Want to try a different direction? Spin up a new approach in seconds. Compare attempts side by side. Branch off the one that works. **The tool keeps up with you, instead of the other way around.**
 
 ## Three Tools, One Idea
 
 **Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
 
-**Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Throw away an experiment, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
+**Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
 
-**TDN** — *the substrate that makes both possible.* TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. Without TDN, the rest of this is impossible.
+**TDN** — *the substrate that makes both possible.* TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDN is what makes the rest of this possible.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 
 | | What | Why it matters |
 |---|---|---|
 | 🤖 | **Envoy MCP Server** | 45 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
-| 📄 | **TDN Network Format** | Networks become text. Diff two versions, revert a bad idea, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
+| 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
 | 📦 | **Automatic Restoration** | Externalized operators rebuild themselves from disk on every project open. The `.toe` is no longer the source of truth — your files are. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
 
@@ -119,7 +119,7 @@ When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD 
 
 TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable JSON file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it on the next project open.
 
-This is the substrate. Without it, "create at the speed of thought" is a tagline. With it, every other capability falls out for free.
+This is the substrate. Every other capability — AI-driven building, version control, automatic restoration — builds on top of it.
 
 - **Entire project**: `ctrl + shift + e`
 - **Current COMP**: `ctrl + alt + e`
