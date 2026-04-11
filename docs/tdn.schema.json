@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.json",
   "title": "TDN (TouchDesigner Network)",
-  "description": "JSON schema for TDN v1.1 — a human-readable format for representing TouchDesigner operator networks.",
+  "description": "JSON schema for TDN v1.3 — a human-readable format for representing TouchDesigner operator networks.",
   "type": "object",
   "required": ["format", "version", "generator", "td_build", "exported_at", "network_path", "options", "operators"],
   "additionalProperties": false,
@@ -525,14 +525,19 @@
         },
         "sequences": {
           "type": "object",
-          "description": "Built-in parameter sequences. Keyed by sequence name, each value is an array of block objects with base-name parameter values. Added in v1.3.",
+          "description": "Built-in parameter sequences. Keyed by sequence name, each value is an array of block objects with base-name parameter values. Array length = numBlocks. Empty objects {} represent blocks with all default values. Added in v1.3.",
           "additionalProperties": {
             "type": "array",
             "items": {
               "type": "object",
-              "additionalProperties": true
+              "additionalProperties": { "$ref": "#/$defs/parameterValue" }
             }
           }
+        },
+        "dat_read_only": {
+          "type": "boolean",
+          "const": true,
+          "description": "true if this DAT is a read-only companion (info DAT, callback DAT, etc.) whose content was not exported. Import skips DAT content for these operators. Added in v1.3."
         },
         "palette_clone": {
           "type": "boolean",

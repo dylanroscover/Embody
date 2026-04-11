@@ -1,6 +1,6 @@
 # TDN Specification
 
-**Version 1.2**
+**Version 1.3**
 
 TDN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional — you generate, and you're stuck with what you got. With it, every step of the loop — generate, compare, revert, branch — runs at the speed of typing.
 
@@ -20,7 +20,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 ```json
 {
   "format": "tdn",
-  "version": "1.2",
+  "version": "1.3",
   "build": 1,
   "generator": "Embody/5.0.237",
   "td_build": "2025.32050",
@@ -48,7 +48,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
-| `version` | string | Yes | Format version. Currently `"1.2"`. |
+| `version` | string | Yes | Format version. Currently `"1.3"`. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
@@ -220,6 +220,68 @@ A constant parameter is included only if its current value differs from its defa
 - **Floats**: considered different if `abs(current - default) > 1e-9`
 - **OP-reference parameters**: `None` and `""` are treated as equivalent (both mean "no operator connected")
 - **All other types**: standard equality comparison (`!=`)
+
+### Divergent Defaults and the Creation-Defaults Catalog
+
+Some TouchDesigner operators reset certain parameters during initialization, meaning the value reported by `p.default` differs from the value TouchDesigner actually assigns when the operator is created. For example:
+
+- `cameraCOMP` `tz`: `p.default` reports `0`, but TD creates cameras with `tz = 5`
+- `lightCOMP` `tz`: `p.default` reports `0`, but TD creates lights with `tz = 5`
+- `renderTOP` resolution parameters: reported defaults differ from creation values
+
+If TDN used `p.default` directly for non-default comparison, a user-set value that happens to match `p.default` but differs from the actual creation value would be silently omitted from export. On import, TD would create the operator with the (different) creation value, and the user's intended value would be lost. Conversely, a parameter at the true creation value might be incorrectly included in the export, bloating the file with false positives.
+
+#### The Catalog System
+
+Embody solves this with a three-tier system that discovers and caches the true creation values for every operator type:
+
+**1. Background scan at startup**
+
+On project open, the `CatalogManager` extension checks whether a creation-values catalog exists for the current TD build (stored as a JSON file in the `.embody/` directory at the project root). If no catalog exists, it runs a background scan:
+
+- Iterates every creatable operator type in TouchDesigner (TOPs, CHOPs, SOPs, DATs, MATs, COMPs, POPs)
+- Creates a temporary instance of each type
+- Compares `p.val` (the actual value TD assigned) against `p.default` (the reported default) for every parameter
+- Records any parameter where the two disagree
+
+The scan processes 1–2 operator types per frame to avoid dropping frames. The resulting catalog is written to `.embody/{build}.json` (e.g., `.embody/2025.33020.json`) and cached for future sessions on the same TD build.
+
+**2. Export/import correction**
+
+During TDN export, the `_getCreationDefault()` method checks the catalog before falling back to `p.default`:
+
+```python
+def _getCreationDefault(self, op_type, par_name, par):
+    divergent = self._getDivergentDefaults(op_type)
+    if par_name in divergent:
+        return divergent[par_name]
+    return par.default
+```
+
+This means TDN compares parameter values against the *actual creation value*, not the *reported default*. Parameters are included in the export if and only if the user's value truly differs from what TD would assign to a freshly created operator.
+
+**3. Cross-build patching**
+
+When a `.tdn` file is opened on a different TD build than the one that exported it, creation defaults may have shifted between builds. The `CatalogManager` handles this automatically:
+
+1. Reads the `td_build` field from each `.tdn` file header
+2. Loads the catalog for the source build (if available)
+3. Loads the catalog for the current build
+4. Finds parameters whose creation defaults changed between the two builds
+5. For each affected operator, checks if the current value matches the *new* default — if so, the parameter was omitted during export (because it matched the *old* default), and TD has now assigned the wrong new default
+6. Patches those parameters back to the old creation value
+
+A summary dialog is shown to the user listing every corrected parameter.
+
+#### Fallback chain
+
+The catalog is loaded in priority order:
+
+1. **`.embody/` catalog file** — per-build JSON written by the background scan
+2. **Embedded `divergent_defaults` table** — a DAT inside the Embody COMP with bootstrap data for known TD builds
+3. **On-the-fly probing** — if neither source has data for the current build, a temporary operator is created at export time to discover the true creation value
+
+This ensures correct non-default comparison regardless of TD version, even on builds that Embody has never seen before.
 
 ---
 
@@ -1121,7 +1183,7 @@ A realistic `.tdn` file demonstrating all major features:
 ```json
 {
   "format": "tdn",
-  "version": "1.2",
+  "version": "1.3",
   "build": 3,
   "generator": "Embody/5.0.237",
   "td_build": "2025.32050",

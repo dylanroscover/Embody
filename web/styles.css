@@ -85,7 +85,7 @@ button:focus-visible,
 }
 .btn:focus-visible { border-radius: 999px; }
 
-p { margin: 0 0 1em; }
+p { margin: 0 0 1em; text-wrap: pretty; }
 
 ul, ol { margin: 0; padding: 0; list-style: none; }
 
@@ -244,6 +244,86 @@ code, kbd, pre {
   flex-shrink: 0;
 }
 .mark__word { line-height: 1; }
+
+/* Mark extension pill (TDN page) */
+.mark__bridge {
+  display: inline-block;
+  width: 18px;
+  height: 1.5px;
+  background: var(--border);
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.mark__link--ext {
+  border-color: var(--border);
+  background: transparent;
+  padding: 0.5rem 1rem 0.5rem 0.75rem;
+  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+}
+.mark__link--ext:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(30, 40, 30, 0.95);
+}
+
+
+/* ------------------------------------------------------------
+   6b. Table of Contents (sticky left sidebar — TDN page)
+   ------------------------------------------------------------ */
+.toc {
+  position: fixed;
+  top: 0;
+  left: clamp(1.25rem, 3vw, 2rem);
+  z-index: 90;
+  max-width: 180px;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+.toc__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-left: 1px solid var(--border-faint);
+  padding-left: 0;
+  pointer-events: auto;
+}
+.toc__link {
+  display: block;
+  padding: 0.65rem 0 0.65rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  text-decoration: none;
+  border-left: 1.5px solid transparent;
+  margin-left: -1px;
+  transition: color 160ms ease, border-color 160ms ease, opacity 400ms ease, transform 400ms ease;
+  opacity: 0;
+  transform: translateY(6px);
+}
+.toc__link--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+.toc__link:hover {
+  color: var(--text-muted);
+}
+.toc__link--active {
+  color: var(--accent);
+  border-left-color: var(--accent);
+}
+.toc__link--active:hover {
+  color: var(--accent-hover);
+}
+
+/* Hide TOC when sidebar would overlap content */
+@media (max-width: 1400px) {
+  .toc { display: none; }
+}
 
 
 /* ------------------------------------------------------------
@@ -503,6 +583,227 @@ code, kbd, pre {
   color: var(--text);
 }
 
+/* ------------------------------------------------------------
+   10b. Compare (binary vs. text — TDN page)
+   ------------------------------------------------------------ */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+.compare__col {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  padding: 2rem 1.85rem 2.1rem;
+}
+.compare__col--tdn {
+  border-color: var(--border);
+}
+.compare__heading {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text);
+  margin: 0 0 1.25rem;
+  letter-spacing: -0.01em;
+}
+.compare__heading code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+.compare__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.compare__list li {
+  position: relative;
+  padding-left: 1.4rem;
+  color: var(--text-muted);
+  font-size: 0.97rem;
+  line-height: 1.55;
+}
+.compare__col--binary .compare__list li::before {
+  content: '\2715';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+}
+.compare__col--tdn .compare__list li::before {
+  content: '\2713';
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+.compare__col--tdn .compare__list li {
+  color: var(--text);
+}
+.compare__list code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+
+/* ------------------------------------------------------------
+   10c. Features grid (what gets captured — TDN page)
+   ------------------------------------------------------------ */
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+.feature {
+  display: flex;
+  gap: 1rem;
+  align-items: start;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.5rem 1.6rem;
+  transition: border-color 200ms ease, background 200ms ease;
+}
+.feature:hover {
+  border-color: var(--border);
+  background: var(--bg-elevated-2);
+}
+.feature__icon {
+  color: var(--accent);
+  font-size: 0.5rem;
+  flex-shrink: 0;
+  margin-top: 0.45rem;
+}
+.feature__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text);
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.01em;
+}
+.feature__desc {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.feature__desc code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+
+/* ------------------------------------------------------------
+   10d. Details (format spec table — TDN page)
+   ------------------------------------------------------------ */
+.details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+.detail {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  padding: 1.5rem 1.5rem;
+}
+.detail__label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: 0.5rem;
+}
+.detail__value {
+  display: block;
+  font-size: 1.05rem;
+  color: var(--text);
+  font-weight: 500;
+}
+.detail__value code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 0.95em;
+}
+
+
+/* ------------------------------------------------------------
+   10e. Sample / full code block (TDN page)
+   ------------------------------------------------------------ */
+.code--full {
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+
+.sample__caption {
+  margin-top: 1.5rem;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+/* JSON comment coloring */
+.c-com { color: var(--text-faint); font-style: italic; }
+
+
+/* ------------------------------------------------------------
+   10f. Pillar variants (TDN page)
+   ------------------------------------------------------------ */
+.pillars--four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.pillar--link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  position: relative;
+  cursor: pointer;
+}
+.pillar--link:hover {
+  border-color: var(--accent);
+  color: inherit;
+}
+.pillar--link:hover .pillar__name {
+  color: var(--accent);
+}
+.pillar__arrow {
+  display: block;
+  margin-top: 1rem;
+  color: var(--accent);
+  font-size: 1.1rem;
+  transition: transform 180ms ease;
+}
+.pillar--link:hover .pillar__arrow {
+  transform: translateX(4px);
+}
+.pillar--link code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+
 .tdn__closer {
   font-size: clamp(1.05rem, 1.6vw, 1.2rem);
   color: var(--text-muted);
@@ -720,6 +1021,8 @@ code, kbd, pre {
     grid-template-columns: 1fr;
     gap: 1rem;
   }
+  .pillars--three { grid-template-columns: 1fr; }
+  .pillars--four { grid-template-columns: 1fr 1fr; }
   .tdn__grid {
     grid-template-columns: 1fr;
     gap: 2rem;
@@ -728,6 +1031,18 @@ code, kbd, pre {
     grid-template-columns: 1fr;
     gap: 0.5rem;
     padding: 1.2rem 0;
+  }
+  .compare {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .features {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+  .details {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
   }
   .footer__inner {
     grid-template-columns: 1fr 1fr;
@@ -769,6 +1084,15 @@ code, kbd, pre {
   .code {
     padding: 1.25rem 1.35rem;
     font-size: 0.76rem;
+  }
+  .features {
+    grid-template-columns: 1fr;
+  }
+  .details {
+    grid-template-columns: 1fr;
+  }
+  .pillars--four {
+    grid-template-columns: 1fr;
   }
 
   .footer__inner {

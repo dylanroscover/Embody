@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>TDN — your network, as text.</title>
+  <meta name="description" content="TDN exports TouchDesigner networks as human-readable JSON. Diffable, AI-readable, and precise enough to rebuild any network from text." />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="TDN — your network, as text." />
+  <meta property="og:description" content="TouchDesigner networks as human-readable JSON. Diffable, AI-readable, and precise enough to rebuild any network from text." />
+  <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
+  <meta property="og:url" content="https://embody.tools/tdn" />
+  <meta property="og:site_name" content="Embody" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="TDN — your network, as text." />
+  <meta name="twitter:description" content="TouchDesigner networks as human-readable JSON. Diffable, AI-readable, and precise enough to rebuild any network from text." />
+  <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
+
+  <!-- Theme -->
+  <meta name="theme-color" content="#181e1e" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- Favicon: inline SVG green dot -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23181e1e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%236ee668'/%3E%3C/svg%3E" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       STICKY MARK (top-left only — no nav)
+       ============================================================ -->
+  <header class="mark" aria-label="Embody / TDN">
+    <a href="/" class="mark__link">
+      <span class="mark__word">embody</span>
+    </a><span class="mark__bridge" aria-hidden="true"></span><a href="#top" class="mark__link mark__link--ext">
+      <span class="mark__dot" aria-hidden="true"></span>
+      <span class="mark__word">tdn</span>
+    </a>
+  </header>
+
+  <!-- ============================================================
+       TABLE OF CONTENTS (sticky left sidebar)
+       ============================================================ -->
+  <nav class="toc" aria-label="Table of contents">
+    <ul class="toc__list">
+      <li><a class="toc__link" href="#top">overview</a></li>
+      <li><a class="toc__link" href="#compare">binary vs. text</a></li>
+      <li><a class="toc__link" href="#captured">what gets captured</a></li>
+      <li><a class="toc__link" href="#small">designed to be small</a></li>
+      <li><a class="toc__link" href="#safety">built for safety</a></li>
+      <li><a class="toc__link" href="#upgrades">survives upgrades</a></li>
+      <li><a class="toc__link" href="#loop">part of the loop</a></li>
+      <li><a class="toc__link" href="#details">format details</a></li>
+      <li><a class="toc__link" href="#sample">example file</a></li>
+      <li><a class="toc__link" href="#deeper">go deeper</a></li>
+    </ul>
+  </nav>
+
+  <main id="top">
+
+    <!-- ============================================================
+         HERO
+         ============================================================ -->
+    <section class="hero">
+      <div class="hero__glow" aria-hidden="true"></div>
+
+      <div class="container hero__inner">
+        <p class="eyebrow">TDN <span class="eyebrow__sep">/</span> TOUCHDESIGNER NETWORK FORMAT</p>
+
+        <h1 class="hero__headline">your network,<br />as&nbsp;text.</h1>
+
+        <p class="hero__sub">
+          A <code>.toe</code> file is a black box. You can't read it. You can't diff it. Your AI agent can't see what's inside. TDN exports any TouchDesigner network as clean, human-readable JSON — only the parameters you actually changed, structured so any tool can understand it.
+        </p>
+
+        <div class="hero__ctas">
+          <a class="btn btn--primary" href="https://dylanroscover.github.io/Embody/tdn/specification/">
+            Read the specification <span aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/tdn/examples/">
+            See examples
+          </a>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         BINARY VS. TEXT
+         ============================================================ -->
+    <section id="compare" class="section section--compare">
+      <div class="container">
+        <p class="eyebrow">THE PROBLEM</p>
+        <h2 class="section__title">binary vs. text.</h2>
+
+        <p class="lede">
+          TouchDesigner projects live in <code>.toe</code> files — opaque binary blobs that no diff tool can read, no AI can understand, and no version control system can meaningfully compare. TDN replaces that with a format designed for everything a binary can't do.
+        </p>
+
+        <div class="compare">
+          <article class="compare__col compare__col--binary">
+            <h3 class="compare__heading">binary <code>.toe</code> / <code>.tox</code></h3>
+            <ul class="compare__list">
+              <li>Opaque — requires TouchDesigner to inspect</li>
+              <li>Binary diff — "file changed"</li>
+              <li>Invisible to AI agents</li>
+              <li>Revert = restore entire binary file</li>
+              <li>Merge conflicts are unresolvable</li>
+              <li>Fixed size regardless of complexity</li>
+            </ul>
+          </article>
+          <article class="compare__col compare__col--tdn">
+            <h3 class="compare__heading">text <code>.tdn</code></h3>
+            <ul class="compare__list">
+              <li>Readable in any text editor</li>
+              <li>Line-by-line diff — "noise frequency changed from 1 to 2.5"</li>
+              <li>Full network context in a single JSON document</li>
+              <li>Revert = <code>git checkout</code> a specific change</li>
+              <li>Merge conflicts are readable and fixable</li>
+              <li>Non-default only — a simple network is a small file</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         WHAT GETS CAPTURED
+         ============================================================ -->
+    <section id="captured" class="section section--captured">
+      <div class="container">
+        <p class="eyebrow">COMPLETE REPRESENTATION</p>
+        <h2 class="section__title">everything that matters.</h2>
+
+        <p class="lede">
+          TDN captures the complete state of a network. Everything that defines the network is in the file; everything that doesn't is left out.
+        </p>
+
+        <div class="features">
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">operators</h3>
+              <p class="feature__desc">Name, type, position, size, color, comment, tags — the full identity of every node.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">parameters</h3>
+              <p class="feature__desc">Only non-default values. Constants, expressions (<code>=</code>), and binds (<code>~</code>) — nothing else.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">connections</h3>
+              <p class="feature__desc">Input wiring as arrays. Position equals input index. No wrappers, no ceremony.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">custom parameters</h3>
+              <p class="feature__desc">Complete definitions — pages, styles, ranges, menus, defaults, help text. Ready to rebuild.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">flags</h3>
+              <p class="feature__desc">Viewer, display, render, bypass, lock, expose — compact arrays with <code>-</code> prefix for negation.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">DAT content</h3>
+              <p class="feature__desc">Text and table data embedded directly in the JSON. Scripts, lookup tables, configuration — all in one file.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">operator storage</h3>
+              <p class="feature__desc">Dicts, lists, tuples, sets, and bytes. Python types round-tripped with <code>$type</code> wrappers.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">annotations</h3>
+              <p class="feature__desc">Annotate, comment, and network box modes — position, size, color, opacity. Your documentation, preserved.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">hierarchy &amp; nesting</h3>
+              <p class="feature__desc">Recursive children, COMP inputs, docking relationships, and <code>tdn_ref</code> pointers for independently externalized COMPs.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">palette clones</h3>
+              <p class="feature__desc">Clone relationships preserved. Children excluded — TD recreates them from the clone source automatically.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">parameter sequences</h3>
+              <p class="feature__desc">Resizable parameter blocks — GLSL uniforms, Combine blocks, channel constants — round-tripped with portable base names.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         DESIGNED TO BE SMALL
+         ============================================================ -->
+    <section id="small" class="section section--small">
+      <div class="container">
+        <p class="eyebrow">FORMAT DESIGN</p>
+        <h2 class="section__title">designed to be small.</h2>
+
+        <p class="lede">
+          Every design decision serves a single goal: the smallest possible output that remains fully readable. A network with 50 operators where you only changed a few parameters produces a file measured in kilobytes, not megabytes.
+        </p>
+
+        <div class="tdn__grid">
+          <pre class="code" aria-label="TDN shorthands"><code><span class="c-com">// expression — just prefix with =</span>
+<span class="c-k">"period"</span><span class="c-p">:</span> <span class="c-s">"=absTime.frame * 0.1"</span>
+
+<span class="c-com">// bind — just prefix with ~</span>
+<span class="c-k">"tx"</span><span class="c-p">:</span> <span class="c-s">"~op('ctrl').par.x"</span>
+
+<span class="c-com">// negated flag — just prefix with -</span>
+<span class="c-k">"flags"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"viewer"</span><span class="c-p">,</span> <span class="c-s">"-expose"</span><span class="c-p">]</span>
+
+<span class="c-com">// connections — position = input index</span>
+<span class="c-k">"inputs"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"noise1"</span><span class="c-p">,</span> <span class="c-n">null</span><span class="c-p">,</span> <span class="c-s">"level1"</span><span class="c-p">]</span>
+
+<span class="c-com">// constant — no wrapper needed</span>
+<span class="c-k">"amp"</span><span class="c-p">:</span> <span class="c-n">0.8</span></code></pre>
+
+          <ul class="tdn__bullets">
+            <li><strong>Non-default only</strong> — parameters at their default values are omitted entirely, often eliminating 90%+ of the parameter space.</li>
+            <li><strong>Type defaults</strong> — properties shared across all operators of a given type are hoisted into a top-level section and removed from each operator.</li>
+            <li><strong>Parameter templates</strong> — identical custom parameter pages appearing on 2+ operators are extracted into <code>par_templates</code> and referenced via <code>$t</code>. Definitions stored once, values per-operator.</li>
+            <li><strong>Compact shorthands</strong> — prefix characters instead of verbose wrapper objects. <code>=</code> for expressions, <code>~</code> for binds, <code>-</code> for negated flags.</li>
+            <li><strong>Simplified connections</strong> — <code>["noise1"]</code> instead of <code>[{"index": 0, "source": "noise1"}]</code>. Array position equals input index.</li>
+          </ul>
+        </div>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">Round-trip safe.</span> Export a network, edit the JSON, import it back. Same network. Every time.</p>
+
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         BUILT FOR SAFETY
+         ============================================================ -->
+    <section id="safety" class="section section--safety">
+      <div class="container">
+        <p class="eyebrow">RELIABILITY</p>
+        <h2 class="section__title">built for safety.</h2>
+
+        <p class="lede">
+          TDN is the source of truth for externalized networks. Every write must be bulletproof.
+        </p>
+
+        <div class="pillars">
+          <article class="pillar">
+            <h3 class="pillar__name">atomic writes</h3>
+            <p class="pillar__body">
+              Every save writes to a temp file first, calls <code>fsync</code>, then uses <code>os.replace</code> to swap it in. No partial writes. Ever.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">backup rotation</h3>
+            <p class="pillar__body">
+              A <code>.tdn_backup/</code> directory keeps two generations of previous versions. Recover from any bad export instantly.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">post-write validation</h3>
+            <p class="pillar__body">
+              After every write, the file is read back and JSON-parsed to confirm integrity. If validation fails, the backup is restored automatically.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">content comparison</h3>
+            <p class="pillar__body">
+              If the new export matches the existing file, the write is skipped entirely — preserving git timestamps and avoiding noise commits.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">best-effort import</h3>
+            <p class="pillar__body">
+              The importer runs 8 ordered phases. A single failed operator never aborts the entire import — partial results are more useful than total failure.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         SURVIVES TD UPGRADES
+         ============================================================ -->
+    <section id="upgrades" class="section section--upgrades">
+      <div class="container container--narrow">
+        <p class="eyebrow">VERSION DURABILITY</p>
+        <h2 class="section__title">survives TD upgrades.</h2>
+
+        <p class="lede">
+          Some TouchDesigner operators reset certain parameters during initialization — a camera's <code>tz</code> is reported as <code>0</code> by default, but TD actually creates it at <code>5</code>. A non-default comparison that trusts the reported value will silently omit your intended setting. TDN catches this.
+        </p>
+
+        <p class="lede">
+          The first time you open a project on a new TD build, Embody scans every creatable operator type in the background, samples the <em>actual</em> creation values, and writes a per-build catalog. TDN exports compare against those real values instead of the reported defaults. When you upgrade TD, the catalog detects which creation values shifted between builds and automatically patches your operators to preserve your intent. An elegant solution to a very obscure problem — but the kind that would otherwise cost you hours of debugging a parameter that "just changed" after an update.
+        </p>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">Upgrade-proof.</span> Export on one build, open on another. Every parameter value survives.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         THE LOOP — how TDN fits with Embody and Envoy
+         ============================================================ -->
+    <section id="loop" class="section section--loop">
+      <div class="container">
+        <p class="eyebrow">THE WORKFLOW</p>
+        <h2 class="section__title">part of the loop.</h2>
+
+        <p class="lede">
+          TDN is not a standalone format. It's the substrate that connects the other two layers of Embody — the format that makes both forward and lateral velocity possible.
+        </p>
+
+        <div class="pillars pillars--three">
+          <article class="pillar">
+            <h3 class="pillar__name">Envoy</h3>
+            <p class="pillar__claim">forward velocity.</p>
+            <p class="pillar__body">
+              Your AI agent exports the current network as TDN to see what's on screen. It generates or modifies the JSON, then imports it back — changes appear instantly in your live session.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">Embody</h3>
+            <p class="pillar__claim">lateral velocity.</p>
+            <p class="pillar__body">
+              Tag a COMP, choose TDN as its externalization strategy, and every save writes the network to a <code>.tdn</code> file. On project open, children rebuild themselves from text automatically.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">Git</h3>
+            <p class="pillar__claim">the record.</p>
+            <p class="pillar__body">
+              Commit the <code>.tdn</code> file. Every change is a clean diff. Review network modifications in pull requests. Branch off working versions. Revert broken experiments.
+            </p>
+          </article>
+        </div>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">The loop.</span> Tag a COMP. Save it as TDN. Commit the file. Let your agent read it, modify it, import the result. All without touching a binary.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         FORMAT DETAILS
+         ============================================================ -->
+    <section id="details" class="section section--details">
+      <div class="container">
+        <p class="eyebrow">SPECIFICATION</p>
+        <h2 class="section__title">format details.</h2>
+
+        <div class="details">
+          <div class="detail">
+            <span class="detail__label">extension</span>
+            <span class="detail__value"><code>.tdn</code></span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">encoding</span>
+            <span class="detail__value">UTF-8</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">MIME type</span>
+            <span class="detail__value"><code>application/json</code></span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">current version</span>
+            <span class="detail__value">1.3</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">backward compatible</span>
+            <span class="detail__value">v1.0 through v1.3</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">JSON Schema</span>
+            <span class="detail__value"><a href="https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.json">tdn.schema.json</a></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         SAMPLE
+         ============================================================ -->
+    <section id="sample" class="section section--sample">
+      <div class="container container--narrow">
+        <p class="eyebrow">A REAL FILE</p>
+        <h2 class="section__title">this is what it looks like.</h2>
+
+        <pre class="code code--full" aria-label="Complete TDN example"><code><span class="c-p">{</span>
+  <span class="c-k">"format"</span><span class="c-p">:</span> <span class="c-s">"tdn"</span><span class="c-p">,</span>
+  <span class="c-k">"version"</span><span class="c-p">:</span> <span class="c-s">"1.3"</span><span class="c-p">,</span>
+  <span class="c-k">"generator"</span><span class="c-p">:</span> <span class="c-s">"Embody/5.0.351"</span><span class="c-p">,</span>
+  <span class="c-k">"td_build"</span><span class="c-p">:</span> <span class="c-s">"2025.33020"</span><span class="c-p">,</span>
+  <span class="c-k">"exported_at"</span><span class="c-p">:</span> <span class="c-s">"2026-04-10T08:15:00Z"</span><span class="c-p">,</span>
+  <span class="c-k">"network_path"</span><span class="c-p">:</span> <span class="c-s">"/project1"</span><span class="c-p">,</span>
+  <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"containerCOMP"</span><span class="c-p">,</span>
+  <span class="c-k">"options"</span><span class="c-p">:</span> <span class="c-p">{</span> <span class="c-k">"include_dat_content"</span><span class="c-p">:</span> <span class="c-n">true</span> <span class="c-p">},</span>
+
+  <span class="c-k">"operators"</span><span class="c-p">:</span> <span class="c-p">[</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"noise1"</span><span class="c-p">,</span>
+      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"noiseTOP"</span><span class="c-p">,</span>
+      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span>
+        <span class="c-k">"amp"</span><span class="c-p">:</span> <span class="c-n">0.8</span><span class="c-p">,</span>
+        <span class="c-k">"period"</span><span class="c-p">:</span> <span class="c-s">"=absTime.frame * 0.1"</span><span class="c-p">,</span>
+        <span class="c-k">"harmons"</span><span class="c-p">:</span> <span class="c-n">4</span>
+      <span class="c-p">},</span>
+      <span class="c-k">"flags"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"viewer"</span><span class="c-p">]</span>
+    <span class="c-p">},</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"blur1"</span><span class="c-p">,</span>
+      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"blurTOP"</span><span class="c-p">,</span>
+      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span> <span class="c-k">"size"</span><span class="c-p">:</span> <span class="c-n">8</span> <span class="c-p">},</span>
+      <span class="c-k">"inputs"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"noise1"</span><span class="c-p">],</span>
+      <span class="c-k">"position"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">400</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">]</span>
+    <span class="c-p">},</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"level1"</span><span class="c-p">,</span>
+      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"levelTOP"</span><span class="c-p">,</span>
+      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span>
+        <span class="c-k">"opacity"</span><span class="c-p">:</span> <span class="c-s">"~op('ctrl').par.Fade"</span><span class="c-p">,</span>
+        <span class="c-k">"brightness1"</span><span class="c-p">:</span> <span class="c-n">1.2</span>
+      <span class="c-p">},</span>
+      <span class="c-k">"inputs"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"blur1"</span><span class="c-p">],</span>
+      <span class="c-k">"flags"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"display"</span><span class="c-p">,</span> <span class="c-s">"render"</span><span class="c-p">],</span>
+      <span class="c-k">"position"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">800</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">]</span>
+    <span class="c-p">}</span>
+  <span class="c-p">],</span>
+
+  <span class="c-k">"annotations"</span><span class="c-p">:</span> <span class="c-p">[</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"annot1"</span><span class="c-p">,</span>
+      <span class="c-k">"mode"</span><span class="c-p">:</span> <span class="c-s">"annotate"</span><span class="c-p">,</span>
+      <span class="c-k">"title"</span><span class="c-p">:</span> <span class="c-s">"noise pipeline"</span><span class="c-p">,</span>
+      <span class="c-k">"position"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">-100</span><span class="c-p">,</span> <span class="c-n">-200</span><span class="c-p">],</span>
+      <span class="c-k">"size"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">1100</span><span class="c-p">,</span> <span class="c-n">400</span><span class="c-p">]</span>
+    <span class="c-p">}</span>
+  <span class="c-p">]</span>
+<span class="c-p">}</span></code></pre>
+
+        <p class="sample__caption">
+          Three operators, one annotation, one expression, one bind. Every required field present, every value spec-accurate — readable, diffable, importable.
+        </p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         GO DEEPER
+         ============================================================ -->
+    <section id="deeper" class="section section--deeper">
+      <div class="container">
+        <p class="eyebrow">DOCUMENTATION</p>
+        <h2 class="section__title">go deeper.</h2>
+
+        <div class="pillars pillars--four">
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/specification/">
+            <h3 class="pillar__name">specification</h3>
+            <p class="pillar__body">
+              The complete field reference — every property, every inclusion condition, every default value.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/schema/">
+            <h3 class="pillar__name">JSON schema</h3>
+            <p class="pillar__body">
+              Machine-readable schema for validation and IDE auto-completion.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/examples/">
+            <h3 class="pillar__name">examples</h3>
+            <p class="pillar__body">
+              Complete, minimal, and annotated <code>.tdn</code> files you can study and use as templates.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/tdn/import-export/">
+            <h3 class="pillar__name">import &amp; export</h3>
+            <p class="pillar__body">
+              Keyboard shortcuts, MCP tools, the 8-phase import process, and error handling.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+
+      <div class="footer__col footer__col--brand">
+        <div class="footer__mark">
+          <span class="mark__dot" aria-hidden="true"></span>
+          <span class="footer__word">embody</span>
+        </div>
+        <p class="footer__tag">natural language tools for <a href="https://derivative.ca">TouchDesigner</a></p>
+      </div>
+
+      <nav class="footer__col" aria-label="Project">
+        <h4 class="footer__h">Toolkit</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/manifesto/">manifesto</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
+          <li><a href="https://github.com/dylanroscover/Embody">github</a></li>
+        </ul>
+      </nav>
+
+      <nav class="footer__col" aria-label="Reference">
+        <h4 class="footer__h">Reference</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/envoy/">Envoy setup</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/#getting-started">get started</a></li>
+        </ul>
+      </nav>
+
+    </div>
+
+    <div class="container footer__bottom">
+      <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
+      <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+    </div>
+  </footer>
+
+  <!-- Scroll-spy + staggered reveal -->
+  <script>
+  (function () {
+    var links = [].slice.call(document.querySelectorAll('.toc__link'));
+    var ids = links.map(function (a) { return a.getAttribute('href').slice(1); });
+    var sections = ids.map(function (id) { return document.getElementById(id); });
+
+    // Active section highlighting
+    var activeObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          var id = entry.target.id;
+          links.forEach(function (a) {
+            a.classList.toggle('toc__link--active', a.getAttribute('href') === '#' + id);
+          });
+        }
+      });
+    }, { rootMargin: '-20% 0px -60% 0px' });
+
+    sections.forEach(function (s) { if (s) activeObserver.observe(s); });
+
+    // Staggered fade-in/fade-out based on scroll position
+    var hero = document.querySelector('.hero');
+    var heroH = hero ? hero.offsetHeight : 400;
+    var revealed = false;
+
+    function updateVisibility() {
+      var scrollY = window.scrollY || window.pageYOffset;
+      var shouldShow = scrollY > heroH * 0.4;
+
+      if (shouldShow === revealed) return;
+      revealed = shouldShow;
+
+      links.forEach(function (link, i) {
+        if (shouldShow) {
+          setTimeout(function () {
+            link.classList.add('toc__link--visible');
+          }, i * 60);
+        } else {
+          setTimeout(function () {
+            link.classList.remove('toc__link--visible');
+          }, (links.length - 1 - i) * 40);
+        }
+      });
+    }
+
+    window.addEventListener('scroll', updateVisibility, { passive: true });
+    updateVisibility();
+
+    // Fast smooth scroll for anchor links
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest('a[href^="#"]');
+      if (!a) return;
+      var target = document.getElementById(a.getAttribute('href').slice(1));
+      if (!target) return;
+      e.preventDefault();
+      var start = window.scrollY;
+      var end = target.getBoundingClientRect().top + start;
+      var dist = end - start;
+      var duration = Math.min(400, Math.max(150, Math.abs(dist) * 0.15));
+      var t0 = null;
+      function step(ts) {
+        if (!t0) t0 = ts;
+        var p = Math.min((ts - t0) / duration, 1);
+        var ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        window.scrollTo(0, start + dist * ease);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  })();
+  </script>
+
+</body>
+</html>
