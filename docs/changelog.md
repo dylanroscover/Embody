@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.352
+
+Fix Envoy failing to start after Embody upgrade (delete old COMP, drop new .tox).
+
+- **Fix: Envoy restart counter not resetting on upgrade**: When the old server's port wasn't released in time, auto-restart exhaustion left `_restart_count` stuck above MAX. The next manual Envoyenable toggle immediately hit the limit and forced itself back to False, making the toggle appear to "do nothing." `Stop()` now always resets `_restart_count`, even when `envoy_running` is already False
+- **Fix: Upgrade-path port race**: `Verify()` deferred `Start()` by only 10 frames (~0.17s) after the old COMP was deleted -- too short for uvicorn to fully release its listener socket. Increased to 60 frames (~1s)
+- **Fix: Port reclaim timeout too short**: `_findAvailablePort()` waited only 0.5s for a force-closed port to become available. Increased to 1.5s to accommodate uvicorn's shutdown sequence
+
 ## v5.0.351
 
 Creation-defaults catalog, stdin-based bridge lifecycle, Envoy resilience hardening.

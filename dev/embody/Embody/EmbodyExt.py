@@ -1211,7 +1211,13 @@ class EmbodyExt:
             # the prompt; kick Envoy start if the restored settings have it
             # enabled (onValueChange was suppressed during restore).
             if self.my.par.Envoyenable.eval():
-                run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=10)
+                # Longer delay on the upgrade path (onCreate → Verify) to give
+                # the old server thread time to release its port.  onDestroyTD
+                # signals the old shutdown_event, but uvicorn can take 1-3s to
+                # fully close its listener socket.  delayFrames=10 (~0.17s) was
+                # too short, causing EADDRINUSE → auto-restart exhaustion →
+                # Envoyenable stuck.  60 frames (~1s) is a safer window.
+                run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
         else:
             # Fresh install (empty table). Always prompt -- even if a leftover
             # .embody.json from a previous install in the same folder was

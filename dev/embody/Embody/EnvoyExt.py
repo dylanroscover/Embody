@@ -1589,9 +1589,12 @@ class EnvoyExt:
         self._log(f'Port {base_port} in use, attempting to free it...')
         self._forceCloseOldServer()
 
-        # Brief wait for socket to close (up to ~0.5s)
+        # Wait for socket to close (up to ~1.5s).  During an upgrade
+        # (delete old COMP → drop new .tox), the old server thread may still
+        # be draining connections.  0.5s was too short — uvicorn's shutdown
+        # sequence can take 1-3s even after sockets are force-closed.
         import time as _time
-        for _ in range(5):
+        for _ in range(15):
             _time.sleep(0.1)
             if not _port_taken(base_port):
                 self._log(f'Port {base_port} freed after force-close')
@@ -1750,6 +1753,14 @@ class EnvoyExt:
 
     def Stop(self) -> None:
         """Stop MCP server"""
+        # Always reset auto-restart counter on Stop, even when envoy_running
+        # is already False.  Without this, the restart-limit path in
+        # _scheduleRestart sets Envoyenable=False → parexec → Stop(), but
+        # envoy_running was already cleared by _onServerError, so the old
+        # code returned early and left _restart_count stuck above MAX.
+        # The next manual toggle would immediately hit the limit again,
+        # making Envoyenable appear to "do nothing."
+        self._restart_count = 0
         if not self.ownerComp.fetch('envoy_running', False):
             self._log('Envoy disabled')
             # Only set 'Disabled' if hooks haven't already set a more
@@ -1761,7 +1772,6 @@ class EnvoyExt:
 
         self._log('Stopping Envoy MCP server')
         self.ownerComp.store('envoy_running', False)
-        self._restart_count = 0  # Manual stop -- reset auto-restart counter
         self.shutdown_event.set()  # Signal uvicorn to exit
 
         # Remove this instance from the registry

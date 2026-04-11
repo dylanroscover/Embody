@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.351-blue)
+![Version](https://img.shields.io/badge/version-5.0.352-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-46-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.352**: Fix Envoy failing to start after Embody upgrade (restart counter, port race, reclaim timeout)
 - **5.0.351**: Creation-defaults catalog, stdin-based bridge lifecycle, Envoy resilience hardening
 - **5.0.336**: Batch MCP operations, Envoy auto-restart on crash and save, 46 MCP tools
 - **5.0.330**: Envoy bridge v2 — proactive reconciliation, multi-session safety, zero forced restarts
