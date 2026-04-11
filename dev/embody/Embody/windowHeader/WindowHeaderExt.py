@@ -61,13 +61,13 @@ class WindowHeaderExt:
 	# ── Press / Release ─────────────────────────────────────────────
 
 	def OnPress(self):
-		"""Called by panelexec1 on lselect offToOn — set pressed visual."""
+		"""Called by panelexec1 on lselect offToOn -- set pressed visual."""
 		btn = self._findClickedButton()
 		if btn:
 			self._setPressed(btn)
 
 	def OnRelease(self):
-		"""Called by panelexec1 on lselect onToOff — clear pressed visual."""
+		"""Called by panelexec1 on lselect onToOff -- clear pressed visual."""
 		self._clearPressed()
 
 	def _setPressed(self, btn):

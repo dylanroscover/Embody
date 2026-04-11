@@ -1,4 +1,4 @@
-﻿"""
+"""
 Prepare hierarchical data for the Manager List COMP.
 
 Takes the raw externalizations select DAT as input and:
@@ -142,7 +142,7 @@ def onCook(scriptOp):
 	# Clean stale paths from LRU tracker (mutate in-place to keep reference)
 	expand_order[:] = [p for p in expand_order if p in all_paths]
 
-	# Enforce row limit — collapse the node with the fewest visible
+	# Enforce row limit -- collapse the node with the fewest visible
 	# children first, but never collapse the active branch
 	active = expand_order[-1] if expand_order else None
 	protected = set()
@@ -181,7 +181,7 @@ def onCook(scriptOp):
 					visible_expanded.add(path)
 
 	# NOTE: expanded and expand_order are mutated in-place above.
-	# Do NOT call store() here — it triggers recooks and would cause
+	# Do NOT call store() here -- it triggers recooks and would cause
 	# an infinite cook loop since this DAT fetches from the same keys.
 
 	# Write output
@@ -198,7 +198,7 @@ def onCook(scriptOp):
 		oper = op(path)
 		is_comp = oper and oper.family == 'COMP'
 
-		# Get strategy — derive from old schema if column missing
+		# Get strategy -- derive from old schema if column missing
 		if has_strategy:
 			strategy = row.get('strategy', '')
 		else:

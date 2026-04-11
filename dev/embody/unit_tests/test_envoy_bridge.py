@@ -40,7 +40,7 @@ sys.modules[_spec.name] = bridge  # Register so @patch('envoy_bridge.X') works
 #   - start_reconciler:      v2, polls .envoy.json + pings backend every 1-5s
 # Tests that need to exercise the reconciler call bridge.reconcile()
 # directly with explicit heartbeat=True instead.
-bridge.start_orphan_watchdog = lambda: None
+bridge.start_orphan_watchdog = lambda *args, **kwargs: None
 if hasattr(bridge, 'start_reconciler'):
     bridge.start_reconciler = lambda *args, **kwargs: None
 
@@ -821,13 +821,17 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Disconnection and reconnection ---
 
     def test_disconnect_triggers_reconnect_on_next_message(self):
-        """After failure, next message calls wait_for_envoy again."""
+        """After failure, next message retries forward directly (no blocking probe).
+
+        v2 removed the blocking reconnect probe: when disconnected, the bridge
+        just tries the forward immediately. If it works, connected is restored.
+        """
         import urllib.error
         call_count = [0]
 
         def forward(url, msg, **kw):
             call_count[0] += 1
-            if call_count[0] == 1:  # First msg fails (single attempt)
+            if call_count[0] == 1:  # First msg fails
                 raise urllib.error.URLError('refused')
             return {'jsonrpc': '2.0', 'id': msg.get('id'), 'result': 'back'}
 
@@ -839,31 +843,22 @@ class TestBridgeMainLoop(EmbodyTestCase):
         stdout = io.StringIO()
         stderr = io.StringIO()
 
-        wait_calls = [0]
-
-        def mock_wait(url, deadline):
-            wait_calls[0] += 1
-            return True
-
         with patch.object(sys, 'stdin', stdin), \
              patch.object(sys, 'stdout', stdout), \
              patch.object(sys, 'stderr', stderr), \
              patch.object(sys, 'argv', ['envoy_bridge.py']), \
-             patch.object(bridge, 'wait_for_envoy', side_effect=mock_wait), \
+             patch.object(bridge, 'wait_for_envoy', return_value=True), \
              patch.object(bridge, 'forward_to_http', side_effect=forward), \
              patch.object(bridge, 'find_td_pid', return_value=None), \
              patch.object(bridge, 'kill_stale_bridges'), \
              patch('time.sleep'):
             bridge.main()
 
-        # Initial connect + reconnect after disconnect
-        self.assertEqual(wait_calls[0], 2)
-
         lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
         responses = [json.loads(l) for l in lines]
         self.assertLen(responses, 2)
         self.assertDictHasKey(responses[0], 'error')  # First failed
-        self.assertEqual(responses[1]['result'], 'back')  # Reconnected
+        self.assertEqual(responses[1]['result'], 'back')  # Retry succeeded
 
     def test_reconnect_fails_sends_error_again(self):
         """Disconnect, reconnect attempt fails — second error sent."""

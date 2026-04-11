@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.3",
-	"build": 375,
-	"generator": "Embody/5.0.335",
+	"build": 392,
+	"generator": "Embody/5.0.348",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.336.toe",
-	"exported_at": "2026-04-10T18:39:30Z",
+	"source_file": "Embody-5.349.toe",
+	"exported_at": "2026-04-11T01:49:23Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -30,11 +30,13 @@
 		},
 		"annotateCOMP": {
 			"parameters": {
-				"includeinorder": true,
 				"order": "=me.digits or 0",
 				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
 			"flags": ["display"]
+		},
+		"baseCOMP": {
+			"size": [160, 130]
 		},
 		"windowCOMP": {
 			"parameters": {
@@ -835,7 +837,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.335"
+				"value": "5.0.348"
 			},
 			{
 				"name": "Touchbuild",
@@ -858,7 +860,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 375
+				"value": 392
 			},
 			{
 				"name": "Github",
@@ -873,7 +875,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-04-10 18:39:30 UTC"
+				"value": "2026-04-11 01:49:23 UTC"
 			},
 			{
 				"name": "Help",
@@ -912,6 +914,17 @@
 				"name": "TDN",
 				"promote": true
 			},
+			{
+				"object": "op('./CatalogManagerExt').module.CatalogManagerExt(me)",
+				"name": "CatalogManager",
+				"promote": true
+			},
+			{},
+			{},
+			{},
+			{},
+			{},
+			{},
 			{}
 		]
 	},
@@ -1043,8 +1056,6 @@
 				"outdone": false,
 				"exttcop": "=tdu.Timecode()",
 				"rate": "=me.time.rate",
-				"timeslice": true,
-				"exportmethod": "datname",
 				"autoexportroot": "=parent()"
 			},
 			"position": [-625, -275],
@@ -1061,7 +1072,8 @@
 				"projectpostsave": true,
 				"file": "embody/Embody/execute.py",
 				"defaultreadencoding": "cp1252",
-				"syncfile": true
+				"syncfile": true,
+				"language": "input"
 			},
 			"flags": ["display"],
 			"position": [-375, 200],
@@ -1107,7 +1119,8 @@
 				"pars": "*",
 				"file": "embody/Embody/parexec.py",
 				"defaultreadencoding": "cp1252",
-				"syncfile": true
+				"syncfile": true,
+				"language": "input"
 			},
 			"position": [-375, 100],
 			"size": [130, 90],
@@ -1194,8 +1207,6 @@
 				"output": "normal",
 				"lbuttonname": "click",
 				"rate": "=me.time.rate",
-				"timeslice": true,
-				"exportmethod": "datname",
 				"autoexportroot": "=parent()"
 			},
 			"position": [-625, -525],
@@ -1251,7 +1262,6 @@
 			"name": "templates",
 			"type": "baseCOMP",
 			"position": [-400, -1200],
-			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"],
 			"tdn_ref": "embody/Embody/templates.tdn"
@@ -1367,8 +1377,6 @@
 				"timeslicemsec": true,
 				"performmode": true,
 				"gputemp": true,
-				"timeslice": true,
-				"exportmethod": "datname",
 				"autoexportroot": "=parent()"
 			},
 			"position": [-625, -650],
@@ -1449,6 +1457,15 @@
 			"palette_clone": true
 		},
 		{
+			"name": "CatalogManagerExt",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/CatalogManagerExt.py"
+			},
+			"position": [-375, 675],
+			"tags": ["py"]
+		},
+		{
 			"name": "annotation_tagging",
 			"type": "annotateCOMP",
 			"parameters": {
@@ -1523,6 +1540,19 @@
 			"palette_clone": true
 		},
 		{
+			"name": "divergent_defaults",
+			"type": "tableDAT",
+			"parameters": {
+				"file": "embody/Embody/divergent_defaults.tsv",
+				"syncfile": true,
+				"rows": 502
+			},
+			"position": [-550, 200],
+			"size": [130, 90],
+			"color": [0.9, 0.3, 0.4],
+			"tags": ["tsv"]
+		},
+		{
 			"name": "window_tagging_menu",
 			"type": "windowCOMP",
 			"parameters": {
@@ -1545,8 +1575,7 @@
 				"offtoon": true,
 				"valuechange": false,
 				"file": "embody/Embody/chopexec_exit_tagger.py",
-				"syncfile": true,
-				"language": "python"
+				"syncfile": true
 			},
 			"position": [-325, -650],
 			"size": [130, 90],

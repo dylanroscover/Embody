@@ -107,7 +107,7 @@ class EnvoyMCPServer:
                 pending['result'] = response['result']
                 pending['event'].set()
             else:
-                # Orphaned response — request already timed out and was removed
+                # Orphaned response -- request already timed out and was removed
                 print(f'[Envoy][WARNING] Orphaned response for request {request_id} '
                       f'(likely timed out). Operation still executed on main thread.')
 
@@ -334,7 +334,7 @@ class EnvoyMCPServer:
         def get_op_errors(op_path: str, recurse: bool = True) -> dict:
             """
             Get error and warning messages for an operator and optionally its children.
-            Useful for debugging TD networks — returns both errors and warnings.
+            Useful for debugging TD networks -- returns both errors and warnings.
 
             Args:
                 op_path: Path to the operator to check
@@ -1098,7 +1098,7 @@ class EnvoyMCPServer:
                 Dict with passed/failed/error/skip counts and full results list
             """
             # Use a dedicated Event so the worker thread can wait directly
-            # for test completion — bypasses the response_queue which is
+            # for test completion -- bypasses the response_queue which is
             # fragile against server restarts / extension reinit.
             test_event = Event()
             test_holder: dict = {}
@@ -1109,7 +1109,7 @@ class EnvoyMCPServer:
 
             # Queue the start request (main thread will run deferred tests)
             self.add_to_refresh_queue({
-                'id': -1,  # Sentinel — no normal response expected
+                'id': -1,  # Sentinel -- no normal response expected
                 'operation': 'run_tests',
                 'params': {'suite_name': suite_name, 'test_name': test_name},
             })
@@ -1125,7 +1125,7 @@ class EnvoyMCPServer:
                 if test_event.wait(timeout=min(remaining, 1.0)):
                     break  # Tests finished
             else:
-                # Server shutting down — unblock cleanly
+                # Server shutting down -- unblock cleanly
                 sys._envoy_pending_test = None
                 return {'error': 'Server shutting down during test run'}
 
@@ -1165,10 +1165,12 @@ class EnvoyMCPServer:
 
         # Suppress "Stateless session crashed" noise from MCP SDK race condition:
         # In stateless mode, terminate() closes streams while background tasks may
-        # still try to send_log_message → ClosedResourceError. This is cosmetic —
+        # still try to send_log_message → ClosedResourceError. This is cosmetic --
         # the server recovers immediately. Filter these out instead of escalating
         # the log level (which would hide real errors).
         import anyio
+
+        from starlette.requests import ClientDisconnect as _CD
 
         class _DisconnectCrashFilter(logging.Filter):
             def filter(self, record):
@@ -1176,12 +1178,17 @@ class EnvoyMCPServer:
                     exc = record.exc_info[1]
                     if self._is_disconnect(exc):
                         return False
+                # Also suppress the "Error handling POST request" messages
+                # that contain ClientDisconnect in the message text
+                msg = record.getMessage() if hasattr(record, 'getMessage') else ''
+                if 'ClientDisconnect' in msg:
+                    return False
                 return True
 
             @staticmethod
             def _is_disconnect(exc):
                 if isinstance(exc, (anyio.BrokenResourceError,
-                                    anyio.ClosedResourceError)):
+                                    anyio.ClosedResourceError, _CD)):
                     return True
                 if isinstance(exc, BaseExceptionGroup):
                     return all(_DisconnectCrashFilter._is_disconnect(e)
@@ -1191,13 +1198,16 @@ class EnvoyMCPServer:
         logging.getLogger("mcp.server.streamable_http_manager").addFilter(
             _DisconnectCrashFilter()
         )
+        logging.getLogger("mcp.server.streamable_http").addFilter(
+            _DisconnectCrashFilter()
+        )
 
         # Drop the per-request "Processing request of type X" log lines from
         # FastMCP's lowlevel server.  The bridge's background reconciler
         # pings the backend every few seconds, which would otherwise flood
         # TD's textport with one "Processing request of type PingRequest"
         # line per ping.  These messages have zero diagnostic value at
-        # runtime — real errors come through different log paths — so we
+        # runtime -- real errors come through different log paths -- so we
         # filter them out instead of raising the logger level (which would
         # also drop legitimate warnings).
         class _RequestProcessingFilter(logging.Filter):
@@ -1206,7 +1216,15 @@ class EnvoyMCPServer:
                     msg = record.getMessage()
                 except Exception:
                     return True
-                return not msg.startswith("Processing request of type ")
+                if msg.startswith("Processing request of type "):
+                    return False
+                # "Received exception from stream: " with empty or whitespace-
+                # only payload = bridge recycled a connection.  Not actionable.
+                if msg.startswith("Received exception from stream:"):
+                    payload = msg[len("Received exception from stream:"):].strip()
+                    if not payload:
+                        return False
+                return True
 
         logging.getLogger("mcp.server.lowlevel.server").addFilter(
             _RequestProcessingFilter()
@@ -1229,12 +1247,18 @@ class EnvoyMCPServer:
         # Manage uvicorn directly so we can signal shutdown via shutdown_event
         starlette_app = self.mcp.streamable_http_app()
 
-        # Wrap the ASGI app to suppress BrokenResourceError from client disconnects.
-        # When a VS Code tab closes while the MCP server is still sending responses,
-        # anyio raises BrokenResourceError which propagates as nested ExceptionGroups.
-        # The server recovers fine (new clients connect immediately), so suppress the noise.
+        # Wrap the ASGI app to suppress client disconnect noise.
+        # During extension reinit or tab close, in-flight connections raise
+        # BrokenResourceError (anyio), ClosedResourceError (anyio), or
+        # ClientDisconnect (starlette).  All are harmless -- the server
+        # recovers on restart.  Without suppression, the flood of tracebacks
+        # can destabilize uvicorn's event loop.
+        from starlette.requests import ClientDisconnect
+
         def _is_client_disconnect(exc):
-            if isinstance(exc, (anyio.BrokenResourceError, anyio.ClosedResourceError)):
+            if isinstance(exc, (anyio.BrokenResourceError,
+                                anyio.ClosedResourceError,
+                                ClientDisconnect)):
                 return True
             if isinstance(exc, BaseExceptionGroup):
                 return all(_is_client_disconnect(e) for e in exc.exceptions)
@@ -1305,8 +1329,21 @@ class EnvoyExt:
 
     def __init__(self, ownerComp: 'COMP') -> None:
         self.ownerComp: COMP = ownerComp
-        self.request_queue: Queue = Queue()   # Worker -> Main thread
-        self.response_queue: Queue = Queue()  # Main -> Worker thread
+        # Inherit queues from previous instance so pending requests survive
+        # extension reinit during save cycles.  Queue is thread-safe.
+        _prev_queues = getattr(sys, '_envoy_queues', {}).get(ownerComp.path)
+        if _prev_queues is not None:
+            self.request_queue: Queue = _prev_queues['request']
+            self.response_queue: Queue = _prev_queues['response']
+        else:
+            self.request_queue: Queue = Queue()
+            self.response_queue: Queue = Queue()
+        _q_registry = getattr(sys, '_envoy_queues', {})
+        _q_registry[ownerComp.path] = {
+            'request': self.request_queue,
+            'response': self.response_queue,
+        }
+        sys._envoy_queues = _q_registry
         self.current_task: Optional[Any] = None
         self._server_gen: int = 0  # Generation counter for stale callback detection
         self._last_served_log_id: int = 0
@@ -1314,6 +1351,7 @@ class EnvoyExt:
         self._last_start_time: float = 0.0  # time.time() when Start() was called
         self._MAX_RESTARTS: int = 3
         self._RESTART_RESET_SECONDS: float = 120.0  # Reset counter after 2 min uptime
+        self._venv_recreated: bool = False  # Guard: only auto-recreate venv once per session
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -1343,11 +1381,13 @@ class EnvoyExt:
         # Defer auto-start so all init/recompile cycles finish first.
         # Guard: only auto-start if init() has already run. On fresh .tox
         # drop, __init__ fires BEFORE init() can reset the baked Envoyenable
-        # to False — without this guard, Start() bypasses the opt-in prompt.
+        # to False -- without this guard, Start() bypasses the opt-in prompt.
         # On code recompile (extension reinit during a running session),
         # _init_complete is already True so auto-start proceeds correctly.
         if (self.ownerComp.par.Envoyenable.eval()
                 and self.ownerComp.fetch('_init_complete', False, search=False)):
+            # Clear stale status so Start() doesn't bail with "already active"
+            self.ownerComp.par.Envoystatus = 'Restarting after reinit...'
             run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
                 delayFrames=30)
 
@@ -1370,7 +1410,7 @@ class EnvoyExt:
         """Signal server shutdown when extension reinitializes.
 
         TD calls this on the OLD instance before the new one initializes.
-        Only signals the shutdown event here — actual Thread Manager cleanup
+        Only signals the shutdown event here -- actual Thread Manager cleanup
         is deferred to _cleanupStaleThreads() in Start(), because modifying
         system COMP state (thread.clean(), Runningthreads parameter) during
         extension reinit can crash TD if triggered by a save-time file sync.
@@ -1412,7 +1452,7 @@ class EnvoyExt:
             if target is None or getattr(target, '__name__', '') != '_runServer':
                 continue
 
-            # Skip pool workers — shutdown_event handles their cleanup via
+            # Skip pool workers -- shutdown_event handles their cleanup via
             # workLoop. Calling clean() would destroy the worker permanently.
             if thread.InPool:
                 self._log(
@@ -1435,7 +1475,7 @@ class EnvoyExt:
             self.ThreadManager.par.Runningthreads.val = len(
                 self.ThreadManager.ext.ThreadManagerExt.Threads)
             self._log(
-                f'Cleaned {cleaned} stale Envoy thread(s) — '
+                f'Cleaned {cleaned} stale Envoy thread(s) -- '
                 f'{len(self.ThreadManager.ext.ThreadManagerExt.Threads)}'
                 f' threads remain '
                 f'(capacity: {self.ThreadManager.ext.ThreadManagerExt.MaxNumberOfThreads.eval()})', 'DEBUG')
@@ -1470,7 +1510,7 @@ class EnvoyExt:
         if old_server is not None:
             self._log('Force-closing old uvicorn server sockets', 'DEBUG')
             old_server.should_exit = True
-            # force_exit skips graceful drain — without this, uvicorn waits
+            # force_exit skips graceful drain -- without this, uvicorn waits
             # for established connections (e.g. MCP client keep-alives) to
             # close, which can block the port indefinitely.
             old_server.force_exit = True
@@ -1545,7 +1585,7 @@ class EnvoyExt:
         if not _port_taken(base_port):
             return base_port
 
-        # Base port busy — try to reclaim it from our own stale server
+        # Base port busy -- try to reclaim it from our own stale server
         self._log(f'Port {base_port} in use, attempting to free it...')
         self._forceCloseOldServer()
 
@@ -1557,7 +1597,7 @@ class EnvoyExt:
                 self._log(f'Port {base_port} freed after force-close')
                 return base_port
 
-        # Still busy — it belongs to another process/instance.
+        # Still busy -- it belongs to another process/instance.
         # Scan the rest of the range without force-close.
         self._log(f'Port {base_port} held by another instance, scanning range...')
         for offset in range(1, range_size):
@@ -1574,16 +1614,16 @@ class EnvoyExt:
             return
         # The envoy_running store can be lost on extension reinit (file sync
         # replaces baked-in code → extension reinitializes → storage cleared).
-        # Check the status parameter as a backup — it survives reinit.
+        # Check the status parameter as a backup -- it survives reinit.
         # Only 'Running' means the server thread is actually active.
-        # 'Starting...' is just a UI hint — not proof of an active thread.
+        # 'Starting...' is just a UI hint -- not proof of an active thread.
         status = str(self.ownerComp.par.Envoystatus.eval())
         if status.startswith('Running'):
             self._log(f'Server already active (status: {status})', 'WARNING')
             self.ownerComp.store('envoy_running', True)
             return
 
-        # Resolve git root silently — Start() never prompts. Dialogs belong only
+        # Resolve git root silently -- Start() never prompts. Dialogs belong only
         # in _enableEnvoy() / InitGit() which are explicitly user-initiated.
         git_root = self.ownerComp.fetch('_git_root', None, search=False)
         if not git_root:
@@ -1614,7 +1654,7 @@ class EnvoyExt:
         self._cleanupTempFiles()
 
         # Create a FRESH Event for this server instance.  Don't clear() the old
-        # one — it must stay set so the previous thread's shutdown_monitor sees it.
+        # one -- it must stay set so the previous thread's shutdown_monitor sees it.
         self.shutdown_event = Event()
         _registry = getattr(sys, '_envoy_shutdown_events', {})
         _registry[self.ownerComp.path] = self.shutdown_event
@@ -1631,9 +1671,9 @@ class EnvoyExt:
 
         # Wrap hooks with generation guard so stale callbacks from a previous
         # server thread don't corrupt the running server's state.
-        # Two checks: (1) instance identity — detects extension reinit (Update,
+        # Two checks: (1) instance identity -- detects extension reinit (Update,
         # recompile) where a NEW EnvoyExt instance replaced us; (2) generation
-        # counter — detects rapid Start() calls on the SAME instance.
+        # counter -- detects rapid Start() calls on the SAME instance.
         def guarded_success(returnValue=None, _gen=gen):
             try:
                 if self.ownerComp.ext.Envoy is not self:
@@ -1661,6 +1701,17 @@ class EnvoyExt:
         # Free Thread Manager slots occupied by stale Envoy threads
         self._cleanupStaleThreads()
 
+        # Fresh queues for the new server thread -- the old worker thread
+        # drains via its own shutdown_event, not these queues.
+        self.request_queue = Queue()
+        self.response_queue = Queue()
+        _q_registry = getattr(sys, '_envoy_queues', {})
+        _q_registry[self.ownerComp.path] = {
+            'request': self.request_queue,
+            'response': self.response_queue,
+        }
+        sys._envoy_queues = _q_registry
+
         # Create and enqueue a TDTask
         self.current_task = self.ThreadManager.TDTask(
             target=self._runServer,
@@ -1674,14 +1725,14 @@ class EnvoyExt:
 
         if thread is None:
             self._log(
-                'Thread Manager at capacity — Envoy task queued for pool '
+                'Thread Manager at capacity -- Envoy task queued for pool '
                 'execution instead of standalone thread.', 'WARNING')
 
         # Update status
         self.ownerComp.par.Envoystatus = f'Running on port {port}'
 
         # Auto-configure project files.
-        # Each step is independent — one failure must not block the others.
+        # Each step is independent -- one failure must not block the others.
         # MCP + AI config: always (uses git root if available, else project.folder)
         target_dir = git_root if git_root != 'no-git' else None
         self._configureMCPClient(port, target_dir=target_dir)
@@ -1710,7 +1761,7 @@ class EnvoyExt:
 
         self._log('Stopping Envoy MCP server')
         self.ownerComp.store('envoy_running', False)
-        self._restart_count = 0  # Manual stop — reset auto-restart counter
+        self._restart_count = 0  # Manual stop -- reset auto-restart counter
         self.shutdown_event.set()  # Signal uvicorn to exit
 
         # Remove this instance from the registry
@@ -1752,7 +1803,7 @@ class EnvoyExt:
                 ) from e
             raise RuntimeError(f'MCP server failed on port {port}: {e}') from e
         except Exception as e:
-            # uvicorn raises UnboundLocalError when bind fails — surface
+            # uvicorn raises UnboundLocalError when bind fails -- surface
             # the underlying cause if possible.
             if 'address already in use' in str(e).lower():
                 raise RuntimeError(
@@ -1799,7 +1850,7 @@ class EnvoyExt:
             try:
                 info = self.request_queue.get_nowait()
             except Exception as e:
-                # queue.Empty — no more pending requests this frame
+                # queue.Empty -- no more pending requests this frame
                 try:
                     expected = isinstance(e, Empty)
                 except NameError:
@@ -1821,7 +1872,7 @@ class EnvoyExt:
 
             result = self._execute_operation(operation, params)
 
-            # Deferred operations (e.g. run_tests) return None —
+            # Deferred operations (e.g. run_tests) return None --
             # the worker thread handles its own response via Event
             if result is None:
                 continue
@@ -1835,7 +1886,7 @@ class EnvoyExt:
         self.current_task = None
         if self.ownerComp.par.Envoyenable.eval():
             self._scheduleRestart('Server exited unexpectedly')
-        # If Envoyenable is already off, Stop() set the status — don't overwrite
+        # If Envoyenable is already off, Stop() set the status -- don't overwrite
 
     def _onServerError(self, error):
         """ExceptHook - Called when the thread task errors"""
@@ -1849,12 +1900,12 @@ class EnvoyExt:
         """Auto-restart the MCP server after a crash, with backoff and cap."""
         uptime = time.time() - self._last_start_time
         if uptime > self._RESTART_RESET_SECONDS:
-            self._restart_count = 0  # Stable long enough — reset
+            self._restart_count = 0  # Stable long enough -- reset
 
         self._restart_count += 1
         if self._restart_count > self._MAX_RESTARTS:
             self._log(
-                f'Server failed {self._restart_count} times — giving up. '
+                f'Server failed {self._restart_count} times -- giving up. '
                 f'Last: {reason}. Toggle Envoy off/on to retry.', 'ERROR')
             self.ownerComp.par.Envoystatus = f'Error: {reason} (restart limit reached)'
             self.ownerComp.par.Envoyenable = False
@@ -1980,12 +2031,12 @@ class EnvoyExt:
 
         Starts tests with RunTestsDeferredPerTest (one test per frame) to
         keep TD responsive. The worker thread waits on a threading.Event
-        stored on sys — the main-thread poll signals it when tests finish.
+        stored on sys -- the main-thread poll signals it when tests finish.
         This bypasses the response_queue entirely, surviving server restarts
         and extension reinit.
 
         Returns None on success (deferred). On error, signals the worker
-        thread directly via the Event and returns None — never returns a
+        thread directly via the Event and returns None -- never returns a
         dict, because the sentinel request_id=-1 would be silently dropped
         by check_responses, leaving the worker thread blocked.
         """
@@ -2012,7 +2063,7 @@ class EnvoyExt:
             test_comp.RunTestsDeferredPerTest(
                 suite_name=suite_name, test_name=test_name)
             self._schedulePollTestCompletion()
-            return None  # Deferred — worker thread waits on sys._envoy_pending_test['event']
+            return None  # Deferred -- worker thread waits on sys._envoy_pending_test['event']
         except Exception as e:
             self._restoreStatusAfterTests()
             self._signalTestError(pending, f'Test run failed: {e}')
@@ -2501,10 +2552,18 @@ class EnvoyExt:
             import td as _td
             version = _td.app.version
             build = _td.app.build
+            os_name = _td.app.osName
+            # TD reports "Windows 10" on Win 11 (same NT 10.0 kernel).
+            if os_name == 'Windows 10':
+                try:
+                    if sys.getwindowsversion().build >= 22000:
+                        os_name = 'Windows 11'
+                except AttributeError:
+                    pass
             return {
                 'server': f'TouchDesigner {version}.{build}',
                 'version': f'{version}.{build}',
-                'osName': _td.app.osName,
+                'osName': os_name,
                 'osVersion': _td.app.osVersion,
                 'envoyVersion': ENVOY_VERSION,
             }
@@ -2940,7 +2999,7 @@ class EnvoyExt:
 
         siblings = [child for child in parent.children if child.path != new_op.path]
         if not siblings:
-            return  # No siblings — default position is fine
+            return  # No siblings -- default position is fine
 
         w = new_op.nodeWidth
         h = new_op.nodeHeight
@@ -3617,7 +3676,7 @@ class EnvoyExt:
                         'note': 'DAT is file-synced automatically by TouchDesigner'
                     }
                 else:
-                    return {'error': f'DAT at {op_path} does not have file sync enabled — not externalized'}
+                    return {'error': f'DAT at {op_path} does not have file sync enabled -- not externalized'}
             else:
                 return {'error': f'Operator family "{target.family}" is not supported for save_externalization'}
 
@@ -3820,7 +3879,7 @@ class EnvoyExt:
         """Auto-configure MCP client by writing .mcp.json and the STDIO bridge
         script.  Uses STDIO transport so Claude Code always has tools available
         (the bridge retries until Envoy is reachable).
-        Idempotent — safe to call on every start.
+        Idempotent -- safe to call on every start.
 
         Args:
             port: The port Envoy is running on.
@@ -3865,12 +3924,12 @@ class EnvoyExt:
 
             if not bridge_content:
                 self._log(
-                    'Bridge script source not found — falling back to HTTP transport',
+                    'Bridge script source not found -- falling back to HTTP transport',
                     'WARNING')
                 self._configureMCPClientHTTP(target_dir, port)
                 return
 
-            # Write bridge script only if content changed — preserving
+            # Write bridge script only if content changed -- preserving
             # mtime prevents Claude Code's file watcher from restarting
             # the MCP server mid-connection.
             needs_write = True
@@ -3880,7 +3939,7 @@ class EnvoyExt:
                     if existing == bridge_content:
                         needs_write = False
                 except OSError:
-                    pass  # Can't read — overwrite
+                    pass  # Can't read -- overwrite
 
             if needs_write:
                 bridge_path.write_text(bridge_content, encoding='utf-8')
@@ -3899,8 +3958,9 @@ class EnvoyExt:
                 venv_python = project_dir / '.venv' / 'bin' / 'python3'
 
             if venv_python.is_file():
-                # Verify the venv Python actually executes — catches stale
-                # pyvenv.cfg pointing to an uninstalled TD version.
+                # Verify the venv Python actually executes -- catches stale
+                # pyvenv.cfg pointing to an uninstalled TD version, or
+                # code-signing mismatches after macOS TD upgrades.
                 try:
                     subprocess.run(
                         [str(venv_python), '-c',
@@ -3909,12 +3969,45 @@ class EnvoyExt:
                     python_cmd = str(venv_python).replace('\\', '/')
                 except (subprocess.CalledProcessError,
                         subprocess.TimeoutExpired, OSError) as e:
-                    self._log(
-                        f'Venv Python at {venv_python} exists but failed to '
-                        f'execute: {e}. Delete the .venv directory and '
-                        f'restart Envoy to recreate it.', 'WARNING')
-                    python_cmd = ('python' if sys.platform == 'win32'
-                                  else 'python3')
+                    if not self._venv_recreated:
+                        self._venv_recreated = True
+                        self._log(
+                            f'Venv corrupted ({type(e).__name__}: {e}), '
+                            f'recreating...', 'WARNING')
+                        import shutil
+                        shutil.rmtree(str(project_dir / '.venv'),
+                                      ignore_errors=True)
+                        op.Embody.ext.Embody._setupEnvironment()
+                        # Re-check after recreation
+                        if venv_python.is_file():
+                            try:
+                                subprocess.run(
+                                    [str(venv_python), '-c',
+                                     'import sys; print(sys.version)'],
+                                    capture_output=True, timeout=10,
+                                    check=True)
+                                python_cmd = str(venv_python).replace(
+                                    '\\', '/')
+                                self._log('Venv recreated successfully',
+                                          'SUCCESS')
+                            except Exception as e2:
+                                self._log(
+                                    f'Venv recreation failed: {e2}. '
+                                    f'Using system Python.', 'ERROR')
+                                python_cmd = ('python' if sys.platform == 'win32'
+                                              else 'python3')
+                        else:
+                            self._log(
+                                'Venv recreation did not produce Python '
+                                'binary. Using system Python.', 'ERROR')
+                            python_cmd = ('python' if sys.platform == 'win32'
+                                          else 'python3')
+                    else:
+                        self._log(
+                            f'Venv Python still broken after recreation: '
+                            f'{e}. Using system Python.', 'WARNING')
+                        python_cmd = ('python' if sys.platform == 'win32'
+                                      else 'python3')
             else:
                 python_cmd = 'python' if sys.platform == 'win32' else 'python3'
 
@@ -3990,11 +4083,11 @@ class EnvoyExt:
 
         Auto-allows read-only Envoy MCP tools so the user isn't prompted
         for every query operation. Only writes if the file doesn't exist
-        yet — never overwrites user customizations.
+        yet -- never overwrites user customizations.
         """
         settings_path = claude_dir / 'settings.local.json'
         if settings_path.exists():
-            self._log('settings.local.json already exists — skipping', 'DEBUG')
+            self._log('settings.local.json already exists -- skipping', 'DEBUG')
             return
 
         settings_content = None
@@ -4007,7 +4100,7 @@ class EnvoyExt:
             pass
 
         if not settings_content:
-            self._log('text_settings_local template not found — skipping settings deployment', 'DEBUG')
+            self._log('text_settings_local template not found -- skipping settings deployment', 'DEBUG')
             return
 
         claude_dir.mkdir(parents=True, exist_ok=True)
@@ -4030,7 +4123,7 @@ class EnvoyExt:
 
     def _checkOrInitGitRepo(self):
         """Check for a git repo. If missing, prompt user to initialize one.
-        Only call from user-initiated flows (_enableEnvoy, InitGit) — never
+        Only call from user-initiated flows (_enableEnvoy, InitGit) -- never
         from automatic startup paths. Returns Path, 'no-git', or None (cancelled)."""
         from pathlib import Path
         import os, subprocess
@@ -4038,7 +4131,7 @@ class EnvoyExt:
         project_dir = Path(project.folder)
         home_dir = Path.home()
 
-        # Walk up looking for .git, but stop before the home directory —
+        # Walk up looking for .git, but stop before the home directory --
         # a .git in ~ (e.g. dotfiles repo) is never the intended project repo.
         for parent in [project_dir] + list(project_dir.parents):
             if parent == home_dir or len(parent.parts) <= len(home_dir.parts):
@@ -4062,7 +4155,7 @@ class EnvoyExt:
         self._git_prompt_active = True
         try:
             choice = op.Embody.ext.Embody._messageBox(
-                'Envoy — Git Repository Recommended',
+                'Envoy -- Git Repository Recommended',
                 'A git repository is recommended for .gitignore and\n'
                 '.gitattributes management. No git repository was found.\n\n'
                 'MCP and AI client config files will be generated either way.\n\n'
@@ -4073,7 +4166,7 @@ class EnvoyExt:
 
             if choice not in (1, 2, 3):  # Cancel or closed dialog
                 self.ownerComp.par.Envoyenable = False
-                self._log('Envoy cancelled — no git repository.', 'INFO')
+                self._log('Envoy cancelled -- no git repository.', 'INFO')
                 return None
 
             if choice == 2:  # Browse for Folder
@@ -4081,16 +4174,16 @@ class EnvoyExt:
                     title='Select Git Repository Root', start=str(project_dir))
                 if not result:
                     self.ownerComp.par.Envoyenable = False
-                    self._log('Envoy cancelled — folder selection aborted.', 'INFO')
+                    self._log('Envoy cancelled -- folder selection aborted.', 'INFO')
                     return None
                 chosen = Path(result)
                 # If the chosen folder already contains a .git, use it directly
                 if (chosen / '.git').exists():
                     self._log(f'Using existing git repo at {chosen}', 'SUCCESS')
                     return chosen
-                # No .git there — offer to initialize in that folder
+                # No .git there -- offer to initialize in that folder
                 init_choice = op.Embody.ext.Embody._messageBox(
-                    'Envoy — Initialize Git',
+                    'Envoy -- Initialize Git',
                     f'No git repo found in:\n  {chosen}\n\nInitialize git here?',
                     buttons=['Cancel', 'Initialize Git'])
                 if init_choice not in (1,):
@@ -4100,7 +4193,7 @@ class EnvoyExt:
 
             if choice in (1, 2):  # Initialize Git Here, or Browse → confirmed init
                 try:
-                    # Strip git env vars that TD's embedded Python may set —
+                    # Strip git env vars that TD's embedded Python may set --
                     # these can cause git init to produce a broken repository.
                     clean_env = {
                         k: v for k, v in os.environ.items()
@@ -4121,7 +4214,7 @@ class EnvoyExt:
                         ['git', 'rev-parse', '--is-inside-work-tree'],
                         **git_kwargs)
                     if verify.returncode != 0:
-                        self._log('Git verify failed after init — retrying', 'WARNING')
+                        self._log('Git verify failed after init -- retrying', 'WARNING')
                         subprocess.run(['git', 'init'], check=True, **git_kwargs)
                         verify = subprocess.run(
                             ['git', 'rev-parse', '--is-inside-work-tree'],
@@ -4140,7 +4233,7 @@ class EnvoyExt:
                 except Exception as e:
                     self._log(f'Failed to initialize git repo: {e}', 'ERROR')
                     op.Embody.ext.Embody._messageBox(
-                        'Envoy — Git Initialization Failed',
+                        'Envoy -- Git Initialization Failed',
                         f'Could not initialize a git repository:\n\n  {e}\n\n'
                         'Envoy will start without git. MCP and AI client\n'
                         'config will be generated in the project folder.\n'
@@ -4150,8 +4243,8 @@ class EnvoyExt:
                         buttons=['OK'])
                     # Fall through to start-without-git
 
-            # choice == 3 or git init failed — start without git
-            self._log('Starting Envoy without git repo — auto-config skipped.', 'WARNING')
+            # choice == 3 or git init failed -- start without git
+            self._log('Starting Envoy without git repo -- auto-config skipped.', 'WARNING')
             return 'no-git'
         finally:
             self._git_prompt_active = False
@@ -4207,7 +4300,7 @@ class EnvoyExt:
         if not self._isPidAlive(existing_pid):
             return base  # Reclaim stale entry
 
-        # Base key is held by a live process — find a unique suffix
+        # Base key is held by a live process -- find a unique suffix
         suffix = 2
         while True:
             candidate = f'{base}-{suffix}'
@@ -4377,7 +4470,7 @@ class EnvoyExt:
     def _configureGitignore(self, git_root):
         """Ensure .gitignore in the git root contains entries for
         Embody/Envoy auto-generated files.
-        Idempotent — only appends missing entries, preserves all existing content.
+        Idempotent -- only appends missing entries, preserves all existing content.
         Migrates old `.claude/` blanket entry to specific entries."""
         MANAGED_ENTRIES = [
             # TouchDesigner project
@@ -4440,9 +4533,9 @@ class EnvoyExt:
         """Ensure .gitattributes normalizes line endings for TD-exported files.
         TouchDesigner writes CRLF on all platforms; this forces LF in git
         so externalized files don't show as dirty after every TD save.
-        Idempotent — only writes if the managed block is missing."""
+        Idempotent -- only writes if the managed block is missing."""
         MANAGED_BLOCK = (
-            '\n# Embody / Envoy — normalize TD line endings (auto-managed)\n'
+            '\n# Embody / Envoy -- normalize TD line endings (auto-managed)\n'
             '*.py text eol=lf\n'
             '*.md text eol=lf\n'
             '*.tdn text eol=lf\n'

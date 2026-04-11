@@ -3,7 +3,7 @@ List COMP callbacks for Embody Manager UI.
 
 Renders the externalization tree with expand/collapse, rollover
 highlights, and clickable Strategy/Delete buttons. All styling
-is pure Python — no TOP textures needed.
+is pure Python -- no TOP textures needed.
 
 me   - this callbacks DAT
 comp - the List COMP (available in all callbacks)
@@ -30,10 +30,10 @@ COL_WIDTHS    = [0, 0, 80, 200, 70, 50, 190, 36]
 COL_STRETCHES = [False, True, False, True, False, False, False, False]
 TEXT_PAD_X = 6  # horizontal padding for left-justified cells
 
-# Row whose Strategy cell is "active" (menu open) — shows "..." while menu visible
+# Row whose Strategy cell is "active" (menu open) -- shows "..." while menu visible
 _active_strategy_row = -1
 
-# Persistent selection — tracks the selected operator path (survives refresh/reorder)
+# Persistent selection -- tracks the selected operator path (survives refresh/reorder)
 _selected_path = ''
 
 # --- Theme colors (loaded from Embody UI pars in onInitTable) ---
@@ -84,11 +84,11 @@ def _load_theme():
 	# Pre-composite saved color (may have alpha < 1) over row bg
 	saved = _composite(saved_raw, row) if saved_raw[3] < 1.0 else saved_raw
 
-	# Amber for exporting — warm shift from saved
+	# Amber for exporting -- warm shift from saved
 	amber = (saved[0] + 0.12, max(0, saved[1] - 0.02),
 	         max(0, saved[2] - 0.04), 1.0)
 
-	# Comp state button — slightly brighter than row bg for subtle visibility
+	# Comp state button -- slightly brighter than row bg for subtle visibility
 	comp_bg = _brighten(row, 0.08)
 
 	# State colors from Embody parameters
@@ -101,11 +101,11 @@ def _load_theme():
 	tdn_saved_raw = _par4('Tdnsavedcolor')
 	tdn_saved = _composite(tdn_saved_raw, row) if tdn_saved_raw[3] < 1.0 else tdn_saved_raw
 
-	# TDN exporting — warm shift from TDN saved blue
+	# TDN exporting -- warm shift from TDN saved blue
 	tdn_amber = (tdn_saved[0] + 0.12, max(0, tdn_saved[1] - 0.02),
 	             max(0, tdn_saved[2] - 0.04), 1.0)
 
-	# Subtle column separator — just visible enough to delineate columns
+	# Subtle column separator -- just visible enough to delineate columns
 	border = _brighten(row, 0.04)
 
 	_t.update({
@@ -220,7 +220,7 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		text, st_bg, st_text = _strategy_style(st)
 
 		if _active_strategy_row == row and st not in ('DAT_Saved', 'TDN_Exporting', ''):
-			# Menu is open for this row — show "..." with rollover color
+			# Menu is open for this row -- show "..." with rollover color
 			attribs.text = '...' if st != 'Comp' else 'Tag'
 			if st in ('TOX_Dirty', 'TDN_Dirty'):
 				attribs.bgColor = _t['dirty_roll']
@@ -473,7 +473,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 			return
 
 		if st == 'Comp' and oper:
-			# Unexternalized COMP — open tagger for strategy choice
+			# Unexternalized COMP -- open tagger for strategy choice
 			_active_strategy_row = row
 			parent.Embody.ext.Embody.rolloverOp = oper
 			parent.Embody.op('tagger/switch_family').par.index = 2
@@ -481,7 +481,7 @@ def onSelect(comp, startRow, startCol, startCoords,
 			run(f"op('{parent.Embody.op('window_tagging_menu')}').par.winopen.pulse()",
 				delayFrames=2)
 		elif (st.startswith('TOX_') or st.startswith('TDN_')) and oper:
-			# Already tagged COMP — open manage menu with Switch/Save
+			# Already tagged COMP -- open manage menu with Switch/Save
 			_active_strategy_row = row
 			parent.Embody.ext.Embody.rolloverOp = oper
 			parent.Embody.op('tagger/switch_family').par.index = 2

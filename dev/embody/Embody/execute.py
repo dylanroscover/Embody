@@ -29,10 +29,15 @@ def init():
 
 def onStart():
 	init()
-	# Restore settings from .embody.json — recovers user config after
+	# Restore settings from .embody.json -- recovers user config after
 	# crash, force-quit, or any unsaved session. On normal open where
 	# .toe was saved, values match and this is a no-op.
 	run(f"op('{parent.Embody}').ext.Embody._restoreSettings(kick_envoy=True)", delayFrames=5)
+	# Check if a creation-defaults catalog exists for this TD build.
+	# If not, starts a background scan (1-2 ops/frame, no blocking).
+	# Must run before ReconstructTDNComps (frame 60) for best results,
+	# but the embedded tableDAT covers exports during the scan window.
+	run(f"op('{parent.Embody}').ext.CatalogManager.CheckAndScan()", delayFrames=10)
 	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
@@ -71,13 +76,13 @@ def onDeviceChange():
 
 def onProjectPreSave():
 	# Clear runtime-only storage that must not bake into the .tox.
-	# _git_root is computed fresh at Start() time — baking it in would cause
+	# _git_root is computed fresh at Start() time -- baking it in would cause
 	# every user's project to inherit the dev repo path from the release .tox.
 	parent.Embody.unstore('_git_root')
 	parent.Embody.unstore('_init_complete')
 	# Clear session-only stores before the save so they never bake into the
 	# .tox. _tdn_stripped_paths and _tdn_pane_restore are written and consumed
-	# within a single Ctrl+S cycle — they have no meaning across sessions.
+	# within a single Ctrl+S cycle -- they have no meaning across sessions.
 	parent.Embody.unstore('_tdn_stripped_paths')
 	parent.Embody.unstore('_tdn_pane_restore')
 
@@ -86,7 +91,7 @@ def onProjectPreSave():
 	# temporarily-missing operators inside TDN COMPs.
 	parent.Embody.ext.Embody.Update(suppress_refresh=True)
 
-	# DAT content safety — detect unprotected DATs before strip/restore
+	# DAT content safety -- detect unprotected DATs before strip/restore
 	parent.Embody.ext.Embody._checkDATContentSafety()
 
 	tdn_comps = parent.Embody.ext.Embody._getTDNStrategyComps()
@@ -181,7 +186,7 @@ def onProjectPreSave():
 						pane_restore[pane.id] = owner_path
 						break
 	except Exception:
-		pass  # Non-critical — pane restoration is best-effort
+		pass  # Non-critical -- pane restoration is best-effort
 	if pane_restore:
 		parent.Embody.store('_tdn_pane_restore', pane_restore)
 
@@ -196,7 +201,7 @@ def onProjectPreSave():
 		comp = op(comp_path)
 		if comp:
 			parent.Embody.ext.Embody.StripCompChildren(comp)
-		# Always track — nested COMPs may already be destroyed by a
+		# Always track -- nested COMPs may already be destroyed by a
 		# parent strip earlier in this loop. They still need restoring.
 		stripped_info.append((comp_path, rel_tdn_path))
 	if stripped_info:
@@ -278,16 +283,16 @@ def onProjectPostSave():
 					if target:
 						pane.owner = target
 		except Exception:
-			pass  # Non-critical — pane restoration is best-effort
+			pass  # Non-critical -- pane restoration is best-effort
 
-	# Re-store _init_complete — pre-save cleared it to avoid baking into
+	# Re-store _init_complete -- pre-save cleared it to avoid baking into
 	# the .tox, but the running session still needs it for parexec.
 	parent.Embody.store('_init_complete', True)
 
 	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)
 
-	# Restart Envoy if it was enabled — the save strip kills the server
+	# Restart Envoy if it was enabled -- the save strip kills the server
 	# thread (extension reinit signals the old shutdown event). The status
 	# parameter still says "Running" but the thread is gone.
 	if parent.Embody.par.Envoyenable.eval():

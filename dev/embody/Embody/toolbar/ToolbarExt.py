@@ -57,13 +57,13 @@ class ToolbarExt:
 	# ── Press / Release ─────────────────────────────────────────────
 
 	def OnContainerPress(self, container):
-		"""Called by panelexec on lselect offToOn — set pressed visual."""
+		"""Called by panelexec on lselect offToOn -- set pressed visual."""
 		btn = self._findClickedButton(container)
 		if btn:
 			self._setPressed(btn)
 
 	def OnContainerRelease(self, container):
-		"""Called by panelexec on lselect onToOff — clear pressed visual."""
+		"""Called by panelexec on lselect onToOff -- clear pressed visual."""
 		self._clearPressed()
 
 	def _setPressed(self, btn):

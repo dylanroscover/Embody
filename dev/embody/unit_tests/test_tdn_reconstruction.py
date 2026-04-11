@@ -2940,6 +2940,109 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertAlmostEqual(float(restored.par.dimmer.eval()), 0.5,
 			places=3)
 
+	def test_T10_camera_tz_zero_roundtrip(self):
+		"""cameraCOMP tz=0 survives roundtrip (p.default lies: default=0, creation=5)."""
+		cam = self.sandbox.create(cameraCOMP, 'cam_tz0')
+		# TD creates cameraCOMP with tz=5, but p.default reports 0.
+		# Setting tz=0 must survive export/import.
+		cam.par.tz = 0.0
+		self.assertAlmostEqual(float(cam.par.tz.eval()), 0.0, places=3,
+			msg='Pre-export: tz should be 0')
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		# Verify tz is in the exported TDN
+		cam_def = next(
+			(o for o in tdn['operators'] if o['name'] == 'cam_tz0'), None)
+		self.assertIsNotNone(cam_def, 'cam_tz0 should be in export')
+		self.assertIn('parameters', cam_def,
+			'cam_tz0 should have non-default parameters')
+		self.assertIn('tz', cam_def['parameters'],
+			'tz=0 must be exported (creation default is 5, not 0)')
+
+		# Clear and reimport
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		restored = self.sandbox.op('cam_tz0')
+		self.assertIsNotNone(restored, 'cameraCOMP should be restored')
+		self.assertAlmostEqual(float(restored.par.tz.eval()), 0.0, places=3,
+			msg='tz=0 must survive roundtrip')
+
+	def test_T11_light_tz_zero_roundtrip(self):
+		"""lightCOMP tz=0 survives roundtrip (p.default lies: default=0, creation=10)."""
+		light = self.sandbox.create(lightCOMP, 'light_tz0')
+		light.par.tz = 0.0
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		light_def = next(
+			(o for o in tdn['operators'] if o['name'] == 'light_tz0'), None)
+		self.assertIsNotNone(light_def)
+		self.assertIn('tz', light_def.get('parameters', {}),
+			'tz=0 must be exported (creation default is 10, not 0)')
+
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		restored = self.sandbox.op('light_tz0')
+		self.assertAlmostEqual(float(restored.par.tz.eval()), 0.0, places=3,
+			msg='tz=0 must survive roundtrip')
+
+	def test_T12_render_resolution_roundtrip(self):
+		"""renderTOP resolution survives when set to p.default (not creation value)."""
+		render = self.sandbox.create(renderTOP, 'render_res')
+		# TD creates renderTOP with resolutionw=1280 but p.default=256
+		render.par.resolutionw = 256
+		render.par.resolutionh = 256
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		render_def = next(
+			(o for o in tdn['operators'] if o['name'] == 'render_res'), None)
+		self.assertIsNotNone(render_def)
+		self.assertIn('resolutionw', render_def.get('parameters', {}),
+			'resolutionw=256 must be exported (creation default is 1280)')
+
+		result = self.tdn.ImportNetwork(
+			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
+		self.assertTrue(result.get('success'))
+
+		restored = self.sandbox.op('render_res')
+		self.assertEqual(int(restored.par.resolutionw.eval()), 256,
+			msg='resolutionw=256 must survive roundtrip')
+		self.assertEqual(int(restored.par.resolutionh.eval()), 256,
+			msg='resolutionh=256 must survive roundtrip')
+
+	def test_T13_divergent_default_not_false_positive(self):
+		"""Params at their true creation value are still omitted from export."""
+		cam = self.sandbox.create(cameraCOMP, 'cam_default')
+		# Don't change tz — leave it at the creation value of 5.0
+
+		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+			include_dat_content=True)
+		self.assertTrue(orig.get('success'))
+		tdn = orig['tdn']
+
+		cam_def = next(
+			(o for o in tdn['operators'] if o['name'] == 'cam_default'), None)
+		self.assertIsNotNone(cam_def)
+		# tz=5 is the creation default, so it should NOT be in the export
+		params = cam_def.get('parameters', {})
+		self.assertNotIn('tz', params,
+			'tz at creation default (5) should NOT be exported')
+
 	# =================================================================
 	# Section U: Nested TDN child-skip logic
 	# =================================================================
@@ -3270,7 +3373,13 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(clone_op.path.startswith('/sys/'))
 
 	def test_V11_multiple_palette_clones_type_defaults(self):
-		"""Clone-source-diff params hoist to type_defaults when unanimous."""
+		"""Palette clones round-trip correctly with divergent defaults fix.
+
+		With the creation-defaults catalog, buttontype=toggledown is now
+		recognized as a true creation default (matching the clone source),
+		so it is correctly omitted from export. parent.create(buttonCOMP)
+		clones from /sys/ and sets buttontype=toggledown automatically.
+		"""
 		names = []
 		for i in range(3):
 			btn = self.sandbox.create(buttonCOMP, f'btn{20 + i}')
@@ -3278,17 +3387,16 @@ class TestTDNReconstruction(EmbodyTestCase):
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
-		td = tdn.get('type_defaults', {}).get('buttonCOMP', {})
-		td_params = td.get('parameters', {})
-		# buttontype should be hoisted to type_defaults (unanimous across 3)
-		self.assertIn('buttontype', td_params,
-			'Unanimous clone-source-diff param should hoist to type_defaults')
 		# Round-trip should preserve all three
 		self._roundTrip(self.sandbox)
 		for name in names:
 			restored = self.sandbox.op(name)
 			self.assertIsNotNone(restored, f'{name} must survive round-trip')
 			self.assertGreater(len(restored.children), 0)
+			# buttontype should still be toggledown after roundtrip
+			self.assertEqual(
+				restored.par.buttontype.eval(), 'toggledown',
+				f'{name} buttontype should be toggledown after roundtrip')
 
 	def test_V12_mixed_network_no_interference(self):
 		"""Palette clone handling does not interfere with regular operators."""

@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.3",
 	"build": 1,
-	"generator": "Embody/5.0.319",
+	"generator": "Embody/5.0.338",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.319.toe",
-	"exported_at": "2026-04-08T06:53:54Z",
+	"source_file": "Embody-5.338.toe",
+	"exported_at": "2026-04-10T20:09:24Z",
 	"network_path": "/embody/Embody/toolbar/container_left/save_folder",
 	"options": {
 		"include_dat_content": false,

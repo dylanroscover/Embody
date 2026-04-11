@@ -1,5 +1,5 @@
 ﻿"""
-TDN — TouchDesigner Network open format (.tdn)
+TDN -- TouchDesigner Network open format (.tdn)
 
 Exports and imports TouchDesigner networks as human-readable JSON files.
 Only non-default properties are stored, keeping the output minimal.
@@ -31,14 +31,14 @@ SKIP_PARAMS = {
 	'pageindex',  # UI state (visible parameter page tab), not config
 }
 
-# Embody-managed About page parameters — excluded from TDN export
+# Embody-managed About page parameters -- excluded from TDN export
 # because they are reconstructed from externalizations.tsv at import time.
 _EMBODY_ABOUT_PARS = {'Build', 'Date', 'Touchbuild'}
 
 # Built-in parameter styles to skip (actions, not state)
 SKIP_BUILTIN_STYLES = {'Pulse', 'Momentary', 'Header'}
 
-# Parameters to skip on palette clones — TD plumbing that interferes
+# Parameters to skip on palette clones -- TD plumbing that interferes
 # with parameter round-tripping. The clone expression causes TD to
 # override user-set values (like buttontype) on rebuild.
 _PALETTE_CLONE_SKIP_PARAMS = {'clone', 'enablecloning'}
@@ -91,7 +91,7 @@ STYLE_APPEND_MAP = {
 	'Sequence': 'appendSequence',
 }
 
-# Default flag values — only export flags that differ
+# Default flag values -- only export flags that differ
 DEFAULT_FLAGS = {
 	'bypass': False,
 	'lock': False,
@@ -130,9 +130,17 @@ class TDNExt:
 		self._defaults_cache: dict[str, dict[str, Any]] = {}
 		self._exportable_cache: dict[str, set[str]] = {}
 		self._seq_default_blocks_cache: dict[tuple[str, str], int] = {}
+		# Divergent defaults: params where TD's p.default lies (differs
+		# from the actual creation value). Loaded lazily from the
+		# divergent_defaults tableDAT inside the Embody COMP.
+		self._divergent_defaults: dict[str, dict[str, Any]] = {}
+		self._divergent_loaded: bool = False
+		# On-the-fly fallback cache for unknown TD builds.
+		self._runtime_creation_cache: dict[str, dict[str, Any]] = {}
+		self._scan_workspace: Optional['COMP'] = None
 
 	# =========================================================================
-	# CRASH SAFETY — atomic writes, backup rotation, validation
+	# CRASH SAFETY -- atomic writes, backup rotation, validation
 	# =========================================================================
 
 	@staticmethod
@@ -153,7 +161,7 @@ class TDNExt:
 		try:
 			rel = tdn.relative_to(proj)
 		except ValueError:
-			# tdn_path not under project_folder — fall back to flat name
+			# tdn_path not under project_folder -- fall back to flat name
 			rel = Path(tdn.name)
 		backup_dir = proj / '.tdn_backup'
 		return backup_dir / (str(rel) + suffix)
@@ -189,7 +197,7 @@ class TDNExt:
 		"""Write content to filepath atomically using temp-file-then-rename.
 
 		Guarantees that `filepath` always contains either the complete old
-		content or the complete new content — never a partial write.
+		content or the complete new content -- never a partial write.
 
 		The temp file is created in the same directory as filepath to
 		ensure os.replace() is atomic (same filesystem).
@@ -207,7 +215,7 @@ class TDNExt:
 				f.flush()
 				os.fsync(f.fileno())
 			os.replace(tmp_path, filepath)
-			tmp_path = None  # Rename succeeded — no cleanup needed
+			tmp_path = None  # Rename succeeded -- no cleanup needed
 		finally:
 			if tmp_fd is not None:
 				os.close(tmp_fd)
@@ -258,7 +266,7 @@ class TDNExt:
 		try:
 			TDNExt._rotate_backups(tdn_path, project_folder)
 		except Exception:
-			# Backup failure should not block the write — log but continue.
+			# Backup failure should not block the write -- log but continue.
 			# The write itself is still atomic.
 			pass
 
@@ -273,7 +281,7 @@ class TDNExt:
 		if validation.get('valid'):
 			return {'success': True}
 
-		# Step 4: Validation failed — attempt restore from backup
+		# Step 4: Validation failed -- attempt restore from backup
 		error_msg = validation.get('error', 'unknown')
 		bak = TDNExt._get_backup_path(tdn_path, project_folder, '.bak')
 		if bak.is_file():
@@ -334,7 +342,7 @@ class TDNExt:
 			return None
 
 	# =========================================================================
-	# PROMOTED METHODS (uppercase — callable directly on op.Embody)
+	# PROMOTED METHODS (uppercase -- callable directly on op.Embody)
 	# =========================================================================
 
 	def ExportNetwork(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
@@ -470,7 +478,7 @@ class TDNExt:
 
 			# Write to file if requested
 			if output_file:
-				# Scan from project folder — TDN paths mirror TD hierarchy
+				# Scan from project folder -- TDN paths mirror TD hierarchy
 				scan_folder = str(project.folder)
 				before_tdn = TDNExt._collectExistingTDNFiles(
 					scan_folder, root_path)
@@ -513,6 +521,8 @@ class TDNExt:
 		except Exception as e:
 			self._log(f'Export failed: {e}', 'ERROR')
 			return {'error': f'Export failed: {e}'}
+		finally:
+			self._cleanupScanWorkspace()
 
 	def ExportNetworkAsync(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 						   output_file: Optional[str] = None, max_depth: Optional[int] = None,
@@ -631,7 +641,7 @@ class TDNExt:
 			"""Worker thread: wait for batches, then assemble and write file.
 
 			File scanning (rglob) is done on the main thread before this
-			starts — scandir suffers extreme GIL contention from bg threads.
+			starts -- scandir suffers extreme GIL contention from bg threads.
 			"""
 			done_event.wait(timeout=300)  # 5 minute safety timeout
 
@@ -762,7 +772,7 @@ class TDNExt:
 		thread = thread_manager.EnqueueTask(task, standalone=True)
 		if thread is None:
 			self._log(
-				'Thread Manager at capacity — export queued but may be '
+				'Thread Manager at capacity -- export queued but may be '
 				'delayed. Try restarting Envoy to free stale threads.',
 				'WARNING')
 
@@ -891,6 +901,7 @@ class TDNExt:
 
 	def _onExportSuccess(self):
 		"""SuccessHook: Log completion (main thread)."""
+		self._cleanupScanWorkspace()
 		state = self._export_state
 		if state and state.get('result'):
 			result = state['result']
@@ -918,6 +929,7 @@ class TDNExt:
 
 	def _onExportError(self, e):
 		"""ExceptHook: Log error (main thread)."""
+		self._cleanupScanWorkspace()
 		self._log(f'Export failed: {e}', 'ERROR')
 		self._export_state = None
 		self._reexport_queue = None
@@ -1033,7 +1045,7 @@ class TDNExt:
 			return {'error': msg}
 
 		if clear_first:
-			# Clear dock relationships before destroying — TD's engine
+			# Clear dock relationships before destroying -- TD's engine
 			# raises an uncatchable tdError if a dock target is destroyed
 			# before its docked operator.
 			for child in list(dest.children):
@@ -1069,7 +1081,7 @@ class TDNExt:
 
 		# Pre-phase: Skip children of nested TDN-externalized COMPs.
 		# If a child COMP has its own .tdn entry in the externalizations table,
-		# its own file is the source of truth — not the parent's snapshot.
+		# its own file is the source of truth -- not the parent's snapshot.
 		tdn_paths = self._getTDNExternalizedPaths()
 		if tdn_paths:
 			tdn_paths.discard(target_path)  # We ARE importing this one
@@ -1078,7 +1090,7 @@ class TDNExt:
 					op_defs, target_path, tdn_paths)
 				for sp in skipped:
 					self._log(
-						f'Skipping children of {sp} — has its own TDN '
+						f'Skipping children of {sp} -- has its own TDN '
 						f'externalization (source of truth)', 'INFO')
 
 		# Cross-validate tdn_ref pointers against table and disk
@@ -1154,10 +1166,10 @@ class TDNExt:
 
 			# Phase 9: Apply target COMP's own properties from TDN.
 			# Runs AFTER child creation so extension reinit (triggered by
-			# recreating extension source DATs) has already happened —
+			# recreating extension source DATs) has already happened --
 			# this overwrites any defaults the extension set.
 			if isinstance(tdn, dict):
-				# Type validation (v1.1+) — warn if destination type differs
+				# Type validation (v1.1+) -- warn if destination type differs
 				tdn_type = tdn.get('type')
 				if tdn_type and dest.OPType != tdn_type:
 					self._log(
@@ -1291,7 +1303,7 @@ class TDNExt:
 		import os
 		if not os.path.isfile(file_path):
 			self._log(f'TDN file not found: {file_path}', 'ERROR')
-			ui.status = f'TDN Import: File not found — {file_path}'
+			ui.status = f'TDN Import: File not found -- {file_path}'
 			return {'error': f'TDN file not found: {file_path}'}
 
 		try:
@@ -1299,7 +1311,7 @@ class TDNExt:
 				tdn_data = json.load(f)
 		except json.JSONDecodeError as e:
 			self._log(f'Invalid JSON in TDN file: {e}', 'ERROR')
-			ui.status = f'TDN Import: Invalid JSON — {e}'
+			ui.status = f'TDN Import: Invalid JSON -- {e}'
 			return {'error': f'Invalid JSON in TDN file: {e}'}
 		except Exception as e:
 			self._log(f'Failed to read TDN file: {e}', 'ERROR')
@@ -1342,7 +1354,7 @@ class TDNExt:
 					f'Skipping duplicate companion "{name}" '
 					f'(original: "{base}")', 'INFO')
 
-		# Keys that carry no user-meaningful data — operators with only
+		# Keys that carry no user-meaningful data -- operators with only
 		# these keys are auto-created defaults (e.g. torus1 inside a
 		# geoCOMP) that TD recreates automatically on COMP creation.
 		_TRIVIAL_KEYS = {'name', 'type', 'position', 'size'}
@@ -1359,7 +1371,7 @@ class TDNExt:
 
 			op_data = self._exportSingleOp(child, options, depth)
 			if op_data is not None:
-				# Skip bare auto-created defaults — TD recreates these
+				# Skip bare auto-created defaults -- TD recreates these
 				# when the parent COMP is created, so they're noise
 				if not (set(op_data.keys()) - _TRIVIAL_KEYS):
 					self._log(
@@ -1451,8 +1463,8 @@ class TDNExt:
 			if comp_conns:
 				data['comp_inputs'] = comp_conns
 
-		# DAT content — include when the include_dat_content option is True.
-		# Skip content for read-only DATs (e.g. glsl1_info, popto1) —
+		# DAT content -- include when the include_dat_content option is True.
+		# Skip content for read-only DATs (e.g. glsl1_info, popto1) --
 		# TD auto-generates their content and rejects writes on import.
 		if target.family == 'DAT' and options.get('include_dat_content', True):
 			if self._isDATEditable(target):
@@ -1463,9 +1475,9 @@ class TDNExt:
 				data['dat_read_only'] = True
 
 		# Recurse into COMP children (sync mode only)
-		# Skip children of palette clones — they come from /sys/ and
+		# Skip children of palette clones -- they come from /sys/ and
 		# don't need to be stored (TD recreates them from the clone source)
-		# Skip children of COMPs with their own TDN tag — those are
+		# Skip children of COMPs with their own TDN tag -- those are
 		# managed by their own .tdn file to avoid redundant nesting
 		if recurse and hasattr(target, 'children'):
 			if self._isPaletteClone(target):
@@ -1483,7 +1495,7 @@ class TDNExt:
 					if 'parameters' not in data:
 						data['parameters'] = {}
 					data['parameters'].update(clone_source_params)
-				# Strip clone/enablecloning — TD plumbing that
+				# Strip clone/enablecloning -- TD plumbing that
 				# parent.create() auto-sets on rebuild.
 				if 'parameters' in data:
 					for skip_par in _PALETTE_CLONE_SKIP_PARAMS:
@@ -1509,6 +1521,181 @@ class TDNExt:
 
 		return data
 
+	# =====================================================================
+	# Divergent defaults — correct for p.default lying
+	# =====================================================================
+
+	def _loadDivergentDefaults(self):
+		"""Load creation defaults, checking sources in priority order:
+
+		1. CatalogManager (already populated from .embody/ catalog file)
+		2. Embedded divergent_defaults tableDAT (bootstrap for known builds)
+		3. Empty dict (on-the-fly fallback handles unknown types)
+		"""
+		self._divergent_loaded = True
+
+		# Priority 1: CatalogManager may have already populated us
+		if self._divergent_defaults:
+			return
+
+		self._divergent_defaults = {}
+
+		# Priority 2: Try loading from .embody/ catalog file
+		import json, os
+		build_str = f'{app.version}.{app.build}'
+		try:
+			catalog_mgr = self.ownerComp.ext.CatalogManager
+			catalog_path = catalog_mgr._getCatalogPath(build_str)
+			if os.path.isfile(catalog_path):
+				catalog = catalog_mgr._readCatalog(catalog_path)
+				if catalog:
+					self._divergent_defaults = catalog
+					self._log(
+						f'Loaded catalog from .embody/ for build '
+						f'{build_str} ({len(catalog)} types)', 'DEBUG')
+					return
+		except Exception:
+			pass
+
+		# Priority 3: Fall back to embedded tableDAT
+		table = self.ownerComp.op('divergent_defaults')
+		if table is None or table.numRows < 2:
+			return
+
+		headers = [table[0, c].val for c in range(table.numCols)]
+		build_cols = headers[3:]  # Skip op_type, par_name, style
+
+		if build_str in build_cols:
+			col_name = build_str
+		elif build_cols:
+			col_name = build_cols[-1]
+			self._log(
+				f'Divergent defaults: no column for build {build_str}, '
+				f'using {col_name}', 'DEBUG')
+		else:
+			return
+
+		col_idx = headers.index(col_name)
+
+		for row_idx in range(1, table.numRows):
+			op_type = table[row_idx, 0].val
+			par_name = table[row_idx, 1].val
+			style = table[row_idx, 2].val
+			val_str = table[row_idx, col_idx].val
+
+			if not val_str:
+				continue
+
+			val = self._deserializeDivergentValue(val_str, style)
+
+			if op_type not in self._divergent_defaults:
+				self._divergent_defaults[op_type] = {}
+			self._divergent_defaults[op_type][par_name] = val
+
+		self._log(
+			f'Loaded divergent defaults from tableDAT: '
+			f'{len(self._divergent_defaults)} op types from column '
+			f'{col_name}', 'DEBUG')
+
+	@staticmethod
+	def _deserializeDivergentValue(val_str, style):
+		"""Convert a stored divergent default string back to a typed value."""
+		if style in ('Float', 'XY', 'XYZ', 'XYZW', 'UV', 'UVW', 'WH',
+					 'RGB', 'RGBA'):
+			try:
+				return float(val_str)
+			except ValueError:
+				return val_str
+		if style == 'Int':
+			try:
+				return int(val_str)
+			except ValueError:
+				return val_str
+		if style == 'Toggle':
+			return val_str == 'True'
+		return val_str
+
+	def _getDivergentDefaults(self, op_type):
+		"""Get divergent defaults for an op type, loading if needed.
+
+		Returns a dict of {par_name: creation_value} for params where
+		p.default lies, or an empty dict if none.
+
+		If the table loaded successfully, a missing op_type means "no
+		divergent defaults for this type" — return {} without probing.
+		On-the-fly probing only runs when the table has no data at all
+		(missing DAT, empty table, or no build columns).
+		"""
+		if not self._divergent_loaded:
+			self._loadDivergentDefaults()
+		# If table loaded, trust it: missing type = no divergences
+		if self._divergent_defaults:
+			return self._divergent_defaults.get(op_type, {})
+		# No table data — fall back to on-the-fly probing
+		return self._getCreationValueOnTheFly(op_type)
+
+	def _getCreationValueOnTheFly(self, op_type):
+		"""Create a temp op, find params where val != default, cache result.
+
+		This is the fallback when the divergent_defaults table doesn't
+		have a column for the current TD build.
+		"""
+		if op_type in self._runtime_creation_cache:
+			return self._runtime_creation_cache[op_type]
+
+		vals = {}
+		try:
+			if self._scan_workspace is None:
+				self._scan_workspace = self.ownerComp.create(
+					baseCOMP, '_defaults_workspace')
+				self._scan_workspace.viewer = False
+
+			import td as _td
+			cls = getattr(_td, op_type, None)
+			if cls is not None:
+				temp = self._scan_workspace.create(cls, '_probe')
+				for p in temp.pars():
+					if p.isCustom or p.readOnly or p.sequence is not None:
+						continue
+					if p.name in SKIP_PARAMS:
+						continue
+					if p.style in SKIP_BUILTIN_STYLES:
+						continue
+					try:
+						if p.val != p.default:
+							# Skip name-dependent values
+							if '_probe' not in str(p.val):
+								vals[p.name] = p.val
+					except Exception:
+						pass
+				temp.destroy()
+		except Exception as e:
+			self._log(
+				f'On-the-fly default probe failed for {op_type}: {e}',
+				'DEBUG')
+
+		self._runtime_creation_cache[op_type] = vals
+		return vals
+
+	def _cleanupScanWorkspace(self):
+		"""Destroy the on-the-fly scan workspace if it exists."""
+		if self._scan_workspace is not None:
+			try:
+				self._scan_workspace.destroy()
+			except Exception:
+				pass
+			self._scan_workspace = None
+
+	def _getCreationDefault(self, op_type, par_name, par):
+		"""Get the true creation default for a parameter.
+
+		Checks the divergent defaults catalog first, falls back to p.default.
+		"""
+		divergent = self._getDivergentDefaults(op_type)
+		if par_name in divergent:
+			return divergent[par_name]
+		return par.default
+
 	def _buildParCache(self, target):
 		"""Build per-OPType cache of exportable parameter names and defaults.
 
@@ -1516,10 +1703,15 @@ class TDNExt:
 		record which are exportable (non-custom, non-readOnly except `file`, non-skip) and
 		their default values. Subsequent operators of the same type skip all
 		those per-parameter attribute checks (isCustom, readOnly, style) and
-		default lookups — replacing ~4 Python-to-C++ bridge calls per parameter
+		default lookups -- replacing ~4 Python-to-C++ bridge calls per parameter
 		with a single Python dict lookup.
+
+		Uses the divergent defaults catalog to correct for params where
+		TD's p.default doesn't match the actual creation value (e.g.
+		cameraCOMP tz: p.default=0 but creation value is 5).
 		"""
 		op_type = target.OPType
+		divergent = self._getDivergentDefaults(op_type)
 		exportable = {}
 		defaults = {}
 		for p in target.pars():
@@ -1534,7 +1726,7 @@ class TDNExt:
 			if p.style in SKIP_BUILTIN_STYLES:
 				continue
 			exportable[p.name] = True
-			defaults[p.name] = p.default
+			defaults[p.name] = divergent.get(p.name, p.default)
 		self._exportable_cache[op_type] = exportable
 		self._defaults_cache[op_type] = defaults
 
@@ -1635,7 +1827,9 @@ class TDNExt:
 				value = self._getParValue(p)
 
 				if value is not None:
-					default = self._serializeValue(p.default)
+					creation_default = self._getCreationDefault(
+						target.OPType, p.name, p)
+					default = self._serializeValue(creation_default)
 					if self._valuesDiffer(value, default):
 						block_data[base_name] = value
 						has_any_nondefault = True
@@ -1661,7 +1855,7 @@ class TDNExt:
 	def _getDefaultSequenceBlockCount(self, target, seq):
 		"""Get default numBlocks for a sequence on this op type.
 
-		Cached per (OPType, seq_name). Defaults to 1 — most built-in
+		Cached per (OPType, seq_name). Defaults to 1 -- most built-in
 		sequences start with 1 block. The worst case of a wrong default
 		is a redundant [{}] in the TDN output (harmless).
 		"""
@@ -1674,11 +1868,11 @@ class TDNExt:
 		"""Export ALL custom parameters grouped by page.
 
 		Returns a dict keyed by page name, where each value is a list of
-		parameter definitions (without the 'page' field — the key IS the page).
+		parameter definitions (without the 'page' field -- the key IS the page).
 
 		For custom sequences: only the sequence header and the block 0 template
 		parameters are exported as custom par definitions. Per-block instance
-		parameters (block index > 0) are skipped — their values are stored in
+		parameters (block index > 0) are skipped -- their values are stored in
 		the operator's `sequences` key by `_exportBuiltinSequences`. The
 		template par's `name` field is normalized to its base name (the
 		original capitalized form, e.g. `Itemlabel` instead of `Items0itemlabel`)
@@ -1759,7 +1953,7 @@ class TDNExt:
 			'style': style,
 		}
 
-		# Label — only if different from name
+		# Label -- only if different from name
 		if first_par.label != base_name:
 			par_def['label'] = first_par.label
 
@@ -1796,10 +1990,10 @@ class TDNExt:
 		# Menu entries
 		if first_par.isMenu:
 			if first_par.menuSource:
-				# Dynamically populated — store the source, not the entries
+				# Dynamically populated -- store the source, not the entries
 				par_def['menuSource'] = first_par.menuSource
 			else:
-				# Manually defined — store entries
+				# Manually defined -- store entries
 				names = list(first_par.menuNames)
 				labels = list(first_par.menuLabels)
 				par_def['menuNames'] = names
@@ -1814,7 +2008,7 @@ class TDNExt:
 		if first_par.help:
 			par_def['help'] = first_par.help
 
-		# Current values — only if different from default
+		# Current values -- only if different from default
 		if len(group) == 1:
 			val = self._getParValue(first_par)
 			if val is not None:
@@ -2107,7 +2301,7 @@ class TDNExt:
 		"""Test whether a DAT's text content is writable.
 
 		Some auto-created companion DATs (e.g. glsl1_info, popto1) are
-		read-only — TD auto-generates their content and rejects writes
+		read-only -- TD auto-generates their content and rejects writes
 		with "The operator is not editable".  This probe is per-instance
 		(not per-OPType) because read-only companions share OPType
 		'textDAT' with regular editable text DATs.
@@ -2167,7 +2361,7 @@ class TDNExt:
 		auto-renamed it due to name conflicts.
 
 		Auto-created companion DATs (e.g. timerCHOP callbacks, rampTOP keys)
-		are reused rather than duplicated — if an operator with the target
+		are reused rather than duplicated -- if an operator with the target
 		name already exists in the parent AND was NOT present before import
 		started, it was auto-created by a sibling's create() earlier in
 		this same import pass.
@@ -2187,7 +2381,7 @@ class TDNExt:
 				continue
 
 			# Reuse auto-created companions (e.g. timerCHOP callbacks,
-			# rampTOP keys) — but only if the op was NOT present before
+			# rampTOP keys) -- but only if the op was NOT present before
 			# import started (i.e. it was auto-created by a sibling's
 			# create() earlier in this same import pass).
 			existing = parent.op(name)
@@ -2227,7 +2421,7 @@ class TDNExt:
 				# Shell created here; network populated by
 				# ReconstructTDNComps() in depth-sorted order.
 				self._log(
-					f'Skipping children of {new_op.path} — '
+					f'Skipping children of {new_op.path} -- '
 					f'managed by {tdn_ref}', 'DEBUG')
 			elif children and new_op.isCOMP:
 				# Clear auto-created default children (e.g. torus1
@@ -2293,7 +2487,7 @@ class TDNExt:
 		with a `sequence` field) are created in this order:
 		  1. Sequence header via appendSequence(name)
 		  2. Template pars (each with a `sequence` field) via their normal
-		     append method — they auto-join the sequence because they
+		     append method -- they auto-join the sequence because they
 		     follow the sequence header in the page
 		  3. After all template pars for a sequence are added, blockSize
 		     is set to the count of template ParGroups for that sequence.
@@ -2508,9 +2702,9 @@ class TDNExt:
 		"""Find a parameter inside a sequence block by base name.
 
 		Tries (in order):
-		  1. block.par.{baseName} — works for built-in sequences
-		  2. block.par[{baseName}] — bracket access fallback
-		  3. target.par.{seqName}{blockIndex}{lowercase baseName} — works
+		  1. block.par.{baseName} -- works for built-in sequences
+		  2. block.par[{baseName}] -- bracket access fallback
+		  3. target.par.{seqName}{blockIndex}{lowercase baseName} -- works
 		     for custom sequences where block.par attribute access returns
 		     None (TD's custom-sequence block.par lookup is broken).
 		"""
@@ -2546,7 +2740,7 @@ class TDNExt:
 			# Built-in parameters
 			is_palette_clone = op_def.get('palette_clone', False)
 			for par_name, value in op_def.get('parameters', {}).items():
-				# Skip clone/enablecloning on palette clones — these
+				# Skip clone/enablecloning on palette clones -- these
 				# are auto-set by parent.create() and should not be
 				# overwritten. Old TDN files may still contain them.
 				if is_palette_clone and par_name in _PALETTE_CLONE_SKIP_PARAMS:
@@ -2799,7 +2993,7 @@ class TDNExt:
 					else:
 						target.text = content
 				except Exception as e:
-					# Downgrade "not editable" errors to DEBUG — expected
+					# Downgrade "not editable" errors to DEBUG -- expected
 					# for auto-generated companion DATs (info DATs, etc.)
 					# from older .tdn files without the dat_read_only flag.
 					err_str = str(e).lower()
@@ -2904,7 +3098,7 @@ class TDNExt:
 			children = op_def.get('children', [])
 
 			if not dock_ref:
-				# No dock on this op — still recurse into children
+				# No dock on this op -- still recurse into children
 				if children:
 					target = self._resolveOp(parent, op_def)
 					if target and target.isCOMP:
@@ -3377,7 +3571,7 @@ class TDNExt:
 		But p.default can differ from the clone source's actual value (e.g.
 		buttontype: p.default is "momentary" but clone source is "toggledown").
 		This method finds params that were wrongly skipped because they match
-		p.default but differ from the clone source — these need to be exported
+		p.default but differ from the clone source -- these need to be exported
 		so they survive the strip/restore rebuild cycle.
 		"""
 		clone_par = getattr(target.par, 'clone', None)
@@ -3441,7 +3635,7 @@ class TDNExt:
 		"""Remove children from op_defs for COMPs with their own TDN entry.
 
 		The child COMP shell is still created (its operator definition remains),
-		but its children array is emptied — the child's own .tdn file is the
+		but its children array is emptied -- the child's own .tdn file is the
 		source of truth for its internal network.
 
 		Args:
@@ -3808,7 +4002,7 @@ class TDNExt:
 		Groups by page: if the same page definition (all par defs sans values)
 		appears on 2+ operators, it becomes a named template.
 
-		Returns (par_templates_dict, operators) — operators modified in-place.
+		Returns (par_templates_dict, operators) -- operators modified in-place.
 		"""
 		from collections import defaultdict
 
@@ -4007,7 +4201,7 @@ class TDNExt:
 	def _stripBuildSuffix(name: str) -> str:
 		"""Strip trailing build number (.NNN) from a project name for stable filenames.
 
-		Only removes a trailing dot-digits suffix — the auto-incrementing build
+		Only removes a trailing dot-digits suffix -- the auto-incrementing build
 		number that TD appends on save. Preserves deliberate user versioning.
 
 		Examples: 'Embody-5.302' -> 'Embody-5', 'Embody-5' -> 'Embody-5',
@@ -4065,7 +4259,7 @@ class TDNExt:
 			headers = [table[0, c].val for c in range(table.numCols)]
 			has_strategy = 'strategy' in headers
 
-			# Update existing row if found — check strategy='tdn' or type='tdn'
+			# Update existing row if found -- check strategy='tdn' or type='tdn'
 			for i in range(1, table.numRows):
 				row_path = table[i, 'path'].val
 				if row_path != root_path:
@@ -4105,7 +4299,7 @@ class TDNExt:
 		"""
 		LARGE_TDN_THRESHOLD = 5_000_000  # 5 MB
 
-		# Already using cascade — no point warning
+		# Already using cascade -- no point warning
 		if self.ownerComp.par.Tdncascade.eval():
 			return
 
@@ -4164,10 +4358,10 @@ class TDNExt:
 		if context == 'export':
 			self._log(
 				f'Locked non-DAT operators in {root_op.path}: {summary} '
-				f'— frozen data will not persist through TDN', 'WARNING')
+				f'-- frozen data will not persist through TDN', 'WARNING')
 			try:
 				ui.messageBox(
-					'Embody — Locked Content Warning',
+					'Embody -- Locked Content Warning',
 					f'{len(locked)} locked non-DAT operator(s) in '
 					f'{root_op.path}:\n\n{summary}\n\n'
 					f'TDN preserves the lock flag but cannot store '
@@ -4183,10 +4377,10 @@ class TDNExt:
 			except Exception:
 				pass  # Non-fatal if dialog fails
 		else:
-			# Import context — log only, no dialog (reconstruction is automated)
+			# Import context -- log only, no dialog (reconstruction is automated)
 			self._log(
 				f'Restored lock flag on {len(locked)} non-DAT operator(s) '
-				f'in {root_op.path}: {summary} — these operators have no '
+				f'in {root_op.path}: {summary} -- these operators have no '
 				f'frozen data and should be unlocked to re-cook', 'WARNING')
 
 	def _log(self, message, level='INFO'):
@@ -4195,6 +4389,6 @@ class TDNExt:
 			self.ownerComp.ext.Embody.Log(message, level, _depth=2)
 			return
 		except Exception:
-			pass  # Fallback below handles this — avoid recursion in logger
+			pass  # Fallback below handles this -- avoid recursion in logger
 		# Fallback if Embody ext unavailable
 		print(f'[TDN][{level}] {message}')

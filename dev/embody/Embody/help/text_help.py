@@ -1,4 +1,4 @@
-﻿'''
+'''
 Embody v5
 ===============
 
@@ -16,7 +16,7 @@ Getting Started
 1. Add the Embody .tox to your project
 2. Tag operators for externalization (lctrl-lctrl)
 3. Press ctrl-shift-u to initialize/update
-4. Work as normal — externalized files are the source of truth
+4. Work as normal -- externalized files are the source of truth
 
 The default Tags are listed on the Tags page. These can be
 customized, but please do so before you enable Embody.
@@ -79,7 +79,7 @@ restores everything from the files on disk:
   native file parameter
 
 Your externalized files on disk are the source of truth.
-The .toe file is just a convenient container — all tagged
+The .toe file is just a convenient container -- all tagged
 operators are fully recoverable from the external files.
 
 All file paths are normalized to forward slashes for cross-
@@ -119,8 +119,8 @@ starts on port 9870 by default and auto-creates a .mcp.json
 file in your project root for AI coding assistants to discover.
 
 You can regenerate Envoy config files at any time:
-  op.Embody.InitEnvoy()  — MCP + AI client config
-  op.Embody.InitGit()    — git repo + .gitignore/.gitattributes
+  op.Embody.InitEnvoy()  -- MCP + AI client config
+  op.Embody.InitGit()    -- git repo + .gitignore/.gitattributes
 
 TDN Network Format
 ------------------

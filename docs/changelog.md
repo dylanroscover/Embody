@@ -1,5 +1,23 @@
 # Changelog
 
+## v5.0.351
+
+Creation-defaults catalog, stdin-based bridge lifecycle, Envoy resilience hardening.
+
+- **Feature: Creation-defaults catalog (`CatalogManagerExt`)**: TD's `p.default` lies for dozens of parameters (e.g., cameraCOMP `tz`: `p.default=0` but creation value is `5`). Embody now scans all creatable op types at startup (1-2 ops/frame, non-blocking), writes a per-build catalog to `.embody/`, and uses actual creation values for TDN export/import. Fixes silent data loss where user-set values matching the wrong default were omitted from export
+- **Feature: Cross-build default patching**: When opening a project exported on a different TD build, the CatalogManager compares catalogs and patches any parameters whose creation defaults shifted between builds. Shows a summary dialog of all corrected values
+- **Feature: Divergent defaults fallback**: Embedded `divergent_defaults.tsv` table provides bootstrap data for known TD builds. On-the-fly probing handles unknown builds by creating temp operators and comparing `p.val` vs `p.default`
+- **Fix: Bridge orphan detection**: Replaced ppid-based orphan watchdog (broken under VS Code extension host, which outlives sessions) with stdin pipe POLLHUP detection via `select.poll()` (macOS/Linux) and `PeekNamedPipe` (Windows). Bridges now exit reliably when their Claude Code session closes
+- **Fix: Bridge stale process cleanup**: Heartbeat files (`envoy-bridge-{pid}.heartbeat`) replace parent-PID heuristics for detecting stale bridges. Phase 1 kills bridges with stale heartbeats (>60s old); Phase 2 falls back to legacy orphan check for pre-heartbeat bridges
+- **Fix: Bridge heartbeat simplification**: Replaced dynamic fast/slow heartbeat cadence (5s/30s) with fixed 10s interval. Removed HTTP connection pool (reverted to simple `urllib.request.urlopen` per call) — the pool caused persistent "not responding" errors from half-closed `http.client` connections
+- **Fix: Envoy queue persistence across save cycles**: Request/response queues now survive extension reinit during Ctrl+S by persisting in `sys._envoy_queues`. Prevents lost MCP requests during the strip/restore window
+- **Fix: Envoy auto venv recreation**: Corrupted venv (broken Python path after TD upgrade) is now auto-recreated once per session instead of just logging a warning
+- **Fix: ClientDisconnect suppression**: Added starlette `ClientDisconnect` to suppressed exceptions alongside `BrokenResourceError`/`ClosedResourceError`. Prevents traceback floods from destabilizing uvicorn's event loop during extension reinit or tab close
+- **Fix: Scan workspace cleanup**: On-the-fly default probe workspace (`_defaults_workspace`) is now destroyed after each export. Previously leaked empty baseCOMPs that accumulated in the Embody COMP across saves
+- **Improved: Em-dash to double-dash**: Systematic `—` to `--` replacement across all Python source files for cross-platform DAT encoding safety
+- **Improved: FastMCP log filtering**: Suppresses empty "Received exception from stream:" messages from recycled bridge connections
+- **Test: 41 test suites** with 4 new divergent-defaults tests (cameraCOMP tz, lightCOMP tz, renderTOP resolution round-trip, false-positive prevention)
+
 ## v5.0.336
 
 Batch MCP operations, Envoy auto-restart on crash and save, 46 MCP tools.

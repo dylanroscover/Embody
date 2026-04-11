@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.3",
-	"build": 31,
-	"generator": "Embody/5.0.319",
+	"build": 37,
+	"generator": "Embody/5.0.348",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.319.toe",
-	"exported_at": "2026-04-08T06:53:55Z",
+	"source_file": "Embody-5.349.toe",
+	"exported_at": "2026-04-11T01:49:24Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false,
@@ -19,7 +19,6 @@
 		},
 		"annotateCOMP": {
 			"parameters": {
-				"includeinorder": true,
 				"order": "=me.digits or 0",
 				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
@@ -309,6 +308,17 @@
 						"name": "TDN",
 						"promote": true
 					},
+					{
+						"object": "op('./CatalogManagerExt').module.CatalogManagerExt(me)",
+						"name": "CatalogManager",
+						"promote": true
+					},
+					{},
+					{},
+					{},
+					{},
+					{},
+					{},
 					{}
 				]
 			},
@@ -363,8 +373,7 @@
 					{
 						"name": "Refresh",
 						"style": "Pulse",
-						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
-						"value": true
+						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
 					},
 					{
 						"name": "Externalizeproject",
@@ -875,7 +884,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.319"
+						"value": "5.0.348"
 					},
 					{
 						"name": "Touchbuild",
@@ -898,7 +907,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 364
+						"value": 392
 					},
 					{
 						"name": "Github",
@@ -913,7 +922,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-04-08 06:53:55 UTC"
+						"value": "2026-04-11 01:49:23 UTC"
 					},
 					{
 						"name": "Help",
@@ -930,8 +939,7 @@
 				"claudius_running": false,
 				"_tdn_restore_failures": ["/embody/base1"],
 				"expand_order": ["/embody"],
-				"_start_in_progress": true,
-				"_init_complete": true
+				"_start_in_progress": true
 			},
 			"tdn_ref": "embody/Embody.tdn"
 		},
@@ -945,7 +953,7 @@
 			"name": "tdn_tests",
 			"type": "baseCOMP",
 			"flags": ["viewer"],
-			"position": [0, -500],
+			"position": [500, -325],
 			"storage": {
 				"embed_dats_in_tdn": true
 			},
@@ -3376,8 +3384,7 @@
 				"fromop": "=parent()",
 				"projectpresave": true,
 				"file": "embody/execute_src_ctrl.py",
-				"syncfile": true,
-				"language": "python"
+				"syncfile": true
 			},
 			"flags": ["viewer"],
 			"position": [-625, 120],
@@ -3391,7 +3398,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 146,
+				"rows": 153,
 				"cols": 11
 			},
 			"flags": ["viewer"],

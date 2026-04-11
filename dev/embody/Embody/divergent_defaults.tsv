@@ -1,0 +1,502 @@
+op_type	par_name	style	099.2025.32280
+abletonlinkCHOP	autoexportroot	OP	
+abletonlinkCHOP	timeslice	Toggle	True
+actorCOMP	instancerottoorder	Menu	rottoxform
+alembicSOP	file	File	
+alembicinPOP	file	File	
+analyzeCHOP	autoexportroot	OP	
+angleCHOP	autoexportroot	OP	
+animationCOMP	opviewer	OP	./out
+animationCOMP	timeref	OP	
+annotateCOMP	includeinorder	Toggle	True
+attributeCHOP	autoexportroot	OP	
+audiobandeqCHOP	autoexportroot	OP	
+audiobandeqCHOP	timeslice	Toggle	True
+audiobinauralCHOP	autoexportroot	OP	
+audiobinauralCHOP	exportmethod	Menu	datname
+audiobinauralCHOP	timeslice	Toggle	True
+audiodeviceinCHOP	autoexportroot	OP	
+audiodeviceinCHOP	timeslice	Toggle	True
+audiodeviceoutCHOP	autoexportroot	OP	
+audiodeviceoutCHOP	timeslice	Toggle	True
+audiodynamicsCHOP	autoexportroot	OP	
+audiodynamicsCHOP	timeslice	Toggle	True
+audiofileinCHOP	autoexportroot	OP	
+audiofileinCHOP	file	File	
+audiofileinCHOP	timeslice	Toggle	True
+audiofileoutCHOP	autoexportroot	OP	
+audiofileoutCHOP	file	FileSave	
+audiofileoutCHOP	timeslice	Toggle	True
+audiofilterCHOP	autoexportroot	OP	
+audiofilterCHOP	timeslice	Toggle	True
+audiomovieCHOP	autoexportroot	OP	
+audiomovieCHOP	timeslice	Toggle	True
+audiondiCHOP	autoexportroot	OP	
+audiondiCHOP	timeslice	Toggle	True
+audiooscillatorCHOP	autoexportroot	OP	
+audiooscillatorCHOP	timeslice	Toggle	True
+audioparaeqCHOP	autoexportroot	OP	
+audioparaeqCHOP	timeslice	Toggle	True
+audioplayCHOP	autoexportroot	OP	
+audioplayCHOP	file	File	
+audioplayCHOP	timeslice	Toggle	True
+audiorenderCHOP	autoexportroot	OP	
+audiorenderCHOP	exportmethod	Menu	datname
+audiorenderCHOP	timeslice	Toggle	True
+audiospectrumCHOP	autoexportroot	OP	
+audiostreaminCHOP	autoexportroot	OP	
+audiostreaminCHOP	timeslice	Toggle	True
+audiostreamoutCHOP	autoexportroot	OP	
+audiostreamoutCHOP	timeslice	Toggle	True
+audiovstCHOP	autoexportroot	OP	
+audiovstCHOP	file	File	
+audiovstCHOP	timeslice	Toggle	True
+audiowebrenderCHOP	autoexportroot	OP	
+audiowebrenderCHOP	timeslice	Toggle	True
+beatCHOP	autoexportroot	OP	
+beatCHOP	exportmethod	Menu	datname
+beatCHOP	timeslice	Toggle	True
+bindCHOP	autoexportroot	OP	
+bindCHOP	exportmethod	Menu	datname
+blacktraxCHOP	autoexportroot	OP	
+blacktraxCHOP	exportmethod	Menu	datname
+blacktraxCHOP	timeslice	Toggle	True
+blendCHOP	autoexportroot	OP	
+blendCOMP	instancerottoorder	Menu	rottoxform
+blobtrackCHOP	autoexportroot	OP	
+bodytrackCHOP	autoexportroot	OP	
+bodytrackCHOP	timeslice	Toggle	True
+boneCOMP	instancerottoorder	Menu	rottoxform
+boneCOMP	prord	Menu	zyx
+boneCOMP	rord	Menu	zyx
+bulletsolverCHOP	autoexportroot	OP	
+bulletsolverCOMP	actors	Object	./*
+bulletsolverCOMP	instancerottoorder	Menu	rottoxform
+buttonCOMP	borderover	Toggle	False
+buttonCOMP	buttontype	Menu	toggledown
+buttonCOMP	enablecloning	Toggle	False
+buttonCOMP	h	Int	40
+buttonCOMP	relpath	Menu	externaltox
+buttonCOMP	repocomp	COMP	
+buttonCOMP	resizecomp	COMP	
+buttonCOMP	w	Int	50
+cameraCOMP	tz	XYZW	5
+camerablendCOMP	tz	XYZW	5
+chopexecuteDAT	fromop	OP	
+chopexecuteDAT	language	Menu	python
+clipCHOP	autoexportroot	OP	
+clipDAT	component	OP	
+clipblenderCHOP	autoexportroot	OP	
+clipblenderCHOP	timeslice	Toggle	True
+clockCHOP	autoexportroot	OP	
+clockCHOP	exportmethod	Menu	datname
+compositeCHOP	autoexportroot	OP	
+constantCHOP	autoexportroot	OP	
+constantMAT	skelrootpath	Object	
+constraintCOMP	instancerottoorder	Menu	rottoxform
+containerCOMP	repocomp	COMP	
+containerCOMP	resizecomp	COMP	
+copyCHOP	autoexportroot	OP	
+copyCHOP	timeslice	Toggle	True
+copySOP	copyg	Str	
+countCHOP	autoexportroot	OP	
+countCHOP	timeslice	Toggle	True
+cplusplusCHOP	autoexportroot	OP	
+cplusplusCHOP	timeslice	Toggle	True
+crossCHOP	autoexportroot	OP	
+cycleCHOP	autoexportroot	OP	
+datexecuteDAT	fromop	OP	
+datexecuteDAT	language	Menu	python
+dattoCHOP	autoexportroot	OP	
+dattoCHOP	colexpr	Str	
+dattoCHOP	rowexpr	Str	
+delayCHOP	autoexportroot	OP	
+delayCHOP	timeslice	Toggle	True
+deleteCHOP	autoexportroot	OP	
+depthMAT	skelrootpath	Object	
+dmxinCHOP	autoexportroot	OP	
+dmxinCHOP	exportmethod	Menu	datname
+dmxinCHOP	timeslice	Toggle	True
+dmxoutCHOP	autoexportroot	OP	
+dmxoutCHOP	exportmethod	Menu	datname
+dmxoutCHOP	timeslice	Toggle	True
+envelopeCHOP	autoexportroot	OP	
+envelopeCHOP	timeslice	Toggle	True
+errorDAT	fromop	OP	
+evaluateDAT	colexpr	Str	
+evaluateDAT	rowexpr	Str	
+eventCHOP	autoexportroot	OP	
+executeDAT	fromop	OP	
+executeDAT	language	Menu	python
+expressionCHOP	autoexportroot	OP	
+extendCHOP	autoexportroot	OP	
+facetrackCHOP	autoexportroot	OP	
+facetrackCHOP	timeslice	Toggle	True
+fanCHOP	autoexportroot	OP	
+fbxCOMP	file	File	
+fbxCOMP	instancerottoorder	Menu	rottoxform
+feedbackCHOP	autoexportroot	OP	
+fieldCOMP	h	Int	20
+fieldCOMP	repocomp	COMP	
+fieldCOMP	resizecomp	COMP	
+fieldCOMP	top	TOP	./text
+fieldCOMP	w	Int	100
+fifoDAT	fromop	OP	
+fileinCHOP	autoexportroot	OP	
+fileinCHOP	file	File	
+fileinPOP	file	File	
+fileinSOP	file	File	
+fileoutCHOP	autoexportroot	OP	
+fileoutDAT	file	FileSave	
+fileoutPOP	file	File	
+filterCHOP	autoexportroot	OP	
+filterCHOP	timeslice	Toggle	True
+fitTOP	outputaspect	Menu	resolution
+fitTOP	outputresolution	Menu	custom
+fitTOP	resolutionh	Int	1000
+fitTOP	resolutionw	Int	1000
+folderDAT	rootfolder	Folder	
+forceCOMP	instancerottoorder	Menu	rottoxform
+freedinCHOP	autoexportroot	OP	
+freedinCHOP	timeslice	Toggle	True
+freedoutCHOP	autoexportroot	OP	
+freedoutCHOP	timeslice	Toggle	True
+functionCHOP	autoexportroot	OP	
+geometryCOMP	instancerottoorder	Menu	rottoxform
+geotextCOMP	instancerottoorder	Menu	rottoxform
+gestureCHOP	autoexportroot	OP	
+gestureCHOP	timeslice	Toggle	True
+glslCOMP	repocomp	COMP	
+glslCOMP	resizecomp	COMP	
+glslMAT	glslversion	Menu	glsl430
+glslMAT	skelrootpath	Object	
+glslTOP	glslversion	Menu	glsl430
+glslmultiTOP	glslversion	Menu	glsl430
+handleCHOP	autoexportroot	OP	
+handleCHOP	exportmethod	Menu	datname
+handleCOMP	instancerottoorder	Menu	rottoxform
+hogCHOP	autoexportroot	OP	
+hokuyoCHOP	autoexportroot	OP	
+holdCHOP	autoexportroot	OP	
+holdCHOP	timeslice	Toggle	True
+importselectCHOP	autoexportroot	OP	
+importselectCHOP	timeslice	Toggle	True
+inCHOP	autoexportroot	OP	
+inCHOP	label	Str	
+inCHOP	timeslice	Toggle	True
+inDAT	label	Str	
+inMAT	label	Str	
+inMAT	skelrootpath	Object	
+inPOP	label	Str	
+inSOP	label	Str	
+inTOP	label	Str	
+infoCHOP	autoexportroot	OP	
+infoDAT	language	Menu	text
+interpolateCHOP	autoexportroot	OP	
+inversecurveCHOP	autoexportroot	OP	
+inversecurveCHOP	exportmethod	Menu	datname
+inversekinCHOP	autoexportroot	OP	
+inversekinCHOP	exportmethod	Menu	datname
+joinCHOP	autoexportroot	OP	
+joystickCHOP	autoexportroot	OP	
+joystickCHOP	exportmethod	Menu	datname
+jsonDAT	language	Menu	json
+keyboardinCHOP	autoexportroot	OP	
+keyboardinDAT	fromop	OP	
+keyframeCHOP	autoexportroot	OP	
+keyframeCHOP	timeslice	Toggle	True
+kinectCHOP	autoexportroot	OP	
+kinectCHOP	exportmethod	Menu	datname
+kinectCHOP	timeslice	Toggle	True
+kinectazureCHOP	autoexportroot	OP	
+kinectazureCHOP	timeslice	Toggle	True
+lagCHOP	autoexportroot	OP	
+lagCHOP	timeslice	Toggle	True
+laserCHOP	autoexportroot	OP	
+laserCHOP	timeslice	Toggle	True
+laserdeviceCHOP	autoexportroot	OP	
+layermixTOP	resolutionh	Int	720
+layermixTOP	resolutionw	Int	1280
+leapmotionCHOP	autoexportroot	OP	
+leapmotionCHOP	exportmethod	Menu	datname
+leuzerod4CHOP	autoexportroot	OP	
+leuzerod4CHOP	timeslice	Toggle	True
+lfoCHOP	autoexportroot	OP	
+lfoCHOP	timeslice	Toggle	True
+lightCOMP	tz	XYZW	10
+limitCHOP	autoexportroot	OP	
+lineMAT	skelrootpath	Object	
+listCOMP	repocomp	COMP	
+listCOMP	resizecomp	COMP	
+logicCHOP	autoexportroot	OP	
+logicCHOP	timeslice	Toggle	True
+lookupCHOP	autoexportroot	OP	
+ltcinCHOP	autoexportroot	OP	
+ltcinCHOP	exportmethod	Menu	datname
+ltcinCHOP	timeslice	Toggle	True
+ltcoutCHOP	autoexportroot	OP	
+ltcoutCHOP	timeslice	Toggle	True
+mathCHOP	autoexportroot	OP	
+mediafileinfoDAT	file	File	
+mergeCHOP	autoexportroot	OP	
+midieventDAT	fromop	OP	
+midiinCHOP	autoexportroot	OP	
+midiinCHOP	file	File	
+midiinCHOP	timeslice	Toggle	True
+midiinDAT	fromop	OP	
+midiinmapCHOP	autoexportroot	OP	
+midiinmapCHOP	exportmethod	Menu	datname
+midiinmapCHOP	timeslice	Toggle	True
+midioutCHOP	autoexportroot	OP	
+midioutCHOP	timeslice	Toggle	True
+mosysCHOP	autoexportroot	OP	
+mosysCHOP	timeslice	Toggle	True
+mouseinCHOP	autoexportroot	OP	
+mouseinCHOP	exportmethod	Menu	datname
+mouseinCHOP	timeslice	Toggle	True
+mouseoutCHOP	autoexportroot	OP	
+moviefileinTOP	file	File	
+moviefileoutTOP	file	FileSave	
+moviefileoutTOP	videocodec	Menu	mjpa
+mqttclientDAT	fromop	OP	
+mqttclientDAT	usercid	Str	
+multitouchinDAT	fromop	OP	
+ncamCHOP	autoexportroot	OP	
+ncamCHOP	timeslice	Toggle	True
+noiseCHOP	autoexportroot	OP	
+notchTOP	outputresolution	Menu	custom
+notchTOP	resolutionh	Int	720
+notchTOP	resolutionw	Int	1280
+nullCHOP	autoexportroot	OP	
+nullCOMP	instancerottoorder	Menu	rottoxform
+nullMAT	skelrootpath	Object	
+nvidiaflexTOP	filtertype	Menu	nearest
+nvidiaflexsolverCOMP	instancerottoorder	Menu	rottoxform
+nvidiaflowTOP	outputresolution	Menu	custom
+nvidiaflowTOP	resolutionh	Int	720
+nvidiaflowTOP	resolutionw	Int	1280
+nvidiaflowemitterCOMP	instancerottoorder	Menu	rottoxform
+oakdeviceCHOP	autoexportroot	OP	
+oakdeviceCHOP	exportmethod	Menu	datname
+oakdeviceCHOP	timeslice	Toggle	True
+oakselectCHOP	autoexportroot	OP	
+oakselectCHOP	exportmethod	Menu	datname
+oakselectCHOP	timeslice	Toggle	True
+objectCHOP	autoexportroot	OP	
+objectCHOP	exportmethod	Menu	datname
+objectCHOP	timeslice	Toggle	True
+oculusaudioCHOP	autoexportroot	OP	
+oculusaudioCHOP	timeslice	Toggle	True
+oculusriftCHOP	autoexportroot	OP	
+oculusriftCHOP	exportmethod	Menu	datname
+oculusriftCHOP	timeslice	Toggle	True
+opencolorioTOP	config	File	
+openvrCHOP	actionmanifest	File	
+openvrCHOP	autoexportroot	OP	
+openvrCHOP	timeslice	Toggle	True
+opexecuteDAT	fromop	OP	
+opexecuteDAT	language	Menu	python
+optitrackinCHOP	autoexportroot	OP	
+optitrackinCHOP	timeslice	Toggle	True
+opviewerCOMP	repocomp	COMP	
+opviewerCOMP	resizecomp	COMP	
+opviewerTOP	outputresolution	Menu	custom
+opviewerTOP	resolutionh	Int	720
+opviewerTOP	resolutionw	Int	1280
+orbbecTOP	filtertype	Menu	linear
+oscinCHOP	autoexportroot	OP	
+oscinCHOP	timeslice	Toggle	True
+oscinDAT	fromop	OP	
+oscoutCHOP	autoexportroot	OP	
+oscoutCHOP	timeslice	Toggle	True
+oscoutDAT	fromop	OP	
+ousterTOP	filtertype	Menu	linear
+ousterselectTOP	filtertype	Menu	linear
+outCHOP	autoexportroot	OP	
+outCHOP	label	Str	
+outDAT	label	Str	
+outMAT	label	Str	
+outMAT	skelrootpath	Object	
+outPOP	label	Str	
+outSOP	label	Str	
+outTOP	label	Str	
+overrideCHOP	autoexportroot	OP	
+overrideCHOP	timeslice	Toggle	True
+panelCHOP	autoexportroot	OP	
+panelCHOP	component	PanelCOMP	
+panelexecuteDAT	fromop	OP	
+panelexecuteDAT	language	Menu	python
+panelexecuteDAT	panels	COMP	
+pangolinCHOP	autoexportroot	OP	
+pantiltCHOP	autoexportroot	OP	
+parameterCHOP	autoexportroot	OP	
+parameterCOMP	bgalpha	Float	1
+parameterCOMP	crop	Menu	on
+parameterCOMP	h	Int	360
+parameterCOMP	repocomp	COMP	
+parameterCOMP	resizecomp	COMP	
+parameterCOMP	w	Int	480
+parameterexecuteDAT	fromop	OP	
+parameterexecuteDAT	language	Menu	python
+pargroupexecuteDAT	language	Menu	python
+patternCHOP	autoexportroot	OP	
+pbrMAT	skelrootpath	Object	
+performCHOP	autoexportroot	OP	
+performCHOP	exportmethod	Menu	datname
+performCHOP	timeslice	Toggle	True
+phaserCHOP	autoexportroot	OP	
+phongMAT	skelrootpath	Object	
+pipeinCHOP	autoexportroot	OP	
+pipeinCHOP	timeslice	Toggle	True
+pipeoutCHOP	autoexportroot	OP	
+pipeoutCHOP	timeslice	Toggle	True
+pointfileinPOP	file	File	
+pointfileinTOP	file	File	
+pointfileinTOP	filtertype	Menu	linear
+pointfileselectTOP	filtertype	Menu	linear
+pointspriteMAT	skelrootpath	Object	
+poptoCHOP	autoexportroot	OP	
+poptoTOP	outputresolution	Menu	custom
+poptoTOP	resolutionh	Int	100
+poptoTOP	resolutionw	Int	100
+posistagenetCHOP	autoexportroot	OP	
+posistagenetCHOP	timeslice	Toggle	True
+pulseCHOP	autoexportroot	OP	
+recordCHOP	autoexportroot	OP	
+recordCHOP	timeslice	Toggle	True
+remapTOP	interp	Menu	linear
+renameCHOP	autoexportroot	OP	
+renderTOP	resolutionh	Int	720
+renderTOP	resolutionw	Int	1280
+renderpickCHOP	autoexportroot	OP	
+renderpickCHOP	exportmethod	Menu	datname
+renderpickCHOP	panel	PanelCOMP	
+rendersimpleTOP	resolutionh	Int	720
+rendersimpleTOP	resolutionw	Int	1280
+renderstreaminCHOP	autoexportroot	OP	
+renderstreaminCHOP	timeslice	Toggle	True
+reorderCHOP	autoexportroot	OP	
+replaceCHOP	autoexportroot	OP	
+replicatorCOMP	destination	COMP	
+resampleCHOP	autoexportroot	OP	
+resampleCHOP	timeslice	Toggle	True
+scriptCHOP	autoexportroot	OP	
+scriptCHOP	exportmethod	Menu	datname
+scurveCHOP	autoexportroot	OP	
+selectCHOP	autoexportroot	OP	
+selectCOMP	repocomp	COMP	
+selectCOMP	resizecomp	COMP	
+selectDAT	colexpr	Str	
+selectDAT	rowexpr	Str	
+selectMAT	skelrootpath	Object	
+sequencerCHOP	autoexportroot	OP	
+sequencerCHOP	timeslice	Toggle	True
+serialCHOP	autoexportroot	OP	
+serialDAT	fromop	OP	
+sharedmeminCHOP	autoexportroot	OP	
+sharedmeminCOMP	instancerottoorder	Menu	rottoxform
+sharedmemoutCHOP	autoexportroot	OP	
+sharedmemoutCOMP	instancerottoorder	Menu	rottoxform
+shiftCHOP	autoexportroot	OP	
+shuffleCHOP	autoexportroot	OP	
+sickTOP	filtertype	Menu	linear
+sliderCOMP	crop	Menu	on
+sliderCOMP	enablecloning	Toggle	False
+sliderCOMP	h	Int	20
+sliderCOMP	relpath	Menu	externaltox
+sliderCOMP	repocomp	COMP	
+sliderCOMP	resizecomp	COMP	
+sliderCOMP	top	TOP	./back
+sliderCOMP	value0	Float	0.5
+sliderCOMP	value1	Float	0.5
+sliderCOMP	w	Int	100
+slopeCHOP	autoexportroot	OP	
+slopeCHOP	timeslice	Toggle	True
+socketioDAT	fromop	OP	
+socketioDAT	language	Menu	text
+soptoCHOP	autoexportroot	OP	
+soptoCHOP	exportmethod	Menu	datname
+sortCHOP	autoexportroot	OP	
+speedCHOP	autoexportroot	OP	
+speedCHOP	timeslice	Toggle	True
+spliceCHOP	autoexportroot	OP	
+springCHOP	autoexportroot	OP	
+springCHOP	timeslice	Toggle	True
+st2110deviceCHOP	autoexportroot	OP	
+st2110deviceCHOP	timeslice	Toggle	True
+stretchCHOP	autoexportroot	OP	
+stypeinCHOP	autoexportroot	OP	
+stypeinCHOP	timeslice	Toggle	True
+stypeoutCHOP	autoexportroot	OP	
+stypeoutCHOP	timeslice	Toggle	True
+substanceTOP	file	File	
+substituteDAT	colexpr	Str	
+substituteDAT	rowexpr	Str	
+switchCHOP	autoexportroot	OP	
+switchMAT	skelrootpath	Object	
+syncinCHOP	autoexportroot	OP	
+syncinCHOP	timeslice	Toggle	True
+syncoutCHOP	autoexportroot	OP	
+syncoutCHOP	timeslice	Toggle	True
+tableCOMP	attributes	DAT	./cell_attributes
+tableCOMP	repocomp	COMP	
+tableCOMP	resizecomp	COMP	
+tableCOMP	tablealign	Menu	horizlr
+tableCOMP	tableattributes	DAT	./table_attributes
+tableCOMP	w	Int	200
+tabletCHOP	autoexportroot	OP	
+tabletCHOP	exportmethod	Menu	datname
+tcpipDAT	fromop	OP	
+tcpipDAT	language	Menu	text
+textCOMP	repocomp	COMP	
+textCOMP	resizecomp	COMP	
+textDAT	language	Menu	text
+textTOP	resmult	Toggle	False
+timeCOMP	clone	COMP	/sys/local/time
+timecodeCHOP	autoexportroot	OP	
+timecodeCHOP	timeslice	Toggle	True
+timelineCHOP	autoexportroot	OP	
+timelineCHOP	exportmethod	Menu	datname
+timelineCHOP	timeslice	Toggle	True
+timerCHOP	autoexportroot	OP	
+timerCHOP	exportmethod	Menu	datname
+timerCHOP	timeslice	Toggle	True
+timesliceCHOP	autoexportroot	OP	
+timesliceCHOP	timeslice	Toggle	True
+toptoCHOP	autoexportroot	OP	
+toptoCHOP	exportmethod	Menu	datname
+touchinCHOP	autoexportroot	OP	
+touchinCHOP	timeslice	Toggle	True
+touchinTOP	outputaspect	Menu	useinput
+touchoutCHOP	autoexportroot	OP	
+touchoutCHOP	timeslice	Toggle	True
+trailCHOP	autoexportroot	OP	
+trailCHOP	timeslice	Toggle	True
+transformCHOP	autoexportroot	OP	
+transformxyzCHOP	autoexportroot	OP	
+triggerCHOP	autoexportroot	OP	
+triggerCHOP	timeslice	Toggle	True
+trimCHOP	autoexportroot	OP	
+trimCHOP	timeslice	Toggle	True
+tuioinDAT	fromop	OP	
+tuioinDAT	language	Menu	text
+udpinDAT	fromop	OP	
+udpinDAT	language	Menu	text
+udpoutDAT	fromop	OP	
+usdCOMP	file	File	
+usdCOMP	instancerottoorder	Menu	rottoxform
+warpCHOP	autoexportroot	OP	
+waveCHOP	autoexportroot	OP	
+webclientDAT	language	Menu	text
+webrenderTOP	outputresolution	Menu	custom
+webrenderTOP	resolutionh	Int	720
+webrenderTOP	resolutionw	Int	1280
+webserverDAT	language	Menu	text
+websocketDAT	fromop	OP	
+websocketDAT	language	Menu	text
+widgetCOMP	repocomp	COMP	
+widgetCOMP	resizecomp	COMP	
+windowCOMP	title	Str	
+wireframeMAT	skelrootpath	Object	
+zedCHOP	autoexportroot	OP	
+zedCHOP	timeslice	Toggle	True

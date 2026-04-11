@@ -21,6 +21,7 @@ extglob.FullName
 
 # Embody / Envoy (auto-managed)
 *.lck
+*.heartbeat
 CrashAutoSave*
 .plan.md
 dev/_test_pars_temp/
@@ -46,3 +47,4 @@ sandbox/
 
 # Embody / Envoy (auto-managed)
 .embody.json
+.embody/
