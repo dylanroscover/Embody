@@ -241,10 +241,11 @@ On project open, the `CatalogManager` extension checks whether a creation-values
 
 - Iterates every creatable operator type in TouchDesigner (TOPs, CHOPs, SOPs, DATs, MATs, COMPs, POPs)
 - Creates a temporary instance of each type
-- Compares `p.val` (the actual value TD assigned) against `p.default` (the reported default) for every parameter
-- Records any parameter where the two disagree
+- Records `p.val` (the actual value TD assigned) for every non-custom, non-read-only parameter
 
-The scan processes 1–2 operator types per frame to avoid dropping frames. The resulting catalog is written to `.embody/{build}.json` (e.g., `.embody/2025.33020.json`) and cached for future sessions on the same TD build.
+The catalog stores **all** creation values, not just divergent ones. This means TDN always has the ground-truth creation value for every parameter — `_getCreationDefault()` returns the catalog value directly, falling back to `p.default` only for parameters the catalog doesn't cover. The divergent-default problem (where `p.val` differs from `p.default`) is solved implicitly: by recording what TD actually assigns, the catalog captures both correct and divergent defaults without needing to distinguish between them.
+
+The scan processes 1–2 operator types per frame to avoid dropping frames. The resulting catalog is written to `.embody/catalog_{build}.json` (e.g., `.embody/catalog_099.2025.32280.json`) and cached for future sessions on the same TD build.
 
 **2. Export/import correction**
 
