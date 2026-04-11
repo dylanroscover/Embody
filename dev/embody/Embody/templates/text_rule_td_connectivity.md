@@ -15,7 +15,7 @@ Before any MCP tool call, verify TD is running and reachable:
 
 The bridge runs a background reconciler thread that continuously manages connectivity:
 
-- **Config polling** (every 1s): Watches `.envoy.json` for mtime changes. Automatically switches to the new active instance when the config is updated.
+- **Config polling** (every 1s): Watches `.embody/envoy.json` for mtime changes. Automatically switches to the new active instance when the config is updated.
 - **Heartbeat** (every 3-30s, dynamic): Pings the backend to detect connect/disconnect transitions. Fast cadence (3s) while disconnected, slow cadence (30s) once stable.
 - **Process discovery**: Detects new and exited TD processes via `find_all_td_pids()`. Forces a config re-read when new TDs appear.
 - **Tool cache**: Persists the tool list to disk so new sessions start with full tools immediately, without waiting for a backend round-trip.
@@ -27,12 +27,12 @@ Most connectivity issues are now handled automatically by the bridge. Manual rec
 
 1. **Call `get_td_status`**: This is always available (even when TD is down). It shows connection state, process liveness, instance registry, and any unregistered TD processes.
 2. **If TD is not running**: Call `launch_td`. The bridge will launch TD with the configured `.toe` file and wait for Envoy to become reachable.
-3. **If the wrong instance is active**: Call `switch_instance` to list or switch instances. The reconciler also auto-switches when `.envoy.json` is edited.
+3. **If the wrong instance is active**: Call `switch_instance` to list or switch instances. The reconciler also auto-switches when `.embody/envoy.json` is edited.
 4. **If the bridge process is stuck**: Tell the user to **reopen this session/conversation** — this is always the first recovery step. Only if that fails, suggest restarting the MCP server as a fallback.
 
 ### Common failure: stale active instance
 
-The most frequent cause of connectivity issues is `.envoy.json` having `active` set to an instance whose TD process is no longer running. The bridge's reconciler detects this automatically via heartbeat failures and reports it in `get_td_status`. Use `launch_td` or `switch_instance` to recover.
+The most frequent cause of connectivity issues is `.embody/envoy.json` having `active` set to an instance whose TD process is no longer running. The bridge's reconciler detects this automatically via heartbeat failures and reports it in `get_td_status`. Use `launch_td` or `switch_instance` to recover.
 
 ### Common failure: broken venv
 

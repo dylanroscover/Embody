@@ -52,8 +52,8 @@ If you prefer manual control, create `.mcp.json` in your project directory. You 
     "envoy": {
       "type": "stdio",
       "command": "python3",
-      "args": ["-u", ".claude/envoy-bridge.py", "--port", "9870",
-               "--config", ".envoy.json"]
+      "args": ["-u", ".embody/envoy-bridge.py", "--port", "9870",
+               "--config", ".embody/envoy.json"]
     }
   }
 }

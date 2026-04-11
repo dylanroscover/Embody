@@ -37,14 +37,14 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 
 ## Settings Persistence
 
-Embody automatically saves your parameter settings to a `.embody.json` file so they survive upgrades, crashes, and force-quits.
+Embody automatically saves your parameter settings to a `config.json` file in the `.embody/` folder so they survive upgrades, crashes, and force-quits.
 
-- **Location**: Git root (next to `.envoy.json` and `.mcp.json`), or the project folder if no git repo
+- **Location**: `.embody/` folder at the git root (next to `.mcp.json`), or the project folder if no git repo
 - **When saved**: Automatically on every parameter change (debounced to 1 frame)
 - **When restored**: On every project open (frame 5), and on fresh install after dropping in a new `.tox`
 - **What's saved**: Folder path, Envoy config, tag names, tag colors, TDN settings, logging options, and other user-configurable parameters. Read-only status fields and runtime state are excluded
 
-The file is created on your first parameter change — no `.embody.json` exists until you customize something. If the file is missing or corrupt, Embody uses its built-in defaults.
+The file is created on your first parameter change — no `.embody/config.json` exists until you customize something. If the file is missing or corrupt, Embody uses its built-in defaults.
 
 !!! tip "Upgrading Embody"
     When you drop a new Embody `.tox` into your project, your saved settings are automatically restored. No manual reconfiguration needed.

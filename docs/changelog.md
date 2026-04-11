@@ -1,5 +1,14 @@
 # Changelog
 
+## v5.0.354
+
+Consolidate all Embody/Envoy runtime files into a single `.embody/` folder.
+
+- **Refactor: `.embody/` folder consolidation**: All auto-generated runtime files now live in one gitignored folder instead of scattered dotfiles at the project root. `.envoy.json` → `.embody/envoy.json`, `.embody.json` → `.embody/config.json`, `.envoy-tools-cache.json` → `.embody/envoy-tools-cache.json`, `.claude/envoy-bridge.py` → `.embody/envoy-bridge.py`. Makes Envoy fully client-agnostic -- no Envoy artifacts in `.claude/`
+- **Migration: automatic upgrade from old paths**: On first Envoy start after upgrade, existing config files are read from old locations, seeded into `.embody/`, and old files removed. `.gitignore` stale entries (`.envoy.json`, `.embody.json`, `.claude/envoy-bridge.py`, etc.) are automatically replaced with a single `.embody/` entry
+- **Fix: bridge path resolution**: `resolve_toe_path()`, `_heartbeat_path()`, `_init_log_file()`, `_find_stale_bridges()`, and `_validate_and_resolve()` now correctly resolve paths relative to the git root (one level up from `.embody/`) instead of the config file's parent directory
+- **Docs**: Updated architecture, setup, claude-code, tools-reference, configuration, getting-started, multi-instance skill, and td-connectivity rule to reflect new paths
+
 ## v5.0.352
 
 Fix Envoy failing to start after Embody upgrade (delete old COMP, drop new .tox).

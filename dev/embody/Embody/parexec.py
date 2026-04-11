@@ -11,7 +11,7 @@ def onValueChange(par, prev):
 	# Suppress all side effects during init and settings restore.
 	# On .tox load, parameters are set from baked values BEFORE
 	# init()/onCreate() runs -- without this guard, parexec writes
-	# .embody.json with baked values before init() can intervene.
+	# .embody/config.json with baked values before init() can intervene.
 	ext = parent.Embody.ext.Embody
 	if getattr(ext, '_restoring_settings', False):
 		return

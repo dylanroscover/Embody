@@ -25,7 +25,7 @@ If your project is inside a git repository, Envoy automatically adds the followi
 | `.mcp.json` | MCP client config (auto-generated per machine) |
 | `.claude/settings.local.json` | Claude Code per-machine permissions |
 | `.claude/projects/` | Claude Code session data |
-| `.claude/envoy-bridge.py` | MCP transport bridge (auto-generated) |
+| `.embody/envoy-bridge.py` | MCP transport bridge (auto-generated) |
 | `__pycache__/` | Python bytecode cache |
 | `.DS_Store` | macOS Finder metadata |
 

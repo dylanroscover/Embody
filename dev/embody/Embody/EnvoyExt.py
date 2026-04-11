@@ -1532,7 +1532,7 @@ class EnvoyExt:
     def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
         """Find an available port in [base_port, base_port + range_size).
 
-        Checks BOTH the socket state AND the .envoy.json registry so that
+        Checks BOTH the socket state AND the envoy.json registry so that
         two TD instances starting near-simultaneously don't race on the same
         port.  A port is considered taken if:
           - A TCP connect succeeds (something is listening), OR
@@ -1554,13 +1554,13 @@ class EnvoyExt:
                 return s.connect_ex(('127.0.0.1', port)) == 0
 
         def _port_registered_by_other(port: int) -> bool:
-            """Check if another live instance claims this port in .envoy.json."""
+            """Check if another live instance claims this port in envoy.json."""
             try:
                 git_root = self.ownerComp.fetch('_git_root', 'no-git')
                 if git_root == 'no-git':
                     return False
                 from pathlib import Path
-                config_path = Path(git_root) / '.envoy.json'
+                config_path = Path(git_root) / '.embody' / 'envoy.json'
                 if not config_path.exists():
                     return False
                 config = json.loads(config_path.read_text(encoding='utf-8'))
@@ -3912,7 +3912,7 @@ class EnvoyExt:
             target_dir = Path(target_dir)
 
             # --- Deploy the STDIO bridge script ---
-            bridge_dir = target_dir / '.claude'
+            bridge_dir = target_dir / '.embody'
             bridge_dir.mkdir(parents=True, exist_ok=True)
             bridge_path = bridge_dir / 'envoy-bridge.py'
 
@@ -3958,6 +3958,27 @@ class EnvoyExt:
             else:
                 if sys.platform != 'win32':
                     bridge_path.chmod(0o755)
+
+            # Migrate: remove old bridge from .claude/ if it exists
+            old_bridge = target_dir / '.claude' / 'envoy-bridge.py'
+            if old_bridge.exists():
+                try:
+                    old_bridge.unlink()
+                    self._log('Migrated: removed old .claude/envoy-bridge.py')
+                except OSError:
+                    pass
+
+            # Migrate: remove old files from previous locations
+            for old_name, desc in [('.envoy-tools-cache.json', 'tools cache'),
+                                    ('.envoy.json', 'envoy config'),
+                                    ('.embody.json', 'embody config')]:
+                old_file = target_dir / old_name
+                if old_file.exists():
+                    try:
+                        old_file.unlink()
+                        self._log(f'Migrated: removed old {old_name} ({desc})')
+                    except OSError:
+                        pass
 
             # Prefer the venv Python (created from TD's Python) so the bridge
             # works on machines without a system Python installation.
@@ -4021,15 +4042,15 @@ class EnvoyExt:
             else:
                 python_cmd = 'python' if sys.platform == 'win32' else 'python3'
 
-            # --- Write .envoy.json project config ---
-            self._writeEnvoyConfig(target_dir, port)
+            # --- Write envoy.json project config ---
+            self._writeEnvoyConfig(target_dir / '.embody', port)
 
             # --- Write .mcp.json with STDIO transport ---
             mcp_file = target_dir / '.mcp.json'
             # Use forward slashes even on Windows for JSON portability
             bridge_abs = str(bridge_path).replace('\\', '/')
             config_abs = str(
-                (target_dir / '.envoy.json')).replace('\\', '/')
+                (target_dir / '.embody' / 'envoy.json')).replace('\\', '/')
 
             # Read existing config to preserve other servers
             config = {}
@@ -4049,7 +4070,7 @@ class EnvoyExt:
                     and existing.get('command') == python_cmd
                     and existing.get('args') == expected_args):
                 self._log('MCP .mcp.json already configured (STDIO bridge)', 'DEBUG')
-                self._deploySettingsLocal(bridge_dir)
+                self._deploySettingsLocal(target_dir / '.claude')
                 return
 
             servers['envoy'] = {
@@ -4063,7 +4084,7 @@ class EnvoyExt:
             self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge → port {port})')
 
             # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
-            self._deploySettingsLocal(bridge_dir)
+            self._deploySettingsLocal(target_dir / '.claude')
 
         except Exception as e:
             self._log(f'Could not auto-configure MCP client: {e}', 'WARNING')
@@ -4333,8 +4354,8 @@ class EnvoyExt:
         except (OSError, ProcessLookupError):
             return False
 
-    def _writeEnvoyConfig(self, git_root, port):
-        """Register this instance in the .envoy.json instance registry.
+    def _writeEnvoyConfig(self, embody_dir, port):
+        """Register this instance in the .embody/envoy.json instance registry.
 
         The registry tracks all running Envoy instances so the bridge can
         discover and switch between them.  Atomic writes prevent corruption
@@ -4357,7 +4378,10 @@ class EnvoyExt:
         import td as _td
         from pathlib import Path
 
-        config_path = git_root / '.envoy.json'
+        embody_dir.mkdir(parents=True, exist_ok=True)
+        config_path = embody_dir / 'envoy.json'
+        # git_root is embody_dir's parent
+        git_root = embody_dir.parent
 
         # Compute toe_path relative to git root
         project_dir = Path(project.folder)
@@ -4380,12 +4404,19 @@ class EnvoyExt:
         else:
             td_executable = str(bin_folder / 'TouchDesigner')
 
-        # Read existing config
+        # Read existing config (migrate from old root-level .envoy.json)
         existing = {}
         if config_path.exists():
             try:
                 existing = json.loads(
                     config_path.read_text(encoding='utf-8'))
+            except (json.JSONDecodeError, OSError):
+                pass
+        elif (git_root / '.envoy.json').exists():
+            try:
+                existing = json.loads(
+                    (git_root / '.envoy.json').read_text(encoding='utf-8'))
+                self._log('Migrated: seeded envoy.json from old .envoy.json')
             except (json.JSONDecodeError, OSError):
                 pass
 
@@ -4418,7 +4449,7 @@ class EnvoyExt:
 
         # Check if already up-to-date
         if instances.get(key) == new_entry and existing.get('active') == key:
-            self._log('.envoy.json already up to date', 'DEBUG')
+            self._log('envoy.json already up to date', 'DEBUG')
             return
 
         instances[key] = new_entry
@@ -4427,10 +4458,10 @@ class EnvoyExt:
         existing['td_executable'] = td_executable
 
         self._atomicWriteJSON(config_path, existing)
-        self._log(f'Registered instance "{key}" in .envoy.json (port {port})')
+        self._log(f'Registered instance "{key}" in envoy.json (port {port})')
 
     def _removeFromRegistry(self, git_root=None):
-        """Remove this instance from the .envoy.json registry on shutdown."""
+        """Remove this instance from the .embody/envoy.json registry on shutdown."""
         import os
         from pathlib import Path
 
@@ -4439,7 +4470,7 @@ class EnvoyExt:
         if git_root == 'no-git':
             return
 
-        config_path = Path(git_root) / '.envoy.json'
+        config_path = Path(git_root) / '.embody' / 'envoy.json'
         if not config_path.exists():
             return
 
@@ -4473,9 +4504,9 @@ class EnvoyExt:
 
         try:
             self._atomicWriteJSON(config_path, config)
-            self._log(f'Deregistered instance "{my_key}" from .envoy.json')
+            self._log(f'Deregistered instance "{my_key}" from envoy.json')
         except Exception as e:
-            self._log(f'Could not deregister from .envoy.json: {e}', 'WARNING')
+            self._log(f'Could not deregister from envoy.json: {e}', 'WARNING')
 
     def _configureGitignore(self, git_root):
         """Ensure .gitignore in the git root contains entries for
@@ -4490,11 +4521,9 @@ class EnvoyExt:
             # Embody / Envoy
             '.venv/',
             '.mcp.json',
-            '.envoy.json',
-            '.embody.json',
+            '.embody/',
             '.claude/settings.local.json',
             '.claude/projects/',
-            '.claude/envoy-bridge.py',
             '__pycache__/',
             '.DS_Store',
         ]
@@ -4508,17 +4537,23 @@ class EnvoyExt:
                 existing_content = gitignore.read_text(encoding='utf-8')
                 existing_lines = existing_content.splitlines()
 
-            # Migrate: remove old blanket `.claude/` entry
+            # Migrate: remove stale entries from older Embody versions
+            STALE_ENTRIES = {'.claude/', '.claude/envoy-bridge.py',
+                             '.envoy-tools-cache.json',
+                             '.envoy.json', '.embody.json',
+                             '.embody/envoy-bridge.py',
+                             '.embody/envoy-tools-cache.json'}
             existing_stripped = {line.strip() for line in existing_lines}
-            if '.claude/' in existing_stripped:
+            found_stale = STALE_ENTRIES & existing_stripped
+            if found_stale:
                 existing_lines = [
                     line for line in existing_lines
-                    if line.strip() != '.claude/'
+                    if line.strip() not in STALE_ENTRIES
                 ]
                 existing_content = '\n'.join(existing_lines)
                 if existing_content and not existing_content.endswith('\n'):
                     existing_content += '\n'
-                self._log('Migrated .gitignore: removed blanket .claude/ entry')
+                self._log(f'Migrated .gitignore: removed stale entries {found_stale}')
 
             existing_stripped = {line.strip() for line in existing_lines}
             missing = [e for e in MANAGED_ENTRIES if e not in existing_stripped]

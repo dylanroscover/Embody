@@ -26,25 +26,13 @@ CrashAutoSave*
 .plan.md
 dev/_test_pars_temp/
 site/
-
-# Embody / Envoy (auto-managed)
-.claude/envoy-bridge.py
-
-# Embody / Envoy (auto-managed)
 Backup/
 logs/
 .tdn_backup/
-
-# Embody / Envoy (auto-managed)
-.envoy.json
-.envoy-tools-cache.json
+.embody/
 
 # Promotion
 SUBMISSIONS.md
 
 # User sandboxes
 sandbox/
-
-# Embody / Envoy (auto-managed)
-.embody.json
-.embody/

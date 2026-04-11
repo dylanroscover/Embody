@@ -51,7 +51,7 @@ class EmbodyExt:
         'text_skill_mcp_tools_reference': 'mcp-tools-reference',
     }
 
-    # Parameters persisted to .embody.json across upgrades.
+    # Parameters persisted to .embody/config.json across upgrades.
     # Explicit whitelist -- new params default to "not persisted" until added.
     _PERSISTED_PARAMS = frozenset({
         # Core
@@ -855,7 +855,7 @@ class EmbodyExt:
     def InitEnvoy(self) -> None:
         """(Re)generate all Envoy and AI client config files.
 
-        Writes MCP config (.mcp.json, .envoy.json, bridge script,
+        Writes MCP config (.mcp.json, .embody/envoy.json, bridge script,
         settings.local.json) and AI client files (CLAUDE.md, AGENTS.md,
         .claude/rules/, .claude/skills/, or equivalent for Cursor/Copilot/
         Windsurf) to the git root or project folder.
@@ -1071,11 +1071,11 @@ class EmbodyExt:
     # ==========================================================================
 
     def _settingsPath(self) -> Path:
-        """Path to .embody.json -- consistent with _findProjectRoot()."""
-        return self._findProjectRoot() / '.embody.json'
+        """Path to .embody/config.json -- consistent with _findProjectRoot()."""
+        return self._findProjectRoot() / '.embody' / 'config.json'
 
     def _saveSettings(self) -> None:
-        """Persist whitelisted parameter values to .embody.json."""
+        """Persist whitelisted parameter values to .embody/config.json."""
         self._settings_save_pending = False
         params = {}
         for name in self._PERSISTED_PARAMS:
@@ -1094,6 +1094,7 @@ class EmbodyExt:
         try:
             import json, os
             path = self._settingsPath()
+            path.parent.mkdir(parents=True, exist_ok=True)
             tmp = Path(str(path) + '.tmp')
             content = json.dumps(data, indent=2) + '\n'
             for attempt in range(3):
@@ -1117,14 +1118,26 @@ class EmbodyExt:
             run(f"op('{self.my}').ext.Embody._saveSettings()", delayFrames=1)
 
     def _restoreSettings(self, kick_envoy: bool = False) -> bool:
-        """Restore parameter values from .embody.json. Returns True if restored.
+        """Restore parameter values from .embody/config.json. Returns True if restored.
         Sets _restoring_settings flag to suppress onValueChange side effects.
 
         kick_envoy: if True and Envoyenable is restored to True, defer Start().
         Only set this on the onStart() path -- Verify() owns startup on onCreate()."""
         path = self._settingsPath()
         if not path.is_file():
-            return False
+            # Migrate: check old root-level .embody.json
+            old_path = self._findProjectRoot() / '.embody.json'
+            if old_path.is_file():
+                try:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    import shutil
+                    shutil.move(str(old_path), str(path))
+                    self.Log('Migrated .embody.json → .embody/config.json', 'INFO')
+                except Exception as e:
+                    self.Log(f'Could not migrate .embody.json: {e}', 'WARNING')
+                    return False
+            else:
+                return False
         try:
             import json
             data = json.loads(path.read_text(encoding='utf-8'))
@@ -1154,7 +1167,7 @@ class EmbodyExt:
                     pass
         finally:
             self._restoring_settings = False
-        self.Log(f'Restored {restored} settings from .embody.json', 'INFO')
+        self.Log(f'Restored {restored} settings from config.json', 'INFO')
         # If Envoyenable was restored to True, kick Start() -- parexec was
         # suppressed during restore so onValueChange never fired.
         # Only do this on the onStart() path (kick_envoy=True).
@@ -1220,7 +1233,7 @@ class EmbodyExt:
                 run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
         else:
             # Fresh install (empty table). Always prompt -- even if a leftover
-            # .embody.json from a previous install in the same folder was
+            # config.json from a previous install in the same folder was
             # restored, the user must explicitly opt in for this new project.
             # Reset Envoyenable so the prompt is the gate, not old settings.
             self.my.par.Envoyenable = False

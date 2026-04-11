@@ -8,7 +8,7 @@ When Envoy starts, it generates a complete Claude Code configuration in your pro
 |---|---|---|
 | `CLAUDE.md` | Project context and critical rules | Yes |
 | `.mcp.json` | MCP server connection config | Yes |
-| `.claude/envoy-bridge.py` | STDIO-to-HTTP bridge for MCP transport | Yes |
+| `.embody/envoy-bridge.py` | STDIO-to-HTTP bridge for MCP transport | Yes |
 | `.claude/settings.local.json` | Tool permissions and MCP server config | Yes |
 | `.claude/rules/` | Always-loaded conventions (see below) | Yes |
 | `.claude/skills/` | On-demand workflow guides (see below) | Yes |
@@ -80,7 +80,7 @@ Returns operators organized by annotation groups, signal flow direction, and any
 
 ## STDIO Bridge
 
-Claude Code connects to Envoy through a STDIO bridge script (`.claude/envoy-bridge.py`) that translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. The bridge provides four meta-tools that work even when TouchDesigner is not running:
+Claude Code connects to Envoy through a STDIO bridge script (`.embody/envoy-bridge.py`) that translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. The bridge provides four meta-tools that work even when TouchDesigner is not running:
 
 | Tool | Description |
 |------|-------------|

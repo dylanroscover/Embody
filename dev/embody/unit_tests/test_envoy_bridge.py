@@ -37,7 +37,7 @@ sys.modules[_spec.name] = bridge  # Register so @patch('envoy_bridge.X') works
 # calls AND race the foreground main loop, breaking forward_to_http call
 # count assertions and many other expectations.
 #   - start_orphan_watchdog: v1, polls parent PID every 30s
-#   - start_reconciler:      v2, polls .envoy.json + pings backend every 1-5s
+#   - start_reconciler:      v2, polls envoy.json + pings backend every 1-5s
 # Tests that need to exercise the reconciler call bridge.reconcile()
 # directly with explicit heartbeat=True instead.
 bridge.start_orphan_watchdog = lambda *args, **kwargs: None
@@ -1225,7 +1225,7 @@ class TestBridgeConfig(EmbodyTestCase):
 
     def test_resolve_toe_path_relative(self):
         config = {'toe_path': 'dev/test.toe'}
-        result = bridge.resolve_toe_path(config, '/repo/.envoy.json')
+        result = bridge.resolve_toe_path(config, '/repo/.embody/envoy.json')
         self.assertEqual(result, '/repo/dev/test.toe')
 
     def test_resolve_toe_path_missing(self):
@@ -1344,7 +1344,7 @@ class TestBridgeMetaTools(EmbodyTestCase):
             state = self._make_state(config={})
             result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
-        self.assertIn('.envoy.json', result['message'])
+        self.assertIn('envoy.json', result['message'])
 
     def test_launch_td_already_running(self):
         """Refuses to launch if TD is already running."""
@@ -1371,7 +1371,7 @@ class TestBridgeMetaTools(EmbodyTestCase):
         """Error when TD executable doesn't exist."""
         state = self._make_state(
             config={'td_executable': '/nonexistent/TD.app', 'toe_path': 'test.toe'},
-            config_path='/tmp/.envoy.json')
+            config_path='/tmp/.embody/envoy.json')
         with patch.object(bridge, 'find_td_pid', return_value=None):
             result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')

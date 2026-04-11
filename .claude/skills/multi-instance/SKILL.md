@@ -20,9 +20,9 @@ Claude Code  <-->  STDIO Bridge  <-->  Envoy (TD instance A, port 9870)
 - **One active connection** at a time — the bridge talks to whichever instance is marked `active`
 - **Switching is instant** — `switch_instance` redirects the bridge's HTTP target in-memory
 
-## Instance Registry (`.envoy.json`)
+## Instance Registry (`.embody/envoy.json`)
 
-Each Envoy instance registers itself in `.envoy.json` at the git root on startup:
+Each Envoy instance registers itself in `.embody/envoy.json` at the git root on startup:
 
 ```json
 {
@@ -68,7 +68,7 @@ This means up to 10 simultaneous instances per base port.
 
 ### 1. Open the first `.toe` file
 
-Launch TD normally or via `launch_td`. Envoy starts on its configured port and registers in `.envoy.json`.
+Launch TD normally or via `launch_td`. Envoy starts on its configured port and registers in `.embody/envoy.json`.
 
 ### 2. Open additional `.toe` files
 
@@ -113,7 +113,7 @@ Both conditions must be true. A dead PID with an open port means another instanc
 Instances are deregistered on graceful TD shutdown. If TD crashes:
 - The PID becomes dead, so the instance shows as unreachable
 - The port may be freed, allowing a new instance to claim it
-- Stale entries remain in `.envoy.json` but are filtered by reachability checks
+- Stale entries remain in `.embody/envoy.json` but are filtered by reachability checks
 - Re-launching TD with the same `.toe` overwrites the stale entry
 
 ## Closing Instances
@@ -149,6 +149,6 @@ When you open the same `.toe` file in multiple TD instances, Envoy auto-suffixes
 
 - The bridge connects to **one instance at a time** — no parallel MCP calls to multiple instances
 - Maximum **10 instances** per base port range
-- `.envoy.json` is per git root — instances in different repos have separate registries
-- `launch_td` always launches the `.toe` configured in `.envoy.json` top-level `toe_path` — use TD directly to open additional files
+- `.embody/envoy.json` is per git root — instances in different repos have separate registries
+- `launch_td` always launches the `.toe` configured in `.embody/envoy.json` top-level `toe_path` — use TD directly to open additional files
 - Opening the same `.toe` file in multiple instances auto-suffixes keys (`MyProject-2`, `-3`, etc.)

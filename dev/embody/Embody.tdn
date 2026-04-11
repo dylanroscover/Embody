@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.3",
-	"build": 392,
-	"generator": "Embody/5.0.348",
+	"build": 393,
+	"generator": "Embody/5.0.353",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.349.toe",
-	"exported_at": "2026-04-11T01:49:23Z",
+	"source_file": "Embody-5.354.toe",
+	"exported_at": "2026-04-11T13:57:47Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -34,9 +34,6 @@
 				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
 			"flags": ["display"]
-		},
-		"baseCOMP": {
-			"size": [160, 130]
 		},
 		"windowCOMP": {
 			"parameters": {
@@ -837,7 +834,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.348"
+				"value": "5.0.353"
 			},
 			{
 				"name": "Touchbuild",
@@ -860,7 +857,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 392
+				"value": 393
 			},
 			{
 				"name": "Github",
@@ -875,7 +872,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-04-11 01:49:23 UTC"
+				"value": "2026-04-11 13:57:47 UTC"
 			},
 			{
 				"name": "Help",
@@ -1198,7 +1195,7 @@
 				"file": "embody/Embody/EnvoyExt.py"
 			},
 			"position": [-375, 475],
-			"tags": ["py", "TDExtension"]
+			"tags": ["TDExtension", "py"]
 		},
 		{
 			"name": "mousein1",
@@ -1262,6 +1259,7 @@
 			"name": "templates",
 			"type": "baseCOMP",
 			"position": [-400, -1200],
+			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
 			"tags": ["tdn"],
 			"tdn_ref": "embody/Embody/templates.tdn"

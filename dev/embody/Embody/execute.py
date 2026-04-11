@@ -29,7 +29,7 @@ def init():
 
 def onStart():
 	init()
-	# Restore settings from .embody.json -- recovers user config after
+	# Restore settings from .embody/config.json -- recovers user config after
 	# crash, force-quit, or any unsaved session. On normal open where
 	# .toe was saved, values match and this is a no-op.
 	run(f"op('{parent.Embody}').ext.Embody._restoreSettings(kick_envoy=True)", delayFrames=5)

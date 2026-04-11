@@ -33,7 +33,7 @@ CRASH_LOOP_WINDOW_S = 300  # 5 minutes
 CRASH_LOOP_MAX = 3  # Max launches within the window
 
 # Reconciler tick intervals.
-CONFIG_TICK_S = 1                 # .envoy.json mtime polling
+CONFIG_TICK_S = 1                 # envoy.json mtime polling
 HEARTBEAT_TICK_S = 10             # backend HTTP ping (fixed cadence)
 TOOL_CACHE_TTL_S = 5         # How long a cached tool list counts as fresh
 BACKEND_PING_TIMEOUT_S = 2   # Per-ping timeout
@@ -81,7 +81,7 @@ BRIDGE_TOOLS = [
                     "description": (
                         "Override the .toe file to open. Absolute path or "
                         "relative to git root. If omitted, uses the default "
-                        "toe_path from .envoy.json."
+                        "toe_path from envoy.json."
                     ),
                 },
             },
@@ -111,7 +111,7 @@ BRIDGE_TOOLS = [
                     "description": (
                         "Override the .toe file to open. Absolute path or "
                         "relative to git root. If omitted, uses the default "
-                        "toe_path from .envoy.json."
+                        "toe_path from envoy.json."
                     ),
                 },
             },
@@ -226,7 +226,10 @@ def _init_file_logging(config_path):
         return
     try:
         if config_path:
-            log_dir = os.path.join(os.path.dirname(config_path), "dev", "logs")
+            # Config is in .embody/ — git root is one level up
+            embody_dir = os.path.dirname(os.path.abspath(config_path))
+            git_root = os.path.dirname(embody_dir)
+            log_dir = os.path.join(git_root, "dev", "logs")
         else:
             log_dir = os.path.join(os.getcwd(), "dev", "logs")
         if os.path.isdir(log_dir):
@@ -266,7 +269,7 @@ def parse_args():
 
 
 def load_config(config_path):
-    """Load .envoy.json config. Returns dict (possibly empty)."""
+    """Load envoy.json config. Returns dict (possibly empty)."""
     if not config_path or not os.path.exists(config_path):
         return {}
     try:
@@ -278,15 +281,21 @@ def load_config(config_path):
 
 
 def resolve_toe_path(config, config_path):
-    """Resolve the .toe path from config (relative to git root)."""
+    """Resolve the .toe path from config (relative to git root).
+
+    toe_path in envoy.json is always relative to the git root.
+    The config file lives at .embody/envoy.json, so we go up one
+    level from the config's parent directory to reach the git root.
+    """
     toe = config.get("toe_path")
     if not toe:
         return None
     if os.path.isabs(toe):
         return toe
-    # Config sits at git root -- resolve relative to its directory
+    # Config is in .embody/ -- git root is one level up
     if config_path:
-        git_root = os.path.dirname(os.path.abspath(config_path))
+        embody_dir = os.path.dirname(os.path.abspath(config_path))
+        git_root = os.path.dirname(embody_dir)
         return os.path.join(git_root, toe)
     return toe
 
@@ -476,14 +485,17 @@ def atomic_write_json(path, data):
 def _heartbeat_path(config_path, pid=None):
     """Return the path for this bridge's heartbeat file.
 
-    Places it in dev/logs/ next to the config.  Falls back to a temp dir
-    if the log directory doesn't exist.
+    Places it in dev/logs/ relative to the git root.  Falls back to a
+    temp dir if the log directory doesn't exist.
     """
     if pid is None:
         pid = os.getpid()
     filename = f"envoy-bridge-{pid}.heartbeat"
     if config_path:
-        log_dir = os.path.join(os.path.dirname(config_path), "dev", "logs")
+        # Config is in .embody/ — git root is one level up
+        embody_dir = os.path.dirname(os.path.abspath(config_path))
+        git_root = os.path.dirname(embody_dir)
+        log_dir = os.path.join(git_root, "dev", "logs")
         if os.path.isdir(log_dir):
             return os.path.join(log_dir, filename)
     import tempfile
@@ -517,7 +529,10 @@ def _list_stale_heartbeats(config_path, max_age_s):
     import glob as _glob
     stale = []
     if config_path:
-        log_dir = os.path.join(os.path.dirname(config_path), "dev", "logs")
+        # Config is in .embody/ — git root is one level up
+        embody_dir = os.path.dirname(os.path.abspath(config_path))
+        git_root = os.path.dirname(embody_dir)
+        log_dir = os.path.join(git_root, "dev", "logs")
     else:
         import tempfile
         log_dir = tempfile.gettempdir()
@@ -611,8 +626,8 @@ def launch_td(config, config_path, project_path=None):
     """Launch TouchDesigner with a .toe file.
 
     Args:
-        config: Parsed .envoy.json config dict.
-        config_path: Path to .envoy.json (for resolving relative paths).
+        config: Parsed envoy.json config dict.
+        config_path: Path to envoy.json (for resolving relative paths).
         project_path: Optional override .toe path. If relative, resolved
             against the git root (same directory as config_path).
 
@@ -620,18 +635,19 @@ def launch_td(config, config_path, project_path=None):
     """
     td_exe = config.get("td_executable")
     if not td_exe:
-        return False, "No td_executable configured in .envoy.json", None
+        return False, "No td_executable configured in envoy.json", None
 
     if project_path:
         # Resolve relative paths against git root
         if not os.path.isabs(project_path) and config_path:
-            git_root = os.path.dirname(os.path.abspath(config_path))
+            embody_dir = os.path.dirname(os.path.abspath(config_path))
+            git_root = os.path.dirname(embody_dir)
             project_path = os.path.join(git_root, project_path)
         toe_path = project_path
     else:
         toe_path = resolve_toe_path(config, config_path)
     if not toe_path:
-        return False, "No toe_path configured in .envoy.json", None
+        return False, "No toe_path configured in envoy.json", None
 
     # Validate paths
     if sys.platform == "darwin":
@@ -639,13 +655,13 @@ def launch_td(config, config_path, project_path=None):
         if not os.path.exists(td_exe):
             return (False,
                     f"TouchDesigner not found at {td_exe}. "
-                    "Install this version or update td_executable in .envoy.json",
+                    "Install this version or update td_executable in envoy.json",
                     None)
     else:
         if not os.path.isfile(td_exe):
             return (False,
                     f"TouchDesigner executable not found at {td_exe}. "
-                    "Install this version or update td_executable in .envoy.json",
+                    "Install this version or update td_executable in envoy.json",
                     None)
 
     if not os.path.isfile(toe_path):
@@ -801,7 +817,7 @@ def handle_switch_instance(params, state):
             fresh["active"] = target
             atomic_write_json(config_path, fresh)
         except Exception as e:
-            log(f"Warning: could not update .envoy.json: {e}")
+            log(f"Warning: could not update envoy.json: {e}")
 
     log(f"Switched from '{old_active}' to '{target}' (port {target_port})")
 
@@ -1008,15 +1024,15 @@ def bridge_only_tools_list(request_id):
 # startup, if Envoy isn't reachable within the quick probe, we return the
 # cached list instead of bridge-only tools.
 
-_TOOLS_CACHE_FILENAME = ".envoy-tools-cache.json"
+_TOOLS_CACHE_FILENAME = "envoy-tools-cache.json"
 
 
 def _tools_cache_path(config_path):
-    """Return the path to the tools cache file (next to .envoy.json)."""
+    """Return the path to the tools cache file (sibling of envoy.json in .embody/)."""
     if not config_path:
         return None
-    return os.path.join(os.path.dirname(os.path.abspath(config_path)),
-                        _TOOLS_CACHE_FILENAME)
+    embody_dir = os.path.dirname(os.path.abspath(config_path))
+    return os.path.join(embody_dir, _TOOLS_CACHE_FILENAME)
 
 
 def save_tools_cache(config_path, tools):
@@ -1025,6 +1041,7 @@ def save_tools_cache(config_path, tools):
     if not path:
         return
     try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         atomic_write_json(path, {"tools": tools})
     except Exception:
         pass
@@ -1465,7 +1482,7 @@ def ping_backend_mcp(url, timeout=BACKEND_PING_TIMEOUT_S):
 def reconcile(state, on_tools_change, *, heartbeat):
     """Run one reconciliation pass against ``state``.
 
-    Phase 1 (every tick, UNCONDITIONAL): re-read ``.envoy.json`` when its
+    Phase 1 (every tick, UNCONDITIONAL): re-read ``envoy.json`` when its
     mtime changes, compare the resolved active port against ``state.url``,
     and switch URL immediately on any drift -- regardless of whether the
     current connection still appears healthy.  This is the fix for the
@@ -1753,7 +1770,7 @@ def main():
     # Self-terminate when MCP client closes stdin pipe (session ended)
     start_orphan_watchdog(stdin_probe_fd, config_path)
 
-    # Start the reconciler thread -- polls .envoy.json every second,
+    # Start the reconciler thread -- polls envoy.json every second,
     # pings the backend on a dynamic cadence (fast while unstable,
     # slow once the link has been stable for STABILITY_THRESHOLD_S),
     # switches URL on any active-instance drift.  This is the core v2

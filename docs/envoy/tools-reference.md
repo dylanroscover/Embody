@@ -132,7 +132,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 | `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch to a different running instance. See [Multiple Instances](architecture.md#multiple-instances) |
 
 !!! info "Bridge architecture"
-    Claude Code connects to Envoy via a STDIO bridge script (`.claude/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.
+    Claude Code connects to Envoy via a STDIO bridge script (`.embody/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.
 
 ## Batch Operations
 
