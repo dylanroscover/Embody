@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Embody — your network, on disk.</title>
+  <meta name="description" content="Embody externalizes TouchDesigner operators to version-control-friendly files on disk. Diff what changed, restore any state, let your AI read the network." />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Embody — your network, on disk." />
+  <meta property="og:description" content="Tag any operator. Embody externalizes it to files on disk. Every version diffable, every state restorable." />
+  <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
+  <meta property="og:url" content="https://embody.tools/embody" />
+  <meta property="og:site_name" content="Embody" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Embody — your network, on disk." />
+  <meta name="twitter:description" content="Tag any operator. Embody externalizes it to files on disk. Every version diffable, every state restorable." />
+  <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
+
+  <!-- Theme -->
+  <meta name="theme-color" content="#181e1e" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- Favicon: inline SVG green dot -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23181e1e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%236ee668'/%3E%3C/svg%3E" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       STICKY MARK
+       ============================================================ -->
+  <header class="mark" aria-label="Embody / Externalize">
+    <a href="/" class="mark__link">
+      <span class="mark__word">embody</span>
+    </a><span class="mark__bridge" aria-hidden="true"></span><a href="#top" class="mark__link mark__link--ext">
+      <span class="mark__dot" aria-hidden="true"></span>
+      <span class="mark__word">externalize</span>
+    </a>
+  </header>
+
+  <!-- ============================================================
+       TABLE OF CONTENTS (sticky left sidebar)
+       ============================================================ -->
+  <nav class="toc" aria-label="Table of contents">
+    <ul class="toc__list">
+      <li><a class="toc__link" href="#top">overview</a></li>
+      <li><a class="toc__link" href="#problem">one file vs. many</a></li>
+      <li><a class="toc__link" href="#files">externalized files</a></li>
+      <li><a class="toc__link" href="#tracking">dirty tracking</a></li>
+      <li><a class="toc__link" href="#safety">nothing lost</a></li>
+      <li><a class="toc__link" href="#git">embody + git</a></li>
+      <li><a class="toc__link" href="#loop">part of the loop</a></li>
+      <li><a class="toc__link" href="#start">get started</a></li>
+      <li><a class="toc__link" href="#deeper">go deeper</a></li>
+    </ul>
+  </nav>
+
+  <main id="top">
+
+    <!-- ============================================================
+         HERO
+         ============================================================ -->
+    <section class="hero">
+      <div class="hero__glow" aria-hidden="true"></div>
+
+      <div class="container hero__inner">
+        <p class="eyebrow">EMBODY <span class="eyebrow__sep">/</span> LATERAL VELOCITY</p>
+
+        <h1 class="hero__headline">your network,<br />on&nbsp;disk.</h1>
+
+        <p class="hero__sub">
+          Your entire project lives inside a single binary file. You can't separate one experiment from another, can't hand a piece of it to someone, can't let your AI read just the part it needs. Embody breaks the project into individual files — one per operator, mirroring your network hierarchy — that rebuild themselves every time you open the project.
+        </p>
+
+        <div class="hero__ctas">
+          <a class="btn btn--primary" href="https://github.com/dylanroscover/Embody/releases/latest">
+            Download the .tox <span aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/embody/getting-started/">
+            Read the docs
+          </a>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         THE SHIFT
+         ============================================================ -->
+    <section id="problem" class="section section--compare">
+      <div class="container">
+        <p class="eyebrow">THE SHIFT</p>
+        <h2 class="section__title">one file vs. many.</h2>
+
+        <p class="lede">
+          Everything you build lives inside a single project file. Every experiment, every version, every branched idea — together, inseparable. Embody breaks the project into individual files you can own, diff, and restore independently.
+        </p>
+
+        <div class="compare">
+          <article class="compare__col compare__col--binary">
+            <h3 class="compare__heading">binary <code>.toe</code></h3>
+            <ul class="compare__list">
+              <li>Opaque — requires TouchDesigner to inspect</li>
+              <li>Binary diff — "file changed"</li>
+              <li>Invisible to AI agents</li>
+              <li>Revert = restore the entire file</li>
+              <li>Merge conflicts are unresolvable</li>
+              <li>One save format for the whole project</li>
+            </ul>
+          </article>
+          <article class="compare__col compare__col--tdn">
+            <h3 class="compare__heading">externalized files</h3>
+            <ul class="compare__list">
+              <li>Readable in any text editor</li>
+              <li>Line-by-line diff — see exactly what changed</li>
+              <li>AI agents can read and understand your network</li>
+              <li>Revert = <code>git checkout</code> a specific change</li>
+              <li>Merge conflicts are readable and fixable</li>
+              <li>Files are the source of truth — <code>.toe</code> is working state</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         EXTERNALIZED FILES
+         ============================================================ -->
+    <section id="files" class="section section--captured">
+      <div class="container">
+        <p class="eyebrow">EXTERNALIZATION</p>
+        <h2 class="section__title">everything gets a file.</h2>
+
+        <p class="lede">
+          Tag any operator. Embody writes it to a file on disk and tracks it. On the next project open, every externalized operator rebuilds itself from that file — automatically, without any intervention.
+        </p>
+
+        <div class="features">
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">TOX strategy</h3>
+              <p class="feature__desc">COMPs saved as portable <code>.tox</code> files. Fast to restore, works with any COMP complexity — UI components, third-party tools, anything.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">TDN strategy</h3>
+              <p class="feature__desc">COMPs saved as <a href="/tdn">TDN</a> JSON — human-readable, diffable, and reviewable in pull requests. Choose this for any network you actively edit.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">DAT formats</h3>
+              <p class="feature__desc">Scripts and data externalize as <code>.py</code>, <code>.json</code>, <code>.xml</code>, <code>.csv</code> — whatever matches the DAT's content type. Auto-detected.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">mirrored hierarchy</h3>
+              <p class="feature__desc">The folder structure on disk mirrors your network hierarchy. Find any externalized file without guessing where it lives.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">auto-restore on open</h3>
+              <p class="feature__desc">Every project open runs three restore phases — TOX COMPs, TDN COMPs, DAT file parameters — fully automatic. Nothing to trigger manually.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">build metadata</h3>
+              <p class="feature__desc">Every externalized COMP gets <code>Buildnumber</code>, <code>Touchbuild</code>, and <code>Builddate</code> injected automatically. A permanent record of when and where it was built.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         DIRTY TRACKING
+         ============================================================ -->
+    <section id="tracking" class="section section--small">
+      <div class="container">
+        <p class="eyebrow">SYNC MODEL</p>
+        <h2 class="section__title">only what changed.</h2>
+
+        <p class="lede">
+          Embody watches every externalized operator for parameter changes. When something changes, the operator is marked dirty. When you press <code>Ctrl+Shift+U</code>, only dirty operators write to disk — no unnecessary file writes, no spurious git changes.
+        </p>
+
+        <div class="tdn__grid">
+          <div class="details">
+            <div class="detail">
+              <span class="detail__label">tag an operator</span>
+              <span class="detail__value"><code>lCtrl lCtrl</code></span>
+            </div>
+            <div class="detail">
+              <span class="detail__label">write dirty ops to disk</span>
+              <span class="detail__value"><code>Ctrl+Shift+U</code></span>
+            </div>
+            <div class="detail">
+              <span class="detail__label">open manager</span>
+              <span class="detail__value"><code>Ctrl+Shift+E</code></span>
+            </div>
+            <div class="detail">
+              <span class="detail__label">restore from disk</span>
+              <span class="detail__value">automatic on project open</span>
+            </div>
+            <div class="detail">
+              <span class="detail__label">tracking table</span>
+              <span class="detail__value"><code>externalizations.tsv</code></span>
+            </div>
+            <div class="detail">
+              <span class="detail__label">tracking fields</span>
+              <span class="detail__value">path, type, file, dirty, build</span>
+            </div>
+          </div>
+
+          <ul class="tdn__bullets">
+            <li><strong>Parameter change detection</strong> — every parameter value is tracked. Touch any parameter on an externalized op and it's immediately marked dirty in the table.</li>
+            <li><strong>Selective writes</strong> — only dirty operators write on Update. A project with 40 externalized ops and one change writes one file, not 40.</li>
+            <li><strong>Content comparison</strong> — if a write produces identical content to the existing file, the write is skipped entirely. Git timestamps stay clean.</li>
+            <li><strong>Single source of truth</strong> — <code>externalizations.tsv</code> tracks what's externalized, where the file lives, and whether it's current. Nothing happens outside of it.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         SAFE BY DESIGN
+         ============================================================ -->
+    <section id="safety" class="section section--safety">
+      <div class="container">
+        <p class="eyebrow">RELIABILITY</p>
+        <h2 class="section__title">nothing lost.</h2>
+
+        <p class="lede">
+          Embody manages files on your behalf. Every decision about what to write, what to keep, and what to skip is explicit and reversible.
+        </p>
+
+        <div class="pillars">
+          <article class="pillar">
+            <h3 class="pillar__name">won't delete your work</h3>
+            <p class="pillar__body">
+              Embody only manages files it created. Remove a tag and the file stays on disk. Files Embody didn't create are never modified.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">bidirectional sync</h3>
+            <p class="pillar__body">
+              Neither direction is lossy. TD&nbsp;&rarr;&nbsp;disk on Update. Disk&nbsp;&rarr;&nbsp;TD on project open. Both paths preserve the full state.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">no silent overwrites</h3>
+            <p class="pillar__body">
+              If two operators point to the same external file, Embody prompts before writing. You decide — not the tool.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">skip-if-identical</h3>
+            <p class="pillar__body">
+              If a write produces the same content as the existing file, it's skipped entirely. No spurious git changes, no noise commits.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">works across machines</h3>
+            <p class="pillar__body">
+              Paths normalized to forward slashes, timestamps stored in UTC. A project externalized on Windows opens cleanly on macOS.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         EMBODY + GIT
+         ============================================================ -->
+    <section id="git" class="section section--upgrades">
+      <div class="container container--narrow">
+        <p class="eyebrow">VERSION CONTROL</p>
+        <h2 class="section__title">embody + git.</h2>
+
+        <p class="lede">
+          A git repository is optional — Embody works in any project folder. But once your operators live in files, version control stops being something you wish you had and starts being something that just works.
+        </p>
+
+        <ul class="tdn__bullets">
+          <li><strong>Readable diffs</strong> — <code>git diff</code> shows exactly which parameters changed on which operators between two commits. Not "file changed." The actual change.</li>
+          <li><strong>Branching by idea</strong> — each experimental direction is a branch. Merging brings working parts back together without manual copy-paste in the TD network editor.</li>
+          <li><strong>Pull request reviews</strong> — reviewers can comment on specific parameter changes, script edits, and network structure without opening TouchDesigner.</li>
+          <li><strong>Bisect</strong> — <code>git bisect</code> can find the commit that introduced a visual or performance regression. Every change is discrete and readable.</li>
+          <li><strong>AI context</strong> — your AI assistant can run <code>git diff</code> against your externalized files and understand exactly what changed between sessions, without you summarizing it.</li>
+        </ul>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">The source of truth.</span> The <code>.toe</code> is a working file. The externalized files on disk are what you actually own.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         PART OF THE LOOP
+         ============================================================ -->
+    <section id="loop" class="section section--loop">
+      <div class="container">
+        <p class="eyebrow">THE WORKFLOW</p>
+        <h2 class="section__title">part of the loop.</h2>
+
+        <p class="lede">
+          Embody is the lateral layer — it keeps your work versioned and restorable. It works with the other two layers to close the full loop.
+        </p>
+
+        <div class="pillars pillars--three">
+          <article class="pillar">
+            <h3 class="pillar__name">Envoy</h3>
+            <p class="pillar__claim">forward velocity.</p>
+            <p class="pillar__body">
+              Your AI agent builds inside the live session. When it's done, it externalizes what it built using Embody's MCP tools — the work is immediately tracked and version-controlled.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">TDN</h3>
+            <p class="pillar__claim">the substrate.</p>
+            <p class="pillar__body">
+              Choose TDN as your externalization strategy for COMPs you want to diff. Every save writes the network as human-readable JSON — operators, parameters, connections, all in text.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">Git</h3>
+            <p class="pillar__claim">the record.</p>
+            <p class="pillar__body">
+              Commit the externalized files. Every Update produces a clean, reviewable diff. Branch off ideas. Revert bad experiments. Your entire creative history, in version control.
+            </p>
+          </article>
+        </div>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">Lateral velocity.</span> Every experiment is a branch. Every save is a diff. Every restore is automatic. You move sideways as fast as you move forward.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         GET STARTED
+         ============================================================ -->
+    <section id="start" class="section section--start">
+      <div class="container">
+        <p class="eyebrow">USAGE</p>
+        <h2 class="section__title">four steps to flow.</h2>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="step__num">01</span>
+            <div class="step__body">
+              <h3 class="step__title">download</h3>
+              <p>Grab the Embody <code>.tox</code> from <a href="https://github.com/dylanroscover/Embody/releases/latest">GitHub Releases</a> and drop it into your TouchDesigner project. That's the install.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">02</span>
+            <div class="step__body">
+              <h3 class="step__title">tag an operator</h3>
+              <p>Double-tap <kbd>lCtrl</kbd> on any COMP or DAT. The operator is registered in <code>externalizations.tsv</code> with an auto-detected externalization strategy.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">03</span>
+            <div class="step__body">
+              <h3 class="step__title">update</h3>
+              <p>Press <kbd>Ctrl+Shift+U</kbd>. Embody writes all dirty operators to their external files. The files on disk are now the source of truth.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">04</span>
+            <div class="step__body">
+              <h3 class="step__title">reopen</h3>
+              <p>Close and reopen the project. Every externalized operator rebuilds automatically from disk — no manual steps, no intervention required.</p>
+            </div>
+          </li>
+        </ol>
+
+        <p class="start__meta">Requires TouchDesigner 2025.32280 or later. Works on macOS and Windows.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         GO DEEPER
+         ============================================================ -->
+    <section id="deeper" class="section section--deeper">
+      <div class="container">
+        <p class="eyebrow">DOCUMENTATION</p>
+        <h2 class="section__title">go deeper.</h2>
+
+        <div class="pillars pillars--four">
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/embody/getting-started/">
+            <h3 class="pillar__name">getting started</h3>
+            <p class="pillar__body">
+              Download, install, and externalize your first operator in under five minutes.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/embody/externalization/">
+            <h3 class="pillar__name">externalization</h3>
+            <p class="pillar__body">
+              Tags, strategies, the sync cycle, and how Embody manages the files it creates.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/embody/manager-ui/">
+            <h3 class="pillar__name">manager UI</h3>
+            <p class="pillar__body">
+              The Embody panel — operator list, dirty state, build info, and bulk operations.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/embody/supported-formats/">
+            <h3 class="pillar__name">supported formats</h3>
+            <p class="pillar__body">
+              Every file format Embody writes — which operators use them and why.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+
+      <div class="footer__col footer__col--brand">
+        <div class="footer__mark">
+          <span class="mark__dot" aria-hidden="true"></span>
+          <span class="footer__word">embody</span>
+        </div>
+        <p class="footer__tag">natural language tools for <a href="https://derivative.ca">TouchDesigner</a></p>
+      </div>
+
+      <nav class="footer__col" aria-label="Project">
+        <h4 class="footer__h">Toolkit</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/manifesto/">manifesto</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
+          <li><a href="https://github.com/dylanroscover/Embody">github</a></li>
+        </ul>
+      </nav>
+
+      <nav class="footer__col" aria-label="Reference">
+        <h4 class="footer__h">Reference</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/envoy/">Envoy setup</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/embody/getting-started/">get started</a></li>
+        </ul>
+      </nav>
+
+    </div>
+
+    <div class="container footer__bottom">
+      <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
+      <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+    </div>
+  </footer>
+
+  <!-- Scroll-spy + staggered reveal -->
+  <script>
+  (function () {
+    var links = [].slice.call(document.querySelectorAll('.toc__link'));
+    var ids = links.map(function (a) { return a.getAttribute('href').slice(1); });
+    var sections = ids.map(function (id) { return document.getElementById(id); });
+
+    var activeObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          var id = entry.target.id;
+          links.forEach(function (a) {
+            a.classList.toggle('toc__link--active', a.getAttribute('href') === '#' + id);
+          });
+        }
+      });
+    }, { rootMargin: '-20% 0px -60% 0px' });
+
+    sections.forEach(function (s) { if (s) activeObserver.observe(s); });
+
+    var hero = document.querySelector('.hero');
+    var heroH = hero ? hero.offsetHeight : 400;
+    var revealed = false;
+
+    function updateVisibility() {
+      var scrollY = window.scrollY || window.pageYOffset;
+      var shouldShow = scrollY > heroH * 0.4;
+      if (shouldShow === revealed) return;
+      revealed = shouldShow;
+      links.forEach(function (link, i) {
+        if (shouldShow) {
+          setTimeout(function () { link.classList.add('toc__link--visible'); }, i * 60);
+        } else {
+          setTimeout(function () { link.classList.remove('toc__link--visible'); }, (links.length - 1 - i) * 40);
+        }
+      });
+    }
+
+    window.addEventListener('scroll', updateVisibility, { passive: true });
+    updateVisibility();
+
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest('a[href^="#"]');
+      if (!a) return;
+      var target = document.getElementById(a.getAttribute('href').slice(1));
+      if (!target) return;
+      e.preventDefault();
+      var start = window.scrollY;
+      var end = target.getBoundingClientRect().top + start;
+      var dist = end - start;
+      var duration = Math.min(400, Math.max(150, Math.abs(dist) * 0.15));
+      var t0 = null;
+      function step(ts) {
+        if (!t0) t0 = ts;
+        var p = Math.min((ts - t0) / duration, 1);
+        var ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        window.scrollTo(0, start + dist * ease);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  })();
+  </script>
+
+</body>
+</html>

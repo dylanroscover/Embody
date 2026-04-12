@@ -772,7 +772,8 @@ code, kbd, pre {
 }
 
 .pillar--link {
-  display: block;
+  display: flex;
+  flex-direction: column;
   color: inherit;
   text-decoration: none;
   position: relative;
@@ -787,7 +788,8 @@ code, kbd, pre {
 }
 .pillar__arrow {
   display: block;
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
   color: var(--accent);
   font-size: 1.1rem;
   transition: transform 180ms ease;

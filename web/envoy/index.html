@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Envoy — talk to your network.</title>
+  <meta name="description" content="An MCP server embedded inside TouchDesigner. 46 tools that let Claude, Cursor, and Windsurf build directly inside your live session." />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Envoy — talk to your network." />
+  <meta property="og:description" content="An MCP server embedded inside TouchDesigner. 46 tools. Say what you want. Watch it build." />
+  <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
+  <meta property="og:url" content="https://embody.tools/envoy" />
+  <meta property="og:site_name" content="Embody" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Envoy — talk to your network." />
+  <meta name="twitter:description" content="An MCP server embedded inside TouchDesigner. 46 tools. Say what you want. Watch it build." />
+  <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
+
+  <!-- Theme -->
+  <meta name="theme-color" content="#181e1e" />
+  <meta name="color-scheme" content="dark" />
+
+  <!-- Favicon: inline SVG green dot -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23181e1e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%236ee668'/%3E%3C/svg%3E" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+
+  <!-- ============================================================
+       STICKY MARK
+       ============================================================ -->
+  <header class="mark" aria-label="Embody / Envoy">
+    <a href="/" class="mark__link">
+      <span class="mark__word">embody</span>
+    </a><span class="mark__bridge" aria-hidden="true"></span><a href="#top" class="mark__link mark__link--ext">
+      <span class="mark__dot" aria-hidden="true"></span>
+      <span class="mark__word">envoy</span>
+    </a>
+  </header>
+
+  <!-- ============================================================
+       TABLE OF CONTENTS (sticky left sidebar)
+       ============================================================ -->
+  <nav class="toc" aria-label="Table of contents">
+    <ul class="toc__list">
+      <li><a class="toc__link" href="#top">overview</a></li>
+      <li><a class="toc__link" href="#gap">blind vs. live</a></li>
+      <li><a class="toc__link" href="#tools">46 tools</a></li>
+      <li><a class="toc__link" href="#capture">see the pixels</a></li>
+      <li><a class="toc__link" href="#works">how it works</a></li>
+      <li><a class="toc__link" href="#safety">runs in your project</a></li>
+      <li><a class="toc__link" href="#config">auto-configured</a></li>
+      <li><a class="toc__link" href="#loop">part of the loop</a></li>
+      <li><a class="toc__link" href="#deeper">go deeper</a></li>
+    </ul>
+  </nav>
+
+  <main id="top">
+
+    <!-- ============================================================
+         HERO
+         ============================================================ -->
+    <section class="hero">
+      <div class="hero__glow" aria-hidden="true"></div>
+
+      <div class="container hero__inner">
+        <p class="eyebrow">ENVOY <span class="eyebrow__sep">/</span> FORWARD VELOCITY</p>
+
+        <h1 class="hero__headline">talk to<br />your&nbsp;network.</h1>
+
+        <p class="hero__sub">
+          Envoy is an MCP server embedded inside your <code>.toe</code> that gives your AI assistant direct access to the live session — operators, parameters, connections, pixel output. It doesn't describe what a network <em>might</em> look like. It builds the one you asked for. Say what you want. Watch it build.
+        </p>
+
+        <div class="hero__ctas">
+          <a class="btn btn--primary" href="https://dylanroscover.github.io/Embody/envoy/setup/">
+            Setup Envoy <span aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/envoy/tools-reference/">
+            See all 46 tools
+          </a>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         THE GAP
+         ============================================================ -->
+    <section id="gap" class="section section--compare">
+      <div class="container">
+        <p class="eyebrow">THE DIFFERENCE</p>
+        <h2 class="section__title">blind vs. live.</h2>
+
+        <p class="lede">
+          Your AI assistant can suggest what to build — but without a connection to the live session, it can't see your network, read your parameters, or act on what's running. Envoy changes that in one toggle.
+        </p>
+
+        <div class="compare">
+          <article class="compare__col compare__col--binary">
+            <h3 class="compare__heading">without Envoy</h3>
+            <ul class="compare__list">
+              <li>AI can describe networks — not build them</li>
+              <li>AI works from assumptions, not live state</li>
+              <li>Manual back-and-forth: AI suggests, you implement</li>
+              <li>AI guesses at network state — no live feedback</li>
+              <li>Visual feedback requires you to describe the output</li>
+              <li>Parameter values, cook errors, hierarchy — all invisible</li>
+            </ul>
+          </article>
+          <article class="compare__col compare__col--tdn">
+            <h3 class="compare__heading">with Envoy</h3>
+            <ul class="compare__list">
+              <li>AI connects directly to your live session</li>
+              <li>46 tools expose every aspect of the running project</li>
+              <li>Say what you want — operators appear, connect, tune</li>
+              <li>AI reads the actual network, not a description of it</li>
+              <li><code>capture_top</code> returns real pixel output as an image</li>
+              <li>Cook errors, parameter values, hierarchy — all accessible</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         46 TOOLS
+         ============================================================ -->
+    <section id="tools" class="section section--captured">
+      <div class="container">
+        <p class="eyebrow">CAPABILITIES</p>
+        <h2 class="section__title">46 tools.</h2>
+
+        <p class="lede">
+          Every aspect of a TouchDesigner session — operators, parameters, connections, scripts, layout, performance, visual output — exposed as MCP tools the AI can call directly.
+        </p>
+
+        <div class="features">
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">operator management</h3>
+              <p class="feature__desc">Create, delete, copy, rename, query. <code>create_op</code> takes any TD type string. <code>find_children</code> searches by name, type, depth, tags, or text content.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">parameter control</h3>
+              <p class="feature__desc"><code>get_parameter</code> returns the full context — value, mode, expression, range, menu entries, default. <code>set_parameter</code> writes any mode in a single call.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">connections</h3>
+              <p class="feature__desc">Wire operators together, disconnect inputs, and inspect the full connection graph — including COMP parent/child connectors.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">DAT content</h3>
+              <p class="feature__desc">Read and write text DATs (scripts, configs) and table DATs (structured data). Edit extension code in place without leaving the session.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">positioning &amp; layout</h3>
+              <p class="feature__desc"><code>get_network_layout</code> returns all operator positions in one call. New operators extend existing rows — no overlaps, no guessing.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">annotations</h3>
+              <p class="feature__desc">Create, read, and modify network boxes and comment annotations. The AI groups and labels operators the same way a human would.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">performance monitoring</h3>
+              <p class="feature__desc"><code>get_project_performance</code> returns FPS, frame time, GPU temp, and a hotspot ranking of the most expensive COMPs. Bottlenecks surface without you pointing at them.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">code execution</h3>
+              <p class="feature__desc"><code>execute_python</code> runs arbitrary Python in TD's main thread. The escape hatch for anything that needs looping, branching, or full TD access between steps.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">introspection</h3>
+              <p class="feature__desc">Inspect the live TD Python API — classes, methods, properties — and call operator methods by name. The AI looks up the API while using it.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">Embody integration</h3>
+              <p class="feature__desc">Tag operators, query externalization status, force-save to disk — the full Embody lifecycle as MCP tools. Build something, externalize it, without switching focus.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">bridge meta-tools</h3>
+              <p class="feature__desc"><code>get_td_status</code>, <code>launch_td</code>, <code>restart_td</code>, <code>switch_instance</code> — run on the local bridge, available even when TD is not running.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">batch operations</h3>
+              <p class="feature__desc"><code>batch_operations</code> combines any set of tool calls into one round-trip. Position 10 operators, connect them, set their parameters — one request, not 30.</p>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         CAPTURE_TOP — visual feedback
+         ============================================================ -->
+    <section id="capture" class="section section--upgrades">
+      <div class="container container--narrow">
+        <p class="eyebrow">VISUAL FEEDBACK</p>
+        <h2 class="section__title">see the pixels.</h2>
+
+        <p class="lede">
+          Every other tool in Envoy works with structure — operators, parameters, connections. <code>capture_top</code> works with what's actually rendering. It captures a TOP's output as an image and returns it directly in the response. The AI <em>sees</em> the pixels — not your description of them.
+        </p>
+
+        <p class="lede">
+          This is the feedback loop that was always missing. The AI builds a compositing chain, captures the output at each stage, examines what it produced, and iterates — without you narrating the screen.
+        </p>
+
+        <ul class="tdn__bullets">
+          <li><strong>Any TOP</strong> — compositing chains, render TOPs, feedback loops, generative textures. If it outputs pixels, the AI can see it.</li>
+          <li><strong>Inline or file</strong> — small captures return directly in the response. Larger ones save to a temp file with the path returned.</li>
+          <li><strong>Iterative</strong> — capture after each change. The AI builds visual intuition across a session, not from a single snapshot.</li>
+        </ul>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">Eyes.</span> The AI doesn't just build your network. It sees what it built.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         HOW IT WORKS
+         ============================================================ -->
+    <section id="works" class="section section--start">
+      <div class="container">
+        <p class="eyebrow">ARCHITECTURE</p>
+        <h2 class="section__title">how it works.</h2>
+
+        <p class="lede">
+          Every tool call follows the same safe path from your AI client into the live TD session and back.
+        </p>
+
+        <ol class="steps">
+          <li class="step">
+            <span class="step__num">01</span>
+            <div class="step__body">
+              <h3 class="step__title">you say what you want</h3>
+              <p>Your AI client sends a tool call. A local bridge script forwards it to Envoy's server on <code>localhost</code> — nothing leaves your machine.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">02</span>
+            <div class="step__body">
+              <h3 class="step__title">envoy queues it safely</h3>
+              <p>The request is validated and queued for TD's main thread. Envoy never touches a TD object directly — it waits for the safe window.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">03</span>
+            <div class="step__body">
+              <h3 class="step__title">TD executes it</h3>
+              <p>TouchDesigner picks up the operation on its own thread, with full access to every operator, parameter, and connection in your project.</p>
+            </div>
+          </li>
+          <li class="step">
+            <span class="step__num">04</span>
+            <div class="step__body">
+              <h3 class="step__title">the result comes back</h3>
+              <p>The response returns to your AI client with recent log entries attached — cook errors, warnings, status messages. Full context, every time.</p>
+            </div>
+          </li>
+        </ol>
+
+        <p class="start__meta">Bridge meta-tools (<code>get_td_status</code>, <code>launch_td</code>) are cached locally — always available, even when TD is not running.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         SAFE BY DESIGN
+         ============================================================ -->
+    <section id="safety" class="section section--safety">
+      <div class="container">
+        <p class="eyebrow">RELIABILITY</p>
+        <h2 class="section__title">runs in your project.</h2>
+
+        <p class="lede">
+          Envoy lives inside your <code>.toe</code>. It starts with your project, stops when you stop it, and never exposes your session to the network. Every design decision treats that trust as load-bearing.
+        </p>
+
+        <div class="pillars">
+          <article class="pillar">
+            <h3 class="pillar__name">thread-safe execution</h3>
+            <p class="pillar__body">
+              The MCP server never touches a TD object. All operator access runs on TD's main thread, enforced by architecture — not convention.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">crash recovery</h3>
+            <p class="pillar__body">
+              If Envoy goes down, it restarts itself — exponential backoff, up to three attempts. Port changes trigger a clean restart automatically.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">local only</h3>
+            <p class="pillar__body">
+              The server binds to <code>127.0.0.1</code>. It's not reachable from the network. Your session stays on your machine.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">no hangs</h3>
+            <p class="pillar__body">
+              Every operation has a hard 30-second timeout. Long-running tasks fail cleanly rather than blocking TD or freezing the bridge.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">always in context</h3>
+            <p class="pillar__body">
+              Every response piggybacks recent log entries — cook errors, warnings, extension messages. The AI never loses context between calls.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         AUTO-CONFIGURED
+         ============================================================ -->
+    <section id="config" class="section section--details">
+      <div class="container">
+        <p class="eyebrow">ZERO SETUP</p>
+        <h2 class="section__title">auto-configured.</h2>
+
+        <p class="lede">
+          When Envoy starts for the first time, it writes a complete AI client configuration to your git repo root — or project folder if there's no git. Every file your AI client needs is generated and kept in sync.
+        </p>
+
+        <div class="details">
+          <div class="detail">
+            <span class="detail__label">.mcp.json</span>
+            <span class="detail__value">Registers the Envoy bridge with Claude Code, Cursor, and Windsurf</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">CLAUDE.md</span>
+            <span class="detail__value">Project context — what Embody is, how the network is structured, what tools to use</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">.claude/rules/</span>
+            <span class="detail__value">Always-loaded conventions — TD Python, parameters, network layout, MCP safety</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">.claude/skills/</span>
+            <span class="detail__value">On-demand reference — full tool catalog, TD API, operator creation, externalization</span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">.claude/commands/</span>
+            <span class="detail__value">Slash commands — <code>/run-tests</code>, <code>/status</code>, <code>/explore-network</code></span>
+          </div>
+          <div class="detail">
+            <span class="detail__label">.gitignore / .gitattributes</span>
+            <span class="detail__value">Binary handling for <code>.toe</code> / <code>.tox</code> and externalized file tracking</span>
+          </div>
+        </div>
+
+        <p class="tdn__closer">Regenerate at any time: <code>op.Embody.InitEnvoy()</code> for MCP + AI config, <code>op.Embody.InitGit()</code> for git config.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         PART OF THE LOOP
+         ============================================================ -->
+    <section id="loop" class="section section--loop">
+      <div class="container">
+        <p class="eyebrow">THE WORKFLOW</p>
+        <h2 class="section__title">part of the loop.</h2>
+
+        <p class="lede">
+          Envoy is the forward layer — it gives the AI access to build. It works with the other two layers to close the full loop.
+        </p>
+
+        <div class="pillars pillars--three">
+          <article class="pillar">
+            <h3 class="pillar__name">Embody</h3>
+            <p class="pillar__claim">lateral velocity.</p>
+            <p class="pillar__body">
+              The AI builds something via Envoy, then externalizes it using Embody's MCP tools. The work is immediately tracked, version-controlled, and restorable on next open.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">TDN</h3>
+            <p class="pillar__claim">the substrate.</p>
+            <p class="pillar__body">
+              Envoy reads the live network via <code>export_network</code> to see what's on screen. It modifies the JSON and imports it back — changes appear instantly, and the diff is human-readable.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">Git</h3>
+            <p class="pillar__claim">the record.</p>
+            <p class="pillar__body">
+              Every build session ends in a commit. The agent reads <code>git diff</code> at session start, understands what changed, and continues where it left off — without you summarizing anything.
+            </p>
+          </article>
+        </div>
+
+        <p class="tdn__callout"><span class="tdn__callout-lead">Forward velocity.</span> You describe. The AI builds, externalizes, and reads the diff next session. The distance between idea and network is the time it takes to say a sentence.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================================================
+         GO DEEPER
+         ============================================================ -->
+    <section id="deeper" class="section section--deeper">
+      <div class="container">
+        <p class="eyebrow">DOCUMENTATION</p>
+        <h2 class="section__title">go deeper.</h2>
+
+        <div class="pillars pillars--four">
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/envoy/setup/">
+            <h3 class="pillar__name">setup</h3>
+            <p class="pillar__body">
+              Enable Envoy, connect your AI client, and verify the session is live.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/envoy/tools-reference/">
+            <h3 class="pillar__name">tools reference</h3>
+            <p class="pillar__body">
+              Every tool, every parameter, every return value. The complete catalog.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/envoy/architecture/">
+            <h3 class="pillar__name">architecture</h3>
+            <p class="pillar__body">
+              The dual-thread model, bridge design, instance management, and recovery paths.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="pillar pillar--link" href="https://dylanroscover.github.io/Embody/envoy/claude-code/">
+            <h3 class="pillar__name">Claude Code</h3>
+            <p class="pillar__body">
+              Auto-generated config — rules, skills, slash commands, and how they work together.
+            </p>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+
+      <div class="footer__col footer__col--brand">
+        <div class="footer__mark">
+          <span class="mark__dot" aria-hidden="true"></span>
+          <span class="footer__word">embody</span>
+        </div>
+        <p class="footer__tag">natural language tools for <a href="https://derivative.ca">TouchDesigner</a></p>
+      </div>
+
+      <nav class="footer__col" aria-label="Project">
+        <h4 class="footer__h">Toolkit</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/manifesto/">manifesto</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
+          <li><a href="https://github.com/dylanroscover/Embody">github</a></li>
+        </ul>
+      </nav>
+
+      <nav class="footer__col" aria-label="Reference">
+        <h4 class="footer__h">Reference</h4>
+        <ul>
+          <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/envoy/tools-reference/">tools reference</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/envoy/setup/">setup guide</a></li>
+        </ul>
+      </nav>
+
+    </div>
+
+    <div class="container footer__bottom">
+      <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
+      <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+    </div>
+  </footer>
+
+  <!-- Scroll-spy + staggered reveal -->
+  <script>
+  (function () {
+    var links = [].slice.call(document.querySelectorAll('.toc__link'));
+    var ids = links.map(function (a) { return a.getAttribute('href').slice(1); });
+    var sections = ids.map(function (id) { return document.getElementById(id); });
+
+    var activeObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          var id = entry.target.id;
+          links.forEach(function (a) {
+            a.classList.toggle('toc__link--active', a.getAttribute('href') === '#' + id);
+          });
+        }
+      });
+    }, { rootMargin: '-20% 0px -60% 0px' });
+
+    sections.forEach(function (s) { if (s) activeObserver.observe(s); });
+
+    var hero = document.querySelector('.hero');
+    var heroH = hero ? hero.offsetHeight : 400;
+    var revealed = false;
+
+    function updateVisibility() {
+      var scrollY = window.scrollY || window.pageYOffset;
+      var shouldShow = scrollY > heroH * 0.4;
+      if (shouldShow === revealed) return;
+      revealed = shouldShow;
+      links.forEach(function (link, i) {
+        if (shouldShow) {
+          setTimeout(function () { link.classList.add('toc__link--visible'); }, i * 60);
+        } else {
+          setTimeout(function () { link.classList.remove('toc__link--visible'); }, (links.length - 1 - i) * 40);
+        }
+      });
+    }
+
+    window.addEventListener('scroll', updateVisibility, { passive: true });
+    updateVisibility();
+
+    document.addEventListener('click', function (e) {
+      var a = e.target.closest('a[href^="#"]');
+      if (!a) return;
+      var target = document.getElementById(a.getAttribute('href').slice(1));
+      if (!target) return;
+      e.preventDefault();
+      var start = window.scrollY;
+      var end = target.getBoundingClientRect().top + start;
+      var dist = end - start;
+      var duration = Math.min(400, Math.max(150, Math.abs(dist) * 0.15));
+      var t0 = null;
+      function step(ts) {
+        if (!t0) t0 = ts;
+        var p = Math.min((ts - t0) / duration, 1);
+        var ease = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+        window.scrollTo(0, start + dist * ease);
+        if (p < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  })();
+  </script>
+
+</body>
+</html>

@@ -91,21 +91,23 @@
         <h2 class="section__title">three tools, one idea.</h2>
 
         <div class="pillars">
-          <article class="pillar">
+          <a class="pillar pillar--link" href="/envoy">
             <h3 class="pillar__name">Envoy</h3>
             <p class="pillar__claim">forward velocity.</p>
             <p class="pillar__body">
-              45 MCP tools that plug Claude, Cursor, or Windsurf straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
+              46 MCP tools that plug Claude, Cursor, or Windsurf straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
             </p>
-          </article>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
 
-          <article class="pillar">
+          <a class="pillar pillar--link" href="/embody">
             <h3 class="pillar__name">Embody</h3>
             <p class="pillar__claim">lateral velocity.</p>
             <p class="pillar__body">
-              Tag any operator and Embody externalizes it to version-control-friendly files on disk. Diff what changed, track who changed it, collaborate across branches, and restore any previous state. Your externalized files are the source of truth — not the binary `.toe`.
+              Tag any operator and Embody externalizes it to version-control-friendly files on disk. Diff what changed, track who changed it, collaborate across branches, and restore any previous state. Your externalized files are the source of truth — not the binary <code>.toe</code>.
             </p>
-          </article>
+            <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
+          </a>
 
           <a class="pillar pillar--link" href="/tdn">
             <h3 class="pillar__name">TDN</h3>
@@ -165,7 +167,7 @@
         <h2 class="section__title">meet TDN.</h2>
 
         <p class="lede">
-          TouchDesigner projects live in <code>.toe</code> files — opaque binary blobs that no diff tool can read, no AI can understand, and no version control system can meaningfully compare. TDN is a new file format we built to fix that. Entire networks exported as a single human-readable JSON file. Operators, parameters, connections, layout, annotations, DAT content — all of it, in text.
+          TDN exports any TouchDesigner network as a single human-readable JSON file — operators, parameters, connections, layout, annotations, DAT content — all of it, in text. Every change becomes a clean diff. Every version is a file your AI agent can read, your team can review, and git can meaningfully compare.
         </p>
 
         <div class="tdn__grid">
@@ -337,5 +339,24 @@
     </div>
   </footer>
 
+  <script>
+  (function () {
+    // Save scroll position when navigating to a sub-page
+    document.querySelectorAll('a.pillar--link').forEach(function (a) {
+      a.addEventListener('click', function () {
+        sessionStorage.setItem('embody_scrollY', window.scrollY);
+      });
+    });
+
+    // Restore scroll position when returning from a sub-page
+    var saved = sessionStorage.getItem('embody_scrollY');
+    if (saved !== null) {
+      sessionStorage.removeItem('embody_scrollY');
+      window.addEventListener('load', function () {
+        window.scrollTo(0, parseInt(saved, 10));
+      });
+    }
+  })();
+  </script>
 </body>
 </html>
