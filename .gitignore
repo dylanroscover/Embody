@@ -30,6 +30,7 @@ Backup/
 logs/
 .tdn_backup/
 .embody/
+.envoy-tools-cache.json
 
 # Promotion
 SUBMISSIONS.md

@@ -1121,6 +1121,10 @@ class EmbodyExt:
         """Restore parameter values from .embody/config.json. Returns True if restored.
         Sets _restoring_settings flag to suppress onValueChange side effects.
 
+        Also stores _init_complete when done -- init() no longer stores it because
+        TD defers onValueChange callbacks to the next cook, and storing _init_complete
+        in init() allowed parexec to process init()'s Envoyenable=False change.
+
         kick_envoy: if True and Envoyenable is restored to True, defer Start().
         Only set this on the onStart() path -- Verify() owns startup on onCreate()."""
         path = self._settingsPath()
@@ -1135,16 +1139,20 @@ class EmbodyExt:
                     self.Log('Migrated .embody.json → .embody/config.json', 'INFO')
                 except Exception as e:
                     self.Log(f'Could not migrate .embody.json: {e}', 'WARNING')
+                    self.my.store('_init_complete', True)
                     return False
             else:
+                self.my.store('_init_complete', True)
                 return False
         try:
             import json
             data = json.loads(path.read_text(encoding='utf-8'))
         except (json.JSONDecodeError, OSError) as e:
             self.Log(f'Settings file corrupt or unreadable: {e}', 'WARNING')
+            self.my.store('_init_complete', True)
             return False
         if not isinstance(data, dict) or 'params' not in data:
+            self.my.store('_init_complete', True)
             return False
         params = data['params']
         restored = 0
@@ -1167,6 +1175,10 @@ class EmbodyExt:
                     pass
         finally:
             self._restoring_settings = False
+        # Signal parexec that init + restore is complete -- safe to process
+        # param changes.  Must be stored AFTER _restoring_settings is cleared
+        # so deferred onValueChange callbacks from init() are still suppressed.
+        self.my.store('_init_complete', True)
         self.Log(f'Restored {restored} settings from config.json', 'INFO')
         # If Envoyenable was restored to True, kick Start() -- parexec was
         # suppressed during restore so onValueChange never fired.
@@ -5127,8 +5139,28 @@ class EmbodyExt:
         """Remove children from a TDN-strategy COMP (for smaller .toe).
 
         Destroys both regular children and utility operators (annotations).
+        Before destruction, captures external sibling wires on comp's own
+        connectors and stores them on comp via comp.store() so they can
+        be restored after the COMP is rebuilt (on post-save, cold open,
+        or user reload). Storage survives .toe save since the COMP shell
+        itself is not stripped.
+
         Returns the number of operators destroyed.
         """
+        # Capture external connections before destroying children.
+        # The in*/out* ops inside comp define its own connectors --
+        # destroying them severs any external wires attached to them.
+        try:
+            externals = self.my.ext.TDN._captureExternalConnections(comp)
+            if externals:
+                comp.store('_tdn_external_wires', externals)
+                self.Log(
+                    f'Captured {len(externals)} external connection(s) on '
+                    f'{comp.path} before strip', 'DEBUG')
+        except Exception as e:
+            self.Log(
+                f'External capture failed on {comp.path}: {e}', 'WARNING')
+
         # findChildren with includeUtility=True gets everything:
         # regular children + hidden utility ops (annotations with utility=True)
         all_ops = list(comp.findChildren(depth=1, includeUtility=True))

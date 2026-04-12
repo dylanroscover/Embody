@@ -138,6 +138,10 @@ class TDNExt:
 		# On-the-fly fallback cache for unknown TD builds.
 		self._runtime_creation_cache: dict[str, dict[str, Any]] = {}
 		self._scan_workspace: Optional['COMP'] = None
+		# Palette component catalog: {name: {'type': op_type, 'min_children': N}}.
+		# Populated by CatalogManagerExt after palette scan completes.
+		# Used by _isPaletteClone() as the primary detection method.
+		self._palette_catalog: dict[str, dict] = {}
 
 	# =========================================================================
 	# CRASH SAFETY -- atomic writes, backup rotation, validation
@@ -1044,6 +1048,27 @@ class TDNExt:
 			ui.status = f'TDN Import: {msg}'
 			return {'error': msg}
 
+		# Capture external wires on dest's own connectors before clear
+		# so they can be re-wired after the rebuild. When dest has no
+		# live wires (cold open, or already-stripped comp during post-save),
+		# fall back to wires stashed on dest via comp.store() by
+		# StripCompChildren.
+		captured_externals = []
+		if clear_first:
+			try:
+				captured_externals = self._captureExternalConnections(dest)
+			except Exception as e:
+				self._log(
+					f'External capture failed on {target_path}: {e}', 'DEBUG')
+			if not captured_externals:
+				try:
+					stashed = dest.fetch(
+						'_tdn_external_wires', [], search=False)
+					if stashed:
+						captured_externals = list(stashed)
+				except Exception:
+					pass
+
 		if clear_first:
 			# Clear dock relationships before destroying -- TD's engine
 			# raises an uncatchable tdError if a dock target is destroyed
@@ -1267,6 +1292,22 @@ class TDNExt:
 							f'Failed to restore storage key "{key}" '
 							f'on {dest.path}: {e}', 'WARNING')
 
+			# Restore external connections captured before clear.
+			# Also consume any stashed wires on dest.
+			ext_restored = 0
+			if captured_externals:
+				try:
+					ext_restored = self._restoreExternalConnections(
+						dest, captured_externals)
+				except Exception as e:
+					self._log(
+						f'External restore failed on {target_path}: {e}',
+						'WARNING')
+			try:
+				dest.unstore('_tdn_external_wires')
+			except Exception:
+				pass
+
 			self._log(
 				f'Imported {len(created)} operators into {target_path}',
 				'SUCCESS')
@@ -1278,6 +1319,8 @@ class TDNExt:
 			}
 			if restored_count:
 				result['restored_file_links'] = restored_count
+			if ext_restored:
+				result['restored_external_connections'] = ext_restored
 			return result
 
 		except Exception as e:
@@ -1463,10 +1506,14 @@ class TDNExt:
 			if comp_conns:
 				data['comp_inputs'] = comp_conns
 
-		# DAT content -- include when the include_dat_content option is True.
+		# DAT content -- include when the include_dat_content option is True,
+		# OR when the DAT lives inside an animationCOMP (keys, channels, graph,
+		# attributes tableDATs hold all keyframe data -- must always be saved).
 		# Skip content for read-only DATs (e.g. glsl1_info, popto1) --
 		# TD auto-generates their content and rejects writes on import.
-		if target.family == 'DAT' and options.get('include_dat_content', True):
+		if target.family == 'DAT' and (
+				options.get('include_dat_content', True) or
+				self._isInsideAnimationCOMP(target)):
 			if self._isDATEditable(target):
 				content_data = self._exportDATContent(target)
 				if content_data:
@@ -2296,6 +2343,168 @@ class TDNExt:
 			inputs.append(conn_map.get(i))
 
 		return inputs
+
+	def _captureExternalConnections(self, comp) -> list:
+		"""Capture sibling<->comp wires on comp's own connectors.
+
+		Records wires going INTO comp's input connectors (from external
+		siblings) and wires going OUT of comp's output connectors (to
+		external siblings). Used to preserve external connections across
+		strip/rebuild cycles where the internal in*/out* operators that
+		define comp's connectors are destroyed and recreated.
+
+		Returns a list of dicts with: direction ('input'|'output'),
+		kind ('op'|'comp'), local_index, remote, remote_index.
+		Returns [] when there's nothing to capture.
+		"""
+		parent = comp.parent()
+		if not parent:
+			return []
+		conns = []
+
+		def _rel(other):
+			try:
+				return other.name if other.parent() == parent else other.path
+			except Exception:
+				return other.path
+
+		def _find_remote_index(remote_op, target_comp, remote_attr):
+			try:
+				for ri, r_conn in enumerate(getattr(remote_op, remote_attr, [])):
+					for rc in r_conn.connections:
+						if rc.owner is target_comp:
+							return ri
+			except Exception:
+				pass
+			return 0
+
+		# INPUTS: walk comp's own input connectors.
+		# conn.owner on an input connector yields the source (remote) op.
+		for kind, local_attr, remote_out_attr in (
+				('op', 'inputConnectors', 'outputConnectors'),
+				('comp', 'inputCOMPConnectors', 'outputCOMPConnectors')):
+			try:
+				for i, connector in enumerate(getattr(comp, local_attr, [])):
+					for c in connector.connections:
+						src = c.owner
+						if src is comp:
+							continue
+						conns.append({
+							'direction': 'input',
+							'kind': kind,
+							'local_index': i,
+							'remote': _rel(src),
+							'remote_index': _find_remote_index(
+								src, comp, remote_out_attr),
+						})
+			except Exception as e:
+				self._log(
+					f'External capture ({local_attr}) error on '
+					f'{comp.path}: {e}', 'DEBUG')
+
+		# OUTPUTS: walk comp's own output connectors.
+		# conn.owner on an output connector yields the destination (remote) op.
+		for kind, local_attr, remote_in_attr in (
+				('op', 'outputConnectors', 'inputConnectors'),
+				('comp', 'outputCOMPConnectors', 'inputCOMPConnectors')):
+			try:
+				for i, connector in enumerate(getattr(comp, local_attr, [])):
+					for c in connector.connections:
+						dst = c.owner
+						if dst is comp:
+							continue
+						conns.append({
+							'direction': 'output',
+							'kind': kind,
+							'local_index': i,
+							'remote': _rel(dst),
+							'remote_index': _find_remote_index(
+								dst, comp, remote_in_attr),
+						})
+			except Exception as e:
+				self._log(
+					f'External capture ({local_attr}) error on '
+					f'{comp.path}: {e}', 'DEBUG')
+
+		return conns
+
+	def _restoreExternalConnections(self, comp, conns) -> int:
+		"""Restore captured external connections. Returns count restored.
+
+		Tolerant of missing/renamed remote ops and connector count changes.
+		Logs WARNING and skips individual wires on failure; never raises.
+		"""
+		if not conns:
+			return 0
+		parent = comp.parent()
+		if not parent:
+			return 0
+
+		def _resolve(ref):
+			o = parent.op(ref)
+			if o:
+				return o
+			return op(ref)
+
+		restored = 0
+		for entry in conns:
+			try:
+				direction = entry.get('direction')
+				kind = entry.get('kind', 'op')
+				local_idx = entry.get('local_index', 0)
+				remote_ref = entry.get('remote')
+				remote_idx = entry.get('remote_index', 0)
+
+				remote = _resolve(remote_ref) if remote_ref else None
+				if not remote:
+					self._log(
+						f'External restore: remote op not found: '
+						f'{remote_ref} ({direction} {kind}[{local_idx}] '
+						f'on {comp.path})', 'WARNING')
+					continue
+
+				if direction == 'input':
+					local_attr = ('inputConnectors' if kind == 'op'
+									else 'inputCOMPConnectors')
+					remote_attr = ('outputConnectors' if kind == 'op'
+									else 'outputCOMPConnectors')
+					local_conns = getattr(comp, local_attr, [])
+					remote_conns = getattr(remote, remote_attr, [])
+					if (local_idx >= len(local_conns)
+							or remote_idx >= len(remote_conns)):
+						self._log(
+							f'External restore: connector index out of '
+							f'range for {remote_ref}[{remote_idx}] -> '
+							f'{comp.name}[{local_idx}] ({kind})', 'WARNING')
+						continue
+					remote_conns[remote_idx].connect(local_conns[local_idx])
+					restored += 1
+				elif direction == 'output':
+					local_attr = ('outputConnectors' if kind == 'op'
+									else 'outputCOMPConnectors')
+					remote_attr = ('inputConnectors' if kind == 'op'
+									else 'inputCOMPConnectors')
+					local_conns = getattr(comp, local_attr, [])
+					remote_conns = getattr(remote, remote_attr, [])
+					if (local_idx >= len(local_conns)
+							or remote_idx >= len(remote_conns)):
+						self._log(
+							f'External restore: connector index out of '
+							f'range for {comp.name}[{local_idx}] -> '
+							f'{remote_ref}[{remote_idx}] ({kind})', 'WARNING')
+						continue
+					local_conns[local_idx].connect(remote_conns[remote_idx])
+					restored += 1
+			except Exception as e:
+				self._log(
+					f'External restore error on {comp.path}: {entry}: {e}',
+					'WARNING')
+
+		if restored:
+			self._log(
+				f'Restored {restored} external connection(s) on {comp.path}',
+				'INFO')
+		return restored
 
 	def _isDATEditable(self, dat_op):
 		"""Test whether a DAT's text content is writable.
@@ -3543,26 +3752,71 @@ class TDNExt:
 	# =========================================================================
 
 	def _isPaletteClone(self, target):
-		"""Check if a COMP is a palette clone (cloned from /sys/)."""
+		"""Check if a COMP is a palette component from TD's shipped palette.
+
+		Detection uses two strategies, in order:
+
+		1. Catalog lookup (fast path): if the operator's name and OPType
+		   both match a known palette entry, it's a palette component.
+		   The catalog is built by CatalogManagerExt at startup.
+
+		2. Clone expression heuristic (fallback): checks the clone
+		   parameter for known system prefixes (TDBasicWidgets, TDResources,
+		   TDTox, /sys/). Catches components whose clone was set by the
+		   palette drag-and-drop mechanism but whose name was changed.
+		"""
 		if not target.isCOMP:
 			return False
+
+		# --- Strategy 1: catalog lookup ---
+		if self._palette_catalog:
+			entry = self._palette_catalog.get(target.name)
+			if entry:
+				# Support both dict format {type, min_children} and legacy str
+				if isinstance(entry, dict):
+					expected_type = entry.get('type', '')
+					min_children = entry.get('min_children', 0)
+				else:
+					expected_type = entry
+					min_children = 0
+				if target.OPType == expected_type:
+					# Child count floor: reject user COMPs with same name that
+					# have far fewer children than the real palette component.
+					# Threshold is half the scanned count (tolerates user mods).
+					floor = max(1, min_children // 2) if min_children > 0 else 0
+					if floor == 0 or len(target.children) >= floor:
+						return True
+
+		# --- Strategy 2: clone expression heuristic ---
 		clone_par = getattr(target.par, 'clone', None)
 		if not clone_par:
 			return False
 		try:
-			# Check evaluated value (operator path)
 			clone_op = clone_par.eval()
 			if clone_op and hasattr(clone_op, 'path'):
 				if clone_op.path.startswith('/sys/'):
 					return True
-			# Check expression for /sys/ references
 			if clone_par.mode == ParMode.EXPRESSION:
 				expr = clone_par.expr
-				if 'TDTox' in expr or 'TDResources' in expr:
+				if any(s in expr for s in (
+						'TDBasicWidgets', 'TDResources', 'TDTox')):
 					return True
 		except Exception as e:
-			self._log(f'Error checking palette clone status for {target.path}: {e}', 'DEBUG')
+			self._log(
+				f'Error checking palette clone for {target.path}: {e}',
+				'DEBUG')
 		return False
+
+	@staticmethod
+	def _isInsideAnimationCOMP(target):
+		"""Return True if target has an animationCOMP in its immediate parent.
+
+		animationCOMP stores all keyframe data in direct-child tableDATs
+		(keys, channels, graph, attributes). Checking only the direct parent
+		is sufficient -- these DATs are never nested deeper inside the COMP.
+		"""
+		p = target.parent()
+		return p is not None and p.OPType == 'animationCOMP'
 
 	def _getCloneSourceDiffs(self, target):
 		"""Find params that differ from the clone source but match p.default.

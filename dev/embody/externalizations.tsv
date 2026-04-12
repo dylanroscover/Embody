@@ -23,7 +23,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_sandbox/sandbox_test_custom_parameters	base	tdn	embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn	2026-04-10 20:09:20 UTC		1	099.2025.32280	0	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_sandbox/custom_seq_test1	base	tdn	embody/unit_tests/test_sandbox/custom_seq_test1.tdn	2026-04-10 20:09:20 UTC		1	099.2025.32280	0	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_sandbox/custom_seq_test	base	tdn	embody/unit_tests/test_sandbox/custom_seq_test.tdn	2026-04-10 20:09:20 UTC		1	099.2025.32280	0	0	0.3000,0.5000,0.9000
-/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-04-11 13:57:47 UTC		18	099.2025.32280	400	0	0.3000,0.5000,0.9000
+/embody/unit_tests/test_sandbox	base	tdn	embody/unit_tests/test_sandbox.tdn	2026-04-12 07:28:20 UTC		18	099.2025.32280	400	0	0.3000,0.5000,0.9000
 /embody/unit_tests/test_rename_move_lifecycle	text	py	embody/unit_tests/test_rename_move_lifecycle.py	2026-04-10 20:09:21 UTC				200	-600	0.9000,0.3000,0.4000
 /embody/unit_tests/test_path_utils	text	py	embody/unit_tests/test_path_utils.py	2026-04-10 20:09:21 UTC				200	-800	0.9000,0.3000,0.4000
 /embody/unit_tests/test_param_tracker	text	py	embody/unit_tests/test_param_tracker.py	2026-04-10 20:09:21 UTC				400	-800	0.9000,0.3000,0.4000
@@ -53,7 +53,7 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/unit_tests/test_claude_config	text	py	embody/unit_tests/test_claude_config.py	2026-04-10 20:09:21 UTC				0	-3000	0.9000,0.3000,0.4000
 /embody/unit_tests/results	table	tsv	embody/unit_tests/results.tsv	2026-04-10 20:09:21 UTC				0	0	0.9000,0.3000,0.4000
 /embody/unit_tests/TestRunnerExt	text	py	embody/unit_tests/TestRunnerExt.py	2026-04-10 20:09:21 UTC				200	0	0.9000,0.3000,0.4000
-/embody/unit_tests	base	tdn	embody/unit_tests.tdn	2026-04-11 13:57:47 UTC		26	099.2025.32280	-600	-300	0.3000,0.5000,0.9000
+/embody/unit_tests	base	tdn	embody/unit_tests.tdn	2026-04-12 07:28:20 UTC		26	099.2025.32280	-600	-300	0.3000,0.5000,0.9000
 /embody/tdn_tests	base	tdn	embody/tdn_tests.tdn	2026-04-10 20:09:21 UTC		47	099.2025.32280	0	-500	0.3000,0.5000,0.9000
 /embody/execute_src_ctrl	execute	py	embody/execute_src_ctrl.py	2026-04-10 20:09:21 UTC				-625	120	0.9000,0.3000,0.4000
 /embody/base_tdn	base	tdn	embody/base_tdn.tdn	2026-04-10 20:09:21 UTC		3	099.2025.32280	700	-325	0.3000,0.5000,0.9000
@@ -146,8 +146,9 @@ path	type	strategy	rel_file_path	timestamp	dirty	build	touch_build	node_x	node_y
 /embody/Embody/TDNExt	text	py	embody/Embody/TDNExt.py	2026-04-10 20:09:28 UTC				-375	375	0.9000,0.3000,0.4000
 /embody/Embody/EnvoyExt	text	py	embody/Embody/EnvoyExt.py	2026-04-10 20:09:28 UTC				-375	475	0.9000,0.3000,0.4000
 /embody/Embody/EmbodyExt	text	py	embody/Embody/EmbodyExt.py	2026-04-10 20:09:28 UTC				-375	576	0.9000,0.3000,0.4000
-/embody/Embody	container	tdn	embody/Embody.tdn	2026-04-11 13:57:47 UTC		393	099.2025.32280	0	0	0.3000,0.5000,0.9000
+/embody/Embody	container	tdn	embody/Embody.tdn	2026-04-12 07:28:20 UTC		394	099.2025.32280	0	0	0.3000,0.5000,0.9000
 /embody	container	tdn	embody.tdn	2026-04-11 01:49:24 UTC		37	099.2025.32280	100	50	0.3000,0.5000,0.9000
 /embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp	base	tox	embody/unit_tests/test_sandbox/sandbox_test_mcp_externalization/tag_ext_comp.tox	2026-04-10 20:11:31 UTC	False	1	2025.32280	0	0	0.3250,0.8000,0.3000
 /embody/Embody/divergent_defaults	table	tsv	embody/Embody/divergent_defaults.tsv	2026-04-10 21:28:13 UTC				0	0	0.9000,0.3000,0.4000
 /embody/Embody/CatalogManagerExt	text	py	embody/Embody/CatalogManagerExt.py	2026-04-11 00:28:37 UTC				-375	675	0.9000,0.3000,0.4000
+/embody/unit_tests/test_tdn_palette_catalog	text	py	embody/unit_tests/test_tdn_palette_catalog.py	2026-04-12 07:08:44 UTC				750	0	0.9000,0.3000,0.4000

@@ -25,6 +25,13 @@ _SKIP_STYLES = frozenset({'Pulse', 'Momentary', 'Header'})
 # Operator family suffixes for discovering creatable types
 _FAMILIES = ('TOP', 'CHOP', 'SOP', 'DAT', 'MAT', 'COMP', 'POP')
 
+# Abstract base types in the td module that match _FAMILIES suffixes
+# but are not creatable operators (e.g. td.CHOP, td.COMP, td.DAT).
+_ABSTRACT_TYPES = frozenset({
+	'TOP', 'CHOP', 'SOP', 'DAT', 'MAT', 'COMP', 'POP',
+	'ObjectCOMP',
+})
+
 
 class CatalogManagerExt:
 
@@ -38,6 +45,10 @@ class CatalogManagerExt:
 		self._workspace = None
 		self._build_str = ''
 		self._probe_name = '_catalog_probe'
+		# Palette scan state
+		self._palette_queue = []          # list of rel_path strings
+		self._palette_results = {}        # {name: placed_type}
+		self._palette_workspace = None
 
 	def onDestroyTD(self):
 		"""Clean up workspace if scan was interrupted."""
@@ -88,6 +99,7 @@ class CatalogManagerExt:
 			name for name in dir(_td)
 			if isinstance(getattr(_td, name, None), type)
 			and any(name.endswith(f) for f in _FAMILIES)
+			and name not in _ABSTRACT_TYPES
 		])
 		self._scan_total = len(self._scan_queue)
 		self._scan_count = 0
@@ -161,7 +173,7 @@ class CatalogManagerExt:
 		run('args[0]._processChunk()', self, delayFrames=1)
 
 	def _finalizeScan(self):
-		"""Write catalog to disk and load into TDNExt."""
+		"""Write op-type catalog to disk, load into TDNExt, start palette scan."""
 		self._cleanupWorkspace()
 
 		if self._scan_errors:
@@ -171,22 +183,161 @@ class CatalogManagerExt:
 		self._log(f'Scan complete: {self._scan_count} types, '
 				  f'{sum(len(v) for v in self._scan_results.values())} params')
 
-		# Write catalog file
-		catalog_path = self._getCatalogPath(self._build_str)
-		self._writeCatalog(catalog_path, self._scan_results)
-
-		# Load into TDNExt
+		# Load op-type defaults into TDNExt immediately (palette scan follows)
 		self._populateTDNExt(self._scan_results)
 
-		# Restore status
-		self.ownerComp.par.Status = 'Enabled'
-
-		# Run cross-build patch check
+		# Run cross-build patch check (uses op-type catalog)
 		self._patchCrossBuildDefaults(self._scan_results)
 
-		# Clean up scan state
+		# Start palette scan — writes the combined catalog when done
+		self._startPaletteScan(self._scan_results)
+
+		# Clean up op-type scan state
 		self._scan_results = {}
 		self._scan_errors = []
+
+	# =================================================================
+	# Palette Component Scan
+	# =================================================================
+
+	PALETTE_CHUNK_SIZE = 1  # .tox files per frame — some palette .tox are heavy
+
+	def _startPaletteScan(self, op_catalog):
+		"""Begin async scan of all shipped palette .tox components.
+
+		Walks TD's palette directory, loads each .tox into a temp COMP,
+		records the placed component's name and OPType, then writes the
+		combined catalog (op defaults + _palette mapping) to disk.
+
+		op_catalog is kept in closure so it can be written alongside
+		palette results in _finalizePaletteScan.
+		"""
+		palette_dir = self._getPaletteDir()
+		if not palette_dir:
+			# Can't find palette — write op-type-only catalog and finish
+			self._writeCatalog(self._getCatalogPath(self._build_str), op_catalog)
+			self.ownerComp.par.Status = 'Enabled'
+			return
+
+		# Enumerate all .tox files
+		rel_paths = []
+		for root, _dirs, files in os.walk(palette_dir):
+			for fname in files:
+				if fname.endswith('.tox'):
+					full = os.path.join(root, fname)
+					rel_paths.append(os.path.relpath(full, palette_dir))
+
+		if not rel_paths:
+			self._writeCatalog(self._getCatalogPath(self._build_str), op_catalog)
+			self.ownerComp.par.Status = 'Enabled'
+			return
+
+		self._palette_queue = sorted(rel_paths)
+		self._palette_results = {}
+		self._palette_workspace = self.ownerComp.create(
+			baseCOMP, '_palette_workspace')
+		self._palette_workspace.viewer = False
+		self._palette_workspace.nodeX = -1200
+		self._palette_workspace.nodeY = -1800
+
+		self._log(f'Palette scan: {len(self._palette_queue)} components')
+		self.ownerComp.par.Status = (
+			f'Scanning palette (0/{len(self._palette_queue)})')
+
+		# Store op_catalog for combined write in _finalizePaletteScan
+		self._op_catalog_pending = op_catalog
+
+		run('args[0]._processPaletteChunk()', self, delayFrames=1)
+
+	def _processPaletteChunk(self):
+		"""Process a batch of .tox files, then yield to main thread."""
+		if not self._palette_queue:
+			self._finalizePaletteScan()
+			return
+
+		chunk = self._palette_queue[:self.PALETTE_CHUNK_SIZE]
+		self._palette_queue = self._palette_queue[self.PALETTE_CHUNK_SIZE:]
+
+		palette_dir = self._getPaletteDir()
+		total = len(self._palette_results) + len(self._palette_queue) + len(chunk)
+
+		for rel_path in chunk:
+			tox_path = os.path.join(palette_dir, rel_path)
+			name = os.path.splitext(os.path.basename(rel_path))[0]
+			wrapper_name = '_pp_' + name[:28]  # short unique name
+			try:
+				existing = self._palette_workspace.op(wrapper_name)
+				if existing:
+					existing.destroy()
+
+				wrapper = self._palette_workspace.create(baseCOMP, wrapper_name)
+				wrapper.loadTox(tox_path)
+
+				# Determine placed type: if the inner child has the same name
+				# as the .tox file, that child IS what TD places in the project.
+				# Otherwise the wrapper itself is the placed component.
+				children = wrapper.children
+				placed_type = wrapper.OPType  # fallback
+				if children:
+					inner = children[0]
+					if inner.name == name:
+						placed_type = inner.OPType
+
+				# Child count for false-positive rejection: a user-created
+				# COMP with the same name would typically be empty. Record
+				# the inner child count (not the wrapper) as a floor.
+				if children and inner.name == name:
+					child_count = len(inner.children)
+				else:
+					child_count = len(wrapper.children)
+
+				# Only record the first occurrence of each name (handles
+				# TDAbleton Live 11+ vs Live 9&10 duplicates — same type)
+				if name not in self._palette_results:
+					self._palette_results[name] = {
+						'type': placed_type,
+						'min_children': child_count,
+					}
+
+				wrapper.destroy()
+			except Exception as e:
+				self._log(f'Palette scan error {name}: {e}')
+				existing = self._palette_workspace.op(wrapper_name)
+				if existing:
+					existing.destroy()
+
+		done = len(self._palette_results)
+		self.ownerComp.par.Status = f'Scanning palette ({done}/{total})'
+		run('args[0]._processPaletteChunk()', self, delayFrames=1)
+
+	def _finalizePaletteScan(self):
+		"""Write combined catalog (op defaults + palette mapping) to disk."""
+		if self._palette_workspace is not None:
+			try:
+				self._palette_workspace.destroy()
+			except Exception:
+				pass
+			self._palette_workspace = None
+
+		self._log(
+			f'Palette scan complete: {len(self._palette_results)} components')
+
+		# Merge palette results into catalog under reserved _palette key
+		combined = dict(getattr(self, '_op_catalog_pending', {}))
+		combined['_palette'] = self._palette_results
+
+		catalog_path = self._getCatalogPath(self._build_str)
+		self._writeCatalog(catalog_path, combined)
+
+		# Push palette mapping into TDNExt
+		try:
+			self.ownerComp.ext.TDN._palette_catalog = self._palette_results
+		except Exception:
+			pass
+
+		self.ownerComp.par.Status = 'Enabled'
+		self._palette_results = {}
+		self._op_catalog_pending = None
 
 	# =================================================================
 	# Cross-Build Patching
@@ -342,20 +493,49 @@ class CatalogManagerExt:
 	# =================================================================
 
 	def _populateTDNExt(self, catalog):
-		"""Load catalog data into TDNExt's divergent defaults cache.
+		"""Load catalog data into TDNExt.
 
-		Loads the full catalog. TDNExt's _buildParCache uses
-		divergent.get(name, p.default) — for params in the catalog,
-		the catalog value is used; for params not in the catalog
-		(shouldn't happen with a full catalog), p.default is used.
+		Separates the reserved _palette key from op-type parameter data.
+		Op-type defaults go into _divergent_defaults; palette name→type
+		mapping goes into _palette_catalog.
 		"""
 		try:
 			tdn_ext = self.ownerComp.ext.TDN
 		except Exception:
 			return
 
-		tdn_ext._divergent_defaults = catalog
+		palette = catalog.get('_palette', {})
+		if palette:
+			tdn_ext._palette_catalog = palette
+
+		# Strip reserved keys so op-type lookup stays clean
+		param_catalog = {k: v for k, v in catalog.items()
+						 if not k.startswith('_')}
+		tdn_ext._divergent_defaults = param_catalog
 		tdn_ext._divergent_loaded = True
+
+	# =================================================================
+	# Palette Path Helper
+	# =================================================================
+
+	@staticmethod
+	def _getPaletteDir():
+		"""Return the absolute path to TD's shipped palette directory.
+
+		Tries the macOS app bundle path first, then the Windows/flat path.
+		Returns None if neither exists.
+		"""
+		candidates = [
+			# macOS app bundle
+			os.path.join(app.installFolder,
+						 'Contents', 'Resources', 'tfs', 'Samples', 'Palette'),
+			# Windows / flat install
+			os.path.join(app.installFolder, 'Samples', 'Palette'),
+		]
+		for path in candidates:
+			if os.path.isdir(path):
+				return path
+		return None
 
 	# =================================================================
 	# File I/O
@@ -367,14 +547,17 @@ class CatalogManagerExt:
 		return os.path.join(root, '.embody', f'catalog_{build_str}.json')
 
 	def _findProjectRoot(self):
-		"""Find the project root (git root or project folder)."""
+		"""Find the project root via EmbodyExt (walks up for .git).
+
+		Delegates to EmbodyExt._findProjectRoot() which checks _git_root
+		storage first, then walks up from project.folder looking for .git.
+		This avoids the path mismatch where project.folder differs from the
+		git root (e.g. dev/ vs repo root), which caused duplicate catalogs.
+		"""
 		try:
-			git_root = self.ownerComp.fetch('_git_root', None, search=False)
-			if git_root:
-				return str(git_root)
+			return str(self.ownerComp.ext.Embody._findProjectRoot())
 		except Exception:
-			pass
-		return str(project.folder)
+			return str(project.folder)
 
 	def _readCatalog(self, path):
 		"""Read a catalog JSON file. Returns dict or None."""

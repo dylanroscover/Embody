@@ -1,5 +1,18 @@
 # Changelog
 
+## v5.0.356
+
+Palette catalog detection, animationCOMP keyframe preservation, external wire preservation across TDN strip/rebuild, Envoyenable startup fix.
+
+- **Feature: Palette component catalog**: `CatalogManagerExt` now walks TD's shipped palette directory after the op-type scan, loads each `.tox` into a temp workspace, and records `{name: {type, min_children}}`. `TDNExt._isPaletteClone()` uses this catalog as the primary detection method (name + OPType + child-count floor), falling back to the clone-expression heuristic (now covers `TDBasicWidgets` in addition to `TDResources`/`TDTox`/`/sys/`). Catches palette components whose clone reference was never set while avoiding false positives from user COMPs that happen to share a palette name
+- **Feature: animationCOMP keyframe preservation**: DATs inside an `animationCOMP` (`keys`, `channels`, `graph`, `attributes`) always export their content regardless of the `include_dat_content` option. Previously these read-only-looking tableDATs lost all keyframe data on TDN round-trip
+- **Fix: External connection preservation across TDN strip/rebuild**: Wires from external siblings into a TDN-strategy COMP's own input/output connectors (backed by internal `in*`/`out*` operators) were severed when the COMP's children were destroyed during save's strip/restore cycle, cold open, or manual reimport. `StripCompChildren` now captures external wires via `comp.store()` before destruction; `ImportNetwork(clear_first=True)` restores them after rebuild (and also captures live wires directly when called without a prior strip)
+- **Fix: Envoyenable disabled on every startup**: `init()` stored `_init_complete` immediately after setting `Envoyenable = False`, but TD defers `onValueChange` callbacks to the next cook — so parexec processed init's own `Envoyenable=False` change and called `Stop()`. `_init_complete` is now stored by `_restoreSettings` after restoration completes (or immediately on its early-return paths), keeping parexec suppressed through the deferred callbacks
+- **Fix: Catalog path mismatch**: `CatalogManagerExt._findProjectRoot()` now delegates to `EmbodyExt._findProjectRoot()` which walks up from `project.folder` looking for `.git`. Previously `project.folder` (often `dev/`) differed from the git root and produced duplicate catalogs under different paths
+- **Fix: Abstract type scan rejection**: `td.CHOP`, `td.COMP`, `td.DAT`, etc. are abstract base types with suffixes matching `_FAMILIES` but aren't creatable. Added `_ABSTRACT_TYPES` filter to skip them during catalog scan
+- **Test: 43 test suites** (+2): `test_tdn_palette_catalog` (catalog lookup, child-count floor, TDBasicWidgets heuristic, animationCOMP round-trip), `test_tdn_external_connections` (strip+import restore, live-wire capture, deleted-sibling tolerance)
+- **Gitignore**: Added `.envoy-tools-cache.json` (bridge tool cache — runtime artifact)
+
 ## v5.0.354
 
 Consolidate all Embody/Envoy runtime files into a single `.embody/` folder.

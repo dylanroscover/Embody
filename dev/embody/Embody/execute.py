@@ -16,15 +16,14 @@ def init():
 	# The release .tox may bake in Envoyenable=True and Envoystatus=Running;
 	# reset both so the git dialog doesn't fire before the externalizations
 	# table is ready and Start() isn't blocked by a stale status.
-	# Suppress parexec side effects (settings save, Start trigger) during reset.
+	# Do NOT store _init_complete here -- keep parexec suppressed until
+	# _restoreSettings completes.  TD defers onValueChange callbacks to the
+	# next cook cycle, so if _init_complete is stored before those callbacks
+	# fire, parexec processes init()'s Envoyenable=False and calls Stop(),
+	# disabling Envoy on every startup.  _restoreSettings stores
+	# _init_complete when it finishes (or immediately if it returns early).
 	parent.Embody.par.Envoyenable = False
 	parent.Embody.par.Envoystatus = 'Disabled'
-	# Signal parexec that init is done -- safe to process param changes.
-	# Before this flag, parexec suppresses all side effects because .tox
-	# param loading fires onValueChange BEFORE init() runs.
-	# Stored on the COMP (not the extension instance) so it survives
-	# extension reinit caused by file sync recompiling DATs.
-	parent.Embody.store('_init_complete', True)
 
 
 def onStart():
