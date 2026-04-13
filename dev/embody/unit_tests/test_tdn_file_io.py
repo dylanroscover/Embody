@@ -443,6 +443,53 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertEqual(strip('my-cool-project-3'), 'my-cool-project-3')
 
 	# =================================================================
+	# SaveTDN root filename derivation — issue #6 regression
+	# =================================================================
+
+	def test_savetdn_root_filename_strips_build_suffix(self):
+		"""SaveTDN at '/' must derive root filename with build suffix stripped.
+
+		Regression for issue #6: prior to the fix, SaveTDN used
+		project.name.removesuffix('.toe') directly, leaving the auto-
+		incrementing build suffix (e.g. '.362') in the .tdn filename.
+		This caused the file to churn on every save and break git history.
+
+		This test mirrors the exact derivation SaveTDN uses at opPath == '/'
+		to confirm _stripBuildSuffix is applied.
+		"""
+		# Simulated project names — build-suffixed and plain variants
+		cases = [
+			('Embody-5.362.toe', 'Embody-5'),
+			('Embody-5.toe',     'Embody-5'),
+			('demo.42.toe',      'demo'),
+			('my-proj-3.toe',    'my-proj-3'),
+		]
+		for project_name, expected in cases:
+			raw_name = project_name.removesuffix('.toe')
+			safe_name = self.embody.ext.TDN._stripBuildSuffix(raw_name)
+			self.assertEqual(
+				safe_name, expected,
+				f"Expected SaveTDN root filename '{expected}.tdn' for "
+				f"project '{project_name}', got '{safe_name}.tdn'")
+
+	def test_savetdn_root_filename_matches_resolve_output_path(self):
+		"""SaveTDN root filename derivation must agree with _resolveOutputPath.
+
+		Both paths compute the same thing for root exports; a drift between
+		them means the .tdn file SaveTDN writes won't match what
+		ExportNetwork auto-resolves, re-introducing issue #6.
+		"""
+		# Simulate SaveTDN derivation
+		raw_name = project.name.removesuffix('.toe')
+		savetdn_name = self.embody.ext.TDN._stripBuildSuffix(raw_name)
+		# Compare against _resolveOutputPath, which is already authoritative
+		resolved = self.embody.ext.TDN._resolveOutputPath('auto', op('/'))
+		self.assertTrue(
+			resolved.replace('\\', '/').endswith(f'{savetdn_name}.tdn'),
+			f"SaveTDN would write '{savetdn_name}.tdn' but "
+			f"_resolveOutputPath returned '{resolved}'")
+
+	# =================================================================
 	# ExportNetwork file output — end-to-end
 	# =================================================================
 

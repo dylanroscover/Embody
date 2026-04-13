@@ -1905,7 +1905,8 @@ class EmbodyExt:
             # so it stays in sync when the .toe is renamed/versioned
             if opPath == '/':
                 from pathlib import Path
-                safe_name = project.name.removesuffix('.toe')
+                raw_name = project.name.removesuffix('.toe')
+                safe_name = self.my.ext.TDN._stripBuildSuffix(raw_name)
                 ext_folder = self.ExternalizationsFolder or ''
                 new_rel = self.normalizePath(
                     str(Path(ext_folder) / f'{safe_name}.tdn'))
