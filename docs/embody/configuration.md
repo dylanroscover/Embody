@@ -25,7 +25,13 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 
 ### TDN
 
+- **Cascade to Children** — When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own `.tdn` file
+- **Large TDN Warning** — *Ask* (default) prompts when a `.tdn` file exceeds 5 MB, *Quiet* suppresses the warning
 - **Embed DATs in TDNs** — Include DAT content in TDN exports
+- **Embed Storage in TDNs** — Include Python storage entries in TDN exports (can be overridden per-COMP from the tagging menu)
+- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open
+- **Strip on Save** — Strip children from TDN-strategy COMPs on save (children are rebuilt on next open from `.tdn` files)
+- **Palette Handling** — How to handle TD palette COMPs (e.g. `abletonLink`, Widget components) during TDN export. *Ask* (default) prompts on first encounter per COMP with four choices; *Black Box* always references the palette and skips internal children (correct for stock palette COMPs); *Full Export* always exports all internals (for heavily customized palette COMPs). See [TDN Palette Handling](../tdn/specification.md#palette-handling) for details
 - **DAT Safety** — What to do when TDN COMPs contain DATs with unprotected content: *Ask Each Save* (default) prompts before each save, *Always Externalize* auto-externalizes without asking, *Never Ask* suppresses the check
 - **Export Project TDN** — Pulse to export the entire project network
 

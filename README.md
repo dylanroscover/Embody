@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.356-blue)
+![Version](https://img.shields.io/badge/version-5.0.362-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-46-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -150,7 +150,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **43 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **44 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.362**: Palette handling control (Ask/Black Box/Full Export) during TDN export, CatalogManager fires on fresh project drops, palette catalog portability + log-level fixes
 - **5.0.356**: Palette catalog detection, animationCOMP keyframe preservation, external wire preservation across TDN strip/rebuild
 - **5.0.354**: Consolidate runtime files into `.embody/` folder, fix bridge path resolution
 - **5.0.352**: Fix Envoy failing to start after Embody upgrade (restart counter, port race, reclaim timeout)

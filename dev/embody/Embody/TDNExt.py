@@ -1527,7 +1527,9 @@ class TDNExt:
 		# Skip children of COMPs with their own TDN tag -- those are
 		# managed by their own .tdn file to avoid redundant nesting
 		if recurse and hasattr(target, 'children'):
-			if self._isPaletteClone(target):
+			is_palette = self._isPaletteClone(target)
+			handling = self._resolvePaletteHandling(target) if is_palette else None
+			if is_palette and handling == 'blackbox':
 				data['palette_clone'] = True
 				# For palette clones, the correct comparison baseline
 				# is the clone source's values, not p.default.
@@ -3525,7 +3527,8 @@ class TDNExt:
 			# Recurse into COMPs (but skip palette clone children
 			# and TDN-tagged COMP children unless embed_all)
 			if hasattr(child, 'children'):
-				if self._isPaletteClone(child):
+				if self._isPaletteClone(child) and (
+						self._resolvePaletteHandling(child) == 'blackbox'):
 					continue
 				if not embed_all and self._hasTDNTag(child):
 					continue
@@ -3750,6 +3753,88 @@ class TDNExt:
 	# =========================================================================
 	# HELPERS
 	# =========================================================================
+
+	# Per-COMP storage key and valid values for palette handling decisions.
+	_PALETTE_HANDLING_KEY = '_tdn_palette_handling'
+	_PALETTE_HANDLING_VALUES = ('blackbox', 'fullexport')
+
+	def _resolvePaletteHandling(self, target):
+		"""Resolve how to handle a detected palette COMP during TDN export.
+
+		Precedence:
+		  1. Per-COMP storage override (`_tdn_palette_handling`).
+		  2. Embody `Tdnpalettehandling` par:
+		       - `blackbox` / `fullexport` -> return directly.
+		       - `ask` -> prompt user via `_promptPaletteHandling`, which
+		         stores the decision on the target and returns it.
+		  3. Fallback: `blackbox` (safe default, preserves old behavior).
+		"""
+		try:
+			stored = target.fetch(self._PALETTE_HANDLING_KEY, None,
+								  search=False)
+		except Exception:
+			stored = None
+		if stored in self._PALETTE_HANDLING_VALUES:
+			return stored
+
+		try:
+			par_val = self.ownerComp.par.Tdnpalettehandling.eval()
+		except Exception:
+			par_val = 'blackbox'
+
+		if par_val in self._PALETTE_HANDLING_VALUES:
+			return par_val
+
+		# par_val == 'ask' (or unexpected)
+		return self._promptPaletteHandling(target)
+
+	def _promptPaletteHandling(self, target):
+		"""Prompt user for palette handling on this COMP; persist the choice.
+
+		Four buttons:
+		  0: Black Box (this COMP)     -> stored on target
+		  1: Full Export (this COMP)   -> stored on target
+		  2: Black Box for All         -> Tdnpalettehandling = blackbox
+		  3: Full Export for All       -> Tdnpalettehandling = fullexport
+		Returns the effective handling string.
+		"""
+		try:
+			embody = self.ownerComp.ext.Embody
+			choice = embody._messageBox(
+				'Embody - Palette Component Detected',
+				f'Palette component "{target.name}" ({target.OPType}) found '
+				f'in TDN export at {target.path}.\n\n'
+				f'- Black Box: reference the palette only; internals are '
+				f're-dropped on import. Recommended for stock palette COMPs.\n'
+				f'- Full Export: export all internals. Use when this COMP has '
+				f'been heavily customized internally.',
+				buttons=['Black Box', 'Full Export',
+						 'Black Box for All', 'Full Export for All'])
+		except Exception as e:
+			self._log(
+				f'Palette prompt failed on {target.path}: {e} '
+				f'(defaulting to blackbox)', 'WARNING')
+			return 'blackbox'
+
+		if choice == 0:
+			target.store(self._PALETTE_HANDLING_KEY, 'blackbox')
+			return 'blackbox'
+		if choice == 1:
+			target.store(self._PALETTE_HANDLING_KEY, 'fullexport')
+			return 'fullexport'
+		if choice == 2:
+			try:
+				self.ownerComp.par.Tdnpalettehandling = 'blackbox'
+			except Exception:
+				pass
+			return 'blackbox'
+		if choice == 3:
+			try:
+				self.ownerComp.par.Tdnpalettehandling = 'fullexport'
+			except Exception:
+				pass
+			return 'fullexport'
+		return 'blackbox'
 
 	def _isPaletteClone(self, target):
 		"""Check if a COMP is a palette component from TD's shipped palette.

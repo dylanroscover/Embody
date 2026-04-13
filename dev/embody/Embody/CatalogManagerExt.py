@@ -61,13 +61,24 @@ class CatalogManagerExt:
 	# Startup Entry Point
 	# =================================================================
 
-	def CheckAndScan(self):
-		"""Check if current build has a catalog. Scan in background if not.
+	def EnsureCatalogs(self):
+		"""Ensure op-type defaults + palette catalog are loaded into TDN.
 
-		Called at startup (frame 10) from execute.py. Non-blocking.
-		If the catalog exists, loads it into TDNExt immediately.
-		If not, starts an async background scan.
+		Called from execute.py onStart and onCreate. Non-blocking.
+		  - If .embody/catalog_<build>.json exists: loads from disk (fast).
+		  - Otherwise: runs async op-type scan, then bootstrap-palette
+		    lookup (or runtime palette scan as fallback), writes cache.
+		Idempotent: safe to call repeatedly; returns early when already loaded.
 		"""
+		# Idempotent: onStart and onCreate both call this; skip when
+		# the current run already populated the catalog.
+		try:
+			tdn_ext = self.ownerComp.ext.TDN
+			if tdn_ext._divergent_loaded and tdn_ext._palette_catalog:
+				return
+		except Exception:
+			pass
+
 		self._build_str = f'{app.version}.{app.build}'
 		catalog_path = self._getCatalogPath(self._build_str)
 
@@ -169,6 +180,14 @@ class CatalogManagerExt:
 		self.ownerComp.par.Status = (
 			f'Scanning defaults ({self._scan_count}/{self._scan_total})')
 
+		# Finalize in-band when the last chunk finishes. Otherwise, under
+		# concurrent heavy work (venv creation during fresh-project
+		# startup), the scheduled run() callback can be lost and the
+		# scan stalls at "N/N" indefinitely.
+		if not self._scan_queue:
+			self._finalizeScan()
+			return
+
 		# Schedule next chunk
 		run('args[0]._processChunk()', self, delayFrames=1)
 
@@ -177,8 +196,10 @@ class CatalogManagerExt:
 		self._cleanupWorkspace()
 
 		if self._scan_errors:
-			self._log(f'Scan errors ({len(self._scan_errors)}): '
-					  f'{self._scan_errors[:5]}')
+			# DEBUG: abstract base classes and arg-requiring ops legitimately
+			# fail the bare-create probe. Non-actionable for users.
+			self._log(f'Scan skipped {len(self._scan_errors)} non-instantiable '
+					  f'types (first 5: {self._scan_errors[:5]})', 'DEBUG')
 
 		self._log(f'Scan complete: {self._scan_count} types, '
 				  f'{sum(len(v) for v in self._scan_results.values())} params')
@@ -189,7 +210,22 @@ class CatalogManagerExt:
 		# Run cross-build patch check (uses op-type catalog)
 		self._patchCrossBuildDefaults(self._scan_results)
 
-		# Start palette scan — writes the combined catalog when done
+		# Try bootstrap palette_catalog tableDAT first — if it covers
+		# the current build, skip the palette scan entirely (saves 5-7s
+		# per TD build on fresh installs).
+		bootstrap_palette = self._loadBootstrapPalette(self._build_str)
+		if bootstrap_palette:
+			self._log(
+				f'Palette bootstrap hit: {len(bootstrap_palette)} entries '
+				f'for build {self._build_str} (skipping scan)')
+			self._palette_results = bootstrap_palette
+			self._op_catalog_pending = self._scan_results
+			self._scan_results = {}
+			self._scan_errors = []
+			self._finalizePaletteScan()
+			return
+
+		# Bootstrap miss — fall back to runtime palette scan.
 		self._startPaletteScan(self._scan_results)
 
 		# Clean up op-type scan state
@@ -308,6 +344,12 @@ class CatalogManagerExt:
 
 		done = len(self._palette_results)
 		self.ownerComp.par.Status = f'Scanning palette ({done}/{total})'
+
+		# Finalize in-band on last chunk — same guard as op-type scan.
+		if not self._palette_queue:
+			self._finalizePaletteScan()
+			return
+
 		run('args[0]._processPaletteChunk()', self, delayFrames=1)
 
 	def _finalizePaletteScan(self):
@@ -515,6 +557,109 @@ class CatalogManagerExt:
 		tdn_ext._divergent_loaded = True
 
 	# =================================================================
+	# Bootstrap Palette Catalog (shipped tableDAT)
+	# =================================================================
+
+	def _loadBootstrapPalette(self, build_str):
+		"""Load palette catalog from the embedded palette_catalog tableDAT.
+
+		Returns {name: {'type': str, 'min_children': int}} filtered to
+		rows matching build_str, or None if the table is missing or has
+		no rows for this build.
+
+		Schema: name | type | min_children | build
+		"""
+		table = self.ownerComp.op('palette_catalog')
+		return self._parseBootstrapPaletteTable(table, build_str)
+
+	def _parseBootstrapPaletteTable(self, table, build_str):
+		"""Pure parsing of a palette_catalog-shaped table. Testable."""
+		if table is None or table.numRows < 2:
+			return None
+
+		try:
+			headers = [table[0, c].val for c in range(table.numCols)]
+			col_name = headers.index('name')
+			col_type = headers.index('type')
+			col_min = headers.index('min_children')
+			col_build = headers.index('build')
+		except (ValueError, Exception) as e:
+			self._log(f'Bootstrap palette: bad schema: {e}', 'WARNING')
+			return None
+
+		result = {}
+		for row_idx in range(1, table.numRows):
+			row_build = table[row_idx, col_build].val
+			if row_build != build_str:
+				continue
+			name = table[row_idx, col_name].val
+			if not name or name in result:
+				continue
+			try:
+				min_children = int(table[row_idx, col_min].val or 0)
+			except ValueError:
+				min_children = 0
+			result[name] = {
+				'type': table[row_idx, col_type].val,
+				'min_children': min_children,
+			}
+		return result if result else None
+
+	def ExportPaletteCatalog(self):
+		"""Dev utility: export the live _palette_catalog to palette_catalog tableDAT.
+
+		Call after a successful runtime palette scan on a new TD build
+		to bake the results into the shipped bootstrap. Appends rows for
+		the current build; does not remove rows for other builds.
+		"""
+		try:
+			palette = dict(self.ownerComp.ext.TDN._palette_catalog)
+		except Exception as e:
+			self._log(f'ExportPaletteCatalog: no palette catalog: {e}', 'ERROR')
+			return
+		if not palette:
+			self._log('ExportPaletteCatalog: palette catalog is empty', 'WARNING')
+			return
+
+		table = self.ownerComp.op('palette_catalog')
+		if table is None:
+			self._log(
+				'ExportPaletteCatalog: palette_catalog tableDAT not found',
+				'ERROR')
+			return
+
+		build_str = f'{app.version}.{app.build}'
+
+		# Ensure header row exists
+		if table.numRows == 0:
+			table.appendRow(['name', 'type', 'min_children', 'build'])
+
+		# Drop existing rows for this build (rewrite)
+		headers = [table[0, c].val for c in range(table.numCols)]
+		col_build = headers.index('build')
+		rows_to_delete = []
+		for r in range(table.numRows - 1, 0, -1):
+			if table[r, col_build].val == build_str:
+				rows_to_delete.append(r)
+		for r in rows_to_delete:
+			table.deleteRow(r)
+
+		# Append current entries (sorted by name for stable diffs)
+		for name in sorted(palette):
+			entry = palette[name]
+			if isinstance(entry, dict):
+				t = entry.get('type', '')
+				mc = entry.get('min_children', 0)
+			else:
+				t = entry
+				mc = 0
+			table.appendRow([name, t, mc, build_str])
+
+		self._log(
+			f'ExportPaletteCatalog: wrote {len(palette)} rows for '
+			f'build {build_str}', 'SUCCESS')
+
+	# =================================================================
 	# Palette Path Helper
 	# =================================================================
 
@@ -615,10 +760,10 @@ class CatalogManagerExt:
 				pass
 			self._workspace = None
 
-	def _log(self, msg):
+	def _log(self, msg, level='INFO'):
 		"""Log via Embody's logging system."""
 		try:
 			self.ownerComp.ext.Embody.Log(
-				f'[CatalogManager] {msg}', 'INFO')
+				f'[CatalogManager] {msg}', level)
 		except Exception:
 			print(f'[CatalogManager] {msg}')

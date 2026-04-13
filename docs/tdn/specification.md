@@ -933,9 +933,30 @@ Mismatches produce warnings, not errors — the COMP shell is always created reg
 
 ### Palette Clones
 
-COMPs that are cloned from the TouchDesigner palette (i.e., their `clone` parameter points to `/sys/`) are marked with `"palette_clone": true`. Their children are **not** exported because TouchDesigner automatically recreates them from the clone source when the project loads.
+COMPs that originate from the TouchDesigner palette (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`) are detected and marked with `"palette_clone": true`. Their children are **not** exported because TouchDesigner automatically recreates them from the palette source when the project loads.
 
 **Parameter handling for palette clones**: During export, parameters are compared against two baselines — the built-in default (`p.default`) and the clone source's actual value. If a parameter matches `p.default` but differs from the clone source, it is still exported. This prevents user-set values from being silently dropped when they happen to match the built-in default but not the clone source (e.g., a `buttontype` whose `p.default` is `"momentary"` but whose clone source is `"toggledown"`). The `clone` and `enablecloning` parameters are always excluded — TD auto-sets these during rebuild.
+
+#### Palette Detection
+
+Detection uses two strategies:
+
+1. **Palette catalog** (primary): Embody ships a catalog at `embody/Embody/palette_catalog.tsv` built by scanning every `.tox` in TD's installed palette directory. The catalog records each component's `name`, `OPType`, and `min_children` count (264 entries for TD 099.2025.32280). A COMP is detected as a palette if its name matches a catalog entry, its `OPType` matches, and it has at least `min_children // 2` children (a floor that tolerates user modifications while rejecting empty user COMPs that happen to share a palette name).
+2. **Clone expression heuristic** (fallback): if the `clone` parameter points to `/sys/` or references `TDBasicWidgets`, `TDResources`, or `TDTox`, the COMP is detected as a palette. Catches cases where the catalog doesn't cover the current TD build.
+
+The catalog is loaded into memory by `CatalogManagerExt.EnsureCatalogs()` at startup from the shipped TSV (skipping a runtime scan) or from `.embody/catalog_<build>.json` if already cached locally.
+
+#### Palette Handling
+
+When the export path encounters a detected palette COMP, the `Tdnpalettehandling` parameter on Embody's TDN page decides what to do:
+
+| Value | Behavior |
+|---|---|
+| `Ask` (default) | On first encounter of each palette COMP, prompts with four buttons: **Black Box** (this COMP), **Full Export** (this COMP), **Black Box for All** (flips the project-wide par), **Full Export for All** (flips the project-wide par). The per-COMP decision is persisted via `comp.store('_tdn_palette_handling', 'blackbox'|'fullexport')` so subsequent exports don't re-prompt. |
+| `Black Box` | Always emit `"palette_clone": true` with parameter overrides only. Children are re-dropped from the palette on import. Correct for stock palette COMPs; lets upstream palette updates from Derivative flow through on round-trip. |
+| `Full Export` | Always export all internal children as if the COMP were a regular user COMP. Use when you've heavily customized the palette internals and need that state preserved across round-trip. |
+
+Per-COMP stored decisions take precedence over the project-wide par. To reset a COMP's stored decision, call `comp.unstore('_tdn_palette_handling')`.
 
 ---
 

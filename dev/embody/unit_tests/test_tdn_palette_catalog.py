@@ -210,6 +210,169 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		self.assertFalse(self.tdn._isInsideAnimationCOMP(dat))
 
 	# =================================================================
+	# G. Palette Handling Resolver (_resolvePaletteHandling)
+	# =================================================================
+
+	def _fakePalette(self, name='myPalette', typ=containerCOMP):
+		"""Create a COMP that the catalog recognizes as a palette."""
+		self.tdn._palette_catalog = {
+			name: {'type': typ.__name__, 'min_children': 0},
+		}
+		return self.sandbox.create(typ, name)
+
+	def test_G01_storage_override_blackbox(self):
+		"""Per-COMP storage 'blackbox' wins over any par value."""
+		comp = self._fakePalette()
+		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'blackbox')
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'fullexport'
+			self.assertEqual(
+				self.tdn._resolvePaletteHandling(comp), 'blackbox',
+				'Storage override must win over par value')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G02_storage_override_fullexport(self):
+		"""Per-COMP storage 'fullexport' wins too."""
+		comp = self._fakePalette()
+		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'fullexport')
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'blackbox'
+			self.assertEqual(
+				self.tdn._resolvePaletteHandling(comp), 'fullexport')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G03_par_blackbox_no_prompt(self):
+		"""Par set to blackbox returns directly, no prompt."""
+		comp = self._fakePalette()
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'blackbox'
+			self.assertEqual(
+				self.tdn._resolvePaletteHandling(comp), 'blackbox')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G04_par_fullexport_no_prompt(self):
+		"""Par set to fullexport returns directly, no prompt."""
+		comp = self._fakePalette()
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'fullexport'
+			self.assertEqual(
+				self.tdn._resolvePaletteHandling(comp), 'fullexport')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G05_ask_prompt_blackbox_this(self):
+		"""Par='ask' + prompt choice 0 -> blackbox, stored on target."""
+		comp = self._fakePalette()
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.store(
+				'_smoke_test_responses',
+				{'Embody - Palette Component Detected': 0})
+			result = self.tdn._resolvePaletteHandling(comp)
+			self.assertEqual(result, 'blackbox')
+			self.assertEqual(
+				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
+				'blackbox',
+				'Choice must be persisted on the target COMP')
+			# Par must remain unchanged for this-COMP choices
+			self.assertEqual(self.embody.par.Tdnpalettehandling.eval(), 'ask')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G06_ask_prompt_fullexport_this(self):
+		"""Par='ask' + prompt choice 1 -> fullexport, stored on target."""
+		comp = self._fakePalette()
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.store(
+				'_smoke_test_responses',
+				{'Embody - Palette Component Detected': 1})
+			result = self.tdn._resolvePaletteHandling(comp)
+			self.assertEqual(result, 'fullexport')
+			self.assertEqual(
+				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
+				'fullexport')
+			self.assertEqual(self.embody.par.Tdnpalettehandling.eval(), 'ask')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G07_ask_prompt_blackbox_for_all(self):
+		"""Par='ask' + prompt choice 2 -> flips par to blackbox, nothing stored on target."""
+		comp = self._fakePalette()
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.store(
+				'_smoke_test_responses',
+				{'Embody - Palette Component Detected': 2})
+			result = self.tdn._resolvePaletteHandling(comp)
+			self.assertEqual(result, 'blackbox')
+			self.assertEqual(
+				self.embody.par.Tdnpalettehandling.eval(), 'blackbox',
+				'"for all" must flip the par')
+			self.assertIsNone(
+				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
+				'"for all" must not write per-COMP storage')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G08_ask_prompt_fullexport_for_all(self):
+		"""Par='ask' + prompt choice 3 -> flips par to fullexport."""
+		comp = self._fakePalette()
+		saved_par = self.embody.par.Tdnpalettehandling.eval()
+		try:
+			self.embody.par.Tdnpalettehandling = 'ask'
+			self.embody.store(
+				'_smoke_test_responses',
+				{'Embody - Palette Component Detected': 3})
+			result = self.tdn._resolvePaletteHandling(comp)
+			self.assertEqual(result, 'fullexport')
+			self.assertEqual(
+				self.embody.par.Tdnpalettehandling.eval(), 'fullexport')
+		finally:
+			self.embody.par.Tdnpalettehandling = saved_par
+
+	def test_G09_export_blackbox_omits_children(self):
+		"""End-to-end: blackbox mode emits palette_clone=true, no children."""
+		comp = self._fakePalette('fakePal', baseCOMP)
+		# Add an internal child to prove it's skipped
+		comp.create(textDAT, 'internal_child')
+		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'blackbox')
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		entry = self._findOpInExport(result['tdn'], 'fakePal')
+		self.assertIsNotNone(entry)
+		self.assertTrue(entry.get('palette_clone'),
+			'blackbox must set palette_clone=true')
+		self.assertNotIn('children', entry,
+			'blackbox must not emit internal children')
+
+	def test_G10_export_fullexport_includes_children(self):
+		"""End-to-end: fullexport mode recurses, no palette_clone flag."""
+		comp = self._fakePalette('fakePal2', baseCOMP)
+		comp.create(textDAT, 'internal_child')
+		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'fullexport')
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		entry = self._findOpInExport(result['tdn'], 'fakePal2')
+		self.assertIsNotNone(entry)
+		self.assertFalse(entry.get('palette_clone'),
+			'fullexport must not set palette_clone flag')
+		self.assertIn('children', entry,
+			'fullexport must recurse into children')
+		names = [c.get('name') for c in entry.get('children', [])]
+		self.assertIn('internal_child', names)
+
+	# =================================================================
 	# Helpers
 	# =================================================================
 

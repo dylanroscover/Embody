@@ -15,6 +15,20 @@ Essential rules to prevent common mistakes. For full API reference, use the `/td
 
 See `parameters.md` for all parameter rules — reading/writing values, designing custom parameter pages, help text, sections, and naming.
 
+## Naming — Methods, Functions, Operators
+
+**Name things for what they do, not how they do it.** A reader seeing only the name should know what to expect. If you can't describe the behavior in the name, the method is probably doing too much — split it.
+
+- **Prefer intent verbs** — `EnsureCatalogs()`, `RestoreSettings()`, `RebuildIndex()`. "Ensure X" means "make X true, doing whatever is needed." Standard, self-explanatory.
+- **Avoid vague pairs** — `CheckAndX()`, `DoStuff()`, `Process()`, `Handle()`, `Manage()`. `CheckAndScan()` tells the reader nothing about *what* is checked or scanned. Rename to the outcome: `EnsureCatalogs()`.
+- **Avoid implementation leakage** — `ParseJSONAndUpdateTable()` exposes internals that should be free to change. Pick a name describing the *effect*: `RefreshOpList()`.
+- **Don't abbreviate domain terms** — `CalcTDNFp()` is cryptic; `ComputeTDNFingerprint()` reads instantly. Screen space is cheap; comprehension is not.
+- **Booleans read as questions** — `isPaletteClone()`, `hasExternalWires()`, `canExportDAT()`. Not `paletteCheck()` or `wiresState()`.
+- **Public vs private** — TD extension methods promoted to the COMP are UpperCamelCase (`EnsureCatalogs`, `Update`); internal helpers are `_lowerCamelCase` (`_loadBootstrapPalette`). Keep the public surface minimal and obviously-named.
+- **Operator names follow the same rule** — `tdn_exporter` > `proc1`, `palette_catalog` > `table2`. The network reads like prose when operators are named for their role.
+
+When in doubt: write the one-line docstring *first*. If the name isn't already in that docstring, the name is wrong.
+
 ## Operator Access
 
 - **Use `opex()` when the operator must exist** — raises immediately with a clear error. `op()` returns `None` silently.

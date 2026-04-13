@@ -1,5 +1,21 @@
 # Changelog
 
+## v5.0.362
+
+Palette handling control during TDN export, CatalogManager robustness on fresh project drops, palette catalog portability and log-level fixes.
+
+- **Feature: TDN palette handling** (`Tdnpalettehandling`): New menu parameter on Embody's TDN page controls how palette COMPs are handled during TDN export. *Ask* (default) prompts on first encounter per COMP with a four-button dialog — *Black Box* (this COMP), *Full Export* (this COMP), *Black Box for All* (flips the project-wide par), *Full Export for All* (flips the project-wide par). *Black Box* always references the palette and skips internal children (correct for stock palette COMPs; lets upstream Derivative palette updates flow through on round-trip). *Full Export* always exports all internals (for heavily customized palette COMPs). Per-COMP decisions are persisted via `comp.store('_tdn_palette_handling', …)`, so you aren't re-prompted for the same COMP. Implementation: `TDNExt._resolvePaletteHandling()`, `TDNExt._promptPaletteHandling()` consult per-COMP storage → par value → prompt
+- **Fix: CatalogManager on fresh project drops**: `EnsureCatalogs()` is now called from `execute.py:onCreate` at frame 45 in addition to `onStart`. Previously new users dropping the `.tox` had empty divergent defaults and broken palette detection in their first session — the catalog only loaded on project reopen
+- **Fix: Catalog scan stall ("N/N" forever)**: `CatalogManagerExt._log()` was missing a `level` parameter. A v5.0.358 logging call passing `'DEBUG'` as second arg caused a TypeError that silently killed `_finalizeScan`, leaving catalog scans stuck with no catalog written. `_log(msg, level='INFO')` now accepts optional level
+- **Fix: Scan finalize defensively in-band**: `_processChunk` and `_processPaletteChunk` now finalize the scan when the queue empties instead of relying on a scheduled `run(delayFrames=1)` callback for the final tick. Defends against lost callbacks during heavy concurrent startup (venv creation, dialog auto-response, Envoy server start)
+- **Fix: `palette_catalog` tableDAT portability**: Both the DAT's `file` par and the row in `externalizations.tsv` had an absolute path (broken on other machines). Now uses relative `embody/Embody/palette_catalog.tsv` + `syncfile=True` + `file.readOnly=True`, matching the `divergent_defaults` pattern
+- **Rename: `CheckAndScan()` → `EnsureCatalogs()`**: Clearer intent-verb name. Method is now idempotent — safe to call repeatedly, returns early when already populated
+- **Fix: Catalog scan errors demoted to DEBUG**: Abstract base types (`td.CHOP`, `td.DAT`, etc.) that can't be instantiated bare were logging at INFO on every startup. Non-actionable for users
+- **Fix: Gitignore migration noise**: `.envoy-tools-cache.json` removed from stale-entries migration list — was being flagged on every startup despite being intentionally kept
+- **Rule: Naming — Methods, Functions, Operators**: New section in `td-python.md` + template covering intent-verb naming, avoiding `CheckAndX`/`DoStuff`/implementation-leakage patterns, boolean `is/has/can` phrasing, public-vs-private conventions
+- **Docs**: Updated configuration.md, externalization.md, TDN specification.md, in-app help text, and `externalize-operator` skill to cover palette handling and the shipped palette catalog mechanism
+- **Test: 44 test suites** (+1, 10 new G01-G10 tests in `test_tdn_palette_catalog` covering the palette handling resolver, prompt flow, per-COMP storage override, and end-to-end export behavior)
+
 ## v5.0.356
 
 Palette catalog detection, animationCOMP keyframe preservation, external wire preservation across TDN strip/rebuild, Envoyenable startup fix.

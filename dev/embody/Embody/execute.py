@@ -32,11 +32,11 @@ def onStart():
 	# crash, force-quit, or any unsaved session. On normal open where
 	# .toe was saved, values match and this is a no-op.
 	run(f"op('{parent.Embody}').ext.Embody._restoreSettings(kick_envoy=True)", delayFrames=5)
-	# Check if a creation-defaults catalog exists for this TD build.
-	# If not, starts a background scan (1-2 ops/frame, no blocking).
+	# Ensure op-type defaults + palette catalog are loaded (loads from
+	# .embody/catalog_<build>.json if present, otherwise async scan).
 	# Must run before ReconstructTDNComps (frame 60) for best results,
 	# but the embedded tableDAT covers exports during the scan window.
-	run(f"op('{parent.Embody}').ext.CatalogManager.CheckAndScan()", delayFrames=10)
+	run(f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs()", delayFrames=10)
 	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
@@ -56,6 +56,9 @@ def onCreate():
 	run(f"op('{parent.Embody}').ext.Embody.CreateExternalizationsTable()", delayFrames=15)
 	# Verify handles update-scenario detection and Envoy opt-in
 	run(f"op('{parent.Embody}').Verify()", delayFrames=30)
+	# Ensure catalogs load on fresh-project drops too, not just onStart.
+	# Delayed past Verify() so the setup dialog isn't fighting the scan.
+	run(f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs()", delayFrames=45)
 	return
 
 def onExit():

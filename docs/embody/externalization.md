@@ -135,6 +135,22 @@ Both `target` and `save_path` are optional — when omitted, `target` defaults t
 !!! warning "Absolute paths"
     Non-system absolute paths (not starting with `/sys/`) in `file` or `externaltox` parameters are logged as warnings but **not** stripped, since they may be intentional. Check the log output after exporting to ensure portability.
 
+## Palette Handling During TDN Export
+
+When a TDN export encounters a TD palette COMP (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` parameter on the TDN page to decide how to handle it:
+
+- **Ask** (default): Prompts with four buttons on first encounter of each palette COMP.
+    - *Black Box* — this COMP: reference only, skip children. Decision stored on the COMP via `comp.store('_tdn_palette_handling', 'blackbox')`.
+    - *Full Export* — this COMP: export all children. Decision stored on the COMP.
+    - *Black Box for All*: flip the project-wide par to `Black Box`, ending future prompts.
+    - *Full Export for All*: flip the project-wide par to `Full Export`.
+- **Black Box**: Always reference the palette and emit `"palette_clone": true` without exporting internals. **Recommended for stock palette COMPs** — lets upstream palette updates from Derivative flow through on round-trip.
+- **Full Export**: Always export all internals like a regular COMP. Use when you've heavily customized the palette internals and need that state preserved.
+
+Per-COMP stored decisions take precedence over the project-wide par, so you can mix (most COMPs auto-use the par value; specific COMPs can override). To reset a stored decision, call `op('/path/to/palette_comp').unstore('_tdn_palette_handling')`.
+
+Detection details and the shipped palette catalog are documented in [TDN Palette Clones](../tdn/specification.md#palette-clones).
+
 ## Resetting
 
 To completely reset and remove externalizations, pulse the **Disable** button.

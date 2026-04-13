@@ -4537,9 +4537,11 @@ class EnvoyExt:
                 existing_content = gitignore.read_text(encoding='utf-8')
                 existing_lines = existing_content.splitlines()
 
-            # Migrate: remove stale entries from older Embody versions
+            # Migrate: remove stale entries from older Embody versions.
+            # NOTE: .envoy-tools-cache.json is intentionally kept gitignored
+            # (v5.0.356+) because a root-level cache can still be written
+            # by legacy paths; we don't want to accidentally commit it.
             STALE_ENTRIES = {'.claude/', '.claude/envoy-bridge.py',
-                             '.envoy-tools-cache.json',
                              '.envoy.json', '.embody.json',
                              '.embody/envoy-bridge.py',
                              '.embody/envoy-tools-cache.json'}

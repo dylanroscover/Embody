@@ -138,6 +138,16 @@ individual files small and git-friendly instead of producing
 one large monolithic .tdn. Parent files store lightweight
 tdn_ref pointers to each child's .tdn file.
 
+Palette handling (Tdnpalettehandling on TDN page):
+When a TDN export encounters a TD palette COMP (e.g.
+abletonLink, Widget components), Embody decides whether to
+reference it (Black Box) or export its internals (Full
+Export). Ask (default) prompts on first encounter per COMP;
+your choice is remembered per-COMP via comp.store(). The
+four-button dialog also lets you flip the project-wide
+default to Black Box or Full Export for All so you aren't
+re-prompted for subsequent palette COMPs.
+
 Manager UI
 ----------
 Press ctrl-shift-o to open the Manager, a TreeLister of all
