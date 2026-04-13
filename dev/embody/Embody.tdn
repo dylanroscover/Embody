@@ -563,6 +563,15 @@
 		],
 		"TDN": [
 			{
+				"name": "Tdnenable",
+				"style": "Toggle",
+				"label": "TDN Enable",
+				"startSection": true,
+				"default": true,
+				"value": true,
+				"help": "Master toggle for the entire TDN subsystem. When OFF, Embody skips TDN reconstruction on project open, skips the strip/restore cycle on save, skips TDN export from Update(), and disables every other parameter on this page. Existing .tdn files on disk are preserved -- only the runtime behavior is suspended."
+			},
+			{
 				"name": "Tdncascade",
 				"style": "Toggle",
 				"label": "Cascade to Children",

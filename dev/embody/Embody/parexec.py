@@ -59,11 +59,18 @@ def onValueChange(par, prev):
 		if list_comp:
 			list_comp.reset()
 
+	elif par.name == 'Tdnenable':
+		parent.Embody.ext.Embody._onTdnEnableChanged(bool(par.eval()))
+
 	elif par.name == 'Embeddatsintdns':
-		parent.Embody.ext.TDN.ReexportAllTDNs()
+		# No-op when the TDN subsystem is disabled -- nothing to re-export.
+		if parent.Embody.ext.Embody._tdnEnabled():
+			parent.Embody.ext.TDN.ReexportAllTDNs()
 
 	elif par.name == 'Embedstorageintdns':
-		parent.Embody.ext.TDN.ReexportAllTDNs()
+		# No-op when the TDN subsystem is disabled -- nothing to re-export.
+		if parent.Embody.ext.Embody._tdnEnabled():
+			parent.Embody.ext.TDN.ReexportAllTDNs()
 
 	elif par.name == 'Tdncascade':
 		state = 'enabled' if par.eval() else 'disabled'

@@ -93,6 +93,13 @@ def onProjectPreSave():
 	# temporarily-missing operators inside TDN COMPs.
 	parent.Embody.ext.Embody.Update(suppress_refresh=True)
 
+	# Master TDN switch: when OFF, skip the entire TDN pre-save pipeline
+	# (export, strip, restore). .tdn files on disk stay untouched.
+	if not parent.Embody.ext.Embody._tdnEnabled():
+		parent.Embody.ext.Embody.Log(
+			'TDN disabled -- skipping pre-save TDN strip/export', 'INFO')
+		return
+
 	# DAT content safety -- detect unprotected DATs before strip/restore
 	parent.Embody.ext.Embody._checkDATContentSafety()
 

@@ -68,6 +68,7 @@ class EmbodyExt:
         'Logfolder', 'Logtofile', 'Verbose', 'Print',
         'Detectduplicatepaths', 'Localtimestamps',
         # TDN
+        'Tdnenable',
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
@@ -1534,6 +1535,11 @@ class EmbodyExt:
 
         # Normalize paths for cross-platform compatibility
         self.normalizeAllPaths()
+
+        # Apply UI gating for the TDN master toggle (greys out dependent
+        # parameters when Tdnenable is OFF).
+        self._applyTdnEnableGating()
+
         run(f"op('{self.my}').Update()", delayFrames=1)
 
     def normalizeAllPaths(self) -> None:
@@ -1592,17 +1598,25 @@ class EmbodyExt:
         # Skip root "/" -- it's a Full Project export, not a managed COMP.
         # SaveTDN("/") would trigger root-level stale cleanup that deletes
         # other tracked .tdn files.
+        # Guard: when Tdnenable is OFF, skip the entire TDN export branch.
+        # tdn_paths still gets populated below from the table so the
+        # "subtractions" filter continues to exclude tracked TDN COMPs.
         tdn_comps = self.getExternalizedOps(COMP, strategy='tdn')
         tdn_paths = {comp.path for comp in tdn_comps}
-        for comp in tdn_comps:
-            if comp.path == '/':
-                continue
-            par_dirty = self.param_tracker.compareParameters(comp)
-            struct_dirty = self._isTDNDirty(comp)
-            if par_dirty or struct_dirty:
-                self.Externalizations[comp.path, 'dirty'] = (
-                    'Par' if par_dirty else 'True')
-                self.SaveTDN(comp.path)
+        if self._tdnEnabled():
+            for comp in tdn_comps:
+                if comp.path == '/':
+                    continue
+                par_dirty = self.param_tracker.compareParameters(comp)
+                struct_dirty = self._isTDNDirty(comp)
+                if par_dirty or struct_dirty:
+                    self.Externalizations[comp.path, 'dirty'] = (
+                        'Par' if par_dirty else 'True')
+                    self.SaveTDN(comp.path)
+        elif tdn_comps:
+            self.Log(
+                f'TDN disabled -- skipping export for {len(tdn_comps)} '
+                f'tracked TDN COMP(s)', 'INFO')
 
         # Check for duplicates
         if self.my.par.Detectduplicatepaths:
@@ -1889,6 +1903,9 @@ class EmbodyExt:
 
     def SaveTDN(self, opPath: str) -> None:
         """Save a TDN-strategy COMP by re-exporting its .tdn file."""
+        if not self._tdnEnabled():
+            self.Log(f'TDN disabled -- skipping SaveTDN for {opPath}', 'INFO')
+            return
         try:
             oper = op(opPath)
             if not oper:
@@ -4855,6 +4872,10 @@ class EmbodyExt:
 
     def ReconstructTDNComps(self) -> None:
         """Reconstruct all TDN-strategy COMPs from .tdn files on project open."""
+        if not self._tdnEnabled():
+            self.Log('TDN disabled (Tdnenable=Off) -- skipping reconstruction',
+                     'INFO')
+            return
         if not self.my.par.Tdncreateonstart.eval():
             return
 
@@ -4944,6 +4965,84 @@ class EmbodyExt:
 
         # Build report
         self._logReconstructionReport(tdn_comps, errors_total)
+
+    def _tdnEnabled(self) -> bool:
+        """Return True if the TDN subsystem is currently enabled.
+
+        Default-on if the parameter is missing (e.g. legacy .tox without
+        Tdnenable yet) so existing user projects keep working.
+        """
+        par = getattr(self.my.par, 'Tdnenable', None)
+        if par is None:
+            return True
+        try:
+            return bool(par.eval())
+        except Exception:
+            return True
+
+    def _applyTdnEnableGating(self) -> None:
+        """Set par.enable on every TDN-page parameter except Tdnenable itself.
+
+        Called after init and whenever Tdnenable changes. Keeps the UI
+        truthful: when the master switch is OFF, every other TDN control
+        greys out so users can't toggle settings whose owning subsystem
+        is paused.
+        """
+        master = getattr(self.my.par, 'Tdnenable', None)
+        if master is None:
+            return
+        enabled = bool(master.eval())
+        try:
+            for page in self.my.customPages:
+                if page.name != 'TDN':
+                    continue
+                for p in page.pars:
+                    if p.name == 'Tdnenable':
+                        continue
+                    try:
+                        p.enable = enabled
+                    except Exception:
+                        pass
+        except Exception as e:
+            self.Log(f'Could not apply Tdnenable gating: {e}', 'DEBUG')
+
+    def _onTdnEnableChanged(self, enabled: bool) -> None:
+        """Handle a Tdnenable toggle from parexec.
+
+        When toggling OFF with existing TDN COMPs tracked, prompt the user
+        for confirmation. Default-safe path: keep .tdn files on disk; the
+        runtime simply stops touching them. Toggling ON has no migration
+        cost -- the next save/open uses the new state.
+        """
+        if enabled:
+            self.Log('TDN enabled', 'INFO')
+            self._applyTdnEnableGating()
+            return
+
+        existing = []
+        try:
+            existing = self._getTDNStrategyComps()
+        except Exception as e:
+            self.Log(f'Could not enumerate TDN COMPs: {e}', 'DEBUG')
+
+        if existing:
+            count = len(existing)
+            choice = self._messageBox(
+                'Embody - Disable TDN',
+                f'Disabling TDN with {count} tracked TDN COMP(s).\n\n'
+                f'Their .tdn files on disk will be preserved. Embody will\n'
+                f'simply stop reconstructing, stripping, or re-exporting\n'
+                f'them until you re-enable TDN.\n\n'
+                f'Continue?',
+                buttons=['Cancel', 'Keep .tdn files (disable only)'])
+            if choice != 1:
+                # User cancelled -- restore the toggle.
+                self.my.par.Tdnenable = True
+                self.Log('TDN disable cancelled by user', 'INFO')
+                return
+
+        self.Log('TDN disabled (.tdn files preserved on disk)', 'INFO')
+        self._applyTdnEnableGating()
 
     def _getTDNStrategyComps(self) -> list[tuple[str, str]]:
         """Get all TDN-strategy COMPs from the externalizations table.
