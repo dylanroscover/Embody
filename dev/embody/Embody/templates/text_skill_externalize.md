@@ -12,7 +12,7 @@ description: "MUST READ before calling externalize_op or save_externalization. R
 
 1. **Tag and externalize**: `externalize_op` on the operator (auto-detects type if omitted)
 2. **Verify**: `get_externalization_status` to confirm dirty state and file path
-3. **Inspect**: Verify file exists in `dev/embody/` via file inspection
+3. **Inspect**: Verify file exists in `embody/` via file inspection
 
 ## Re-exporting After Changes
 
@@ -50,7 +50,3 @@ When exporting a TDN-strategy COMP whose network contains TD palette components 
 - **Full Export**: export all children as if the COMP were a regular user COMP. Use only when palette internals have been heavily customized.
 
 Check and override programmatically: `op.Embody.par.Tdnpalettehandling = 'blackbox' | 'fullexport' | 'ask'`, or force a specific COMP: `op('/path/to/comp').store('_tdn_palette_handling', 'fullexport')`.
-
-## Known Issue — Absolute `rel_file_path` on MCP-Created Externalizations
-
-`externalize_op` via MCP currently records an **absolute** path in `externalizations.tsv`'s `rel_file_path` column (bug, not yet auto-fixed). This breaks portability across machines. After externalizing via MCP, check the row in `externalizations` tableDAT and, if the path starts with `/`, rewrite it to the relative form (`embody/...`) before saving the `.toe`. Externalizing via the TD UI records relative paths correctly.

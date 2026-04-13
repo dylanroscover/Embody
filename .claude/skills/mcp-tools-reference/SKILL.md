@@ -129,7 +129,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
-**Auto-piggybacked logs**: Every MCP response includes a `_logs` field with up to 20 recent entries. Log files at `dev/logs/` have the complete picture.
+**Auto-piggybacked logs**: Every MCP response includes a `_logs` field with up to 20 recent entries. Log files inside Embody's logs directory (see the `Logfolder` parameter on the Embody COMP) have the complete picture.
 
 ## Bridge Meta-Tools
 

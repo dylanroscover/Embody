@@ -36,8 +36,6 @@ class EmbodyExt:
         'text_rule_td_python':               'td-python',
         'text_rule_mcp_safety':              'mcp-safety',
         'text_rule_parameters':              'parameters',
-        'text_rule_commit_push_checklist':   'commit-push-checklist',
-        'text_rule_github_release':          'github-release',
     }
 
     # Skill DAT name -> slug (Claude Code only)

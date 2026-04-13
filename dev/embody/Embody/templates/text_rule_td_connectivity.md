@@ -36,7 +36,7 @@ The most frequent cause of connectivity issues is `.embody/envoy.json` having `a
 
 ### Common failure: broken venv
 
-**Symptoms**: Bridge process doesn't start at all, or starts and immediately exits. `dev/logs/envoy-bridge.log` is empty or shows a Python traceback about a missing interpreter. `.mcp.json` command points to a `.venv/` Python that doesn't work.
+**Symptoms**: Bridge process doesn't start at all, or starts and immediately exits. The `envoy-bridge.log` file inside Embody's logs directory (see the `Logfolder` parameter on the Embody COMP) is empty or shows a Python traceback about a missing interpreter. `.mcp.json` command points to a `.venv/` Python that doesn't work.
 
 **Cause**: The venv was created from a TD Python installation that has since been upgraded or removed. The `home` key in `.venv/pyvenv.cfg` points to a dead path (common on Windows with versioned TD directories like `TouchDesigner.2025.32460/`).
 

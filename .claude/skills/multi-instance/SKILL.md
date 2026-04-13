@@ -34,8 +34,8 @@ Each Envoy instance registers itself in `.embody/envoy.json` at the git root on 
       "port": 9870,
       "td_pid": 12345
     },
-    "smoke_template": {
-      "toe_path": "dev/release_testing/smoke_template.toe",
+    "MySecondProject": {
+      "toe_path": "MySecondProject.toe",
       "port": 9871,
       "td_pid": 67890
     }
@@ -87,7 +87,7 @@ Returns each instance's name, port, PID, reachability (PID alive + port respondi
 ### 4. Switch to a different instance
 
 ```
-switch_instance(instance="smoke_template")
+switch_instance(instance="MySecondProject")
 ```
 
 The bridge immediately redirects to the target instance's port. All subsequent MCP calls go to that TD process.
@@ -123,7 +123,7 @@ Instances are deregistered on graceful TD shutdown. If TD crashes:
 To close a specific instance, `switch_instance` to it first, then send the quit command:
 
 ```python
-switch_instance(instance="smoke_template")   # target the instance
+switch_instance(instance="MySecondProject")   # target the instance
 execute_python(code="project.quit()")         # user gets save prompt in TD
 ```
 
@@ -136,7 +136,7 @@ execute_python(code="project.quit()")         # user gets save prompt in TD
 | Scenario | Action |
 |----------|--------|
 | Test code in two `.toe` files side by side | Open both, `switch_instance` between them |
-| Run smoke tests on a template `.toe` | Open template, switch to it, run tests, switch back |
+| Test code in a secondary `.toe` | Open it, switch to it, perform work, switch back |
 | Check if a second TD is still running | `switch_instance()` (list mode) or `get_td_status` |
 | One instance crashed, want the other | `switch_instance` to the surviving instance |
 | Close a specific instance | `switch_instance` to it, then `execute_python` with `project.quit()` |

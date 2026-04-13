@@ -112,17 +112,6 @@
 			"tags": ["md"]
 		},
 		{
-			"name": "text_rule_github_release",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/templates/text_rule_github_release.md",
-				"language": "text",
-				"extension": "md"
-			},
-			"position": [1500, 400],
-			"tags": ["md"]
-		},
-		{
 			"name": "text_rule_network_layout",
 			"type": "textDAT",
 			"parameters": {
@@ -198,17 +187,6 @@
 			},
 			"position": [1800, -400],
 			"tags": ["md"]
-		},
-		{
-			"name": "text_rule_commit_push_checklist",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/templates/text_rule_commit_push_checklist.md",
-				"language": "text",
-				"extension": "md"
-			},
-			"position": [1200, 400],
-			"tags": ["md"]
 		}
 	],
 	"annotations": [
@@ -228,7 +206,7 @@
 			"title": "Rule Templates",
 			"text": "Auto-deployed rules for user projects",
 			"position": [-70, 330],
-			"size": [1770, 330],
+			"size": [1170, 330],
 			"color": [0.45, 0.45, 0.45],
 			"opacity": 0.5
 		},
