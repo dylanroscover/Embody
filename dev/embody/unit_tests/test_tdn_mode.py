@@ -44,6 +44,14 @@ class TestTdnMode(EmbodyTestCase):
             self.embody.par.Tdnmode.val = self._mode_was
         finally:
             parexec.par.active = was_active
+        # Re-apply gating so par.enable state matches the restored mode.
+        # Tests that flip mode leave enable state stale otherwise (e.g.
+        # test_gating_off_greys_all_except_mode would leak enable=False
+        # across all TDN params into the next test / user session).
+        try:
+            self.embody_ext._applyTdnModeGating()
+        except Exception:
+            pass
         try:
             self.embody.unstore('_smoke_test_responses')
         except Exception:
