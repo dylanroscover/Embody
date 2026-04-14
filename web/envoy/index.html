@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Envoy — talk to your network.</title>
-  <meta name="description" content="An MCP server embedded inside TouchDesigner. 46 tools that let Claude, Cursor, and Windsurf build directly inside your live session." />
+  <meta name="description" content="An MCP server embedded inside TouchDesigner. 47 tools that let Claude, Cursor, and Windsurf build directly inside your live session." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Envoy — talk to your network." />
-  <meta property="og:description" content="An MCP server embedded inside TouchDesigner. 46 tools. Say what you want. Watch it build." />
+  <meta property="og:description" content="An MCP server embedded inside TouchDesigner. 47 tools. Say what you want. Watch it build." />
   <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
   <meta property="og:url" content="https://embody.tools/envoy" />
   <meta property="og:site_name" content="Embody" />
@@ -17,7 +17,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Envoy — talk to your network." />
-  <meta name="twitter:description" content="An MCP server embedded inside TouchDesigner. 46 tools. Say what you want. Watch it build." />
+  <meta name="twitter:description" content="An MCP server embedded inside TouchDesigner. 47 tools. Say what you want. Watch it build." />
   <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
 
   <!-- Theme -->
@@ -55,7 +55,7 @@
     <ul class="toc__list">
       <li><a class="toc__link" href="#top">overview</a></li>
       <li><a class="toc__link" href="#gap">blind vs. live</a></li>
-      <li><a class="toc__link" href="#tools">46 tools</a></li>
+      <li><a class="toc__link" href="#tools">47 tools</a></li>
       <li><a class="toc__link" href="#capture">see the pixels</a></li>
       <li><a class="toc__link" href="#works">how it works</a></li>
       <li><a class="toc__link" href="#safety">runs in your project</a></li>
@@ -87,7 +87,7 @@
             Setup Envoy <span aria-hidden="true">&rarr;</span>
           </a>
           <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/envoy/tools-reference/">
-            See all 46 tools
+            See all 47 tools
           </a>
         </div>
       </div>
@@ -122,7 +122,7 @@
             <h3 class="compare__heading">with Envoy</h3>
             <ul class="compare__list">
               <li>AI connects directly to your live session</li>
-              <li>46 tools expose every aspect of the running project</li>
+              <li>47 tools expose every aspect of the running project</li>
               <li>Say what you want — operators appear, connect, tune</li>
               <li>AI reads the actual network, not a description of it</li>
               <li><code>capture_top</code> returns real pixel output as an image</li>
@@ -140,7 +140,7 @@
     <section id="tools" class="section section--captured">
       <div class="container">
         <p class="eyebrow">CAPABILITIES</p>
-        <h2 class="section__title">46 tools.</h2>
+        <h2 class="section__title">47 tools.</h2>
 
         <p class="lede">
           Every aspect of a TouchDesigner session — operators, parameters, connections, scripts, layout, performance, visual output — exposed as MCP tools the AI can call directly.
@@ -152,6 +152,13 @@
             <div>
               <h3 class="feature__name">operator management</h3>
               <p class="feature__desc">Create, delete, copy, rename, query. <code>create_op</code> takes any TD type string. <code>find_children</code> searches by name, type, depth, tags, or text content.</p>
+            </div>
+          </article>
+          <article class="feature">
+            <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
+            <div>
+              <h3 class="feature__name">read_tdn</h3>
+              <p class="feature__desc"><code>read_tdn</code> returns an entire subtree &mdash; operators, parameters, connections, DAT content &mdash; in one compacted call. <strong>20&ndash;90&times; fewer tokens</strong> than walking the same network via <code>get_op</code> + <code>query_network</code>, with a 5&times; floor verified in CI. Default omission, <code>type_defaults</code>, and <code>par_templates</code> do the compression. Use it for structural reads; fall back to <code>get_parameter</code>, <code>get_op_errors</code>, or <code>get_dat_content</code> when you need live runtime values.</p>
             </div>
           </article>
           <article class="feature">

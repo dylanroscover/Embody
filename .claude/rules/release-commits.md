@@ -36,6 +36,8 @@ Each bullet should describe the change clearly enough that a user who didn't wri
 
 ## 4. Verify Template Sync
 
+**When updating a rule or skill in `.claude/`, also update the corresponding template DAT in `dev/embody/Embody/templates/` if one exists.** This applies on every edit, not just at release time — drift between source and template ships stale guidance to user projects.
+
 Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claude/` counterparts:
 
 | `.claude/` file | Template file |

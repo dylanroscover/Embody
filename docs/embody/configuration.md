@@ -29,6 +29,7 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
     - *Off* — no TDN runtime. `.tdn` files on disk are preserved; Embody stops touching them.
     - *Export-on-Save* — **default**. Writes `.tdn` files on save. `.toe` is the source of truth; live network is never stripped. Ideal for git-diff and MCP workflows.
     - *Roundtrip (Experimental)* — bidirectional strip/restore. Children are stripped from the `.toe` on save and rebuilt from `.tdn` on open. May hit edge cases with extension reload timing on deeply-nested TDN COMPs.
+    - **Upgrading from the old `Tdnenable` toggle**: on first project open after upgrade, Embody detects the legacy parameter in `.embody/config.json` and shows a one-shot dialog offering Export-on-Save (recommended) or a one-click restore of the previous Full behavior via Roundtrip mode. Your existing `.tdn` files and tracked COMP entries are preserved across the switch; the nudge fires once per project and never again.
 - **Cascade to Children** — When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own `.tdn` file
 - **Large TDN Warning** — *Ask* (default) prompts when a `.tdn` file exceeds 5 MB, *Quiet* suppresses the warning
 - **Embed DATs in TDNs** — Include DAT content in TDN exports

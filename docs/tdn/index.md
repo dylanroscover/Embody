@@ -47,6 +47,17 @@ No prefix means a constant value. This keeps the common case (constant parameter
 
 ## Usage
 
+### Read (live, no disk)
+
+Use the `read_tdn` MCP tool to return a live network as a TDN dict without writing anything to disk. Preferred for LLM workflows exploring multi-operator networks — **~20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network`.
+
+- `comp_path` — Starting COMP (default: `/`)
+- `include_dat_content` — Include DAT text/table content
+- `max_depth` — Cap recursion on large roots
+- `embed_all` — Recurse into TDN-tagged COMPs instead of skipping their children
+
+Works in all three `Tdnmode` values. See [Import & Export → Reading a Network](import-export.md#reading-a-network-no-disk-io) for the full scope-boundary guide (when to reach for `get_parameter`, `get_op_errors`, `get_dat_content`, etc. instead).
+
 ### Export
 
 === "Keyboard Shortcut"

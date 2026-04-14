@@ -158,7 +158,7 @@
             <span class="feature__icon" aria-hidden="true">&#x25A0;</span>
             <div>
               <h3 class="feature__name">TDN strategy</h3>
-              <p class="feature__desc">COMPs saved as <a href="/tdn">TDN</a> JSON — human-readable, diffable, and reviewable in pull requests. Choose this for any network you actively edit.</p>
+              <p class="feature__desc">COMPs mirrored to <a href="/tdn">TDN</a> JSON on every save &mdash; human-readable, diffable, reviewable in pull requests, and readable by your agent in one call. Your <code>.toe</code> stays the source of truth; the <code>.tdn</code> rides alongside.</p>
             </div>
           </article>
           <article class="feature">
@@ -265,9 +265,15 @@
             </p>
           </article>
           <article class="pillar">
-            <h3 class="pillar__name">bidirectional sync</h3>
+            <h3 class="pillar__name">export on save</h3>
             <p class="pillar__body">
-              Neither direction is lossy. TD&nbsp;&rarr;&nbsp;disk on Update. Disk&nbsp;&rarr;&nbsp;TD on project open. Both paths preserve the full state.
+              The default. Your <code>.toe</code> stays authoritative. On every save, changed TDN COMPs write a <code>.tdn</code> alongside it &mdash; for git diffs, code review, and AI reads. The live network is never stripped.
+            </p>
+          </article>
+          <article class="pillar">
+            <h3 class="pillar__name">roundtrip <em>(experimental)</em></h3>
+            <p class="pillar__body">
+              Opt-in. Children are stripped from the <code>.toe</code> on save and reconstructed from <code>.tdn</code> on open &mdash; text becomes the source of truth. For teams who want the JSON to win.
             </p>
           </article>
           <article class="pillar">

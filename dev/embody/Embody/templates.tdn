@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.3",
 	"build": 12,
-	"generator": "Embody/5.0.338",
+	"generator": "Embody/5.0.363",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.338.toe",
-	"exported_at": "2026-04-10T20:09:26Z",
+	"source_file": "Embody-5.363.toe",
+	"exported_at": "2026-04-14T01:35:11Z",
 	"network_path": "/embody/Embody/templates",
 	"options": {
 		"include_dat_content": false,
@@ -29,7 +29,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_claude.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"flags": ["viewer"],
@@ -41,7 +40,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_agents_md.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [300, 1200],
@@ -62,7 +60,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_rule_td_python.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [300, 400],
@@ -83,7 +80,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_rule_mcp_safety.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [600, 400],
@@ -94,7 +90,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_rule_parameters.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [900, 400],
@@ -105,10 +100,19 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_skill_externalize.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [600, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_rule_github_release",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_github_release.md",
+				"extension": "md"
+			},
+			"position": [1500, 400],
 			"tags": ["md"]
 		},
 		{
@@ -116,7 +120,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_rule_network_layout.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [0, 400],
@@ -127,7 +130,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_skill_debug_operator.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [300, -400],
@@ -138,7 +140,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_skill_create_operator.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [0, -400],
@@ -149,7 +150,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_skill_create_extension.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [900, -400],
@@ -160,7 +160,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_skill_td_api_reference.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [1500, -400],
@@ -171,7 +170,6 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_skill_manage_annotations.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [1200, -400],
@@ -182,10 +180,19 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/Embody/templates/text_skill_mcp_tools_reference.md",
-				"language": "text",
 				"extension": "md"
 			},
 			"position": [1800, -400],
+			"tags": ["md"]
+		},
+		{
+			"name": "text_rule_commit_push_checklist",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_commit_push_checklist.md",
+				"extension": "md"
+			},
+			"position": [1200, 400],
 			"tags": ["md"]
 		}
 	],
@@ -206,7 +213,7 @@
 			"title": "Rule Templates",
 			"text": "Auto-deployed rules for user projects",
 			"position": [-70, 330],
-			"size": [1170, 330],
+			"size": [1770, 330],
 			"color": [0.45, 0.45, 0.45],
 			"opacity": 0.5
 		},

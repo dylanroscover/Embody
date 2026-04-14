@@ -942,7 +942,7 @@ COMPs that originate from the TouchDesigner palette (e.g. `abletonLink`, Widget 
 Detection uses two strategies:
 
 1. **Palette catalog** (primary): Embody ships a catalog at `embody/Embody/palette_catalog.tsv` built by scanning every `.tox` in TD's installed palette directory. The catalog records each component's `name`, `OPType`, and `min_children` count (264 entries for TD 099.2025.32280). A COMP is detected as a palette if its name matches a catalog entry, its `OPType` matches, and it has at least `min_children // 2` children (a floor that tolerates user modifications while rejecting empty user COMPs that happen to share a palette name).
-2. **Clone expression heuristic** (fallback): if the `clone` parameter points to `/sys/` or references `TDBasicWidgets`, `TDResources`, or `TDTox`, the COMP is detected as a palette. Catches cases where the catalog doesn't cover the current TD build.
+2. **Clone expression heuristic** (fallback): if the `clone` parameter points to `/sys/` or references `TDBasicWidgets`, `TDResources`, or `TDTox`, the COMP is detected as a palette. Catches cases where the catalog doesn't cover the current TD build. **Exception**: paths and expressions under `/sys/TDTox/defaultCOMPs/` are explicitly excluded. That directory holds TD's native-operator templates — every freshly-created `buttonCOMP`, `panelCOMP`, etc. clones from there by default, and those are stock types, not palette components. Export them as regular COMPs.
 
 The catalog is loaded into memory by `CatalogManagerExt.EnsureCatalogs()` at startup from the shipped TSV (skipping a runtime scan) or from `.embody/catalog_<build>.json` if already cached locally.
 
