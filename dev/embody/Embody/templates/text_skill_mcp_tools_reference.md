@@ -114,8 +114,13 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Export to `.tdn` JSON |
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Returns live network as a TDN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdn` to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from `.tdn` JSON |
+
+**When to prefer `read_tdn`:** exploring or auditing ≥3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
+
+**When NOT to use `read_tdn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdn` is an authored-state snapshot, not a runtime probe.
 
 ## TOP Capture
 

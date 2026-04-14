@@ -1006,6 +1006,49 @@ class EnvoyMCPServer:
                 'clear_first': clear_first,
             })
 
+        @self.mcp.tool()
+        def read_tdn(comp_path: str = "/",
+                     include_dat_content: bool = None,
+                     max_depth: int = None,
+                     embed_all: bool = False) -> dict:
+            """
+            Read the network under comp_path as a TDN dict (live in-memory
+            state, never written to disk). Prefer this over get_op /
+            query_network when exploring more than ~3 operators -- it's
+            typically 20-90x fewer tokens thanks to default-omission,
+            type_defaults, and par_templates compaction.
+
+            Scope cost by passing a specific comp_path. Pass max_depth to
+            cap nesting if you're reading a large root. Works in all
+            Tdnmode values (Off / Export / Full) -- reads live state,
+            not the .tdn files on disk.
+
+            When NOT to use: if you need evaluated-expression runtime
+            values, cook errors, DAT/CHOP/TOP output data, cook timing,
+            or operator flag state after runtime mutation. Use
+            get_parameter, get_op_errors, get_dat_content, capture_top,
+            or get_op_flags respectively for those.
+
+            Args:
+                comp_path: Root COMP to read (default "/" for entire project)
+                include_dat_content: Include DAT text/table content
+                    (default None = use Embeddatsintdns toggle)
+                max_depth: Maximum recursion depth (None = unlimited)
+                embed_all: If True, recurse into TDN-tagged COMPs instead
+                    of skipping their children. Produces a self-contained
+                    view of the entire subtree.
+
+            Returns:
+                Dict with the .tdn JSON document under 'tdn' on success,
+                or 'error' on failure.
+            """
+            return self._execute_in_td('read_tdn', {
+                'comp_path': comp_path,
+                'include_dat_content': include_dat_content,
+                'max_depth': max_depth,
+                'embed_all': embed_all,
+            })
+
         # === TOP Capture ===
 
         @self.mcp.tool()
@@ -1981,6 +2024,7 @@ class EnvoyExt:
             # TDN network format
             'export_network': self._export_network,
             'import_network': self._import_network,
+            'read_tdn': self._read_tdn,
             # Annotations
             'create_annotation': self._create_annotation,
             'get_annotations': self._get_annotations,
@@ -3881,6 +3925,24 @@ class EnvoyExt:
             target_path=target_path,
             tdn=tdn,
             clear_first=clear_first,
+        )
+
+    def _read_tdn(self, comp_path='/', include_dat_content=None,
+                  max_depth=None, embed_all=False):
+        """Read a network subtree as a TDN dict (in-memory, no disk write).
+
+        Thin delegate over TDN.ExportNetwork(output_file=None). Kept as a
+        separate MCP tool so LLM-facing docs can emphasize the token-cost
+        win vs get_op/query_network walks.
+        """
+        if not getattr(self.ownerComp.ext, 'TDN', None):
+            return {'error': 'TDN extension not loaded on Embody COMP'}
+        return self.ownerComp.ext.TDN.ExportNetwork(
+            root_path=comp_path,
+            include_dat_content=include_dat_content,
+            output_file=None,
+            max_depth=max_depth,
+            embed_all=embed_all,
         )
 
     # === Utility Methods ===
