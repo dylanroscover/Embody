@@ -72,7 +72,7 @@ The `Tdnmode` parameter on the Embody COMP selects how the TDN subsystem behaves
 | Mode | On save (++ctrl+s++) | On project open | When to pick |
 |------|----------------------|-----------------|--------------|
 | **Off** | No TDN activity. `.tdn` files on disk stay untouched. | No reconstruction. | Temporarily disabling TDN without deleting any files. |
-| **Export-on-Save (MCP)** *(default, recommended)* | Writes fresh `.tdn` files for every tagged TDN COMP. `.toe` stays the source of truth; live network is never stripped. | No reconstruction — the `.toe` already has everything. | Day-to-day work. Cheap, predictable, no round-trip risk. Ideal for git-diff / MCP workflows. |
+| **Export-on-Save (MCP)** *(default, recommended)* | Writes `.tdn` files for every tagged TDN COMP **whose content changed** since the last save (unchanged COMPs are skipped to avoid noisy git diffs from header churn). `.toe` stays the source of truth; live network is never stripped. | No reconstruction — the `.toe` already has everything. | Day-to-day work. Cheap, predictable, no round-trip risk. Ideal for git-diff / MCP workflows. |
 | **Full Import/Export (Experimental)** | Writes `.tdn` files **and** strips COMP children from the `.toe` so the `.toe` stays small. | Children are rebuilt from `.tdn` files at frame 60. | Large projects where the `.toe` bloats without strip, or workflows that treat `.tdn` as the primary source. May hit edge cases with palette clones and extension reload timing. |
 
 You can switch modes at any time — existing `.tdn` files on disk and tracked COMP entries are preserved across transitions.
@@ -138,7 +138,7 @@ A real leaf-component file like `envoy_toggle.tdn` is ~1.3 KB — 38 readable li
 - `get_op` returns all 175-219 parameters per operator wrapped in `{value, mode, label}` triples — roughly 15-25 KB per operator.
 - `read_tdn` applies the same compaction as `.tdn` export — default omission, `type_defaults`, `par_templates` — and returns the full subtree in one call.
 
-For a 24-operator COMP (`container_left.tdn`), the TDN payload is ~12 KB (~3K tokens) vs an estimated ~360-480 KB (~90-120K tokens) via an equivalent `get_op` walk. The delta scales with network size and type homogeneity. See the [MCP tools reference](../../.claude/skills/mcp-tools-reference/SKILL.md) for guidance on when to prefer `read_tdn` vs the runtime probes (`get_parameter`, `get_op_errors`, `get_dat_content`, etc.).
+For a 24-operator COMP (`container_left.tdn`), the TDN payload is ~12 KB (~3K tokens) vs an estimated ~360-480 KB (~90-120K tokens) via an equivalent `get_op` walk. The delta scales with network size and type homogeneity. A conservative 5× floor is verified in CI (`test_mcp_tdn_tools.py`); 20-90× is the typical real-world range. See the [Claude Code skills guide](../envoy/claude-code.md) for which Envoy skill to consult and when to prefer `read_tdn` vs the runtime probes (`get_parameter`, `get_op_errors`, `get_dat_content`, etc.).
 
 ## Automatic Restoration
 

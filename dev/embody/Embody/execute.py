@@ -307,10 +307,13 @@ def onProjectPostSave():
 	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)
 
-	# Restart Envoy if it was enabled -- the save strip kills the server
-	# thread (extension reinit signals the old shutdown event). The status
-	# parameter still says "Running" but the thread is gone.
-	if parent.Embody.par.Envoyenable.eval():
+	# Restart Envoy only if the save strip actually ran (Full mode with
+	# tracked TDN COMPs). The strip triggers an extension reinit that
+	# signals Envoy's shutdown event -- the server thread exits and must
+	# be restarted. In Off/Export modes nothing is stripped, no reinit
+	# fires, and Envoy stays healthy -- don't tear down the MCP server
+	# for no reason.
+	if stripped and parent.Embody.par.Envoyenable.eval():
 		# Clear stale state so Start() doesn't bail with "already running"
 		parent.Embody.store('envoy_running', False)
 		parent.Embody.par.Envoystatus = 'Restarting after save...'

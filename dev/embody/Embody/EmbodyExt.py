@@ -1182,9 +1182,16 @@ class EmbodyExt:
         # TDN mode migration detection: an upgrading user will have
         # 'Tdnenable' in their persisted params but not 'Tdnmode'. Defer
         # the nudge dialog so init can complete cleanly first.
-        if 'Tdnenable' in params and 'Tdnmode' not in params:
+        # Guarded by a schedule-time flag so a second _restoreSettings in
+        # the same session (e.g. onCreate then onStart) can't queue a
+        # second dialog before the first one fires.
+        already_scheduled = self.my.fetch(
+            '_tdn_migration_scheduled', False, search=False)
+        if ('Tdnenable' in params and 'Tdnmode' not in params
+                and not already_scheduled):
             prev_tdn_enable = bool(params.get('Tdnenable', {}).get('val', True))
             self.my.store('_tdn_migration_prev_enable', prev_tdn_enable)
+            self.my.store('_tdn_migration_scheduled', True)
             run(f"op('{self.my}').ext.Embody._showTDNMigrationNudge()",
                 delayFrames=60)
         # If Envoyenable was restored to True, kick Start() -- parexec was
@@ -5255,15 +5262,20 @@ class EmbodyExt:
     # Storage keys preserved even when Embedstorageintdns is off
     # (mirrors TDNExt logic that exports these as control metadata).
     _STORAGE_CONTROL_KEYS = {'embed_dats_in_tdn', 'embed_storage_in_tdn'}
-    # Storage keys never exported (runtime/internal) -- mirror of
-    # TDNExt.SKIP_STORAGE_KEYS. Not at risk because never meant to persist.
+    # Storage keys never surfaced as at-risk -- superset of
+    # TDNExt.SKIP_STORAGE_KEYS covering additional Embody runtime state
+    # (mode migration flags, pane restore, init completion, etc.) that
+    # TDNExt also does not serialize meaningfully. Only user-owned keys
+    # should reach _findAtRiskStorage.
     _STORAGE_SKIP_KEYS = {
         '_tdn_stripped_paths', '_git_root',
         'envoy_running', 'envoy_shutdown_event',
         'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
         '_tdn_external_wires', '_tdn_pane_restore',
         '_init_complete', '_smoke_test_responses',
-        '_tdn_restore_failures', '_tdn_mode_migration_shown',
+        '_tdn_restore_failures',
+        '_tdn_mode_migration_shown', '_tdn_migration_scheduled',
+        '_tdn_migration_prev_enable',
         'pressed',
     }
 

@@ -37,9 +37,9 @@ If DATs inside TDN-managed COMPs lose their content after saving:
 
 1. **Enable Embed DATs in TDNs**: This stores DAT content directly in the `.tdn` file, preserving it through the strip/restore cycle.
 2. **Externalize the DATs**: Tag them with an Embody DAT tag so their content is saved to files on disk.
-3. **Check the DAT Safety parameter**: If set to *Never Ask*, Embody won't warn you about at-risk DATs. Change it to *Ask Each Save* or *Always Externalize* to catch unprotected DATs before they lose content.
+3. **Check the Content Safety parameter**: If set to *Never Ask*, Embody won't warn you about at-risk DATs or storage. Change it to *Ask Each Save* or *Always Externalize* to catch unprotected content before it's lost.
 
-See [DAT Content Safety](externalization.md#dat-content-safety) for details on how the safety check works.
+See [Content Safety](externalization.md#content-safety-save-time-check) for details on how the safety check works.
 
 ### Cross-Platform Issues
 
