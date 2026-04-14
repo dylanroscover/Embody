@@ -1179,13 +1179,82 @@ class EmbodyExt:
         # so deferred onValueChange callbacks from init() are still suppressed.
         self.my.store('_init_complete', True)
         self.Log(f'Restored {restored} settings from config.json', 'INFO')
+        # TDN mode migration detection: an upgrading user will have
+        # 'Tdnenable' in their persisted params but not 'Tdnmode'. Defer
+        # the nudge dialog so init can complete cleanly first.
+        if 'Tdnenable' in params and 'Tdnmode' not in params:
+            prev_tdn_enable = bool(params.get('Tdnenable', {}).get('val', True))
+            self.my.store('_tdn_migration_prev_enable', prev_tdn_enable)
+            run(f"op('{self.my}').ext.Embody._showTDNMigrationNudge()",
+                delayFrames=60)
         # If Envoyenable was restored to True, kick Start() -- parexec was
         # suppressed during restore so onValueChange never fired.
-        # Only do this on the onStart() path (kick_envoy=True).
+        # Only set this on the onStart() path (kick_envoy=True).
         # Verify() owns Envoy startup on the onCreate() path.
         if kick_envoy and self.my.par.Envoyenable.eval():
             run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=3)
         return restored > 0
+
+    def _showTDNMigrationNudge(self) -> None:
+        """One-time dialog after upgrading from the binary Tdnenable toggle.
+
+        Fires when a user opens a project previously saved with the old
+        Tdnenable toggle and no Tdnmode selection yet. Offers a choice
+        between restoring Full bidirectional sync (their prior behavior)
+        or adopting the new Export-on-Save default (recommended).
+
+        Guarded by _tdn_mode_migration_shown so it only fires once per
+        project across sessions (the flag is persisted via param write
+        into config.json on next save).
+        """
+        if self.my.fetch('_tdn_mode_migration_shown', False, search=False):
+            return
+        prev_enable = self.my.fetch('_tdn_migration_prev_enable', True,
+                                    search=False)
+        self.my.unstore('_tdn_migration_prev_enable')
+
+        tdn_comps = []
+        try:
+            tdn_comps = self._getTDNStrategyComps()
+        except Exception:
+            pass
+
+        if not tdn_comps:
+            # No TDN COMPs tracked -- silently accept the new default.
+            self.my.store('_tdn_mode_migration_shown', True)
+            return
+
+        prev_label = ('Full (bidirectional)' if prev_enable
+                      else 'Off (TDN disabled)')
+        msg = (
+            f'TDN default changed in this release.\n\n'
+            f'Your project was previously saved with the legacy Tdnenable '
+            f'toggle ({prev_label}). The new system has three modes:\n\n'
+            f'  \u2022 Off -- no TDN runtime\n'
+            f'  \u2022 Export-on-Save (MCP) -- recommended; .toe is truth, '
+            f'.tdn files are rewritten on save\n'
+            f'  \u2022 Full Import/Export (Experimental) -- bidirectional '
+            f'strip/restore on save and reconstruction on open (previous '
+            f'behavior)\n\n'
+            f'Currently set to Export-on-Save. Your {len(tdn_comps)} '
+            f'tracked TDN COMP(s) will stop round-tripping on save.\n\n'
+            f'Keep the new default, or restore Full?'
+        )
+        choice = self._messageBox(
+            'Embody - TDN Mode Changed',
+            msg,
+            buttons=['Keep Export-on-Save (recommended)',
+                     'Restore Full (previous behavior)'])
+        if choice == 1:
+            try:
+                self.my.par.Tdnmode = 'full'
+                self._applyTdnModeGating()
+                self.Log('TDN mode restored to Full per user choice', 'INFO')
+            except Exception as e:
+                self.Log(f'Could not restore Full mode: {e}', 'WARNING')
+        else:
+            self.Log('TDN mode kept at Export-on-Save (new default)', 'INFO')
+        self.my.store('_tdn_mode_migration_shown', True)
 
     def Verify(self) -> None:
         """Initialize or reconnect Embody on install or update.
