@@ -68,7 +68,7 @@ class EmbodyExt:
         'Logfolder', 'Logtofile', 'Verbose', 'Print',
         'Detectduplicatepaths', 'Localtimestamps',
         # TDN
-        'Tdnenable',
+        'Tdnmode',
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
@@ -1536,9 +1536,9 @@ class EmbodyExt:
         # Normalize paths for cross-platform compatibility
         self.normalizeAllPaths()
 
-        # Apply UI gating for the TDN master toggle (greys out dependent
-        # parameters when Tdnenable is OFF).
-        self._applyTdnEnableGating()
+        # Apply UI gating for the TDN mode menu (greys out dependent
+        # parameters based on Off / Export / Full).
+        self._applyTdnModeGating()
 
         run(f"op('{self.my}').Update()", delayFrames=1)
 
@@ -1598,7 +1598,8 @@ class EmbodyExt:
         # Skip root "/" -- it's a Full Project export, not a managed COMP.
         # SaveTDN("/") would trigger root-level stale cleanup that deletes
         # other tracked .tdn files.
-        # Guard: when Tdnenable is OFF, skip the entire TDN export branch.
+        # Guard: when Tdnmode is Off, skip the entire TDN export branch.
+        # In Export and Full modes we still run the export.
         # tdn_paths still gets populated below from the table so the
         # "subtractions" filter continues to exclude tracked TDN COMPs.
         tdn_comps = self.getExternalizedOps(COMP, strategy='tdn')
@@ -4872,10 +4873,15 @@ class EmbodyExt:
 
     def ReconstructTDNComps(self) -> None:
         """Reconstruct all TDN-strategy COMPs from .tdn files on project open."""
-        if not self._tdnEnabled():
-            self.Log('TDN disabled (Tdnenable=Off) -- skipping reconstruction',
-                     'INFO')
+        mode = self._tdnMode()
+        if mode == 'off':
+            self.Log('TDN mode=off -- skipping reconstruction', 'INFO')
             return
+        if mode == 'export':
+            self.Log('TDN mode=export -- .toe is source of truth, skipping '
+                     'reconstruction', 'INFO')
+            return
+        # mode == 'full'
         if not self.my.par.Tdncreateonstart.eval():
             return
 
@@ -4966,83 +4972,113 @@ class EmbodyExt:
         # Build report
         self._logReconstructionReport(tdn_comps, errors_total)
 
-    def _tdnEnabled(self) -> bool:
-        """Return True if the TDN subsystem is currently enabled.
+    # Params visible only in 'full' mode (strip/reconstruction concepts).
+    _TDN_FULL_ONLY_PARAMS = {'Tdnstriponsave', 'Tdncreateonstart'}
 
-        Default-on if the parameter is missing (e.g. legacy .tox without
-        Tdnenable yet) so existing user projects keep working.
+    def _tdnMode(self) -> str:
+        """Return 'off' | 'export' | 'full' from Tdnmode menu.
+
+        Defaults to 'export' if the parameter is missing (legacy .tox).
         """
-        par = getattr(self.my.par, 'Tdnenable', None)
+        par = getattr(self.my.par, 'Tdnmode', None)
         if par is None:
-            return True
+            return 'export'
         try:
-            return bool(par.eval())
+            val = par.eval()
+            return val if val in ('off', 'export', 'full') else 'export'
         except Exception:
-            return True
+            return 'export'
 
-    def _applyTdnEnableGating(self) -> None:
-        """Set par.enable on every TDN-page parameter except Tdnenable itself.
+    def _tdnEnabled(self) -> bool:
+        """Return True if the TDN subsystem is NOT in Off mode.
 
-        Called after init and whenever Tdnenable changes. Keeps the UI
-        truthful: when the master switch is OFF, every other TDN control
-        greys out so users can't toggle settings whose owning subsystem
-        is paused.
+        Thin wrapper for call sites that only need to know whether any
+        TDN runtime behavior should fire (export OR strip). Callers that
+        need to distinguish export vs full should use _tdnMode().
         """
-        master = getattr(self.my.par, 'Tdnenable', None)
+        return self._tdnMode() != 'off'
+
+    def _applyTdnModeGating(self) -> None:
+        """Three-way UI gating for TDN-page parameters based on Tdnmode.
+
+        - Off: all params greyed except Tdnmode itself.
+        - Export: strip/reconstruction params (Tdnstriponsave, Tdncreateonstart)
+          greyed; remaining Embed/cascade/picker params stay live.
+        - Full: all params live.
+        """
+        master = getattr(self.my.par, 'Tdnmode', None)
         if master is None:
             return
-        enabled = bool(master.eval())
+        mode = self._tdnMode()
         try:
             for page in self.my.customPages:
                 if page.name != 'TDN':
                     continue
                 for p in page.pars:
-                    if p.name == 'Tdnenable':
+                    if p.name == 'Tdnmode':
                         continue
                     try:
-                        p.enable = enabled
+                        if mode == 'off':
+                            p.enable = False
+                        elif mode == 'export':
+                            p.enable = p.name not in self._TDN_FULL_ONLY_PARAMS
+                        else:  # full
+                            p.enable = True
                     except Exception:
                         pass
         except Exception as e:
-            self.Log(f'Could not apply Tdnenable gating: {e}', 'DEBUG')
+            self.Log(f'Could not apply Tdnmode gating: {e}', 'DEBUG')
 
-    def _onTdnEnableChanged(self, enabled: bool) -> None:
-        """Handle a Tdnenable toggle from parexec.
+    # Backward-compat alias (old name used inside Update / parexec history).
+    _applyTdnEnableGating = _applyTdnModeGating
 
-        When toggling OFF with existing TDN COMPs tracked, prompt the user
-        for confirmation. Default-safe path: keep .tdn files on disk; the
-        runtime simply stops touching them. Toggling ON has no migration
-        cost -- the next save/open uses the new state.
+    def _onTdnModeChanged(self, mode: str) -> None:
+        """Handle a Tdnmode change from parexec.
+
+        Transitions surface the impact so the user isn't surprised:
+        - TO off with tracked TDN COMPs: confirmation dialog (preserve files).
+        - export -> full: INFO log that Full is experimental.
+        - full -> export: INFO log that reconstruction will be skipped.
+        - off -> full: no dialog here (cold flip).
+
+        Always refreshes gating last.
         """
-        if enabled:
-            self.Log('TDN enabled', 'INFO')
-            self._applyTdnEnableGating()
-            return
+        if mode == 'off':
+            existing = []
+            try:
+                existing = self._getTDNStrategyComps()
+            except Exception as e:
+                self.Log(f'Could not enumerate TDN COMPs: {e}', 'DEBUG')
+            if existing:
+                count = len(existing)
+                choice = self._messageBox(
+                    'Embody - Disable TDN',
+                    f'Switching TDN to Off with {count} tracked TDN COMP(s).\n\n'
+                    f'Their .tdn files on disk will be preserved. Embody will\n'
+                    f'simply stop reconstructing, stripping, or re-exporting\n'
+                    f'them until you switch back.\n\n'
+                    f'Continue?',
+                    buttons=['Cancel', 'Keep .tdn files (disable only)'])
+                if choice != 1:
+                    # User cancelled -- restore to Export (the safe default).
+                    self.my.par.Tdnmode = 'export'
+                    self.Log('TDN mode change cancelled by user', 'INFO')
+                    return
+            self.Log('TDN disabled (.tdn files preserved on disk)', 'INFO')
+        elif mode == 'full':
+            self.Log(
+                'TDN mode: Full Import/Export (Experimental). Strip/restore '
+                'runs on save. Watch for edge cases with palette clones and '
+                'extension reload timing.', 'INFO')
+        elif mode == 'export':
+            self.Log(
+                'TDN mode: Export-on-Save. .toe is the source of truth; '
+                '.tdn files are rewritten on save. Reconstruction on open '
+                'is skipped.', 'INFO')
+        self._applyTdnModeGating()
 
-        existing = []
-        try:
-            existing = self._getTDNStrategyComps()
-        except Exception as e:
-            self.Log(f'Could not enumerate TDN COMPs: {e}', 'DEBUG')
-
-        if existing:
-            count = len(existing)
-            choice = self._messageBox(
-                'Embody - Disable TDN',
-                f'Disabling TDN with {count} tracked TDN COMP(s).\n\n'
-                f'Their .tdn files on disk will be preserved. Embody will\n'
-                f'simply stop reconstructing, stripping, or re-exporting\n'
-                f'them until you re-enable TDN.\n\n'
-                f'Continue?',
-                buttons=['Cancel', 'Keep .tdn files (disable only)'])
-            if choice != 1:
-                # User cancelled -- restore the toggle.
-                self.my.par.Tdnenable = True
-                self.Log('TDN disable cancelled by user', 'INFO')
-                return
-
-        self.Log('TDN disabled (.tdn files preserved on disk)', 'INFO')
-        self._applyTdnEnableGating()
+    # Backward-compat alias (old name referenced by parexec pre-rename).
+    _onTdnEnableChanged = _onTdnModeChanged
 
     def _getTDNStrategyComps(self) -> list[tuple[str, str]]:
         """Get all TDN-strategy COMPs from the externalizations table.
@@ -5147,42 +5183,152 @@ class EmbodyExt:
 
         return result
 
-    def _promptDATSafety(self, at_risk: list) -> str:
-        """Show dialog for at-risk DATs. Returns 'externalize' or 'skip'."""
-        all_dats = [d for _, dats in at_risk for d in dats]
-        count = len(all_dats)
-        noun = 'DAT' if count == 1 else 'DATs'
+    # Storage keys preserved even when Embedstorageintdns is off
+    # (mirrors TDNExt logic that exports these as control metadata).
+    _STORAGE_CONTROL_KEYS = {'embed_dats_in_tdn', 'embed_storage_in_tdn'}
+    # Storage keys never exported (runtime/internal) -- mirror of
+    # TDNExt.SKIP_STORAGE_KEYS. Not at risk because never meant to persist.
+    _STORAGE_SKIP_KEYS = {
+        '_tdn_stripped_paths', '_git_root',
+        'envoy_running', 'envoy_shutdown_event',
+        'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
+        '_tdn_external_wires', '_tdn_pane_restore',
+        '_init_complete', '_smoke_test_responses',
+        '_tdn_restore_failures', '_tdn_mode_migration_shown',
+        'pressed',
+    }
 
-        # Build list (cap at 10 to avoid giant dialog)
-        lines = []
-        for dat in all_dats[:10]:
-            fmt = 'table' if dat.isTable else 'text'
-            lines.append(f'  \u2022 {dat.path} ({fmt})')
-        if count > 10:
-            lines.append(f'  \u2026 and {count - 10} more')
+    def _findAtRiskStorage(self) -> list:
+        """Find operators inside TDN COMPs whose comp.storage entries will
+        be lost on save. Mirrors _findAtRiskDATs.
 
-        dat_list = '\n'.join(lines)
-        msg = (f'{count} {noun} in TDN-managed COMP(s) contain content that\n'
-               f'will be lost on save (Embed DATs is OFF, {noun} not externalized):\n\n'
-               f'{dat_list}\n\n'
-               f'Externalize {"this" if count == 1 else "these"} {noun} '
-               f'to preserve content?')
+        Returns list of (comp_path, [(op_path, [keys])]) tuples for TDN
+        COMPs where Embed Storage is OFF and any op inside has non-control,
+        non-runtime storage keys.
+        """
+        tdn_comps = self._getTDNStrategyComps()
+        if not tdn_comps:
+            return []
 
+        tdn_paths = {path for path, _ in tdn_comps}
+        result = []
+
+        for comp_path, _ in tdn_comps:
+            comp = op(comp_path)
+            if not comp:
+                continue
+
+            # Resolve embed_storage: per-COMP override -> global parameter
+            per_comp = comp.fetch('embed_storage_in_tdn', None, search=False)
+            embed_on = (per_comp if per_comp is not None
+                        else self.my.par.Embedstorageintdns.eval())
+            if embed_on:
+                continue  # Storage preserved in TDN
+
+            at_risk = []
+            # Check comp itself and all descendants (depth is unbounded;
+            # excluded descendants are only those inside a nested TDN COMP,
+            # which that COMP's own settings handle).
+            candidates = [comp] + list(comp.findChildren())
+            for target in candidates:
+                # Skip ops inside a nested TDN COMP
+                if target is not comp:
+                    inside_nested = False
+                    parent_op = target.parent()
+                    while parent_op and parent_op.path != comp_path:
+                        if parent_op.path in tdn_paths:
+                            inside_nested = True
+                            break
+                        parent_op = parent_op.parent()
+                    if inside_nested:
+                        continue
+
+                try:
+                    storage = target.storage
+                except Exception:
+                    continue
+                if not storage:
+                    continue
+
+                risky_keys = [
+                    k for k in storage.keys()
+                    if k not in self._STORAGE_CONTROL_KEYS
+                    and k not in self._STORAGE_SKIP_KEYS
+                ]
+                if risky_keys:
+                    at_risk.append((target.path, sorted(risky_keys)))
+
+            if at_risk:
+                result.append((comp_path, at_risk))
+
+        return result
+
+    def _promptTDNContentSafety(
+            self, at_risk_dats: list, at_risk_storage: list) -> str:
+        """Show combined dialog for at-risk DATs + storage.
+
+        Returns 'externalize' or 'skip'. Note: 'externalize' applies only
+        to DATs; storage has no externalization path, skip logs a summary.
+        """
+        all_dats = [d for _, dats in at_risk_dats for d in dats]
+        dat_count = len(all_dats)
+        storage_entries = [
+            (op_path, keys)
+            for _, entries in at_risk_storage
+            for op_path, keys in entries
+        ]
+        storage_count = sum(len(keys) for _, keys in storage_entries)
+
+        sections = []
+
+        if dat_count:
+            noun = 'DAT' if dat_count == 1 else 'DATs'
+            lines = []
+            for dat in all_dats[:10]:
+                fmt = 'table' if dat.isTable else 'text'
+                lines.append(f'  \u2022 {dat.path} ({fmt})')
+            if dat_count > 10:
+                lines.append(f'  \u2026 and {dat_count - 10} more')
+            sections.append(
+                f'{dat_count} {noun} will lose content (Embed DATs OFF):\n'
+                + '\n'.join(lines))
+
+        if storage_count:
+            key_noun = 'key' if storage_count == 1 else 'keys'
+            lines = []
+            shown = 0
+            for op_path, keys in storage_entries:
+                for k in keys:
+                    if shown >= 10:
+                        break
+                    lines.append(f'  \u2022 {op_path} \u2192 "{k}"')
+                    shown += 1
+                if shown >= 10:
+                    break
+            if storage_count > 10:
+                lines.append(f'  \u2026 and {storage_count - 10} more')
+            sections.append(
+                f'{storage_count} storage {key_noun} will be lost '
+                f'(Embed Storage OFF):\n' + '\n'.join(lines))
+
+        body = '\n\n'.join(sections)
+        externalize_verb = 'Externalize DATs' if dat_count else 'Continue'
+        msg = (f'TDN content will be dropped on next save.\n\n'
+               f'{body}\n\n'
+               f'Note: storage has no externalization path -- enable Embed '
+               f'Storage in TDNs to preserve it, or dismiss to proceed.')
+
+        buttons = [externalize_verb, 'Skip', 'Always Externalize']
         choice = self._messageBox(
-            'DAT Content at Risk', msg,
-            buttons=['Externalize', 'Skip',
-                     'Always Externalize', 'Never Ask'])
+            'TDN Content at Risk', msg, buttons=buttons)
 
         if choice == 0:
             return 'externalize'
         elif choice == 2:
             self.my.par.Tdndatsafety = 'externalize'
-            self.Log('DAT safety preference set to Always Externalize', 'INFO')
+            self.Log('TDN content safety preference set to Always '
+                     'Externalize', 'INFO')
             return 'externalize'
-        elif choice == 3:
-            self.my.par.Tdndatsafety = 'ignore'
-            self.Log('DAT safety preference set to Never Ask', 'INFO')
-            return 'skip'
         return 'skip'
 
     def _externalizeDATs(self, dats: list) -> int:
@@ -5205,10 +5351,12 @@ class EmbodyExt:
                 self.Log(f'Failed to externalize {dat.path}: {e}', 'WARNING')
         return count
 
-    def _checkDATContentSafety(self) -> None:
-        """Check for at-risk DATs in TDN COMPs and prompt/auto-externalize.
+    def _checkTDNContentSafety(self) -> None:
+        """Check for at-risk DATs AND storage in TDN COMPs.
 
         Called from onProjectPreSave() before the TDN export/strip cycle.
+        Prompts user or auto-externalizes per Tdndatsafety preference.
+        On skip, logs a SUCCESS summary naming what was dropped.
         """
         safety_par = getattr(self.my.par, 'Tdndatsafety', None)
         preference = safety_par.eval() if safety_par else 'ask'
@@ -5216,22 +5364,61 @@ class EmbodyExt:
         if preference == 'ignore':
             return
 
-        at_risk = self._findAtRiskDATs()
-        if not at_risk:
+        at_risk_dats = self._findAtRiskDATs()
+        at_risk_storage = self._findAtRiskStorage()
+        if not at_risk_dats and not at_risk_storage:
             return
 
-        all_dats = [d for _, dats in at_risk for d in dats]
+        all_dats = [d for _, dats in at_risk_dats for d in dats]
 
         if preference == 'externalize':
             count = self._externalizeDATs(all_dats)
-            self.Log(f'Auto-externalized {count} at-risk DAT(s)', 'SUCCESS')
+            if count:
+                self.Log(f'Auto-externalized {count} at-risk DAT(s)',
+                         'SUCCESS')
+            if at_risk_storage:
+                self._logSkippedStorage(at_risk_storage)
             return
 
         # preference == 'ask'
-        choice = self._promptDATSafety(at_risk)
+        choice = self._promptTDNContentSafety(at_risk_dats, at_risk_storage)
         if choice == 'externalize':
             count = self._externalizeDATs(all_dats)
             self.Log(f'Externalized {count} at-risk DAT(s)', 'SUCCESS')
+            if at_risk_storage:
+                self._logSkippedStorage(at_risk_storage)
+        else:
+            if all_dats:
+                self._logSkippedDATs(all_dats)
+            if at_risk_storage:
+                self._logSkippedStorage(at_risk_storage)
+
+    # Backwards-compatible alias (execute.py may still call the old name).
+    _checkDATContentSafety = _checkTDNContentSafety
+
+    def _logSkippedDATs(self, dats: list) -> None:
+        """Log a SUCCESS-level summary of DATs whose content was dropped."""
+        names = ', '.join(d.path for d in dats[:5])
+        if len(dats) > 5:
+            names += f', \u2026 (+{len(dats) - 5} more)'
+        self.Log(
+            f'Skipped externalization of {len(dats)} at-risk DAT(s): '
+            f'{names}', 'SUCCESS')
+
+    def _logSkippedStorage(self, at_risk_storage: list) -> None:
+        """Log a SUCCESS-level summary of storage keys that will be dropped."""
+        entries = []
+        total = 0
+        for _, op_entries in at_risk_storage:
+            for op_path, keys in op_entries:
+                total += len(keys)
+                entries.append(f'{op_path}[{",".join(keys)}]')
+        shown = ', '.join(entries[:5])
+        if len(entries) > 5:
+            shown += f', \u2026 (+{len(entries) - 5} more)'
+        self.Log(
+            f'Dropping {total} TDN storage entr{"y" if total == 1 else "ies"} '
+            f'on save (Embed Storage OFF): {shown}', 'SUCCESS')
 
     def StripCompChildren(self, comp: OP) -> int:
         """Remove children from a TDN-strategy COMP (for smaller .toe).

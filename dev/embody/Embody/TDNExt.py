@@ -3873,16 +3873,25 @@ class TDNExt:
 						return True
 
 		# --- Strategy 2: clone expression heuristic ---
+		# Exclude /sys/TDTox/defaultCOMPs/* — these are TD's native-operator
+		# templates (every fresh buttonCOMP/panelCOMP/etc. clones from there
+		# by default). Not palette components; internals are minimal and
+		# export cleanly. Treated like any other normal COMP.
 		clone_par = getattr(target.par, 'clone', None)
 		if not clone_par:
 			return False
 		try:
 			clone_op = clone_par.eval()
 			if clone_op and hasattr(clone_op, 'path'):
-				if clone_op.path.startswith('/sys/'):
+				cpath = clone_op.path
+				if cpath.startswith('/sys/TDTox/defaultCOMPs/'):
+					return False
+				if cpath.startswith('/sys/'):
 					return True
 			if clone_par.mode == ParMode.EXPRESSION:
 				expr = clone_par.expr
+				if 'defaultCOMPs' in expr:
+					return False
 				if any(s in expr for s in (
 						'TDBasicWidgets', 'TDResources', 'TDTox')):
 					return True

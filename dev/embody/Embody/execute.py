@@ -93,15 +93,16 @@ def onProjectPreSave():
 	# temporarily-missing operators inside TDN COMPs.
 	parent.Embody.ext.Embody.Update(suppress_refresh=True)
 
-	# Master TDN switch: when OFF, skip the entire TDN pre-save pipeline
+	# Master TDN mode: when Off, skip the entire TDN pre-save pipeline
 	# (export, strip, restore). .tdn files on disk stay untouched.
-	if not parent.Embody.ext.Embody._tdnEnabled():
+	mode = parent.Embody.ext.Embody._tdnMode()
+	if mode == 'off':
 		parent.Embody.ext.Embody.Log(
-			'TDN disabled -- skipping pre-save TDN strip/export', 'INFO')
+			'TDN mode=off -- skipping pre-save TDN strip/export', 'INFO')
 		return
 
-	# DAT content safety -- detect unprotected DATs before strip/restore
-	parent.Embody.ext.Embody._checkDATContentSafety()
+	# TDN content safety -- detect unprotected DATs and storage before strip/restore
+	parent.Embody.ext.Embody._checkTDNContentSafety()
 
 	tdn_comps = parent.Embody.ext.Embody._getTDNStrategyComps()
 	if not tdn_comps:
@@ -177,8 +178,12 @@ def onProjectPreSave():
 	# Phase 2: Strip children from exported COMPs so the .toe stays small.
 	# Only strip COMPs whose export succeeded - stripping without a valid
 	# .tdn on disk would permanently destroy the children.
-	# Gated on Strip on Save toggle - when Off, .tdn files are still exported
-	# (Phase 1) but children stay in the .toe.
+	# Gated on Tdnmode: Export mode skips strip entirely (.toe is truth).
+	# Full mode runs strip when Tdnstriponsave is on.
+	if mode != 'full':
+		parent.Embody.ext.Embody.Log(
+			'TDN mode=export -- skipping Phase 2 strip', 'DEBUG')
+		return
 	if not parent.Embody.par.Tdnstriponsave.eval():
 		return
 
@@ -220,66 +225,67 @@ def onProjectPreSave():
 def onProjectPostSave():
 	# Restore children that were stripped during pre-save.
 	# Re-import from the just-exported .tdn files to keep the session intact.
+	# In Export/Off modes no strip runs, so stripped is empty -- but we still
+	# need to re-store _init_complete and restart Envoy below.
 	stripped = parent.Embody.fetch('_tdn_stripped_paths', [], search=False)
-	if not stripped:
-		return
-	parent.Embody.unstore('_tdn_stripped_paths')
-	# Sort shallowest-first so parent COMPs (e.g. /META) are restored
-	# before their nested children (/META/geo1). The parent import
-	# recreates the child COMP shell; the child import then replaces
-	# its default contents (e.g. Torus) with the correct .tdn state.
-	def _depth_key(entry):
-		p = entry[0] if isinstance(entry, (list, tuple)) else entry
-		return p.count('/')
-	stripped = sorted(stripped, key=_depth_key)
-	for entry in stripped:
-		# Unpack stored (comp_path, rel_tdn_path) tuples.
-		# Fall back to legacy format (plain string) for safety.
-		if isinstance(entry, (list, tuple)) and len(entry) == 2:
-			comp_path, rel_path = entry
-		else:
-			comp_path = entry
+	if stripped:
+		parent.Embody.unstore('_tdn_stripped_paths')
+		# Sort shallowest-first so parent COMPs (e.g. /META) are restored
+		# before their nested children (/META/geo1). The parent import
+		# recreates the child COMP shell; the child import then replaces
+		# its default contents (e.g. Torus) with the correct .tdn state.
+		def _depth_key(entry):
+			p = entry[0] if isinstance(entry, (list, tuple)) else entry
+			return p.count('/')
+		stripped = sorted(stripped, key=_depth_key)
+		for entry in stripped:
+			# Unpack stored (comp_path, rel_tdn_path) tuples.
+			# Fall back to legacy format (plain string) for safety.
+			if isinstance(entry, (list, tuple)) and len(entry) == 2:
+				comp_path, rel_path = entry
+			else:
+				comp_path = entry
+				try:
+					rel_path = parent.Embody.ext.Embody._getStrategyFilePath(comp_path, 'tdn')
+				except Exception:
+					rel_path = None
 			try:
-				rel_path = parent.Embody.ext.Embody._getStrategyFilePath(comp_path, 'tdn')
-			except Exception:
-				rel_path = None
-		try:
-			if not rel_path:
-				parent.Embody.ext.Embody.Log(
-					f'Post-save restore: no TDN file path for {comp_path}', 'WARNING')
-				continue
-			abs_path = parent.Embody.ext.Embody.buildAbsolutePath(rel_path)
-			if not abs_path.is_file():
-				parent.Embody.ext.Embody.Log(
-					f'Post-save restore: .tdn file missing: {rel_path}', 'WARNING')
-				continue
-			import json
-			tdn_doc = json.loads(abs_path.read_text(encoding='utf-8'))
-			parent.Embody.ext.TDN.ImportNetwork(
-				target_path=comp_path, tdn=tdn_doc, clear_first=True,
-				restore_file_links=True)
-		except Exception as e:
-			# print() as backup - Log may fail if extensions are reinitializing
-			print(f'Embody > Post-save restore failed for {comp_path}: {e}')
-			try:
-				parent.Embody.ext.Embody.Log(
-					f'Post-save restore failed for {comp_path}: {e}', 'ERROR')
-			except Exception:
-				pass
-			# Attempt rollback from backup .tdn
-			try:
-				backup_path = parent.Embody.ext.TDN._get_backup_path_instance(
-					str(abs_path))
-				if backup_path.is_file():
-					import json as _json
-					backup_tdn = _json.loads(
-						backup_path.read_text(encoding='utf-8'))
-					parent.Embody.ext.TDN.ImportNetwork(
-						target_path=comp_path, tdn=backup_tdn,
-						clear_first=True, restore_file_links=True)
-					print(f'Embody > Rolled back {comp_path} from backup')
-			except Exception as rb_e:
-				print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')
+				if not rel_path:
+					parent.Embody.ext.Embody.Log(
+						f'Post-save restore: no TDN file path for {comp_path}', 'WARNING')
+					continue
+				abs_path = parent.Embody.ext.Embody.buildAbsolutePath(rel_path)
+				if not abs_path.is_file():
+					parent.Embody.ext.Embody.Log(
+						f'Post-save restore: .tdn file missing: {rel_path}', 'WARNING')
+					continue
+				import json
+				tdn_doc = json.loads(abs_path.read_text(encoding='utf-8'))
+				parent.Embody.ext.TDN.ImportNetwork(
+					target_path=comp_path, tdn=tdn_doc, clear_first=True,
+					restore_file_links=True)
+			except Exception as e:
+				# print() as backup - Log may fail if extensions are reinitializing
+				print(f'Embody > Post-save restore failed for {comp_path}: {e}')
+				try:
+					parent.Embody.ext.Embody.Log(
+						f'Post-save restore failed for {comp_path}: {e}', 'ERROR')
+				except Exception:
+					pass
+				# Attempt rollback from backup .tdn
+				try:
+					backup_path = parent.Embody.ext.TDN._get_backup_path_instance(
+						str(abs_path))
+					if backup_path.is_file():
+						import json as _json
+						backup_tdn = _json.loads(
+							backup_path.read_text(encoding='utf-8'))
+						parent.Embody.ext.TDN.ImportNetwork(
+							target_path=comp_path, tdn=backup_tdn,
+							clear_first=True, restore_file_links=True)
+						print(f'Embody > Rolled back {comp_path} from backup')
+				except Exception as rb_e:
+					print(f'Embody > Rollback also failed for {comp_path}: {rb_e}')
 	# Restore pane owners that were orphaned during strip
 	pane_restore = parent.Embody.fetch('_tdn_pane_restore', {}, search=False)
 	if pane_restore:

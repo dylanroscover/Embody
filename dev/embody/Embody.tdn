@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.3",
 	"build": 395,
-	"generator": "Embody/5.0.356",
+	"generator": "Embody/5.0.363",
 	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.357.toe",
-	"exported_at": "2026-04-12T16:30:39Z",
+	"source_file": "Embody-5.364.toe",
+	"exported_at": "2026-04-14T02:35:50Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -563,13 +563,14 @@
 		],
 		"TDN": [
 			{
-				"name": "Tdnenable",
-				"style": "Toggle",
-				"label": "TDN Enable",
+				"name": "Tdnmode",
+				"style": "Menu",
+				"label": "TDN Mode",
 				"startSection": true,
-				"default": true,
-				"value": true,
-				"help": "Master toggle for the entire TDN subsystem. When OFF, Embody skips TDN reconstruction on project open, skips the strip/restore cycle on save, skips TDN export from Update(), and disables every other parameter on this page. Existing .tdn files on disk are preserved -- only the runtime behavior is suspended."
+				"default": "export",
+				"menuNames": ["off", "export", "full"],
+				"menuLabels": ["Off", "Export-on-Save (MCP)", "Full Import/Export (Experimental)"],
+				"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Full (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with palette clones and extension reload timing."
 			},
 			{
 				"name": "Tdncascade",
@@ -615,6 +616,17 @@
 				"label": "Strip on Save",
 				"default": true,
 				"help": "When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal."
+			},
+			{
+				"name": "Tdnpalettehandling",
+				"style": "Menu",
+				"label": "Palette Handling",
+				"startSection": true,
+				"default": "ask",
+				"menuNames": ["ask", "blackbox", "fullexport"],
+				"menuLabels": ["Ask", "Black Box", "Full Export"],
+				"help": "How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.",
+				"value": "blackbox"
 			},
 			{
 				"name": "Tdnfile",
@@ -851,7 +863,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.356"
+				"value": "5.0.363"
 			},
 			{
 				"name": "Touchbuild",
@@ -889,7 +901,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-04-12 16:30:39 UTC"
+				"value": "2026-04-14 02:35:50 UTC"
 			},
 			{
 				"name": "Help",
@@ -1212,7 +1224,7 @@
 				"file": "embody/Embody/EnvoyExt.py"
 			},
 			"position": [-300, 500],
-			"tags": ["py", "TDExtension"]
+			"tags": ["TDExtension", "py"]
 		},
 		{
 			"name": "mousein1",
@@ -1337,7 +1349,7 @@
 			"position": [300, 475],
 			"size": [160, 130],
 			"comp_inputs": ["manager"],
-			"palette_clone": true
+			"tdn_ref": "embody/Embody/windowHeader.tdn"
 		},
 		{
 			"name": "annotation_ui",
@@ -1429,7 +1441,7 @@
 			"name": "palette_catalog",
 			"type": "tableDAT",
 			"parameters": {
-				"file": "/Users/rosco/Documents/Git/Embody/dev/embody/Embody/palette_catalog.tsv",
+				"file": "embody/Embody/palette_catalog.tsv",
 				"rows": 265
 			},
 			"position": [-500, 200]

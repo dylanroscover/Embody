@@ -59,8 +59,8 @@ def onValueChange(par, prev):
 		if list_comp:
 			list_comp.reset()
 
-	elif par.name == 'Tdnenable':
-		parent.Embody.ext.Embody._onTdnEnableChanged(bool(par.eval()))
+	elif par.name == 'Tdnmode':
+		parent.Embody.ext.Embody._onTdnModeChanged(str(par.eval()))
 
 	elif par.name == 'Embeddatsintdns':
 		# No-op when the TDN subsystem is disabled -- nothing to re-export.
