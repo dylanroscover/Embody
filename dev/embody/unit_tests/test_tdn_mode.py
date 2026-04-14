@@ -150,6 +150,47 @@ class TestTdnMode(EmbodyTestCase):
         self.assertNotIn('Operator not found', messages)
 
     # ------------------------------------------------------------------
+    # 4b. Regression guards for the save-cycle hardening
+    # ------------------------------------------------------------------
+
+    def test_init_complete_restored_after_export_mode_save(self):
+        """Regression: the fix that _init_complete re-store fires even when
+        no strip ran. Export mode never strips, so the old early-return in
+        onProjectPostSave would leave _init_complete False -- silently
+        disabling every parexec callback for the rest of the session.
+        """
+        self._setMode('export')
+        # Simulate the pre-save unstore + post-save restore handshake.
+        self.embody.unstore('_init_complete')
+        self.embody.unstore('_tdn_stripped_paths')  # Export never sets this
+        # Call postSave directly (it's a module-level function in execute.py).
+        execute_mod = self.embody.op('execute').module
+        execute_mod.onProjectPostSave()
+        flag = self.embody.fetch('_init_complete', None, search=False)
+        self.assertTrue(flag,
+            f'_init_complete must be True after post-save in Export mode, '
+            f'got {flag!r}. This is the exact landmine the session fix '
+            f'addressed -- if this regresses, parexec goes silent on save.')
+
+    def test_envoy_not_restarted_when_strip_skipped(self):
+        """Regression: Envoy restart is conditional on a strip having run.
+        In Off/Export modes no strip occurs and no extension reinit fires,
+        so tearing down the MCP server on every save is pointless and
+        user-visible (momentary MCP disconnect).
+        """
+        self._setMode('export')
+        self.embody.unstore('_tdn_stripped_paths')
+        # Track 'Envoystatus' change as a signal the restart path ran.
+        prev_status = self.embody.par.Envoystatus.eval()
+        execute_mod = self.embody.op('execute').module
+        execute_mod.onProjectPostSave()
+        status = self.embody.par.Envoystatus.eval()
+        self.assertNotEqual(status, 'Restarting after save...',
+            'Envoy must NOT be restarted when no strip ran. Status changed '
+            f'from {prev_status!r} to {status!r} -- if this regresses, '
+            'every Off/Export save needlessly drops the MCP server.')
+
+    # ------------------------------------------------------------------
     # 5. Disk-side non-destructive mode flips
     # ------------------------------------------------------------------
 

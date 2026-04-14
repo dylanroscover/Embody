@@ -5136,11 +5136,25 @@ class EmbodyExt:
                     f'Continue?',
                     buttons=['Cancel', 'Keep .tdn files (disable only)'])
                 if choice != 1:
-                    # User cancelled -- restore to Export (the safe default).
-                    self.my.par.Tdnmode = 'export'
+                    # User cancelled -- restore to Export (the safe default)
+                    # with parexec suppressed so _onTdnModeChanged doesn't
+                    # re-fire and log a misleading "mode: Export-on-Save".
+                    parexec = self.my.op('parexec')
+                    was_active = (parexec.par.active.eval()
+                                  if parexec else None)
+                    if parexec:
+                        parexec.par.active = False
+                    try:
+                        self.my.par.Tdnmode = 'export'
+                    finally:
+                        if parexec:
+                            parexec.par.active = was_active
+                    self._applyTdnModeGating()
                     self.Log('TDN mode change cancelled by user', 'INFO')
                     return
-            self.Log('TDN disabled (.tdn files preserved on disk)', 'INFO')
+                self.Log('TDN disabled (.tdn files preserved on disk)',
+                         'INFO')
+            # else: no tracked COMPs -- flip is silent, nothing to preserve
         elif mode == 'full':
             self.Log(
                 'TDN mode: Roundtrip (Experimental). Strip/restore '
@@ -5271,8 +5285,10 @@ class EmbodyExt:
     _STORAGE_SKIP_KEYS = {
         '_tdn_stripped_paths', '_git_root',
         'envoy_running', 'envoy_shutdown_event',
-        'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
+        'expanded_paths', 'expand_order',
+        'manage_file_path', 'visible_count', 'hover',
         '_tdn_external_wires', '_tdn_pane_restore',
+        '_tdn_palette_handling',
         '_init_complete', '_smoke_test_responses',
         '_tdn_restore_failures',
         '_tdn_mode_migration_shown', '_tdn_migration_scheduled',

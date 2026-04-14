@@ -21,7 +21,7 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 ### Restoration
 
 - **TOX Restore on Start** — Restore missing TOX-strategy COMPs from `.tox` files on project open (ON by default)
-- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open. **Only active when `TDN Mode` = Full.** In Export-on-Save mode, the `.toe` is the source of truth and reconstruction is skipped.
+- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open. **Only active when `TDN Mode` = Roundtrip.** In Export-on-Save mode, the `.toe` is the source of truth and reconstruction is skipped. See [TDN](#tdn) for the full parameter listing.
 
 ### TDN
 
