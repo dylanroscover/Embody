@@ -80,7 +80,7 @@
         <h1 class="hero__headline">your network,<br />as&nbsp;text.</h1>
 
         <p class="hero__sub">
-          TDN exports any TouchDesigner network as clean, human-readable JSON — only the parameters you actually changed, structured so any tool can understand it. Your AI agent can read it. Your team can review it. Git can diff it line by line.
+          TDN exports any TouchDesigner network as clean, human-readable JSON — only the parameters you actually changed, structured so any tool can understand it. Your AI agent reads it in one call, at <strong>20&ndash;90&times; fewer tokens</strong> than walking operators one by one. Your team reviews it. Git diffs it line by line.
         </p>
 
         <div class="hero__ctas">
@@ -269,6 +269,8 @@
 
         <p class="tdn__callout"><span class="tdn__callout-lead">Round-trip safe.</span> Export a network, edit the JSON, import it back. Same network. Every time.</p>
 
+        <p class="tdn__callout"><span class="tdn__callout-lead">And&nbsp;&mdash; this is where it earns its keep with AI.</span> The same compaction that keeps <code>.tdn</code> files small on disk keeps them cheap in a context window. Envoy's <code>read_tdn</code> MCP tool returns an entire subtree &mdash; operators, parameters, connections, DAT content &mdash; in one compacted call. <strong>20&ndash;90&times; fewer tokens</strong> than walking the same network with <code>get_op</code> + <code>query_network</code>, with a conservative 5&times; floor verified in CI. Your agent reads the structure once and starts working.</p>
+
       </div>
     </section>
 
@@ -359,7 +361,7 @@
             <h3 class="pillar__name">Envoy</h3>
             <p class="pillar__claim">forward velocity.</p>
             <p class="pillar__body">
-              Your AI agent exports the current network as TDN to see what's on screen. It generates or modifies the JSON, then imports it back — changes appear instantly in your live session.
+              Your agent calls <code>read_tdn</code> to see the live network in one compacted payload &mdash; 20&ndash;90&times; cheaper than walking operators one at a time. It generates or modifies the JSON, then <code>import_network</code> applies it back. Changes appear instantly in your live session.
             </p>
           </article>
           <article class="pillar">
