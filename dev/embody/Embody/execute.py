@@ -36,7 +36,12 @@ def onStart():
 	# .embody/catalog_<build>.json if present, otherwise async scan).
 	# Must run before ReconstructTDNComps (frame 60) for best results,
 	# but the embedded tableDAT covers exports during the scan window.
-	run(f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs()", delayFrames=10)
+	# Skip entirely in Off mode -- catalogs exist for TDN export compaction
+	# and palette-clone detection; both are dormant when Tdnmode=off.
+	run(
+		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
+		f"if op('{parent.Embody}').ext.Embody._tdnMode() != 'off' else None",
+		delayFrames=10)
 	# On project open, silently extract CLAUDE.md if Envoy is
 	# enabled but the file is missing (handles upgrades from older versions)
 	run(f"op('{parent.Embody}').ext.Embody._upgradeEnvoy()", delayFrames=30)
@@ -58,7 +63,11 @@ def onCreate():
 	run(f"op('{parent.Embody}').Verify()", delayFrames=30)
 	# Ensure catalogs load on fresh-project drops too, not just onStart.
 	# Delayed past Verify() so the setup dialog isn't fighting the scan.
-	run(f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs()", delayFrames=45)
+	# Skip in Off mode -- see onStart() for rationale.
+	run(
+		f"op('{parent.Embody}').ext.CatalogManager.EnsureCatalogs() "
+		f"if op('{parent.Embody}').ext.Embody._tdnMode() != 'off' else None",
+		delayFrames=45)
 	return
 
 def onExit():

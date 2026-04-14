@@ -27,14 +27,14 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 
 - **TDN Mode** — Master three-way switch for the TDN subsystem:
     - *Off* — no TDN runtime. `.tdn` files on disk are preserved; Embody stops touching them.
-    - *Export-on-Save (MCP)* — **default**. Writes `.tdn` files on save. `.toe` is the source of truth; live network is never stripped. Ideal for git-diff and MCP workflows.
-    - *Full Import/Export (Experimental)* — bidirectional strip/restore. Children are stripped from the `.toe` on save and rebuilt from `.tdn` on open. May hit edge cases with palette clones and extension reload timing.
+    - *Export-on-Save* — **default**. Writes `.tdn` files on save. `.toe` is the source of truth; live network is never stripped. Ideal for git-diff and MCP workflows.
+    - *Roundtrip (Experimental)* — bidirectional strip/restore. Children are stripped from the `.toe` on save and rebuilt from `.tdn` on open. May hit edge cases with extension reload timing on deeply-nested TDN COMPs.
 - **Cascade to Children** — When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own `.tdn` file
 - **Large TDN Warning** — *Ask* (default) prompts when a `.tdn` file exceeds 5 MB, *Quiet* suppresses the warning
 - **Embed DATs in TDNs** — Include DAT content in TDN exports
 - **Embed Storage in TDNs** — Include Python storage entries in TDN exports (can be overridden per-COMP from the tagging menu)
-- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open (Full mode only; greyed in Off/Export)
-- **Strip on Save** — Strip children from TDN-strategy COMPs on save (Full mode only; greyed in Off/Export — Export-on-Save never strips)
+- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open (Roundtrip mode only; greyed in Off/Export)
+- **Strip on Save** — Strip children from TDN-strategy COMPs on save (Roundtrip mode only; greyed in Off/Export — Export-on-Save never strips)
 - **Palette Handling** — How to handle TD palette COMPs (e.g. `abletonLink`, Widget components) during TDN export. *Ask* (default) prompts on first encounter per COMP with four choices; *Black Box* always references the palette and skips internal children (correct for stock palette COMPs); *Full Export* always exports all internals (for heavily customized palette COMPs). Native operator templates (`/sys/TDTox/defaultCOMPs/`) are excluded from palette detection — a plain `buttonCOMP` or `panelCOMP` is treated as a regular COMP, not a palette clone. See [TDN Palette Handling](../tdn/specification.md#palette-handling) for details
 - **Content Safety** — What to do when TDN COMPs contain DATs or storage that would be lost on save: *Ask Each Save* (default) prompts before each save, *Always Externalize* auto-externalizes at-risk DATs without asking, *Never Ask* suppresses the check entirely. The *Never Ask* value is an opt-in escape hatch for power users — the save-time dialog no longer offers a single-click bypass button.
 - **Export Project TDN** — Pulse to export the entire project network

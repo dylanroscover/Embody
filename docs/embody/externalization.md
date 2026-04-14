@@ -72,8 +72,8 @@ The `Tdnmode` parameter on the Embody COMP selects how the TDN subsystem behaves
 | Mode | On save (++ctrl+s++) | On project open | When to pick |
 |------|----------------------|-----------------|--------------|
 | **Off** | No TDN activity. `.tdn` files on disk stay untouched. | No reconstruction. | Temporarily disabling TDN without deleting any files. |
-| **Export-on-Save (MCP)** *(default, recommended)* | Writes `.tdn` files for every tagged TDN COMP **whose content changed** since the last save (unchanged COMPs are skipped to avoid noisy git diffs from header churn). `.toe` stays the source of truth; live network is never stripped. | No reconstruction — the `.toe` already has everything. | Day-to-day work. Cheap, predictable, no round-trip risk. Ideal for git-diff / MCP workflows. |
-| **Full Import/Export (Experimental)** | Writes `.tdn` files **and** strips COMP children from the `.toe` so the `.toe` stays small. | Children are rebuilt from `.tdn` files at frame 60. | Large projects where the `.toe` bloats without strip, or workflows that treat `.tdn` as the primary source. May hit edge cases with palette clones and extension reload timing. |
+| **Export-on-Save** *(default, recommended)* | Writes `.tdn` files for every tagged TDN COMP **whose content changed** since the last save (unchanged COMPs are skipped to avoid noisy git diffs from header churn). `.toe` stays the source of truth; live network is never stripped. | No reconstruction — the `.toe` already has everything. | Day-to-day work. Cheap, predictable, no round-trip risk. Ideal for git-diff / MCP workflows. |
+| **Roundtrip (Experimental)** | Writes `.tdn` files **and** strips COMP children from the `.toe` so the `.toe` stays small. | Children are rebuilt from `.tdn` files at frame 60. | Large projects where the `.toe` bloats without strip, or workflows that treat `.tdn` as the primary source. May hit edge cases with extension reload timing on deeply-nested TDN COMPs. |
 
 You can switch modes at any time — existing `.tdn` files on disk and tracked COMP entries are preserved across transitions.
 
@@ -101,7 +101,7 @@ The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) an
     To avoid this prompt entirely, either enable **Embed DATs in TDNs** / **Embed Storage in TDNs** (stores content directly in the `.tdn` file) or externalize your DATs with Embody tags before saving.
 
 !!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
-    TDN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Full mode. Use **TOX strategy** instead of TDN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
+    TDN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Roundtrip mode. Use **TOX strategy** instead of TDN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
 
 ### Why TDN
 
@@ -147,10 +147,10 @@ Embody automatically restores all externalized operators when a project is opene
 | Strategy | Restoration Method | Toggle |
 |----------|-------------------|--------|
 | **TOX** | Missing COMPs are restored from `.tox` files on disk | `Toxrestoreonstart` (ON by default) |
-| **TDN** | Children are reconstructed from `.tdn` JSON files — **Full mode only** | `Tdnmode = Full` + `Tdncreateonstart` |
+| **TDN** | Children are reconstructed from `.tdn` JSON files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
 | **DAT** | Synced from external files via TouchDesigner's native `file` parameter | Always active |
 
-In **Full** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdn` files exist purely for git diff / MCP reads.
+In **Roundtrip** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdn` files exist purely for git diff / MCP reads.
 
 ## Export Portable Tox
 

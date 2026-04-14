@@ -1238,9 +1238,9 @@ class EmbodyExt:
             f'Your project was previously saved with the legacy Tdnenable '
             f'toggle ({prev_label}). The new system has three modes:\n\n'
             f'  \u2022 Off -- no TDN runtime\n'
-            f'  \u2022 Export-on-Save (MCP) -- recommended; .toe is truth, '
+            f'  \u2022 Export-on-Save -- recommended; .toe is truth, '
             f'.tdn files are rewritten on save\n'
-            f'  \u2022 Full Import/Export (Experimental) -- bidirectional '
+            f'  \u2022 Roundtrip (Experimental) -- bidirectional '
             f'strip/restore on save and reconstruction on open (previous '
             f'behavior)\n\n'
             f'Currently set to Export-on-Save. Your {len(tdn_comps)} '
@@ -5143,9 +5143,10 @@ class EmbodyExt:
             self.Log('TDN disabled (.tdn files preserved on disk)', 'INFO')
         elif mode == 'full':
             self.Log(
-                'TDN mode: Full Import/Export (Experimental). Strip/restore '
-                'runs on save. Watch for edge cases with palette clones and '
-                'extension reload timing.', 'INFO')
+                'TDN mode: Roundtrip (Experimental). Strip/restore '
+                'runs on save; children are reconstructed from .tdn on open. '
+                'Watch for edge cases with extension reload timing on '
+                'deeply-nested TDN COMPs.', 'INFO')
         elif mode == 'export':
             self.Log(
                 'TDN mode: Export-on-Save. .toe is the source of truth; '

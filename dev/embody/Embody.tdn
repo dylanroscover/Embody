@@ -569,8 +569,8 @@
 				"startSection": true,
 				"default": "export",
 				"menuNames": ["off", "export", "full"],
-				"menuLabels": ["Off", "Export-on-Save (MCP)", "Full Import/Export (Experimental)"],
-				"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Full (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with palette clones and extension reload timing."
+				"menuLabels": ["Off", "Export-on-Save", "Roundtrip (Experimental)"],
+				"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs."
 			},
 			{
 				"name": "Tdncascade",
