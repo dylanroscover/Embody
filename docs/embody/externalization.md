@@ -61,40 +61,84 @@ This table serves as the source of truth for what files Embody manages. Only fil
 
 ## TDN Strategy
 
-COMPs can also be externalized using the **TDN strategy** instead of `.tox`. This exports the COMP's network as human-readable JSON (`.tdn` files) instead of binary `.tox` files, enabling meaningful git diffs.
+COMPs can also be externalized using the **TDN strategy** instead of `.tox`. This exports the COMP's network as human-readable JSON (`.tdn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
 
-With TDN strategy:
+See [TDN Format](../tdn/index.md) for format details, and ["Why TDN"](#why-tdn) below for the concrete wins.
 
-- **On update** (++ctrl+shift+u++): The COMP's children are exported to a `.tdn` file
-- **On project save** (++ctrl+s++): Children are **stripped from the `.toe`** to keep it small, then restored immediately after save completes. This means the `.toe` does not contain TDN children — they live entirely in `.tdn` files on disk.
-- **On project open**: Children are automatically reconstructed from the `.tdn` file
-- **In git**: You see readable JSON diffs instead of binary changes
+### TDN Mode (master switch)
 
-!!! important "Always update externalizations before saving the .toe"
-    Since ++ctrl+s++ strips TDN children from the `.toe`, always press ++ctrl+shift+u++ first to ensure your `.tdn` files are up to date. If TD crashes mid-save, the `.tdn` files are what Embody uses to reconstruct your work.
+The `Tdnmode` parameter on the Embody COMP selects how the TDN subsystem behaves at save/open time:
 
-!!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
-    TDN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload**. Embody warns you at save time when this is detected. Use **TOX strategy** instead of TDN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
+| Mode | On save (++ctrl+s++) | On project open | When to pick |
+|------|----------------------|-----------------|--------------|
+| **Off** | No TDN activity. `.tdn` files on disk stay untouched. | No reconstruction. | Temporarily disabling TDN without deleting any files. |
+| **Export-on-Save (MCP)** *(default, recommended)* | Writes fresh `.tdn` files for every tagged TDN COMP. `.toe` stays the source of truth; live network is never stripped. | No reconstruction — the `.toe` already has everything. | Day-to-day work. Cheap, predictable, no round-trip risk. Ideal for git-diff / MCP workflows. |
+| **Full Import/Export (Experimental)** | Writes `.tdn` files **and** strips COMP children from the `.toe` so the `.toe` stays small. | Children are rebuilt from `.tdn` files at frame 60. | Large projects where the `.toe` bloats without strip, or workflows that treat `.tdn` as the primary source. May hit edge cases with palette clones and extension reload timing. |
 
-See [TDN Format](../tdn/index.md) for more details.
+You can switch modes at any time — existing `.tdn` files on disk and tracked COMP entries are preserved across transitions.
 
-### DAT Content Safety
+!!! note "Opt-in per COMP"
+    Regardless of mode, only COMPs you've explicitly tagged with Embody's TDN tag are touched. A fresh `baseCOMP` you just created is invisible to Embody until you tag it.
 
-When you save a project (++ctrl+s++), Embody checks for **unprotected DATs** inside TDN-managed COMPs — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs in TDNs** parameter is OFF). These DATs would lose their content during the TDN strip/restore save cycle.
+### Content Safety (save-time check)
 
-If at-risk DATs are found, Embody prompts you with four options:
+When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDN-managed COMPs:
+
+- **At-risk DATs** — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs in TDNs** parameter is OFF).
+- **At-risk storage** — `comp.storage` entries on the TDN COMP or its descendants that won't be preserved when **Embed Storage in TDNs** is OFF.
+
+If at-risk content is found, Embody prompts you with three options:
 
 | Button | Behavior |
 |--------|----------|
-| **Externalize** | Tag and externalize the at-risk DATs so their content is saved to files on disk |
-| **Skip** | Proceed with the save — content may be lost |
-| **Always Externalize** | Externalize now, and do so automatically on future saves without asking |
-| **Never Ask** | Suppress the check permanently |
+| **Externalize DATs** | Tag and externalize the at-risk DATs so their content is saved to files on disk. Storage has no externalization path — enable **Embed Storage in TDNs** to preserve it. |
+| **Skip** | Proceed with the save. Skipped content is logged at SUCCESS level so you know exactly what was dropped. |
+| **Always Externalize** | Externalize now, and do so automatically on future saves without asking. |
 
-The preference is stored in the **DAT Safety** parameter (`Tdndatsafety`) and can be changed at any time from the Embody COMP's TDN settings.
+The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) and can be changed at any time from the Embody COMP's TDN settings. Setting `Tdndatsafety = 'ignore'` explicitly suppresses the check entirely — an opt-in escape hatch for power users who accept the risk.
 
 !!! tip
-    To avoid this prompt entirely, either enable **Embed DATs in TDNs** (stores DAT content directly in the `.tdn` file) or externalize your DATs with Embody tags before saving.
+    To avoid this prompt entirely, either enable **Embed DATs in TDNs** / **Embed Storage in TDNs** (stores content directly in the `.tdn` file) or externalize your DATs with Embody tags before saving.
+
+!!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
+    TDN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Full mode. Use **TOX strategy** instead of TDN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
+
+### Why TDN
+
+TDN isn't just a different file format — it unlocks workflows that binary `.toe`/`.tox` files can't support.
+
+**File size and density.** Even without compression, `.tdn` is comparable to or smaller than the equivalent binary `.tox` because only non-default parameters are emitted. Three compaction mechanisms kick in:
+
+- Default omission — parameters are included only when they differ from the operator type's creation defaults.
+- `type_defaults` — properties shared across every operator of a type are hoisted once to a top-level block and stripped from each operator.
+- `par_templates` — repeated custom-parameter pages collapse into references.
+
+A real leaf-component file like `envoy_toggle.tdn` is ~1.3 KB — 38 readable lines including only the ~15 parameters whose values actually differ from a `textCOMP`'s defaults.
+
+**Git three-way merge on real conflicts.** `.toe` is binary, so git can't three-way merge it — one side wins, the other loses. `.tdn` is JSON; git merges it like any other text file, and conflicts show up as readable diffs you can resolve by reading intent:
+
+```
+"Speed": {
+<<<<<<< HEAD
+    "value": 1.5
+=======
+    "value": 2.0
+>>>>>>> feature/faster-playback
+}
+```
+
+**PR review humans can actually do.** A `.toe` diff is literally `Binary files differ`. A `.tdn` parameter change is a one-line delta. Reviewers comment on specific lines, request changes, and approve — the same workflow as any other text code review.
+
+**Cross-version portability.** `.toe` and `.tox` are coupled to the exact TD build that wrote them. `.tdn` files are format-versioned and self-describing — every export stamps its own `version`, `td_build`, and `generator`. As long as the referenced operator types exist in the current TD build, the network rebuilds cleanly.
+
+**CI/CD integration.** The `docs/tdn.schema.json` JSON Schema (draft 2020-12) validates every `.tdn` file in CI. You can compute diff stats (operators added/removed, parameters changed), lint for forbidden patterns (absolute paths, missing help text, orphan ops), and gate merges — none of which is possible with binary `.toe`.
+
+**Dramatically lower token cost for LLM / MCP workflows.** Reading a network via `read_tdn` (MCP tool) uses **~20-90× fewer tokens** than walking the same subtree via `get_op`+`query_network`:
+
+- `get_op` returns all 175-219 parameters per operator wrapped in `{value, mode, label}` triples — roughly 15-25 KB per operator.
+- `read_tdn` applies the same compaction as `.tdn` export — default omission, `type_defaults`, `par_templates` — and returns the full subtree in one call.
+
+For a 24-operator COMP (`container_left.tdn`), the TDN payload is ~12 KB (~3K tokens) vs an estimated ~360-480 KB (~90-120K tokens) via an equivalent `get_op` walk. The delta scales with network size and type homogeneity. See the [MCP tools reference](../../.claude/skills/mcp-tools-reference/SKILL.md) for guidance on when to prefer `read_tdn` vs the runtime probes (`get_parameter`, `get_op_errors`, `get_dat_content`, etc.).
 
 ## Automatic Restoration
 
@@ -103,10 +147,10 @@ Embody automatically restores all externalized operators when a project is opene
 | Strategy | Restoration Method | Toggle |
 |----------|-------------------|--------|
 | **TOX** | Missing COMPs are restored from `.tox` files on disk | `Toxrestoreonstart` (ON by default) |
-| **TDN** | Children are reconstructed from `.tdn` JSON files | `Tdncreateonstart` |
+| **TDN** | Children are reconstructed from `.tdn` JSON files — **Full mode only** | `Tdnmode = Full` + `Tdncreateonstart` |
 | **DAT** | Synced from external files via TouchDesigner's native `file` parameter | Always active |
 
-This means that even if you never save your `.toe` file after externalizing, all tagged operators are fully recoverable from the files on disk the next time you open the project.
+In **Full** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdn` files exist purely for git diff / MCP reads.
 
 ## Export Portable Tox
 
