@@ -32,6 +32,15 @@ _ABSTRACT_TYPES = frozenset({
 	'ObjectCOMP',
 })
 
+# Palette .tox stems (case-insensitive) skipped during scan — they run
+# invasive init on loadTox: messageBoxes, project.cookRate changes,
+# TDImportCache creation. Loss of palette-clone detection for these is
+# acceptable; almost nobody diffs them in TDN networks.
+_PALETTE_SCAN_BLOCKLIST = frozenset({
+	'tdvr',      # forces 90fps, shows VR framerate messageBox
+	'autoui',    # shows "Widget Package Required" messageBox
+})
+
 
 class CatalogManagerExt:
 
@@ -255,13 +264,22 @@ class CatalogManagerExt:
 			self.ownerComp.par.Status = 'Enabled'
 			return
 
-		# Enumerate all .tox files
+		# Enumerate all .tox files, skipping blocklisted palettes whose
+		# loadTox triggers invasive init (messageBoxes, cookRate changes).
 		rel_paths = []
+		skipped = []
 		for root, _dirs, files in os.walk(palette_dir):
 			for fname in files:
-				if fname.endswith('.tox'):
-					full = os.path.join(root, fname)
-					rel_paths.append(os.path.relpath(full, palette_dir))
+				if not fname.endswith('.tox'):
+					continue
+				stem = os.path.splitext(fname)[0].lower()
+				if stem in _PALETTE_SCAN_BLOCKLIST:
+					skipped.append(stem)
+					continue
+				full = os.path.join(root, fname)
+				rel_paths.append(os.path.relpath(full, palette_dir))
+		if skipped:
+			self._log(f'Palette scan skipping blocklisted: {sorted(skipped)}')
 
 		if not rel_paths:
 			self._writeCatalog(self._getCatalogPath(self._build_str), op_catalog)

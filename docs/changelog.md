@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.376
+
+Palette scan no longer triggers invasive palette popups (TDVR framerate warning, AutoUI widget-package dialog) on fresh-build startup, rebaked palette catalog for TD 2025.32460, and Issue #12 fix for false "locked content" warnings inside clones and replicants.
+
+- **Fix: Palette scan skips invasive palettes (TDVR, AutoUI)**: `CatalogManagerExt._startPaletteScan()` now filters a small blocklist (`tdvr`, `autoui`) before `loadTox`. When `palette_catalog` bootstrap doesn't cover the current TD build, the runtime scan used to load every palette .tox into a hidden workspace — including TDVR (which unconditionally calls `project.cookRate = 90` and pops a messageBox) and AutoUI (which pops a "Widget Package Required" dialog). Both were blocking main-thread modals that scared users into thinking Embody had taken over their project. Loss of palette-clone detection for these two components is acceptable — they're rare in TDN-diffed networks and were silently broken anyway. Single log line names what was skipped
+- **Rebake: `palette_catalog.tsv` now covers build 099.2025.32460**: Ran `ExportPaletteCatalog()` on current stable TD; the shipped bootstrap table now includes 261 palette components for 32460 alongside the existing 264 for 32280 (525 data rows + header, ~22 KB). Users on either build hit the bootstrap and skip the palette scan entirely on first load — no workspace creation, no `loadTox` calls, no popups
+- **Fix: False "locked content" warnings inside clones and replicants** (Issue #12, reported by Chris Mills): `TDNExt._checkLockedUnexportedContent()` now skips operators whose ancestor chain contains a clone master (`clone` + `enablecloning` both set) or a replicant template. Lock state inside clones is inherited from the master, not owned by the instance; lock state inside replicants is regenerated per-template by the replicator COMP. Warning the user about those paths is noise, not signal — and the paths (e.g. `icon (TOP)`) were especially confusing because they don't exist at the root level the warning referenced. Added helper `_isInsideCloneOrReplicant()`. Also switched summary from `child.name` to `child.path` so any remaining warnings point to an unambiguous location
+
 ## v5.0.372
 
 TDN master switch becomes a three-mode menu (Off / Export-on-Save / Roundtrip) replacing the short-lived `Tdnenable` toggle, new `read_tdn` MCP tool for 20-90× token-cost reduction on multi-operator reads, combined DAT+storage Content Safety dialog, palette-detection fix for native `buttonCOMP` operators, and a docs + landing page rewrite making the TDN value proposition explicit.

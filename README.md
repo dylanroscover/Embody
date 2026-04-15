@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.372-blue)
+![Version](https://img.shields.io/badge/version-5.0.376-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -26,7 +26,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 46 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 47 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
 | 📦 | **Automatic Restoration** | Externalized operators rebuild themselves from disk on every project open. The `.toe` is no longer the source of truth — your files are. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.376**: Palette scan skips invasive palettes (TDVR framerate popup, AutoUI widget dialog) on fresh-build startup, rebaked palette catalog covers TD 2025.32460, and false "locked content" warnings suppressed inside clones/replicants (Issue #12)
 - **5.0.372**: TDN three-mode master switch (Off/Export-on-Save/Roundtrip), `read_tdn` MCP tool (~20-90× fewer tokens than `get_op` walks), combined DAT+storage Content Safety dialog with "Never Ask" footgun removed, palette detection fix for native `buttonCOMP` operators, migration nudge for upgrading users, docs + landing page rewrite
 - **5.0.362**: Palette handling control (Ask/Black Box/Full Export) during TDN export, CatalogManager fires on fresh project drops, palette catalog portability + log-level fixes
 - **5.0.356**: Palette catalog detection, animationCOMP keyframe preservation, external wire preservation across TDN strip/rebuild

@@ -4692,13 +4692,15 @@ class TDNExt:
 		locked = []
 		for child in root_op.findChildren():
 			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
+				if self._isInsideCloneOrReplicant(child, root_op):
+					continue
 				locked.append(child)
 
 		if not locked:
 			return
 
 		# Build summary
-		names = [f'{c.name} ({c.family})' for c in locked[:10]]
+		names = [f'{c.path} ({c.family})' for c in locked[:10]]
 		summary = ', '.join(names)
 		if len(locked) > 10:
 			summary += f', ... and {len(locked) - 10} more'
@@ -4730,6 +4732,29 @@ class TDNExt:
 				f'Restored lock flag on {len(locked)} non-DAT operator(s) '
 				f'in {root_op.path}: {summary} -- these operators have no '
 				f'frozen data and should be unlocked to re-cook', 'WARNING')
+
+	def _isInsideCloneOrReplicant(self, child, root_op):
+		"""True if child is a descendant of a clone or replicant COMP.
+
+		Lock state inside clones is inherited from the master (user
+		should fix it there). Lock state inside replicants is
+		regenerated per-template by the replicatorCOMP. In both cases
+		warning the user is noise, not signal.
+		"""
+		p = child.parent()
+		while p is not None and p is not root_op and p.path != '/':
+			if p.replicator is not None:
+				return True
+			clone_par = getattr(p.par, 'clone', None)
+			enable_par = getattr(p.par, 'enablecloning', None)
+			if clone_par is not None and enable_par is not None:
+				try:
+					if clone_par.eval() and enable_par.eval():
+						return True
+				except Exception:
+					pass
+			p = p.parent()
+		return False
 
 	def _log(self, message, level='INFO'):
 		"""Log via Embody's centralized logger."""
