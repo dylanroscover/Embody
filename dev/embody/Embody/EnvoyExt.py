@@ -1937,7 +1937,7 @@ class EnvoyExt:
         self._log('Server thread exited')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
-        if self.ownerComp.par.Envoyenable.eval():
+        if self.ownerComp.par.Envoyenable.eval() and not self.ownerComp.ext.Embody._performMode:
             self._scheduleRestart('Server exited unexpectedly')
         # If Envoyenable is already off, Stop() set the status -- don't overwrite
 
@@ -1946,7 +1946,7 @@ class EnvoyExt:
         self._log(f'Server error: {error}', 'ERROR')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
-        if self.ownerComp.par.Envoyenable.eval():
+        if self.ownerComp.par.Envoyenable.eval() and not self.ownerComp.ext.Embody._performMode:
             self._scheduleRestart(f'Server error: {error}')
 
     def _scheduleRestart(self, reason: str):

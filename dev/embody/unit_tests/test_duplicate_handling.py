@@ -88,6 +88,76 @@ class TestDuplicateHandling(EmbodyTestCase):
         result = self.embody_ext._resolveClonesByCloningAPI([comp1, comp2])
         self.assertFalse(result)
 
+    # --- _resolveDATsInClonedCOMPs ---
+
+    def test_resolve_dats_in_cloned_comps_returns_false_for_comps(self):
+        """_resolveDATsInClonedCOMPs returns False when ops are COMPs."""
+        comp1 = self.sandbox.create(baseCOMP, 'comp_not_dat_a')
+        comp2 = self.sandbox.create(baseCOMP, 'comp_not_dat_b')
+        result = self.embody_ext._resolveDATsInClonedCOMPs([comp1, comp2])
+        self.assertFalse(result)
+
+    def test_resolve_dats_in_cloned_comps_returns_false_for_mixed(self):
+        """_resolveDATsInClonedCOMPs returns False for mixed DAT/COMP lists."""
+        comp = self.sandbox.create(baseCOMP, 'mixed_c')
+        dat = self.sandbox.create(textDAT, 'mixed_d')
+        result = self.embody_ext._resolveDATsInClonedCOMPs([comp, dat])
+        self.assertFalse(result)
+
+    def test_resolve_dats_in_cloned_comps_returns_false_no_clone(self):
+        """_resolveDATsInClonedCOMPs returns False when no ancestor is a clone."""
+        dat1 = self.sandbox.create(textDAT, 'no_clone_dat_a')
+        dat2 = self.sandbox.create(textDAT, 'no_clone_dat_b')
+        result = self.embody_ext._resolveDATsInClonedCOMPs([dat1, dat2])
+        self.assertFalse(result)
+
+    def test_resolve_dats_in_cloned_comps_tags_clone_dat(self):
+        """_resolveDATsInClonedCOMPs auto-tags DATs inside clone COMPs."""
+        master = self.sandbox.create(baseCOMP, 'rd_master')
+        clone = self.sandbox.create(baseCOMP, 'rd_clone')
+        clone.par.clone = master
+        clone.par.enablecloning = True
+        master_dat = master.create(textDAT, 'ext')
+        clone_dat = clone.create(textDAT, 'ext')
+        result = self.embody_ext._resolveDATsInClonedCOMPs([master_dat, clone_dat])
+        self.assertTrue(result, 'Resolver should succeed for clone DAT group')
+        self.assertIn('clone', clone_dat.tags, 'Clone DAT should be tagged')
+        self.assertNotIn('clone', master_dat.tags, 'Master DAT should NOT be tagged')
+
+    def test_resolve_dats_all_inside_clones_returns_false(self):
+        """_resolveDATsInClonedCOMPs returns False when no master exists."""
+        master_comp = self.sandbox.create(baseCOMP, 'ac_master')
+        clone_a = self.sandbox.create(baseCOMP, 'ac_clone_a')
+        clone_b = self.sandbox.create(baseCOMP, 'ac_clone_b')
+        clone_a.par.clone = master_comp
+        clone_a.par.enablecloning = True
+        clone_b.par.clone = master_comp
+        clone_b.par.enablecloning = True
+        dat_a = clone_a.create(textDAT, 'ext')
+        dat_b = clone_b.create(textDAT, 'ext')
+        result = self.embody_ext._resolveDATsInClonedCOMPs([dat_a, dat_b])
+        self.assertFalse(result, 'Should return False when all DATs are inside clones')
+
+    def test_build_path_groups_excludes_dats_in_clone_comps(self):
+        """_buildPathGroups must exclude DATs inside active clone COMPs."""
+        master = self.sandbox.create(baseCOMP, 'bpg_master')
+        clone = self.sandbox.create(baseCOMP, 'bpg_clone')
+        clone.par.clone = master
+        clone.par.enablecloning = True
+        py_tag = self.embody.par.Pytag.val
+        master_dat = master.create(textDAT, 'ext')
+        master_dat.tags.add(py_tag)
+        master_dat.par.file = 'test/bpg_shared.py'
+        clone_dat = clone.create(textDAT, 'ext')
+        clone_dat.tags.add(py_tag)
+        clone_dat.par.file = 'test/bpg_shared.py'
+        groups = self.embody_ext._buildPathGroups()
+        # Clone DAT should be excluded by isInsideClone
+        for ops in groups.values():
+            for o in ops:
+                self.assertNotEqual(o.path, clone_dat.path,
+                    f'Clone DAT {clone_dat.path} should not appear in path groups')
+
 
 class TestReplicantHandling(EmbodyTestCase):
     """Tests for replicant filtering in duplicate detection."""

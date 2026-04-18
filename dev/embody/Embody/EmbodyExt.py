@@ -1657,6 +1657,8 @@ class EmbodyExt:
         """
         if self.my.par.Status != 'Enabled':
             return
+        if self._performMode:
+            return
 
         # Detect renames/moves BEFORE scanning for additions.
         # Without this, a renamed op gets added as "new" by the additions
@@ -1761,6 +1763,8 @@ class EmbodyExt:
 
     def Refresh(self) -> None:
         """Refresh Embody state and UI."""
+        if self._performMode:
+            return
         self.cleanupAllDuplicateRows()
         self.updateDirtyStates(self.ExternalizationsFolder)
         self.my.op('list/inject_parents').cook(force=True)
@@ -1911,18 +1915,36 @@ class EmbodyExt:
         )
 
     def isInsideClone(self, oper: OP) -> bool:
-        """Check if operator is inside a clone hierarchy."""
-        while oper:
-            if oper.family == 'COMP' and oper.par.clone.eval():
-                if oper.name not in str(oper.par.clone.eval()):
-                    return True
-            oper = oper.parent()
+        """True if oper or any ancestor COMP is an active clone instance."""
+        p = oper
+        while p is not None and p.path != '/':
+            if p.family == 'COMP':
+                clone_par = getattr(p.par, 'clone', None)
+                enable_par = getattr(p.par, 'enablecloning', None)
+                if clone_par is not None and enable_par is not None:
+                    try:
+                        clone_val = clone_par.eval()
+                        if clone_val and enable_par.eval():
+                            return True
+                    except Exception:
+                        pass
+            p = p.parent()
         return False
 
     def isClone(self, oper: OP) -> bool:
-        """Check if operator is a clone (not master)."""
-        if oper.family == 'COMP' and oper.par.clone.eval():
-            return oper.name not in str(oper.par.clone.eval())
+        """Check if operator is a clone COMP (not master)."""
+        if oper.family != 'COMP':
+            return False
+        clone_par = getattr(oper.par, 'clone', None)
+        enable_par = getattr(oper.par, 'enablecloning', None)
+        if clone_par is None or enable_par is None:
+            return False
+        try:
+            clone_val = clone_par.eval()
+            if clone_val and enable_par.eval():
+                return oper.name not in str(clone_val)
+        except Exception:
+            pass
         return False
 
     def isReplicant(self, oper: OP) -> bool:
@@ -1939,6 +1961,8 @@ class EmbodyExt:
 
     def Save(self, opPath: str) -> None:
         """Save a TOX-strategy COMP and update tracking."""
+        if self._performMode:
+            return
         try:
             oper = op(opPath)
             if not oper or oper.family != 'COMP':
@@ -1980,6 +2004,8 @@ class EmbodyExt:
 
     def SaveTDN(self, opPath: str) -> None:
         """Save a TDN-strategy COMP by re-exporting its .tdn file."""
+        if self._performMode:
+            return
         if not self._tdnEnabled():
             self.Log(f'TDN disabled -- skipping SaveTDN for {opPath}', 'INFO')
             return
@@ -2332,6 +2358,8 @@ class EmbodyExt:
 
     def SaveCurrentComp(self) -> None:
         """Update only the COMP we're currently working inside of (Ctrl/Cmd+Alt+U)."""
+        if self._performMode:
+            return
         current_comp = None
         
         try:
@@ -2803,10 +2831,13 @@ class EmbodyExt:
             ancestor_result = self._detectAncestorRename(rows_to_check)
             if ancestor_result:
                 old_prefix, new_prefix = ancestor_result
-                self._handleAncestorRename(
+                success = self._handleAncestorRename(
                     old_prefix, new_prefix, rows_to_check,
                     externalizationsFolder)
-                return
+                if success:
+                    return
+                self.Log("Ancestor rename batch failed, falling back to "
+                         "per-operator handling", "WARNING")
 
             processed_ops = set()
             missing_with_files = []
@@ -3248,64 +3279,74 @@ class EmbodyExt:
         old_dir_segment = old_prefix.strip('/')
         new_dir_segment = new_prefix.strip('/')
 
+        # Include ExternalizationsFolder prefix for disk path operations
+        if externalizationsFolder:
+            old_disk_segment = externalizationsFolder + '/' + old_dir_segment
+            new_disk_segment = externalizationsFolder + '/' + new_dir_segment
+        else:
+            old_disk_segment = old_dir_segment
+            new_disk_segment = new_dir_segment
+
         # --- Phase A: Calculate what will change ---
         affected = []
         for old_path, rel_file, row_type, strategy in rows_to_check:
             if old_path.startswith(old_prefix + '/') or old_path == old_prefix:
                 new_path = new_prefix + old_path[len(old_prefix):]
-                if rel_file.startswith(old_dir_segment + '/'):
-                    new_rel_file = new_dir_segment + rel_file[len(old_dir_segment):]
-                elif rel_file == old_dir_segment:
-                    new_rel_file = new_dir_segment
+                if rel_file.startswith(old_disk_segment + '/'):
+                    new_rel_file = new_disk_segment + rel_file[len(old_disk_segment):]
+                elif rel_file == old_disk_segment:
+                    new_rel_file = new_disk_segment
                 else:
                     new_rel_file = rel_file
                 affected.append((old_path, new_path, rel_file, new_rel_file,
                                 row_type, strategy))
 
         if not affected:
-            return
+            return False
 
         # --- Phase B: Prompt user ---
         msg = (f"Detected rename: {old_prefix} → {new_prefix}\n\n"
                f"{len(affected)} externalized files will be moved:\n"
-               f"  {old_dir_segment}/...  →  {new_dir_segment}/...\n\n"
+               f"  {old_disk_segment}/...  →  {new_disk_segment}/...\n\n"
                f"This will rename the folder on disk and update all tracking.\n"
                f"Cancel to leave files at their current location.")
-        choice = ui.messageBox('Embody -- Ancestor Rename Detected', msg,
-                               buttons=['Cancel', 'Proceed'])
+        choice = self._messageBox('Embody -- Ancestor Rename Detected', msg,
+                                  ['Cancel', 'Proceed'])
         if choice != 1:
             self.Log(f"Ancestor rename cancelled by user: "
                      f"{old_prefix} → {new_prefix}", "INFO")
-            return
+            return False
 
         # --- Phase C: Rename directory on disk ---
         project_folder = Path(project.folder)
-        old_dir = project_folder / old_dir_segment
-        new_dir = project_folder / new_dir_segment
+        old_dir = project_folder / old_disk_segment
+        new_dir = project_folder / new_disk_segment
 
         if not old_dir.exists():
             self.Log(f"Source directory not found: {old_dir}", "ERROR")
-            ui.messageBox('Embody Error',
-                          f'Source directory not found:\n{old_dir_segment}/',
-                          buttons=['OK'])
-            return
+            self._messageBox('Embody Error',
+                             f'Source directory not found:\n{old_disk_segment}/',
+                             ['OK'])
+            return False
 
         if new_dir.exists():
             self.Log(f"Target directory already exists: {new_dir}", "ERROR")
-            ui.messageBox('Embody Error',
-                          f'Cannot rename: directory "{new_dir_segment}/" '
-                          f'already exists.', buttons=['OK'])
-            return
+            self._messageBox('Embody Error',
+                             f'Cannot rename: directory "{new_disk_segment}/" '
+                             f'already exists.',
+                             ['OK'])
+            return False
 
         try:
             old_dir.rename(new_dir)
-            self.Log(f"Renamed directory: {old_dir_segment}/ → "
-                     f"{new_dir_segment}/", "SUCCESS")
+            self.Log(f"Renamed directory: {old_disk_segment}/ → "
+                     f"{new_disk_segment}/", "SUCCESS")
         except Exception as e:
             self.Log("Failed to rename directory", "ERROR", str(e))
-            ui.messageBox('Embody Error',
-                          f'Failed to rename directory:\n{e}', buttons=['OK'])
-            return
+            self._messageBox('Embody Error',
+                             f'Failed to rename directory:\n{e}',
+                             ['OK'])
+            return False
 
         # --- Phase D: Update externalizations table ---
         table = self.Externalizations
@@ -3399,6 +3440,8 @@ class EmbodyExt:
                     delayFrames=1)
             self.Log(f"Deferred {len(deferred_updates)} file param updates "
                      f"for Embody components", "DEBUG")
+
+        return True
 
     def _handleMissingOperator(self, old_op_path, old_rel_file_path, delete_file=True):
         """Handle an operator that no longer exists."""
@@ -3703,6 +3746,7 @@ class EmbodyExt:
         Groups all operators sharing the same external path, then:
         - For replicants: auto-tags all replicants (master is the template)
         - For COMPs with TD clone relationships: auto-tags clones
+        - For DATs inside cloned COMPs: auto-tags DATs in clone COMPs
         - For others: prompts the user once per group
         """
         for path, ops in self._buildPathGroups().items():
@@ -3713,6 +3757,8 @@ class EmbodyExt:
             if self._resolveReplicants(ops):
                 continue
             if self._resolveClonesByCloningAPI(ops):
+                continue
+            if self._resolveDATsInClonedCOMPs(ops):
                 continue
             self._promptForDuplicateGroup(path, ops)
 
@@ -3757,6 +3803,37 @@ class EmbodyExt:
         self.Log(
             f"Auto-resolved clone master '{master.path}' for path "
             f"shared by {len(ops)} operators", "SUCCESS")
+        return True
+
+    def _resolveDATsInClonedCOMPs(self, ops: list) -> bool:
+        """Auto-resolve DATs inside cloned COMPs.
+
+        When DATs share an external path and their ancestor COMPs are in
+        a clone relationship, auto-tag DATs inside clone COMPs.
+
+        Returns True if resolution succeeded, False if not applicable.
+        """
+        if not all(o.family == 'DAT' for o in ops):
+            return False
+
+        masters = []
+        clones = []
+        for dat in ops:
+            if self.isInsideClone(dat):
+                clones.append(dat)
+            else:
+                masters.append(dat)
+
+        if not masters or not clones:
+            return False
+
+        for dat in clones:
+            self._handleDuplicateAsReference(dat)
+
+        self.Log(
+            f"Auto-resolved {len(clones)} DAT{'s' if len(clones) > 1 else ''} "
+            f"inside cloned COMPs (master: "
+            f"{', '.join(d.path for d in masters)})", "SUCCESS")
         return True
 
     def _resolveReplicants(self, ops: list) -> bool:
@@ -3873,6 +3950,8 @@ class EmbodyExt:
 
     def TagGetter(self) -> None:
         """Open tagging menu for rollover operator."""
+        if self._performMode:
+            return
         params = self.tagger.op('tags')
         switch = self.tagger.op('switch_family')
         oper = ui.rolloverOp
@@ -4761,6 +4840,8 @@ class EmbodyExt:
 
     def ExternalizeProject(self) -> None:
         """Externalize all compatible COMPs and DATs in project."""
+        if self._performMode:
+            return
         choice = ui.messageBox('Embody -- Externalize Full Project',
             'Add all compatible COMPs and DATs to Embody?\n'
             '(Palette components, clones, and replicants will be ignored)\n\n'
@@ -5073,6 +5154,73 @@ class EmbodyExt:
         need to distinguish export vs full should use _tdnMode().
         """
         return self._tdnMode() != 'off'
+
+    # ==========================================================================
+    # PERFORM MODE
+    # ==========================================================================
+
+    @property
+    def _performMode(self) -> bool:
+        """True when Perform Mode is active -- all compute suppressed."""
+        par = getattr(self.my.par, 'Performmode', None)
+        return bool(par.eval()) if par is not None else False
+
+    def _enterPerformMode(self) -> None:
+        """Suspend all Embody features for live performance."""
+        # Snapshot state so we can restore on exit
+        state = {
+            'envoy_was_running': bool(self.my.fetch('envoy_running', False, search=False)),
+            'kb_active': self.my.op('keyboardin1').par.active.eval(),
+            'exit_tagger_active': self.my.op('chopexec_exit_tagger').par.active.eval(),
+        }
+        self.my.store('_perform_state', state)
+
+        # Stop Envoy directly (do NOT touch Envoyenable -- that would corrupt config.json)
+        self.my.ext.Envoy.Stop()
+
+        # Disable keyboard shortcuts and exit tagger
+        self.my.op('keyboardin1').par.active = False
+        self.my.op('chopexec_exit_tagger').par.active = False
+
+        # Close manager window if open
+        self.my.op('window_manager').par.winclose.pulse()
+
+        # Update status display
+        self.my.par.Envoystatus = 'Perform Mode'
+
+        # Grey out Envoy parameters so user sees they're frozen
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient'):
+            par = getattr(self.my.par, p, None)
+            if par is not None:
+                par.enable = False
+
+        self.Log('Perform Mode ON -- features suspended', 'INFO')
+
+    def _exitPerformMode(self) -> None:
+        """Restore all Embody features after live performance."""
+        state = self.my.fetch('_perform_state', {}, search=False)
+
+        # Re-enable keyboard shortcuts and exit tagger
+        self.my.op('keyboardin1').par.active = state.get('kb_active', True)
+        self.my.op('chopexec_exit_tagger').par.active = state.get('exit_tagger_active', True)
+
+        # Restore Envoy parameter enable state
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient'):
+            par = getattr(self.my.par, p, None)
+            if par is not None:
+                par.enable = True
+
+        # Restart Envoy if it was running before
+        if state.get('envoy_was_running'):
+            run("parent.Embody.ext.Envoy.Start()", delayFrames=5)
+
+        # Clean up snapshot
+        self.my.unstore('_perform_state')
+
+        # Trigger Refresh to restore UI state
+        run("parent.Embody.par.Refresh.pulse()", delayFrames=10)
+
+        self.Log('Perform Mode OFF -- features restored', 'INFO')
 
     def _applyTdnModeGating(self) -> None:
         """Three-way UI gating for TDN-page parameters based on Tdnmode.
@@ -6243,6 +6391,8 @@ class EmbodyExt:
         is only refreshed during Refresh/Update). Falls back to the cached
         table value for DATs and 'Par' (parameter change) state.
         """
+        if self._performMode:
+            return 0
         table = self.Externalizations
         if not table:
             return 0

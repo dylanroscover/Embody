@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.376-blue)
+![Version](https://img.shields.io/badge/version-5.0.381-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -150,7 +150,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **47 test suites** (1,184 test cases) covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **48 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.381**: Global Perform Mode toggle disables Embody/Envoy/TDN compute during TD performance (Issue #13), auto-resolve duplicate DATs inside active clones without prompting (Issue #15), ancestor-rename disk handling now uses the externalizations folder prefix so `Move` no longer fails with "source folder not found" (Issue #16), new render-coordinate-system rules for TD's bottom-left origin convention (Issue #14)
 - **5.0.376**: Palette scan skips invasive palettes (TDVR framerate popup, AutoUI widget dialog) on fresh-build startup, rebaked palette catalog covers TD 2025.32460, and false "locked content" warnings suppressed inside clones/replicants (Issue #12)
 - **5.0.372**: TDN three-mode master switch (Off/Export-on-Save/Roundtrip), `read_tdn` MCP tool (~20-90× fewer tokens than `get_op` walks), combined DAT+storage Content Safety dialog with "Never Ask" footgun removed, palette detection fix for native `buttonCOMP` operators, migration nudge for upgrading users, docs + landing page rewrite
 - **5.0.362**: Palette handling control (Ask/Black Box/Full Export) during TDN export, CatalogManager fires on fresh project drops, palette catalog portability + log-level fixes

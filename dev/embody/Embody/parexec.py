@@ -41,6 +41,12 @@ def onValueChange(par, prev):
 		else:
 			parent.Embody.ext.Envoy.Stop()
 
+	elif par.name == 'Performmode':
+		if par.eval():
+			parent.Embody.ext.Embody._enterPerformMode()
+		else:
+			parent.Embody.ext.Embody._exitPerformMode()
+
 	elif par.name == 'Envoyport':
 		# Auto-restart server on port change if currently enabled
 		if parent.Embody.par.Envoyenable.eval():

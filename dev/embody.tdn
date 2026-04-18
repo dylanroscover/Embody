@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.3",
-	"build": 38,
-	"generator": "Embody/5.0.363",
-	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.364.toe",
-	"exported_at": "2026-04-14T02:35:51Z",
+	"build": 40,
+	"generator": "Embody/5.0.379",
+	"td_build": "099.2025.32460",
+	"source_file": "Embody-5.380.toe",
+	"exported_at": "2026-04-18T19:43:49Z",
 	"network_path": "/embody",
 	"options": {
 		"include_dat_content": false,
@@ -332,6 +332,11 @@
 						"value": "Enabled"
 					},
 					{
+						"name": "Performmode",
+						"style": "Toggle",
+						"label": "Perform Mode"
+					},
+					{
 						"name": "Createexternalizationstable",
 						"style": "Pulse",
 						"label": "Create Externalizations Table",
@@ -424,11 +429,11 @@
 					{
 						"name": "Tdndatsafety",
 						"style": "Menu",
-						"label": "DAT Safety",
+						"label": "Content Safety",
 						"default": "ask",
 						"menuNames": ["ask", "externalize", "ignore"],
 						"menuLabels": ["Ask Each Save", "Always Externalize", "Never Ask"],
-						"help": "What to do when TDN COMPs contain DATs with content that isn't externalized or embedded. 'Ask Each Save' prompts on each save, 'Always Externalize' auto-externalizes without asking, 'Never Ask' suppresses the check."
+						"help": "What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk."
 					},
 					{
 						"name": "Openmanager",
@@ -611,8 +616,8 @@
 						"startSection": true,
 						"default": "export",
 						"menuNames": ["off", "export", "full"],
-						"menuLabels": ["Off", "Export-on-Save (MCP)", "Full Import/Export (Experimental)"],
-						"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Full (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with palette clones and extension reload timing."
+						"menuLabels": ["Off", "Export-on-Save", "Roundtrip (Experimental)"],
+						"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs."
 					},
 					{
 						"name": "Tdncascade",
@@ -905,7 +910,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.363"
+						"value": "5.0.379"
 					},
 					{
 						"name": "Touchbuild",
@@ -913,7 +918,7 @@
 						"label": "Touch Build",
 						"readOnly": true,
 						"help": "TouchDesigner build number this version was developed on (read-only).",
-						"value": "2025.32280"
+						"value": "2025.32460"
 					},
 					{
 						"name": "Author",
@@ -928,7 +933,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 395
+						"value": 398
 					},
 					{
 						"name": "Github",
@@ -943,7 +948,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-04-14 02:35:50 UTC"
+						"value": "2026-04-18 19:43:48 UTC"
 					},
 					{
 						"name": "Help",
@@ -3419,7 +3424,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 154,
+				"rows": 155,
 				"cols": 11
 			},
 			"flags": ["viewer"],

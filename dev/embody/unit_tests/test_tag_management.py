@@ -98,6 +98,63 @@ class TestTagManagement(EmbodyTestCase):
         inner = comp.create(textDAT, 'inner')
         self.assertFalse(self.embody_ext.isInsideClone(inner))
 
+    def test_isInsideClone_handles_missing_clone_par(self):
+        """isInsideClone should not raise on ops without par.clone."""
+        dat = self.sandbox.create(textDAT, 'plain_dat')
+        # DATs have no par.clone -- should return False, not raise
+        self.assertFalse(self.embody_ext.isInsideClone(dat))
+
+    def test_isInsideClone_dat_inside_clone_comp_true(self):
+        """DAT inside an active clone COMP should return True."""
+        master = self.sandbox.create(baseCOMP, 'clone_master')
+        clone = self.sandbox.create(baseCOMP, 'clone_instance')
+        clone.par.clone = master
+        clone.par.enablecloning = True
+        inner_dat = clone.create(textDAT, 'ext_dat')
+        self.assertTrue(self.embody_ext.isInsideClone(inner_dat))
+
+    def test_isInsideClone_dat_inside_master_comp_false(self):
+        """DAT inside the master COMP should return False."""
+        master = self.sandbox.create(baseCOMP, 'the_master')
+        clone = self.sandbox.create(baseCOMP, 'the_clone')
+        clone.par.clone = master
+        clone.par.enablecloning = True
+        master_dat = master.create(textDAT, 'ext_dat')
+        self.assertFalse(self.embody_ext.isInsideClone(master_dat))
+
+    def test_isInsideClone_clone_comp_itself_true(self):
+        """A clone COMP itself should return True (preserves call-site behavior)."""
+        master = self.sandbox.create(baseCOMP, 'comp_master')
+        clone = self.sandbox.create(baseCOMP, 'comp_clone')
+        clone.par.clone = master
+        clone.par.enablecloning = True
+        self.assertTrue(self.embody_ext.isInsideClone(clone))
+
+    def test_isInsideClone_disabled_cloning_false(self):
+        """COMP with clone set but enablecloning=False should return False."""
+        master = self.sandbox.create(baseCOMP, 'dis_master')
+        clone = self.sandbox.create(baseCOMP, 'dis_clone')
+        clone.par.clone = master
+        clone.par.enablecloning = False
+        inner_dat = clone.create(textDAT, 'dis_dat')
+        self.assertFalse(self.embody_ext.isInsideClone(inner_dat))
+
+    def test_isClone_actual_clone_returns_true(self):
+        """isClone returns True for a COMP that is an active clone."""
+        master = self.sandbox.create(baseCOMP, 'ic_master')
+        clone = self.sandbox.create(baseCOMP, 'ic_clone')
+        clone.par.clone = master
+        clone.par.enablecloning = True
+        self.assertTrue(self.embody_ext.isClone(clone))
+
+    def test_isClone_master_returns_false(self):
+        """isClone returns False for the master COMP."""
+        master = self.sandbox.create(baseCOMP, 'ic_master2')
+        clone = self.sandbox.create(baseCOMP, 'ic_clone2')
+        clone.par.clone = master
+        clone.par.enablecloning = True
+        self.assertFalse(self.embody_ext.isClone(master))
+
     # --- isReplicant ---
 
     def test_isReplicant_regular_op_false(self):

@@ -8,7 +8,7 @@ class WindowHeaderExt:
 		self._lastHovered = None
 		self._lastPressed = None
 
-		self.min_width = 410
+		self.min_width = 440
 		self.min_height = 66
 		self.max_width = 1080
 		self.max_height = 440
@@ -24,6 +24,7 @@ class WindowHeaderExt:
 		# Known-good default display states for maximize restore
 		self._defaults = {
 			'status':           {'mode': 'constant', 'val': 0},
+			'perform':          {'mode': 'constant', 'val': 1},
 			'disable':          {'mode': 'constant', 'val': 1},
 			'initialize':       {'mode': 'constant', 'val': 1},
 			'refresh':          {'mode': 'expression',

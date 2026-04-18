@@ -8,9 +8,9 @@
 # Make sure the corresponding toggle is enabled in the CHOP Execute DAT.
 
 def onOffToOn(channel, sampleIndex, val, prev):
-	if not ui.performMode:
+	if not ui.performMode and not parent.Embody.par.Performmode.eval():
 		run(f"parent.Embody.TagExiter()", delayFrames = 5)
-	
+
 	return
 
 def whileOn(channel, sampleIndex, val, prev):

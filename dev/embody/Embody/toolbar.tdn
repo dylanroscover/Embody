@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.3",
-	"build": 12,
-	"generator": "Embody/5.0.363",
-	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.363.toe",
-	"exported_at": "2026-04-14T01:35:10Z",
+	"build": 13,
+	"generator": "Embody/5.0.377",
+	"td_build": "099.2025.32460",
+	"source_file": "Embody-5.378.toe",
+	"exported_at": "2026-04-18T19:13:12Z",
 	"network_path": "/embody/Embody/toolbar",
 	"options": {
 		"include_dat_content": false,
@@ -97,9 +97,9 @@
 			"name": "tooltip",
 			"type": "containerCOMP",
 			"parameters": {
-				"x": 237,
+				"x": 4,
 				"y": 40,
-				"w": 213,
+				"w": 243,
 				"h": 22,
 				"layer": 10,
 				"alignallow": "ignore",
@@ -131,7 +131,7 @@
 			"name": "tip_measure",
 			"type": "textTOP",
 			"parameters": {
-				"text": "Export project TDN (Ctrl+Shift+E)",
+				"text": "Update externalizations (Ctrl+Shift+U)",
 				"font": "Open Sans",
 				"fontsizex": 10,
 				"fontsizey": 10
@@ -180,7 +180,7 @@
 			"parameters": {
 				"file": "embody/Embody/toolbar/toolbar_config.tsv",
 				"syncfile": true,
-				"rows": 15,
+				"rows": 16,
 				"cols": 16
 			},
 			"position": [0, -200],

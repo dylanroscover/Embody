@@ -24,6 +24,7 @@ def init():
 	# _init_complete when it finishes (or immediately if it returns early).
 	parent.Embody.par.Envoyenable = False
 	parent.Embody.par.Envoystatus = 'Disabled'
+	parent.Embody.par.Performmode = False
 
 
 def onStart():
@@ -96,6 +97,13 @@ def onProjectPreSave():
 	# within a single Ctrl+S cycle -- they have no meaning across sessions.
 	parent.Embody.unstore('_tdn_stripped_paths')
 	parent.Embody.unstore('_tdn_pane_restore')
+	parent.Embody.unstore('_perform_state')
+
+	# Skip all pre-save processing in Perform Mode.
+	# The .toe still saves normally via TD -- Embody's externalization pipeline is bypassed.
+	if parent.Embody.ext.Embody._performMode:
+		parent.Embody.ext.Embody.Log('Perform Mode -- skipping pre-save externalization', 'INFO')
+		return
 
 	# Suppress the delayed Refresh pulse - the continuity check must NOT
 	# fire during the strip/restore window or it will delete files for
@@ -312,6 +320,10 @@ def onProjectPostSave():
 	# Re-store _init_complete -- pre-save cleared it to avoid baking into
 	# the .tox, but the running session still needs it for parexec.
 	parent.Embody.store('_init_complete', True)
+
+	# In Perform Mode, nothing was stripped, so skip post-save refresh/restart.
+	if parent.Embody.ext.Embody._performMode:
+		return
 
 	# Safe to refresh now - all stripped COMPs have been restored
 	run(f"op('{parent.Embody}').par.Refresh.pulse()", delayFrames=1)

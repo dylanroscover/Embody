@@ -138,6 +138,25 @@ This applies to:
 - **`addError()`/`addWarning()` only works in cook callbacks** — use `addScriptError()` from extension methods.
 - **`TOP.sample()` downloads entire texture** from GPU — never use in loops. Use `numpyArray()` for batch access.
 
+## Render Coordinate System
+
+TouchDesigner's render and texture coordinate system places **(0, 0) at the bottom-left, with Y increasing upward.** This is the opposite of numpy, PIL, screen pixels, and web conventions where (0, 0) is top-left and Y increases downward.
+
+| Context | Origin | Y direction |
+|---|---|---|
+| `TOP.sample(x, y)` | Bottom-left | Up |
+| GLSL `gl_FragCoord` | Bottom-left | Up |
+| UV coordinates (0–1) | Bottom-left | Up |
+| Crop/Transform TOP params | Bottom-left | Up |
+| `scriptTOP` pixel writing | Bottom-left | Up |
+| `TOP.numpyArray()` return | **Top-left** | **Down** |
+| PIL / OpenCV images | **Top-left** | **Down** |
+| Panel/widget screen coords | **Top-left** | **Down** |
+
+- **`TOP.numpyArray()`** returns rows **top-to-bottom** (row 0 = top of image), but TD texture coordinates have y=0 at the **bottom**. Use `np.flipud(arr)` when converting between the two systems.
+- **`TOP.sample(x, y)`**: `y=0` samples the **bottom** edge, not the top.
+- **GLSL shaders**: `gl_FragCoord.y = 0` is the bottom edge of the render.
+
 ## Pre-Installed Packages
 
 Available without installation: `numpy`, `cv2` (OpenCV), `requests`, `yaml` (PyYAML), `cryptography`, `attrs`. Auto-imported stdlib: `math`, `re`, `sys`, `collections`, `enum`, `inspect`, `traceback`, `warnings`.

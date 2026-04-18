@@ -195,7 +195,7 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 		hc = data[row, 'has_children'].val == '1'
 		if hc:
 			expanded = parent.Embody.fetch('expanded_paths', set())
-			arrow = '\u25BC ' if path in expanded else '\u25B6 '
+			arrow = '\u25BE ' if path in expanded else '\u25B8 '
 			attribs.text = arrow + name
 		else:
 			attribs.text = name

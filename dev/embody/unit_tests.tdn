@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.3",
 	"build": 27,
-	"generator": "Embody/5.0.375",
+	"generator": "Embody/5.0.380",
 	"td_build": "099.2025.32460",
-	"source_file": "Embody-5.376.toe",
-	"exported_at": "2026-04-15T08:38:23Z",
+	"source_file": "Embody-5.381.toe",
+	"exported_at": "2026-04-18T22:36:58Z",
 	"network_path": "/embody/unit_tests",
 	"options": {
 		"include_dat_content": false,
@@ -2444,7 +2444,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/results.tsv",
 				"syncfile": true,
-				"rows": 2,
+				"rows": 125,
 				"cols": 5
 			},
 			"flags": ["viewer"],
@@ -2485,7 +2485,9 @@
 			"type": "textDAT",
 			"parameters": {
 				"file": "embody/unit_tests/test_mcp_batch.py"
-			}
+			},
+			"flags": ["viewer"],
+			"position": [800, -1600]
 		},
 		{
 			"name": "test_path_utils",
@@ -2822,7 +2824,7 @@
 			"parameters": {
 				"file": "embody/unit_tests/test_catalog_bootstrap_palette.py"
 			},
-			"position": [750, -100]
+			"position": [900, 0]
 		}
 	],
 	"annotations": [
@@ -2832,7 +2834,7 @@
 			"title": "u",
 			"text": "Test runner, results table, and sandbox",
 			"position": [-70, -70],
-			"size": [871, 370],
+			"size": [1371, 370],
 			"color": [0.22, 0.35, 0.22],
 			"opacity": 0.5
 		},
@@ -2862,7 +2864,7 @@
 			"title": "TDN Format Tests (5)",
 			"text": "Export/import, helpers, reconstruction, file I/O, crash safety",
 			"position": [-70, -2270],
-			"size": [1070, 330],
+			"size": [1470, 330],
 			"color": [0.35, 0.35, 0.25],
 			"opacity": 0.5
 		},
