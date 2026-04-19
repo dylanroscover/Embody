@@ -16,5 +16,3 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Diagnosing operator errors | `/debug-operator` |
 | `switch_instance` or multi-instance workflows | `/multi-instance` |
 | First MCP call in a new session | `/mcp-tools-reference` |
-
-When updating a rule or skill in `.claude/`, also update the corresponding template DAT in `dev/embody/Embody/templates/` if one exists. Root CLAUDE.md and `text_claude.md` serve different audiences and are maintained independently.

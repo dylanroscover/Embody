@@ -25,7 +25,7 @@ If your project is inside a git repository, Envoy automatically adds the followi
 | `.mcp.json` | MCP client config (auto-generated per machine) |
 | `.claude/settings.local.json` | Claude Code per-machine permissions |
 | `.claude/projects/` | Claude Code session data |
-| `.claude/envoy-bridge.py` | MCP transport bridge (auto-generated) |
+| `.embody/envoy-bridge.py` | MCP transport bridge (auto-generated) |
 | `__pycache__/` | Python bytecode cache |
 | `.DS_Store` | macOS Finder metadata |
 
@@ -58,7 +58,7 @@ Embody is a self-contained component — no external dependencies are needed for
 
 1. **Externalize operators**: Select any COMP or DAT and press ++lctrl++ twice in a row. Embody tags the operator and externalizes it to disk in one step.
 
-2. **Save as you work**: Press ++ctrl+shift+u++ to update all dirty externalizations, or ++ctrl+alt+u++ to save just the COMP you're currently inside.
+2. **Update as you work**: Press ++ctrl+shift+u++ to update all dirty externalizations, or ++ctrl+alt+u++ to update just the COMP you're currently inside.
 
 3. **Work with confidence**: Your externalized files on disk are the source of truth. On project open, Embody automatically restores everything from disk — you never need to worry about losing externalized work.
 
@@ -69,7 +69,7 @@ Embody is a self-contained component — no external dependencies are needed for
 
 Once set up, Embody works in the background:
 
-- **Save externalizations**: Use ++ctrl+shift+u++ to save all dirty COMPs and DATs, or ++ctrl+alt+u++ to save just the COMP you're currently inside.
-- **Automatic restoration**: On project open, Embody automatically restores all externalized operators from the files on disk. TOX-strategy COMPs are restored from `.tox` files, TDN-strategy COMPs are reconstructed from `.tdn` JSON files, and DATs sync via TouchDesigner's native file parameter. You do not need to save your `.toe` file to preserve externalized work.
+- **Update externalizations**: Use ++ctrl+shift+u++ to update all dirty COMPs and DATs, or ++ctrl+alt+u++ to update just the COMP you're currently inside.
+- **Automatic restoration**: On project open, Embody restores externalized operators from the files on disk. TOX-strategy COMPs are always restored from `.tox` files, and DATs always sync via TouchDesigner's native file parameter. TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — the recommended Export-on-Save mode keeps the `.toe` as the source of truth and skips reconstruction on open. See [TDN Mode](externalization.md#tdn-mode-master-switch) for the tradeoffs.
 - **Parameter tracking**: Embody tracks all parameter values on externalized COMPs. When any parameter changes (not just network edits), that COMP is automatically marked dirty with a "Par" indicator.
 - **Cross-platform**: All file paths are normalized to forward slashes (`/`), so teams on mixed Windows/macOS platforms can collaborate without path-related merge conflicts.

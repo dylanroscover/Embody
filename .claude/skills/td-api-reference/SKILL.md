@@ -211,11 +211,22 @@ arr = op('noise1').numpyArray()   # Shape: (numChans, numSamples)
 
 ## TOP Pixel Access
 
+**Coordinate system:** TD places **(0, 0) at the bottom-left, with Y increasing upward** for all texture operations. `TOP.numpyArray()` is the exception: it returns rows top-to-bottom (numpy convention).
+
 `TOP.sample(x, y)` downloads the **entire texture** from GPU — extremely expensive. Never in loops.
 
 ```python
-r, g, b, a = op('noise1').sample(x=0.5, y=0.5)  # Debugging only
+# sample() uses TD texture coords: y=0 is BOTTOM of image
+r, g, b, a = op('noise1').sample(x=0.5, y=0.5)  # Center of texture
+r, g, b, a = op('noise1').sample(x=0, y=0)       # Bottom-left corner
+
+# numpyArray() returns rows TOP-to-BOTTOM (opposite of TD texture coords)
 arr = op('noise1').numpyArray()  # [height, width, channels] — NOT [width, height]
+# arr[0] is the TOP of the image (highest TD Y)
+# arr[-1] is the BOTTOM of the image (TD y=0)
+
+# Flip to match TD bottom-up order:
+arr_td = np.flipud(arr)
 ```
 
 ## POPs — GPU-Accelerated Point Operators

@@ -18,7 +18,11 @@
 
 
 def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShift, rShift, state, time, cmd, lCmd, rCmd):
-	
+
+	# Suppress all shortcuts in Perform Mode (belt-and-suspenders -- DAT is also disabled)
+	if parent.Embody.par.Performmode.eval():
+		return
+
 	# Combine ctrl and cmd for cross-platform compatibility
 	ctrl_or_cmd = ctrl or cmd
 
@@ -39,7 +43,11 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 	elif state and key == 'u' and ctrl_or_cmd and lShift:
 		parent.Embody.UpdateHandler()
 
-	# Save current COMP only
+	# Refresh tracking state
+	elif state and key == 'r' and ctrl_or_cmd and lShift:
+		parent.Embody.Refresh()
+
+	# Update current COMP only
 	elif state and key == 'u' and ctrl_or_cmd and alt:
 	    parent.Embody.SaveCurrentComp()
 

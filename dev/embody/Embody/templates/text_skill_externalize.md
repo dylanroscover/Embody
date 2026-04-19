@@ -12,7 +12,7 @@ description: "MUST READ before calling externalize_op or save_externalization. R
 
 1. **Tag and externalize**: `externalize_op` on the operator (auto-detects type if omitted)
 2. **Verify**: `get_externalization_status` to confirm dirty state and file path
-3. **Inspect**: Verify file exists in `dev/embody/` via file inspection
+3. **Inspect**: Verify file exists in `embody/` via file inspection
 
 ## Re-exporting After Changes
 
@@ -40,3 +40,13 @@ The exported `.tox` works in any TD project with no missing file errors.
 
 - `get_externalizations` — list all externalized operators with status
 - `get_externalization_status` — get dirty state, build number, timestamp, file path for a specific operator
+
+## TDN Export — Palette COMP Handling
+
+When exporting a TDN-strategy COMP whose network contains TD palette components (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`), Embody consults the `Tdnpalettehandling` par on the Embody COMP's TDN page:
+
+- **Ask** (default): On first encounter of each palette COMP, a four-button dialog appears — *Black Box* (this COMP), *Full Export* (this COMP), *Black Box for All*, *Full Export for All*. The per-COMP choice is stored via `comp.store('_tdn_palette_handling', ...)` so repeated exports don't re-prompt.
+- **Black Box**: reference the palette only, emit `"palette_clone": true`, skip internal children. Correct for stock palette COMPs.
+- **Full Export**: export all children as if the COMP were a regular user COMP. Use only when palette internals have been heavily customized.
+
+Check and override programmatically: `op.Embody.par.Tdnpalettehandling = 'blackbox' | 'fullexport' | 'ask'`, or force a specific COMP: `op('/path/to/comp').store('_tdn_palette_handling', 'fullexport')`.

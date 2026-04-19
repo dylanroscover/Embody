@@ -8,7 +8,7 @@
 
 ## Critical Rules
 
-1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) or call `get_externalizations` to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
+1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) or call `get_externalizations` to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then **always** call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. **Never leave a `.tdn` edit unreloaded** — the user must see updates immediately in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
 2. **Use Envoy MCP tools for live TD state and non-TDN operators** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." For operators not externalized as TDN, use MCP tools to inspect and modify them. The filesystem holds externalized files (`.py`, `.tox`, `.tdn`, `.json`, `.xml`, etc.); MCP is for interacting with live operator state inside TD.
 3. **NEVER create operators under `/local`** — `/local` is volatile storage, not saved with the `.toe` file. Always place operators under the project root or the user's active network. Use `execute_python` with `result = ui.panes.current.owner.path` to find the current network.
 4. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure.
@@ -19,6 +19,7 @@
 9. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
 10. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
 11. **Always update unit tests when modifying project code** — check whether existing tests assert against changed behavior.
+12. **Batch repetitive MCP operations** — never make 3+ individual calls to the same tool. Use `batch_operations` to combine `set_op_position`, `connect_ops`, `set_parameter`, `set_op_flags`, etc. into a single request. For complex logic (conditionals, loops, computed values), use `execute_python` instead. Each MCP round-trip costs tokens and latency — minimize them.
 
 ## Approach Guidelines
 
@@ -97,7 +98,7 @@ All externalized operators are fully recoverable from disk, regardless of `.toe`
 
 ### Envoy MCP Architecture
 
-Dual-thread design: worker thread runs MCP server (no TD imports), main thread executes TD operations via `_onRefresh()`. Communication via `threading.Event` + `Queue`. Server auto-configures `.mcp.json` in the git root on startup.
+Dual-thread design: worker thread runs MCP server (no TD imports), main thread executes TD operations via `_onRefresh()`. Communication via `threading.Event` + `Queue`. Server auto-configures `.mcp.json` in the git root (or project folder if no git) on startup.
 
 ### TDN Network Format
 
@@ -109,6 +110,8 @@ JSON-based format for representing TD networks as diffable text. Non-default par
 # Promoted methods (uppercase) — called directly on the component:
 op.Embody.Update()
 op.Embody.Save()
+op.Embody.InitEnvoy()    # Regenerate MCP + AI client config files
+op.Embody.InitGit()      # Init/reconnect git repo + .gitignore/.gitattributes
 op.Embody.ExportPortableTox(target=some_comp, save_path='/path/to/output.tox')
 
 # Non-promoted (lowercase) — through ext:

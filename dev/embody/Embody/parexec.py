@@ -1,4 +1,4 @@
-﻿# me - this DAT
+# me - this DAT
 # par - the Par object that has changed
 # val - the current value
 # prev - the previous value
@@ -8,6 +8,16 @@
 import webbrowser
 
 def onValueChange(par, prev):
+	# Suppress all side effects during init and settings restore.
+	# On .tox load, parameters are set from baked values BEFORE
+	# init()/onCreate() runs -- without this guard, parexec writes
+	# .embody/config.json with baked values before init() can intervene.
+	ext = parent.Embody.ext.Embody
+	if getattr(ext, '_restoring_settings', False):
+		return
+	if not parent.Embody.fetch('_init_complete', False, search=False):
+		return
+
 	# use par.eval() to get current value
 	if par.name == 'Folder':
 		parent.Embody.Disable(prev, removeTags=False)
@@ -23,12 +33,19 @@ def onValueChange(par, prev):
 
 	elif par.name == 'Envoyenable':
 		if par.eval():
-			# Defer Start and re-check â€” gives onCreate time to suppress
+			# Defer Start and re-check -- gives init() time to suppress
 			# the baked-in Envoyenable=True before the server launches.
+			# The 30-frame delay matches Verify() timing in onCreate().
 			run("parent.Embody.ext.Envoy.Start() if parent.Embody.par.Envoyenable.eval() else None",
-				delayFrames=5)
+				delayFrames=30)
 		else:
 			parent.Embody.ext.Envoy.Stop()
+
+	elif par.name == 'Performmode':
+		if par.eval():
+			parent.Embody.ext.Embody._enterPerformMode()
+		else:
+			parent.Embody.ext.Embody._exitPerformMode()
 
 	elif par.name == 'Envoyport':
 		# Auto-restart server on port change if currently enabled
@@ -48,8 +65,25 @@ def onValueChange(par, prev):
 		if list_comp:
 			list_comp.reset()
 
+	elif par.name == 'Tdnmode':
+		parent.Embody.ext.Embody._onTdnModeChanged(str(par.eval()))
+
 	elif par.name == 'Embeddatsintdns':
-		parent.Embody.ext.TDN.ReexportAllTDNs()
+		# No-op when the TDN subsystem is disabled -- nothing to re-export.
+		if parent.Embody.ext.Embody._tdnEnabled():
+			parent.Embody.ext.TDN.ReexportAllTDNs()
+
+	elif par.name == 'Embedstorageintdns':
+		# No-op when the TDN subsystem is disabled -- nothing to re-export.
+		if parent.Embody.ext.Embody._tdnEnabled():
+			parent.Embody.ext.TDN.ReexportAllTDNs()
+
+	elif par.name == 'Tdncascade':
+		state = 'enabled' if par.eval() else 'disabled'
+		parent.Embody.ext.Embody.Log(f'TDN cascade {state}', 'INFO')
+
+	if par.name in parent.Embody.ext.Embody._PERSISTED_PARAMS:
+		parent.Embody.ext.Embody._deferSaveSettings()
 
 	return
 

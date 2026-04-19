@@ -57,13 +57,13 @@ class ToolbarExt:
 	# ── Press / Release ─────────────────────────────────────────────
 
 	def OnContainerPress(self, container):
-		"""Called by panelexec on lselect offToOn — set pressed visual."""
+		"""Called by panelexec on lselect offToOn -- set pressed visual."""
 		btn = self._findClickedButton(container)
 		if btn:
 			self._setPressed(btn)
 
 	def OnContainerRelease(self, container):
-		"""Called by panelexec on lselect onToOff — clear pressed visual."""
+		"""Called by panelexec on lselect onToOff -- clear pressed visual."""
 		self._clearPressed()
 
 	def _setPressed(self, btn):
@@ -195,6 +195,11 @@ class ToolbarExt:
 		emb = self.ownerComp.parent.Embody
 		current = emb.par.Envoyenable.eval()
 		emb.par.Envoyenable = not current
+
+	def _action_toggle_perform(self):
+		emb = self.ownerComp.parent.Embody
+		current = emb.par.Performmode.eval()
+		emb.par.Performmode = not current
 
 	def _action_export_tdn(self):
 		self.ownerComp.parent.Embody.ext.TDN.ExportProjectTDNInteractive()

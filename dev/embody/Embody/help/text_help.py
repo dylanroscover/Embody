@@ -1,4 +1,4 @@
-﻿'''
+'''
 Embody v5
 ===============
 
@@ -16,7 +16,7 @@ Getting Started
 1. Add the Embody .tox to your project
 2. Tag operators for externalization (lctrl-lctrl)
 3. Press ctrl-shift-u to initialize/update
-4. Work as normal — externalized files are the source of truth
+4. Work as normal -- externalized files are the source of truth
 
 The default Tags are listed on the Tags page. These can be
 customized, but please do so before you enable Embody.
@@ -55,8 +55,8 @@ DATs:  .py, .json, .xml, .html, .glsl, .frag, .vert,
 Workflow
 --------
 Embody keeps your external files up to date as you work.
-Press ctrl-shift-u to save all dirty externalizations, or
-ctrl-alt-u to save just the COMP you're currently inside.
+Press ctrl-shift-u to update all dirty externalizations, or
+ctrl-alt-u to update just the COMP you're currently inside.
 DATs are automatically synchronized by TouchDesigner via
 their Sync to File parameter.
 
@@ -79,7 +79,7 @@ restores everything from the files on disk:
   native file parameter
 
 Your externalized files on disk are the source of truth.
-The .toe file is just a convenient container — all tagged
+The .toe file is just a convenient container -- all tagged
 operators are fully recoverable from the external files.
 
 All file paths are normalized to forward slashes for cross-
@@ -116,7 +116,11 @@ programmatically. When enabled, Envoy lets you:
 
 To enable: toggle the Envoyenable parameter ON. The server
 starts on port 9870 by default and auto-creates a .mcp.json
-file in your git repo root for AI coding assistants to discover.
+file in your project root for AI coding assistants to discover.
+
+You can regenerate Envoy config files at any time:
+  op.Embody.InitEnvoy()  -- MCP + AI client config
+  op.Embody.InitGit()    -- git repo + .gitignore/.gitattributes
 
 TDN Network Format
 ------------------
@@ -126,6 +130,23 @@ connections, and layout in a diffable format.
 
 Use ctrl-shift-e to export the full project, or ctrl-alt-e
 to export just the current network.
+
+Cascade TDN to child COMPs (Tdncascade toggle on TDN page):
+When enabled, tagging a COMP for TDN automatically tags all
+child COMPs too, so each gets its own .tdn file. This keeps
+individual files small and git-friendly instead of producing
+one large monolithic .tdn. Parent files store lightweight
+tdn_ref pointers to each child's .tdn file.
+
+Palette handling (Tdnpalettehandling on TDN page):
+When a TDN export encounters a TD palette COMP (e.g.
+abletonLink, Widget components), Embody decides whether to
+reference it (Black Box) or export its internals (Full
+Export). Ask (default) prompts on first encounter per COMP;
+your choice is remembered per-COMP via comp.store(). The
+four-button dialog also lets you flip the project-wide
+default to Black Box or Full Export for All so you aren't
+re-prompted for subsequent palette COMPs.
 
 Manager UI
 ----------
@@ -142,8 +163,9 @@ Keyboard Shortcuts
 ctrl-shift-o :   Open the Manager UI
 lctrl-lctrl :    Tag or manage the operator under the cursor
                  (shows Actions menu for already-tagged operators)
-ctrl-shift-u :   Initialize/update all externalizations
-ctrl-alt-u :     Save only the current COMP you are inside
+ctrl-shift-u :   Update all externalizations
+ctrl-alt-u :     Update only the current COMP you are inside
+ctrl-shift-r :   Refresh tracking state
 ctrl-shift-e :   Export the full project network to .tdn
 ctrl-alt-e :     Export the current network to .tdn
 

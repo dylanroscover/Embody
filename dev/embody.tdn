@@ -1,13 +1,15 @@
 {
 	"format": "tdn",
-	"version": "1.1",
-	"build": 27,
-	"generator": "Embody/5.0.255",
-	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:55Z",
+	"version": "1.3",
+	"build": 40,
+	"generator": "Embody/5.0.379",
+	"td_build": "099.2025.32460",
+	"source_file": "Embody-5.380.toe",
+	"exported_at": "2026-04-18T19:43:49Z",
 	"network_path": "/embody",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"baseCOMP": {
@@ -17,10 +19,8 @@
 		},
 		"annotateCOMP": {
 			"parameters": {
-				"includeinorder": true,
 				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1",
-				"clone": "=op.TDAnnotate.op('annotate', includeUtility=True)"
+				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
 			},
 			"flags": ["display"],
 			"color": [0.45, 0.45, 0.45]
@@ -260,9 +260,16 @@
 		"top": "./out1",
 		"topsmoothness": "mipmap",
 		"borderover": false,
-		"ext0promote": true,
 		"parentshortcut": "Project",
 		"reloadbuiltin": false
+	},
+	"sequences": {
+		"ext": [
+			{
+				"promote": true
+			},
+			{}
+		]
 	},
 	"flags": ["viewer"],
 	"color": [0.3, 0.5, 0.9],
@@ -279,19 +286,41 @@
 				"repocomp": "=me",
 				"borderover": false,
 				"align": "horizlr",
-				"ext0object": "op('./EmbodyExt').module.EmbodyExt(me)",
-				"ext0name": "Embody",
-				"ext0promote": true,
 				"parentshortcut": "Embody",
 				"opshortcut": "Embody",
 				"opviewer": "./text_bg",
-				"reloadbuiltin": false,
-				"ext1object": "op('./EnvoyExt').module.EnvoyExt(me)",
-				"ext1name": "Envoy",
-				"ext1promote": true,
-				"ext2object": "op('./TDNExt').module.TDNExt(me)",
-				"ext2name": "TDN",
-				"ext2promote": true
+				"reloadbuiltin": false
+			},
+			"sequences": {
+				"ext": [
+					{
+						"object": "op('./EmbodyExt').module.EmbodyExt(me)",
+						"name": "Embody",
+						"promote": true
+					},
+					{
+						"object": "op('./EnvoyExt').module.EnvoyExt(me)",
+						"name": "Envoy",
+						"promote": true
+					},
+					{
+						"object": "op('./TDNExt').module.TDNExt(me)",
+						"name": "TDN",
+						"promote": true
+					},
+					{
+						"object": "op('./CatalogManagerExt').module.CatalogManagerExt(me)",
+						"name": "CatalogManager",
+						"promote": true
+					},
+					{},
+					{},
+					{},
+					{},
+					{},
+					{},
+					{}
+				]
 			},
 			"custom_pars": {
 				"Embody": [
@@ -301,6 +330,11 @@
 						"readOnly": true,
 						"help": "Current Embody status (read-only). Shows whether Embody is initialized and running.",
 						"value": "Enabled"
+					},
+					{
+						"name": "Performmode",
+						"style": "Toggle",
+						"label": "Perform Mode"
 					},
 					{
 						"name": "Createexternalizationstable",
@@ -344,8 +378,7 @@
 					{
 						"name": "Refresh",
 						"style": "Pulse",
-						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
-						"value": true
+						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
 					},
 					{
 						"name": "Externalizeproject",
@@ -392,6 +425,15 @@
 						"menuLabels": ["Ask", "Always Keep Files", "Always Delete Files"],
 						"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.",
 						"value": "delete"
+					},
+					{
+						"name": "Tdndatsafety",
+						"style": "Menu",
+						"label": "Content Safety",
+						"default": "ask",
+						"menuNames": ["ask", "externalize", "ignore"],
+						"menuLabels": ["Ask Each Save", "Always Externalize", "Never Ask"],
+						"help": "What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk."
 					},
 					{
 						"name": "Openmanager",
@@ -568,15 +610,50 @@
 				],
 				"TDN": [
 					{
+						"name": "Tdnmode",
+						"style": "Menu",
+						"label": "TDN Mode",
+						"startSection": true,
+						"default": "export",
+						"menuNames": ["off", "export", "full"],
+						"menuLabels": ["Off", "Export-on-Save", "Roundtrip (Experimental)"],
+						"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs."
+					},
+					{
+						"name": "Tdncascade",
+						"style": "Toggle",
+						"label": "Cascade to Children",
+						"startSection": true,
+						"help": "When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file."
+					},
+					{
+						"name": "Tdncascadewarn",
+						"style": "Menu",
+						"label": "Large TDN Warning",
+						"default": "ask",
+						"menuNames": ["ask", "quiet"],
+						"menuLabels": ["Ask", "Quiet"],
+						"help": "Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed."
+					},
+					{
 						"name": "Embeddatsintdns",
 						"style": "Toggle",
 						"label": "Embed DATs (default)",
+						"startSection": true,
 						"help": "When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content."
+					},
+					{
+						"name": "Embedstorageintdns",
+						"style": "Toggle",
+						"label": "Embed Storage (default)",
+						"default": true,
+						"help": "Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu."
 					},
 					{
 						"name": "Tdncreateonstart",
 						"style": "Toggle",
 						"label": "TDN Create on Start",
+						"startSection": true,
 						"default": true,
 						"help": "When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save."
 					},
@@ -588,11 +665,15 @@
 						"help": "When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal."
 					},
 					{
-						"name": "Exportprojecttdn",
-						"style": "Pulse",
-						"label": "Export Project TDN",
+						"name": "Tdnpalettehandling",
+						"style": "Menu",
+						"label": "Palette Handling",
 						"startSection": true,
-						"help": "Exports the entire project network to a single .tdn JSON file. Captures all operators, parameters, connections, and layout."
+						"default": "ask",
+						"menuNames": ["ask", "blackbox", "fullexport"],
+						"menuLabels": ["Ask", "Black Box", "Full Export"],
+						"help": "How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.",
+						"value": "blackbox"
 					},
 					{
 						"name": "Tdnfile",
@@ -646,7 +727,7 @@
 						"label": "Envoy Status",
 						"readOnly": true,
 						"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-						"value": "Starting..."
+						"value": "Running on port 9870"
 					}
 				],
 				"Logs": [
@@ -718,6 +799,23 @@
 						"readOnly": true,
 						"help": "Keyboard shortcut for updating/saving the current COMP to its externalized file.",
 						"value": "ctrl/cmd + alt + u"
+					},
+					{
+						"name": "Exportprojecttdn",
+						"style": "Str",
+						"label": "Export Project to TDN",
+						"startSection": true,
+						"default": "ctrl/cmd + lshift + e",
+						"readOnly": true,
+						"help": "Export the entire project network to a single .tdn file at your project root."
+					},
+					{
+						"name": "Exportcomptdn",
+						"style": "Str",
+						"label": "Export Current COMP to TDN",
+						"default": "ctrl/cmd + alt + e",
+						"readOnly": true,
+						"help": "Export the current COMP network to a .tdn file."
 					},
 					{
 						"name": "Textcolor",
@@ -812,7 +910,7 @@
 						"startSection": true,
 						"readOnly": true,
 						"help": "Embody version string (read-only).",
-						"value": "5.0.255"
+						"value": "5.0.379"
 					},
 					{
 						"name": "Touchbuild",
@@ -820,7 +918,7 @@
 						"label": "Touch Build",
 						"readOnly": true,
 						"help": "TouchDesigner build number this version was developed on (read-only).",
-						"value": "2025.32280"
+						"value": "2025.32460"
 					},
 					{
 						"name": "Author",
@@ -835,7 +933,7 @@
 						"label": "Build Number",
 						"readOnly": true,
 						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 222
+						"value": 398
 					},
 					{
 						"name": "Github",
@@ -850,7 +948,7 @@
 						"label": "Build Date",
 						"readOnly": true,
 						"help": "Date of this Embody build (read-only).",
-						"value": "2026-03-26 16:00:55 UTC"
+						"value": "2026-04-18 19:43:48 UTC"
 					},
 					{
 						"name": "Help",
@@ -866,31 +964,43 @@
 			"storage": {
 				"claudius_running": false,
 				"_tdn_restore_failures": ["/embody/base1"],
-				"expand_order": ["/embody", "/embody/unit_tests"]
-			}
+				"expand_order": ["/embody"],
+				"_start_in_progress": true
+			},
+			"tdn_ref": "embody/Embody.tdn"
 		},
 		{
 			"name": "base_tdn",
 			"type": "baseCOMP",
-			"position": [700, -325]
+			"position": [700, -325],
+			"tdn_ref": "embody/base_tdn.tdn"
 		},
 		{
 			"name": "tdn_tests",
 			"type": "baseCOMP",
 			"flags": ["viewer"],
-			"position": [0, -500],
+			"position": [500, -325],
 			"storage": {
 				"embed_dats_in_tdn": true
-			}
+			},
+			"tdn_ref": "embody/tdn_tests.tdn"
 		},
 		{
 			"name": "unit_tests",
 			"type": "baseCOMP",
 			"parameters": {
-				"ext0object": "op('./TestRunnerExt').module.TestRunnerExt(me)",
-				"ext0name": "TestRunnerExt",
-				"ext0promote": true,
 				"opshortcut": "unit_tests"
+			},
+			"sequences": {
+				"ext": [
+					{
+						"object": "op('./TestRunnerExt').module.TestRunnerExt(me)",
+						"name": "TestRunnerExt",
+						"promote": true
+					},
+					{},
+					{}
+				]
 			},
 			"position": [-600, -300],
 			"storage": {
@@ -3290,7 +3400,8 @@
 						}
 					]
 				}
-			}
+			},
+			"tdn_ref": "embody/unit_tests.tdn"
 		},
 		{
 			"name": "execute_src_ctrl",
@@ -3299,8 +3410,7 @@
 				"fromop": "=parent()",
 				"projectpresave": true,
 				"file": "embody/execute_src_ctrl.py",
-				"syncfile": true,
-				"language": "python"
+				"syncfile": true
 			},
 			"flags": ["viewer"],
 			"position": [-625, 120],
@@ -3314,7 +3424,7 @@
 			"parameters": {
 				"file": "embody/externalizations.tsv",
 				"syncfile": true,
-				"rows": 129,
+				"rows": 155,
 				"cols": 11
 			},
 			"flags": ["viewer"],
@@ -3326,6 +3436,14 @@
 		{
 			"name": "annotation_unit_tests",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -3353,6 +3471,14 @@
 		{
 			"name": "annotation_execute_src_ctrl",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",
@@ -3381,6 +3507,14 @@
 		{
 			"name": "annotation_externalizations",
 			"type": "annotateCOMP",
+			"sequences": {
+				"ext": [
+					{
+						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
+						"promote": true
+					}
+				]
+			},
 			"custom_pars": {
 				"Text": {
 					"$t": "text",

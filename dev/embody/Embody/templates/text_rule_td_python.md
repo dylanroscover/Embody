@@ -15,6 +15,20 @@ Essential rules to prevent common mistakes. For full API reference, use the `/td
 
 See `parameters.md` for all parameter rules — reading/writing values, designing custom parameter pages, help text, sections, and naming.
 
+## Naming — Methods, Functions, Operators
+
+**Name things for what they do, not how they do it.** A reader seeing only the name should know what to expect. If you can't describe the behavior in the name, the method is probably doing too much — split it.
+
+- **Prefer intent verbs** — `EnsureCatalogs()`, `RestoreSettings()`, `RebuildIndex()`. "Ensure X" means "make X true, doing whatever is needed." Standard, self-explanatory.
+- **Avoid vague pairs** — `CheckAndX()`, `DoStuff()`, `Process()`, `Handle()`, `Manage()`. `CheckAndScan()` tells the reader nothing about *what* is checked or scanned. Rename to the outcome: `EnsureCatalogs()`.
+- **Avoid implementation leakage** — `ParseJSONAndUpdateTable()` exposes internals that should be free to change. Pick a name describing the *effect*: `RefreshOpList()`.
+- **Don't abbreviate domain terms** — `CalcTDNFp()` is cryptic; `ComputeTDNFingerprint()` reads instantly. Screen space is cheap; comprehension is not.
+- **Booleans read as questions** — `isPaletteClone()`, `hasExternalWires()`, `canExportDAT()`. Not `paletteCheck()` or `wiresState()`.
+- **Public vs private** — TD extension methods promoted to the COMP are UpperCamelCase (`EnsureCatalogs`, `Update`); internal helpers are `_lowerCamelCase` (`_loadBootstrapPalette`). Keep the public surface minimal and obviously-named.
+- **Operator names follow the same rule** — `tdn_exporter` > `proc1`, `palette_catalog` > `table2`. The network reads like prose when operators are named for their role.
+
+When in doubt: write the one-line docstring *first*. If the name isn't already in that docstring, the name is wrong.
+
 ## Operator Access
 
 - **Use `opex()` when the operator must exist** — raises immediately with a clear error. `op()` returns `None` silently.
@@ -84,6 +98,22 @@ Think about **where the calling code lives** relative to the target:
 - **`extensionsReady` guard**: Parameter expressions referencing extension-promoted attributes must use: `parent().MyProp if parent().extensionsReady else 0`
 - **Auto-reinitializes on source change**: Implement `onDestroyTD(self)` for clean teardown. Use `onInitTD(self)` for post-init setup.
 
+### `onInitTD` and TDN Import Timing
+
+**Any initialization that sets up state inside a TDN-strategy COMP will be destroyed when TDN import runs.** TDN reconstruction (`ReconstructTDNComps`) calls `ImportNetwork` with `clear_first=True`, which deletes all children and recreates them from the `.tdn` file. If an extension's `onInitTD` creates operators, sets parameters, stores values, or builds internal state inside a TDN COMP, that work is wiped out by the import.
+
+This applies to:
+
+- **Project open**: `ReconstructTDNComps` runs at frame 60. Extensions inside TDN COMPs initialize earlier (when the COMP shell is created), so `onInitTD` fires before the import overwrites everything.
+- **Ctrl+S / `project.save()`**: The strip/restore cycle deletes children pre-save, then re-imports them post-save. Extensions reinitialize after the restore, but the import may still be completing.
+
+**Rules:**
+
+1. **Defer initialization that depends on network state.** Use `run('self.mySetup()', delayFrames=5)` in `onInitTD` so the setup executes after the TDN import completes. The delay must be long enough for all import phases to finish.
+2. **Never assume `onInitTD` runs once.** Inside TDN COMPs, extensions may reinitialize multiple times: on project open, after every save (strip/restore), and on manual TDN reimport. `onInitTD` must be idempotent.
+3. **Guard against missing children.** During the strip phase of a save, the COMP's children are temporarily gone. If `onInitTD` fires during this window, `op('child')` returns `None`. Always null-check operators before accessing them.
+4. **Store persistent state outside the TDN boundary.** If an extension needs state that survives reimport, use `store()` on the COMP itself (storage is preserved through TDN import) or on an ancestor outside the TDN COMP.
+
 ## Threading
 
 - **NEVER access TD objects from a worker thread** — all TD operations must go through main-thread hooks.
@@ -111,6 +141,25 @@ Think about **where the calling code lives** relative to the target:
 - **`copyOPs([list])` preserves connections** between copied operators. `COMP.copy()` does not.
 - **`addError()`/`addWarning()` only works in cook callbacks** — use `addScriptError()` from extension methods.
 - **`TOP.sample()` downloads entire texture** from GPU — never use in loops. Use `numpyArray()` for batch access.
+
+## Render Coordinate System
+
+TouchDesigner's render and texture coordinate system places **(0, 0) at the bottom-left, with Y increasing upward.** This is the opposite of numpy, PIL, screen pixels, and web conventions where (0, 0) is top-left and Y increases downward.
+
+| Context | Origin | Y direction |
+|---|---|---|
+| `TOP.sample(x, y)` | Bottom-left | Up |
+| GLSL `gl_FragCoord` | Bottom-left | Up |
+| UV coordinates (0–1) | Bottom-left | Up |
+| Crop/Transform TOP params | Bottom-left | Up |
+| `scriptTOP` pixel writing | Bottom-left | Up |
+| `TOP.numpyArray()` return | **Top-left** | **Down** |
+| PIL / OpenCV images | **Top-left** | **Down** |
+| Panel/widget screen coords | **Top-left** | **Down** |
+
+- **`TOP.numpyArray()`** returns rows **top-to-bottom** (row 0 = top of image), but TD texture coordinates have y=0 at the **bottom**. Use `np.flipud(arr)` when converting between the two systems.
+- **`TOP.sample(x, y)`**: `y=0` samples the **bottom** edge, not the top.
+- **GLSL shaders**: `gl_FragCoord.y = 0` is the bottom edge of the render.
 
 ## Pre-Installed Packages
 

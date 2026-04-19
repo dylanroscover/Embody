@@ -25,7 +25,7 @@ Envoy uses a two-thread architecture to bridge the MCP protocol with TouchDesign
 
 ## STDIO Bridge
 
-Claude Code communicates with MCP servers via STDIO (stdin/stdout JSON-RPC). Since Envoy runs as an HTTP server inside TouchDesigner, the bridge script (`.claude/envoy-bridge.py`) translates between these transports.
+Claude Code communicates with MCP servers via STDIO (stdin/stdout JSON-RPC). Since Envoy runs as an HTTP server inside TouchDesigner, the bridge script (`.embody/envoy-bridge.py`) translates between these transports.
 
 The bridge provides several features beyond simple proxying:
 
@@ -39,9 +39,9 @@ The bridge provides several features beyond simple proxying:
 
 The bridge is regenerated from Embody's templates on each Envoy start. It uses only the Python standard library (no third-party dependencies).
 
-### `.envoy.json` Configuration
+### `.embody/envoy.json` Configuration
 
-The bridge reads project configuration from `.envoy.json` at the git root. This file also serves as the **instance registry** when running multiple TouchDesigner instances.
+The bridge reads project configuration from `.embody/envoy.json` at the git root. This file also serves as the **instance registry** when running multiple TouchDesigner instances.
 
 ```json
 {
@@ -73,7 +73,7 @@ Envoy supports running multiple TouchDesigner instances simultaneously in the sa
 
 **Port allocation**: Each instance picks a port from a 10-port range starting at the configured Envoy Port (default: 9870). If the base port is occupied by another instance, Envoy scans ports `base+1` through `base+9` and claims the first available one. Up to 10 simultaneous instances are supported per base port.
 
-**Bridge routing**: The STDIO bridge connects to **one active instance** at a time. The `switch_instance` meta-tool redirects the bridge to a different running instance by updating its target port in memory and writing the new `active` field to `.envoy.json`. Switching is instant — no reconnection delay.
+**Bridge routing**: The STDIO bridge connects to **one active instance** at a time. The `switch_instance` meta-tool redirects the bridge to a different running instance by updating its target port in memory and writing the new `active` field to `.embody/envoy.json`. Switching is instant — no reconnection delay.
 
 **Instance reachability**: The bridge verifies instances by checking both PID liveness and port responsiveness. An instance is only considered reachable when both checks pass. This filters out stale registry entries from crashed or closed instances.
 
@@ -120,7 +120,7 @@ The preferred way to close a TD instance programmatically is via Envoy itself:
 execute_python(code="project.quit()")
 ```
 
-This triggers TD's normal quit flow — the user is prompted to save unsaved changes, then `onDestroyTD` fires, the instance deregisters from `.envoy.json`, and the port is released cleanly. This is more reliable than OS-level approaches (`osascript`, `taskkill`) which may not trigger TD's shutdown callbacks.
+This triggers TD's normal quit flow — the user is prompted to save unsaved changes, then `onDestroyTD` fires, the instance deregisters from `.embody/envoy.json`, and the port is released cleanly. This is more reliable than OS-level approaches (`osascript`, `taskkill`) which may not trigger TD's shutdown callbacks.
 
 !!! warning
     Never use `project.quit(force=True)` unless the user has explicitly asked for it — `force=True` skips the save dialog and risks losing unsaved work.

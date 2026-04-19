@@ -20,9 +20,9 @@ Claude Code  <-->  STDIO Bridge  <-->  Envoy (TD instance A, port 9870)
 - **One active connection** at a time — the bridge talks to whichever instance is marked `active`
 - **Switching is instant** — `switch_instance` redirects the bridge's HTTP target in-memory
 
-## Instance Registry (`.envoy.json`)
+## Instance Registry (`.embody/envoy.json`)
 
-Each Envoy instance registers itself in `.envoy.json` at the git root on startup:
+Each Envoy instance registers itself in `.embody/envoy.json` at the git root on startup:
 
 ```json
 {
@@ -34,8 +34,8 @@ Each Envoy instance registers itself in `.envoy.json` at the git root on startup
       "port": 9870,
       "td_pid": 12345
     },
-    "smoke_template": {
-      "toe_path": "dev/release_testing/smoke_template.toe",
+    "MySecondProject": {
+      "toe_path": "MySecondProject.toe",
       "port": 9871,
       "td_pid": 67890
     }
@@ -68,7 +68,7 @@ This means up to 10 simultaneous instances per base port.
 
 ### 1. Open the first `.toe` file
 
-Launch TD normally or via `launch_td`. Envoy starts on its configured port and registers in `.envoy.json`.
+Launch TD normally or via `launch_td`. Envoy starts on its configured port and registers in `.embody/envoy.json`.
 
 ### 2. Open additional `.toe` files
 
@@ -87,7 +87,7 @@ Returns each instance's name, port, PID, reachability (PID alive + port respondi
 ### 4. Switch to a different instance
 
 ```
-switch_instance(instance="smoke_template")
+switch_instance(instance="MySecondProject")
 ```
 
 The bridge immediately redirects to the target instance's port. All subsequent MCP calls go to that TD process.
@@ -113,7 +113,7 @@ Both conditions must be true. A dead PID with an open port means another instanc
 Instances are deregistered on graceful TD shutdown. If TD crashes:
 - The PID becomes dead, so the instance shows as unreachable
 - The port may be freed, allowing a new instance to claim it
-- Stale entries remain in `.envoy.json` but are filtered by reachability checks
+- Stale entries remain in `.embody/envoy.json` but are filtered by reachability checks
 - Re-launching TD with the same `.toe` overwrites the stale entry
 
 ## Closing Instances
@@ -123,7 +123,7 @@ Instances are deregistered on graceful TD shutdown. If TD crashes:
 To close a specific instance, `switch_instance` to it first, then send the quit command:
 
 ```python
-switch_instance(instance="smoke_template")   # target the instance
+switch_instance(instance="MySecondProject")   # target the instance
 execute_python(code="project.quit()")         # user gets save prompt in TD
 ```
 
@@ -136,7 +136,7 @@ execute_python(code="project.quit()")         # user gets save prompt in TD
 | Scenario | Action |
 |----------|--------|
 | Test code in two `.toe` files side by side | Open both, `switch_instance` between them |
-| Run smoke tests on a template `.toe` | Open template, switch to it, run tests, switch back |
+| Test code in a secondary `.toe` | Open it, switch to it, perform work, switch back |
 | Check if a second TD is still running | `switch_instance()` (list mode) or `get_td_status` |
 | One instance crashed, want the other | `switch_instance` to the surviving instance |
 | Close a specific instance | `switch_instance` to it, then `execute_python` with `project.quit()` |
@@ -149,6 +149,6 @@ When you open the same `.toe` file in multiple TD instances, Envoy auto-suffixes
 
 - The bridge connects to **one instance at a time** — no parallel MCP calls to multiple instances
 - Maximum **10 instances** per base port range
-- `.envoy.json` is per git root — instances in different repos have separate registries
-- `launch_td` always launches the `.toe` configured in `.envoy.json` top-level `toe_path` — use TD directly to open additional files
+- `.embody/envoy.json` is per git root — instances in different repos have separate registries
+- `launch_td` always launches the `.toe` configured in `.embody/envoy.json` top-level `toe_path` — use TD directly to open additional files
 - Opening the same `.toe` file in multiple instances auto-suffixes keys (`MyProject-2`, `-3`, etc.)

@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 46 MCP tools for interacting with TouchDesigner. All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 
@@ -42,6 +42,7 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_position` | `op_path` | Get operator position, size, color, and comment |
+| `get_network_layout` | `comp_path`, `include_annotations?` | Get positions of ALL operators (and annotations) in a COMP in one call. Returns bounding_box. Use instead of repeated `get_op_position` calls |
 | `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set operator position, size, color (`[r,g,b]` floats 0-1), or comment |
 | `layout_children` | `op_path` | Auto-layout all children in a COMP |
 
@@ -100,7 +101,8 @@ Envoy exposes 40+ MCP tools for interacting with TouchDesigner. All tools use th
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Export network to `.tdn` JSON (non-default properties only) |
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
 
 ## TOP Capture
@@ -131,7 +133,30 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 | `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch to a different running instance. See [Multiple Instances](architecture.md#multiple-instances) |
 
 !!! info "Bridge architecture"
-    Claude Code connects to Envoy via a STDIO bridge script (`.claude/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.
+    Claude Code connects to Envoy via a STDIO bridge script (`.embody/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.
+
+## Batch Operations
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `batch_operations` | `operations` | Execute multiple operations in a single request. Reduces latency and token overhead |
+
+`operations` is a list of `{"tool": str, "params": dict}` objects. Each entry maps to an existing tool name and its parameters. Stops on first error.
+
+**When to use**: 3+ calls to the same tool type (positioning, connecting, parameter setting, flags). Use `execute_python` instead when you need conditionals, loops, or computed values between operations.
+
+**Example** — position 4 operators + connect them in one call:
+```json
+{"operations": [
+  {"tool": "set_op_position", "params": {"op_path": "/project1/noise1", "x": 400, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/comp1", "x": 800, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/level1", "x": 1200, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/null1", "x": 1600, "y": 0}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/noise1", "dest_path": "/project1/comp1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/comp1", "dest_path": "/project1/level1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/level1", "dest_path": "/project1/null1"}}
+]}
+```
 
 ## MCP Prompts
 

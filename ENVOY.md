@@ -20,7 +20,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 8. **Binary files** (`.toe`, `.tox`) — use MCP tools to inspect contents, not the filesystem.
 9. **Always check for errors and warnings after creating operators** — `get_op_errors` with `recurse=true` immediately after creating and connecting.
 10. **Favor annotations over OP comments** — use `create_annotation` for documenting operators and groups.
-11. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
+11. **Always analyze log files after MCP operations** — read Embody's logs directory (see the `Logfolder` parameter on the Embody COMP) for the complete picture. Ring buffer only holds 200 entries.
 12. **Load the relevant skill BEFORE acting** — skills are prerequisites, not optional reference:
     - Before `create_op`: load `/create-operator`
     - Before `create_annotation` or `set_annotation`: load `/manage-annotations`

@@ -1,27 +1,26 @@
 {
 	"format": "tdn",
-	"version": "1.1",
-	"build": 17,
-	"generator": "Embody/5.0.255",
+	"version": "1.3",
+	"build": 18,
+	"generator": "Embody/5.0.363",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:54Z",
+	"source_file": "Embody-5.364.toe",
+	"exported_at": "2026-04-14T02:35:50Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type_defaults": {
 		"buttonCOMP": {
 			"parameters": {
+				"buttontype": "momentary",
 				"scaletofit": "onlyshrink",
 				"fontsize": 12,
-				"w": 50,
 				"h": 28,
 				"hmode": "fill",
 				"resizecomp": "=me",
-				"repocomp": "=me",
-				"borderover": false,
-				"enablecloning": false,
-				"clone": "=op.TDTox.op('defaultCOMPs/button')"
+				"repocomp": "=me"
 			},
 			"flags": ["viewer"]
 		},
@@ -86,7 +85,8 @@
 			"position": [0, 275],
 			"size": [160, 76],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/tagger/header.tdn"
 		},
 		{
 			"name": "button0",
@@ -99,7 +99,8 @@
 				"alignorder": 1,
 				"display": false,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false
+				"reloadbuiltin": false,
+				"relpath": "inherit"
 			},
 			"position": [-225, 175],
 			"size": [160, 76],
@@ -115,7 +116,8 @@
 				"colorb": 0.2,
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false
+				"reloadbuiltin": false,
+				"relpath": "inherit"
 			},
 			"position": [-225, -276],
 			"size": [160, 76],
@@ -131,7 +133,8 @@
 				"colorb": 0.2,
 				"alignorder": 1,
 				"topsmoothness": "mipmap",
-				"reloadbuiltin": false
+				"reloadbuiltin": false,
+				"relpath": "inherit"
 			},
 			"position": [25, -276],
 			"size": [160, 76],
@@ -145,8 +148,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 0.5,
-				"relpath": "externaltox"
+				"alignorder": 0.5
 			},
 			"position": [25, 100],
 			"size": [160, 134],
@@ -156,12 +158,11 @@
 			"name": "btn_embed",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "⊞  Embed DATs in tdn",
+				"label": "⊞  Embed DATs in tdn  ✓",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 0.65,
-				"relpath": "externaltox"
+				"alignorder": 0.65
 			},
 			"position": [260, 275],
 			"size": [160, 134],
@@ -175,8 +176,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 0.6,
-				"relpath": "externaltox"
+				"alignorder": 0.6
 			},
 			"position": [-280, 275],
 			"size": [160, 134],
@@ -191,8 +191,7 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 11,
-				"display": false,
-				"relpath": "externaltox"
+				"display": false
 			},
 			"position": [-1000, 275],
 			"size": [160, 134],
@@ -219,8 +218,7 @@
 				"colorg": 0.2,
 				"colorb": 0.2,
 				"alignorder": 0.5,
-				"display": false,
-				"relpath": "externaltox"
+				"display": false
 			},
 			"position": [-640, 275],
 			"size": [160, 134],
@@ -243,7 +241,8 @@
 			"position": [-225, 0],
 			"size": [160, 130],
 			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
+			"tags": ["tdn"],
+			"tdn_ref": "embody/Embody/tagger/replicator1.tdn"
 		},
 		{
 			"name": "select_dats",
@@ -262,8 +261,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 10,
-				"relpath": "externaltox"
+				"alignorder": 10
 			},
 			"position": [-820, 275],
 			"size": [160, 134],
@@ -277,8 +275,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 1,
-				"relpath": "externaltox"
+				"alignorder": 1
 			},
 			"position": [-460, 275],
 			"size": [160, 134],
@@ -303,6 +300,20 @@
 			"position": [-600, 0],
 			"size": [130, 90],
 			"inputs": ["parameter1", "select_dats", "select_comps"]
+		},
+		{
+			"name": "btn_embed_storage",
+			"type": "buttonCOMP",
+			"parameters": {
+				"label": "⊞  Embed storage in tdn  ✓",
+				"colorr": 0.2,
+				"colorg": 0.2,
+				"colorb": 0.2,
+				"alignorder": 0.66
+			},
+			"position": [440, 275],
+			"size": [160, 134],
+			"palette_clone": true
 		},
 		{
 			"name": "replicator1_callbacks",

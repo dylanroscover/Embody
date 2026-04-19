@@ -27,16 +27,16 @@
 
 ## Git Initialization Failed
 
-**Symptoms:** Envoy starts but `.mcp.json`, `CLAUDE.md`, and `.claude/` files are not generated.
+**Symptoms:** Envoy starts and MCP config is generated, but `.gitignore` and `.gitattributes` are missing.
 
-1. **No git repo:** Envoy needs a git repository to know where to place config files. If your project isn't in a repo, either:
-    - Run `git init` in your project directory
-    - Or select "Start Without Git" and [configure manually](setup.md#manual-configuration)
+Since v5.0.264, Envoy generates MCP and AI client config files (`.mcp.json`, `CLAUDE.md`, `.claude/`, etc.) regardless of whether a git repo exists — they are written to the project folder as a fallback. Only `.gitignore` and `.gitattributes` require a git repo.
+
+1. **No git repo:** If you later create one, run `op.Embody.InitGit()` from the textport to generate git config and update MCP paths to point to the git root.
 2. **Git init error:** If Envoy attempted to initialize git and failed, a dialog will explain the error. Common causes:
     - `git` not on your system PATH
     - Permissions issue in the project directory
     - TouchDesigner's embedded Python environment conflicting with git (Envoy strips known problematic env vars, but edge cases exist)
-3. **Verify manually:** Open a terminal in your project directory and run `git rev-parse --is-inside-work-tree`. If this returns `true`, git is working and you can re-enable Envoy.
+3. **Verify manually:** Open a terminal in your project directory and run `git rev-parse --is-inside-work-tree`. If this returns `true`, git is working and you can run `op.Embody.InitGit()` to generate the missing files.
 
 ## Curl Fallback Not Working
 

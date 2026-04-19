@@ -1,5 +1,5 @@
 ﻿"""
-TDN — TouchDesigner Network open format (.tdn)
+TDN -- TouchDesigner Network open format (.tdn)
 
 Exports and imports TouchDesigner networks as human-readable JSON files.
 Only non-default properties are stored, keeping the output minimal.
@@ -21,7 +21,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Optional, Union
 
-TDN_VERSION = '1.1'
+TDN_VERSION = '1.3'
 
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
@@ -31,14 +31,14 @@ SKIP_PARAMS = {
 	'pageindex',  # UI state (visible parameter page tab), not config
 }
 
-# Embody-managed About page parameters — excluded from TDN export
+# Embody-managed About page parameters -- excluded from TDN export
 # because they are reconstructed from externalizations.tsv at import time.
 _EMBODY_ABOUT_PARS = {'Build', 'Date', 'Touchbuild'}
 
 # Built-in parameter styles to skip (actions, not state)
 SKIP_BUILTIN_STYLES = {'Pulse', 'Momentary', 'Header'}
 
-# Parameters to skip on palette clones — TD plumbing that interferes
+# Parameters to skip on palette clones -- TD plumbing that interferes
 # with parameter round-tripping. The clone expression causes TD to
 # override user-set values (like buttontype) on rebuild.
 _PALETTE_CLONE_SKIP_PARAMS = {'clone', 'enablecloning'}
@@ -91,7 +91,7 @@ STYLE_APPEND_MAP = {
 	'Sequence': 'appendSequence',
 }
 
-# Default flag values — only export flags that differ
+# Default flag values -- only export flags that differ
 DEFAULT_FLAGS = {
 	'bypass': False,
 	'lock': False,
@@ -129,9 +129,22 @@ class TDNExt:
 		# so we cache them to avoid repeated Python-to-C++ bridge calls.
 		self._defaults_cache: dict[str, dict[str, Any]] = {}
 		self._exportable_cache: dict[str, set[str]] = {}
+		self._seq_default_blocks_cache: dict[tuple[str, str], int] = {}
+		# Divergent defaults: params where TD's p.default lies (differs
+		# from the actual creation value). Loaded lazily from the
+		# divergent_defaults tableDAT inside the Embody COMP.
+		self._divergent_defaults: dict[str, dict[str, Any]] = {}
+		self._divergent_loaded: bool = False
+		# On-the-fly fallback cache for unknown TD builds.
+		self._runtime_creation_cache: dict[str, dict[str, Any]] = {}
+		self._scan_workspace: Optional['COMP'] = None
+		# Palette component catalog: {name: {'type': op_type, 'min_children': N}}.
+		# Populated by CatalogManagerExt after palette scan completes.
+		# Used by _isPaletteClone() as the primary detection method.
+		self._palette_catalog: dict[str, dict] = {}
 
 	# =========================================================================
-	# CRASH SAFETY — atomic writes, backup rotation, validation
+	# CRASH SAFETY -- atomic writes, backup rotation, validation
 	# =========================================================================
 
 	@staticmethod
@@ -152,7 +165,7 @@ class TDNExt:
 		try:
 			rel = tdn.relative_to(proj)
 		except ValueError:
-			# tdn_path not under project_folder — fall back to flat name
+			# tdn_path not under project_folder -- fall back to flat name
 			rel = Path(tdn.name)
 		backup_dir = proj / '.tdn_backup'
 		return backup_dir / (str(rel) + suffix)
@@ -188,7 +201,7 @@ class TDNExt:
 		"""Write content to filepath atomically using temp-file-then-rename.
 
 		Guarantees that `filepath` always contains either the complete old
-		content or the complete new content — never a partial write.
+		content or the complete new content -- never a partial write.
 
 		The temp file is created in the same directory as filepath to
 		ensure os.replace() is atomic (same filesystem).
@@ -206,7 +219,7 @@ class TDNExt:
 				f.flush()
 				os.fsync(f.fileno())
 			os.replace(tmp_path, filepath)
-			tmp_path = None  # Rename succeeded — no cleanup needed
+			tmp_path = None  # Rename succeeded -- no cleanup needed
 		finally:
 			if tmp_fd is not None:
 				os.close(tmp_fd)
@@ -257,7 +270,7 @@ class TDNExt:
 		try:
 			TDNExt._rotate_backups(tdn_path, project_folder)
 		except Exception:
-			# Backup failure should not block the write — log but continue.
+			# Backup failure should not block the write -- log but continue.
 			# The write itself is still atomic.
 			pass
 
@@ -272,7 +285,7 @@ class TDNExt:
 		if validation.get('valid'):
 			return {'success': True}
 
-		# Step 4: Validation failed — attempt restore from backup
+		# Step 4: Validation failed -- attempt restore from backup
 		error_msg = validation.get('error', 'unknown')
 		bak = TDNExt._get_backup_path(tdn_path, project_folder, '.bak')
 		if bak.is_file():
@@ -333,13 +346,14 @@ class TDNExt:
 			return None
 
 	# =========================================================================
-	# PROMOTED METHODS (uppercase — callable directly on op.Embody)
+	# PROMOTED METHODS (uppercase -- callable directly on op.Embody)
 	# =========================================================================
 
 	def ExportNetwork(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 					  output_file: Optional[str] = None, max_depth: Optional[int] = None,
 					  cleanup_protected: Optional[list[str]] = None,
-					  embed_all: bool = False) -> dict[str, Any]:
+					  embed_all: bool = False,
+					  include_storage: Optional[bool] = None) -> dict[str, Any]:
 		"""
 		Export a TouchDesigner network to .tdn JSON format.
 
@@ -372,8 +386,16 @@ class TDNExt:
 			else:
 				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
 
+		if include_storage is None:
+			per_comp = root_op.fetch('embed_storage_in_tdn', None, search=False)
+			if per_comp is not None:
+				include_storage = per_comp
+			else:
+				include_storage = self.ownerComp.par.Embedstorageintdns.eval()
+
 		options = {
 			'include_dat_content': include_dat_content,
+			'include_storage': include_storage,
 			'max_depth': max_depth,
 			'embed_all': embed_all,
 		}
@@ -381,6 +403,7 @@ class TDNExt:
 		try:
 			self._defaults_cache.clear()
 			self._exportable_cache.clear()
+			self._seq_default_blocks_cache.clear()
 			operators = self._exportChildren(root_op, options, depth=0)
 
 			# Post-processing optimizations
@@ -396,11 +419,13 @@ class TDNExt:
 				'build': build_num,
 				'generator': f'Embody/{self._getEmbodyVersion()}',
 				'td_build': f'{app.version}.{app.build}',
+				'source_file': project.name,
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
 				'network_path': root_path,
 				'options': {
 					'include_dat_content': include_dat_content,
+					'include_storage': include_storage,
 				},
 			}
 			if type_defaults:
@@ -417,6 +442,10 @@ class TDNExt:
 			root_builtin_params = self._exportBuiltinParams(root_op)
 			if root_builtin_params:
 				tdn['parameters'] = root_builtin_params
+			# Target COMP's own built-in/custom sequences (v1.3+)
+			root_sequences = self._exportBuiltinSequences(root_op)
+			if root_sequences:
+				tdn['sequences'] = root_sequences
 
 			# Target COMP's own metadata (v1.1+)
 			root_flags = self._exportFlags(root_op)
@@ -430,9 +459,17 @@ class TDNExt:
 				tdn['tags'] = root_tags
 			if root_op.comment:
 				tdn['comment'] = root_op.comment
-			root_storage = self._exportStorage(root_op)
-			if root_storage:
-				tdn['storage'] = root_storage
+			if options.get('include_storage', True):
+				root_storage = self._exportStorage(root_op)
+				if root_storage:
+					tdn['storage'] = root_storage
+			else:
+				# Preserve Embody control keys even when storage is excluded
+				root_storage = self._exportStorage(root_op)
+				control_keys = {k: v for k, v in root_storage.items()
+								if k in ('embed_dats_in_tdn', 'embed_storage_in_tdn')}
+				if control_keys:
+					tdn['storage'] = control_keys
 
 			tdn['operators'] = operators
 
@@ -445,7 +482,7 @@ class TDNExt:
 
 			# Write to file if requested
 			if output_file:
-				# Scan from project folder — TDN paths mirror TD hierarchy
+				# Scan from project folder -- TDN paths mirror TD hierarchy
 				scan_folder = str(project.folder)
 				before_tdn = TDNExt._collectExistingTDNFiles(
 					scan_folder, root_path)
@@ -479,15 +516,22 @@ class TDNExt:
 				# content won't survive a TDN round-trip
 				self._warnLockedNonDATs(root_op, context='export')
 
+				# One-time warning for large monolithic TDN files
+				if not options.get('embed_all'):
+					self._warnLargeTDN(filepath, root_path)
+
 			return result
 
 		except Exception as e:
 			self._log(f'Export failed: {e}', 'ERROR')
 			return {'error': f'Export failed: {e}'}
+		finally:
+			self._cleanupScanWorkspace()
 
 	def ExportNetworkAsync(self, root_path: str = '/', include_dat_content: Optional[bool] = None,
 						   output_file: Optional[str] = None, max_depth: Optional[int] = None,
-						   embed_all: bool = False) -> None:
+						   embed_all: bool = False,
+						   include_storage: Optional[bool] = None) -> None:
 		"""
 		Non-blocking export using Thread Manager. Processes operators in
 		batches across frames so TouchDesigner stays responsive.
@@ -533,6 +577,7 @@ class TDNExt:
 		metadata = {
 			'generator': f'Embody/{self._getEmbodyVersion()}',
 			'td_build': f'{app.version}.{app.build}',
+			'source_file': project.name,
 			'build': self._getBuildNumber(root_op),
 			'project_name': project.name.removesuffix('.toe'),
 			'project_folder': str(project.folder),
@@ -546,6 +591,13 @@ class TDNExt:
 				include_dat_content = per_comp
 			else:
 				include_dat_content = self.ownerComp.par.Embeddatsintdns.eval()
+
+		if include_storage is None:
+			per_comp = root_op.fetch('embed_storage_in_tdn', None, search=False)
+			if per_comp is not None:
+				include_storage = per_comp
+			else:
+				include_storage = self.ownerComp.par.Embedstorageintdns.eval()
 
 		done_event = Event()
 
@@ -571,6 +623,7 @@ class TDNExt:
 			'results': {},
 			'options': {
 				'include_dat_content': include_dat_content,
+				'include_storage': include_storage,
 				'max_depth': max_depth,
 				'embed_all': embed_all,
 			},
@@ -592,7 +645,7 @@ class TDNExt:
 			"""Worker thread: wait for batches, then assemble and write file.
 
 			File scanning (rglob) is done on the main thread before this
-			starts — scandir suffers extreme GIL contention from bg threads.
+			starts -- scandir suffers extreme GIL contention from bg threads.
 			"""
 			done_event.wait(timeout=300)  # 5 minute safety timeout
 
@@ -624,12 +677,15 @@ class TDNExt:
 				'build': state['metadata'].get('build'),
 				'generator': state['metadata']['generator'],
 				'td_build': state['metadata']['td_build'],
+				'source_file': state['metadata'].get('source_file', ''),
 				'exported_at': datetime.now(timezone.utc).strftime(
 					'%Y-%m-%dT%H:%M:%SZ'),
 				'network_path': state['root_path'],
 				'options': {
 					'include_dat_content':
 						state['options']['include_dat_content'],
+					'include_storage':
+						state['options'].get('include_storage', True),
 				},
 			}
 			if type_defaults:
@@ -645,6 +701,8 @@ class TDNExt:
 				tdn['custom_pars'] = root_meta['custom_pars']
 			if root_meta.get('parameters'):
 				tdn['parameters'] = root_meta['parameters']
+			if root_meta.get('sequences'):
+				tdn['sequences'] = root_meta['sequences']
 			if root_meta.get('flags'):
 				tdn['flags'] = root_meta['flags']
 			if root_meta.get('color'):
@@ -718,7 +776,7 @@ class TDNExt:
 		thread = thread_manager.EnqueueTask(task, standalone=True)
 		if thread is None:
 			self._log(
-				'Thread Manager at capacity — export queued but may be '
+				'Thread Manager at capacity -- export queued but may be '
 				'delayed. Try restarting Envoy to free stale threads.',
 				'WARNING')
 
@@ -802,6 +860,9 @@ class TDNExt:
 					root_builtin = self._exportBuiltinParams(root_op)
 					if root_builtin:
 						root_meta['parameters'] = root_builtin
+					root_sequences = self._exportBuiltinSequences(root_op)
+					if root_sequences:
+						root_meta['sequences'] = root_sequences
 					root_flags = self._exportFlags(root_op)
 					if root_flags:
 						root_meta['flags'] = root_flags
@@ -814,9 +875,18 @@ class TDNExt:
 						root_meta['tags'] = root_tags
 					if root_op.comment:
 						root_meta['comment'] = root_op.comment
-					root_storage = self._exportStorage(root_op)
-					if root_storage:
-						root_meta['storage'] = root_storage
+					if state['options'].get('include_storage', True):
+						root_storage = self._exportStorage(root_op)
+						if root_storage:
+							root_meta['storage'] = root_storage
+					else:
+						root_storage = self._exportStorage(root_op)
+						control_keys = {
+							k: v for k, v in root_storage.items()
+							if k in ('embed_dats_in_tdn',
+									 'embed_storage_in_tdn')}
+						if control_keys:
+							root_meta['storage'] = control_keys
 					state['root_meta'] = root_meta
 				for path, data in state['results'].items():
 					target_op = op(path)
@@ -835,6 +905,7 @@ class TDNExt:
 
 	def _onExportSuccess(self):
 		"""SuccessHook: Log completion (main thread)."""
+		self._cleanupScanWorkspace()
 		state = self._export_state
 		if state and state.get('result'):
 			result = state['result']
@@ -862,6 +933,7 @@ class TDNExt:
 
 	def _onExportError(self, e):
 		"""ExceptHook: Log error (main thread)."""
+		self._cleanupScanWorkspace()
 		self._log(f'Export failed: {e}', 'ERROR')
 		self._export_state = None
 		self._reexport_queue = None
@@ -976,8 +1048,29 @@ class TDNExt:
 			ui.status = f'TDN Import: {msg}'
 			return {'error': msg}
 
+		# Capture external wires on dest's own connectors before clear
+		# so they can be re-wired after the rebuild. When dest has no
+		# live wires (cold open, or already-stripped comp during post-save),
+		# fall back to wires stashed on dest via comp.store() by
+		# StripCompChildren.
+		captured_externals = []
 		if clear_first:
-			# Clear dock relationships before destroying — TD's engine
+			try:
+				captured_externals = self._captureExternalConnections(dest)
+			except Exception as e:
+				self._log(
+					f'External capture failed on {target_path}: {e}', 'DEBUG')
+			if not captured_externals:
+				try:
+					stashed = dest.fetch(
+						'_tdn_external_wires', [], search=False)
+					if stashed:
+						captured_externals = list(stashed)
+				except Exception:
+					pass
+
+		if clear_first:
+			# Clear dock relationships before destroying -- TD's engine
 			# raises an uncatchable tdError if a dock target is destroyed
 			# before its docked operator.
 			for child in list(dest.children):
@@ -1013,7 +1106,7 @@ class TDNExt:
 
 		# Pre-phase: Skip children of nested TDN-externalized COMPs.
 		# If a child COMP has its own .tdn entry in the externalizations table,
-		# its own file is the source of truth — not the parent's snapshot.
+		# its own file is the source of truth -- not the parent's snapshot.
 		tdn_paths = self._getTDNExternalizedPaths()
 		if tdn_paths:
 			tdn_paths.discard(target_path)  # We ARE importing this one
@@ -1022,8 +1115,13 @@ class TDNExt:
 					op_defs, target_path, tdn_paths)
 				for sp in skipped:
 					self._log(
-						f'Skipping children of {sp} — has its own TDN '
+						f'Skipping children of {sp} -- has its own TDN '
 						f'externalization (source of truth)', 'INFO')
+
+		# Cross-validate tdn_ref pointers against table and disk
+		ref_warnings = self._validateTDNRefs(op_defs, target_path)
+		for w in ref_warnings:
+			self._log(w, 'WARNING')
 
 		try:
 			created = []
@@ -1039,6 +1137,9 @@ class TDNExt:
 
 			# Phase 2: Create custom parameters
 			self._createCustomPars(dest, op_defs)
+
+			# Phase 2.5: Expand built-in parameter sequences (v1.3+)
+			self._expandSequences(dest, op_defs)
 
 			# Phase 3: Set parameter values
 			self._setParameters(dest, op_defs)
@@ -1090,10 +1191,10 @@ class TDNExt:
 
 			# Phase 9: Apply target COMP's own properties from TDN.
 			# Runs AFTER child creation so extension reinit (triggered by
-			# recreating extension source DATs) has already happened —
+			# recreating extension source DATs) has already happened --
 			# this overwrites any defaults the extension set.
 			if isinstance(tdn, dict):
-				# Type validation (v1.1+) — warn if destination type differs
+				# Type validation (v1.1+) -- warn if destination type differs
 				tdn_type = tdn.get('type')
 				if tdn_type and dest.OPType != tdn_type:
 					self._log(
@@ -1111,6 +1212,30 @@ class TDNExt:
 				tdn_params = tdn.get('parameters', {})
 				for par_name, value in tdn_params.items():
 					self._setParValue(dest, par_name, value)
+
+				# Built-in parameter sequences (v1.3+)
+				tdn_sequences = tdn.get('sequences', {})
+				for seq_name, blocks in tdn_sequences.items():
+					try:
+						seq = dest.seq[seq_name]
+						seq.numBlocks = len(blocks)
+						for i, block_data in enumerate(blocks):
+							if not block_data:
+								continue
+							block = seq[i]
+							for base_name, value in block_data.items():
+								par = getattr(block.par, base_name, None)
+								if par is None:
+									try:
+										par = block.par[base_name]
+									except Exception:
+										par = None
+								if par is not None:
+									self._setParValue(dest, par.name, value)
+					except Exception as e:
+						self._log(
+							f'Failed to set sequence {seq_name} on '
+							f'{dest.path}: {e}', 'WARNING')
 
 				# Flags (v1.1+)
 				tdn_flags = tdn.get('flags', [])
@@ -1167,6 +1292,22 @@ class TDNExt:
 							f'Failed to restore storage key "{key}" '
 							f'on {dest.path}: {e}', 'WARNING')
 
+			# Restore external connections captured before clear.
+			# Also consume any stashed wires on dest.
+			ext_restored = 0
+			if captured_externals:
+				try:
+					ext_restored = self._restoreExternalConnections(
+						dest, captured_externals)
+				except Exception as e:
+					self._log(
+						f'External restore failed on {target_path}: {e}',
+						'WARNING')
+			try:
+				dest.unstore('_tdn_external_wires')
+			except Exception:
+				pass
+
 			self._log(
 				f'Imported {len(created)} operators into {target_path}',
 				'SUCCESS')
@@ -1178,6 +1319,8 @@ class TDNExt:
 			}
 			if restored_count:
 				result['restored_file_links'] = restored_count
+			if ext_restored:
+				result['restored_external_connections'] = ext_restored
 			return result
 
 		except Exception as e:
@@ -1203,7 +1346,7 @@ class TDNExt:
 		import os
 		if not os.path.isfile(file_path):
 			self._log(f'TDN file not found: {file_path}', 'ERROR')
-			ui.status = f'TDN Import: File not found — {file_path}'
+			ui.status = f'TDN Import: File not found -- {file_path}'
 			return {'error': f'TDN file not found: {file_path}'}
 
 		try:
@@ -1211,7 +1354,7 @@ class TDNExt:
 				tdn_data = json.load(f)
 		except json.JSONDecodeError as e:
 			self._log(f'Invalid JSON in TDN file: {e}', 'ERROR')
-			ui.status = f'TDN Import: Invalid JSON — {e}'
+			ui.status = f'TDN Import: Invalid JSON -- {e}'
 			return {'error': f'Invalid JSON in TDN file: {e}'}
 		except Exception as e:
 			self._log(f'Failed to read TDN file: {e}', 'ERROR')
@@ -1254,7 +1397,7 @@ class TDNExt:
 					f'Skipping duplicate companion "{name}" '
 					f'(original: "{base}")', 'INFO')
 
-		# Keys that carry no user-meaningful data — operators with only
+		# Keys that carry no user-meaningful data -- operators with only
 		# these keys are auto-created defaults (e.g. torus1 inside a
 		# geoCOMP) that TD recreates automatically on COMP creation.
 		_TRIVIAL_KEYS = {'name', 'type', 'position', 'size'}
@@ -1271,7 +1414,7 @@ class TDNExt:
 
 			op_data = self._exportSingleOp(child, options, depth)
 			if op_data is not None:
-				# Skip bare auto-created defaults — TD recreates these
+				# Skip bare auto-created defaults -- TD recreates these
 				# when the parent COMP is created, so they're noise
 				if not (set(op_data.keys()) - _TRIVIAL_KEYS):
 					self._log(
@@ -1293,6 +1436,11 @@ class TDNExt:
 		params = self._exportBuiltinParams(target)
 		if params:
 			data['parameters'] = params
+
+		# Built-in parameter sequences (v1.3+)
+		sequences = self._exportBuiltinSequences(target)
+		if sequences:
+			data['sequences'] = sequences
 
 		# Custom parameters (always all of them)
 		custom_pars = self._exportCustomPars(target)
@@ -1335,9 +1483,17 @@ class TDNExt:
 				data['dock'] = dock_op.path
 
 		# Storage (all serializable entries, skipping transient/internal keys)
-		storage = self._exportStorage(target)
-		if storage:
-			data['storage'] = storage
+		if options.get('include_storage', True):
+			storage = self._exportStorage(target)
+			if storage:
+				data['storage'] = storage
+		else:
+			# Preserve Embody control keys even when storage is excluded
+			storage = self._exportStorage(target)
+			control_keys = {k: v for k, v in storage.items()
+							if k in ('embed_dats_in_tdn', 'embed_storage_in_tdn')}
+			if control_keys:
+				data['storage'] = control_keys
 
 		# Operator connections (left/right wires)
 		connections = self._exportConnections(target)
@@ -1350,19 +1506,30 @@ class TDNExt:
 			if comp_conns:
 				data['comp_inputs'] = comp_conns
 
-		# DAT content — include when the include_dat_content option is True.
-		if target.family == 'DAT' and options.get('include_dat_content', True):
-			content_data = self._exportDATContent(target)
-			if content_data:
-				data.update(content_data)
+		# DAT content -- include when the include_dat_content option is True,
+		# OR when the DAT lives inside an animationCOMP (keys, channels, graph,
+		# attributes tableDATs hold all keyframe data -- must always be saved).
+		# Skip content for read-only DATs (e.g. glsl1_info, popto1) --
+		# TD auto-generates their content and rejects writes on import.
+		if target.family == 'DAT' and (
+				options.get('include_dat_content', True) or
+				self._isInsideAnimationCOMP(target)):
+			if self._isDATEditable(target):
+				content_data = self._exportDATContent(target)
+				if content_data:
+					data.update(content_data)
+			else:
+				data['dat_read_only'] = True
 
 		# Recurse into COMP children (sync mode only)
-		# Skip children of palette clones — they come from /sys/ and
+		# Skip children of palette clones -- they come from /sys/ and
 		# don't need to be stored (TD recreates them from the clone source)
-		# Skip children of COMPs with their own TDN tag — those are
+		# Skip children of COMPs with their own TDN tag -- those are
 		# managed by their own .tdn file to avoid redundant nesting
 		if recurse and hasattr(target, 'children'):
-			if self._isPaletteClone(target):
+			is_palette = self._isPaletteClone(target)
+			handling = self._resolvePaletteHandling(target) if is_palette else None
+			if is_palette and handling == 'blackbox':
 				data['palette_clone'] = True
 				# For palette clones, the correct comparison baseline
 				# is the clone source's values, not p.default.
@@ -1377,7 +1544,7 @@ class TDNExt:
 					if 'parameters' not in data:
 						data['parameters'] = {}
 					data['parameters'].update(clone_source_params)
-				# Strip clone/enablecloning — TD plumbing that
+				# Strip clone/enablecloning -- TD plumbing that
 				# parent.create() auto-sets on rebuild.
 				if 'parameters' in data:
 					for skip_par in _PALETTE_CLONE_SKIP_PARAMS:
@@ -1385,7 +1552,11 @@ class TDNExt:
 					if not data['parameters']:
 						del data['parameters']
 			elif self._hasTDNTag(target) and not options.get('embed_all'):
-				pass  # Child's network managed by its own .tdn file
+				# Child's network managed by its own .tdn file.
+				# Write a tdn_ref pointer for cross-validation.
+				tdn_ref = self._resolveTDNRef(target)
+				if tdn_ref:
+					data['tdn_ref'] = tdn_ref
 			else:
 				max_depth = options.get('max_depth')
 				if max_depth is None or depth < max_depth:
@@ -1399,6 +1570,181 @@ class TDNExt:
 
 		return data
 
+	# =====================================================================
+	# Divergent defaults — correct for p.default lying
+	# =====================================================================
+
+	def _loadDivergentDefaults(self):
+		"""Load creation defaults, checking sources in priority order:
+
+		1. CatalogManager (already populated from .embody/ catalog file)
+		2. Embedded divergent_defaults tableDAT (bootstrap for known builds)
+		3. Empty dict (on-the-fly fallback handles unknown types)
+		"""
+		self._divergent_loaded = True
+
+		# Priority 1: CatalogManager may have already populated us
+		if self._divergent_defaults:
+			return
+
+		self._divergent_defaults = {}
+
+		# Priority 2: Try loading from .embody/ catalog file
+		import json, os
+		build_str = f'{app.version}.{app.build}'
+		try:
+			catalog_mgr = self.ownerComp.ext.CatalogManager
+			catalog_path = catalog_mgr._getCatalogPath(build_str)
+			if os.path.isfile(catalog_path):
+				catalog = catalog_mgr._readCatalog(catalog_path)
+				if catalog:
+					self._divergent_defaults = catalog
+					self._log(
+						f'Loaded catalog from .embody/ for build '
+						f'{build_str} ({len(catalog)} types)', 'DEBUG')
+					return
+		except Exception:
+			pass
+
+		# Priority 3: Fall back to embedded tableDAT
+		table = self.ownerComp.op('divergent_defaults')
+		if table is None or table.numRows < 2:
+			return
+
+		headers = [table[0, c].val for c in range(table.numCols)]
+		build_cols = headers[3:]  # Skip op_type, par_name, style
+
+		if build_str in build_cols:
+			col_name = build_str
+		elif build_cols:
+			col_name = build_cols[-1]
+			self._log(
+				f'Divergent defaults: no column for build {build_str}, '
+				f'using {col_name}', 'DEBUG')
+		else:
+			return
+
+		col_idx = headers.index(col_name)
+
+		for row_idx in range(1, table.numRows):
+			op_type = table[row_idx, 0].val
+			par_name = table[row_idx, 1].val
+			style = table[row_idx, 2].val
+			val_str = table[row_idx, col_idx].val
+
+			if not val_str:
+				continue
+
+			val = self._deserializeDivergentValue(val_str, style)
+
+			if op_type not in self._divergent_defaults:
+				self._divergent_defaults[op_type] = {}
+			self._divergent_defaults[op_type][par_name] = val
+
+		self._log(
+			f'Loaded divergent defaults from tableDAT: '
+			f'{len(self._divergent_defaults)} op types from column '
+			f'{col_name}', 'DEBUG')
+
+	@staticmethod
+	def _deserializeDivergentValue(val_str, style):
+		"""Convert a stored divergent default string back to a typed value."""
+		if style in ('Float', 'XY', 'XYZ', 'XYZW', 'UV', 'UVW', 'WH',
+					 'RGB', 'RGBA'):
+			try:
+				return float(val_str)
+			except ValueError:
+				return val_str
+		if style == 'Int':
+			try:
+				return int(val_str)
+			except ValueError:
+				return val_str
+		if style == 'Toggle':
+			return val_str == 'True'
+		return val_str
+
+	def _getDivergentDefaults(self, op_type):
+		"""Get divergent defaults for an op type, loading if needed.
+
+		Returns a dict of {par_name: creation_value} for params where
+		p.default lies, or an empty dict if none.
+
+		If the table loaded successfully, a missing op_type means "no
+		divergent defaults for this type" — return {} without probing.
+		On-the-fly probing only runs when the table has no data at all
+		(missing DAT, empty table, or no build columns).
+		"""
+		if not self._divergent_loaded:
+			self._loadDivergentDefaults()
+		# If table loaded, trust it: missing type = no divergences
+		if self._divergent_defaults:
+			return self._divergent_defaults.get(op_type, {})
+		# No table data — fall back to on-the-fly probing
+		return self._getCreationValueOnTheFly(op_type)
+
+	def _getCreationValueOnTheFly(self, op_type):
+		"""Create a temp op, find params where val != default, cache result.
+
+		This is the fallback when the divergent_defaults table doesn't
+		have a column for the current TD build.
+		"""
+		if op_type in self._runtime_creation_cache:
+			return self._runtime_creation_cache[op_type]
+
+		vals = {}
+		try:
+			if self._scan_workspace is None:
+				self._scan_workspace = self.ownerComp.create(
+					baseCOMP, '_defaults_workspace')
+				self._scan_workspace.viewer = False
+
+			import td as _td
+			cls = getattr(_td, op_type, None)
+			if cls is not None:
+				temp = self._scan_workspace.create(cls, '_probe')
+				for p in temp.pars():
+					if p.isCustom or p.readOnly or p.sequence is not None:
+						continue
+					if p.name in SKIP_PARAMS:
+						continue
+					if p.style in SKIP_BUILTIN_STYLES:
+						continue
+					try:
+						if p.val != p.default:
+							# Skip name-dependent values
+							if '_probe' not in str(p.val):
+								vals[p.name] = p.val
+					except Exception:
+						pass
+				temp.destroy()
+		except Exception as e:
+			self._log(
+				f'On-the-fly default probe failed for {op_type}: {e}',
+				'DEBUG')
+
+		self._runtime_creation_cache[op_type] = vals
+		return vals
+
+	def _cleanupScanWorkspace(self):
+		"""Destroy the on-the-fly scan workspace if it exists."""
+		if self._scan_workspace is not None:
+			try:
+				self._scan_workspace.destroy()
+			except Exception:
+				pass
+			self._scan_workspace = None
+
+	def _getCreationDefault(self, op_type, par_name, par):
+		"""Get the true creation default for a parameter.
+
+		Checks the divergent defaults catalog first, falls back to p.default.
+		"""
+		divergent = self._getDivergentDefaults(op_type)
+		if par_name in divergent:
+			return divergent[par_name]
+		return par.default
+
 	def _buildParCache(self, target):
 		"""Build per-OPType cache of exportable parameter names and defaults.
 
@@ -1406,14 +1752,21 @@ class TDNExt:
 		record which are exportable (non-custom, non-readOnly except `file`, non-skip) and
 		their default values. Subsequent operators of the same type skip all
 		those per-parameter attribute checks (isCustom, readOnly, style) and
-		default lookups — replacing ~4 Python-to-C++ bridge calls per parameter
+		default lookups -- replacing ~4 Python-to-C++ bridge calls per parameter
 		with a single Python dict lookup.
+
+		Uses the divergent defaults catalog to correct for params where
+		TD's p.default doesn't match the actual creation value (e.g.
+		cameraCOMP tz: p.default=0 but creation value is 5).
 		"""
 		op_type = target.OPType
+		divergent = self._getDivergentDefaults(op_type)
 		exportable = {}
 		defaults = {}
 		for p in target.pars():
 			if p.isCustom:
+				continue
+			if p.sequence is not None:
 				continue
 			if p.readOnly and p.name != 'file':
 				continue
@@ -1422,7 +1775,7 @@ class TDNExt:
 			if p.style in SKIP_BUILTIN_STYLES:
 				continue
 			exportable[p.name] = True
-			defaults[p.name] = p.default
+			defaults[p.name] = divergent.get(p.name, p.default)
 		self._exportable_cache[op_type] = exportable
 		self._defaults_cache[op_type] = defaults
 
@@ -1463,11 +1816,116 @@ class TDNExt:
 
 		return params
 
+	def _exportBuiltinSequences(self, target):
+		"""Export built-in parameter sequences with non-default block data.
+
+		Discovers all sequences on the operator via par.isSequence headers,
+		then exports each sequence's blocks as an array of base-name dicts.
+
+		Returns dict of {seq_name: [block_data, ...]} or empty dict.
+		Only includes sequences where numBlocks differs from default OR
+		any block parameter has a non-default value.
+		"""
+		sequences = {}
+		seen = set()
+
+		for p in target.pars():
+			if not p.isSequence:
+				continue
+			seq = p.sequence
+			if seq is None or seq.name in seen:
+				continue
+			seen.add(seq.name)
+
+			seq_data = self._exportSequenceBlocks(target, seq)
+			if seq_data is not None:
+				sequences[seq.name] = seq_data
+
+		return sequences
+
+	def _exportSequenceBlocks(self, target, seq):
+		"""Export blocks for a single sequence.
+
+		Returns list of block dicts ({base_name: value}), or None if
+		the sequence is entirely at defaults and can be omitted.
+
+		Note: TD creates new wrapper objects for p.sequenceBlock on each
+		access, so identity (``is``) and equality (``==``) comparisons
+		fail. We compare by block index instead.
+		"""
+		# Group sequence parameters by block index
+		block_pars = {}  # {block_index: [par, ...]}
+		for p in target.pars():
+			if p.sequence is None or p.sequence.name != seq.name:
+				continue
+			if p.isSequence:
+				continue  # Skip the header par
+			sb = p.sequenceBlock
+			if sb is None:
+				continue
+			idx = sb.index
+			block_pars.setdefault(idx, []).append(p)
+
+		blocks = []
+		has_any_nondefault = False
+
+		for block in seq.blocks:
+			block_data = {}
+			for p in block_pars.get(block.index, []):
+				base_name = self._getSequenceBaseName(p, seq)
+				value = self._getParValue(p)
+
+				if value is not None:
+					creation_default = self._getCreationDefault(
+						target.OPType, p.name, p)
+					default = self._serializeValue(creation_default)
+					if self._valuesDiffer(value, default):
+						block_data[base_name] = value
+						has_any_nondefault = True
+
+			blocks.append(block_data)
+
+		default_count = self._getDefaultSequenceBlockCount(target, seq)
+
+		if len(blocks) == default_count and not has_any_nondefault:
+			return None
+
+		return blocks
+
+	@staticmethod
+	def _getSequenceBaseName(par, seq):
+		"""Extract base name from a sequence parameter's full name.
+
+		E.g., 'comb2oper' with seq.name='comb' → 'oper'
+		"""
+		after_prefix = par.name[len(seq.name):]
+		return after_prefix.lstrip('0123456789')
+
+	def _getDefaultSequenceBlockCount(self, target, seq):
+		"""Get default numBlocks for a sequence on this op type.
+
+		Cached per (OPType, seq_name). Defaults to 1 -- most built-in
+		sequences start with 1 block. The worst case of a wrong default
+		is a redundant [{}] in the TDN output (harmless).
+		"""
+		cache_key = (target.OPType, seq.name)
+		if cache_key not in self._seq_default_blocks_cache:
+			self._seq_default_blocks_cache[cache_key] = 1
+		return self._seq_default_blocks_cache[cache_key]
+
 	def _exportCustomPars(self, target):
 		"""Export ALL custom parameters grouped by page.
 
 		Returns a dict keyed by page name, where each value is a list of
-		parameter definitions (without the 'page' field — the key IS the page).
+		parameter definitions (without the 'page' field -- the key IS the page).
+
+		For custom sequences: only the sequence header and the block 0 template
+		parameters are exported as custom par definitions. Per-block instance
+		parameters (block index > 0) are skipped -- their values are stored in
+		the operator's `sequences` key by `_exportBuiltinSequences`. The
+		template par's `name` field is normalized to its base name (the
+		original capitalized form, e.g. `Itemlabel` instead of `Items0itemlabel`)
+		so import can call `page.appendStr('Itemlabel')` correctly.
 		"""
 		if not hasattr(target, 'customPages'):
 			return {}
@@ -1479,6 +1937,14 @@ class TDNExt:
 			page_pars = []
 			for p in page.pars:
 				if p.name in seen_names:
+					continue
+
+				# Skip per-block instance parameters (block index > 0).
+				# Only block 0 represents the template; the rest are
+				# auto-generated by TD's sequence machinery.
+				sb = p.sequenceBlock
+				if sb is not None and sb.index > 0:
+					seen_names.add(p.name)
 					continue
 
 				# Get the tuplet (group of related pars)
@@ -1495,6 +1961,20 @@ class TDNExt:
 				# Export the group as a single definition (without page)
 				par_def = self._exportCustomParGroup(page, group)
 				if par_def:
+					# For sequence template pars, normalize the name to its
+					# base form (strip "{seqName}0" prefix). The base name
+					# must start with an uppercase letter for appendStr/etc.
+					if sb is not None and sb.index == 0 and p.sequence is not None:
+						base = self._getSequenceBaseName(p, p.sequence)
+						# Capitalize first letter to satisfy TD's naming
+						if base:
+							base = base[0].upper() + base[1:]
+							par_def['name'] = base
+							par_def['sequence'] = p.sequence.name
+							# Sequence template values are stored in
+							# the `sequences` key, not `value` here
+							par_def.pop('value', None)
+							par_def.pop('values', None)
 					page_pars.append(par_def)
 
 			if page_pars:
@@ -1522,7 +2002,7 @@ class TDNExt:
 			'style': style,
 		}
 
-		# Label — only if different from name
+		# Label -- only if different from name
 		if first_par.label != base_name:
 			par_def['label'] = first_par.label
 
@@ -1559,10 +2039,10 @@ class TDNExt:
 		# Menu entries
 		if first_par.isMenu:
 			if first_par.menuSource:
-				# Dynamically populated — store the source, not the entries
+				# Dynamically populated -- store the source, not the entries
 				par_def['menuSource'] = first_par.menuSource
 			else:
-				# Manually defined — store entries
+				# Manually defined -- store entries
 				names = list(first_par.menuNames)
 				labels = list(first_par.menuLabels)
 				par_def['menuNames'] = names
@@ -1577,7 +2057,7 @@ class TDNExt:
 		if first_par.help:
 			par_def['help'] = first_par.help
 
-		# Current values — only if different from default
+		# Current values -- only if different from default
 		if len(group) == 1:
 			val = self._getParValue(first_par)
 			if val is not None:
@@ -1798,15 +2278,15 @@ class TDNExt:
 				data['opacity'] = round(opacity, 4)
 
 			alpha = ann.par.Backcoloralpha.eval()
-			if abs(alpha - 1.0) > 1e-6:
+			if abs(alpha - 1.0) > 1e-6 and alpha > 0:
 				data['backAlpha'] = round(alpha, 4)
 
 			titleHeight = ann.par.Titleheight.eval()
-			if abs(titleHeight - 30) > 1e-6:
+			if abs(titleHeight - 30) > 1e-6 and titleHeight > 0:
 				data['titleHeight'] = titleHeight
 
 			bodyFontSize = ann.par.Bodyfontsize.eval()
-			if abs(bodyFontSize - 10) > 1e-6:
+			if abs(bodyFontSize - 10) > 1e-6 and bodyFontSize > 0:
 				data['bodyFontSize'] = bodyFontSize
 
 			result.append(data)
@@ -1866,6 +2346,184 @@ class TDNExt:
 
 		return inputs
 
+	def _captureExternalConnections(self, comp) -> list:
+		"""Capture sibling<->comp wires on comp's own connectors.
+
+		Records wires going INTO comp's input connectors (from external
+		siblings) and wires going OUT of comp's output connectors (to
+		external siblings). Used to preserve external connections across
+		strip/rebuild cycles where the internal in*/out* operators that
+		define comp's connectors are destroyed and recreated.
+
+		Returns a list of dicts with: direction ('input'|'output'),
+		kind ('op'|'comp'), local_index, remote, remote_index.
+		Returns [] when there's nothing to capture.
+		"""
+		parent = comp.parent()
+		if not parent:
+			return []
+		conns = []
+
+		def _rel(other):
+			try:
+				return other.name if other.parent() == parent else other.path
+			except Exception:
+				return other.path
+
+		def _find_remote_index(remote_op, target_comp, remote_attr):
+			try:
+				for ri, r_conn in enumerate(getattr(remote_op, remote_attr, [])):
+					for rc in r_conn.connections:
+						if rc.owner is target_comp:
+							return ri
+			except Exception:
+				pass
+			return 0
+
+		# INPUTS: walk comp's own input connectors.
+		# conn.owner on an input connector yields the source (remote) op.
+		for kind, local_attr, remote_out_attr in (
+				('op', 'inputConnectors', 'outputConnectors'),
+				('comp', 'inputCOMPConnectors', 'outputCOMPConnectors')):
+			try:
+				for i, connector in enumerate(getattr(comp, local_attr, [])):
+					for c in connector.connections:
+						src = c.owner
+						if src is comp:
+							continue
+						conns.append({
+							'direction': 'input',
+							'kind': kind,
+							'local_index': i,
+							'remote': _rel(src),
+							'remote_index': _find_remote_index(
+								src, comp, remote_out_attr),
+						})
+			except Exception as e:
+				self._log(
+					f'External capture ({local_attr}) error on '
+					f'{comp.path}: {e}', 'DEBUG')
+
+		# OUTPUTS: walk comp's own output connectors.
+		# conn.owner on an output connector yields the destination (remote) op.
+		for kind, local_attr, remote_in_attr in (
+				('op', 'outputConnectors', 'inputConnectors'),
+				('comp', 'outputCOMPConnectors', 'inputCOMPConnectors')):
+			try:
+				for i, connector in enumerate(getattr(comp, local_attr, [])):
+					for c in connector.connections:
+						dst = c.owner
+						if dst is comp:
+							continue
+						conns.append({
+							'direction': 'output',
+							'kind': kind,
+							'local_index': i,
+							'remote': _rel(dst),
+							'remote_index': _find_remote_index(
+								dst, comp, remote_in_attr),
+						})
+			except Exception as e:
+				self._log(
+					f'External capture ({local_attr}) error on '
+					f'{comp.path}: {e}', 'DEBUG')
+
+		return conns
+
+	def _restoreExternalConnections(self, comp, conns) -> int:
+		"""Restore captured external connections. Returns count restored.
+
+		Tolerant of missing/renamed remote ops and connector count changes.
+		Logs WARNING and skips individual wires on failure; never raises.
+		"""
+		if not conns:
+			return 0
+		parent = comp.parent()
+		if not parent:
+			return 0
+
+		def _resolve(ref):
+			o = parent.op(ref)
+			if o:
+				return o
+			return op(ref)
+
+		restored = 0
+		for entry in conns:
+			try:
+				direction = entry.get('direction')
+				kind = entry.get('kind', 'op')
+				local_idx = entry.get('local_index', 0)
+				remote_ref = entry.get('remote')
+				remote_idx = entry.get('remote_index', 0)
+
+				remote = _resolve(remote_ref) if remote_ref else None
+				if not remote:
+					self._log(
+						f'External restore: remote op not found: '
+						f'{remote_ref} ({direction} {kind}[{local_idx}] '
+						f'on {comp.path})', 'WARNING')
+					continue
+
+				if direction == 'input':
+					local_attr = ('inputConnectors' if kind == 'op'
+									else 'inputCOMPConnectors')
+					remote_attr = ('outputConnectors' if kind == 'op'
+									else 'outputCOMPConnectors')
+					local_conns = getattr(comp, local_attr, [])
+					remote_conns = getattr(remote, remote_attr, [])
+					if (local_idx >= len(local_conns)
+							or remote_idx >= len(remote_conns)):
+						self._log(
+							f'External restore: connector index out of '
+							f'range for {remote_ref}[{remote_idx}] -> '
+							f'{comp.name}[{local_idx}] ({kind})', 'WARNING')
+						continue
+					remote_conns[remote_idx].connect(local_conns[local_idx])
+					restored += 1
+				elif direction == 'output':
+					local_attr = ('outputConnectors' if kind == 'op'
+									else 'outputCOMPConnectors')
+					remote_attr = ('inputConnectors' if kind == 'op'
+									else 'inputCOMPConnectors')
+					local_conns = getattr(comp, local_attr, [])
+					remote_conns = getattr(remote, remote_attr, [])
+					if (local_idx >= len(local_conns)
+							or remote_idx >= len(remote_conns)):
+						self._log(
+							f'External restore: connector index out of '
+							f'range for {comp.name}[{local_idx}] -> '
+							f'{remote_ref}[{remote_idx}] ({kind})', 'WARNING')
+						continue
+					local_conns[local_idx].connect(remote_conns[remote_idx])
+					restored += 1
+			except Exception as e:
+				self._log(
+					f'External restore error on {comp.path}: {entry}: {e}',
+					'WARNING')
+
+		if restored:
+			self._log(
+				f'Restored {restored} external connection(s) on {comp.path}',
+				'INFO')
+		return restored
+
+	def _isDATEditable(self, dat_op):
+		"""Test whether a DAT's text content is writable.
+
+		Some auto-created companion DATs (e.g. glsl1_info, popto1) are
+		read-only -- TD auto-generates their content and rejects writes
+		with "The operator is not editable".  This probe is per-instance
+		(not per-OPType) because read-only companions share OPType
+		'textDAT' with regular editable text DATs.
+		"""
+		try:
+			original = dat_op.text
+			dat_op.text = original
+			return True
+		except Exception:
+			return False
+
 	def _exportDATContent(self, target):
 		"""Export DAT text or table content."""
 		try:
@@ -1914,7 +2572,7 @@ class TDNExt:
 		auto-renamed it due to name conflicts.
 
 		Auto-created companion DATs (e.g. timerCHOP callbacks, rampTOP keys)
-		are reused rather than duplicated — if an operator with the target
+		are reused rather than duplicated -- if an operator with the target
 		name already exists in the parent AND was NOT present before import
 		started, it was auto-created by a sibling's create() earlier in
 		this same import pass.
@@ -1934,7 +2592,7 @@ class TDNExt:
 				continue
 
 			# Reuse auto-created companions (e.g. timerCHOP callbacks,
-			# rampTOP keys) — but only if the op was NOT present before
+			# rampTOP keys) -- but only if the op was NOT present before
 			# import started (i.e. it was auto-created by a sibling's
 			# create() earlier in this same import pass).
 			existing = parent.op(name)
@@ -1950,12 +2608,17 @@ class TDNExt:
 
 			try:
 				new_op = parent.create(op_type, name)
+				# TD ignores the name param for some palette types
+				# (e.g. annotateCOMP). Explicitly rename to match the TDN.
+				if new_op.name != name:
+					try:
+						new_op.name = name
+					except Exception:
+						self._log(
+							f'Operator "{name}" auto-named to '
+							f'"{new_op.name}"', 'WARNING')
 				created.append(new_op.path)
 				op_def['_created_op'] = new_op
-				if new_op.name != name:
-					self._log(
-						f'Operator "{name}" renamed to "{new_op.name}" '
-						f'(name conflict)', 'WARNING')
 			except Exception as e:
 				self._log(
 					f'Failed to create {op_type} "{name}": {e}', 'WARNING')
@@ -1963,7 +2626,15 @@ class TDNExt:
 
 			# Recurse into children for COMPs
 			children = op_def.get('children', [])
-			if children and new_op.isCOMP:
+			tdn_ref = op_def.get('tdn_ref')
+			if tdn_ref and new_op.isCOMP:
+				# This COMP's children come from a separate .tdn file.
+				# Shell created here; network populated by
+				# ReconstructTDNComps() in depth-sorted order.
+				self._log(
+					f'Skipping children of {new_op.path} -- '
+					f'managed by {tdn_ref}', 'DEBUG')
+			elif children and new_op.isCOMP:
 				# Clear auto-created default children (e.g. torus1
 				# inside a geometryCOMP) before importing TDN children.
 				# These defaults aren't in the TDN (filtered by
@@ -1985,9 +2656,14 @@ class TDNExt:
 
 			custom_pars = op_def.get('custom_pars', {})
 			if custom_pars and target.isCOMP:
-				# Normalize to flat list with page info
-				flat_defs = self._flattenCustomPars(custom_pars)
-				self._createCustomParsOnOp(target, flat_defs)
+				# Palette clones already have their custom parameters from
+				# the clone source. Replacing them with appendXXX(replace=True)
+				# destroys the internal parameter bindings that the clone's
+				# rendering network depends on. Skip creation; Phase 3 sets
+				# values on the existing parameters directly.
+				if not op_def.get('palette_clone', False):
+					flat_defs = self._flattenCustomPars(custom_pars)
+					self._createCustomParsOnOp(target, flat_defs)
 
 			# Recurse
 			children = op_def.get('children', [])
@@ -2016,14 +2692,35 @@ class TDNExt:
 		return []
 
 	def _createCustomParsOnOp(self, target, custom_par_defs):
-		"""Create custom parameters on a single operator."""
+		"""Create custom parameters on a single operator.
+
+		Custom sequences (Sequence-style headers + template pars marked
+		with a `sequence` field) are created in this order:
+		  1. Sequence header via appendSequence(name)
+		  2. Template pars (each with a `sequence` field) via their normal
+		     append method -- they auto-join the sequence because they
+		     follow the sequence header in the page
+		  3. After all template pars for a sequence are added, blockSize
+		     is set to the count of template ParGroups for that sequence.
+		Block-instance values (numBlocks + per-block values) are restored
+		later in Phase 2.5 (_expandSequences).
+		"""
 		pages = {}  # Cache pages by name
+		# Track template par counts per sequence for blockSize setting
+		seq_template_counts = {}  # {seq_name: count}
 
 		for par_def in custom_par_defs:
 			style = par_def.get('style', 'Float')
 			par_name = par_def.get('name', '')
 			label = par_def.get('label', par_name)
 			page_name = par_def.get('page', 'Custom')
+
+			# Track template par counts: each par with a `sequence` field
+			# is one ParGroup in that sequence's block template
+			belongs_to_seq = par_def.get('sequence')
+			if belongs_to_seq:
+				seq_template_counts[belongs_to_seq] = (
+					seq_template_counts.get(belongs_to_seq, 0) + 1)
 
 			# Get or create page
 			if page_name not in pages:
@@ -2142,6 +2839,108 @@ class TDNExt:
 					f'Failed to create custom par "{par_name}": {e}',
 					'WARNING')
 
+		# After all custom pars are created, set blockSize for each
+		# custom sequence so its template is fully formed before
+		# Phase 2.5 sets numBlocks and block values.
+		for seq_name, count in seq_template_counts.items():
+			try:
+				seq = target.seq[seq_name]
+				seq.blockSize = count
+			except Exception as e:
+				self._log(
+					f'Failed to set blockSize={count} on sequence '
+					f'{seq_name} of {target.path}: {e}', 'WARNING')
+
+	def _expandSequences(self, parent, op_defs):
+		"""Phase 2.5: Expand built-in and custom parameter sequences.
+
+		Sets numBlocks for each sequence (creating parameter slots),
+		then sets non-default block parameter values. Must run before
+		Phase 3 (_setParameters) so the sequence parameters exist.
+
+		Custom sequences (defined via page.appendSequence) require
+		blockSize to be set before numBlocks. This is done in
+		_createCustomParsOnOp during Phase 2 based on the template
+		par count from the TDN.
+		"""
+		for op_def in op_defs:
+			sequences = op_def.get('sequences')
+			target = self._resolveOp(parent, op_def) if sequences else None
+
+			if sequences and target:
+				for seq_name, blocks in sequences.items():
+					try:
+						seq = target.seq[seq_name]
+					except Exception:
+						self._log(
+							f'Sequence "{seq_name}" not found on '
+							f'{target.path}', 'WARNING')
+						continue
+
+					try:
+						seq.numBlocks = len(blocks)
+					except Exception as e:
+						self._log(
+							f'Failed to set numBlocks={len(blocks)} on '
+							f'sequence {seq_name} of {target.path}: {e}',
+							'WARNING')
+						continue
+
+					for i, block_data in enumerate(blocks):
+						if not block_data:
+							continue
+						block = seq[i]
+						for base_name, value in block_data.items():
+							par = self._resolveSequenceBlockPar(
+								target, seq, block, i, base_name)
+							if par is None:
+								self._log(
+									f'Sequence param "{base_name}" not found '
+									f'in {seq_name}[{i}] on {target.path}',
+									'WARNING')
+								continue
+							self._setParValue(target, par.name, value)
+
+			# Recurse into children
+			children = op_def.get('children', [])
+			if children:
+				resolved = target or self._resolveOp(parent, op_def)
+				if resolved and resolved.isCOMP:
+					self._expandSequences(resolved, children)
+
+	@staticmethod
+	def _resolveSequenceBlockPar(target, seq, block, block_index, base_name):
+		"""Find a parameter inside a sequence block by base name.
+
+		Tries (in order):
+		  1. block.par.{baseName} -- works for built-in sequences
+		  2. block.par[{baseName}] -- bracket access fallback
+		  3. target.par.{seqName}{blockIndex}{lowercase baseName} -- works
+		     for custom sequences where block.par attribute access returns
+		     None (TD's custom-sequence block.par lookup is broken).
+		"""
+		# Try attribute access first (works for built-in seqs)
+		par = getattr(block.par, base_name, None)
+		if par is not None:
+			return par
+		# Try bracket access
+		try:
+			par = block.par[base_name]
+			if par is not None:
+				return par
+		except Exception:
+			pass
+		# Try full prefixed name on the target (works for custom seqs).
+		# Custom sequence pars are stored as {seqName}{blockIndex}{baseName_lower}
+		full_lower = f'{seq.name}{block_index}{base_name.lower()}'
+		par = getattr(target.par, full_lower, None)
+		if par is not None:
+			return par
+		# Last resort: try without lowercasing (in case of edge cases)
+		full_orig = f'{seq.name}{block_index}{base_name}'
+		par = getattr(target.par, full_orig, None)
+		return par
+
 	def _setParameters(self, parent, op_defs):
 		"""Phase 3: Set parameter values on all operators."""
 		for op_def in op_defs:
@@ -2152,7 +2951,7 @@ class TDNExt:
 			# Built-in parameters
 			is_palette_clone = op_def.get('palette_clone', False)
 			for par_name, value in op_def.get('parameters', {}).items():
-				# Skip clone/enablecloning on palette clones — these
+				# Skip clone/enablecloning on palette clones -- these
 				# are auto-set by parent.create() and should not be
 				# overwritten. Old TDN files may still contain them.
 				if is_palette_clone and par_name in _PALETTE_CLONE_SKIP_PARAMS:
@@ -2387,6 +3186,13 @@ class TDNExt:
 			if not target:
 				continue
 
+			# Skip DATs marked as read-only during export (v1.2+).
+			if op_def.get('dat_read_only'):
+				children = op_def.get('children', [])
+				if children and target.isCOMP:
+					self._setDATContent(target, children)
+				continue
+
 			if 'dat_content' in op_def and target.family == 'DAT':
 				try:
 					fmt = op_def.get('dat_content_format', 'text')
@@ -2398,9 +3204,18 @@ class TDNExt:
 					else:
 						target.text = content
 				except Exception as e:
-					self._log(
-						f'Failed to set DAT content on {target.path}: {e}',
-						'WARNING')
+					# Downgrade "not editable" errors to DEBUG -- expected
+					# for auto-generated companion DATs (info DATs, etc.)
+					# from older .tdn files without the dat_read_only flag.
+					err_str = str(e).lower()
+					if 'not editable' in err_str:
+						self._log(
+							f'Skipping read-only DAT {target.path} '
+							f'(auto-generated content)', 'DEBUG')
+					else:
+						self._log(
+							f'Failed to set DAT content on '
+							f'{target.path}: {e}', 'WARNING')
 
 			# Recurse
 			children = op_def.get('children', [])
@@ -2494,7 +3309,7 @@ class TDNExt:
 			children = op_def.get('children', [])
 
 			if not dock_ref:
-				# No dock on this op — still recurse into children
+				# No dock on this op -- still recurse into children
 				if children:
 					target = self._resolveOp(parent, op_def)
 					if target and target.isCOMP:
@@ -2588,15 +3403,15 @@ class TDNExt:
 					ann.par.Opacity = opacity
 
 				backAlpha = ann_def.get('backAlpha')
-				if backAlpha is not None:
+				if backAlpha is not None and backAlpha > 0:
 					ann.par.Backcoloralpha = backAlpha
 
 				titleHeight = ann_def.get('titleHeight')
-				if titleHeight is not None:
+				if titleHeight is not None and titleHeight > 0:
 					ann.par.Titleheight = titleHeight
 
 				bodyFontSize = ann_def.get('bodyFontSize')
-				if bodyFontSize is not None:
+				if bodyFontSize is not None and bodyFontSize > 0:
 					ann.par.Bodyfontsize = bodyFontSize
 
 				created.append(ann.path)
@@ -2712,7 +3527,8 @@ class TDNExt:
 			# Recurse into COMPs (but skip palette clone children
 			# and TDN-tagged COMP children unless embed_all)
 			if hasattr(child, 'children'):
-				if self._isPaletteClone(child):
+				if self._isPaletteClone(child) and (
+						self._resolvePaletteHandling(child) == 'blackbox'):
 					continue
 				if not embed_all and self._hasTDNTag(child):
 					continue
@@ -2938,27 +3754,163 @@ class TDNExt:
 	# HELPERS
 	# =========================================================================
 
+	# Per-COMP storage key and valid values for palette handling decisions.
+	_PALETTE_HANDLING_KEY = '_tdn_palette_handling'
+	_PALETTE_HANDLING_VALUES = ('blackbox', 'fullexport')
+
+	def _resolvePaletteHandling(self, target):
+		"""Resolve how to handle a detected palette COMP during TDN export.
+
+		Precedence:
+		  1. Per-COMP storage override (`_tdn_palette_handling`).
+		  2. Embody `Tdnpalettehandling` par:
+		       - `blackbox` / `fullexport` -> return directly.
+		       - `ask` -> prompt user via `_promptPaletteHandling`, which
+		         stores the decision on the target and returns it.
+		  3. Fallback: `blackbox` (safe default, preserves old behavior).
+		"""
+		try:
+			stored = target.fetch(self._PALETTE_HANDLING_KEY, None,
+								  search=False)
+		except Exception:
+			stored = None
+		if stored in self._PALETTE_HANDLING_VALUES:
+			return stored
+
+		try:
+			par_val = self.ownerComp.par.Tdnpalettehandling.eval()
+		except Exception:
+			par_val = 'blackbox'
+
+		if par_val in self._PALETTE_HANDLING_VALUES:
+			return par_val
+
+		# par_val == 'ask' (or unexpected)
+		return self._promptPaletteHandling(target)
+
+	def _promptPaletteHandling(self, target):
+		"""Prompt user for palette handling on this COMP; persist the choice.
+
+		Four buttons:
+		  0: Black Box (this COMP)     -> stored on target
+		  1: Full Export (this COMP)   -> stored on target
+		  2: Black Box for All         -> Tdnpalettehandling = blackbox
+		  3: Full Export for All       -> Tdnpalettehandling = fullexport
+		Returns the effective handling string.
+		"""
+		try:
+			embody = self.ownerComp.ext.Embody
+			choice = embody._messageBox(
+				'Embody - Palette Component Detected',
+				f'Palette component "{target.name}" ({target.OPType}) found '
+				f'in TDN export at {target.path}.\n\n'
+				f'- Black Box: reference the palette only; internals are '
+				f're-dropped on import. Recommended for stock palette COMPs.\n'
+				f'- Full Export: export all internals. Use when this COMP has '
+				f'been heavily customized internally.',
+				buttons=['Black Box', 'Full Export',
+						 'Black Box for All', 'Full Export for All'])
+		except Exception as e:
+			self._log(
+				f'Palette prompt failed on {target.path}: {e} '
+				f'(defaulting to blackbox)', 'WARNING')
+			return 'blackbox'
+
+		if choice == 0:
+			target.store(self._PALETTE_HANDLING_KEY, 'blackbox')
+			return 'blackbox'
+		if choice == 1:
+			target.store(self._PALETTE_HANDLING_KEY, 'fullexport')
+			return 'fullexport'
+		if choice == 2:
+			try:
+				self.ownerComp.par.Tdnpalettehandling = 'blackbox'
+			except Exception:
+				pass
+			return 'blackbox'
+		if choice == 3:
+			try:
+				self.ownerComp.par.Tdnpalettehandling = 'fullexport'
+			except Exception:
+				pass
+			return 'fullexport'
+		return 'blackbox'
+
 	def _isPaletteClone(self, target):
-		"""Check if a COMP is a palette clone (cloned from /sys/)."""
+		"""Check if a COMP is a palette component from TD's shipped palette.
+
+		Detection uses two strategies, in order:
+
+		1. Catalog lookup (fast path): if the operator's name and OPType
+		   both match a known palette entry, it's a palette component.
+		   The catalog is built by CatalogManagerExt at startup.
+
+		2. Clone expression heuristic (fallback): checks the clone
+		   parameter for known system prefixes (TDBasicWidgets, TDResources,
+		   TDTox, /sys/). Catches components whose clone was set by the
+		   palette drag-and-drop mechanism but whose name was changed.
+		"""
 		if not target.isCOMP:
 			return False
+
+		# --- Strategy 1: catalog lookup ---
+		if self._palette_catalog:
+			entry = self._palette_catalog.get(target.name)
+			if entry:
+				# Support both dict format {type, min_children} and legacy str
+				if isinstance(entry, dict):
+					expected_type = entry.get('type', '')
+					min_children = entry.get('min_children', 0)
+				else:
+					expected_type = entry
+					min_children = 0
+				if target.OPType == expected_type:
+					# Child count floor: reject user COMPs with same name that
+					# have far fewer children than the real palette component.
+					# Threshold is half the scanned count (tolerates user mods).
+					floor = max(1, min_children // 2) if min_children > 0 else 0
+					if floor == 0 or len(target.children) >= floor:
+						return True
+
+		# --- Strategy 2: clone expression heuristic ---
+		# Exclude /sys/TDTox/defaultCOMPs/* — these are TD's native-operator
+		# templates (every fresh buttonCOMP/panelCOMP/etc. clones from there
+		# by default). Not palette components; internals are minimal and
+		# export cleanly. Treated like any other normal COMP.
 		clone_par = getattr(target.par, 'clone', None)
 		if not clone_par:
 			return False
 		try:
-			# Check evaluated value (operator path)
 			clone_op = clone_par.eval()
 			if clone_op and hasattr(clone_op, 'path'):
-				if clone_op.path.startswith('/sys/'):
+				cpath = clone_op.path
+				if cpath.startswith('/sys/TDTox/defaultCOMPs/'):
+					return False
+				if cpath.startswith('/sys/'):
 					return True
-			# Check expression for /sys/ references
 			if clone_par.mode == ParMode.EXPRESSION:
 				expr = clone_par.expr
-				if 'TDTox' in expr or 'TDResources' in expr:
+				if 'defaultCOMPs' in expr:
+					return False
+				if any(s in expr for s in (
+						'TDBasicWidgets', 'TDResources', 'TDTox')):
 					return True
 		except Exception as e:
-			self._log(f'Error checking palette clone status for {target.path}: {e}', 'DEBUG')
+			self._log(
+				f'Error checking palette clone for {target.path}: {e}',
+				'DEBUG')
 		return False
+
+	@staticmethod
+	def _isInsideAnimationCOMP(target):
+		"""Return True if target has an animationCOMP in its immediate parent.
+
+		animationCOMP stores all keyframe data in direct-child tableDATs
+		(keys, channels, graph, attributes). Checking only the direct parent
+		is sufficient -- these DATs are never nested deeper inside the COMP.
+		"""
+		p = target.parent()
+		return p is not None and p.OPType == 'animationCOMP'
 
 	def _getCloneSourceDiffs(self, target):
 		"""Find params that differ from the clone source but match p.default.
@@ -2967,7 +3919,7 @@ class TDNExt:
 		But p.default can differ from the clone source's actual value (e.g.
 		buttontype: p.default is "momentary" but clone source is "toggledown").
 		This method finds params that were wrongly skipped because they match
-		p.default but differ from the clone source — these need to be exported
+		p.default but differ from the clone source -- these need to be exported
 		so they survive the strip/restore rebuild cycle.
 		"""
 		clone_par = getattr(target.par, 'clone', None)
@@ -3031,7 +3983,7 @@ class TDNExt:
 		"""Remove children from op_defs for COMPs with their own TDN entry.
 
 		The child COMP shell is still created (its operator definition remains),
-		but its children array is emptied — the child's own .tdn file is the
+		but its children array is emptied -- the child's own .tdn file is the
 		source of truth for its internal network.
 
 		Args:
@@ -3063,6 +4015,70 @@ class TDNExt:
 			return False
 		tdn_tag = self.ownerComp.par.Tdntag.val
 		return tdn_tag in target.tags
+
+	def _resolveTDNRef(self, target) -> 'Optional[str]':
+		"""Look up a TDN-tagged child COMP's relative file path.
+
+		Returns the child's .tdn file path (relative to the project
+		externalization folder) from the externalizations table, or
+		None if the child isn't tracked.
+		"""
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if not table or table.numRows < 2:
+				return None
+			for i in range(1, table.numRows):
+				if (table[i, 'path'].val == target.path
+						and table[i, 'strategy'].val == 'tdn'):
+					return table[i, 'rel_file_path'].val
+		except Exception:
+			pass
+		return None
+
+	def _validateTDNRefs(self, op_defs: list, parent_path: str) -> list:
+		"""Cross-validate tdn_ref pointers against the externalizations table.
+
+		Checks two independent sources of truth:
+		1. Each tdn_ref in the file corresponds to a table entry
+		2. Each referenced .tdn file exists on disk
+
+		Returns list of warning messages (empty = all valid).
+		"""
+		warnings = []
+		tdn_paths = self._getTDNExternalizedPaths()
+
+		for op_def in op_defs:
+			tdn_ref = op_def.get('tdn_ref')
+			name = op_def.get('name', '?')
+			child_path = f"{parent_path.rstrip('/')}/{name}"
+
+			if tdn_ref:
+				# Check 1: table entry exists for this child
+				if child_path not in tdn_paths:
+					warnings.append(
+						f'tdn_ref for {child_path} points to {tdn_ref} '
+						f'but no matching entry in externalizations table')
+
+				# Check 2: referenced file exists on disk
+				try:
+					abs_path = self.ownerComp.ext.Embody.buildAbsolutePath(
+						tdn_ref)
+					if not abs_path.is_file():
+						warnings.append(
+							f'tdn_ref for {child_path}: file not found: '
+							f'{tdn_ref}')
+				except Exception:
+					warnings.append(
+						f'tdn_ref for {child_path}: cannot resolve path: '
+						f'{tdn_ref}')
+
+			# Recurse into children
+			children = op_def.get('children', [])
+			if children:
+				warnings.extend(
+					self._validateTDNRefs(children, child_path))
+
+		return warnings
 
 	def _serializeValue(self, val):
 		"""Convert a parameter value to a JSON-safe type.
@@ -3334,7 +4350,7 @@ class TDNExt:
 		Groups by page: if the same page definition (all par defs sans values)
 		appears on 2+ operators, it becomes a named template.
 
-		Returns (par_templates_dict, operators) — operators modified in-place.
+		Returns (par_templates_dict, operators) -- operators modified in-place.
 		"""
 		from collections import defaultdict
 
@@ -3529,6 +4545,19 @@ class TDNExt:
 				pass
 		return None
 
+	@staticmethod
+	def _stripBuildSuffix(name: str) -> str:
+		"""Strip trailing build number (.NNN) from a project name for stable filenames.
+
+		Only removes a trailing dot-digits suffix -- the auto-incrementing build
+		number that TD appends on save. Preserves deliberate user versioning.
+
+		Examples: 'Embody-5.302' -> 'Embody-5', 'Embody-5' -> 'Embody-5',
+		'demo' -> 'demo', 'Embody5' -> 'Embody5', 'Embody_5' -> 'Embody_5'.
+		"""
+		import re
+		return re.sub(r'\.\d+$', '', name)
+
 	def _resolveOutputPath(self, output_file, root_op):
 		"""Resolve the output file path, matching the operator's TD path structure."""
 		from pathlib import Path
@@ -3537,8 +4566,9 @@ class TDNExt:
 			project_dir = Path(project.folder)
 
 			if root_op.path == '/':
-				# Root export: place in externalizations folder if configured
-				safe_name = project.name.removesuffix('.toe')
+				# Root export: strip build number for stable git-diffable name
+				raw_name = project.name.removesuffix('.toe')
+				safe_name = TDNExt._stripBuildSuffix(raw_name)
 				try:
 					ext_folder = self.ownerComp.ext.Embody.ExternalizationsFolder
 					if ext_folder:
@@ -3577,7 +4607,7 @@ class TDNExt:
 			headers = [table[0, c].val for c in range(table.numCols)]
 			has_strategy = 'strategy' in headers
 
-			# Update existing row if found — check strategy='tdn' or type='tdn'
+			# Update existing row if found -- check strategy='tdn' or type='tdn'
 			for i in range(1, table.numRows):
 				row_path = table[i, 'path'].val
 				if row_path != root_path:
@@ -3608,6 +4638,46 @@ class TDNExt:
 		except Exception as e:
 			self._log(f'Failed to track TDN export: {e}', 'WARNING')
 
+	def _warnLargeTDN(self, filepath: str, root_path: str) -> None:
+		"""Show a one-time warning when a TDN file exceeds the size threshold.
+
+		Uses the Tdncascadewarn parameter (ask/quiet) to control whether
+		the dialog is shown. 'Don't show again' sets the parameter to
+		'quiet' permanently.
+		"""
+		LARGE_TDN_THRESHOLD = 5_000_000  # 5 MB
+
+		# Already using cascade -- no point warning
+		if self.ownerComp.par.Tdncascade.eval():
+			return
+
+		warn_pref = getattr(self.ownerComp.par, 'Tdncascadewarn', None)
+		if warn_pref is None or warn_pref.eval() != 'ask':
+			return
+
+		try:
+			file_size = Path(filepath).stat().st_size
+		except Exception:
+			return
+
+		if file_size < LARGE_TDN_THRESHOLD:
+			return
+
+		size_mb = file_size / (1024 * 1024)
+		msg = (
+			f'The TDN file for {root_path} is {size_mb:.1f} MB.\n\n'
+			f'Large TDN files are difficult to diff in git. '
+			f'Enable "Cascade to Children" on the TDN page '
+			f'to split each child COMP into its own .tdn file.')
+		choice = self.ownerComp.ext.Embody._messageBox(
+			'Large TDN File',
+			msg,
+			buttons=['OK', "Don't show again"])
+
+		if choice == 1:  # Don't show again
+			self.ownerComp.par.Tdncascadewarn = 'quiet'
+			self._log('Large TDN warning silenced', 'INFO')
+
 	def _warnLockedNonDATs(self, root_op, context='export'):
 		"""Scan a network for locked non-DAT operators and warn.
 
@@ -3622,13 +4692,15 @@ class TDNExt:
 		locked = []
 		for child in root_op.findChildren():
 			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
+				if self._isInsideCloneOrReplicant(child, root_op):
+					continue
 				locked.append(child)
 
 		if not locked:
 			return
 
 		# Build summary
-		names = [f'{c.name} ({c.family})' for c in locked[:10]]
+		names = [f'{c.path} ({c.family})' for c in locked[:10]]
 		summary = ', '.join(names)
 		if len(locked) > 10:
 			summary += f', ... and {len(locked) - 10} more'
@@ -3636,10 +4708,10 @@ class TDNExt:
 		if context == 'export':
 			self._log(
 				f'Locked non-DAT operators in {root_op.path}: {summary} '
-				f'— frozen data will not persist through TDN', 'WARNING')
+				f'-- frozen data will not persist through TDN', 'WARNING')
 			try:
 				ui.messageBox(
-					'Embody — Locked Content Warning',
+					'Embody -- Locked Content Warning',
 					f'{len(locked)} locked non-DAT operator(s) in '
 					f'{root_op.path}:\n\n{summary}\n\n'
 					f'TDN preserves the lock flag but cannot store '
@@ -3655,11 +4727,34 @@ class TDNExt:
 			except Exception:
 				pass  # Non-fatal if dialog fails
 		else:
-			# Import context — log only, no dialog (reconstruction is automated)
+			# Import context -- log only, no dialog (reconstruction is automated)
 			self._log(
 				f'Restored lock flag on {len(locked)} non-DAT operator(s) '
-				f'in {root_op.path}: {summary} — these operators have no '
+				f'in {root_op.path}: {summary} -- these operators have no '
 				f'frozen data and should be unlocked to re-cook', 'WARNING')
+
+	def _isInsideCloneOrReplicant(self, child, root_op):
+		"""True if child is a descendant of a clone or replicant COMP.
+
+		Lock state inside clones is inherited from the master (user
+		should fix it there). Lock state inside replicants is
+		regenerated per-template by the replicatorCOMP. In both cases
+		warning the user is noise, not signal.
+		"""
+		p = child.parent()
+		while p is not None and p is not root_op and p.path != '/':
+			if p.replicator is not None:
+				return True
+			clone_par = getattr(p.par, 'clone', None)
+			enable_par = getattr(p.par, 'enablecloning', None)
+			if clone_par is not None and enable_par is not None:
+				try:
+					if clone_par.eval() and enable_par.eval():
+						return True
+				except Exception:
+					pass
+			p = p.parent()
+		return False
 
 	def _log(self, message, level='INFO'):
 		"""Log via Embody's centralized logger."""
@@ -3667,6 +4762,6 @@ class TDNExt:
 			self.ownerComp.ext.Embody.Log(message, level, _depth=2)
 			return
 		except Exception:
-			pass  # Fallback below handles this — avoid recursion in logger
+			pass  # Fallback below handles this -- avoid recursion in logger
 		# Fallback if Embody ext unavailable
 		print(f'[TDN][{level}] {message}')

@@ -1,4 +1,33 @@
-# Import & Export
+# Read, Import & Export
+
+## Reading a Network (no disk I/O)
+
+### MCP Tool
+
+Use the `read_tdn` tool to return the live network as a TDN dict **without writing anything to disk**. This is the preferred read path for LLM workflows exploring networks of more than ~3 operators — **typically 20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network` because of default-omission, `type_defaults`, and `par_templates` compaction.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `comp_path` | `"/"` | Starting COMP path |
+| `include_dat_content` | Toggle setting | Include DAT text/table content |
+| `max_depth` | `null` (unlimited) | Cap recursion on large roots |
+| `embed_all` | `false` | Recurse into TDN-tagged COMPs instead of skipping their children |
+
+Works in all three `Tdnmode` values (Off / Export-on-Save / Roundtrip) — `read_tdn` reads live state, not `.tdn` files on disk.
+
+### When NOT to use `read_tdn`
+
+For these, reach for the runtime-state MCP tools instead:
+
+| Need | Use |
+|---|---|
+| Evaluated-expression runtime values | `get_parameter` |
+| Cook errors / warnings | `get_op_errors` |
+| DAT / CHOP / TOP output data | `get_dat_content`, `capture_top` |
+| Cook timing | `get_op_performance` |
+| Flag state after runtime mutation | `get_op_flags` |
+
+---
 
 ## Exporting a Network
 

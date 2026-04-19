@@ -21,12 +21,23 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 ### Restoration
 
 - **TOX Restore on Start** — Restore missing TOX-strategy COMPs from `.tox` files on project open (ON by default)
-- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open
+- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open. **Only active when `TDN Mode` = Roundtrip.** In Export-on-Save mode, the `.toe` is the source of truth and reconstruction is skipped. See [TDN](#tdn) for the full parameter listing.
 
 ### TDN
 
+- **TDN Mode** — Master three-way switch for the TDN subsystem:
+    - *Off* — no TDN runtime. `.tdn` files on disk are preserved; Embody stops touching them.
+    - *Export-on-Save* — **default**. Writes `.tdn` files on save. `.toe` is the source of truth; live network is never stripped. Ideal for git-diff and MCP workflows.
+    - *Roundtrip (Experimental)* — bidirectional strip/restore. Children are stripped from the `.toe` on save and rebuilt from `.tdn` on open. May hit edge cases with extension reload timing on deeply-nested TDN COMPs.
+    - **Upgrading from the old `Tdnenable` toggle**: on first project open after upgrade, Embody detects the legacy parameter in `.embody/config.json` and shows a one-shot dialog offering Export-on-Save (recommended) or a one-click restore of the previous Full behavior via Roundtrip mode. Your existing `.tdn` files and tracked COMP entries are preserved across the switch; the nudge fires once per project and never again.
+- **Cascade to Children** — When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own `.tdn` file
+- **Large TDN Warning** — *Ask* (default) prompts when a `.tdn` file exceeds 5 MB, *Quiet* suppresses the warning
 - **Embed DATs in TDNs** — Include DAT content in TDN exports
-- **DAT Safety** — What to do when TDN COMPs contain DATs with unprotected content: *Ask Each Save* (default) prompts before each save, *Always Externalize* auto-externalizes without asking, *Never Ask* suppresses the check
+- **Embed Storage in TDNs** — Include Python storage entries in TDN exports (can be overridden per-COMP from the tagging menu)
+- **TDN Create on Start** — Reconstruct TDN-strategy COMPs from `.tdn` files on project open (Roundtrip mode only; greyed in Off/Export)
+- **Strip on Save** — Strip children from TDN-strategy COMPs on save (Roundtrip mode only; greyed in Off/Export — Export-on-Save never strips)
+- **Palette Handling** — How to handle TD palette COMPs (e.g. `abletonLink`, Widget components) during TDN export. *Ask* (default) prompts on first encounter per COMP with four choices; *Black Box* always references the palette and skips internal children (correct for stock palette COMPs); *Full Export* always exports all internals (for heavily customized palette COMPs). Native operator templates (`/sys/TDTox/defaultCOMPs/`) are excluded from palette detection — a plain `buttonCOMP` or `panelCOMP` is treated as a regular COMP, not a palette clone. See [TDN Palette Handling](../tdn/specification.md#palette-handling) for details
+- **Content Safety** — What to do when TDN COMPs contain DATs or storage that would be lost on save: *Ask Each Save* (default) prompts before each save, *Always Externalize* auto-externalizes at-risk DATs without asking, *Never Ask* suppresses the check entirely. The *Never Ask* value is an opt-in escape hatch for power users — the save-time dialog no longer offers a single-click bypass button.
 - **Export Project TDN** — Pulse to export the entire project network
 
 ### Logs
@@ -34,6 +45,20 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Verbose (Debug)** — Enable debug-level logging
 - **Print to Textport** — Echo logs to the textport
 - **Log to File** — Enabled by default, writes to `logs/<project_name>_YYMMDD.log`
+
+## Settings Persistence
+
+Embody automatically saves your parameter settings to a `config.json` file in the `.embody/` folder so they survive upgrades, crashes, and force-quits.
+
+- **Location**: `.embody/` folder at the git root (next to `.mcp.json`), or the project folder if no git repo
+- **When saved**: Automatically on every parameter change (debounced to 1 frame)
+- **When restored**: On every project open (frame 5), and on fresh install after dropping in a new `.tox`
+- **What's saved**: Folder path, Envoy config, tag names, tag colors, TDN settings, logging options, and other user-configurable parameters. Read-only status fields and runtime state are excluded
+
+The file is created on your first parameter change — no `.embody/config.json` exists until you customize something. If the file is missing or corrupt, Embody uses its built-in defaults.
+
+!!! tip "Upgrading Embody"
+    When you drop a new Embody `.tox` into your project, your saved settings are automatically restored. No manual reconfiguration needed.
 
 ## Logging System
 

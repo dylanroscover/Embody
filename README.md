@@ -1,34 +1,35 @@
 # 💬 Embody
 
-**Have a conversation with TouchDesigner.**
+**Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.263-blue)
+![Version](https://img.shields.io/badge/version-5.0.381-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
-![MCP Tools](https://img.shields.io/badge/MCP_tools-45-purple)
-![License](https://img.shields.io/badge/license-TEC_Friendly-green)
+![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
+![License](https://img.shields.io/badge/license-MIT-green)
+![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody)
 
-[Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
+[Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Manifesto](https://dylanroscover.github.io/Embody/manifesto/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
 
 ---
 
-TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or review. Embody makes your TD projects readable: by AI, by version control, and by you. **Git is not required** — Embody works in any project folder.
+Embody puts your ideas on screen as fast as you can describe them. Operators, connections, parameters, the works. Want to try a different direction? Spin up a new approach in seconds. Compare attempts side by side. Branch off the one that works. **The tool keeps up with you, instead of the other way around.**
 
-## What It Does
+## Three Tools, One Idea
 
-**Envoy**, Embody's embedded [MCP](https://modelcontextprotocol.io/) server, lets AI assistants like [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire connections, set parameters, write extensions, and debug errors — all through natural conversation. No copy-pasting code. No describing your network in chat.
+**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
 
-**Embody** externalizes your operators to diffable files (`.tox`, `.py`, `.json`, `.glsl`, etc.) in a folder structure that mirrors your network hierarchy. Tag operators, save with `ctrl + shift + u`, and everything restores from disk automatically on project open — your externalized files are the source of truth.
+**Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
 
-**TDN** (TouchDesigner Network) exports your entire operator network to human-readable JSON — a structured language that both humans and LLMs can read, diff, and reconstruct. Review structural changes in pull requests, snapshot configurations, or hand an LLM a complete picture of your network.
+**TDN** — *the substrate that makes both possible.* TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDN is what makes the rest of this possible.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 
-| | Feature | What It Does |
-|---|---------|-------------|
-| 📦 | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores everything from disk on project open |
-| 🤖 | **Envoy MCP Server** | 45 tools let AI assistants create operators, set parameters, wire connections, and more |
-| 📄 | **TDN Network Format** | Export/import operator networks as diffable JSON for code review and snapshots |
-| 📤 | **Portable Tox Export** | Export any COMP as a self-contained `.tox` with all external references stripped |
+| | What | Why it matters |
+|---|---|---|
+| 🤖 | **Envoy MCP Server** | 47 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
+| 📦 | **Automatic Restoration** | Externalized operators rebuild themselves from disk on every project open. The `.toe` is no longer the source of truth — your files are. |
+| 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
 
 ---
 
@@ -36,7 +37,7 @@ TouchDesigner projects are binary `.toe` files — impossible to diff, merge, or
 
 ### 1. Project Setup
 
-Embody writes externalized files relative to your `.toe` location — no special folder structure required. A **git repository** is recommended if you want diffable history and collaboration, but Embody works in any project folder:
+Embody writes externalized files relative to your `.toe` location — no special folder structure required. Embody works in any project folder; if you happen to use git, every change is also a clean diff for free.
 
 ```
 my-project/              ← project folder (optionally a git repo)
@@ -52,7 +53,7 @@ my-project/              ← project folder (optionally a git repo)
 
 1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project
 2. **Tag operators** — select any COMP or DAT and press `lctrl` twice to tag and externalize it
-3. **Work normally** — press `ctrl + shift + u` to save all changes, or `ctrl + alt + u` to save only the current COMP. On project open, Embody restores everything from disk automatically
+3. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. On project open, Embody restores everything from disk automatically
 
 > **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
@@ -61,8 +62,9 @@ my-project/              ← project folder (optionally a git repo)
 | Shortcut | Action |
 |----------|--------|
 | `lctrl + lctrl` | Tag or manage the operator under the cursor |
-| `ctrl + shift + u` | Initialize / update all externalizations |
-| `ctrl + alt + u` | Save only the current COMP |
+| `ctrl + shift + u` | Update all externalizations |
+| `ctrl + alt + u` | Update only the current COMP |
+| `ctrl + shift + r` | Refresh tracking state |
 | `ctrl + shift + o` | Open the Manager UI |
 | `ctrl + shift + e` | Export entire project to `.tdn` file |
 | `ctrl + alt + e` | Export current COMP to `.tdn` file |
@@ -115,7 +117,9 @@ When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD 
 
 ## TDN Network Format
 
-TDN (TouchDesigner Network) is a JSON-based format for exporting operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be meaningfully diffed in any text tool — or in git if you use version control.
+TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable JSON file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it on the next project open.
+
+This is the substrate. Every other capability — AI-driven building, version control, automatic restoration — builds on top of it.
 
 - **Entire project**: `ctrl + shift + e`
 - **Current COMP**: `ctrl + alt + e`
@@ -146,7 +150,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **39 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **48 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -177,8 +181,25 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.381**: Global Perform Mode toggle disables Embody/Envoy/TDN compute during TD performance (Issue #13), auto-resolve duplicate DATs inside active clones without prompting (Issue #15), ancestor-rename disk handling now uses the externalizations folder prefix so `Move` no longer fails with "source folder not found" (Issue #16), new render-coordinate-system rules for TD's bottom-left origin convention (Issue #14)
+- **5.0.376**: Palette scan skips invasive palettes (TDVR framerate popup, AutoUI widget dialog) on fresh-build startup, rebaked palette catalog covers TD 2025.32460, and false "locked content" warnings suppressed inside clones/replicants (Issue #12)
+- **5.0.372**: TDN three-mode master switch (Off/Export-on-Save/Roundtrip), `read_tdn` MCP tool (~20-90× fewer tokens than `get_op` walks), combined DAT+storage Content Safety dialog with "Never Ask" footgun removed, palette detection fix for native `buttonCOMP` operators, migration nudge for upgrading users, docs + landing page rewrite
+- **5.0.362**: Palette handling control (Ask/Black Box/Full Export) during TDN export, CatalogManager fires on fresh project drops, palette catalog portability + log-level fixes
+- **5.0.356**: Palette catalog detection, animationCOMP keyframe preservation, external wire preservation across TDN strip/rebuild
+- **5.0.354**: Consolidate runtime files into `.embody/` folder, fix bridge path resolution
+- **5.0.352**: Fix Envoy failing to start after Embody upgrade (restart counter, port race, reclaim timeout)
+- **5.0.351**: Creation-defaults catalog, stdin-based bridge lifecycle, Envoy resilience hardening
+- **5.0.336**: Batch MCP operations, Envoy auto-restart on crash and save, 46 MCP tools
+- **5.0.330**: Envoy bridge v2 — proactive reconciliation, multi-session safety, zero forced restarts
+- **5.0.320**: TDN v1.3 — parameter sequence round-trip + companion DAT handling (GLSL/Timer/Script/Ramp companions)
+- **5.0.310**: Fix first-time Envoy setup stuck on "Disabled" (issues #8, #9), git config generation on fresh install
+- **5.0.305**: Replicant duplicate detection fix (issue #4), TDN export improvements, ExternalizeProject dialog
+- **5.0.302**: Fix duplicate path clone detection (issue #4), config file location (issue #5), Envoy startup flow
+- **5.0.278**: Fix folder change crash (issue #3), regression tests
+- **5.0.277**: Manager UI improvements, Ctrl+Shift+R shortcut, consistent "Update" terminology
+- **5.0.275**: TDN export keyboard shortcut pars, keyboard shortcuts documentation
+- **5.0.274**: Settings persistence across upgrades, extension initialization timing docs
 - **5.0.263**: DAT content safety, palette clone fidelity, recursive TDN fingerprinting, venv validation
-- **5.0.260**: Bridge signal diagnostics, conditional bridge-script writes, connectivity wording fix
 - **5.0.259**: Mandatory operator layout rules, `/local` path prohibition, TD connectivity recovery
 - **5.0.258**: Multi-instance Envoy support, `switch_instance` tool, auto-suffix collision avoidance
 - **5.0.252**: Windows process-kill fix, reconstruction verification fix
@@ -199,7 +220,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 - **5.0.204**: Custom window header, path portability, TDN cleanup
 - **5.0.201**: Robust first-install init, table schema expansion, release build hardening
 - **5.0.190**: Automatic restoration — TOX and TDN strategy COMPs fully restored from disk on project open
-- **5.0**: Envoy MCP server (45 tools), TDN format, test framework (38 suites), macOS support
+- **5.0**: Envoy MCP server (46 tools), TDN format, test framework (38 suites), macOS support
 
 ---
 
@@ -209,4 +230,4 @@ Originally derived from [External Tox Saver](https://github.com/franklin113/Exte
 
 ## License
 
-[TEC Friendly License v1.0](LICENSE)
+[MIT License](LICENSE)

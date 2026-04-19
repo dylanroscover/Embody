@@ -1,13 +1,15 @@
 {
 	"format": "tdn",
-	"version": "1.1",
-	"build": 5,
-	"generator": "Embody/5.0.261",
+	"version": "1.3",
+	"build": 1,
+	"generator": "Embody/5.0.363",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-28T20:09:53Z",
+	"source_file": "Embody-5.363.toe",
+	"exported_at": "2026-04-14T01:35:07Z",
 	"network_path": "/embody/Embody/toolbar/container_left/initialize",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type": "textCOMP",
 	"parameters": {
@@ -33,7 +35,7 @@
 	"color": [0.3, 0.5, 0.9],
 	"tags": ["tdn"],
 	"storage": {
-		"pressed": true
+		"pressed": false
 	},
 	"operators": []
 }

@@ -1,10 +1,10 @@
 # TDN Format
 
-**TDN** (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. Unlike binary `.toe` and `.tox` files, `.tdn` files can be opened in any text editor, compared with any diff tool, and — if you use git — meaningfully reviewed in pull requests.
+**TDN** (TouchDesigner Network) is the substrate that makes the rest of Embody possible. It's a JSON-based file format for representing TouchDesigner operator networks as text — text your AI agent can read, text any diff tool can compare, text a network can rebuild itself from on the next project open. Unlike binary `.toe` and `.tox` files, a `.tdn` file is the network in a form anything can understand.
 
 ## Why TDN?
 
-TouchDesigner's binary `.toe` files are opaque to text-based tools. When you change a parameter or rewire operators, there's no way to see what changed by looking at the file. TDN solves this by being as **lean and efficient as possible** — both in file size and readability:
+Without a text format for networks, AI-driven TouchDesigner work is one-directional: you generate, and you're stuck with what you got. There's no way to compare attempts, no way to revert cleanly, no way to hand the agent a snapshot of what's already on screen. TDN closes that loop. The format is designed to be as **lean and efficient as possible** — both in file size and readability:
 
 - **Non-default only** — only parameters that differ from their defaults are exported. No bloat, no noise — just what you actually changed
 - **Human-readable JSON** — easy to read, diff, and review (in pull requests or any text comparison tool)
@@ -47,6 +47,17 @@ No prefix means a constant value. This keeps the common case (constant parameter
 
 ## Usage
 
+### Read (live, no disk)
+
+Use the `read_tdn` MCP tool to return a live network as a TDN dict without writing anything to disk. Preferred for LLM workflows exploring multi-operator networks — **~20-90× fewer tokens** than walking the same subtree with `get_op` + `query_network`.
+
+- `comp_path` — Starting COMP (default: `/`)
+- `include_dat_content` — Include DAT text/table content
+- `max_depth` — Cap recursion on large roots
+- `embed_all` — Recurse into TDN-tagged COMPs instead of skipping their children
+
+Works in all three `Tdnmode` values. See [Import & Export → Reading a Network](import-export.md#reading-a-network-no-disk-io) for the full scope-boundary guide (when to reach for `get_parameter`, `get_op_errors`, `get_dat_content`, etc. instead).
+
 ### Export
 
 === "Keyboard Shortcut"
@@ -75,7 +86,7 @@ Use the `import_network` MCP tool:
 
 COMPs can use TDN as their externalization strategy (instead of `.tox`). With TDN strategy:
 
-1. Press ++ctrl+shift+u++ to export children to `.tdn` files
+1. Press ++ctrl+shift+u++ to update — children are exported to `.tdn` files
 2. On project save (++ctrl+s++), children are stripped from the `.toe` to keep it small, then restored after save completes
 3. On project open, children are automatically reconstructed from the `.tdn` file — no need to save your `.toe` to preserve them
 4. In git, you see readable JSON diffs instead of binary changes

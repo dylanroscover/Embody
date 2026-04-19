@@ -1,13 +1,15 @@
 {
 	"format": "tdn",
-	"version": "1.1",
+	"version": "1.3",
 	"build": 1,
-	"generator": "Embody/5.0.255",
+	"generator": "Embody/5.0.363",
 	"td_build": "099.2025.32280",
-	"exported_at": "2026-03-26T16:00:54Z",
+	"source_file": "Embody-5.363.toe",
+	"exported_at": "2026-04-14T01:35:04Z",
 	"network_path": "/embody/Embody/toolbar/container_right/spacer_pars",
 	"options": {
-		"include_dat_content": false
+		"include_dat_content": false,
+		"include_storage": true
 	},
 	"type": "containerCOMP",
 	"parameters": {

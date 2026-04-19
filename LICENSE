@@ -1,61 +1,21 @@
-TEC Friendly License v1.0
-=========================
+MIT License
 
-Copyright (c) 2020-present The Experiential Company, LLC ("TEC")
+Copyright (c) 2020-present The Experiential Company, LLC
 
-Permission
-----------
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-You can use, copy, modify, merge, publish, distribute, and sell this software,
-in source or binary form, for any purpose, including commercial use.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-The only conditions are:
-
-1. Keep this license text and the credits (the names above) in any significant
-   copies, forks, or redistributions of the software.
-
-2. If you change the software in a way that materially affects how it works,
-   be honest about that in your own documentation or about box. Don’t imply
-   your modified version is the “official” software unless you have our written
-   permission.
-
-No warranty
------------
-
-This software is provided “as is”, with no promises of any kind.
-
-You use it entirely at your own risk. TEC (and any contributors) are **not**
-responsible for any bugs, crashes, data loss, broken shows, missed cues, or
-other damage, including business or project losses, even if you told us about
-the possibility in advance.
-
-If you are using this in a critical, commercial, or safety-sensitive context,
-it is **your** responsibility to test it thoroughly and put proper backups and
-fallbacks in place.
-
-Support & consulting
---------------------
-
-There is no guaranteed free support.
-
-If you:
-
-- need help integrating this software,
-- want new features or bug fixes on a schedule,
-- or want training or custom development,
-
-you’re welcome to reach out and hire us:
-
-  hello@tec.design
-
-Using this software does **not** create any obligation on us to respond,
-fix issues, or provide support unless we have a separate written agreement.
-
-Jurisdiction
-------------
-
-If any part of this license is found invalid or unenforceable, the rest stays
-in effect.
-
-Where a choice of law is needed, this license is governed by the laws of the
-State of California, USA, excluding its conflict-of-law rules.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

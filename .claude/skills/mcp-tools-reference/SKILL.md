@@ -114,8 +114,13 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Export to `.tdn` JSON |
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Returns live network as a TDN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdn` to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from `.tdn` JSON |
+
+**When to prefer `read_tdn`:** exploring or auditing ≥3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
+
+**When NOT to use `read_tdn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdn` is an authored-state snapshot, not a runtime probe.
 
 ## TOP Capture
 
@@ -129,7 +134,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
-**Auto-piggybacked logs**: Every MCP response includes a `_logs` field with up to 20 recent entries. Log files at `dev/logs/` have the complete picture.
+**Auto-piggybacked logs**: Every MCP response includes a `_logs` field with up to 20 recent entries. Log files inside Embody's logs directory (see the `Logfolder` parameter on the Embody COMP) have the complete picture.
 
 ## Bridge Meta-Tools
 
@@ -141,3 +146,25 @@ These run locally on the STDIO bridge — they work even when TD is not running.
 | `launch_td` | `timeout?` | Launch TD with the project's `.toe` file, wait for Envoy (default: 120s) |
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |
 | `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch the bridge to a different running instance (provide toe basename without `.toe`). See `/multi-instance` skill for workflow |
+
+## Batch Operations
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `batch_operations` | `operations` | Execute multiple operations in a single request. Reduces latency and token overhead |
+
+**`operations`** is a list of `{"tool": str, "params": dict}` objects. Each entry maps to an existing tool name and its parameters. Stops on first error.
+
+**When to use**: 3+ calls to the same tool type (positioning, connecting, parameter setting, flags). Use `execute_python` instead when you need conditionals, loops, or computed values between operations.
+
+**Example** — position 4 operators + connect them in one call:
+```json
+{"operations": [
+  {"tool": "set_op_position", "params": {"op_path": "/project1/noise1", "x": 400, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/comp1", "x": 800, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/level1", "x": 1200, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/null1", "x": 1600, "y": 0}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/noise1", "dest_path": "/project1/comp1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/comp1", "dest_path": "/project1/level1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/level1", "dest_path": "/project1/null1"}}
+]}

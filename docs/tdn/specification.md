@@ -1,6 +1,8 @@
 # TDN Specification
 
-**Version 1.1**
+**Version 1.3**
+
+TDN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional — you generate, and you're stuck with what you got. With it, every step of the loop — generate, compare, revert, branch — runs at the speed of typing.
 
 TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
@@ -18,7 +20,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 ```json
 {
   "format": "tdn",
-  "version": "1.1",
+  "version": "1.3",
   "build": 1,
   "generator": "Embody/5.0.237",
   "td_build": "2025.32050",
@@ -26,7 +28,8 @@ A `.tdn` file is a JSON object with the following top-level fields:
   "network_path": "/",
   "type": "containerCOMP",
   "options": {
-    "include_dat_content": true
+    "include_dat_content": true,
+    "include_storage": true
   },
   "type_defaults": { ... },
   "par_templates": { ... },
@@ -45,7 +48,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
-| `version` | string | Yes | Format version. Currently `"1.1"`. |
+| `version` | string | Yes | Format version. Currently `"1.3"`. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
@@ -54,6 +57,7 @@ A `.tdn` file is a JSON object with the following top-level fields:
 | `type` | string | No | TouchDesigner operator type of the target COMP (e.g., `"baseCOMP"`, `"containerCOMP"`, `"geometryCOMP"`). Added in v1.1. Makes the file self-describing for portable import into other projects. On import, a mismatch between this field and the destination COMP's type triggers a warning. |
 | `options` | object | Yes | Export settings used when generating this file. |
 | `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |
+| `options.include_storage` | boolean | No | Whether operator storage entries were included in the export. Absent means `true` (included). Added in v1.2. Can be toggled per-COMP via the `embed_storage_in_tdn` storage key. |
 | `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
 | `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
@@ -119,6 +123,8 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `children` | array | No | Only for COMPs with child operators (excluding palette clones). Contains nested operator objects. See [Children and Hierarchy](#children-and-hierarchy). |
 | `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
+| `sequences` | object | No | Only if the operator has built-in parameter sequences with non-default block counts or values. See [Built-in Parameter Sequences](#built-in-parameter-sequences). *Added in v1.3.* |
+| `tdn_ref` | string | No | Only for COMPs with their own TDN externalization. Relative file path to the child's `.tdn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
 
 ### Compact Formatting
 
@@ -214,6 +220,109 @@ A constant parameter is included only if its current value differs from its defa
 - **Floats**: considered different if `abs(current - default) > 1e-9`
 - **OP-reference parameters**: `None` and `""` are treated as equivalent (both mean "no operator connected")
 - **All other types**: standard equality comparison (`!=`)
+
+### Divergent Defaults and the Creation-Defaults Catalog
+
+Some TouchDesigner operators reset certain parameters during initialization, meaning the value reported by `p.default` differs from the value TouchDesigner actually assigns when the operator is created. For example:
+
+- `cameraCOMP` `tz`: `p.default` reports `0`, but TD creates cameras with `tz = 5`
+- `lightCOMP` `tz`: `p.default` reports `0`, but TD creates lights with `tz = 5`
+- `renderTOP` resolution parameters: reported defaults differ from creation values
+
+If TDN used `p.default` directly for non-default comparison, a user-set value that happens to match `p.default` but differs from the actual creation value would be silently omitted from export. On import, TD would create the operator with the (different) creation value, and the user's intended value would be lost. Conversely, a parameter at the true creation value might be incorrectly included in the export, bloating the file with false positives.
+
+#### The Catalog System
+
+Embody solves this with a three-tier system that discovers and caches the true creation values for every operator type:
+
+**1. Background scan at startup**
+
+On project open, the `CatalogManager` extension checks whether a creation-values catalog exists for the current TD build (stored as a JSON file in the `.embody/` directory at the project root). If no catalog exists, it runs a background scan:
+
+- Iterates every creatable operator type in TouchDesigner (TOPs, CHOPs, SOPs, DATs, MATs, COMPs, POPs)
+- Creates a temporary instance of each type
+- Records `p.val` (the actual value TD assigned) for every non-custom, non-read-only parameter
+
+The catalog stores **all** creation values, not just divergent ones. This means TDN always has the ground-truth creation value for every parameter — `_getCreationDefault()` returns the catalog value directly, falling back to `p.default` only for parameters the catalog doesn't cover. The divergent-default problem (where `p.val` differs from `p.default`) is solved implicitly: by recording what TD actually assigns, the catalog captures both correct and divergent defaults without needing to distinguish between them.
+
+The scan processes 1–2 operator types per frame to avoid dropping frames. The resulting catalog is written to `.embody/catalog_{build}.json` (e.g., `.embody/catalog_099.2025.32280.json`) and cached for future sessions on the same TD build.
+
+**2. Export/import correction**
+
+During TDN export, the `_getCreationDefault()` method checks the catalog before falling back to `p.default`:
+
+```python
+def _getCreationDefault(self, op_type, par_name, par):
+    divergent = self._getDivergentDefaults(op_type)
+    if par_name in divergent:
+        return divergent[par_name]
+    return par.default
+```
+
+This means TDN compares parameter values against the *actual creation value*, not the *reported default*. Parameters are included in the export if and only if the user's value truly differs from what TD would assign to a freshly created operator.
+
+**3. Cross-build patching**
+
+When a `.tdn` file is opened on a different TD build than the one that exported it, creation defaults may have shifted between builds. The `CatalogManager` handles this automatically:
+
+1. Reads the `td_build` field from each `.tdn` file header
+2. Loads the catalog for the source build (if available)
+3. Loads the catalog for the current build
+4. Finds parameters whose creation defaults changed between the two builds
+5. For each affected operator, checks if the current value matches the *new* default — if so, the parameter was omitted during export (because it matched the *old* default), and TD has now assigned the wrong new default
+6. Patches those parameters back to the old creation value
+
+A summary dialog is shown to the user listing every corrected parameter.
+
+#### Fallback chain
+
+The catalog is loaded in priority order:
+
+1. **`.embody/` catalog file** — per-build JSON written by the background scan
+2. **Embedded `divergent_defaults` table** — a DAT inside the Embody COMP with bootstrap data for known TD builds
+3. **On-the-fly probing** — if neither source has data for the current build, a temporary operator is created at export time to discover the true creation value
+
+This ensures correct non-default comparison regardless of TD version, even on builds that Embody has never seen before.
+
+---
+
+## Built-in Parameter Sequences
+
+*Added in v1.3.*
+
+Many TouchDesigner operators have **resizable parameter blocks** — mathmixPOP Combine blocks, glslPOP/glslTOP uniform sequences, attributePOP attribute blocks, constantCHOP channel blocks, etc. These are called **parameter sequences** in TD's API.
+
+The `sequences` object stores per-operator sequence data. It is keyed by sequence name, where each value is an array of block objects containing only non-default parameter values using **base names** (without the sequence prefix or block index):
+
+```json
+{
+  "name": "mathmix1",
+  "type": "mathmixPOP",
+  "sequences": {
+    "comb": [
+      {"oper": "A", "scopea": "P", "result": "startPos"},
+      {"oper": "A + B", "scopea": "vel", "scopeb": "direction", "result": "vel"},
+      {}
+    ]
+  }
+}
+```
+
+### Design
+
+- **Array length = `numBlocks`**: The importer sets `seq.numBlocks = len(blocks)` to create the right number of parameter slots before setting values.
+- **Base names**: `"oper"` rather than `"comb0oper"`. The full parameter name is `{seqName}{blockIndex}{baseName}` (e.g., `comb2oper`), but only the base name is stored. This makes the format portable and readable.
+- **Empty objects `{}`**: Represent blocks where all parameters are at their default values. Included to preserve correct block count and ordering.
+- **Omission**: The `sequences` key is omitted entirely when all sequences on the operator have their default block count and all block values are defaults.
+- **Value shorthand**: Same as built-in parameters — `=` prefix for expressions, `~` prefix for binds, literal values for constants.
+
+### Import Phase
+
+Sequences are expanded in **Phase 2.5** (between custom parameter creation and parameter value setting). This ensures the dynamically-created sequence parameters exist before Phase 3 attempts to set values on them.
+
+### Exclusion from type_defaults
+
+Sequence data is **never included in `type_defaults`**. Sequences are inherently per-instance (different operators have different block counts), so they cannot be compressed into per-type defaults.
 
 ---
 
@@ -678,6 +787,10 @@ DAT content is only included when:
 
 Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
 
+### Per-COMP Storage Toggle
+
+Storage export can be disabled per-COMP by setting the `embed_storage_in_tdn` storage key to `false` on the target COMP, or globally via Embody's `Embedstorageintdns` parameter. When disabled, the `options.include_storage` field is `false` and operator storage entries are omitted — except for Embody control keys (`embed_dats_in_tdn`, `embed_storage_in_tdn`) which are always preserved to maintain round-trip fidelity of export preferences.
+
 ### Format
 
 ```json
@@ -782,11 +895,68 @@ This prevents a common problem: if a child COMP is updated and re-exported to it
 
 If a child COMP is removed from the externalizations table (no longer tagged for TDN), its `children` array in the parent TDN will be imported normally — no special handling needed.
 
+### COMP References (`tdn_ref`)
+
+*Added in TDN v1.2.*
+
+When a parent COMP is exported and a child COMP has its own TDN externalization, the parent's operator definition for that child includes a `tdn_ref` field instead of a `children` array:
+
+```json
+{
+  "name": "audio_mixer",
+  "type": "baseCOMP",
+  "tdn_ref": "Embody/project1/audio_mixer.tdn",
+  "position": [600, 0]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `tdn_ref` | `string` | Relative file path from the externalization folder to the child's `.tdn` file. Includes the COMP name in the path for cross-validation. |
+
+**Mutually exclusive with `children`**: When `tdn_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced file.
+
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. The referenced `.tdn` file is imported separately during reconstruction (sorted by path depth — parents before children).
+
+**Cross-validation**: The `tdn_ref` value is checked against two independent sources:
+
+1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdn'` and a matching `rel_file_path`.
+2. **Disk**: The referenced `.tdn` file must exist at the resolved absolute path.
+
+Mismatches produce warnings, not errors — the COMP shell is always created regardless. This ensures graceful degradation when files are moved or the table is out of sync.
+
+**Backward compatibility**:
+
+- Files **without** `tdn_ref` (TDN v1.1 and earlier) continue to work. The existing `_stripNestedTDNChildren` mechanism handles them via the externalizations table.
+- Files **with** `tdn_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The `_stripNestedTDNChildren` path handles the nested COMP correctly as a fallback.
+- The `embed_all=True` export option suppresses `tdn_ref` and inlines all children, producing a fully self-contained file regardless of child externalization status.
+
 ### Palette Clones
 
-COMPs that are cloned from the TouchDesigner palette (i.e., their `clone` parameter points to `/sys/`) are marked with `"palette_clone": true`. Their children are **not** exported because TouchDesigner automatically recreates them from the clone source when the project loads.
+COMPs that originate from the TouchDesigner palette (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`) are detected and marked with `"palette_clone": true`. Their children are **not** exported because TouchDesigner automatically recreates them from the palette source when the project loads.
 
 **Parameter handling for palette clones**: During export, parameters are compared against two baselines — the built-in default (`p.default`) and the clone source's actual value. If a parameter matches `p.default` but differs from the clone source, it is still exported. This prevents user-set values from being silently dropped when they happen to match the built-in default but not the clone source (e.g., a `buttontype` whose `p.default` is `"momentary"` but whose clone source is `"toggledown"`). The `clone` and `enablecloning` parameters are always excluded — TD auto-sets these during rebuild.
+
+#### Palette Detection
+
+Detection uses two strategies:
+
+1. **Palette catalog** (primary): Embody ships a catalog at `embody/Embody/palette_catalog.tsv` built by scanning every `.tox` in TD's installed palette directory. The catalog records each component's `name`, `OPType`, and `min_children` count (264 entries for TD 099.2025.32280). A COMP is detected as a palette if its name matches a catalog entry, its `OPType` matches, and it has at least `min_children // 2` children (a floor that tolerates user modifications while rejecting empty user COMPs that happen to share a palette name).
+2. **Clone expression heuristic** (fallback): if the `clone` parameter points to `/sys/` or references `TDBasicWidgets`, `TDResources`, or `TDTox`, the COMP is detected as a palette. Catches cases where the catalog doesn't cover the current TD build. **Exception**: paths and expressions under `/sys/TDTox/defaultCOMPs/` are explicitly excluded. That directory holds TD's native-operator templates — every freshly-created `buttonCOMP`, `panelCOMP`, etc. clones from there by default, and those are stock types, not palette components. Export them as regular COMPs.
+
+The catalog is loaded into memory by `CatalogManagerExt.EnsureCatalogs()` at startup from the shipped TSV (skipping a runtime scan) or from `.embody/catalog_<build>.json` if already cached locally.
+
+#### Palette Handling
+
+When the export path encounters a detected palette COMP, the `Tdnpalettehandling` parameter on Embody's TDN page decides what to do:
+
+| Value | Behavior |
+|---|---|
+| `Ask` (default) | On first encounter of each palette COMP, prompts with four buttons: **Black Box** (this COMP), **Full Export** (this COMP), **Black Box for All** (flips the project-wide par), **Full Export for All** (flips the project-wide par). The per-COMP decision is persisted via `comp.store('_tdn_palette_handling', 'blackbox'|'fullexport')` so subsequent exports don't re-prompt. |
+| `Black Box` | Always emit `"palette_clone": true` with parameter overrides only. Children are re-dropped from the palette on import. Correct for stock palette COMPs; lets upstream palette updates from Derivative flow through on round-trip. |
+| `Full Export` | Always export all internal children as if the COMP were a regular user COMP. Use when you've heavily customized the palette internals and need that state preserved across round-trip. |
+
+Per-COMP stored decisions take precedence over the project-wide par. To reset a COMP's stored decision, call `comp.unstore('_tdn_palette_handling')`.
 
 ---
 
@@ -901,6 +1071,47 @@ Importing a `.tdn` file reconstructs the network in a pre-phase plus eight seque
 
 The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
 
+### Extension Initialization Timing
+
+!!! danger "Extensions initialize BEFORE TDN import"
+    When a TDN COMP is reconstructed (on project open or after save), the COMP shell is created first and any extensions on it initialize immediately. The TDN import runs **after** extension initialization, calling `ImportNetwork` with `clear_first=True` — which deletes all children and recreates them from the `.tdn` file. This means any state set up by `onInitTD` inside the COMP is **overwritten**.
+
+**Timeline on project open:**
+
+| Step | Frame | What happens |
+|------|-------|--------------|
+| 1 | Early | COMP shell created (exists but empty) |
+| 2 | Early | Extension `__init__` runs |
+| 3 | End of frame | `onInitTD` fires — network may not exist yet |
+| 4 | Frame 60 | `ReconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
+| 5 | Frame 60+ | All children deleted and recreated from `.tdn` |
+
+**Timeline on save (strip/restore cycle):**
+
+| Step | What happens |
+|------|--------------|
+| 1 | Pre-save: children stripped from TDN COMPs |
+| 2 | `.toe` saved without TDN children |
+| 3 | Post-save: `ImportNetwork` re-imports children from `.tdn` |
+| 4 | Extensions may reinitialize during restore |
+
+**Impact:** If an extension's `onInitTD` creates operators, sets parameter values, writes to storage, or builds any state inside the COMP, that work is destroyed by the import. This affects extensions that live inside TDN COMPs **and** extensions whose ownerComp is a TDN-strategy COMP.
+
+**Solution:** Defer initialization using `run()` with `delayFrames`:
+
+```python
+def onInitTD(self):
+    run('args[0].postInit()', self, delayFrames=5)
+
+def postInit(self):
+    """Runs after TDN import completes. Safe to set up state."""
+    pass
+```
+
+The deferred method must be **idempotent** — it will run on every project open, after every save, and on manual reimport. Use a delay of at least 5 frames to ensure all import phases have completed.
+
+For full guidance on writing extensions that coexist with TDN, see the [Extensions](../td-development/extensions.md#initialization-and-tdn-import-timing) documentation.
+
 ### Version Compatibility
 
 When importing a full `.tdn` document, the importer checks the metadata fields for compatibility:
@@ -994,7 +1205,7 @@ A realistic `.tdn` file demonstrating all major features:
 ```json
 {
   "format": "tdn",
-  "version": "1.1",
+  "version": "1.3",
   "build": 3,
   "generator": "Embody/5.0.237",
   "td_build": "2025.32050",
@@ -1002,7 +1213,8 @@ A realistic `.tdn` file demonstrating all major features:
   "network_path": "/",
   "type": "baseCOMP",
   "options": {
-    "include_dat_content": true
+    "include_dat_content": true,
+    "include_storage": true
   },
   "type_defaults": {
     "baseCOMP": {
@@ -1139,3 +1351,4 @@ Key observations:
 | 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact JSON formatting. |
 | 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |
 | 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDN exports. Pre-save now auto-exports current state before stripping TDN COMPs. |
+| 1.3 | 2026-04-07 | Added built-in parameter sequence support (`sequences` key on operator objects). Operators with resizable parameter blocks (mathmixPOP, glslPOP, attributePOP, constantCHOP, etc.) now round-trip correctly. Added Phase 2.5 to import process. Sequence parameters excluded from `type_defaults` compression and `_buildParCache`. |

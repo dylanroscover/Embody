@@ -1,5 +1,239 @@
 # Changelog
 
+## v5.0.381
+
+Global Perform Mode toggle suspends Embody/Envoy/TDN compute during live performance (Issue #13), auto-resolve for duplicate DATs inside active clones without prompting (Issue #15), ancestor-rename disk handling fixed so `Move` no longer fails with "source folder not found" (Issue #16), and new render-coordinate-system rules documenting TD's bottom-left origin convention (Issue #14).
+
+- **Feature: Perform Mode** (Issue #13, reported by Chris Mills): New `Performmode` toggle on the Embody COMP (and perform button in the toolbar) suspends all Embody/Envoy/TDN compute for the duration of a live performance. On enter, `_enterPerformMode` snapshots pre-state (Envoy running, keyboard listener active, exit tagger active) and stops Envoy directly, disables the `keyboardin1` DAT and `chopexec_exit_tagger`, closes the manager window, greys out Envoy parameters, and sets `Envoystatus = 'Perform Mode'`. Guards added to `Update`, `Refresh`, `Save`, `SaveTDN`, `SaveCurrentComp`, `TagGetter`, `ExternalizeProject`, `getDirtyCount`, `onProjectPreSave`, `onProjectPostSave`, and Envoy's `_onServerSuccess`/`_onServerError` auto-restart. `_exitPerformMode` restores snapshot state and restarts Envoy if it was running. `execute.py:onCreate` clears `Performmode = False` on project open so the toggle never persists across sessions. Envoy parameter changes to `Envoyenable`/`Envoyport`/`Aiclient` are protected (never touched during Perform Mode, so config.json stays intact)
+- **Fix: Auto-resolve duplicate DATs inside active clones** (Issue #15, reported by Chris Mills): When a COMP with an externalized DAT inside is cloned, the master's DAT and the clone's DAT share the same relative path — producing a duplicate prompt on every save. `_resolveDATsInClonedCOMPs()` now auto-resolves these groups without prompting: DATs inside an active clone COMP are treated as references (clone-side), DATs in the master are kept as the master. Wired into the duplicate resolution flow in `cleanupAllDuplicateRows()` alongside the existing `_resolveClonesByCloningAPI()` handler
+- **Fix: Ancestor rename no longer fails with "source folder not found"** (Issue #16, reported by Chris Mills): `_handleAncestorRename()` was building disk paths from the raw operator-path prefix (e.g. `/old` → `old`) and passing that straight to `project.folder / old`. That works by coincidence when `Externalizationsfolder` is empty (the default — files write directly under the project root) because the op-path segment and the on-disk segment match. The moment `Externalizationsfolder` is pointed at a subfolder (say `ext/`), files actually live at `project.folder / ext / old / ...` but the rename code was still looking at `project.folder / old / ...` — so `old_dir.exists()` returned False and the user saw "Source folder not found." The method now composes `Externalizationsfolder` into the disk segment before every filesystem operation (Phase A rel_file matching, Phase C directory rename, Phase D table updates, TDN-strategy handling, user cancellation path all fixed). Returns `bool` so `checkOpsForContinuity()` can fall back to per-operator handling when the ancestor-level rename fails for any reason
+- **Hardening: Clone detection null-safety**: `isInsideClone()` and `isClone()` now use `getattr(par, 'clone'/'enablecloning', None)` with exception wrapping so DATs and operators that lack those parameters no longer raise during duplicate resolution. Also excludes DATs inside clone COMPs from the path-groups collected by `_buildPathGroups()` so replicant filtering and duplicate detection agree
+- **UI: Perform button in toolbar**: New `perform` textCOMP (Material Design icon) between Status and Disable buttons, wired to `ToolbarExt._action_toggle_perform()`. Tinted amber when active (face color driven by `Performmode` parameter, matching the Disable button's active-state pattern). Keyboard shortcut suppression, exit-tagger gating, and parexec routing to `_enterPerformMode`/`_exitPerformMode` all fire from the single Performmode toggle
+- **UI: Full Envoy status string in toolbar**: `envoy_status` widget now reads the full `Envoystatus` parameter (`"Running on port 9870"`, `"Off"`, `"Error: ..."`, `"Perform Mode"`) instead of just the port number. Width expanded 55 → 160 units. Text color unchanged (uses default `Textcolor`, not green). Window header `min_width` bumped 410 → 440 to accommodate the new button; title now concatenates `Headerlabel + '  ·  ' + Envoystatus` so project name and MCP status are visible from any docked pane
+- **Rule: Render coordinate system** (Issue #14, reported by Chris Mills): Added "Render Coordinate System" section to `.claude/rules/td-python.md` and expanded "TOP Pixel Access" in `skills/td-api-reference/SKILL.md` documenting TD's bottom-left origin convention. `TOP.sample(x, y)` y=0 is the bottom edge, GLSL `gl_FragCoord.y=0` is the bottom, UV and crop/transform params are bottom-left, but `TOP.numpyArray()` returns rows top-to-bottom and PIL/OpenCV/panel coords are all top-left. Table + `np.flipud()` guidance added. Templates in `dev/embody/Embody/templates/` synced so user projects get the new guidance on Embody initialization
+- **Log: Fix pluralization in auto-resolve log line**: `_resolveDATsInClonedCOMPs()` log message was using `len(clones) != 1` as the plural guard, producing "0 DATs" with an errant s in the no-clones path. Changed to `len(clones) > 1`
+- **Test: 48 test suites** (+1): New `test_ancestor_rename.py` (680 lines) covers `_detectAncestorRename` threshold and prefix extraction, `_handleAncestorRename` Phase A/C/D on externalized COMPs, disk segment composition with `ExternalizationsFolder`, TDN-strategy handling, user cancellation, fallback to per-operator on failure, and full end-to-end rename flow with directory movement verification. `test_duplicate_handling.py` expanded (+70 lines) to cover `_buildPathGroups` replicant filtering, `_resolveClonesByCloningAPI` non-COMP handling, `_resolveDATsInClonedCOMPs` auto-tagging, and dialog-driven master/clone selection. `test_tag_management.py` expanded (+57 lines) to cover `isInsideClone` null-safety on DATs without `par.clone` and `isClone` active-vs-master discrimination
+
+## v5.0.376
+
+Palette scan no longer triggers invasive palette popups (TDVR framerate warning, AutoUI widget-package dialog) on fresh-build startup, rebaked palette catalog for TD 2025.32460, and Issue #12 fix for false "locked content" warnings inside clones and replicants.
+
+- **Fix: Palette scan skips invasive palettes (TDVR, AutoUI)**: `CatalogManagerExt._startPaletteScan()` now filters a small blocklist (`tdvr`, `autoui`) before `loadTox`. When `palette_catalog` bootstrap doesn't cover the current TD build, the runtime scan used to load every palette .tox into a hidden workspace — including TDVR (which unconditionally calls `project.cookRate = 90` and pops a messageBox) and AutoUI (which pops a "Widget Package Required" dialog). Both were blocking main-thread modals that scared users into thinking Embody had taken over their project. Loss of palette-clone detection for these two components is acceptable — they're rare in TDN-diffed networks and were silently broken anyway. Single log line names what was skipped
+- **Rebake: `palette_catalog.tsv` now covers build 099.2025.32460**: Ran `ExportPaletteCatalog()` on current stable TD; the shipped bootstrap table now includes 261 palette components for 32460 alongside the existing 264 for 32280 (525 data rows + header, ~22 KB). Users on either build hit the bootstrap and skip the palette scan entirely on first load — no workspace creation, no `loadTox` calls, no popups
+- **Fix: False "locked content" warnings inside clones and replicants** (Issue #12, reported by Chris Mills): `TDNExt._checkLockedUnexportedContent()` now skips operators whose ancestor chain contains a clone master (`clone` + `enablecloning` both set) or a replicant template. Lock state inside clones is inherited from the master, not owned by the instance; lock state inside replicants is regenerated per-template by the replicator COMP. Warning the user about those paths is noise, not signal — and the paths (e.g. `icon (TOP)`) were especially confusing because they don't exist at the root level the warning referenced. Added helper `_isInsideCloneOrReplicant()`. Also switched summary from `child.name` to `child.path` so any remaining warnings point to an unambiguous location
+
+## v5.0.372
+
+TDN master switch becomes a three-mode menu (Off / Export-on-Save / Roundtrip) replacing the short-lived `Tdnenable` toggle, new `read_tdn` MCP tool for 20-90× token-cost reduction on multi-operator reads, combined DAT+storage Content Safety dialog, palette-detection fix for native `buttonCOMP` operators, and a docs + landing page rewrite making the TDN value proposition explicit.
+
+- **Feature: `Tdnmode` three-way menu**: New `Tdnmode` menu on Embody's TDN page with three values. *Off* disables the entire TDN subsystem (no export, no reconstruction, no catalog scan — fastest startup for projects that don't use TDN). *Export-on-Save* (new default) writes `.tdn` files on save for diffs and AI context, but does not rebuild COMPs from `.tdn` on open — the `.toe` remains authoritative. *Roundtrip (Experimental)* is the full previous behavior: export on save plus reconstruct TDN-strategy COMPs from disk on open. Gates every TDN entry point (`SaveTDN`, `Update()` TDN loop, `ReconstructTDNComps`, pre-save strip, `CatalogManager.EnsureCatalogs`). Internal `menuNames` stay as `off`/`export`/`full` so persisted values and code references don't churn
+- **Feature: Migration nudge for upgrading users**: On first open after upgrade, projects saved with the legacy `Tdnenable` toggle see a one-shot dialog explaining the new mode and defaulting them to Export-on-Save (or offering a one-click restore of their previous Full behavior as Roundtrip). Stored flags (`_tdn_mode_migration_shown` + `_tdn_migration_scheduled`) prevent re-prompting and double-firing if `_restoreSettings` is called twice within the 60-frame defer window
+- **Feature: `read_tdn` MCP tool**: New MCP tool returns a COMP's live network as a TDN dict without writing to disk. Typically **20-90× fewer tokens** than walking the same subtree via `get_op` + `query_network` thanks to default omission, `type_defaults`, and `par_templates` compaction. Intended as the preferred read path for LLM workflows exploring networks of more than ~3 operators. Works in all three `Tdnmode` values (reads live state, not disk). Scope cost via `comp_path`; cap with `max_depth`. Docstring enumerates when NOT to use (runtime values → `get_parameter`, cook errors → `get_op_errors`, DAT/TOP data → `get_dat_content`/`capture_top`, etc.). Conservative 5× floor verified in CI
+- **Feature: Combined Content Safety check (`Tdndatsafety` → "Content Safety")**: Pre-save safety gate now inspects both DAT content AND `comp.storage` for at-risk user data inside TDN-strategy COMPs, surfaced in one combined dialog. `_findAtRiskStorage` mirrors `_findAtRiskDATs`. Parameter renamed from "DAT Safety" to "Content Safety" to reflect the expanded scope. `_STORAGE_SKIP_KEYS` covers Embody's internal runtime keys (`_tdn_stripped_paths`, `_tdn_palette_handling`, migration flags, etc.) so only user-owned keys surface
+- **Feature: Removed "Never Ask" dialog button**: The Content Safety dialog no longer offers a single-click "Never Ask" footgun. *Ignore* remains available as a menu value on the `Tdndatsafety` parameter for power users who explicitly opt out, but the accidental-dismiss path that silently disarmed all future checks is gone. Dialog is now 3 buttons: *Externalize DATs* / *Skip* / *Always Externalize*. Skipped content is logged at SUCCESS level with the exact op paths and keys that were dropped
+- **Fix: Palette detection false-positive on native `buttonCOMP`**: `TDNExt._isPaletteClone()` was misclassifying stock TD operators like `buttonCOMP` as palette clones because every freshly-created COMP clones from `/sys/TDTox/defaultCOMPs/<type>` by default, and the `/sys/` prefix matched the Strategy 2 heuristic. Detection now explicitly excludes `/sys/TDTox/defaultCOMPs/` paths and `'defaultCOMPs'` in the clone expression. Native COMP types export their internals normally; real palette clones (TDBasicWidgets, TDResources, actual Palette sources) still match
+- **Fix: `onProjectPostSave` regression in Off/Export modes**: Post-save used to early-return when `_tdn_stripped_paths` was empty — which never happened in the `Tdnenable=True` world but happens on every Off/Export save. The early return skipped `_init_complete` re-store, silently disabling every parexec callback for the rest of the session. Strip-restoration is now guarded by `if stripped:`; pane restore, `_init_complete` re-store, and the delayed `Refresh.pulse()` always run
+- **Fix: Envoy restart conditional on strip having happened**: Post-save Envoy restart was made unconditional during the above fix, which meant every Off/Export save was needlessly tearing down and restarting the MCP server thread. Now gated on `stripped and Envoyenable.eval()` so restart only fires in Roundtrip mode where the extension actually reinitialized
+- **Fix: Cancel path on Off transition no longer double-logs**: When a user flips Tdnmode to Off with tracked TDN COMPs and picks Cancel, the revert to `export` now happens with parexec suppressed so the transition handler doesn't re-fire and emit a misleading "mode: Export-on-Save" INFO immediately after the "cancelled by user" message. Also silences the "TDN disabled" log when flipping to Off with zero tracked COMPs
+- **Perf: Catalog load gated on `Tdnmode != 'off'`**: `CatalogManager.EnsureCatalogs()` skipped entirely when `Tdnmode = Off`. The catalog is consumed exclusively by TDN export compaction and palette-clone detection — both dormant in Off. Saves the op-type scan + divergent-defaults probe at startup for users who don't need TDN
+- **Docs: TDN Strategy section rewrite**: `docs/embody/externalization.md` replaces the binary `Tdnenable` narrative with a three-mode table + a new **Why TDN** subsection covering file size/density, git three-way merge, PR review, cross-version portability, CI/CD schema validation, and the 20-90× MCP token cost reduction. Grounded in real TDNExt code paths (default omission, type_defaults, par_templates) and actual `.tdn` file sizes. `configuration.md`, `getting-started.md`, `troubleshooting.md` updated to match. In-app help text on `Tdnmode` and `Tdndatsafety` rewritten. `read_tdn` added to every MCP tool catalog page. `/sys/TDTox/defaultCOMPs/` exclusion documented in the TDN specification. Migration nudge described in the config reference
+- **Docs: Landing page (embody.tools) positioning rewrite**: `web/embody/index.html` TDN Strategy feature card reframes TDN as a mirror of the `.toe` rather than a replacement. The "bidirectional sync" pillar becomes two pillars — *export on save* (the default) and *roundtrip (experimental)*. `web/tdn/index.html` Embody pillar softened to match. `web/envoy/index.html` adds a new `read_tdn` feature card highlighting the 20-90× token reduction; tool count updated from 46 to 47. Sample TDN JSON generator strings bumped to `Embody/5.0.372`
+- **Test: 47 test suites** (+3, 1184 test cases): `test_tdn_mode` (15 tests covering all three modes, gating, reconstruction/SaveTDN guards, regression guards for `_init_complete` and Envoy restart), `test_tdn_safety_guards` (7 tests covering `_findAtRiskStorage`, combined dialog, Never-Ask removal, skip logging), `test_mcp_tdn_tools` (5 tests covering `read_tdn` round-trip, mode agnosticism, DAT content toggle, and a token-budget regression with a conservative 5× CI floor)
+
+## v5.0.362
+
+Palette handling control during TDN export, CatalogManager robustness on fresh project drops, palette catalog portability and log-level fixes.
+
+- **Feature: TDN palette handling** (`Tdnpalettehandling`): New menu parameter on Embody's TDN page controls how palette COMPs are handled during TDN export. *Ask* (default) prompts on first encounter per COMP with a four-button dialog — *Black Box* (this COMP), *Full Export* (this COMP), *Black Box for All* (flips the project-wide par), *Full Export for All* (flips the project-wide par). *Black Box* always references the palette and skips internal children (correct for stock palette COMPs; lets upstream Derivative palette updates flow through on round-trip). *Full Export* always exports all internals (for heavily customized palette COMPs). Per-COMP decisions are persisted via `comp.store('_tdn_palette_handling', …)`, so you aren't re-prompted for the same COMP. Implementation: `TDNExt._resolvePaletteHandling()`, `TDNExt._promptPaletteHandling()` consult per-COMP storage → par value → prompt
+- **Fix: CatalogManager on fresh project drops**: `EnsureCatalogs()` is now called from `execute.py:onCreate` at frame 45 in addition to `onStart`. Previously new users dropping the `.tox` had empty divergent defaults and broken palette detection in their first session — the catalog only loaded on project reopen
+- **Fix: Catalog scan stall ("N/N" forever)**: `CatalogManagerExt._log()` was missing a `level` parameter. A v5.0.358 logging call passing `'DEBUG'` as second arg caused a TypeError that silently killed `_finalizeScan`, leaving catalog scans stuck with no catalog written. `_log(msg, level='INFO')` now accepts optional level
+- **Fix: Scan finalize defensively in-band**: `_processChunk` and `_processPaletteChunk` now finalize the scan when the queue empties instead of relying on a scheduled `run(delayFrames=1)` callback for the final tick. Defends against lost callbacks during heavy concurrent startup (venv creation, dialog auto-response, Envoy server start)
+- **Fix: `palette_catalog` tableDAT portability**: Both the DAT's `file` par and the row in `externalizations.tsv` had an absolute path (broken on other machines). Now uses relative `embody/Embody/palette_catalog.tsv` + `syncfile=True` + `file.readOnly=True`, matching the `divergent_defaults` pattern
+- **Rename: `CheckAndScan()` → `EnsureCatalogs()`**: Clearer intent-verb name. Method is now idempotent — safe to call repeatedly, returns early when already populated
+- **Fix: Catalog scan errors demoted to DEBUG**: Abstract base types (`td.CHOP`, `td.DAT`, etc.) that can't be instantiated bare were logging at INFO on every startup. Non-actionable for users
+- **Fix: Gitignore migration noise**: `.envoy-tools-cache.json` removed from stale-entries migration list — was being flagged on every startup despite being intentionally kept
+- **Rule: Naming — Methods, Functions, Operators**: New section in `td-python.md` + template covering intent-verb naming, avoiding `CheckAndX`/`DoStuff`/implementation-leakage patterns, boolean `is/has/can` phrasing, public-vs-private conventions
+- **Docs**: Updated configuration.md, externalization.md, TDN specification.md, in-app help text, and `externalize-operator` skill to cover palette handling and the shipped palette catalog mechanism
+- **Test: 44 test suites** (+1, 10 new G01-G10 tests in `test_tdn_palette_catalog` covering the palette handling resolver, prompt flow, per-COMP storage override, and end-to-end export behavior)
+
+## v5.0.356
+
+Palette catalog detection, animationCOMP keyframe preservation, external wire preservation across TDN strip/rebuild, Envoyenable startup fix.
+
+- **Feature: Palette component catalog**: `CatalogManagerExt` now walks TD's shipped palette directory after the op-type scan, loads each `.tox` into a temp workspace, and records `{name: {type, min_children}}`. `TDNExt._isPaletteClone()` uses this catalog as the primary detection method (name + OPType + child-count floor), falling back to the clone-expression heuristic (now covers `TDBasicWidgets` in addition to `TDResources`/`TDTox`/`/sys/`). Catches palette components whose clone reference was never set while avoiding false positives from user COMPs that happen to share a palette name
+- **Feature: animationCOMP keyframe preservation**: DATs inside an `animationCOMP` (`keys`, `channels`, `graph`, `attributes`) always export their content regardless of the `include_dat_content` option. Previously these read-only-looking tableDATs lost all keyframe data on TDN round-trip
+- **Fix: External connection preservation across TDN strip/rebuild**: Wires from external siblings into a TDN-strategy COMP's own input/output connectors (backed by internal `in*`/`out*` operators) were severed when the COMP's children were destroyed during save's strip/restore cycle, cold open, or manual reimport. `StripCompChildren` now captures external wires via `comp.store()` before destruction; `ImportNetwork(clear_first=True)` restores them after rebuild (and also captures live wires directly when called without a prior strip)
+- **Fix: Envoyenable disabled on every startup**: `init()` stored `_init_complete` immediately after setting `Envoyenable = False`, but TD defers `onValueChange` callbacks to the next cook — so parexec processed init's own `Envoyenable=False` change and called `Stop()`. `_init_complete` is now stored by `_restoreSettings` after restoration completes (or immediately on its early-return paths), keeping parexec suppressed through the deferred callbacks
+- **Fix: Catalog path mismatch**: `CatalogManagerExt._findProjectRoot()` now delegates to `EmbodyExt._findProjectRoot()` which walks up from `project.folder` looking for `.git`. Previously `project.folder` (often `dev/`) differed from the git root and produced duplicate catalogs under different paths
+- **Fix: Abstract type scan rejection**: `td.CHOP`, `td.COMP`, `td.DAT`, etc. are abstract base types with suffixes matching `_FAMILIES` but aren't creatable. Added `_ABSTRACT_TYPES` filter to skip them during catalog scan
+- **Test: 43 test suites** (+2): `test_tdn_palette_catalog` (catalog lookup, child-count floor, TDBasicWidgets heuristic, animationCOMP round-trip), `test_tdn_external_connections` (strip+import restore, live-wire capture, deleted-sibling tolerance)
+- **Gitignore**: Added `.envoy-tools-cache.json` (bridge tool cache — runtime artifact)
+
+## v5.0.354
+
+Consolidate all Embody/Envoy runtime files into a single `.embody/` folder.
+
+- **Refactor: `.embody/` folder consolidation**: All auto-generated runtime files now live in one gitignored folder instead of scattered dotfiles at the project root. `.envoy.json` → `.embody/envoy.json`, `.embody.json` → `.embody/config.json`, `.envoy-tools-cache.json` → `.embody/envoy-tools-cache.json`, `.claude/envoy-bridge.py` → `.embody/envoy-bridge.py`. Makes Envoy fully client-agnostic -- no Envoy artifacts in `.claude/`
+- **Migration: automatic upgrade from old paths**: On first Envoy start after upgrade, existing config files are read from old locations, seeded into `.embody/`, and old files removed. `.gitignore` stale entries (`.envoy.json`, `.embody.json`, `.claude/envoy-bridge.py`, etc.) are automatically replaced with a single `.embody/` entry
+- **Fix: bridge path resolution**: `resolve_toe_path()`, `_heartbeat_path()`, `_init_log_file()`, `_find_stale_bridges()`, and `_validate_and_resolve()` now correctly resolve paths relative to the git root (one level up from `.embody/`) instead of the config file's parent directory
+- **Docs**: Updated architecture, setup, claude-code, tools-reference, configuration, getting-started, multi-instance skill, and td-connectivity rule to reflect new paths
+
+## v5.0.352
+
+Fix Envoy failing to start after Embody upgrade (delete old COMP, drop new .tox).
+
+- **Fix: Envoy restart counter not resetting on upgrade**: When the old server's port wasn't released in time, auto-restart exhaustion left `_restart_count` stuck above MAX. The next manual Envoyenable toggle immediately hit the limit and forced itself back to False, making the toggle appear to "do nothing." `Stop()` now always resets `_restart_count`, even when `envoy_running` is already False
+- **Fix: Upgrade-path port race**: `Verify()` deferred `Start()` by only 10 frames (~0.17s) after the old COMP was deleted -- too short for uvicorn to fully release its listener socket. Increased to 60 frames (~1s)
+- **Fix: Port reclaim timeout too short**: `_findAvailablePort()` waited only 0.5s for a force-closed port to become available. Increased to 1.5s to accommodate uvicorn's shutdown sequence
+
+## v5.0.351
+
+Creation-defaults catalog, stdin-based bridge lifecycle, Envoy resilience hardening.
+
+- **Feature: Creation-defaults catalog (`CatalogManagerExt`)**: TD's `p.default` lies for dozens of parameters (e.g., cameraCOMP `tz`: `p.default=0` but creation value is `5`). Embody now scans all creatable op types at startup (1-2 ops/frame, non-blocking), writes a per-build catalog to `.embody/`, and uses actual creation values for TDN export/import. Fixes silent data loss where user-set values matching the wrong default were omitted from export
+- **Feature: Cross-build default patching**: When opening a project exported on a different TD build, the CatalogManager compares catalogs and patches any parameters whose creation defaults shifted between builds. Shows a summary dialog of all corrected values
+- **Feature: Divergent defaults fallback**: Embedded `divergent_defaults.tsv` table provides bootstrap data for known TD builds. On-the-fly probing handles unknown builds by creating temp operators and comparing `p.val` vs `p.default`
+- **Fix: Bridge orphan detection**: Replaced ppid-based orphan watchdog (broken under VS Code extension host, which outlives sessions) with stdin pipe POLLHUP detection via `select.poll()` (macOS/Linux) and `PeekNamedPipe` (Windows). Bridges now exit reliably when their Claude Code session closes
+- **Fix: Bridge stale process cleanup**: Heartbeat files (`envoy-bridge-{pid}.heartbeat`) replace parent-PID heuristics for detecting stale bridges. Phase 1 kills bridges with stale heartbeats (>60s old); Phase 2 falls back to legacy orphan check for pre-heartbeat bridges
+- **Fix: Bridge heartbeat simplification**: Replaced dynamic fast/slow heartbeat cadence (5s/30s) with fixed 10s interval. Removed HTTP connection pool (reverted to simple `urllib.request.urlopen` per call) — the pool caused persistent "not responding" errors from half-closed `http.client` connections
+- **Fix: Envoy queue persistence across save cycles**: Request/response queues now survive extension reinit during Ctrl+S by persisting in `sys._envoy_queues`. Prevents lost MCP requests during the strip/restore window
+- **Fix: Envoy auto venv recreation**: Corrupted venv (broken Python path after TD upgrade) is now auto-recreated once per session instead of just logging a warning
+- **Fix: ClientDisconnect suppression**: Added starlette `ClientDisconnect` to suppressed exceptions alongside `BrokenResourceError`/`ClosedResourceError`. Prevents traceback floods from destabilizing uvicorn's event loop during extension reinit or tab close
+- **Fix: Scan workspace cleanup**: On-the-fly default probe workspace (`_defaults_workspace`) is now destroyed after each export. Previously leaked empty baseCOMPs that accumulated in the Embody COMP across saves
+- **Improved: Em-dash to double-dash**: Systematic `—` to `--` replacement across all Python source files for cross-platform DAT encoding safety
+- **Improved: FastMCP log filtering**: Suppresses empty "Received exception from stream:" messages from recycled bridge connections
+- **Test: 41 test suites** with 4 new divergent-defaults tests (cameraCOMP tz, lightCOMP tz, renderTOP resolution round-trip, false-positive prevention)
+
+## v5.0.336
+
+Batch MCP operations, Envoy auto-restart on crash and save, 46 MCP tools.
+
+- **Feature: `batch_operations` MCP tool**: Combine multiple tool calls into a single request — positions, connections, parameters, flags, etc. Stops on first error, returns per-operation results. Cuts token overhead and latency for repetitive operations
+- **Fix: Envoy dies on Ctrl+S**: The save cycle's TDN strip/restore killed the server thread via extension reinit, leaving status stuck on "Running" with a dead port. `onProjectPostSave` now explicitly restarts Envoy after restoration completes
+- **Fix: Envoy auto-restart on crash**: Server thread failures (SuccessHook/ExceptHook) now trigger automatic restart with exponential backoff (1s, 2s, 3s) up to 3 attempts. Counter resets after 2 minutes of stable uptime. Manual Stop() resets the counter
+- **Rule: Batch repetitive MCP operations** (CLAUDE.md #12): Never make 3+ individual calls to the same tool — use `batch_operations` or `execute_python` instead
+- **Test: 41 test suites** including new `test_mcp_batch` (9 tests covering success, error handling, nested prevention, practical create+query patterns)
+
+## v5.0.330
+
+Envoy bridge v2: proactive reconciliation, multi-session safety, and zero forced restarts. The bridge now survives TD crashes, instance switches, and multi-session concurrency without requiring Claude Code session restarts.
+
+- **Feature: Background reconciler thread**: Polls `.envoy.json` every 1 second (unconditionally, regardless of connection state) and pings the backend every 5–30 seconds (dynamic backoff). Detects instance switches within seconds — opening a new TD instance mid-session automatically routes MCP calls to the new instance
+- **Feature: Disk-based tool cache**: Persists the full tool list to `.envoy-tools-cache.json` so new sessions always start with all 45+ tools, even if TD hasn't finished loading. Works around Claude Code's `list_changed` notification bug (#13646)
+- **Feature: HTTP connection pooling**: Replaced per-request `urllib.request.urlopen()` with a persistent `http.client.HTTPConnection` per URL. Eliminates socket churn that was causing `ClientDisconnect` tracebacks in starlette and crashing Envoy's HTTP server under load
+- **Feature: Dynamic heartbeat backoff**: Pings every 5s while unstable or recently changed, slows to 30s once connected stably for 30+ seconds. Reduces textport noise by 6x in steady state
+- **Feature: Proactive TD process discovery**: `find_all_td_pids()` scans for new TouchDesigner processes every heartbeat, forces config re-read when new TDs appear. Filters out bridge processes that use TD's bundled Python (false positive fix)
+- **Feature: `notifications/tools/list_changed` emission**: Bridge advertises `listChanged: true` and sends the MCP notification on every backend state transition and explicit instance switch
+- **Feature: Local `ping` handler**: Answers MCP `ping` requests locally with zero latency, regardless of backend state
+- **Feature: Multi-session safety**: `kill_stale_bridges()` now checks parent PID before killing peers — only orphans (parent dead/reparented to launchd) are terminated. Multiple Claude Code sessions can safely coexist against the same project
+- **Fix: Port conflict detection in multi-instance startup**: `_findAvailablePort()` now checks the `.envoy.json` registry in addition to socket probes, preventing two TD instances from racing on the same port during near-simultaneous startup
+- **Fix: Restart loop on port fallback**: Removed `Envoyport` parameter update during `Start()` that triggered `parexec.py` Stop+Start cycle when the port shifted (e.g., 9870→9871)
+- **Fix: Ghost TD detection**: `find_all_td_pids()` now excludes bridge processes whose cmdline contains `envoy-bridge`, preventing false "TD is alive" reports when only bridge processes remain
+- **Fix: Orphan watchdog hardening**: Added `is_process_alive(parent_pid)` belt-and-suspenders check alongside ppid comparison, catches cases where ppid doesn't update immediately on reparenting
+- **Improved: 3-second initial probe** (was 60s): First `tools/list` response returns in ≤3 seconds with the best available tools (live, cached, or bridge-only). Reconciler handles recovery in the background
+- **Improved: Single-attempt forwarding** (was 4 retries): Failed MCP forwards return immediately instead of blocking 7.5 seconds on retries. The reconciler drives reconnection
+- **Improved: PID-tagged log lines**: `[envoy-bridge:PID]` format makes multi-session logs distinguishable
+- **Improved: PID-tagged temp files**: `atomic_write_json()` uses per-PID temp files to prevent collisions between concurrent bridge processes
+- **Improved: Server-side log filter**: Suppresses FastMCP's per-request `Processing request of type PingRequest` messages from flooding TD's textport
+- **Test: 136 bridge unit tests** across 19 suites, covering BridgeState locking, tool hash detection, reconciler state transitions, listChanged capability, cache hits, stdout serialization, single-attempt forwarding, and connection lifecycle
+
+## v5.0.320
+
+TDN v1.3: parameter sequence round-trip + companion DAT handling. Operators with resizable parameter blocks (mathmixPOP, glslPOP, constantCHOP, etc.) and companion DATs (GLSL `_pixel`/`_compute`/`_info`, Timer/Script CHOP `_callbacks`, Ramp TOP `_keys`, etc.) now round-trip cleanly through TDN export/import.
+
+- **Feature: TDN parameter sequence support** (TDN v1.3): Operators with built-in parameter sequences (mathmixPOP Combine blocks, glslPOP/glslTOP uniform sequences, attributePOP attribute blocks, constantCHOP channel blocks, etc.) now export their sequence data in a new `sequences` key and restore it on import. Previously, adding parameter blocks (e.g., a new Combine block on mathmixPOP) would silently lose the added blocks after TDN round-trip
+- **Feature: Custom parameter sequence support**: Custom sequences defined via `page.appendSequence()` are now round-tripped correctly. Template parameters are exported with their base name and a `sequence` field; on import, `blockSize` is set from the template par count before `numBlocks` populates the block instances. Includes a fallback resolver for custom-sequence block parameters where TD's `block.par.{base}` lookup returns `None`
+- **Feature: Read-only DAT detection**: Auto-generated companion DATs (e.g. `glsl1_info`, `popto1`) that reject `dat.text = ...` writes are now probed at export time and tagged with `dat_read_only: true`. Their content is excluded from the export, and importers no longer log "not editable" warnings when restoring them. Older `.tdn` files without the flag are also handled silently
+- **Fix: Parameter cache silently dropping sequence parameters**: `_buildParCache()` cached exportable parameters per OPType from the first instance encountered. Sequence parameters with dynamic names (e.g., `comb2oper` on a 3-block mathmixPOP) were silently skipped on other instances whose block count exceeded the cached set. Sequence parameters are now excluded from the flat parameter cache and handled by the dedicated sequence export path
+- **Improved: Import Phase 2.5**: New `_expandSequences()` phase runs between custom parameter creation (Phase 2) and parameter value setting (Phase 3), ensuring dynamically-created sequence parameter slots exist before values are applied
+- **Improved: Network layout rule — Docked Callback DATs**: New section in `.claude/rules/network-layout.md` (and the matching template) defines a deterministic placement formula for the companion DATs that TD auto-spawns and docks to operators (chopExecuteDAT, glsl info DATs, keyboardinDAT, etc.). Includes a center-out alternation pattern and a procedure for repositioning every dock after `create_op`
+- **Test: Sequence round-trip tests**: 12 new tests in `test_tdn_sequences.py` covering export format, round-trip fidelity, expression values, nested COMPs, type_defaults exclusion, and backward compatibility
+- **Test: Companion DAT round-trip tests**: 14 new tests (Section W) in `test_tdn_reconstruction.py` covering GLSL TOP/multi/POP/copy/advanced companions, Timer/Script CHOP/SOP/DAT callbacks, Ramp TOP keys, read-only info DAT handling, and a comprehensive no-duplicates check across all companion-creating ops
+
+## v5.0.310
+
+Fix first-time Envoy setup permanently stuck on "Enabled + Disabled" (issues #8, #9).
+
+- **Fix: Envoy permanently stuck "Disabled" after first-time install** (GitHub issue #9): `_init_complete` was stored as an instance attribute on EmbodyExt, destroyed when file sync recompiled DATs during first-time setup. Parexec silently dropped all parameter changes — including `Envoyenable = True` — so `Start()` was never scheduled. Moved `_init_complete` to COMP storage (`.store()`/`.fetch()`) which survives extension reinit. Added pre-save unstore and post-save re-store to prevent baking into the `.tox`
+- **Fix: `Start()` status guard self-poisoning** (GitHub issue #9): `EnvoyExt.__init__` set `Envoystatus = 'Starting...'` before deferring `Start()` by 30 frames. `Start()` then saw `'Starting...'` in its status guard and assumed another start was in progress — permanent deadlock. Removed the premature status from `__init__`; narrowed the guard to only block on `'Running'` (actual server activity), not `'Starting...'` (UI hint)
+- **Fix: `.gitignore` and `.gitattributes` not generated on first-time git init** (GitHub issue #8): Git config files are now created inside `_checkOrInitGitRepo()` immediately after `git init` succeeds, instead of relying on `Start()` which may not run in the same session
+- **Fix: Type error in `Start()` git config** (pre-existing): `_configureGitignore`/`_configureGitattributes` expect a `Path` object but `Start()` passed a string from COMP storage. Wrapped with `Path()` conversion
+- **Improved: `Start()` status guard visibility**: Upgraded the `Envoystatus` backup guard from DEBUG to WARNING so state inconsistencies are visible in logs
+
+## v5.0.305
+
+Replicant duplicate detection fix (issue #4 update), TDN export improvements, ExternalizeProject dialog enhancement.
+
+- **Fix: Replicant duplicate detection** (GitHub issue #4 follow-up): `_buildPathGroups()` now filters out replicants alongside clones, preventing replicator outputs from entering the duplicate detection flow. Previously, 100 replicants sharing the same `externaltox` path would trigger a massive popup with 100+ buttons. Added `_resolveReplicants()` safety net that auto-tags replicants as clones without prompting if they reach `checkForDuplicates()` through another code path
+- **Improved: ExternalizeProject dialog**: Expanded the "Externalize Full Project" dialog with clearer descriptions and new combined options (`TOX + Project TDN`, `TDN + Project TDN`) that externalize operators and also export a project-wide `.tdn` snapshot in one step
+- **Improved: TDN export `source_file` field**: All TDN exports now include the originating `.toe` filename for traceability
+- **Improved: Stable project TDN filenames**: New `_stripBuildSuffix()` strips the auto-incrementing build number (e.g. `.302`) from project names, so root TDN exports produce a stable filename across saves (e.g. `Embody-5.tdn` instead of `Embody-5.305.tdn`)
+- **Test: Replicant handling tests**: 4 new tests in `test_duplicate_handling.py` covering `_resolveReplicants`, `isReplicant`, and replicator integration with `_buildPathGroups`
+- **Test: TDN file I/O tests**: 7 new tests in `test_tdn_file_io.py` for `_stripBuildSuffix` edge cases and `source_file` export verification
+
+## v5.0.302
+
+Fix duplicate path clone detection (issue #4), config file location (issue #5), Envoy startup flow on fresh .tox install.
+
+- **Fix: Clone assignment for duplicate paths** (GitHub issue #4): Rewrote duplicate detection to use group-based path mapping (`_buildPathGroups`) and TD's `.clones`/`par.clone` API for automatic master identification. COMPs that are clones of each other are resolved silently; non-clone duplicates show a single per-group dialog with Dismiss option. Eliminated infinite cancel loop and wrong-operator tagging
+- **Fix: Config files written to home directory** (GitHub issue #5): Bounded `_findProjectRoot()` and `_checkOrInitGitRepo()` walk-up to stop at `Path.home()`, preventing accidental discovery of unrelated git repos (e.g. dotfiles in `~`). Added `_git_prompt_active` guard against concurrent git dialogs
+- **Fix: Envoy auto-start on fresh .tox drop**: `EnvoyExt.__init__` was scheduling `Start()` based on the baked `Envoyenable=True` before `init()` could reset it. Added `_init_complete` guard so auto-start only fires during extension reinit in a running session, never on fresh install. Removed `_setupEnvironment()` from `EmbodyExt.__init__` (now runs inside `Start()`)
+- **Fix: Envoy opt-in prompt not appearing**: `_restoreSettings()` finding a leftover `.embody.json` caused `Verify()` to skip the "Enable Envoy?" dialog. Fresh installs (empty externalizations table) now always prompt, regardless of prior settings files
+- **Fix: Sequential dialog flow**: Moved git repo check into `_enableEnvoy()` so it runs immediately after the user clicks "Enable Envoy" — before deps install. `Start()` now uses silent `_findGitRoot()` and never shows dialogs
+- **Fix: Runtime-only storage baking into .tox**: `onProjectPreSave` now unstores `_git_root`, `_tdn_stripped_paths`, and `_tdn_pane_restore` — these are session-only values that caused spurious warnings (e.g. "Post-save restore: .tdn file missing: unit_tests.tdn") when baked into the release .tox
+- **Fix: parexec SyntaxError on save**: Fixed non-ASCII bytes (smart quotes, em dashes) in parexec.py that caused `SyntaxError` when TD reads externalized files with CP1252 encoding
+- **Improved: `_restoreSettings()` kick_envoy parameter**: `onStart()` passes `kick_envoy=True` to defer Envoy start after settings restore; `Verify()` (onCreate path) uses default `kick_envoy=False` since it owns the Envoy startup flow
+- **Test: Duplicate handling tests**: 5 new tests in `test_duplicate_handling.py` covering `_buildPathGroups`, `_resolveClonesByCloningAPI`, group dialog, and user-selects-master flow
+- **Test: Smoke release fix**: `test_envoy_server_running_if_enabled` now checks `Envoystatus` parameter (survives extension reinit) instead of `envoy_running` store
+- **Docs**: Updated duplicate path handling section in `externalization.md` (39 test suites, 1390 tests)
+
+## v5.0.278
+
+Fix folder change crash, regression tests.
+
+- **Fix: Changing externalization folder deletes target directory** (GitHub issue #3): When changing the Folder parameter, `Disable()` would fall back to `project.folder` when the previous folder was empty, then `deleteEmptyDirectories` would walk the entire project tree and delete the newly-created target directory. `UpdateHandler` then failed with `FileNotFoundError`. Fixed by guarding all directory cleanup to never operate on `project.folder`, and switching `os.mkdir` to `os.makedirs(exist_ok=True)` for robustness
+- **Regression tests**: Two new tests in `test_custom_parameters.py` — `test_zz_folder_10_empty_dir_survives_disable` reproduces the exact issue #3 scenario, `test_zz_folder_11_disable_empty_prev_skips_project_folder` verifies empty prevFolder doesn't walk project.folder (39 test suites)
+
+## v5.0.277
+
+Manager UI improvements, new keyboard shortcut, consistent terminology.
+
+- **"Update current COMP" toolbar button**: New button (floppy disk icon) in the toolbar directly after "Update externalizations", calls `SaveCurrentComp()` — equivalent to Ctrl+Alt+U. Visible in both full and minimized manager views
+- **Ctrl+Shift+R keyboard shortcut**: New shortcut to refresh tracking state, added to keyboard callbacks, toolbar tooltip, and all documentation
+- **Consistent "Update" terminology**: Replaced mixed "Save"/"Update" language across all user-facing text — tooltips, help text, docs, and README now consistently use "Update" for externalization operations (Ctrl+Shift+U, Ctrl+Alt+U)
+- **Minimized UI fix**: Reduced `min_height` from 72 to 66 to eliminate black bar at bottom of minimized manager (header 26px + toolbar 40px = 66px exactly). Increased `min_width` from 370 to 410 to accommodate the new button
+- **Manager list default expand**: Root-level items in the externalization list now start expanded on first launch instead of fully collapsed
+- **Restored unit_tests annotations**: 6 annotation groups accidentally removed in v5.0.269 commit (irony: the "fix annotation loss" commit) have been restored from git history
+- **TDN reload rule**: CLAUDE.md rule #1 strengthened — editing `.tdn` files on disk now mandates an immediate `import_network` MCP call to reload in TD
+- **Manager toolbar docs**: New toolbar button reference table added to `manager-ui.md` with all buttons, actions, and keyboard shortcuts
+
+## v5.0.275
+
+TDN export keyboard shortcut pars, keyboard shortcuts documentation.
+
+- **TDN export shortcut pars**: Added `Export Project to TDN` and `Export Current COMP to TDN` read-only parameters to the UI custom page, displaying the `ctrl/cmd + lshift + e` and `ctrl/cmd + alt + e` shortcuts alongside the existing four shortcut pars
+- **Keyboard shortcuts docs**: Added an info callout to `keyboard-shortcuts.md` clearly explaining the difference between Save shortcuts (update tracked externalizations) and Export shortcuts (standalone TDN snapshot of any network)
+
+## v5.0.274
+
+Settings persistence across upgrades, extension initialization timing documentation.
+
+- **Settings persistence (`.embody.json`)**: Embody now saves user-configured parameters to a `.embody.json` file at the git root (or project folder if no git). Settings are written automatically on every parameter change and restored on project open (`onStart`) and fresh install (`onCreate`). Survives `.tox` upgrades, crashes, and force-quits. Whitelisted parameters include folder, Envoy config, tag names, tag colors, TDN settings, and logging options. Restore runs silently (no `onValueChange` side effects) via `_restoring_settings` flag
+- **Crash-safe restore**: `_restoreSettings()` runs at frame 5 on every project open, not just on fresh install. If the `.toe` has stale values (unsaved session, crash), `.embody.json` wins
+- **Extension initialization timing docs**: New documentation covering the critical `onInitTD` / TDN import timing issue — extensions inside TDN COMPs must defer initialization because `ImportNetwork(clear_first=True)` overwrites any state set during `onInitTD`. Added to `td-python.md` rule, `create-extension` skill, `extensions.md` doc, and TDN specification
+- **Template sync**: Updated `text_rule_td_python.md` and `text_skill_create_extension.md` templates to match their `.claude/` counterparts
+
+## v5.0.269
+
+Fix annotation loss on save, TDN v1.2, poisoned zero value guards, bridge improvements.
+
+- **Fix TDN annotation loss on Ctrl+S**: Two import-path bugs caused annotations to disappear after save. Phase 2 (`_createCustomPars`) called `appendXXX(replace=True)` on palette clone operators (annotateCOMP), destroying internal parameter bindings that the clone's rendering network depends on — fix: skip Phase 2 for `palette_clone` operators. Phase 1 (`_createOps`) only logged a warning when TD ignored the name param for annotateCOMP creates, causing Phase 7a to create duplicates — fix: explicitly rename after creation
+- **Guard annotation import/export against poisoned zero values**: Previous palette clone bug exported `titleHeight=0`, `bodyFontSize=0`, `backAlpha=0.0` from broken annotations, making them invisible on reimport. Both import and export now skip zero values, letting palette clone defaults apply
+- **TDN v1.2**: Storage options, `tdn_ref` cross-validation, large TDN warning
+- **Envoy bridge improvements**: Signal diagnostics, startup log improvements
+- **Toolbar/UI updates**: Press state improvements, button interactions
+- **New test coverage**: `test_tdn_file_io.py` added for TDN file I/O operations
+
 ## v5.0.263
 
 DAT content safety, palette clone fidelity, recursive TDN fingerprinting, toolbar press states, venv validation.

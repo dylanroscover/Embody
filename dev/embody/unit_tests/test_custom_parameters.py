@@ -575,3 +575,102 @@ class TestCustomParameters(EmbodyTestCase):
                 temp_folder.rmdir()
             except OSError:
                 pass  # Not empty, leave it
+
+    # ==================================================================
+    # F. FOLDER CHANGE TO NEW EMPTY DIRECTORY (issue #3 regression)
+    # ==================================================================
+
+    def test_zz_folder_10_empty_dir_survives_disable(self):
+        """Changing Folder to a new empty directory must not delete it.
+
+        Regression test for GitHub issue #3: Disable() was calling
+        deleteEmptyDirectories on project.folder when prevFolder was
+        empty, which walked the entire project tree and removed the
+        newly-created target directory.
+        """
+        parexec = self.embody.op('parexec')
+        parexec.par.active = False
+
+        # Save original state
+        original_folder = self.embody.par.Folder.eval()
+        target_name = '_test_issue3_target'
+        target_dir = Path(project.folder) / target_name
+
+        try:
+            # Create the new empty directory (simulates user creating it)
+            target_dir.mkdir(exist_ok=True)
+            self.assertTrue(target_dir.is_dir(), 'Target dir should exist')
+
+            # Simulate folder change: Disable with prev='', then switch
+            prev = self.embody.par.Folder.eval()
+            self.embody.par.Folder.val = target_name
+
+            # Disable with the old folder (reproduces the parexec flow)
+            self.embody_ext.Disable(prev, removeTags=False)
+            self.assertEqual(self.embody.par.Status.eval(), 'Disabled')
+
+            # The target directory must still exist after Disable
+            self.assertTrue(target_dir.is_dir(),
+                            f'Target directory was deleted during Disable: {target_dir}')
+
+            # Re-enable — UpdateHandler should create the subfolder
+            self.embody_ext.UpdateHandler()
+            self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
+
+            project_folder = self.embody_ext.getProjectFolder()
+            self.assertTrue(os.path.isdir(project_folder),
+                            f'Project folder should exist after UpdateHandler: {project_folder}')
+
+        finally:
+            # Restore original folder
+            self.embody.par.Folder.val = original_folder
+            self.embody_ext.Disable(target_name, removeTags=False)
+            self.embody_ext.UpdateHandler()
+            self.embody_ext.Update()
+            parexec.par.active = True
+
+            # Clean up test directory
+            if target_dir.is_dir():
+                try:
+                    import shutil
+                    shutil.rmtree(str(target_dir))
+                except Exception:
+                    pass
+
+    def test_zz_folder_11_disable_empty_prev_skips_project_folder(self):
+        """Disable with empty prevFolder must not walk project.folder.
+
+        When prevFolder is '', Disable falls back to project.folder.
+        The fix ensures deleteEmptyDirectories is never called on
+        project.folder, preventing collateral deletion of unrelated dirs.
+        """
+        parexec = self.embody.op('parexec')
+        parexec.par.active = False
+
+        original_folder = self.embody.par.Folder.eval()
+        canary_name = '_test_issue3_canary'
+        canary_dir = Path(project.folder) / canary_name
+
+        try:
+            # Create an empty "canary" directory inside project.folder
+            canary_dir.mkdir(exist_ok=True)
+
+            # Disable with empty prev — this was the trigger for issue #3
+            self.embody_ext.Disable('', removeTags=False)
+            self.assertEqual(self.embody.par.Status.eval(), 'Disabled')
+
+            # The canary directory must survive
+            self.assertTrue(canary_dir.is_dir(),
+                            f'Canary directory was deleted by Disable: {canary_dir}')
+
+        finally:
+            self.embody.par.Folder.val = original_folder
+            self.embody_ext.UpdateHandler()
+            self.embody_ext.Update()
+            parexec.par.active = True
+
+            if canary_dir.is_dir():
+                try:
+                    canary_dir.rmdir()
+                except OSError:
+                    pass
