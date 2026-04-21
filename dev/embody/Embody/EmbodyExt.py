@@ -1915,7 +1915,12 @@ class EmbodyExt:
         )
 
     def isInsideClone(self, oper: OP) -> bool:
-        """True if oper or any ancestor COMP is an active clone instance."""
+        """True if oper or any ancestor COMP is an active clone instance.
+
+        A COMP whose par.clone self-references (a common pattern for
+        reusable UI components using iop.* expressions) is treated as
+        a master, not a clone.
+        """
         p = oper
         while p is not None and p.path != '/':
             if p.family == 'COMP':
@@ -1924,7 +1929,8 @@ class EmbodyExt:
                 if clone_par is not None and enable_par is not None:
                     try:
                         clone_val = clone_par.eval()
-                        if clone_val and enable_par.eval():
+                        if (clone_val and clone_val is not p
+                                and enable_par.eval()):
                             return True
                     except Exception:
                         pass
@@ -1932,7 +1938,10 @@ class EmbodyExt:
         return False
 
     def isClone(self, oper: OP) -> bool:
-        """Check if operator is a clone COMP (not master)."""
+        """Check if operator is a clone COMP (not master).
+
+        A COMP whose par.clone self-references is treated as a master.
+        """
         if oper.family != 'COMP':
             return False
         clone_par = getattr(oper.par, 'clone', None)
@@ -1941,8 +1950,8 @@ class EmbodyExt:
             return False
         try:
             clone_val = clone_par.eval()
-            if clone_val and enable_par.eval():
-                return oper.name not in str(clone_val)
+            if clone_val and clone_val is not oper and enable_par.eval():
+                return True
         except Exception:
             pass
         return False

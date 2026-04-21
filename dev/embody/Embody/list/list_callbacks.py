@@ -26,7 +26,7 @@ HEADER_LABELS = [
 	'', 'Network Path', '', 'External File Path',
 	'Strategy', 'Build', 'Timestamp', 'Del',
 ]
-COL_WIDTHS    = [0, 0, 80, 200, 70, 50, 190, 36]
+COL_WIDTHS    = [16, 0, 80, 200, 70, 50, 190, 36]
 COL_STRETCHES = [False, True, False, True, False, False, False, False]
 TEXT_PAD_X = 6  # horizontal padding for left-justified cells
 
@@ -187,18 +187,18 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 	bg = _t['select'] if (highlight or is_selected) else _row_bg(row)
 
 	if col == COL_EXPANDO:
-		attribs.text = ''
+		hc = data[row, 'has_children'].val == '1'
+		if hc:
+			expanded = parent.Embody.fetch('expanded_paths', set())
+			attribs.text = '\u2212' if path in expanded else '+'
+			attribs.textJustify = JustifyType.CENTER
+		else:
+			attribs.text = ''
 		attribs.bgColor = bg
 
 	elif col == COL_PATH:
 		name = (path.rsplit('/', 1)[-1] or path) if path else ''
-		hc = data[row, 'has_children'].val == '1'
-		if hc:
-			expanded = parent.Embody.fetch('expanded_paths', set())
-			arrow = '\u25BE ' if path in expanded else '\u25B8 '
-			attribs.text = arrow + name
-		else:
-			attribs.text = name
+		attribs.text = name
 		attribs.textJustify = JustifyType.CENTERLEFT
 		attribs.textOffsetX = TEXT_PAD_X
 		attribs.bgColor = bg

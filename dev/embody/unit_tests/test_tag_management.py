@@ -155,6 +155,37 @@ class TestTagManagement(EmbodyTestCase):
         clone.par.enablecloning = True
         self.assertFalse(self.embody_ext.isClone(master))
 
+    def test_isClone_self_reference_is_master(self):
+        """A COMP with par.clone self-referencing is a master, not a clone.
+
+        Reproduces the reusable-UI-component pattern where par.clone
+        evaluates to self via an expression like iop.Components.op('MyComp').
+        Uses expression mode to avoid TD's clone-sync recursion on direct
+        self-assignment with cloning enabled.
+        """
+        master = self.sandbox.create(baseCOMP, 'self_ref_master')
+        master.par.clone.expr = f"op('{master.path}')"
+        master.par.enablecloning = True
+        self.assertFalse(self.embody_ext.isClone(master),
+            'Self-referencing COMP should NOT be identified as clone')
+
+    def test_isInsideClone_self_reference_master_false(self):
+        """DAT inside a self-referencing master should return False."""
+        master = self.sandbox.create(baseCOMP, 'sr_host')
+        master.par.clone.expr = f"op('{master.path}')"
+        master.par.enablecloning = True
+        inner_dat = master.create(textDAT, 'ext_dat')
+        self.assertFalse(self.embody_ext.isInsideClone(inner_dat),
+            'DAT inside self-referencing master should NOT be marked inside-clone')
+
+    def test_isInsideClone_self_reference_comp_itself_false(self):
+        """A self-referencing master COMP itself should return False."""
+        master = self.sandbox.create(baseCOMP, 'sr_comp')
+        master.par.clone.expr = f"op('{master.path}')"
+        master.par.enablecloning = True
+        self.assertFalse(self.embody_ext.isInsideClone(master),
+            'Self-referencing master should NOT be marked inside-clone')
+
     # --- isReplicant ---
 
     def test_isReplicant_regular_op_false(self):

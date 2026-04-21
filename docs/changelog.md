@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.383
+
+Clone detection fix for self-referencing masters (a common pattern for reusable UI components using `iop.*` expressions), and a cleaner list UI that moves the tree expand/collapse control into a dedicated column.
+
+- **Fix: Self-referencing COMPs are masters, not clones**: `isClone()` and `isInsideClone()` in EmbodyExt were misclassifying reusable-component masters whose `par.clone` evaluates to themselves (a standard pattern — a component COMP sets `par.clone.expr = "iop.Components.op('MyComp')"` so instances dropped elsewhere auto-sync). Before the fix, saving inside such a master would mark DATs as "inside a clone" and route them through the clone-side auto-resolve path, breaking externalization for the component's own authored contents. Both methods now treat `par.clone is self` (identity check on the evaluated op) as a master, not a clone. `isClone()` simplified from "does `oper.name` appear in the stringified clone value" string-match to the direct identity comparison. Added three unit tests in `test_tag_management.py` (`test_isClone_self_reference_is_master`, `test_isInsideClone_self_reference_master_false`, `test_isInsideClone_self_reference_comp_itself_false`) using expression-mode clone assignment to avoid TD's direct-assignment recursion
+- **UI: Dedicated expando column in the externalization list**: The tree-expand indicator used to be prefixed onto the network-path cell as a `▸ Name` / `▾ Name` string, which left the path column doing two jobs and misaligned when names varied in length. `list_callbacks.py` now renders a dedicated `+` / `−` character in the leading 16-unit-wide expando column (previously hidden at width 0), leaving the network-path cell to show just the name centered-left with normal padding. Only rows with children get a character; leaf rows stay blank. Small visual change, noticeably cleaner at a glance
+- **Chore: `.gitignore` entry for `.release-drafts/`**: Local release-staging directory now ignored
+
 ## v5.0.381
 
 Global Perform Mode toggle suspends Embody/Envoy/TDN compute during live performance (Issue #13), auto-resolve for duplicate DATs inside active clones without prompting (Issue #15), ancestor-rename disk handling fixed so `Move` no longer fails with "source folder not found" (Issue #16), and new render-coordinate-system rules documenting TD's bottom-left origin convention (Issue #14).
