@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.383-blue)
+![Version](https://img.shields.io/badge/version-5.0.386-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.386**: Batch-confirm prompt for duplicate path detection — when multiple groups remain unresolved, one dialog offers `Auto-resolve all` / `Review individually` / `Dismiss` instead of a separate modal per group
 - **5.0.383**: Clone detection fix for self-referencing masters (reusable UI components using `iop.*` expressions), and a cleaner list UI moving the tree expand/collapse indicator into a dedicated column
 - **5.0.381**: Global Perform Mode toggle disables Embody/Envoy/TDN compute during TD performance (Issue #13), auto-resolve duplicate DATs inside active clones without prompting (Issue #15), ancestor-rename disk handling now uses the externalizations folder prefix so `Move` no longer fails with "source folder not found" (Issue #16), new render-coordinate-system rules for TD's bottom-left origin convention (Issue #14)
 - **5.0.376**: Palette scan skips invasive palettes (TDVR framerate popup, AutoUI widget dialog) on fresh-build startup, rebaked palette catalog covers TD 2025.32460, and false "locked content" warnings suppressed inside clones/replicants (Issue #12)

@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.386
+
+Batch-confirm prompt for duplicate path detection — one dialog instead of N — so projects with several unresolved duplicate groups no longer spam the user with a modal per group on every save/refresh.
+
+- **Feature: batch-confirm prompt for duplicate paths**: When `checkForDuplicates()` finishes auto-resolving replicants, TD clones, and DATs inside cloned COMPs, any groups it still can't resolve now collect into a list. If 2+ groups remain, a single `Duplicate Paths Detected` dialog appears with three choices: `Dismiss` (skip for now, re-prompt next cycle), `Review individually` (falls back to the existing per-group prompt per group), or `Auto-resolve all (N)` (picks the first listed operator in each group as master; tags the rest with `clone`). Single-group case is unchanged — it goes straight to the original per-group prompt. Addresses user feedback that projects with many copy-pasted COMPs were hitting the per-group modal 5-10 times per save
+- **Hardening: `_messageBox` list-of-responses for headless testing**: The test harness's `_smoke_test_responses` storage dict now accepts a list of button indices per title (e.g. `{'Duplicate Path Detected': [1, 1]}`) in addition to the existing single-int form. List values are consumed front-to-back; the key is removed once empty. This unlocks multi-invocation test coverage of the new `Review individually` path where the per-group prompt fires multiple times within a single `checkForDuplicates()` call. Backward compatible — existing single-int seeds still work
+- **Tests**: New `TestBatchResolution` class in `test_duplicate_handling.py` with 6 tests covering the single-group shortcut, each batch-prompt button, per-group fallthrough, and the `_autoResolveFirstAsMaster` helper including empty-input safety. Full duplicate_handling suite: 56/56 passing. Verified live in the dev project with 3 fake groups — `Auto-resolve all` correctly kept `alpha_1`, `beta_1`, `gamma_1` as masters and tagged the rest
+
 ## v5.0.383
 
 Clone detection fix for self-referencing masters (a common pattern for reusable UI components using `iop.*` expressions), and a cleaner list UI that moves the tree expand/collapse control into a dedicated column.

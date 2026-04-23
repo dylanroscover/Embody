@@ -488,12 +488,26 @@ class EmbodyExt:
         Seed responses via:
             op.Embody.store('_smoke_test_responses', {'Dialog Title': button_index})
 
-        Responses are consumed on use. Falls through to ui.messageBox
-        when no response is seeded.
+        A list value answers multiple invocations of the same title in
+        order (one button_index per invocation):
+            op.Embody.store('_smoke_test_responses', {'Dialog Title': [1, 2]})
+
+        Single-int values are consumed on first use; list values are
+        consumed front-to-back until empty. The key is removed once
+        its responses are exhausted; the store is cleared when no
+        keys remain.
         """
         responses = self.my.fetch('_smoke_test_responses', None, search=False)
         if responses is not None and title in responses:
-            choice = responses.pop(title)
+            value = responses[title]
+            if isinstance(value, list):
+                choice = value.pop(0) if value else None
+                if choice is None:
+                    return ui.messageBox(title, message, buttons=buttons)
+                if not value:
+                    responses.pop(title)
+            else:
+                choice = responses.pop(title)
             self.Log(f'[test] Auto-responded to "{title}" -> button {choice}')
             if not responses:
                 self.my.unstore('_smoke_test_responses')
@@ -3756,8 +3770,12 @@ class EmbodyExt:
         - For replicants: auto-tags all replicants (master is the template)
         - For COMPs with TD clone relationships: auto-tags clones
         - For DATs inside cloned COMPs: auto-tags DATs in clone COMPs
-        - For others: prompts the user once per group
+        - For others: collects unresolved groups. When 2+ groups
+          remain, offers a single batch prompt (auto-resolve all /
+          review individually / skip); a single group goes straight
+          to the per-group prompt.
         """
+        unresolved = []
         for path, ops in self._buildPathGroups().items():
             if len(ops) < 2:
                 continue
@@ -3769,6 +3787,24 @@ class EmbodyExt:
                 continue
             if self._resolveDATsInClonedCOMPs(ops):
                 continue
+            unresolved.append((path, ops))
+
+        if not unresolved:
+            return
+
+        if len(unresolved) == 1:
+            path, ops = unresolved[0]
+            self._promptForDuplicateGroup(path, ops)
+            return
+
+        choice = self._promptForBatchResolution(unresolved)
+        if choice == 'dismiss':
+            return
+        if choice == 'auto':
+            for path, ops in unresolved:
+                self._autoResolveFirstAsMaster(path, ops)
+            return
+        for path, ops in unresolved:
             self._promptForDuplicateGroup(path, ops)
 
     def _resolveClonesByCloningAPI(self, ops: list) -> bool:
@@ -3899,6 +3935,54 @@ class EmbodyExt:
             self.Log(
                 f"User selected '{ops[master_idx].path}' as master "
                 f"for '{path}'", "SUCCESS")
+
+    def _promptForBatchResolution(self, unresolved: list) -> str:
+        """Ask how to handle multiple unresolved duplicate groups.
+
+        Returns 'dismiss', 'review', or 'auto'.
+        """
+        n = len(unresolved)
+        preview_limit = 5
+        preview_lines = [f"  - {path}" for path, _ in unresolved[:preview_limit]]
+        if n > preview_limit:
+            preview_lines.append(f"  ... and {n - preview_limit} more")
+        preview = '\n'.join(preview_lines)
+
+        choice = self._messageBox(
+            'Duplicate Paths Detected',
+            f"{n} groups of operators share external file paths:\n\n"
+            f"{preview}\n\n"
+            f"How would you like to resolve them?\n\n"
+            f"  * Auto-resolve all: in each group, keep the first\n"
+            f"    listed operator as master; tag the rest as clones.\n"
+            f"  * Review individually: prompt once per group.\n"
+            f"  * Dismiss: skip for now (will re-prompt next cycle).",
+            buttons=['Dismiss', 'Review individually',
+                     f'Auto-resolve all ({n})'])
+
+        if choice == 0:
+            return 'dismiss'
+        if choice == 1:
+            return 'review'
+        return 'auto'
+
+    def _autoResolveFirstAsMaster(self, path: str, ops: list) -> None:
+        """Tag all but the first op in the group as clones.
+
+        Applied when the user opts into batch resolution. Matches the
+        common case where the first-listed operator is the desired
+        master and the rest are copy-paste or drag-in duplicates.
+        """
+        if not ops:
+            return
+        master = ops[0]
+        clones = ops[1:]
+        for o in clones:
+            self._handleDuplicateAsReference(o)
+        plural = 's' if len(clones) != 1 else ''
+        self.Log(
+            f"Auto-resolved '{master.path}' as master for '{path}' "
+            f"({len(clones)} clone{plural})", "SUCCESS")
 
     def _handleDuplicateAsReference(self, oper):
         """Mark duplicate as intentional clone reference."""

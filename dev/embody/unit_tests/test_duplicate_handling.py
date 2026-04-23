@@ -312,3 +312,108 @@ class TestCheckForDuplicates(EmbodyTestCase):
                                     'strategy column should not be empty')
                     return
             self.fail(f'No table row found for {dats[1].path}')
+
+
+class TestBatchResolution(EmbodyTestCase):
+    """Tests for the batch-prompt flow when 2+ unresolved groups exist."""
+
+    def setUp(self):
+        self.workspace = self.sandbox.create(baseCOMP, 'batch_workspace')
+        self._prev_detect = self.embody.par.Detectduplicatepaths.eval()
+        self.embody.par.Detectduplicatepaths = True
+
+    def tearDown(self):
+        for i in range(self.embody_ext.Externalizations.numRows - 1, 0, -1):
+            path = self.embody_ext.Externalizations[i, 'path'].val
+            if path.startswith(self.sandbox.path):
+                self.embody_ext.Externalizations.deleteRow(i)
+        self.embody.par.Detectduplicatepaths = self._prev_detect
+        self.embody.unstore('_smoke_test_responses')
+        super().tearDown()
+
+    def _make_group(self, names, shared_path):
+        """Create a duplicate group of tagged DATs sharing one path."""
+        py_tag = self.embody.par.Pytag.val
+        dats = []
+        for name in names:
+            dat = self.workspace.create(textDAT, name)
+            dat.tags.add(py_tag)
+            dat.par.file = shared_path
+            dat.par.syncfile = True
+            dats.append(dat)
+        return dats
+
+    def test_single_unresolved_group_skips_batch_prompt(self):
+        """One group -> goes straight to per-group prompt, no batch dialog."""
+        dats = self._make_group(['solo_a', 'solo_b'], 'test/solo.py')
+        # Seed ONLY the per-group prompt response. If the batch prompt were
+        # shown, its title ('Duplicate Paths Detected') wouldn't match and
+        # the real ui.messageBox would fire -- so a clean pass implies
+        # the batch prompt was correctly skipped.
+        self.embody.store('_smoke_test_responses',
+                          {'Duplicate Path Detected': 1})
+        self.embody_ext.checkForDuplicates()
+        clone_count = sum(1 for d in dats if 'clone' in d.tags)
+        self.assertEqual(clone_count, 1,
+                         'Exactly one op should be tagged clone after '
+                         'per-group prompt')
+
+    def test_batch_auto_resolve_tags_all_groups(self):
+        """User picks 'Auto-resolve all' -> first op in each group is master."""
+        grp1 = self._make_group(['g1_a', 'g1_b'], 'test/grp1.py')
+        grp2 = self._make_group(['g2_a', 'g2_b', 'g2_c'], 'test/grp2.py')
+        # Button 2 = 'Auto-resolve all'
+        self.embody.store('_smoke_test_responses',
+                          {'Duplicate Paths Detected': 2})
+        self.embody_ext.checkForDuplicates()
+        g1_clones = sum(1 for d in grp1 if 'clone' in d.tags)
+        g2_clones = sum(1 for d in grp2 if 'clone' in d.tags)
+        self.assertEqual(g1_clones, len(grp1) - 1,
+                         'Group 1: all but master should be tagged clone')
+        self.assertEqual(g2_clones, len(grp2) - 1,
+                         'Group 2: all but master should be tagged clone')
+
+    def test_batch_dismiss_tags_nothing(self):
+        """User picks 'Dismiss' -> no ops tagged across any group."""
+        grp1 = self._make_group(['dg1_a', 'dg1_b'], 'test/dgrp1.py')
+        grp2 = self._make_group(['dg2_a', 'dg2_b'], 'test/dgrp2.py')
+        # Button 0 = 'Dismiss'
+        self.embody.store('_smoke_test_responses',
+                          {'Duplicate Paths Detected': 0})
+        self.embody_ext.checkForDuplicates()
+        for d in grp1 + grp2:
+            self.assertNotIn('clone', d.tags,
+                             f'{d.path} should not be tagged after Dismiss')
+
+    def test_batch_review_falls_through_to_per_group(self):
+        """User picks 'Review individually' -> per-group prompt fires."""
+        grp1 = self._make_group(['rg1_a', 'rg1_b'], 'test/rgrp1.py')
+        grp2 = self._make_group(['rg2_a', 'rg2_b'], 'test/rgrp2.py')
+        # Batch: button 1 = 'Review individually';
+        # Per-group prompt fires once per group -- seed a list so both
+        # invocations get answered (button 1 = first op is master).
+        self.embody.store('_smoke_test_responses', {
+            'Duplicate Paths Detected': 1,
+            'Duplicate Path Detected': [1, 1],
+        })
+        self.embody_ext.checkForDuplicates()
+        g1_clones = sum(1 for d in grp1 if 'clone' in d.tags)
+        g2_clones = sum(1 for d in grp2 if 'clone' in d.tags)
+        self.assertEqual(g1_clones, 1,
+                         'Group 1: one op should be tagged via per-group prompt')
+        self.assertEqual(g2_clones, 1,
+                         'Group 2: one op should be tagged via per-group prompt')
+
+    def test_auto_resolve_helper_first_op_is_master(self):
+        """_autoResolveFirstAsMaster keeps ops[0], tags rest."""
+        ops = self._make_group(['h_a', 'h_b', 'h_c'], 'test/helper.py')
+        self.embody_ext._autoResolveFirstAsMaster('test/helper.py', ops)
+        self.assertNotIn('clone', ops[0].tags,
+                         'First op should be retained as master')
+        self.assertIn('clone', ops[1].tags)
+        self.assertIn('clone', ops[2].tags)
+
+    def test_auto_resolve_helper_empty_list_is_safe(self):
+        """_autoResolveFirstAsMaster handles empty input without error."""
+        # Should not raise
+        self.embody_ext._autoResolveFirstAsMaster('test/empty.py', [])
