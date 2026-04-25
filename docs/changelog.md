@@ -1,5 +1,13 @@
 # Changelog
 
+## v5.0.389
+
+Test-debt cleanup: `test_envoy_bridge.py` was carrying 21 stale assertions left behind by prior bridge refactors (HTTP connection pool removal, log prefix format change, v2 main-loop semantics). All bridge tests now pass — 148/151 (3 explicit stubs skipped, no failures, no errors).
+
+- **Fix: `TestBridgeForwardToHttp` rewritten for `urllib.request.urlopen`**: 17 tests previously expected a pooled `http.client.HTTPConnection` (`bridge._http_pool`, `bridge._http_pool_lock`, `bridge._get_http_connection`). The bridge was simplified to use a fresh `urllib.request.urlopen` per call (see [envoy_bridge.py:1286](dev/embody/envoy_bridge.py#L1286)) but the tests were never updated. setUp/`_make_conn` helper replaced with `_make_response`. Each test now mocks `urllib.request.urlopen` directly and inspects the `urllib.request.Request` object passed to it. The over-strict `test_http_exception_wrapped_as_oserror` was replaced with `test_url_error_propagates_as_oserror` to match the actual contract.
+- **Fix: `TestBridgeLog.test_log_includes_prefix` PID-aware**: assertion changed from literal `'[envoy-bridge]'` to `'[envoy-bridge:'` to match the current log format `[envoy-bridge:<pid>] <ts> <msg>` ([envoy_bridge.py:249](dev/embody/envoy_bridge.py#L249)).
+- **Fix: `TestBridgeMainLoop` initial-connection-timeout tests match v2 semantics**: 3 tests assumed the bridge blocks on `wait_for_envoy` for arbitrary methods and emits a connection-lost error when it times out. v2 bridge does not block — it tries `forward_to_http` once and only errors when the forward call itself raises ([envoy_bridge.py:2103-2134](dev/embody/envoy_bridge.py#L2103-L2134)). Tests `test_initial_connection_timeout_sends_error`, `test_initial_timeout_includes_actionable_hint`, and `test_initial_timeout_then_next_message_retries_connect` now mock `forward_to_http` to raise `OSError` and assert the bridge emits the connection-lost error response with the `launch_td` actionable hint.
+
 ## v5.0.388
 
 Per-project TouchDesigner build pinning so the Envoy bridge launches the right TD version on a fresh clone, plus a thread-safety fix in the MCP update checker.

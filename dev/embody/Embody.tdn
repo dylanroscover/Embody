@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.3",
-	"build": 407,
-	"generator": "Embody/5.0.385",
+	"build": 417,
+	"generator": "Embody/5.0.388",
 	"td_build": "099.2025.32460",
-	"source_file": "Embody-5.386.toe",
-	"exported_at": "2026-04-23T22:00:01Z",
+	"source_file": "Embody-5.389.toe",
+	"exported_at": "2026-04-25T16:30:09Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -685,7 +685,7 @@
 				"label": "Envoy Status",
 				"readOnly": true,
 				"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-				"value": "Running on port 9870"
+				"value": "Starting..."
 			}
 		],
 		"Logs": [
@@ -868,7 +868,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.385"
+				"value": "5.0.388"
 			},
 			{
 				"name": "Touchbuild",
@@ -891,7 +891,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 407
+				"value": 417
 			},
 			{
 				"name": "Github",
@@ -906,7 +906,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-04-23 22:00:01 UTC"
+				"value": "2026-04-25 16:30:09 UTC"
 			},
 			{
 				"name": "Help",
@@ -966,7 +966,8 @@
 		"claudius_running": false,
 		"_tdn_restore_failures": ["/embody/base1"],
 		"expand_order": [],
-		"_start_in_progress": true
+		"_start_in_progress": true,
+		"_init_complete": true
 	},
 	"operators": [
 		{

@@ -100,58 +100,41 @@ class TestBridgeParseArgs(EmbodyTestCase):
 
 class TestBridgeForwardToHttp(EmbodyTestCase):
     """
-    v2 forward_to_http uses a pooled ``http.client.HTTPConnection`` per
-    URL (see bridge._http_pool) instead of ``urllib.request.urlopen``.
-    Tests mock the pooled connection directly via
-    ``_get_http_connection`` so they exercise the real code path
+    forward_to_http calls ``urllib.request.urlopen`` once per message.
+    Tests mock urlopen directly so they exercise the real parsing path
     without opening real sockets.
     """
 
-    def setUp(self):
-        # Clear the pool between tests so mocks don't leak state and
-        # unreachable connections from earlier tests don't linger.
-        with bridge._http_pool_lock:
-            bridge._http_pool.clear()
-
-    def _make_conn(self, body, status=200, reason='OK'):
-        """Build a mock HTTPConnection that returns ``body`` as the response."""
+    def _make_response(self, body):
+        """Build a mock response object that urlopen would return."""
         resp = MagicMock()
         resp.read.return_value = body.encode('utf-8')
-        resp.status = status
-        resp.reason = reason
-        conn = MagicMock()
-        conn.sock = None
-        conn.getresponse.return_value = resp
-        return conn
+        return resp
 
     # --- SSE format ---
 
     def test_sse_format_single_event(self):
         body = 'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertTrue(result['result']['ok'])
 
     def test_sse_data_only_no_event_line(self):
         """SSE with just data: line, no event: prefix."""
         body = 'data: {"id":1,"result":"bare"}\n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'bare')
 
     def test_sse_multiple_events_returns_first(self):
         body = 'data: {"first":true}\n\ndata: {"second":true}\n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertTrue(result.get('first'))
 
     def test_sse_with_extra_whitespace(self):
         body = '  data: {"id":1}  \n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['id'], 1)
 
@@ -159,45 +142,42 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
 
     def test_plain_json_response(self):
         body = '{"jsonrpc":"2.0","id":1,"result":"hello"}'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'hello')
 
     def test_plain_json_with_surrounding_whitespace(self):
         body = '  \n  {"jsonrpc":"2.0","id":1,"result":"padded"}  \n  '
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'padded')
 
     # --- Empty / malformed responses ---
 
     def test_empty_response_body(self):
-        conn = self._make_conn('')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response('')):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     def test_whitespace_only_response(self):
-        conn = self._make_conn('   \n  ')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response('   \n  ')):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     def test_malformed_json_in_plain_body(self):
         """Garbled non-JSON body returns None, doesn't crash."""
-        conn = self._make_conn('not json at all')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response('not json at all')):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     # --- Error propagation ---
 
     def test_http_error_raises_oserror(self):
-        """HTTP status >= 400 raises OSError so the retry path catches it."""
-        conn = self._make_conn('error body', status=500, reason='Internal Server Error')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        """HTTP status >= 400 raises HTTPError (an OSError subclass)."""
+        import urllib.error
+        err = urllib.error.HTTPError(
+            'http://localhost:9870/mcp', 500, 'Internal Server Error', {}, None)
+        with patch('urllib.request.urlopen', side_effect=err):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
@@ -207,10 +187,8 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
 
     def test_connection_error_propagates(self):
         """ConnectionRefusedError (subclass of OSError) propagates."""
-        conn = MagicMock()
-        conn.sock = None
-        conn.request.side_effect = ConnectionRefusedError('refused')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   side_effect=ConnectionRefusedError('refused')):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
@@ -221,10 +199,8 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
     def test_timeout_propagates(self):
         """Socket timeout (OSError subclass) propagates."""
         import socket
-        conn = MagicMock()
-        conn.sock = None
-        conn.request.side_effect = socket.timeout('timed out')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   side_effect=socket.timeout('timed out')):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
@@ -232,60 +208,50 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
                 raised = True
             self.assertTrue(raised, 'socket.timeout should propagate as OSError')
 
-    def test_http_exception_wrapped_as_oserror(self):
-        """http.client.HTTPException is wrapped so retry path catches it."""
-        import http.client
-        conn = MagicMock()
-        conn.sock = None
-        conn.request.side_effect = http.client.BadStatusLine('oops')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+    def test_url_error_propagates_as_oserror(self):
+        """urllib.error.URLError (OSError subclass) propagates so the main
+        loop's connection-lost handler can catch it."""
+        import urllib.error
+        with patch('urllib.request.urlopen',
+                   side_effect=urllib.error.URLError('bad url')):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
             except OSError:
                 raised = True
-            self.assertTrue(raised, 'HTTPException should be wrapped as OSError')
+            self.assertTrue(raised, 'URLError should propagate as OSError')
 
     # --- Request correctness ---
 
     def test_request_content_type_header(self):
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        call_kwargs = conn.request.call_args
-        headers = call_kwargs[1].get('headers') if call_kwargs[1] else None
-        if headers is None and len(call_kwargs[0]) >= 4:
-            headers = call_kwargs[0][3]
-        self.assertEqual(headers.get('Content-Type'), 'application/json')
+        req = mock_urlopen.call_args[0][0]
+        # urllib lowercases header names internally; use get_header for safe lookup.
+        self.assertEqual(req.get_header('Content-type'), 'application/json')
 
     def test_request_accept_header(self):
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        call_kwargs = conn.request.call_args
-        headers = call_kwargs[1].get('headers') if call_kwargs[1] else None
-        if headers is None and len(call_kwargs[0]) >= 4:
-            headers = call_kwargs[0][3]
-        self.assertIn('text/event-stream', headers.get('Accept', ''))
+        req = mock_urlopen.call_args[0][0]
+        self.assertIn('text/event-stream', req.get_header('Accept', ''))
 
     def test_request_body_is_valid_json(self):
         msg = {'jsonrpc': '2.0', 'id': 42, 'method': 'tools/call'}
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', msg)
-        call_args = conn.request.call_args
-        body = call_args[1].get('body') if call_args[1] else None
-        if body is None and len(call_args[0]) >= 3:
-            body = call_args[0][2]
-        self.assertDictEqual(json.loads(body), msg)
+        req = mock_urlopen.call_args[0][0]
+        self.assertDictEqual(json.loads(req.data.decode('utf-8')), msg)
 
     def test_custom_timeout_passed(self):
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1}, timeout=5)
-        # Timeout is applied to conn.timeout; conn.sock is None so no settimeout call.
-        # conn is a MagicMock so conn.timeout = 5 was set via attribute assignment.
-        self.assertEqual(conn.timeout, 5)
+        # urlopen(req, timeout=5) — timeout passed as kwarg.
+        self.assertEqual(mock_urlopen.call_args[1].get('timeout'), 5)
 
 
 # =====================================================================
@@ -342,7 +308,8 @@ class TestBridgeLog(EmbodyTestCase):
         err = io.StringIO()
         with patch.object(sys, 'stderr', err):
             bridge.log('test message')
-        self.assertIn('[envoy-bridge]', err.getvalue())
+        # Format is "[envoy-bridge:<pid>] <ts> <msg>" -- check the stable prefix.
+        self.assertIn('[envoy-bridge:', err.getvalue())
 
     def test_log_flushes_stderr(self):
         err = MagicMock()
@@ -625,17 +592,27 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Initial connection failure ---
 
     def test_initial_connection_timeout_sends_error(self):
-        """Non-protocol method gets error when Envoy is unreachable."""
+        """Non-protocol method gets error when forward_to_http fails.
+
+        v2 bridge does not block on initial connect for arbitrary methods --
+        it tries to forward and only errors out when the forward call itself
+        raises (which is what happens when Envoy is unreachable).
+        """
+        def fail(url, msg, **kw):
+            raise OSError('Connection refused')
         msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}
-        responses = self._run_main([msg], wait_result=False)
+        responses = self._run_main(
+            [msg], wait_result=False, forward_side_effect=fail)
         self.assertLen(responses, 1)
         self.assertDictHasKey(responses[0], 'error')
         self.assertIn('connection lost', responses[0]['error']['message'].lower())
 
     def test_initial_timeout_includes_actionable_hint(self):
+        def fail(url, msg, **kw):
+            raise OSError('Connection refused')
         msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}
         responses = self._run_main(
-            [msg], wait_result=False,
+            [msg], wait_result=False, forward_side_effect=fail,
             port_args=['envoy_bridge.py', '--port', '1234'])
         self.assertIn('launch_td', responses[0]['error']['message'])
 
@@ -689,36 +666,31 @@ class TestBridgeMainLoop(EmbodyTestCase):
                       {t['name'] for t in responses[1]['result']['tools']})
 
     def test_initial_timeout_then_next_message_retries_connect(self):
-        """After initial timeout, the next message triggers wait_for_envoy again."""
+        """After a forward failure, the next message keeps trying.
+
+        v2 bridge does not block on wait_for_envoy for arbitrary methods.
+        Recovery is per-message: each request calls forward_to_http directly,
+        and if it fails, the bridge marks disconnected but continues serving
+        subsequent messages (which try forward_to_http again).
+        """
         msgs = [
             {'jsonrpc': '2.0', 'id': 1, 'method': 'first'},
             {'jsonrpc': '2.0', 'id': 2, 'method': 'second'},
         ]
-        stdin = self._make_stdin(msgs)
-        stdout = io.StringIO()
-        stderr = io.StringIO()
+        forward_calls = [0]
+        def fwd(url, msg, **kw):
+            forward_calls[0] += 1
+            if forward_calls[0] == 1:
+                raise OSError('Connection refused')
+            return {'jsonrpc': '2.0', 'id': msg['id'], 'result': 'ok'}
 
-        wait_calls = [0]
-        def mock_wait(url, deadline):
-            wait_calls[0] += 1
-            return wait_calls[0] >= 2  # Fail first, succeed second
+        responses = self._run_main(
+            msgs, wait_result=False, forward_side_effect=fwd)
 
-        with patch.object(sys, 'stdin', stdin), \
-             patch.object(sys, 'stdout', stdout), \
-             patch.object(sys, 'stderr', stderr), \
-             patch.object(sys, 'argv', ['envoy_bridge.py']), \
-             patch.object(bridge, 'wait_for_envoy', side_effect=mock_wait), \
-             patch.object(bridge, 'forward_to_http',
-                          return_value={'jsonrpc': '2.0', 'id': 2, 'result': 'ok'}), \
-             patch.object(bridge, 'find_td_pid', return_value=None), \
-             patch.object(bridge, 'kill_stale_bridges'), \
-             patch('time.sleep'):
-            bridge.main()
-
-        self.assertEqual(wait_calls[0], 2)
-        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
-        responses = [json.loads(l) for l in lines]
-        # First: error (connection failed), Second: success
+        # Both messages get forwarded -- the second one because the bridge
+        # keeps trying after a failure.
+        self.assertEqual(forward_calls[0], 2)
+        # First: error (forward failed), Second: success.
         self.assertLen(responses, 2)
         self.assertDictHasKey(responses[0], 'error')
         self.assertEqual(responses[1]['result'], 'ok')
