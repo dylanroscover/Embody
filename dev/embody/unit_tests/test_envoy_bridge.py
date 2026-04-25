@@ -1234,6 +1234,146 @@ class TestBridgeConfig(EmbodyTestCase):
 
 
 # =====================================================================
+# project.json + TD install discovery
+# =====================================================================
+
+class TestBridgeProjectJsonAndDiscovery(EmbodyTestCase):
+    """Covers load_project_config(), build parsing, and select_td_install()
+    matching policy. find_td_installs() itself is platform-dependent, so
+    select_td_install is tested via the ``installs=`` injection point."""
+
+    # --- load_project_config -------------------------------------------
+
+    def test_load_project_config_missing(self):
+        self.assertEqual(bridge.load_project_config(None), {})
+        self.assertEqual(
+            bridge.load_project_config('/nonexistent/.embody/envoy.json'), {})
+
+    def test_load_project_config_valid(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            project_json = os.path.join(embody, 'project.json')
+            with open(project_json, 'w') as f:
+                json.dump({'td_build': '2025.32660'}, f)
+            envoy_json = os.path.join(embody, 'envoy.json')
+            result = bridge.load_project_config(envoy_json)
+            self.assertEqual(result, {'td_build': '2025.32660'})
+
+    def test_load_project_config_malformed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                f.write('not json {{{')
+            envoy_json = os.path.join(embody, 'envoy.json')
+            self.assertEqual(bridge.load_project_config(envoy_json), {})
+
+    def test_load_project_config_non_dict(self):
+        """A JSON list/scalar at top level should yield {}."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                json.dump(['not', 'a', 'dict'], f)
+            envoy_json = os.path.join(embody, 'envoy.json')
+            self.assertEqual(bridge.load_project_config(envoy_json), {})
+
+    # --- _parse_build --------------------------------------------------
+
+    def test_parse_build_valid(self):
+        self.assertEqual(bridge._parse_build('2025.32660'), (2025, 32660))
+        self.assertEqual(bridge._parse_build('2023.11340'), (2023, 11340))
+
+    def test_parse_build_embedded(self):
+        """Should still parse when surrounded by directory/version text."""
+        self.assertEqual(
+            bridge._parse_build('TouchDesigner.2025.32660'),
+            (2025, 32660))
+
+    def test_parse_build_invalid(self):
+        self.assertIsNone(bridge._parse_build(None))
+        self.assertIsNone(bridge._parse_build(''))
+        self.assertIsNone(bridge._parse_build('not-a-build'))
+
+    # --- select_td_install ---------------------------------------------
+
+    def test_select_exact_match(self):
+        installs = [
+            ('2025.32660', '/Applications/TD2025.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        exe, warn = bridge.select_td_install('2025.32660', None, installs)
+        self.assertEqual(exe, '/Applications/TD2025.app')
+        self.assertIsNone(warn)
+
+    def test_select_same_year_closest(self):
+        installs = [
+            ('2025.32700', '/Applications/TD2025-newer.app'),
+            ('2025.32500', '/Applications/TD2025-older.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        exe, warn = bridge.select_td_install('2025.32660', None, installs)
+        # 32700 is closer to 32660 (delta 40) than 32500 (delta 160)
+        self.assertEqual(exe, '/Applications/TD2025-newer.app')
+        self.assertIsNotNone(warn)
+        self.assertIn('2025.32660', warn)
+        self.assertIn('2025.32700', warn)
+
+    def test_select_falls_back_to_envoy_json_when_no_year_match(self):
+        installs = [('2023.11340', '/Applications/TD2023.app')]
+        # Use a real existing path so os.path.exists() returns True.
+        fallback = sys.executable
+        exe, warn = bridge.select_td_install('2025.32660', fallback, installs)
+        self.assertEqual(exe, fallback)
+        self.assertIsNotNone(warn)
+        self.assertIn('falling back', warn.lower())
+
+    def test_select_falls_back_to_newest_when_no_envoy_json(self):
+        installs = [
+            ('2025.32700', '/Applications/TD2025.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        # No fallback, no year match
+        exe, warn = bridge.select_td_install('2023.11340', None, installs)
+        self.assertEqual(exe, '/Applications/TD2025.app')
+        self.assertIsNotNone(warn)
+        self.assertIn('newest', warn.lower())
+
+    def test_select_no_pin_uses_fallback(self):
+        """No td_build → use fallback verbatim, no warning."""
+        installs = [('2025.32660', '/Applications/TD2025.app')]
+        fallback = sys.executable
+        exe, warn = bridge.select_td_install(None, fallback, installs)
+        self.assertEqual(exe, fallback)
+        self.assertIsNone(warn)
+
+    def test_select_no_pin_no_fallback_returns_newest(self):
+        """No pin and no fallback → newest install, no warning."""
+        installs = [
+            ('2025.32700', '/Applications/TD2025.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        exe, warn = bridge.select_td_install(None, None, installs)
+        self.assertEqual(exe, '/Applications/TD2025.app')
+        self.assertIsNone(warn)
+
+    def test_select_nothing_found(self):
+        exe, warn = bridge.select_td_install('2025.32660', None, [])
+        self.assertIsNone(exe)
+        self.assertIn('No TouchDesigner', warn)
+        self.assertIn('2025.32660', warn)
+
+    def test_select_nothing_found_no_pin(self):
+        exe, warn = bridge.select_td_install(None, None, [])
+        self.assertIsNone(exe)
+        self.assertIn('No TouchDesigner', warn)
+
+
+# =====================================================================
 # Process Management
 # =====================================================================
 

@@ -320,6 +320,8 @@ class EmbodyExt:
         notice if an update is available - never blocks the main thread."""
         import threading
 
+        owner_path = self.my.path
+
         def _check():
             try:
                 import urllib.request
@@ -332,12 +334,17 @@ class EmbodyExt:
                     data = json.loads(resp.read())
                 latest = data['info']['version']
                 if tuple(int(x) for x in latest.split('.')) > tuple(int(x) for x in installed.split('.')):
-                    self.Log(
+                    msg = (
                         f'MCP update available: {installed} -> {latest}. '
                         f'Update MCP_MIN_VERSION in EmbodyExt._setupEnvironment() '
-                        f'and delete dev/.venv to upgrade.',
-                        'WARNING'
+                        f'and delete dev/.venv to upgrade.'
                     )
+                    # self.Log() touches TD objects (FIFO DAT, parameters,
+                    # absTime.frame). Marshal to the main thread via run().
+                    # Guarded so a rename/move between spawn and fire becomes
+                    # a silent no-op rather than a None.Log() script error.
+                    run("o = op(args[0])\nif o: o.Log(args[1], 'WARNING')",
+                        owner_path, msg, delayFrames=1)
             except Exception:
                 pass  # Network unavailable, not critical
 
@@ -1086,6 +1093,65 @@ class EmbodyExt:
     def _settingsPath(self) -> Path:
         """Path to .embody/config.json -- consistent with _findProjectRoot()."""
         return self._findProjectRoot() / '.embody' / 'config.json'
+
+    def _projectJsonPath(self) -> Path:
+        """Path to .embody/project.json -- committed project metadata.
+
+        Unlike .embody/config.json (user-local settings) and .embody/envoy.json
+        (live runtime registry), project.json is intended to be checked into git
+        so the same metadata travels with the repo to every machine.
+        """
+        return self._findProjectRoot() / '.embody' / 'project.json'
+
+    def _writeProjectJson(self) -> None:
+        """Pin the current TouchDesigner build into .embody/project.json.
+
+        The Envoy bridge reads td_build to pick a matching TD install when
+        launching on a fresh clone, where envoy.json is gitignored and its
+        td_executable path may not exist locally. Idempotent -- skips the
+        write when td_build is already current.
+        """
+        import json, os
+        path = self._projectJsonPath()
+        # app.build is the build proper (e.g. '2025.32460'). app.version is
+        # the long-lived major branch ('099') and would only be noise here.
+        current_build = app.build
+
+        existing = {}
+        if path.is_file():
+            try:
+                loaded = json.loads(path.read_text(encoding='utf-8'))
+                if isinstance(loaded, dict):
+                    existing = loaded
+            except (json.JSONDecodeError, OSError):
+                pass  # Treat unreadable as empty -- we'll overwrite.
+
+        if existing.get('td_build') == current_build:
+            return
+
+        existing['td_build'] = current_build
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = Path(str(path) + '.tmp')
+            content = json.dumps(existing, indent=2) + '\n'
+            for attempt in range(3):
+                try:
+                    tmp.write_text(content, encoding='utf-8')
+                    os.replace(str(tmp), str(path))
+                    self.Log(
+                        f'Pinned td_build={current_build} in '
+                        f'.embody/project.json',
+                        'DEBUG')
+                    return
+                except PermissionError:
+                    if attempt < 2:
+                        import time as _time
+                        _time.sleep(0.1)
+                    else:
+                        raise
+        except Exception as e:
+            self.Log(f'Failed to write project.json: {e}', 'WARNING')
 
     def _saveSettings(self) -> None:
         """Persist whitelisted parameter values to .embody/config.json."""

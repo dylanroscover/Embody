@@ -4583,7 +4583,9 @@ class EnvoyExt:
             # Embody / Envoy
             '.venv/',
             '.mcp.json',
-            '.embody/',
+            # Ignore .embody/ runtime files but keep committed project.json
+            '.embody/*',
+            '!.embody/project.json',
             '.claude/settings.local.json',
             '.claude/projects/',
             '__pycache__/',
@@ -4606,7 +4608,10 @@ class EnvoyExt:
             STALE_ENTRIES = {'.claude/', '.claude/envoy-bridge.py',
                              '.envoy.json', '.embody.json',
                              '.embody/envoy-bridge.py',
-                             '.embody/envoy-tools-cache.json'}
+                             '.embody/envoy-tools-cache.json',
+                             # v5.0.387: replaced by '.embody/*' + '!.embody/project.json'
+                             # so .embody/project.json (committed td_build pin) is tracked.
+                             '.embody/'}
             existing_stripped = {line.strip() for line in existing_lines}
             found_stale = STALE_ENTRIES & existing_stripped
             if found_stale:

@@ -29,7 +29,8 @@ site/
 Backup/
 logs/
 .tdn_backup/
-.embody/
+.embody/*
+!.embody/project.json
 .envoy-tools-cache.json
 
 # Promotion

@@ -54,6 +54,9 @@ def onStart():
 	run(f"op('{parent.Embody}').ReconstructTDNComps()", delayFrames=60)
 	# Reconcile metadata for operators that exist but lost tags/colors/file params
 	run(f"op('{parent.Embody}').ext.Embody.ReconcileMetadata()", delayFrames=75)
+	# Pin current TD build into .embody/project.json so the Envoy bridge can
+	# pick a matching install on fresh clones (committed; survives git clone).
+	run(f"op('{parent.Embody}').ext.Embody._writeProjectJson()", delayFrames=80)
 	return
 
 def onCreate():
@@ -320,6 +323,13 @@ def onProjectPostSave():
 	# Re-store _init_complete -- pre-save cleared it to avoid baking into
 	# the .tox, but the running session still needs it for parexec.
 	parent.Embody.store('_init_complete', True)
+
+	# Refresh td_build pin -- the TD that just saved is the one downstream
+	# users should launch with on a fresh clone.
+	try:
+		parent.Embody.ext.Embody._writeProjectJson()
+	except Exception as e:
+		print(f'Embody > project.json update failed: {e}')
 
 	# In Perform Mode, nothing was stripped, so skip post-save refresh/restart.
 	if parent.Embody.ext.Embody._performMode:
