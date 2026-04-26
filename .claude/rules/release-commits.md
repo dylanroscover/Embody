@@ -6,6 +6,14 @@ description: "Procedure for preparing version release commits — changelog, REA
 
 When the user asks to prepare a release commit (e.g., "prep a commit for v217"), follow these steps in order.
 
+## 0. Save the Project
+
+The entire save call is `project.save()` — no arguments. TD increments the `.toe` filename's trailing build, the `onProjectPreSave` hook in `dev/embody/execute_src_ctrl.py` bumps `par.Version`, deletes the prior release `.tox`, and exports the new one. Filename and `par.Version` stay in lock-step.
+
+Don't pass a path (TD increments from *your* path's build, desyncing by one). Don't pre-set `par.Version`. Don't call `ExportPortableTox` directly.
+
+If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, then have the user close TD without saving and reopen. Do **not** save again — the hook will delete the just-correct release `.tox`.
+
 ## 1. Audit All Changes
 
 - Run `git diff --stat` and `git diff HEAD --name-status` to identify every changed, added, and deleted file.

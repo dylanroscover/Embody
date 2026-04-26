@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.389-blue)
+![Version](https://img.shields.io/badge/version-5.0.391-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -181,8 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
-- **5.0.389**: Test-debt cleanup in `test_envoy_bridge.py` — 21 stale assertions left over from prior bridge refactors (HTTP pool removal, log prefix change, v2 main-loop semantics) brought back into alignment. All 148 bridge tests now pass (3 explicit stubs skipped, no failures, no errors)
-- **5.0.388**: Per-project TouchDesigner build pinning — `.embody/project.json` records `td_build`, and the Envoy bridge auto-discovers the matching install on launch so a fresh clone opens with the right TD version on any machine. Plus a thread-conflict fix in the MCP update checker (`_checkMCPUpdate` no longer touches TD operators from a worker thread)
+- **5.0.391**: Per-project TouchDesigner build pinning (committed `.embody/project.json` + Envoy bridge auto-discovers the matching install on fresh clones), thread-conflict fix in the MCP update checker, and a 21-assertion cleanup of bridge tests that had been silently broken since the bridge v2 refactor — bridge tests now 148/151 passing, zero failures
 - **5.0.386**: Batch-confirm prompt for duplicate path detection — when multiple groups remain unresolved, one dialog offers `Auto-resolve all` / `Review individually` / `Dismiss` instead of a separate modal per group
 - **5.0.383**: Clone detection fix for self-referencing masters (reusable UI components using `iop.*` expressions), and a cleaner list UI moving the tree expand/collapse indicator into a dedicated column
 - **5.0.381**: Global Perform Mode toggle disables Embody/Envoy/TDN compute during TD performance (Issue #13), auto-resolve duplicate DATs inside active clones without prompting (Issue #15), ancestor-rename disk handling now uses the externalizations folder prefix so `Move` no longer fails with "source folder not found" (Issue #16), new render-coordinate-system rules for TD's bottom-left origin convention (Issue #14)
