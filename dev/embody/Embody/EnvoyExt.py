@@ -4054,11 +4054,16 @@ class EnvoyExt:
                 # Verify the venv Python actually executes -- catches stale
                 # pyvenv.cfg pointing to an uninstalled TD version, or
                 # code-signing mismatches after macOS TD upgrades.
+                # stdin=DEVNULL: without it, subprocess.run inside TD on
+                # Windows raises [WinError 50] (DuplicateHandle on TD's
+                # non-duplicatable GUI stdin handle) -- which then triggers
+                # the rmtree path below and destroys a healthy venv.
                 try:
                     subprocess.run(
                         [str(venv_python), '-c',
                          'import sys; print(sys.version)'],
-                        capture_output=True, timeout=10, check=True)
+                        capture_output=True, timeout=10, check=True,
+                        stdin=subprocess.DEVNULL)
                     python_cmd = str(venv_python).replace('\\', '/')
                 except (subprocess.CalledProcessError,
                         subprocess.TimeoutExpired, OSError) as e:
@@ -4078,7 +4083,8 @@ class EnvoyExt:
                                     [str(venv_python), '-c',
                                      'import sys; print(sys.version)'],
                                     capture_output=True, timeout=10,
-                                    check=True)
+                                    check=True,
+                                    stdin=subprocess.DEVNULL)
                                 python_cmd = str(venv_python).replace(
                                     '\\', '/')
                                 self._log('Venv recreated successfully',

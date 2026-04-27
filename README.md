@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.391-blue)
+![Version](https://img.shields.io/badge/version-5.0.392-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.392**: Critical Windows-only fix — `subprocess.run` from inside TD raised `[WinError 50] The request is not supported` because TD's GUI process stdin handle isn't duplicatable, causing Embody's venv-verify to falsely flag healthy venvs as corrupt and `shutil.rmtree` them on every TD restart. Fixed by passing `stdin=subprocess.DEVNULL` on the 5 affected `subprocess.run` sites in the bootstrap and verify-venv paths
 - **5.0.391**: Per-project TouchDesigner build pinning (committed `.embody/project.json` + Envoy bridge auto-discovers the matching install on fresh clones), thread-conflict fix in the MCP update checker, and a 21-assertion cleanup of bridge tests that had been silently broken since the bridge v2 refactor — bridge tests now 148/151 passing, zero failures
 - **5.0.386**: Batch-confirm prompt for duplicate path detection — when multiple groups remain unresolved, one dialog offers `Auto-resolve all` / `Review individually` / `Dismiss` instead of a separate modal per group
 - **5.0.383**: Clone detection fix for self-referencing masters (reusable UI components using `iop.*` expressions), and a cleaner list UI moving the tree expand/collapse indicator into a dedicated column

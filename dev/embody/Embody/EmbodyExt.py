@@ -222,19 +222,25 @@ class EmbodyExt:
             if not uv:
                 return
 
-            # Create venv if it doesn't exist
+            # Create venv if it doesn't exist.
+            # stdin=DEVNULL: subprocess.run from inside TD on Windows raises
+            # [WinError 50] without it -- subprocess.py's stdin=None path
+            # calls DuplicateHandle on TD's stdin handle, which is not
+            # duplicatable for a GUI process. DEVNULL routes through NUL.
             if not os.path.isdir(venv_dir):
                 self.Log('Creating virtual environment...')
                 subprocess.run(
                     [uv, 'venv', venv_dir, '--python', python_exe],
-                    check=True, capture_output=True, text=True
+                    check=True, capture_output=True, text=True,
+                    stdin=subprocess.DEVNULL,
                 )
 
             # Install dependencies
             self.Log('Installing dependencies...')
             subprocess.run(
                 [uv, 'pip', 'install'] + deps + ['--python', venv_python],
-                check=True, capture_output=True, text=True
+                check=True, capture_output=True, text=True,
+                stdin=subprocess.DEVNULL,
             )
 
             self._addSitePackages(site_packages)
@@ -259,7 +265,8 @@ class EmbodyExt:
         try:
             subprocess.run(
                 [python_exe, '-m', 'pip', 'install', '--user', 'uv'],
-                check=True, capture_output=True, text=True
+                check=True, capture_output=True, text=True,
+                stdin=subprocess.DEVNULL,
             )
         except subprocess.CalledProcessError as e:
             self.Log(f'Failed to install uv: {e.stderr or e}', 'ERROR')

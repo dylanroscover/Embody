@@ -1,5 +1,11 @@
 # Changelog
 
+## v5.0.392
+
+Single critical fix for a Windows-only venv-destruction loop that bricked Envoy on machines where TouchDesigner's GUI-process stdin handle isn't duplicatable.
+
+- **Fix: `subprocess.run` from inside TD no longer raises `[WinError 50]` on Windows**: Affected machines saw Embody's venv-bootstrap and verify-venv subprocess calls fail with `OSError: [WinError 50] The request is not supported`, traced to `subprocess._make_inheritable` calling `_winapi.DuplicateHandle` on the parent's `STD_INPUT_HANDLE` — TD's GUI process stdin handle is a console-buffer / non-duplicatable kernel object, so the duplicate fails before any child process is spawned. The verify-venv handler in `EnvoyExt._writeMCPConfig` treats `OSError` as "venv corrupt" and runs `shutil.rmtree(.venv)`, so on every TD restart the auto-recovery destroyed a perfectly healthy venv, ran the bootstrap (which also failed with WinError 50), and left the user with no `mcp` package and a crashing MCP server. Fixed by passing `stdin=subprocess.DEVNULL` on every `subprocess.run` in the bootstrap path (3 sites in `EmbodyExt._setupEnvironment` / `_findOrInstallUv`) and the verify-venv path (2 sites in `EnvoyExt._writeMCPConfig`) — routes through `NUL`, which is duplicatable. Confirmed via textport repro: `subprocess.run([sys.executable, '-c', 'print(1)'], capture_output=True)` raised WinError 50 on the affected machine; the same call with `stdin=subprocess.DEVNULL` returned `rc=0`. Reported by Jason Latta.
+
 ## v5.0.391
 
 Three independent fixes shipped together: per-project TouchDesigner build pinning so the Envoy bridge can find the right install on a fresh clone, a thread-safety fix in the MCP update checker, and a 21-assertion cleanup of bridge tests that had been silently broken since the bridge v2 refactor.
