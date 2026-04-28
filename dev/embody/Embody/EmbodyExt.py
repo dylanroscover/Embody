@@ -170,6 +170,11 @@ class EmbodyExt:
         Set up a Python virtual environment using uv for Envoy dependencies.
         Installs uv if not found, creates .venv, installs packages.
         Adds the venv's site-packages to sys.path so TD can import from it.
+
+        Returns True if the environment is ready (mcp.server importable),
+        False if any step failed. Callers (e.g. EnvoyExt.Start) MUST gate on
+        this -- continuing past a False return produces an inscrutable
+        'No module named mcp.server' traceback at server-start time.
         """
         project_dir = project.folder
         venv_dir = os.path.join(project_dir, '.venv')
@@ -209,18 +214,26 @@ class EmbodyExt:
                             self.Log(f'attrs {installed_attrs} may conflict with TD -- downgrading...')
                         else:
                             self._checkMCPUpdate(installed)
-                            return
+                            return self._verifyMcpImportable(site_packages)
                     except Exception:
                         self._checkMCPUpdate(installed)
-                        return
+                        return self._verifyMcpImportable(site_packages)
                 self.Log(f'MCP {installed} installed, upgrading to >={MCP_MIN_VERSION}...')
-            except Exception:
-                return  # Can't determine version, assume OK
+            except Exception as e:
+                # mcp dir exists but version metadata unreadable -- accept and verify import
+                self.Log(f'Could not read mcp version ({e}); proceeding with import check', 'WARNING')
+                return self._verifyMcpImportable(site_packages)
 
         try:
             uv = self._findOrInstallUv(python_exe)
             if not uv:
-                return
+                self.Log(
+                    'uv not found and could not be installed -- Envoy cannot bootstrap. '
+                    'Install uv manually (https://docs.astral.sh/uv/) and ensure it is on PATH '
+                    'visible to TouchDesigner (macOS GUI apps do not inherit shell PATH).',
+                    'ERROR',
+                )
+                return False
 
             # Create venv if it doesn't exist.
             # stdin=DEVNULL: subprocess.run from inside TD on Windows raises
@@ -247,11 +260,39 @@ class EmbodyExt:
             if sys.platform.startswith('win'):
                 self._fixPywin32Dlls(site_packages)
             self.Log('Python environment ready', 'SUCCESS')
+            return self._verifyMcpImportable(site_packages)
 
         except subprocess.CalledProcessError as e:
             self.Log(f'Environment setup failed: {e.stderr or e}', 'ERROR')
+            return False
         except Exception as e:
             self.Log(f'Environment setup failed: {e}', 'ERROR')
+            return False
+
+    def _verifyMcpImportable(self, site_packages):
+        """Final gate: confirm mcp.server actually imports inside TD's process.
+
+        A populated site-packages is necessary but not sufficient -- a partial
+        install or load-time failure (missing native dep, etc.) would still
+        leave the server unable to start. Catching it here yields a useful
+        textport message instead of an inscrutable traceback at run time.
+        """
+        try:
+            import importlib
+            # Drop any cached failed import so the retry actually re-runs the loader
+            for mod in list(sys.modules):
+                if mod == 'mcp' or mod.startswith('mcp.'):
+                    del sys.modules[mod]
+            importlib.import_module('mcp.server')
+            return True
+        except Exception as e:
+            self.Log(
+                f'Dependencies installed but mcp.server failed to import: {e}. '
+                f'Inspect {site_packages} for partial installs and try deleting '
+                f'.venv/ to force a clean rebuild.',
+                'ERROR',
+            )
+            return False
 
     def _findOrInstallUv(self, python_exe):
         """Find uv on PATH, or install it via pip --user. Returns path to uv executable or None."""

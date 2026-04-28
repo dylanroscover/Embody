@@ -1676,8 +1676,18 @@ class EnvoyExt:
             git_root = self._findGitRoot()
             self.ownerComp.store('_git_root', git_root)
 
-        # Ensure Python environment is ready (idempotent fast path if already installed)
-        op.Embody.ext.Embody._setupEnvironment()
+        # Ensure Python environment is ready (idempotent fast path if already installed).
+        # If setup fails, abort here -- continuing would crash _runServer with an
+        # inscrutable 'No module named mcp.server' traceback. _setupEnvironment has
+        # already logged the specific failure to the textport.
+        if not op.Embody.ext.Embody._setupEnvironment():
+            self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                'Aborting Envoy start -- Python environment is not ready. '
+                'See textport above for the underlying failure.',
+                'ERROR',
+            )
+            return
 
         base_port = self.ownerComp.par.Envoyport.eval()
         port = self._findAvailablePort(base_port)
