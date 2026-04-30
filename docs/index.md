@@ -17,7 +17,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **46 tools** that lets Claude Code, Cursor, and Windsurf talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen. Idea → network in seconds.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **47 tools** that lets Claude Code, Cursor, and Windsurf talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen. Idea → network in seconds.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
@@ -68,7 +68,7 @@ You describe what you want. The AI works with your live network — operators, c
 | | Feature | Description |
 |---|---------|-------------|
 | :material-sync: | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores from disk on project open |
-| :material-robot: | **Envoy MCP Server** | 46 tools connect AI assistants to your live TD session |
+| :material-robot: | **Envoy MCP Server** | 47 tools connect AI assistants to your live TD session |
 | :material-file-document: | **TDN Format** | Export/import operator networks as diffable JSON for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — minimal friction |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |
