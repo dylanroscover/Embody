@@ -480,24 +480,49 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def set_dat_content(op_path: str, text: str = None,
-                           rows: list = None, clear: bool = False) -> dict:
+                           rows: list = None, clear: bool = False,
+                           confirm_wipe: bool = False) -> dict:
             """
-            Set the content of a DAT operator.
+            Full-replace the content of a DAT operator. NOT incremental --
+            the entire DAT is replaced by what you send.
+
+            Workflow for partial edits:
+              1. get_dat_content(op_path) to read the current content
+              2. Modify the returned content in memory
+              3. set_dat_content(op_path, text=full_modified_content)
+
+            Sending only the part you changed will destroy everything else.
+
+            Guardrails:
+              - No-content guard: refuses calls with no actionable args
+                (text=None, rows=None, clear=False -- you passed nothing).
+              - Wipe guard: refuses calls that would leave the DAT empty
+                (text="", rows=[], or clear=True with no replacement
+                content) unless confirm_wipe=True. Most "wipe" calls are
+                accidents from malformed input -- the guard interrupts
+                so you can verify intent before destroying content.
 
             Args:
                 op_path: Path to the DAT operator
                 text: Full text content to set (replaces entire DAT)
                 rows: List of lists to set as table rows (replaces entire table)
-                clear: If True, clear the DAT before setting content
+                clear: Optional. Redundant when text/rows is also provided
+                    (assignment already replaces the entire content).
+                    Use alone with confirm_wipe=True to explicitly empty
+                    a DAT (e.g. resetting a FIFO log).
+                confirm_wipe: Safety flag. Set True ONLY when you have
+                    explicitly verified the DAT should become empty.
+                    Default False refuses wipes.
 
             Returns:
-                Dict with success status
+                Dict with success status, or {'error': ...} if a guard trips
             """
             return self._execute_in_td('set_dat_content', {
                 'op_path': op_path,
                 'text': text,
                 'rows': rows,
-                'clear': clear
+                'clear': clear,
+                'confirm_wipe': confirm_wipe,
             })
 
         # === Operator Flags Tools ===
@@ -2883,13 +2908,60 @@ class EnvoyExt:
             return {'error': f'Failed to get DAT content: {e}'}
 
     def _set_dat_content(self, op_path: str, text: str = None,
-                        rows: list = None, clear: bool = False) -> dict:
-        """Set DAT content from text or table rows"""
+                        rows: list = None, clear: bool = False,
+                        confirm_wipe: bool = False) -> dict:
+        """Set DAT content from text or table rows.
+
+        Two guardrails:
+        1. No-content guard: refuses calls with no actionable content
+           (text=None, rows=None, clear=False) -- caller passed nothing.
+        2. Wipe guard: refuses calls that would leave the DAT empty
+           (text='', rows=[], or clear=True without replacement content)
+           unless confirm_wipe=True. Catches the common accident pattern
+           where an agent sends empty content from a malformed call and
+           silently destroys user content.
+
+        Note: `clear=True` is redundant when `text` or `rows` is also
+        provided -- the assignment already replaces the entire content.
+        """
         target = op(op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
         if target.family != 'DAT':
             return {'error': f'{op_path} is not a DAT (family: {target.family})'}
+
+        # No-content guard: caller passed nothing actionable. This is the
+        # same failure shape as a wipe (silent confused call returning
+        # success) so we refuse it the same way.
+        if text is None and rows is None and not clear:
+            return {'error': (
+                f'No content provided for {op_path}. Pass text=, rows=, '
+                f'or clear=True with confirm_wipe=True. set_dat_content '
+                f'is full-replace -- if you want to edit existing content, '
+                f'call get_dat_content first to read it.'
+            )}
+
+        # Wipe detection -- check the *resulting* state, not just inputs.
+        # `clear=True, text="hello"` is an atomic replace, NOT a wipe.
+        if not confirm_wipe:
+            wipe_reason = None
+            if text == '':
+                wipe_reason = "text=''"
+            elif rows is not None and len(rows) == 0:
+                wipe_reason = 'rows=[]'
+            elif clear and text is None and rows is None:
+                wipe_reason = 'clear=True with no replacement content'
+            if wipe_reason is not None:
+                return {'error': (
+                    f'Refusing to wipe DAT {op_path}: call would set '
+                    f'content to empty ({wipe_reason}). This is almost '
+                    f'always an accident -- set_dat_content is full-'
+                    f'replace, not incremental. Likely fix: call '
+                    f'get_dat_content first, edit the returned content, '
+                    f'then send the complete result. Only retry with '
+                    f'confirm_wipe=True if you have already verified the '
+                    f'DAT must become empty (e.g. resetting a FIFO log).'
+                )}
 
         try:
             if clear:

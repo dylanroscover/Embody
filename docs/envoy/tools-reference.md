@@ -28,7 +28,7 @@ Envoy exposes 47 MCP tools for interacting with TouchDesigner. All tools use the
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, or `"auto"`) |
-| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?` | Set DAT content from text string or list of row lists |
+| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. Wipe guardrail refuses `text=""`, `rows=[]`, or `clear=True` with no content unless `confirm_wipe=True` is passed. Read with `get_dat_content` first, build the complete new content, then send the full result. |
 
 ## Operator Flags
 

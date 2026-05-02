@@ -170,3 +170,87 @@ class TestTDNSafetyGuards(EmbodyTestCase):
                 f'got: {[e.get("message", "") for e in new_logs]}')
         finally:
             self.sandbox.unstore('soon_gone')
+
+    # ------------------------------------------------------------------
+    # D. DAT type filter — skip TD-managed, keep user-authored
+    # ------------------------------------------------------------------
+
+    def _flatten_dats(self, result):
+        """Flatten [(comp_path, [dat_ops])] into a set of DAT paths."""
+        return {d.path for _, dats in result for d in dats}
+
+    def test_TD_MANAGED_DAT_TYPES_membership(self):
+        """The denylist must include the types that triggered the user's
+        original noise (info, webrtc, folder, monitors, devices) AND must
+        NOT include any callback DAT type -- callbacks hold user-authored
+        Python and losing them silently is exactly what the warning
+        exists to prevent."""
+        types = self.embody_ext._TD_MANAGED_DAT_TYPES
+        # Read-only TD-generated outputs that must be skipped
+        for t in ('info', 'webrtc', 'folder', 'monitors',
+                  'audiodevices', 'videodevices', 'serialdevices',
+                  'mididevices'):
+            self.assertIn(t, types,
+                f'TD-managed DAT type {t!r} missing from skip set')
+        # Callback DAT types that must NEVER be skipped
+        for t in ('execute', 'parexec', 'pargroupexec', 'chopexec',
+                  'datexec', 'opexec', 'panelexec'):
+            self.assertNotIn(t, types,
+                f'Callback DAT type {t!r} must NOT be in skip set -- '
+                f'callbacks hold user-authored Python')
+        # Common user-authored types that must never be skipped
+        for t in ('text', 'table'):
+            self.assertNotIn(t, types,
+                f'User-authored type {t!r} must NOT be in skip set')
+
+    def test_findAtRiskDATs_ignores_td_managed_folder_dat(self):
+        """Functional end-to-end: a folderDAT with real rows (TD-managed
+        content) must be excluded from the at-risk warning even though
+        it has non-empty content. This is the user's exact scenario."""
+        folder_dat = self.sandbox.create(folderDAT, 'mgr_folder')
+        folder_dat.par.folder = project.folder
+        folder_dat.cook(force=True)
+        try:
+            # Sanity: must have rows, otherwise the empty-content skip
+            # would short-circuit before the type filter runs and the
+            # test would pass for the wrong reason.
+            self.assertGreater(folder_dat.numRows, 0,
+                f'Test setup: folder DAT must have rows '
+                f'(got {folder_dat.numRows})')
+            flat = self._flatten_dats(self.embody_ext._findAtRiskDATs())
+            self.assertNotIn(folder_dat.path, flat,
+                'TD-managed folder DAT with content was incorrectly '
+                'flagged as at-risk')
+        finally:
+            folder_dat.destroy()
+
+    def test_findAtRiskDATs_keeps_callback_dats(self):
+        """Callback DATs (executeDAT family) hold user-authored Python
+        and MUST continue to surface in the at-risk warning -- losing a
+        callback silently is a destructive footgun."""
+        cb_dat = self.sandbox.create(chopexecuteDAT, 'safety_callback')
+        cb_dat.text = (
+            '# user-authored callback\n'
+            'def onValueChange(channel, sampleIndex, val, prev):\n'
+            '\tpass\n'
+        )
+        try:
+            flat = self._flatten_dats(self.embody_ext._findAtRiskDATs())
+            self.assertIn(cb_dat.path, flat,
+                'chopexecuteDAT with user-authored callback content must '
+                'surface in at-risk results -- callbacks are exactly what '
+                'the warning exists to protect')
+        finally:
+            cb_dat.destroy()
+
+    def test_findAtRiskDATs_flags_plain_text_dat(self):
+        """Baseline: a user-authored textDAT with content must still be
+        flagged. Confirms the type filter did not break the happy path."""
+        text_dat = self.sandbox.create(textDAT, 'safety_text')
+        text_dat.text = 'user-authored content that would be lost'
+        try:
+            flat = self._flatten_dats(self.embody_ext._findAtRiskDATs())
+            self.assertIn(text_dat.path, flat,
+                'Plain textDAT with content must still be flagged')
+        finally:
+            text_dat.destroy()

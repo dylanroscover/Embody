@@ -665,6 +665,28 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('launch_td',
                       {t['name'] for t in responses[1]['result']['tools']})
 
+    def test_local_ping_request_returns_empty_result(self):
+        """Ping request is handled locally with empty result, no Envoy call.
+
+        Implementation: envoy_bridge.py ping handler responds with
+        {result: {}} for requests, regardless of connection state.
+        """
+        msg = {'jsonrpc': '2.0', 'id': 42, 'method': 'ping'}
+        responses = self._run_main([msg], wait_result=False)
+        self.assertLen(responses, 1)
+        self.assertEqual(responses[0],
+            {'jsonrpc': '2.0', 'id': 42, 'result': {}})
+
+    def test_local_ping_notification_produces_no_response(self):
+        """Ping without id is a notification; handler must produce no output.
+
+        Implementation: ping handler short-circuits via `continue` after
+        the notification check, so neither a response nor an error is sent.
+        """
+        msg = {'jsonrpc': '2.0', 'method': 'ping'}
+        responses = self._run_main([msg], wait_result=False)
+        self.assertLen(responses, 0)
+
     def test_initial_timeout_then_next_message_retries_connect(self):
         """After a forward failure, the next message keeps trying.
 
@@ -1385,6 +1407,62 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
             self.assertFalse(bridge.is_process_alive(9999))
         mock_kernel32.CloseHandle.assert_not_called()
+
+    # --- find_all_td_pids: pgrep filtering on macOS/Linux ---
+
+    @patch.object(bridge, '_is_bridge_process')
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_filters_self_and_bridges(
+            self, mock_run, mock_is_bridge):
+        """find_all_td_pids excludes own PID and bridge processes from
+        pgrep output. Without filtering, pgrep -f 'TouchDesigner' would
+        match the bridge process running TD's bundled Python."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        my_pid = os.getpid()
+        fake = MagicMock()
+        fake.returncode = 0
+        fake.stdout = f'{my_pid}\n12345\n67890\n11111\n'
+        mock_run.return_value = fake
+        # Simulate one of the candidate PIDs being a bridge process
+        mock_is_bridge.side_effect = lambda pid: pid == 67890
+
+        pids = bridge.find_all_td_pids()
+
+        self.assertNotIn(my_pid, pids,
+            'Own PID must be excluded')
+        self.assertNotIn(67890, pids,
+            'Bridge process PID must be excluded')
+        self.assertIn(12345, pids)
+        self.assertIn(11111, pids)
+
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_returns_empty_on_timeout(self, mock_run):
+        """find_all_td_pids returns [] when subprocess times out."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        import subprocess as sp
+        mock_run.side_effect = sp.TimeoutExpired(cmd=['pgrep'], timeout=5)
+        self.assertEqual(bridge.find_all_td_pids(), [])
+
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_returns_empty_when_pgrep_missing(self, mock_run):
+        """find_all_td_pids returns [] when pgrep binary is not found."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        mock_run.side_effect = FileNotFoundError()
+        self.assertEqual(bridge.find_all_td_pids(), [])
+
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_returns_empty_on_pgrep_no_match(self, mock_run):
+        """pgrep returncode != 0 (no TD processes found) yields []."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        fake = MagicMock()
+        fake.returncode = 1  # pgrep returns 1 when no matches
+        fake.stdout = ''
+        mock_run.return_value = fake
+        self.assertEqual(bridge.find_all_td_pids(), [])
 
 
 # =====================================================================
@@ -2330,26 +2408,3 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
             f'{bad_lines[:5]}')
 
 
-# =====================================================================
-# Stubs for tests that depend on implementation steps 7-9
-# (deferred to a later bridge v2 pass)
-# =====================================================================
-
-class TestBridgeV2DeferredStubs(EmbodyTestCase):
-    """
-    Stubs for plan test cases 4, 6, 8 — left intentionally as SkipTest
-    so they show up in the runner as a visible reminder that the next
-    bridge v2 phase still needs coverage.
-    """
-
-    def test_local_ping_handler_stub(self):
-        """Plan case 4 — depends on bridge v2 step 4 (local ping handling)."""
-        raise SkipTest('depends on bridge v2 step 4: local ping handler')
-
-    def test_find_all_td_pids_stub(self):
-        """Plan case 6 — depends on bridge v2 step 8 (find_all_td_pids)."""
-        raise SkipTest('depends on bridge v2 step 8: find_all_td_pids')
-
-    def test_initial_probe_3s_stub(self):
-        """Plan case 8 — depends on bridge v2 step 7 (3s initial probe)."""
-        raise SkipTest('depends on bridge v2 step 7: 3s initial probe + bridge-only fallback')

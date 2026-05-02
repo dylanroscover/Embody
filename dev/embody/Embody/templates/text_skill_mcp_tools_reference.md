@@ -32,7 +32,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, `"auto"`) |
-| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?` | Set content from text string or list of row lists |
+| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. **Wipe guardrail**: calls that would leave the DAT empty (`text=""`, `rows=[]`, or `clear=True` with no content) are refused unless `confirm_wipe=True`. Always `get_dat_content` first, build the full new content, then send the complete result -- never send empty/partial content. |
 
 ## Operator Flags
 

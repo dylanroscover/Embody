@@ -25,6 +25,19 @@ class TestAncestorRename(EmbodyTestCase):
         self._test_dir.mkdir(parents=True, exist_ok=True)
         self._added_paths = []
 
+        # Snapshot top-level dirs under dev/embody/ so tearDown can remove
+        # any test-created prefix dirs (retval/, tblupd/, cancel_test/, etc.)
+        # AND their renamed siblings (the rename happens inside the same prefix,
+        # so removing the prefix kills both source and renamed-to dirs).
+        # Without this, a successful rename leaves the renamed-to dir on disk;
+        # the next run hits the (correct) "Target directory already exists"
+        # guard in _handleAncestorRename and fails.
+        embody_root = Path(project.folder) / 'embody'
+        self._embody_snapshot = (
+            {p.name for p in embody_root.iterdir() if p.is_dir()}
+            if embody_root.exists() else set()
+        )
+
         # Intercept _messageBox so tests never block on UI
         self._captured_dialogs = []
         self._orig_messageBox = self.embody_ext._messageBox
@@ -51,8 +64,22 @@ class TestAncestorRename(EmbodyTestCase):
             path = table[i, 'path'].val
             if path.startswith(self.sandbox.path):
                 table.deleteRow(i)
-        # Clean up temp dirs
+        # Clean up filesystem
         import shutil
+        # 1. Any new top-level dirs under dev/embody/ that the test created
+        #    (retval/, tblupd/, cancel_test/, conflict/, phaseA/, tdntest/, ...)
+        #    Includes renamed-to subdirs since they live inside the same prefix.
+        embody_root = Path(project.folder) / 'embody'
+        if embody_root.exists():
+            for p in embody_root.iterdir():
+                if p.is_dir() and p.name not in self._embody_snapshot:
+                    shutil.rmtree(p, ignore_errors=True)
+        # 2. The workspace dir under the sandbox -- the no-ext-folder test
+        #    writes bare_parent/ and renames to bare_renamed/ here.
+        workspace_disk = Path(project.folder) / self.workspace.path.lstrip('/')
+        if workspace_disk.exists():
+            shutil.rmtree(workspace_disk, ignore_errors=True)
+        # 3. Legacy _test_dir (kept for backwards compat)
         if self._test_dir.exists():
             shutil.rmtree(self._test_dir, ignore_errors=True)
         super().tearDown()

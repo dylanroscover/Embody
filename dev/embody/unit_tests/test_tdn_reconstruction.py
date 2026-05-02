@@ -3191,11 +3191,15 @@ class TestTDNReconstruction(EmbodyTestCase):
 	# =================================================================
 	# V. Palette Clone Round-Trip Fidelity (12 tests)
 	# =================================================================
-	# Palette clones are COMPs (buttonCOMP, sliderCOMP) cloned from
-	# /sys/TDTox/defaultCOMPs/. On export, params matching p.default
-	# but differing from the clone source must be captured. On import,
-	# clone/enablecloning params must be skipped. Children come from
-	# the clone source and are not stored in TDN.
+	# Native widget COMPs (buttonCOMP, sliderCOMP) clone from
+	# /sys/TDTox/defaultCOMPs/. As of v5.0.x they are NOT treated as
+	# palette clones at the TDN export layer (palette_clone flag is
+	# reserved for true user palette clones from /sys/TDBasicWidgets
+	# and similar). Native widgets export as regular COMPs with full
+	# children + the clone reference parameter, so user customizations
+	# inside their internals round-trip intact. The "divergent default"
+	# concern remains: params matching p.default but differing from
+	# the clone source must still be captured (V04, V05).
 	# =================================================================
 
 	def test_V01_button_roundtrip_basic(self):
@@ -3226,18 +3230,26 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(clone_op.path.startswith('/sys/'),
 			f'Clone should point to /sys/, got {clone_op.path}')
 
-	def test_V03_palette_clone_flag_in_export(self):
-		"""Export marks palette clones and skips children."""
+	def test_V03_native_widget_exports_with_children(self):
+		"""Native widget COMPs (cloned from /sys/TDTox/defaultCOMPs/)
+		export as regular COMPs: NO palette_clone flag, children fully
+		exported. This preserves any user customization inside the
+		widget's internals through round-trip."""
 		btn = self.sandbox.create(buttonCOMP, 'btn3')
 		actual_name = btn.name
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		ops = orig['tdn']['operators']
 		btn_entry = next(e for e in ops if e['name'] == actual_name)
-		self.assertTrue(btn_entry.get('palette_clone'),
-			'palette_clone flag must be True')
-		self.assertNotIn('children', btn_entry,
-			'Children must not be exported for palette clones')
+		self.assertFalse(btn_entry.get('palette_clone'),
+			'Native widget COMPs must NOT carry the palette_clone flag '
+			'(reserved for true user palette clones)')
+		self.assertIn('children', btn_entry,
+			'Children must be exported in full for native widgets so '
+			'user customizations round-trip intact')
+		self.assertGreater(len(btn_entry['children']), 0,
+			'buttonCOMP from /sys/TDTox/defaultCOMPs/ ships with '
+			'children -- they must appear in the export')
 
 	def test_V04_buttontype_matches_default_preserved(self):
 		"""Params matching p.default but differing from clone source survive round-trip.
@@ -3290,28 +3302,25 @@ class TestTDNReconstruction(EmbodyTestCase):
 		restored = self.sandbox.op(actual_name)
 		self.assertEqual(str(restored.par.label.eval()), 'Custom')
 
-	def test_V07_clone_enablecloning_excluded_from_export(self):
-		"""clone and enablecloning params must not appear in TDN export."""
+	def test_V07_clone_reference_captured_in_export(self):
+		"""Native widget COMPs export their clone reference so the
+		import side can recreate the link to /sys/TDTox/defaultCOMPs/.
+		`enablecloning` matches its default (True) for fresh widgets
+		so it is correctly omitted by the default-skipping export."""
 		btn = self.sandbox.create(buttonCOMP, 'btn7')
 		actual_name = btn.name
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
-		# Check per-op params
 		ops = tdn['operators']
 		btn_entry = next(e for e in ops if e['name'] == actual_name)
 		per_op = btn_entry.get('parameters', {})
-		self.assertNotIn('clone', per_op,
-			'clone must not appear in per-op params')
+		self.assertIn('clone', per_op,
+			'Clone reference must be captured so the link to /sys/ '
+			'survives round-trip')
 		self.assertNotIn('enablecloning', per_op,
-			'enablecloning must not appear in per-op params')
-		# Check type_defaults
-		td_params = tdn.get('type_defaults', {}).get(
-			'buttonCOMP', {}).get('parameters', {})
-		self.assertNotIn('clone', td_params,
-			'clone must not appear in type_defaults')
-		self.assertNotIn('enablecloning', td_params,
-			'enablecloning must not appear in type_defaults')
+			'enablecloning matches its default for fresh widgets and '
+			'should be omitted by the default-skipping export')
 
 	def test_V08_old_tdn_clone_params_skipped_on_import(self):
 		"""Old TDN files with clone/enablecloning params don't overwrite auto-set values."""
@@ -3399,7 +3408,10 @@ class TestTDNReconstruction(EmbodyTestCase):
 				f'{name} buttontype should be toggledown after roundtrip')
 
 	def test_V12_mixed_network_no_interference(self):
-		"""Palette clone handling does not interfere with regular operators."""
+		"""A mixed network of native widget COMPs (button, slider) and
+		regular operators (baseCOMP, nullTOP) round-trips correctly.
+		None of these carry the palette_clone flag under current export
+		semantics -- that flag is reserved for true user palette clones."""
 		btn = self.sandbox.create(buttonCOMP, 'btn30')
 		btn_name = btn.name
 		btn.par.label = 'Mixed'
@@ -3407,26 +3419,26 @@ class TestTDNReconstruction(EmbodyTestCase):
 		sl_name = sl.name
 		base = self.sandbox.create(baseCOMP, 'base30')
 		base.create(nullTOP, 'inner1')
-		null = self.sandbox.create(nullTOP, 'null30')
+		self.sandbox.create(nullTOP, 'null30')
 
-		# Export and check palette_clone flags
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		ops = orig['tdn']['operators']
 		by_name = {e['name']: e for e in ops}
-		self.assertTrue(by_name[btn_name].get('palette_clone'))
-		self.assertTrue(by_name[sl_name].get('palette_clone'))
-		self.assertFalse(by_name.get('base30', {}).get('palette_clone', False),
-			'baseCOMP must NOT be marked as palette clone')
-		self.assertFalse(by_name.get('null30', {}).get('palette_clone', False))
+		# No operator in this mixed network should carry palette_clone --
+		# native widgets export as regular COMPs, regular ops never qualified.
+		for name in (btn_name, sl_name, 'base30', 'null30'):
+			self.assertFalse(by_name.get(name, {}).get('palette_clone', False),
+				f'{name} must NOT carry palette_clone flag')
 
-		# Round-trip
+		# Round-trip preserves all four operator categories
 		self._roundTrip(self.sandbox)
-		# Palette clones intact
+		# Native widgets keep their children + custom param value
 		self.assertGreater(len(self.sandbox.op(btn_name).children), 0)
 		self.assertGreater(len(self.sandbox.op(sl_name).children), 0)
 		self.assertEqual(str(self.sandbox.op(btn_name).par.label.eval()), 'Mixed')
-		# Regular ops intact
+		# Regular operators round-trip without interference from the
+		# native-widget code path
 		self.assertIsNotNone(self.sandbox.op('base30'))
 		self.assertIsNotNone(self.sandbox.op('base30').op('inner1'))
 		self.assertIsNotNone(self.sandbox.op('null30'))

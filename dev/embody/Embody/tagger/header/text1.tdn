@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.3",
 	"build": 6,
-	"generator": "Embody/5.0.388",
+	"generator": "Embody/5.0.395",
 	"td_build": "099.2025.32460",
-	"source_file": "Embody-5.389.toe",
-	"exported_at": "2026-04-25T16:26:20Z",
+	"source_file": "Embody-5.395.toe",
+	"exported_at": "2026-05-02T01:33:34Z",
 	"network_path": "/embody/Embody/tagger/header/text1",
 	"options": {
 		"include_dat_content": false,

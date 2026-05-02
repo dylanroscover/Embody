@@ -1205,7 +1205,10 @@ class EmbodyExt:
         """Persist whitelisted parameter values to .embody/config.json."""
         self._settings_save_pending = False
         params = {}
-        for name in self._PERSISTED_PARAMS:
+        # Sort names so JSON output is stable across TD sessions. _PERSISTED_PARAMS
+        # is a frozenset, and Python's hash randomization gives each process a
+        # different iteration order -- producing noisy diffs on every save.
+        for name in sorted(self._PERSISTED_PARAMS):
             par = getattr(self.my.par, name, None)
             if par is None:
                 continue
@@ -1223,7 +1226,7 @@ class EmbodyExt:
             path = self._settingsPath()
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = Path(str(path) + '.tmp')
-            content = json.dumps(data, indent=2) + '\n'
+            content = json.dumps(data, indent=2, sort_keys=True) + '\n'
             for attempt in range(3):
                 try:
                     tmp.write_text(content, encoding='utf-8')
@@ -5565,6 +5568,39 @@ class EmbodyExt:
     # DAT Content Safety
     # ------------------------------------------------------------------
 
+    # DAT operator types whose `text`/table content is fully derived by
+    # TouchDesigner from inputs, parameters, or runtime state. The user
+    # cannot author this content -- TD regenerates it on cook -- so
+    # warning that it "will be lost on save" is noise. Compared against
+    # `dat.type` (short form, e.g. 'info' not 'infoDAT'), matching the
+    # convention used by self.supported_dat_types.
+    #
+    # Callback DATs (execute, parexec, chopexec, datexec, opexec,
+    # panelexec, pargroupexec, keyboardin, mousein, oscin, etc.) are
+    # NOT in this set -- their content IS user-authored Python and must
+    # continue to surface in the at-risk warning.
+    _TD_MANAGED_DAT_TYPES = {
+        'info',           # Info DAT -- introspection of another op
+        'webrtc',         # Per-connection signaling state
+        'folder',         # Filesystem listing
+        'opfind',         # Network search results
+        'monitors',       # Monitor hardware state
+        'audiodevices',   # Audio device enumeration
+        'videodevices',   # Video device enumeration
+        'serialdevices',  # Serial device enumeration
+        'mididevices',    # MIDI device enumeration
+        'midievent',      # Project-wide MIDI event log
+        'error',          # FIFO of recent TD errors
+        'perform',        # Cook/draw timing log
+        'examine',        # Inspector view of another op
+        'mediafileinfo',  # Metadata extracted from a media file
+        'tuioin',         # Inbound TUIO event table
+        'multitouchin',   # Inbound Windows multi-touch events
+        'ndi',            # Discovered NDI sources
+        'mpcdi',          # Calibration data parsed from .mpcdi
+        'indices',        # Generated number series
+    }
+
     def _findAtRiskDATs(self) -> list:
         """Find DATs inside TDN COMPs that will lose content during save.
 
@@ -5611,6 +5647,14 @@ class EmbodyExt:
 
                 # Skip DATs with a file parameter already set
                 if hasattr(dat.par, 'file') and dat.par.file.eval():
+                    continue
+
+                # Skip DATs whose content TD generates and regenerates
+                # on cook (info, webrtc, folder, monitors, devices, etc.)
+                # The user did not author this content and cannot preserve
+                # it -- warning would be noise. Callback DATs (execute,
+                # parexec, etc.) are intentionally absent from this set.
+                if dat.type in self._TD_MANAGED_DAT_TYPES:
                     continue
 
                 # Check for non-empty content
