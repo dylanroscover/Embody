@@ -237,3 +237,88 @@ class TestSmokeRelease(EmbodyTestCase):
         port = int(self.embody.par.Envoyport.eval())
         self.assertGreater(port, 1023, f'Port {port} too low')
         self.assertLess(port, 65536, f'Port {port} too high')
+
+    # =========================================================================
+    # Update() race condition with CatalogManager (regression for v5.0.398)
+    # =========================================================================
+
+    def _restore_status(self, saved_status, saved_pending):
+        """Helper used by the regression tests below."""
+        self.embody.par.Status = saved_status
+        if saved_pending is True:
+            self.embody_ext._pending_envoy_prompt = True
+        else:
+            try:
+                delattr(self.embody_ext, '_pending_envoy_prompt')
+            except AttributeError:
+                pass
+        try:
+            self.embody.unstore('_smoke_test_responses')
+        except Exception:
+            pass
+
+    def test_update_consumes_pending_prompt_during_catalog_scan(self):
+        """Update() must consume `_pending_envoy_prompt` even when Status
+        is a transient catalog-scan value.
+
+        The bug: on fresh-project drops, EnsureCatalogs (no cached catalog)
+        sets Status='Scanning defaults (X/N)' one frame before Update fires.
+        The old check `Status != 'Enabled'` returned early on that transient
+        value, so Update never consumed `_pending_envoy_prompt`, so
+        `_promptEnvoy` was never scheduled, so the Envoy opt-in dialog
+        never appeared. Latent for many releases; surfaced when a user
+        finally tested fresh-drop on a machine without a cached catalog.
+        """
+        saved_status = self.embody.par.Status.eval()
+        saved_pending = getattr(self.embody_ext, '_pending_envoy_prompt', False)
+        try:
+            # Seed the prompt response so any chained _promptEnvoy is silent
+            self.embody.store('_smoke_test_responses', {
+                'Embody - AI Coding Assistant Integration': 0  # Skip
+            })
+            # Simulate the race: scanning value when Update fires
+            self.embody.par.Status = 'Scanning defaults (12/685)'
+            self.embody_ext._pending_envoy_prompt = True
+            # Run Update -- must NOT return early on transient Status
+            self.embody_ext.Update(suppress_refresh=True)
+            self.assertFalse(
+                getattr(self.embody_ext, '_pending_envoy_prompt', False),
+                "Update must consume _pending_envoy_prompt even when "
+                "Status='Scanning defaults' -- the race fix in v5.0.398 "
+                "ensures Update only skips when Status=='Disabled'")
+        finally:
+            self._restore_status(saved_status, saved_pending)
+
+    def test_update_skips_only_when_disabled(self):
+        """Update should run for every transient Status value (Scanning
+        defaults, Scanning palette, Testing) and only return early when
+        Embody is explicitly Disabled. Verifies no other transient state
+        regresses to the old `!= 'Enabled'` check."""
+        saved_status = self.embody.par.Status.eval()
+        saved_pending = getattr(self.embody_ext, '_pending_envoy_prompt', False)
+        try:
+            self.embody.store('_smoke_test_responses', {
+                'Embody - AI Coding Assistant Integration': 0
+            })
+            for transient in (
+                'Scanning defaults (0/100)',
+                'Scanning palette (50/261)',
+                'Testing',
+            ):
+                self.embody.par.Status = transient
+                self.embody_ext._pending_envoy_prompt = True
+                self.embody_ext.Update(suppress_refresh=True)
+                self.assertFalse(
+                    getattr(self.embody_ext, '_pending_envoy_prompt', False),
+                    f"Update must run with Status='{transient}'")
+            # Confirm Disabled DOES short-circuit
+            self.embody.par.Status = 'Disabled'
+            self.embody_ext._pending_envoy_prompt = True
+            self.embody_ext.Update(suppress_refresh=True)
+            self.assertTrue(
+                getattr(self.embody_ext, '_pending_envoy_prompt', False),
+                "Update must skip (and leave _pending_envoy_prompt set) "
+                "when Status=='Disabled' -- this is the only state that "
+                "should short-circuit Update")
+        finally:
+            self._restore_status(saved_status, saved_pending)

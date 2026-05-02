@@ -1786,7 +1786,16 @@ class EmbodyExt:
                 onProjectPreSave() to prevent the continuity check from firing
                 during the TDN strip/restore window.
         """
-        if self.my.par.Status != 'Enabled':
+        # Skip ONLY when Embody is explicitly Disabled. Status takes other
+        # transient values during normal operation -- 'Scanning defaults (X/N)'
+        # and 'Scanning palette (X/N)' from CatalogManager.EnsureCatalogs(),
+        # 'Testing' from EnvoyExt port-test -- and Update must still run during
+        # those windows. The previous `!= 'Enabled'` check raced with the
+        # catalog scan that fires on fresh-project drops: the scan started
+        # one frame before Update was scheduled, set Status to 'Scanning
+        # defaults (0/N)', and Update returned early -- never consuming
+        # _pending_envoy_prompt, so the Envoy opt-in dialog never appeared.
+        if self.my.par.Status == 'Disabled':
             return
         if self._performMode:
             return
@@ -6117,7 +6126,10 @@ class EmbodyExt:
         the table and re-applies any missing metadata so the session stays in
         sync with the on-disk source of truth.
         """
-        if self.my.par.Status != 'Enabled':
+        # Skip ONLY when Embody is explicitly Disabled. Same race fix as
+        # Update() -- transient 'Scanning defaults', 'Scanning palette',
+        # and 'Testing' values must NOT block normal operation.
+        if self.my.par.Status == 'Disabled':
             return
 
         table = self.Externalizations

@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.3",
 	"build": 104,
-	"generator": "Embody/5.0.396",
+	"generator": "Embody/5.0.397",
 	"td_build": "099.2025.32460",
-	"source_file": "Embody-5.397.toe",
-	"exported_at": "2026-05-02T19:02:19Z",
+	"source_file": "Embody-5.398.toe",
+	"exported_at": "2026-05-02T21:34:11Z",
 	"network_path": "/embody/unit_tests/test_sandbox",
 	"options": {
 		"include_dat_content": false,

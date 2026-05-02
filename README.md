@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.397-blue)
+![Version](https://img.shields.io/badge/version-5.0.398-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.398**: Hotfix for a latent race condition that broke the first-install dialog flow on fresh-project drops without a cached catalog. `Update()` raced with `EnsureCatalogs()`, which sets `Status='Scanning defaults (X/N)'` to show progress. The old gate `if Status != 'Enabled': return` returned early on that transient value, so `_pending_envoy_prompt` was never consumed and the Envoy opt-in dialog never appeared. Both gates (`Update`, `ReconcileMetadata`) now short-circuit only when Status is explicitly `'Disabled'`. Plus 2 regression tests that fail without the fix.
 - **5.0.397**: `confirm_wipe` guardrail on `set_dat_content` MCP tool blocks accidental DAT wipes from malformed agent calls (refuses `text=""`, `rows=[]`, or `clear=True` with no replacement unless explicitly confirmed); TDN at-risk dialog skips TD-managed read-only DAT types (Info, WebRTC, Folder, Monitors, device-discovery, etc.) so the warning only fires for content the user actually authored; `.embody/config.json` now byte-stable across saves via sorted iteration of `_PERSISTED_PARAMS` + `sort_keys=True` (issue #18); test debt cleanup of 28 orphan `.txt` files, 3 stale envoy_bridge stubs replaced with 6 real tests, ancestor_rename tearDown leak fixed, palette tdn_reconstruction tests aligned with current production contract
 - **5.0.393**: Harden Envoy bootstrap so silent failures surface a useful textport message instead of `No module named 'mcp.server'` — `_setupEnvironment` now returns `bool`, four previously-silent failure paths log explicit errors, `Start()` aborts before `_runServer` if deps aren't ready, and a final `import mcp.server` gate catches partial installs (issue #17)
 - **5.0.392**: Critical Windows-only fix — `subprocess.run` from inside TD raised `[WinError 50] The request is not supported` because TD's GUI process stdin handle isn't duplicatable, causing Embody's venv-verify to falsely flag healthy venvs as corrupt and `shutil.rmtree` them on every TD restart. Fixed by passing `stdin=subprocess.DEVNULL` on the 5 affected `subprocess.run` sites in the bootstrap and verify-venv paths
