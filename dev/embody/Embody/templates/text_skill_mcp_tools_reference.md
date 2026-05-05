@@ -32,7 +32,8 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, `"auto"`) |
-| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. **Wipe guardrail**: calls that would leave the DAT empty (`text=""`, `rows=[]`, or `clear=True` with no content) are refused unless `confirm_wipe=True`. Always `get_dat_content` first, build the full new content, then send the complete result -- never send empty/partial content. |
+| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. **Wipe guardrail**: calls that would leave the DAT empty (`text=""`, `rows=[]`, or `clear=True` with no content) are refused unless `confirm_wipe=True`. **For partial edits to text DATs, prefer `edit_dat_content`** -- it sends only the changed substring (much cheaper for large DATs). Use `set_dat_content` for tables, full rewrites, or intentional wipes. |
+| `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a DAT -- replaces `old_string` with `new_string`. Mirrors Claude Code's Edit tool: `old_string` must appear exactly once by default; widen with surrounding context for uniqueness, or pass `replace_all=True` to replace every occurrence. Token-efficient -- only the changed substring crosses the wire. **Text DATs only**; tables go through `set_dat_content(rows=...)`. Refuses empty `old_string`, identical strings, and edits that would wipe the DAT (unless `confirm_wipe=True`). |
 
 ## Operator Flags
 

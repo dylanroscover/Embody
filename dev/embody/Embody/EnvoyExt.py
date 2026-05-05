@@ -486,7 +486,11 @@ class EnvoyMCPServer:
             Full-replace the content of a DAT operator. NOT incremental --
             the entire DAT is replaced by what you send.
 
-            Workflow for partial edits:
+            For partial edits to text DATs, prefer edit_dat_content --
+            it takes old_string/new_string and only sends the changed
+            substring across the wire (much cheaper for large DATs).
+
+            Workflow for full replace:
               1. get_dat_content(op_path) to read the current content
               2. Modify the returned content in memory
               3. set_dat_content(op_path, text=full_modified_content)
@@ -522,6 +526,66 @@ class EnvoyMCPServer:
                 'text': text,
                 'rows': rows,
                 'clear': clear,
+                'confirm_wipe': confirm_wipe,
+            })
+
+        @self.mcp.tool()
+        def edit_dat_content(op_path: str, old_string: str,
+                             new_string: str, replace_all: bool = False,
+                             confirm_wipe: bool = False) -> dict:
+            """
+            Surgical text edit on a DAT -- replaces old_string with
+            new_string. Token-efficient alternative to set_dat_content
+            for partial edits: only the changed substring crosses the
+            wire, not the whole DAT.
+
+            Mirrors Claude Code's Edit tool semantics:
+              - old_string must appear exactly once by default. If it
+                appears multiple times, either widen old_string with
+                surrounding context or pass replace_all=True.
+              - old_string and new_string must differ.
+              - old_string must be non-empty.
+
+            Text-only. For tables, use set_dat_content(rows=...) --
+            string matching across cells is a different beast.
+
+            Workflow for partial text edits:
+              1. (Optional) get_dat_content(op_path) to inspect current
+                 content if you don't already know what's there.
+              2. edit_dat_content(op_path, old_string=..., new_string=...)
+              No second round-trip needed for the write.
+
+            Guardrails:
+              - Refuses non-text DATs (use set_dat_content for tables).
+              - Refuses empty old_string (would match every position).
+              - Refuses old_string == new_string (no-op).
+              - Wipe guard: if the resulting text would be empty,
+                requires confirm_wipe=True (mirrors set_dat_content).
+              - Not-found error includes diagnostics (DAT length, row
+                count, case-insensitive hint) so the caller can
+                self-correct without another round-trip.
+
+            Args:
+                op_path: Path to the DAT operator
+                old_string: Text to find. Must be unique unless
+                    replace_all=True. Must not be empty.
+                new_string: Replacement text. Must differ from
+                    old_string.
+                replace_all: When True, replaces every occurrence.
+                    When False (default), requires unique match.
+                confirm_wipe: Safety flag. Set True ONLY when the
+                    edit is intended to leave the DAT empty.
+
+            Returns:
+                Dict with success, path, replacements (count of
+                substitutions made), numRows, numCols. Or
+                {'error': ...} if a guard trips.
+            """
+            return self._execute_in_td('edit_dat_content', {
+                'op_path': op_path,
+                'old_string': old_string,
+                'new_string': new_string,
+                'replace_all': replace_all,
                 'confirm_wipe': confirm_wipe,
             })
 
@@ -2027,6 +2091,7 @@ class EnvoyExt:
             # DAT content
             'get_dat_content': self._get_dat_content,
             'set_dat_content': self._set_dat_content,
+            'edit_dat_content': self._edit_dat_content,
             # Operator flags
             'get_op_flags': self._get_op_flags,
             'set_op_flags': self._set_op_flags,
@@ -2982,6 +3047,101 @@ class EnvoyExt:
             }
         except Exception as e:
             return {'error': f'Failed to set DAT content: {e}'}
+
+    def _edit_dat_content(self, op_path: str, old_string: str,
+                         new_string: str, replace_all: bool = False,
+                         confirm_wipe: bool = False) -> dict:
+        """Surgical text edit on a DAT -- replaces old_string with
+        new_string. Mirrors Claude Code's Edit tool: by default
+        old_string must appear exactly once in the DAT's text.
+
+        Token-efficient alternative to set_dat_content for partial
+        edits: only the changed substring crosses the wire, not the
+        whole DAT.
+
+        Text-only. Tables should use set_dat_content(rows=...) -- string
+        matching across cells is a different beast.
+
+        Guardrails:
+        - Refuse empty old_string (would match every position).
+        - Refuse old_string == new_string (no-op).
+        - Refuse non-text DATs (point caller at set_dat_content).
+        - Wipe guard: if the resulting text is empty, require
+          confirm_wipe=True (mirrors set_dat_content semantics).
+        - Not-found error includes diagnostics so the caller can
+          self-correct without a second get_dat_content round-trip.
+        """
+        target = op(op_path)
+        if not target:
+            return {'error': f'Operator not found: {op_path}'}
+        if target.family != 'DAT':
+            return {'error': f'{op_path} is not a DAT (family: {target.family})'}
+        if not target.isText:
+            return {'error': (
+                f'{op_path} is not a text DAT (isText=False). '
+                f'edit_dat_content is text-only -- use set_dat_content '
+                f'with rows= for table DATs.'
+            )}
+
+        if old_string == '':
+            return {'error': (
+                f'old_string is empty. edit_dat_content requires a '
+                f'non-empty search string -- an empty string would '
+                f'match every position in the DAT.'
+            )}
+        if old_string == new_string:
+            return {'error': (
+                f'old_string and new_string are identical -- this '
+                f'would be a no-op. If you meant to verify content, '
+                f'use get_dat_content instead.'
+            )}
+
+        current = target.text
+        count = current.count(old_string)
+        if count == 0:
+            ci_match = old_string.lower() in current.lower()
+            hint = (
+                ' A case-insensitive search would have matched -- '
+                'check the casing of old_string.'
+            ) if ci_match else ''
+            return {'error': (
+                f'old_string not found in {op_path} '
+                f'(DAT length: {len(current)} chars, '
+                f'{target.numRows} rows).{hint} Call get_dat_content '
+                f'to inspect current content.'
+            )}
+        if count > 1 and not replace_all:
+            return {'error': (
+                f'old_string appears {count} times in {op_path}; '
+                f'edit_dat_content requires a unique match by default. '
+                f'Either widen old_string with surrounding context to '
+                f'make it unique, or pass replace_all=True to replace '
+                f'every occurrence.'
+            )}
+
+        if replace_all:
+            new_text = current.replace(old_string, new_string)
+        else:
+            new_text = current.replace(old_string, new_string, 1)
+
+        if new_text == '' and not confirm_wipe:
+            return {'error': (
+                f'Refusing to wipe DAT {op_path}: this edit would '
+                f'leave the DAT empty. Pass confirm_wipe=True if '
+                f'this is intentional (e.g. resetting a FIFO log).'
+            )}
+
+        try:
+            target.text = new_text
+            return {
+                'success': True,
+                'path': op_path,
+                'replacements': count if replace_all else 1,
+                'numRows': target.numRows,
+                'numCols': target.numCols,
+            }
+        except Exception as e:
+            return {'error': f'Failed to edit DAT content: {e}'}
 
     # === TOP Capture (Main Thread Only) ===
 

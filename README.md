@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-5.0.398-blue)
+![Version](https://img.shields.io/badge/version-5.0.399-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-47-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **5.0.399**: New `edit_dat_content` MCP tool for token-efficient surgical text edits — mirrors Claude Code's Edit tool (`old_string`/`new_string`, unique match by default, opt-in `replace_all`), so a 2-line edit in a 500-line DAT no longer pays for the whole DAT's content on the wire. Bridge multi-launch fix: Envoy can now launch a TD instance alongside an unrelated TD project — `handle_launch_td` swapped the blanket "any TD running" guard for an instance-specific check, macOS `open -n` flag forces a new process instead of reusing an existing window, and PID identification diffs against a pre-launch snapshot instead of returning the first TD pid found. Plus 11 new tests for the new tool and a one-line fix for `test_set_dat_content_clear` that had been failing since v5.0.397's wipe guardrail.
 - **5.0.398**: Hotfix for a latent race condition that broke the first-install dialog flow on fresh-project drops without a cached catalog. `Update()` raced with `EnsureCatalogs()`, which sets `Status='Scanning defaults (X/N)'` to show progress. The old gate `if Status != 'Enabled': return` returned early on that transient value, so `_pending_envoy_prompt` was never consumed and the Envoy opt-in dialog never appeared. Both gates (`Update`, `ReconcileMetadata`) now short-circuit only when Status is explicitly `'Disabled'`. Plus 2 regression tests that fail without the fix.
 - **5.0.397**: `confirm_wipe` guardrail on `set_dat_content` MCP tool blocks accidental DAT wipes from malformed agent calls (refuses `text=""`, `rows=[]`, or `clear=True` with no replacement unless explicitly confirmed); TDN at-risk dialog skips TD-managed read-only DAT types (Info, WebRTC, Folder, Monitors, device-discovery, etc.) so the warning only fires for content the user actually authored; `.embody/config.json` now byte-stable across saves via sorted iteration of `_PERSISTED_PARAMS` + `sort_keys=True` (issue #18); test debt cleanup of 28 orphan `.txt` files, 3 stale envoy_bridge stubs replaced with 6 real tests, ancestor_rename tearDown leak fixed, palette tdn_reconstruction tests aligned with current production contract
 - **5.0.393**: Harden Envoy bootstrap so silent failures surface a useful textport message instead of `No module named 'mcp.server'` — `_setupEnvironment` now returns `bool`, four previously-silent failure paths log explicit errors, `Start()` aborts before `_runServer` if deps aren't ready, and a final `import mcp.server` gate catches partial installs (issue #17)

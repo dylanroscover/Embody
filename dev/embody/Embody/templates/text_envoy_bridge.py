@@ -805,7 +805,7 @@ def quit_td(pid, graceful_timeout=15):
     return True, f"TouchDesigner (PID {pid}) was force-killed"
 
 
-def launch_td(config, config_path, project_path=None):
+def launch_td(config, config_path, project_path=None, existing_pids=None):
     """Launch TouchDesigner with a .toe file.
 
     Args:
@@ -813,9 +813,13 @@ def launch_td(config, config_path, project_path=None):
         config_path: Path to envoy.json (for resolving relative paths).
         project_path: Optional override .toe path. If relative, resolved
             against the git root (same directory as config_path).
+        existing_pids: Optional iterable of TD PIDs already running before
+            this launch. Used on macOS to identify the spawned PID by
+            exclusion (LaunchServices doesn't return one).
 
     Returns (success: bool, message: str, pid: int|None).
     """
+    existing_pids = set(existing_pids or [])
     # Resolve TD executable: prefer the install matching project.json's
     # td_build pin (committed, travels across machines), then fall back
     # to envoy.json's td_executable (gitignored, machine-local).
@@ -871,16 +875,22 @@ def launch_td(config, config_path, project_path=None):
     log(f"Launching TouchDesigner: {td_exe} with {toe_path}")
     try:
         if sys.platform == "darwin":
+            # -n forces a new process even when TouchDesigner is already
+            # running. Without it, LaunchServices may reuse an existing
+            # window and spawn no new process, breaking multi-instance.
             proc = subprocess.Popen(
-                ["open", "-a", td_exe, toe_path],
+                ["open", "-n", "-a", td_exe, toe_path],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
             # 'open' returns immediately; TD process is spawned by LaunchServices.
-            # Wait briefly for open to finish, then find TD's actual PID.
+            # Wait briefly for open to finish, then find TD's actual PID by
+            # diffing against the pre-launch snapshot.
             proc.wait(timeout=10)
             time.sleep(2)  # Give TD a moment to start
-            pid = find_td_pid()
+            new_pids = [p for p in find_all_td_pids()
+                        if p not in existing_pids]
+            pid = new_pids[0] if new_pids else None
         elif sys.platform == "win32":
             proc = subprocess.Popen(
                 [td_exe, toe_path],
@@ -1044,16 +1054,38 @@ def handle_launch_td(params, state):
     timeout = params.get("timeout", 120)
     project_path = params.get("project_path")
 
-    # Safety: check if TD is already running
-    existing_pid = find_td_pid()
-    if existing_pid and is_process_alive(existing_pid):
-        return {
-            "status": "error",
-            "message": (
-                f"TouchDesigner is already running (PID {existing_pid}). "
-                "Close it first or use get_td_status to check its state."
-            ),
-        }
+    with state:
+        config = state.config
+        config_path = state.config_path
+
+    # Resolve the target .toe so we can check whether THIS specific
+    # instance is already running. Other TDs (different .toe, unrelated
+    # projects) are fine -- launching alongside them is supported.
+    if project_path:
+        if not os.path.isabs(project_path) and config_path:
+            embody_dir = os.path.dirname(os.path.abspath(config_path))
+            git_root = os.path.dirname(embody_dir)
+            target_toe = os.path.join(git_root, project_path)
+        else:
+            target_toe = project_path
+    else:
+        target_toe = resolve_toe_path(config, config_path)
+
+    if target_toe:
+        target_basename = os.path.basename(target_toe)
+        if target_basename.endswith(".toe"):
+            target_basename = target_basename[:-4]
+        instance_info = config.get("instances", {}).get(target_basename, {})
+        existing_pid = instance_info.get("td_pid")
+        if existing_pid and is_process_alive(existing_pid):
+            return {
+                "status": "error",
+                "message": (
+                    f'Instance "{target_basename}" is already running '
+                    f"(PID {existing_pid}). Use switch_instance to use "
+                    "it, or close it first to relaunch."
+                ),
+            }
 
     # Crash-loop guard
     now = time.monotonic()
@@ -1070,12 +1102,14 @@ def handle_launch_td(params, state):
             ),
         }
 
+    # Snapshot existing TD PIDs so launch_td can identify the spawned
+    # process by exclusion on macOS.
+    pre_launch_pids = find_all_td_pids()
+
     # Launch
-    with state:
-        config = state.config
-        config_path = state.config_path
     success, message, pid = launch_td(config, config_path,
-                                      project_path=project_path)
+                                      project_path=project_path,
+                                      existing_pids=pre_launch_pids)
     if not success:
         return {"status": "error", "message": message}
 

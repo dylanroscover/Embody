@@ -79,7 +79,8 @@ Read and write text DATs (Python scripts, configs, console output) and table DAT
 | Tool | Description |
 |---|---|
 | `get_dat_content` | Get DAT text or table data |
-| `set_dat_content` | Write text string or structured table rows |
+| `set_dat_content` | Write text string or structured table rows (full replace) |
+| `edit_dat_content` | Surgical text edit — replace `old_string` with `new_string`. Token-efficient for partial edits. |
 
 ### Operator Flags
 
