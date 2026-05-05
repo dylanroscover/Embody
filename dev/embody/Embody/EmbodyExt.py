@@ -1800,6 +1800,23 @@ class EmbodyExt:
         if self._performMode:
             return
 
+        # Detect a .toe basename change since the last Update and
+        # propagate to the envoy.json registry. This is a defensive
+        # backstop for execute.py's onProjectPostSave RefreshRegistry
+        # call -- if execute.py wasn't reloaded after a source edit,
+        # or the save took an Off/Export path that skipped Envoy
+        # restart, this catches the rename on the next Update tick.
+        # Idempotent: _writeEnvoyConfig short-circuits when the
+        # registry is already current.
+        try:
+            current_name = project.name
+            if getattr(self, '_last_toe_name', None) != current_name:
+                self._last_toe_name = current_name
+                if self.my.par.Envoyenable.eval():
+                    self.ownerComp.ext.Envoy.RefreshRegistry()
+        except Exception as e:
+            self.Log(f'registry rename-detect failed: {e}', 'WARNING')
+
         # Detect renames/moves BEFORE scanning for additions.
         # Without this, a renamed op gets added as "new" by the additions
         # scan, and the subsequent continuity check in Refresh() can't

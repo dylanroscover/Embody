@@ -1584,6 +1584,86 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertNotIn('already running', result['message'])
         self.assertIn('not found', result['message'].lower())
 
+    def test_launch_td_pid_aware_guard_catches_stale_key(self):
+        """When the registry key is stale (e.g. registered under
+        Embody-5.400 but the live .toe is now Embody-5.401 after a
+        save), the fast-path key lookup misses. The PID-aware
+        slow-path scans every alive instance and refuses if any
+        toe_path (after walk-forward) resolves to the same target.
+
+        Without this guard, the v5.0.401 walk-forward in
+        resolve_toe_path could spawn a duplicate TD because the new
+        basename has no entry in the registry.
+        """
+        import tempfile, os as _os
+        tmp = tempfile.mkdtemp(prefix='envoy_pidguard_test_')
+        try:
+            embody_dir = _os.path.join(tmp, '.embody')
+            _os.makedirs(embody_dir, exist_ok=True)
+            dev_dir = _os.path.join(tmp, 'dev')
+            _os.makedirs(dev_dir, exist_ok=True)
+            # Only the .401 .toe exists -- .400 was renamed by save.
+            with open(_os.path.join(dev_dir, 'Project-1.401.toe'), 'w') as f:
+                f.write('')
+            config = {
+                'td_executable': '/Applications/TouchDesigner.app',
+                'active': 'Project-1.400',  # stale key
+                'instances': {
+                    'Project-1.400': {
+                        'toe_path': 'dev/Project-1.400.toe',  # stale path
+                        'port': 9870,
+                        'td_pid': _os.getpid(),  # alive (us)
+                    },
+                },
+            }
+            state = self._make_state(
+                config=config,
+                config_path=_os.path.join(embody_dir, 'envoy.json'))
+            result = bridge.handle_launch_td({}, state)
+            self.assertEqual(result['status'], 'error')
+            self.assertIn('already running', result['message'])
+            # The error should name the stale key (Project-1.400) so
+            # the user understands what to switch_instance to.
+            self.assertIn('Project-1.400', result['message'])
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_launch_td_pid_aware_guard_ignores_dead_pids(self):
+        """A registered toe_path that walks forward to the target
+        but whose td_pid is dead must NOT block the launch."""
+        import tempfile, os as _os
+        tmp = tempfile.mkdtemp(prefix='envoy_pidguard_test_')
+        try:
+            embody_dir = _os.path.join(tmp, '.embody')
+            _os.makedirs(embody_dir, exist_ok=True)
+            dev_dir = _os.path.join(tmp, 'dev')
+            _os.makedirs(dev_dir, exist_ok=True)
+            with open(_os.path.join(dev_dir, 'Project-1.401.toe'), 'w') as f:
+                f.write('')
+            config = {
+                'td_executable': '/nonexistent/TD.app',
+                'active': 'Project-1.400',
+                'instances': {
+                    'Project-1.400': {
+                        'toe_path': 'dev/Project-1.400.toe',
+                        'port': 9870,
+                        'td_pid': 999999990,  # dead PID
+                    },
+                },
+            }
+            state = self._make_state(
+                config=config,
+                config_path=_os.path.join(embody_dir, 'envoy.json'))
+            result = bridge.handle_launch_td({}, state)
+            # Falls past the guard, fails on missing executable.
+            self.assertEqual(result['status'], 'error')
+            self.assertNotIn('already running', result['message'])
+            self.assertIn('not found', result['message'].lower())
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+
     def test_launch_td_crash_loop_guard(self):
         """Refuses after too many recent launches."""
         now = time.monotonic()

@@ -1129,10 +1129,15 @@ def handle_launch_td(params, state):
         target_toe = resolve_toe_path(config, config_path)
 
     if target_toe:
+        target_abs = os.path.abspath(target_toe)
         target_basename = os.path.basename(target_toe)
         if target_basename.endswith(".toe"):
             target_basename = target_basename[:-4]
-        instance_info = config.get("instances", {}).get(target_basename, {})
+        instances = config.get("instances", {})
+
+        # Fast path: direct key lookup. Refuses if an instance is
+        # registered under the target's basename with a live PID.
+        instance_info = instances.get(target_basename, {})
         existing_pid = instance_info.get("td_pid")
         if existing_pid and is_process_alive(existing_pid):
             return {
@@ -1143,6 +1148,38 @@ def handle_launch_td(params, state):
                     "it, or close it first to relaunch."
                 ),
             }
+
+        # PID-aware path: scan every instance whose td_pid is alive
+        # and whose registered toe_path (after walk-forward) resolves
+        # to the same target file. Catches the stale-key edge case --
+        # registry still keyed under an older basename, but the live
+        # process IS the one we're about to launch a duplicate of.
+        if config_path:
+            embody_dir = os.path.dirname(os.path.abspath(config_path))
+            git_root = os.path.dirname(embody_dir)
+        else:
+            git_root = None
+        for key, info in instances.items():
+            pid = info.get("td_pid", 0)
+            if not pid or not is_process_alive(pid):
+                continue
+            their_toe = info.get("toe_path", "")
+            if not their_toe:
+                continue
+            if not os.path.isabs(their_toe) and git_root:
+                their_toe = os.path.join(git_root, their_toe)
+            their_resolved = find_latest_versioned_toe(their_toe)
+            if os.path.abspath(their_resolved) == target_abs:
+                return {
+                    "status": "error",
+                    "message": (
+                        f'Instance "{key}" (PID {pid}) is already running '
+                        f"the target .toe (resolved to "
+                        f"{os.path.basename(target_abs)}). The registry "
+                        f"key may be stale -- use switch_instance to use "
+                        f"it, or close it first to relaunch."
+                    ),
+                }
 
     # Crash-loop guard
     now = time.monotonic()

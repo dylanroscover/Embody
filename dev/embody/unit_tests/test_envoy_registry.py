@@ -136,3 +136,126 @@ class TestInstanceKeyRename(EmbodyTestCase):
             self.envoy._isPidAlive = original
         # 'Embody-5.399' is owned by a foreign live PID, so we get -2
         self.assertEqual(key, 'Embody-5.399-2')
+
+
+class TestRegistryDeadPidGC(EmbodyTestCase):
+    """_writeEnvoyConfig garbage-collects rows whose td_pid is dead
+    on every write. Catches the accumulation that the previous
+    deregister-only flow allowed: hard kills, force-quits, OS
+    crashes, and Cmd+Q-without-Envoy-stop all leave dead rows.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.envoy = self.embody.ext.Envoy
+        self.my_pid = os.getpid()
+
+    def _write_test_registry(self, tmp_dir, instances, active_key):
+        """Drop a synthetic envoy.json into tmp_dir/.embody/."""
+        embody_dir = tmp_dir / '.embody'
+        embody_dir.mkdir(parents=True, exist_ok=True)
+        config_path = embody_dir / 'envoy.json'
+        import json as _json
+        config_path.write_text(_json.dumps({
+            'active': active_key,
+            'td_executable': '/Applications/TouchDesigner.app',
+            'instances': instances,
+        }))
+        return embody_dir, config_path
+
+    def _read_registry(self, config_path):
+        import json as _json
+        return _json.loads(config_path.read_text())
+
+    def test_dead_rows_pruned_on_write(self):
+        import tempfile, json as _json
+        from pathlib import Path
+        tmp = Path(tempfile.mkdtemp(prefix='embody_gc_test_'))
+        try:
+            embody_dir, config_path = self._write_test_registry(
+                tmp,
+                {
+                    # Live row (matches our PID + current toe)
+                    'self_key': {
+                        'toe_path': 'dev/whatever.toe',
+                        'port': 9870,
+                        'td_pid': self.my_pid,
+                    },
+                    'dead_a': {
+                        'toe_path': 'dev/a.toe', 'port': 9871,
+                        'td_pid': 999999991,
+                    },
+                    'dead_b': {
+                        'toe_path': 'dev/b.toe', 'port': 9872,
+                        'td_pid': 999999992,
+                    },
+                    'dead_c': {
+                        'toe_path': 'dev/c.toe', 'port': 9873,
+                        'td_pid': 999999993,
+                    },
+                },
+                active_key='self_key',
+            )
+            # Force is-alive predicate: our PID + nothing else
+            original = self.envoy._isPidAlive
+            self.envoy._isPidAlive = lambda p: p == self.my_pid
+            try:
+                self.envoy._writeEnvoyConfig(embody_dir, port=9870)
+            finally:
+                self.envoy._isPidAlive = original
+
+            after = self._read_registry(config_path)
+            keys = set(after.get('instances', {}).keys())
+            # Our row should remain (under whatever current key
+            # _writeEnvoyConfig computed). All dead rows gone.
+            self.assertNotIn('dead_a', keys)
+            self.assertNotIn('dead_b', keys)
+            self.assertNotIn('dead_c', keys)
+            # Exactly one live row remains -- ours
+            self.assertEqual(len(keys), 1)
+            remaining = next(iter(after['instances'].values()))
+            self.assertEqual(remaining['td_pid'], self.my_pid)
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_live_foreign_row_preserved(self):
+        """A foreign instance with a live PID stays in the registry."""
+        import tempfile
+        from pathlib import Path
+        tmp = Path(tempfile.mkdtemp(prefix='embody_gc_test_'))
+        try:
+            FOREIGN_PID = 12345
+            embody_dir, config_path = self._write_test_registry(
+                tmp,
+                {
+                    'foreign_live': {
+                        'toe_path': 'dev/other.toe', 'port': 9871,
+                        'td_pid': FOREIGN_PID,
+                    },
+                    'self_key': {
+                        'toe_path': 'dev/whatever.toe', 'port': 9870,
+                        'td_pid': self.my_pid,
+                    },
+                    'dead_x': {
+                        'toe_path': 'dev/x.toe', 'port': 9872,
+                        'td_pid': 999999990,
+                    },
+                },
+                active_key='self_key',
+            )
+            original = self.envoy._isPidAlive
+            self.envoy._isPidAlive = (
+                lambda p: p in (self.my_pid, FOREIGN_PID))
+            try:
+                self.envoy._writeEnvoyConfig(embody_dir, port=9870)
+            finally:
+                self.envoy._isPidAlive = original
+
+            after = self._read_registry(config_path)
+            keys = set(after.get('instances', {}).keys())
+            self.assertIn('foreign_live', keys)
+            self.assertNotIn('dead_x', keys)
+        finally:
+            import shutil
+            shutil.rmtree(tmp, ignore_errors=True)

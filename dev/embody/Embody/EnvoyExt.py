@@ -4763,6 +4763,24 @@ class EnvoyExt:
         key = self._instanceKey(toe_rel, instances)
         my_pid = os.getpid()
 
+        # Garbage-collect any registry rows whose PID is no longer
+        # alive. Embody only deregisters cleanly on graceful shutdown
+        # (Stop()/onDestroyTD); hard kills, force-quits, OS crashes,
+        # and Cmd+Q-without-Envoy-stop all leave dead rows behind that
+        # accumulate across sessions. Running this on every registry
+        # write keeps the file bounded.
+        dead_keys = [
+            k for k, info in list(instances.items())
+            if not self._isPidAlive(info.get('td_pid', 0))
+        ]
+        for dead_key in dead_keys:
+            del instances[dead_key]
+        if dead_keys:
+            self._log(
+                f'Pruned {len(dead_keys)} dead registry '
+                f'{"row" if len(dead_keys) == 1 else "rows"}: '
+                f'{", ".join(repr(k) for k in dead_keys)}', 'DEBUG')
+
         # Prune stale entries under different keys for the same PID
         # (left over from a prior toe rename, e.g. TD's save-time
         # version bump). Keeps the registry walking forward instead of
