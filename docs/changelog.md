@@ -1,5 +1,11 @@
 # Changelog
 
+## v5.0.403
+
+Hotfix for a one-line typo in the v5.0.402 rename-detection backstop.
+
+- **Fix: `EmbodyExt.Update()` rename-detect uses `self.my`, not `self.ownerComp`**: The new rename-detection block added in v5.0.402 referenced `self.ownerComp.ext.Envoy.RefreshRegistry()`. `EmbodyExt` stores its owner COMP as `self.my` (line 82: `self.my = ownerComp`); only `EnvoyExt` uses `self.ownerComp`. I copied the pattern from EnvoyExt without verifying. Result: every `Update()` tick during a v5.0.402 save threw `'EmbodyExt' object has no attribute 'ownerComp'`, the warning got logged but the rename-detect path never actually fired -- the registry wouldn't walk forward on save. Caught immediately on first fresh-session check by inspecting `dev/logs/Embody-5.402.toe_*.log`. The Layer 2 walk-forward in the bridge masked the user-visible symptom (lookups still resolved to the new .toe), but the registry would have stayed perpetually keyed to the previous version. One-character fix; unit-test path was unaffected since the test code paths don't exercise this property reference.
+
 ## v5.0.402
 
 Three closely-related fixes for the registry that landed during follow-up testing of v5.0.401: dead-PID rows now garbage-collect on every write (catching the accumulation that hard-kills/force-quits/crashes leave behind), `Update()` watches for `.toe` basename changes as a backstop for execute.py's postSave hook in case it didn't reload, and the bridge's `launch_td` guard scans every alive instance by PID instead of relying on the (potentially stale) registry key.

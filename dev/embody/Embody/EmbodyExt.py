@@ -1813,7 +1813,7 @@ class EmbodyExt:
             if getattr(self, '_last_toe_name', None) != current_name:
                 self._last_toe_name = current_name
                 if self.my.par.Envoyenable.eval():
-                    self.ownerComp.ext.Envoy.RefreshRegistry()
+                    self.my.ext.Envoy.RefreshRegistry()
         except Exception as e:
             self.Log(f'registry rename-detect failed: {e}', 'WARNING')
 
