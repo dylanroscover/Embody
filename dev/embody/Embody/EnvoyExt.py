@@ -4614,6 +4614,14 @@ class EnvoyExt:
         """Compute a unique instance key from the toe filename.
         Uses basename without .toe.  Appends -2, -3, etc. on collision
         with a live instance (same or different toe_path).
+
+        Walks forward across TD's auto-version-bump on save: if this PID
+        is already registered and its registered toe_path STILL matches
+        the current path, the existing key is reused (no churn). If the
+        toe_path has changed (rename, save-as-version-up), a fresh key
+        is computed from the new basename and the caller is responsible
+        for pruning the stale entry under the old key.
+
         If Envoyinstancename is set, uses that as the key instead."""
         import os
         from pathlib import Path
@@ -4629,27 +4637,31 @@ class EnvoyExt:
         base = Path(toe_rel).stem  # e.g. 'Embody-5.251'
         my_pid = os.getpid()
 
-        # Check if this PID already has a key (re-registration)
+        # Re-registration with same toe_path: keep the existing key.
+        # If the toe_path has changed, fall through and compute a new
+        # key from the current basename -- caller prunes the stale row.
         for key, info in existing_instances.items():
-            if info.get('td_pid') == my_pid:
+            if (info.get('td_pid') == my_pid
+                    and info.get('toe_path') == toe_rel):
                 return key
 
-        # Check if base key is free or held by a dead process
+        # Check if base key is free, held by a dead process, or held
+        # by our own previous (now-stale) registration.
         if base not in existing_instances:
             return base
         existing_pid = existing_instances[base].get('td_pid', 0)
-        if not self._isPidAlive(existing_pid):
-            return base  # Reclaim stale entry
+        if not self._isPidAlive(existing_pid) or existing_pid == my_pid:
+            return base
 
-        # Base key is held by a live process -- find a unique suffix
+        # Base key is held by a live foreign process -- find a unique suffix
         suffix = 2
         while True:
             candidate = f'{base}-{suffix}'
             if candidate not in existing_instances:
                 return candidate
             existing_pid = existing_instances[candidate].get('td_pid', 0)
-            if not self._isPidAlive(existing_pid):
-                return candidate  # Reclaim stale entry
+            if not self._isPidAlive(existing_pid) or existing_pid == my_pid:
+                return candidate
             suffix += 1
 
     @staticmethod
@@ -4749,16 +4761,33 @@ class EnvoyExt:
 
         instances = existing.get('instances', {})
         key = self._instanceKey(toe_rel, instances)
+        my_pid = os.getpid()
+
+        # Prune stale entries under different keys for the same PID
+        # (left over from a prior toe rename, e.g. TD's save-time
+        # version bump). Keeps the registry walking forward instead of
+        # accumulating dead aliases.
+        stale_keys = [
+            k for k, info in list(instances.items())
+            if info.get('td_pid') == my_pid and k != key
+        ]
+        for stale_key in stale_keys:
+            del instances[stale_key]
+            self._log(
+                f'Pruned stale registry key "{stale_key}" '
+                f'(PID {my_pid} now registered as "{key}")', 'DEBUG')
 
         # Build this instance's entry
         new_entry = {
             'toe_path': toe_rel,
             'port': port,
-            'td_pid': os.getpid(),
+            'td_pid': my_pid,
         }
 
-        # Check if already up-to-date
-        if instances.get(key) == new_entry and existing.get('active') == key:
+        # Check if already up-to-date (no stale prune happened either)
+        if (not stale_keys
+                and instances.get(key) == new_entry
+                and existing.get('active') == key):
             self._log('envoy.json already up to date', 'DEBUG')
             return
 
@@ -4769,6 +4798,48 @@ class EnvoyExt:
 
         self._atomicWriteJSON(config_path, existing)
         self._log(f'Registered instance "{key}" in envoy.json (port {port})')
+
+    def RefreshRegistry(self):
+        """Re-register this instance in envoy.json under its current
+        toe basename. Safe to call repeatedly (idempotent when nothing
+        has changed). Used after `project.save()` to walk the registry
+        forward across TD's save-time version bump -- the toe goes
+        from `Foo-5.398.toe` to `Foo-5.399.toe` and the registry needs
+        to follow.
+
+        Reads the running port from envoy.json by looking up our own
+        PID, since EnvoyExt does not retain a runtime port attribute
+        (the actual server lives on a worker thread)."""
+        import os
+        from pathlib import Path
+
+        git_root = self.ownerComp.fetch('_git_root', 'no-git')
+        if git_root == 'no-git':
+            return
+        config_path = Path(git_root) / '.embody' / 'envoy.json'
+        if not config_path.exists():
+            return
+
+        try:
+            existing = json.loads(config_path.read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, OSError):
+            return
+
+        my_pid = os.getpid()
+        port = 0
+        for info in existing.get('instances', {}).values():
+            if info.get('td_pid') == my_pid:
+                port = info.get('port', 0)
+                break
+        if not port:
+            # We aren't in the registry yet (Envoy may have only just
+            # started, or not started at all). Nothing to refresh.
+            return
+
+        try:
+            self._writeEnvoyConfig(config_path.parent, port)
+        except Exception as e:
+            self._log(f'RefreshRegistry failed: {e}', 'WARNING')
 
     def _removeFromRegistry(self, git_root=None):
         """Remove this instance from the .embody/envoy.json registry on shutdown."""

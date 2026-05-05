@@ -281,24 +281,81 @@ def load_config(config_path):
         return {}
 
 
+def find_latest_versioned_toe(toe_path):
+    """If ``toe_path`` is missing, find a version-bumped sibling.
+
+    TD's project save increments the trailing numeric segment of the
+    .toe filename (``Foo-5.398.toe`` -> ``Foo-5.399.toe``). When the
+    registry references the older name, the bridge still needs to
+    locate the live file. Strips the trailing ``<digits>.toe`` to
+    derive a prefix, scans the directory for siblings matching that
+    prefix, and returns the path with the highest extant numeric
+    suffix. Returns the input unchanged when it already exists, when
+    the directory does not exist, or when no versioned siblings are
+    found. The bridge does NOT rewrite envoy.json from this resolution
+    path -- registry mutation stays Embody's responsibility.
+    """
+    if os.path.isfile(toe_path):
+        return toe_path
+    directory = os.path.dirname(toe_path) or "."
+    if not os.path.isdir(directory):
+        return toe_path
+    basename = os.path.basename(toe_path)
+    m = re.match(r"^(.*?)(\d+)\.toe$", basename)
+    if not m:
+        return toe_path
+    prefix = m.group(1)
+    pattern = re.compile(
+        r"^" + re.escape(prefix) + r"(\d+)\.toe$")
+    best_n = -1
+    best_path = toe_path
+    try:
+        entries = os.listdir(directory)
+    except OSError:
+        return toe_path
+    for entry in entries:
+        m2 = pattern.match(entry)
+        if not m2:
+            continue
+        n = int(m2.group(1))
+        if n > best_n:
+            best_n = n
+            best_path = os.path.join(directory, entry)
+    if best_n >= 0 and best_path != toe_path:
+        log(f"Resolved stale toe_path to versioned sibling: "
+            f"{os.path.basename(toe_path)} -> {os.path.basename(best_path)}")
+    return best_path
+
+
 def resolve_toe_path(config, config_path):
     """Resolve the .toe path from config (relative to git root).
 
-    toe_path in envoy.json is always relative to the git root.
-    The config file lives at .embody/envoy.json, so we go up one
-    level from the config's parent directory to reach the git root.
+    Reads ``toe_path`` from ``instances[active]`` when the registry is
+    in multi-instance format, falling back to the top-level
+    ``toe_path`` key for legacy flat configs. If the resolved file is
+    missing, attempts to walk forward to a version-bumped sibling
+    (TD's save-time auto increment renames the .toe; the registry
+    may lag).
     """
-    toe = config.get("toe_path")
+    instances = config.get("instances", {})
+    active = config.get("active")
+    toe = None
+    if active and active in instances:
+        toe = instances[active].get("toe_path")
+    if not toe:
+        toe = config.get("toe_path")  # legacy flat format
     if not toe:
         return None
     if os.path.isabs(toe):
-        return toe
-    # Config is in .embody/ -- git root is one level up
-    if config_path:
+        absolute = toe
+    elif config_path:
+        # Config is in .embody/ -- git root is one level up
         embody_dir = os.path.dirname(os.path.abspath(config_path))
         git_root = os.path.dirname(embody_dir)
-        return os.path.join(git_root, toe)
-    return toe
+        absolute = os.path.join(git_root, toe)
+    else:
+        absolute = toe
+    return find_latest_versioned_toe(absolute)
 
 
 def load_project_config(config_path):
@@ -805,7 +862,7 @@ def quit_td(pid, graceful_timeout=15):
     return True, f"TouchDesigner (PID {pid}) was force-killed"
 
 
-def launch_td(config, config_path, project_path=None):
+def launch_td(config, config_path, project_path=None, existing_pids=None):
     """Launch TouchDesigner with a .toe file.
 
     Args:
@@ -813,9 +870,13 @@ def launch_td(config, config_path, project_path=None):
         config_path: Path to envoy.json (for resolving relative paths).
         project_path: Optional override .toe path. If relative, resolved
             against the git root (same directory as config_path).
+        existing_pids: Optional iterable of TD PIDs already running before
+            this launch. Used on macOS to identify the spawned PID by
+            exclusion (LaunchServices doesn't return one).
 
     Returns (success: bool, message: str, pid: int|None).
     """
+    existing_pids = set(existing_pids or [])
     # Resolve TD executable: prefer the install matching project.json's
     # td_build pin (committed, travels across machines), then fall back
     # to envoy.json's td_executable (gitignored, machine-local).
@@ -871,16 +932,22 @@ def launch_td(config, config_path, project_path=None):
     log(f"Launching TouchDesigner: {td_exe} with {toe_path}")
     try:
         if sys.platform == "darwin":
+            # -n forces a new process even when TouchDesigner is already
+            # running. Without it, LaunchServices may reuse an existing
+            # window and spawn no new process, breaking multi-instance.
             proc = subprocess.Popen(
-                ["open", "-a", td_exe, toe_path],
+                ["open", "-n", "-a", td_exe, toe_path],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
             # 'open' returns immediately; TD process is spawned by LaunchServices.
-            # Wait briefly for open to finish, then find TD's actual PID.
+            # Wait briefly for open to finish, then find TD's actual PID by
+            # diffing against the pre-launch snapshot.
             proc.wait(timeout=10)
             time.sleep(2)  # Give TD a moment to start
-            pid = find_td_pid()
+            new_pids = [p for p in find_all_td_pids()
+                        if p not in existing_pids]
+            pid = new_pids[0] if new_pids else None
         elif sys.platform == "win32":
             proc = subprocess.Popen(
                 [td_exe, toe_path],
@@ -1044,16 +1111,38 @@ def handle_launch_td(params, state):
     timeout = params.get("timeout", 120)
     project_path = params.get("project_path")
 
-    # Safety: check if TD is already running
-    existing_pid = find_td_pid()
-    if existing_pid and is_process_alive(existing_pid):
-        return {
-            "status": "error",
-            "message": (
-                f"TouchDesigner is already running (PID {existing_pid}). "
-                "Close it first or use get_td_status to check its state."
-            ),
-        }
+    with state:
+        config = state.config
+        config_path = state.config_path
+
+    # Resolve the target .toe so we can check whether THIS specific
+    # instance is already running. Other TDs (different .toe, unrelated
+    # projects) are fine -- launching alongside them is supported.
+    if project_path:
+        if not os.path.isabs(project_path) and config_path:
+            embody_dir = os.path.dirname(os.path.abspath(config_path))
+            git_root = os.path.dirname(embody_dir)
+            target_toe = os.path.join(git_root, project_path)
+        else:
+            target_toe = project_path
+    else:
+        target_toe = resolve_toe_path(config, config_path)
+
+    if target_toe:
+        target_basename = os.path.basename(target_toe)
+        if target_basename.endswith(".toe"):
+            target_basename = target_basename[:-4]
+        instance_info = config.get("instances", {}).get(target_basename, {})
+        existing_pid = instance_info.get("td_pid")
+        if existing_pid and is_process_alive(existing_pid):
+            return {
+                "status": "error",
+                "message": (
+                    f'Instance "{target_basename}" is already running '
+                    f"(PID {existing_pid}). Use switch_instance to use "
+                    "it, or close it first to relaunch."
+                ),
+            }
 
     # Crash-loop guard
     now = time.monotonic()
@@ -1070,12 +1159,14 @@ def handle_launch_td(params, state):
             ),
         }
 
+    # Snapshot existing TD PIDs so launch_td can identify the spawned
+    # process by exclusion on macOS.
+    pre_launch_pids = find_all_td_pids()
+
     # Launch
-    with state:
-        config = state.config
-        config_path = state.config_path
     success, message, pid = launch_td(config, config_path,
-                                      project_path=project_path)
+                                      project_path=project_path,
+                                      existing_pids=pre_launch_pids)
     if not success:
         return {"status": "error", "message": message}
 

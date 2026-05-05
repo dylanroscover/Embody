@@ -331,6 +331,18 @@ def onProjectPostSave():
 	except Exception as e:
 		print(f'Embody > project.json update failed: {e}')
 
+	# Walk the envoy.json registry forward across TD's save-time version
+	# bump (e.g. Foo-5.398.toe -> Foo-5.399.toe). When Envoy doesn't
+	# restart (Off/Export modes, no strip), the registry would otherwise
+	# stay pointed at the now-renamed .toe, leaving the bridge unable to
+	# locate the live instance. Idempotent when the basename hasn't
+	# changed.
+	try:
+		if parent.Embody.par.Envoyenable.eval():
+			parent.Embody.ext.Envoy.RefreshRegistry()
+	except Exception as e:
+		print(f'Embody > RefreshRegistry failed: {e}')
+
 	# In Perform Mode, nothing was stripped, so skip post-save refresh/restart.
 	if parent.Embody.ext.Embody._performMode:
 		return

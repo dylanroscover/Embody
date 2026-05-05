@@ -281,24 +281,81 @@ def load_config(config_path):
         return {}
 
 
+def find_latest_versioned_toe(toe_path):
+    """If ``toe_path`` is missing, find a version-bumped sibling.
+
+    TD's project save increments the trailing numeric segment of the
+    .toe filename (``Foo-5.398.toe`` -> ``Foo-5.399.toe``). When the
+    registry references the older name, the bridge still needs to
+    locate the live file. Strips the trailing ``<digits>.toe`` to
+    derive a prefix, scans the directory for siblings matching that
+    prefix, and returns the path with the highest extant numeric
+    suffix. Returns the input unchanged when it already exists, when
+    the directory does not exist, or when no versioned siblings are
+    found. The bridge does NOT rewrite envoy.json from this resolution
+    path -- registry mutation stays Embody's responsibility.
+    """
+    if os.path.isfile(toe_path):
+        return toe_path
+    directory = os.path.dirname(toe_path) or "."
+    if not os.path.isdir(directory):
+        return toe_path
+    basename = os.path.basename(toe_path)
+    m = re.match(r"^(.*?)(\d+)\.toe$", basename)
+    if not m:
+        return toe_path
+    prefix = m.group(1)
+    pattern = re.compile(
+        r"^" + re.escape(prefix) + r"(\d+)\.toe$")
+    best_n = -1
+    best_path = toe_path
+    try:
+        entries = os.listdir(directory)
+    except OSError:
+        return toe_path
+    for entry in entries:
+        m2 = pattern.match(entry)
+        if not m2:
+            continue
+        n = int(m2.group(1))
+        if n > best_n:
+            best_n = n
+            best_path = os.path.join(directory, entry)
+    if best_n >= 0 and best_path != toe_path:
+        log(f"Resolved stale toe_path to versioned sibling: "
+            f"{os.path.basename(toe_path)} -> {os.path.basename(best_path)}")
+    return best_path
+
+
 def resolve_toe_path(config, config_path):
     """Resolve the .toe path from config (relative to git root).
 
-    toe_path in envoy.json is always relative to the git root.
-    The config file lives at .embody/envoy.json, so we go up one
-    level from the config's parent directory to reach the git root.
+    Reads ``toe_path`` from ``instances[active]`` when the registry is
+    in multi-instance format, falling back to the top-level
+    ``toe_path`` key for legacy flat configs. If the resolved file is
+    missing, attempts to walk forward to a version-bumped sibling
+    (TD's save-time auto increment renames the .toe; the registry
+    may lag).
     """
-    toe = config.get("toe_path")
+    instances = config.get("instances", {})
+    active = config.get("active")
+    toe = None
+    if active and active in instances:
+        toe = instances[active].get("toe_path")
+    if not toe:
+        toe = config.get("toe_path")  # legacy flat format
     if not toe:
         return None
     if os.path.isabs(toe):
-        return toe
-    # Config is in .embody/ -- git root is one level up
-    if config_path:
+        absolute = toe
+    elif config_path:
+        # Config is in .embody/ -- git root is one level up
         embody_dir = os.path.dirname(os.path.abspath(config_path))
         git_root = os.path.dirname(embody_dir)
-        return os.path.join(git_root, toe)
-    return toe
+        absolute = os.path.join(git_root, toe)
+    else:
+        absolute = toe
+    return find_latest_versioned_toe(absolute)
 
 
 def load_project_config(config_path):

@@ -1537,13 +1537,52 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertIn('envoy.json', result['message'])
 
     def test_launch_td_already_running(self):
-        """Refuses to launch if TD is already running."""
-        with patch.object(bridge, 'find_td_pid', return_value=os.getpid()):
-            state = self._make_state(
-                config={'td_executable': '/usr/bin/td', 'toe_path': 'test.toe'})
-            result = bridge.handle_launch_td({}, state)
+        """Refuses to launch if THIS specific instance is already running.
+
+        The instance-specific guard (replaced the v5.0.398 blanket
+        "any TD running" check) only fires when the target .toe's
+        registered PID is alive. Other TDs are passed through.
+        """
+        my_pid = os.getpid()
+        config = {
+            'td_executable': '/usr/bin/td',
+            'active': 'test',
+            'instances': {
+                'test': {'toe_path': 'dev/test.toe',
+                         'port': 9870, 'td_pid': my_pid},
+            },
+        }
+        state = self._make_state(config=config,
+                                  config_path='/tmp/.embody/envoy.json')
+        result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
         self.assertIn('already running', result['message'])
+        self.assertIn('"test"', result['message'])
+
+    def test_launch_td_unrelated_td_running(self):
+        """Other TDs (different .toe, no registry entry) are NOT a
+        block. The new guard only refuses when the TARGET instance
+        is already alive -- launching alongside unrelated projects
+        is supported as of v5.0.400."""
+        config = {
+            'td_executable': '/nonexistent/TD.app',
+            'active': 'target',
+            'instances': {
+                'target': {'toe_path': 'dev/target.toe',
+                           'port': 9870, 'td_pid': 0},
+                'unrelated': {'toe_path': 'dev/unrelated.toe',
+                              'port': 9871, 'td_pid': os.getpid()},
+            },
+        }
+        state = self._make_state(config=config,
+                                  config_path='/tmp/.embody/envoy.json')
+        result = bridge.handle_launch_td({}, state)
+        # Falls through past the instance guard to the executable
+        # check (which fails because the path is fake) -- proves the
+        # blanket guard is gone.
+        self.assertEqual(result['status'], 'error')
+        self.assertNotIn('already running', result['message'])
+        self.assertIn('not found', result['message'].lower())
 
     def test_launch_td_crash_loop_guard(self):
         """Refuses after too many recent launches."""
@@ -2406,5 +2445,144 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
             bad_lines, [],
             f'{len(bad_lines)} corrupt lines (lock not serializing stdout writes): '
             f'{bad_lines[:5]}')
+
+
+# =====================================================================
+# .toe path resolution & version-iteration walk-forward
+# =====================================================================
+
+class TestBridgeVersionIteration(EmbodyTestCase):
+    """find_latest_versioned_toe walks forward across TD's save-time
+    auto-increment when the registry references an older basename."""
+
+    def setUp(self):
+        super().setUp()
+        import tempfile
+        self._tmp = tempfile.mkdtemp(prefix='envoy_bridge_test_')
+
+    def tearDown(self):
+        import shutil
+        try:
+            shutil.rmtree(self._tmp, ignore_errors=True)
+        except Exception:
+            pass
+        super().tearDown()
+
+    def _touch(self, name):
+        path = os.path.join(self._tmp, name)
+        with open(path, 'w') as f:
+            f.write('')
+        return path
+
+    def test_returns_input_when_file_exists(self):
+        target = self._touch('Embody-5.398.toe')
+        self.assertEqual(bridge.find_latest_versioned_toe(target), target)
+
+    def test_walks_forward_to_higher_version(self):
+        self._touch('Embody-5.399.toe')
+        stale = os.path.join(self._tmp, 'Embody-5.398.toe')
+        result = bridge.find_latest_versioned_toe(stale)
+        self.assertEqual(os.path.basename(result), 'Embody-5.399.toe')
+
+    def test_picks_highest_among_many(self):
+        for n in (391, 393, 397, 401, 399):
+            self._touch(f'Embody-5.{n}.toe')
+        stale = os.path.join(self._tmp, 'Embody-5.388.toe')
+        result = bridge.find_latest_versioned_toe(stale)
+        self.assertEqual(os.path.basename(result), 'Embody-5.401.toe')
+
+    def test_no_siblings_returns_input(self):
+        stale = os.path.join(self._tmp, 'Embody-5.398.toe')
+        result = bridge.find_latest_versioned_toe(stale)
+        self.assertEqual(result, stale)
+
+    def test_unrelated_files_ignored(self):
+        self._touch('SomethingElse.5.398.toe')
+        self._touch('Embody.txt')
+        stale = os.path.join(self._tmp, 'Embody-5.398.toe')
+        result = bridge.find_latest_versioned_toe(stale)
+        self.assertEqual(result, stale)
+
+    def test_nondigit_suffix_no_walk(self):
+        """A basename that doesn't end in <digits>.toe gets no walk."""
+        self._touch('Project.toe')
+        stale = os.path.join(self._tmp, 'Project.toe')
+        result = bridge.find_latest_versioned_toe(stale)
+        self.assertEqual(result, stale)
+
+    def test_directory_missing_returns_input(self):
+        stale = '/nonexistent/path/Embody-5.398.toe'
+        result = bridge.find_latest_versioned_toe(stale)
+        self.assertEqual(result, stale)
+
+
+class TestBridgeResolveToePath(EmbodyTestCase):
+    """resolve_toe_path reads from instances[active] (multi-instance
+    format) and falls back to legacy flat config. Walks forward when
+    the resolved file is missing."""
+
+    def setUp(self):
+        super().setUp()
+        import tempfile
+        self._tmp = tempfile.mkdtemp(prefix='envoy_resolve_test_')
+        # Mimic git_root/.embody/envoy.json layout
+        self._embody_dir = os.path.join(self._tmp, '.embody')
+        os.makedirs(self._embody_dir, exist_ok=True)
+        self._config_path = os.path.join(self._embody_dir, 'envoy.json')
+        self._dev_dir = os.path.join(self._tmp, 'dev')
+        os.makedirs(self._dev_dir, exist_ok=True)
+
+    def tearDown(self):
+        import shutil
+        try:
+            shutil.rmtree(self._tmp, ignore_errors=True)
+        except Exception:
+            pass
+        super().tearDown()
+
+    def _touch_dev(self, name):
+        path = os.path.join(self._dev_dir, name)
+        with open(path, 'w') as f:
+            f.write('')
+        return path
+
+    def test_multi_instance_format(self):
+        target = self._touch_dev('Embody-5.398.toe')
+        config = {
+            'active': 'Embody-5.398',
+            'instances': {
+                'Embody-5.398': {'toe_path': 'dev/Embody-5.398.toe',
+                                 'port': 9870, 'td_pid': 1}
+            },
+        }
+        result = bridge.resolve_toe_path(config, self._config_path)
+        self.assertEqual(result, target)
+
+    def test_multi_instance_walks_forward(self):
+        """Active points at an older .toe; the bridge walks forward."""
+        self._touch_dev('Embody-5.399.toe')
+        config = {
+            'active': 'Embody-5.398',
+            'instances': {
+                'Embody-5.398': {'toe_path': 'dev/Embody-5.398.toe',
+                                 'port': 9870, 'td_pid': 1}
+            },
+        }
+        result = bridge.resolve_toe_path(config, self._config_path)
+        self.assertEqual(os.path.basename(result), 'Embody-5.399.toe')
+
+    def test_legacy_flat_format(self):
+        target = self._touch_dev('Project.toe')
+        config = {'toe_path': 'dev/Project.toe'}
+        result = bridge.resolve_toe_path(config, self._config_path)
+        self.assertEqual(result, target)
+
+    def test_empty_config_returns_none(self):
+        self.assertIsNone(bridge.resolve_toe_path({}, self._config_path))
+
+    def test_active_missing_from_instances(self):
+        """active key not in instances -- fall back to legacy then None."""
+        config = {'active': 'GhostInstance', 'instances': {}}
+        self.assertIsNone(bridge.resolve_toe_path(config, self._config_path))
 
 
