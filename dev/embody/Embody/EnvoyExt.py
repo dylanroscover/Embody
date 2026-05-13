@@ -1701,11 +1701,11 @@ class EnvoyExt:
                     if info.get('port') == port:
                         other_pid = info.get('td_pid', 0)
                         if other_pid and other_pid != my_pid:
-                            try:
-                                _os.kill(other_pid, 0)
+                            # Use the shared safe liveness check -- a raw
+                            # os.kill(other_pid, 0) here would silently
+                            # TerminateProcess() the foreign TD on Windows.
+                            if EnvoyExt._isPidAlive(other_pid):
                                 return True  # Another live instance owns this port
-                            except (ProcessLookupError, PermissionError):
-                                pass  # Dead PID, stale entry
             except Exception:
                 pass
             return False
@@ -2706,14 +2706,12 @@ class EnvoyExt:
             import td as _td
             version = _td.app.version
             build = _td.app.build
-            os_name = _td.app.osName
-            # TD reports "Windows 10" on Win 11 (same NT 10.0 kernel).
-            if os_name == 'Windows 10':
-                try:
-                    if sys.getwindowsversion().build >= 22000:
-                        os_name = 'Windows 11'
-                except AttributeError:
-                    pass
+            # app.osName reports "Windows 10" on Win 11 (same NT 10.0 kernel);
+            # EmbodyExt._osLabel() disambiguates via the build number.
+            try:
+                os_name = self.ownerComp.ext.Embody._osLabel()
+            except Exception:
+                os_name = _td.app.osName
             return {
                 'server': f'TouchDesigner {version}.{build}',
                 'version': f'{version}.{build}',
@@ -4666,14 +4664,48 @@ class EnvoyExt:
 
     @staticmethod
     def _isPidAlive(pid):
-        """Check if a process with the given PID is alive."""
-        import os
-        if not pid:
+        """Check whether a process with the given PID is alive.
+
+        CRITICAL: do NOT use ``os.kill(pid, 0)`` on Windows.  CPython's
+        posixmodule implements ``os.kill`` on Windows via
+        ``OpenProcess(PROCESS_ALL_ACCESS, …)`` + ``TerminateProcess(handle, sig)``
+        regardless of ``sig`` -- when called with ``sig=0`` on a foreign
+        TD process Embody has access to, it would silently terminate that
+        process with exit code 0.  And when the PID is invalid in a
+        particular way (e.g. registry corruption, a wrapped-around PID,
+        a non-int), ``OpenProcess`` returns ``INVALID_HANDLE_VALUE``
+        instead of NULL; the subsequent ``TerminateProcess`` fails with
+        ``WinError 87`` and CPython's wrapper raises ``OSError`` *while
+        leaving the interpreter thread state inconsistent*, surfacing as
+        ``SystemError: <class 'OSError'> returned a result with an
+        exception set`` and intermittently aborting the process on the
+        next interpreter tick.  Mirror the bridge's safe pattern instead.
+        """
+        if not isinstance(pid, int) or pid <= 0:
             return False
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                kernel32 = ctypes.windll.kernel32
+                SYNCHRONIZE = 0x00100000
+                handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+                if handle:
+                    kernel32.CloseHandle(handle)
+                    return True
+                return False
+            except Exception:
+                return False
+        # POSIX: signal 0 is a real no-op liveness check.  Catch
+        # OverflowError too -- pid_t is int32 on most kernels and a
+        # registry that's been corrupted with a giant value would
+        # otherwise propagate the overflow up through _writeEnvoyConfig.
+        import os
         try:
             os.kill(pid, 0)
             return True
-        except (OSError, ProcessLookupError):
+        except (ProcessLookupError, PermissionError):
+            return False
+        except (OSError, OverflowError, ValueError):
             return False
 
     def _writeEnvoyConfig(self, embody_dir, port):

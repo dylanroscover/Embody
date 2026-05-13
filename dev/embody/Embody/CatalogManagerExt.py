@@ -58,6 +58,12 @@ class CatalogManagerExt:
 		self._palette_queue = []          # list of rel_path strings
 		self._palette_results = {}        # {name: placed_type}
 		self._palette_workspace = None
+		# Timeline / cook state snapshot, taken before the palette scan.
+		# Loading some palette .tox files runs their init code, which can
+		# mutate GLOBAL timeline state (pause playback, change cookRate).
+		# We restore the snapshot after every chunk so a misbehaving
+		# component can't leave the timeline paused.
+		self._time_snapshot = None
 
 	def onDestroyTD(self):
 		"""Clean up workspace if scan was interrupted."""
@@ -301,6 +307,10 @@ class CatalogManagerExt:
 		# Store op_catalog for combined write in _finalizePaletteScan
 		self._op_catalog_pending = op_catalog
 
+		# Snapshot global timeline/cook state — loading palette components
+		# can mutate it, and we must hand it back untouched.
+		self._snapshotTimeState()
+
 		run('args[0]._processPaletteChunk()', self, delayFrames=1)
 
 	def _processPaletteChunk(self):
@@ -360,6 +370,10 @@ class CatalogManagerExt:
 				if existing:
 					existing.destroy()
 
+		# Loading a palette component may have paused playback or changed
+		# the cook rate — undo any global side effects before yielding.
+		self._restoreTimeState()
+
 		done = len(self._palette_results)
 		self.ownerComp.par.Status = f'Scanning palette ({done}/{total})'
 
@@ -378,6 +392,10 @@ class CatalogManagerExt:
 			except Exception:
 				pass
 			self._palette_workspace = None
+
+		# Final restore in case the last chunk left state dirty.
+		self._restoreTimeState()
+		self._time_snapshot = None
 
 		self._log(
 			f'Palette scan complete: {len(self._palette_results)} components')
@@ -777,6 +795,45 @@ class CatalogManagerExt:
 			except Exception:
 				pass
 			self._workspace = None
+
+	# --- Timeline / cook state guard (around the palette scan) ---------
+
+	# Global state that loading a palette .tox can clobber. Each entry is
+	# (label, getter, setter) over the relevant object.
+	def _timeStateAccessors(self):
+		tl = self.ownerComp.time
+		return [
+			('play', lambda: tl.play, lambda v: setattr(tl, 'play', v)),
+			('rate', lambda: tl.rate, lambda v: setattr(tl, 'rate', v)),
+			('cookRate', lambda: project.cookRate,
+			 lambda v: setattr(project, 'cookRate', v)),
+			('realTime', lambda: project.realTime,
+			 lambda v: setattr(project, 'realTime', v)),
+		]
+
+	def _snapshotTimeState(self):
+		"""Capture global timeline/cook state before the palette scan."""
+		snap = {}
+		for label, get, _set in self._timeStateAccessors():
+			try:
+				snap[label] = get()
+			except Exception:
+				pass
+		self._time_snapshot = snap
+
+	def _restoreTimeState(self):
+		"""Restore any global timeline/cook state a palette load changed."""
+		snap = self._time_snapshot
+		if not snap:
+			return
+		for label, get, set_ in self._timeStateAccessors():
+			if label not in snap:
+				continue
+			try:
+				if get() != snap[label]:
+					set_(snap[label])
+			except Exception:
+				pass
 
 	def _log(self, msg, level='INFO'):
 		"""Log via Embody's logging system."""

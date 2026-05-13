@@ -21,12 +21,11 @@ def version(version):
     return new_version
 
 def updateReadme(build, version):
-    # load the file into file_content
-    with open(readme, 'r') as f:
+    # README contains emoji; pin UTF-8 so locale-default codecs don't crash.
+    with open(readme, 'r', encoding='utf-8') as f:
         file_content = f.readlines()
 
-    # Overwrite it
-    with open(readme, 'w') as writer:
+    with open(readme, 'w', encoding='utf-8') as writer:
         for line in file_content:
             # We search for the correct section
             build_pre = '#### :floppy_disk: TouchDesigner'

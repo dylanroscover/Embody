@@ -26,6 +26,10 @@
 - Before editing a file, verify it is the ACTUAL file responsible. Grep and trace the render path before making changes.
 - Avoid over-engineering. Prefer minimal, targeted changes.
 - When debugging, state your hypothesis, verify with evidence, then fix.
+- Define success criteria before you start, then loop until you've verified them — don't just run steps and declare done.
+- Checkpoint after each significant step: what changed, what's verified, what's left. Don't continue from a state you can't describe.
+- Fail loud — "done" is wrong if anything was skipped silently, "tests pass" is wrong if any were skipped. Surface uncertainty; don't bury it.
+- Surface conflicts, don't average them: when two patterns or rules contradict, pick one (more recent / more tested), say why, flag the other for cleanup — never silently reconcile.
 
 ## Project Structure
 

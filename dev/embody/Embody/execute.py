@@ -10,7 +10,7 @@ def init():
 	parent.Embody.Log(
 		f"Embody v{parent.Embody.par.Version.eval()} | "
 		f"TouchDesigner {app.version}.{app.build} | "
-		f"{app.osName} {app.osVersion}"
+		f"{parent.Embody.ext.Embody._osLabel()}"
 	)
 	# Prevent Envoy from auto-starting before init completes.
 	# The release .tox may bake in Envoyenable=True and Envoystatus=Running;

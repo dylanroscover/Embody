@@ -544,28 +544,48 @@ def select_td_install(target_build, fallback_exe=None, installs=None):
 # Process management
 # ---------------------------------------------------------------------------
 
-def _is_bridge_process(pid):
-    """Check if a PID is an envoy-bridge process (not actual TouchDesigner).
-
-    The bridge runs TD's bundled Python, so pgrep -f TouchDesigner matches
-    it.  This helper reads the process cmdline and returns True if it
-    contains 'envoy-bridge' or 'envoy_bridge'.
-    """
+def _process_cmdline(pid):
+    """Return the full command line for a PID, or '' if unavailable."""
     try:
         cmdline_path = f"/proc/{pid}/cmdline"
         if os.path.exists(cmdline_path):
             with open(cmdline_path, "r") as f:
-                cmdline = f.read()
-        else:
-            # macOS
-            result = subprocess.run(
-                ["ps", "-p", str(pid), "-o", "args="],
-                capture_output=True, text=True, timeout=5,
-            )
-            cmdline = result.stdout
-        return "envoy-bridge" in cmdline or "envoy_bridge" in cmdline
+                return f.read().replace("\x00", " ")
+        # macOS / BSD
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "args="],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.stdout
     except (OSError, subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+        return ""
+
+
+def _is_bridge_process(pid):
+    """Check if a PID is an envoy-bridge process (not actual TouchDesigner).
+
+    The bridge runs TD's bundled Python, so pgrep -f TouchDesigner matches
+    it.  Returns True if the process cmdline contains 'envoy-bridge' or
+    'envoy_bridge'.
+    """
+    cmdline = _process_cmdline(pid)
+    return "envoy-bridge" in cmdline or "envoy_bridge" in cmdline
+
+
+# Bundled helper / CEF subprocesses inside TouchDesigner.app share the
+# "TouchDesigner" executable name, so `pgrep -f TouchDesigner` matches them
+# too.  They are not TD instances -- CEF recycles its GPU/renderer children
+# every few seconds, which would otherwise flood the bridge log with phantom
+# "new TD process" churn and trigger needless config re-reads.  The Web Render
+# helper ("TouchDesigner Web Render.app") is the common one; CEF children also
+# carry a "--type=" flag.
+_TD_HELPER_MARKERS = ("Web Render", "--type=")
+
+
+def _is_td_helper_process(pid):
+    """True if PID is a bundled TD helper/CEF subprocess, not a TD instance."""
+    cmdline = _process_cmdline(pid)
+    return any(marker in cmdline for marker in _TD_HELPER_MARKERS)
 
 
 def find_all_td_pids():
@@ -616,6 +636,8 @@ def find_all_td_pids():
                 if pid == my_pid:
                     continue
                 if _is_bridge_process(pid):
+                    continue
+                if _is_td_helper_process(pid):
                     continue
                 pids.append(pid)
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):

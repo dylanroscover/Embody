@@ -259,3 +259,73 @@ class TestRegistryDeadPidGC(EmbodyTestCase):
         finally:
             import shutil
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+class TestIsPidAliveSafety(EmbodyTestCase):
+    """Cover the real EnvoyExt._isPidAlive (not a mock).
+
+    The original implementation used os.kill(pid, 0).  On Windows that
+    is *not* a liveness check -- CPython's posixmodule routes it through
+    OpenProcess(PROCESS_ALL_ACCESS, ...) + TerminateProcess(handle, 0),
+    which kills foreign TD processes Embody had access to AND, when the
+    PID is invalid in certain ways, raises an OSError that leaves the
+    interpreter thread state inconsistent (SystemError: returned a
+    result with an exception set), intermittently aborting the process.
+
+    These tests pin the safe contract: never raise, never terminate
+    anything, handle every garbage input by returning False.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.envoy = self.embody.ext.Envoy
+
+    def test_zero_is_dead(self):
+        self.assertFalse(self.envoy._isPidAlive(0))
+
+    def test_none_is_dead(self):
+        self.assertFalse(self.envoy._isPidAlive(None))
+
+    def test_negative_is_dead(self):
+        # Bare os.kill(-1, 0) on POSIX broadcasts to a process group and
+        # on Windows wraps to a giant DWORD.  Must be a clean False.
+        self.assertFalse(self.envoy._isPidAlive(-1))
+        self.assertFalse(self.envoy._isPidAlive(-99999))
+
+    def test_string_pid_is_dead(self):
+        # Corrupt registries have surfaced non-int PIDs before; the safe
+        # path must reject them without raising.
+        self.assertFalse(self.envoy._isPidAlive('12345'))
+        self.assertFalse(self.envoy._isPidAlive(''))
+
+    def test_bool_pid_is_dead(self):
+        # bool is technically an int subclass but is never a real PID.
+        # isinstance(True, int) is True, but pid<=0 catches False and
+        # True (1) is too low to be a real Windows/macOS process id.
+        # Both must be safe; behaviour doesn't matter as long as no
+        # SystemError leaks.
+        try:
+            self.envoy._isPidAlive(True)
+            self.envoy._isPidAlive(False)
+        except SystemError:
+            self.fail('_isPidAlive must not raise SystemError on bool input')
+
+    def test_huge_pid_is_dead_without_systemerror(self):
+        # 4-billion-ish wraps a DWORD on Windows.  Older implementation
+        # crashed here with `SystemError: returned a result with an
+        # exception set`; this test pins the safe contract.
+        try:
+            result = self.envoy._isPidAlive(2 ** 31)
+        except SystemError as e:
+            self.fail(f'_isPidAlive must not surface SystemError: {e}')
+        self.assertFalse(result)
+
+    def test_own_pid_is_alive(self):
+        """The TD process is alive -- its own PID must report True."""
+        self.assertTrue(self.envoy._isPidAlive(os.getpid()))
+
+    def test_definitely_dead_pid_is_dead(self):
+        """A PID far beyond any plausible live process must report False."""
+        # 0x7FFFFFFE is just below INT32_MAX -- well outside the live PID
+        # range on any sane OS, and not a special-cased ID.
+        self.assertFalse(self.envoy._isPidAlive(0x7FFFFFFE))

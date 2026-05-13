@@ -276,10 +276,22 @@ class EmbodyExt:
         install or load-time failure (missing native dep, etc.) would still
         leave the server unable to start. Catching it here yields a useful
         textport message instead of an inscrutable traceback at run time.
+
+        Fast path: if mcp.server is already in sys.modules, a previous Start()
+        in this session already imported it successfully -- return True without
+        touching sys.modules.  Tearing down and re-importing mcp.* on top of an
+        already-loaded pydantic_core (Rust C extension) can panic the
+        validator and abort() the process with no Python traceback -- the
+        "TD just closes on Envoy toggle off/on" crash users hit on 5.0.393+.
         """
+        if 'mcp.server' in sys.modules:
+            return True
         try:
             import importlib
-            # Drop any cached failed import so the retry actually re-runs the loader
+            # First import attempt of this session, or recovery from a prior
+            # failed import: clear any half-loaded mcp.* entries so the loader
+            # genuinely re-runs (a failed import leaves the parent package
+            # behind but not the submodule).
             for mod in list(sys.modules):
                 if mod == 'mcp' or mod.startswith('mcp.'):
                     del sys.modules[mod]
@@ -1133,6 +1145,35 @@ class EmbodyExt:
 
         if migrations:
             self.Log(f'Schema migration: added {", ".join(migrations)}', 'SUCCESS')
+
+    @staticmethod
+    def _resolveOsLabel(os_name: str, os_version: str, win_build) -> str:
+        """Pure OS-label resolution, isolated from TD globals for testability.
+
+        TouchDesigner's ``app.osVersion`` reports ``"10"`` on Windows 11 -- both
+        Windows 10 and 11 share NT kernel version 10.0, so the only reliable
+        discriminator is the build number: 22000+ means Windows 11. ``win_build``
+        is ``sys.getwindowsversion().build`` (an int), or ``None`` when that
+        probe is unavailable (i.e. not running on Windows). On macOS / genuine
+        Windows 10 the label passes through unchanged.
+        """
+        label = f'{os_name} {os_version}'.strip()
+        if 'Windows' in os_name and '11' not in label:
+            if win_build is not None and win_build >= 22000:
+                label = 'Windows 11'
+        return label
+
+    @staticmethod
+    def _osLabel() -> str:
+        """Human-readable OS label for logs and diagnostics, fixed for Win 11.
+
+        See _resolveOsLabel for why this can't just trust app.osName/osVersion.
+        """
+        try:
+            win_build = sys.getwindowsversion().build
+        except (AttributeError, OSError):
+            win_build = None  # Not Windows, or the probe isn't available.
+        return EmbodyExt._resolveOsLabel(app.osName, app.osVersion, win_build)
 
     # ==========================================================================
     # SETTINGS PERSISTENCE

@@ -39,3 +39,9 @@ SUBMISSIONS.md
 # User sandboxes
 sandbox/
 .release-drafts/
+
+# TouchDesigner-generated (TDPyEnvManager, 2025.32280+)
+dev/TDPyEnvManagerContext.yaml
+
+# One-off diagnostic dumps from users -- don't commit other people's project data
+tmp/
