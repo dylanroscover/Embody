@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
-	"version": "1.3",
-	"build": 451,
-	"generator": "Embody/5.0.405",
+	"version": "1.4",
+	"build": 463,
+	"generator": "Embody/5.0.412",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.406.toe",
-	"exported_at": "2026-05-13T05:37:40Z",
+	"source_file": "Embody-5.412.toe",
+	"exported_at": "2026-05-18T15:42:59Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -336,7 +336,8 @@
 			{
 				"name": "Refresh",
 				"style": "Pulse",
-				"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
+				"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
+				"value": true
 			},
 			{
 				"name": "Externalizeproject",
@@ -665,6 +666,15 @@
 				"value": "claudecode"
 			},
 			{
+				"name": "Aiprojectroot",
+				"style": "Menu",
+				"label": "AI Project Root",
+				"default": "gitroot",
+				"menuNames": ["gitroot", "projectfolder"],
+				"menuLabels": ["Git root", "Project folder (.toe directory)"],
+				"help": "Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). \"Git root\" (default) writes at the top of the git repo. \"Project folder\" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace."
+			},
+			{
 				"name": "Envoyenable",
 				"style": "Toggle",
 				"label": "Envoy Enable",
@@ -685,7 +695,7 @@
 				"label": "Envoy Status",
 				"readOnly": true,
 				"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-				"value": "Running on port 9870"
+				"value": "Running on port 9871"
 			}
 		],
 		"Logs": [
@@ -868,7 +878,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.405"
+				"value": "5.0.412"
 			},
 			{
 				"name": "Touchbuild",
@@ -891,7 +901,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 451
+				"value": 463
 			},
 			{
 				"name": "Github",
@@ -906,7 +916,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-05-13 05:37:40 UTC"
+				"value": "2026-05-18 15:42:59 UTC"
 			},
 			{
 				"name": "Help",
@@ -966,7 +976,8 @@
 		"claudius_running": false,
 		"_tdn_restore_failures": ["/embody/base1"],
 		"expand_order": [],
-		"_start_in_progress": true
+		"_start_in_progress": true,
+		"_init_complete": true
 	},
 	"operators": [
 		{
@@ -1229,7 +1240,7 @@
 				"file": "embody/Embody/EnvoyExt.py"
 			},
 			"position": [-300, 500],
-			"tags": ["py", "TDExtension"]
+			"tags": ["TDExtension", "py"]
 		},
 		{
 			"name": "mousein1",

@@ -125,6 +125,7 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 | `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
 | `sequences` | object | No | Only if the operator has built-in parameter sequences with non-default block counts or values. See [Built-in Parameter Sequences](#built-in-parameter-sequences). *Added in v1.3.* |
 | `tdn_ref` | string | No | Only for COMPs with their own TDN externalization. Relative file path to the child's `.tdn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
+| `tox_ref` | string | No | Only for COMPs with their own TOX externalization. Relative file path to the child's `.tox` file. Mutually exclusive with `children`. See [TOX References](#tox-references-tox_ref). *Added in v1.4.* |
 
 ### Compact Formatting
 
@@ -930,6 +931,43 @@ Mismatches produce warnings, not errors — the COMP shell is always created reg
 - Files **without** `tdn_ref` (TDN v1.1 and earlier) continue to work. The existing `_stripNestedTDNChildren` mechanism handles them via the externalizations table.
 - Files **with** `tdn_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The `_stripNestedTDNChildren` path handles the nested COMP correctly as a fallback.
 - The `embed_all=True` export option suppresses `tdn_ref` and inlines all children, producing a fully self-contained file regardless of child externalization status.
+
+### TOX References (`tox_ref`)
+
+*Added in TDN v1.4.*
+
+The same ownership principle applies when a child COMP is externalized as `.tox` instead of `.tdn`. The parent's operator definition for that child includes a `tox_ref` field instead of a `children` array:
+
+```json
+{
+  "name": "wave_speed",
+  "type": "sliderCOMP",
+  "tags": ["tox"],
+  "tox_ref": "Embody/project1/wave_speed.tox",
+  "position": [475, 425]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `tox_ref` | `string` | Relative file path from the externalization folder to the child's `.tox` file. |
+
+**Mutually exclusive with `children`**: When `tox_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced `.tox` file. This prevents the parent `.tdn` from duplicating the contents of the child `.tox`, which would otherwise pollute `type_defaults` with the child's internal operator types and bloat the parent file.
+
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. `externaltox` is **not** present in the parent `.tdn`'s parameter dict (it's an Embody-managed parameter, excluded from TDN export). Instead, the importer stores the `tox_ref` path on the new shell as `_pending_tox_restore` storage, then a post-import phase (`_restoreTOXShells`) sets `externaltox` from that marker and calls `_reloadTox` to load the `.tox` content immediately. This means the `.tox` content is fully restored after import — both for runtime imports (e.g. `import_network` via MCP) and for project-open reconstruction. `RestoreTOXComps` (frame 45) still handles the case where the parent `.tdn` is not re-imported and the table is the only source.
+
+**TOX vs TDN, when to use which**:
+
+- **TOX**: opaque binary encapsulation. The `.tox` is a single self-contained file, fast to load, but not git-diffable. Suitable for palette widgets, third-party COMPs, and anything where you don't need text-level review of internals.
+- **TDN**: text/JSON snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
+
+Both strategies receive the same ownership treatment in parent `.tdn` files — neither embeds children into the parent. The strategy choice is about the **child file format**, not whether the parent embeds.
+
+**Backward compatibility**:
+
+- Pre-v1.4 `.tdn` files that embedded TOX children's contents still import correctly: on import, `_stripNestedTOXChildren` consults the externalizations table and clears any embedded `children` for TOX-tagged paths. The COMP shell is created and `RestoreTOXComps` loads from the `.tox` file.
+- Files **with** `tox_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The strip path handles the nested COMP correctly as a fallback.
+- The `embed_all=True` export option suppresses `tox_ref` and inlines all children.
 
 ### Palette Clones
 

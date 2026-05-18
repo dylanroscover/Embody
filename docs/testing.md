@@ -80,7 +80,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_tdn_export_import` | 26 | Network export/import |
 | `test_tdn_helpers` | 25 | TDN utility functions |
 | `test_tdn_reconstruction` | 124 | Reconstruction round-trip fidelity |
-| `test_tdn_file_io` | 66 | TDN file output, per-comp splitting, stale cleanup |
+| `test_tdn_file_io` | 92 | TDN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
 
 ### Infrastructure (1 suite)
 

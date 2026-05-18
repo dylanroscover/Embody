@@ -17,6 +17,11 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 
 - **Envoy Enable** — Toggle the MCP server on/off
 - **Envoy Port** — Port number for the MCP server (default: 9870)
+- **AI Client** — Which AI coding assistant to generate config for (`Claude Code`, `Cursor`, `Copilot`, `Windsurf`, or `None`). Switching clients regenerates the corresponding files.
+- **AI Project Root** — Where Embody writes AI/MCP config files (`AGENTS.md`, `CLAUDE.md`, `.claude/`, `.cursor/`, `.mcp.json`, `.embody/`). Two modes:
+    - *Git root* (default) — config lives at the top of the git repository. This is the right choice when the whole repo is your AI tool's workspace.
+    - *Project folder (.toe directory)* — config lives next to the `.toe`. Use this when your TouchDesigner project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool's workspace (e.g. `myrepo/touchdesigner/` opened in Cursor or Claude Code).
+    Flipping the parameter migrates Embody's own state (`.embody/config.json`, `project.json`, palette catalogs, `.claude/settings.local.json`) to the new root and cleans up Embody-generated AI files at the old root. User-authored files (custom skills, hand-edited `CLAUDE.md`, other entries in `.mcp.json`) are preserved.
 
 ### Restoration
 

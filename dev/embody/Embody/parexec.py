@@ -31,6 +31,15 @@ def onValueChange(par, prev):
 		if parent.Embody.par.Envoyenable.eval():
 			op.Embody.ext.Embody._extractAIConfig()
 
+	elif par.name == 'Aiprojectroot':
+		# Move Embody's own state (.embody/config.json, project.json) to the
+		# new root first so _saveSettings (triggered by _deferSaveSettings
+		# below) writes alongside the migrated file rather than next to a
+		# stale copy. Then regenerate AI/MCP config at the new root.
+		parent.Embody.ext.Embody._migrateRootFiles(prev, par.eval())
+		if parent.Embody.par.Envoyenable.eval():
+			parent.Embody.InitEnvoy()
+
 	elif par.name == 'Envoyenable':
 		if par.eval():
 			# Defer Start and re-check -- gives init() time to suppress

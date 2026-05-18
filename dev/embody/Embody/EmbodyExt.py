@@ -53,7 +53,7 @@ class EmbodyExt:
     # Explicit whitelist -- new params default to "not persisted" until added.
     _PERSISTED_PARAMS = frozenset({
         # Core
-        'Folder', 'Envoyenable', 'Envoyport', 'Aiclient',
+        'Folder', 'Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot',
         # Tag names
         'Toxtag', 'Tdntag', 'Pytag', 'Csvtag', 'Dattag',
         'Htmltag', 'Jsontag', 'Mdtag', 'Rtftag', 'Txttag',
@@ -565,12 +565,21 @@ class EmbodyExt:
         keys remain.
         """
         responses = self.my.fetch('_smoke_test_responses', None, search=False)
-        if responses is not None and title in responses:
+        test_mode = responses is not None
+        if test_mode and title in responses:
             value = responses[title]
             if isinstance(value, list):
                 choice = value.pop(0) if value else None
                 if choice is None:
-                    return ui.messageBox(title, message, buttons=buttons)
+                    # List exhausted -- treat as a hard test failure (do NOT
+                    # fall back to ui.messageBox, which would freeze TD with
+                    # modal dialogs queued by the test).
+                    self.Log(
+                        f'[test] Response list exhausted for "{title}"; '
+                        f'returning -1 instead of opening modal dialog. '
+                        f'Seed a longer list if more invocations are expected.',
+                        'WARNING')
+                    return -1
                 if not value:
                     responses.pop(title)
             else:
@@ -579,6 +588,15 @@ class EmbodyExt:
             if not responses:
                 self.my.unstore('_smoke_test_responses')
             return choice
+        if test_mode:
+            # Test is running but no response was seeded for this title --
+            # bail with -1 instead of opening a modal that would freeze TD.
+            self.Log(
+                f'[test] No response seeded for "{title}"; returning -1 '
+                f'instead of opening modal dialog. Seed it via '
+                f'op.Embody.store("_smoke_test_responses", {{...}}).',
+                'WARNING')
+            return -1
         return ui.messageBox(title, message, buttons=buttons)
 
     def _promptEnvoy(self):
@@ -641,23 +659,334 @@ class EmbodyExt:
         )
 
     def _findProjectRoot(self):
-        """Find the git root, or fall back to project.folder.
+        """Where Embody writes AI config, MCP config, and its own state.
 
-        Checks the stored git root first (set by Start/InitGit), then
-        walks up from project.folder but stops before the home directory
-        to avoid picking up unrelated repos (e.g. dotfiles in ~).
+        Honors the Aiprojectroot parameter:
+          - 'gitroot' (default): the git repository root, found by walking
+            up from project.folder. This is where AI tools (Claude Code,
+            Cursor, etc.) expect AGENTS.md / .mcp.json / .claude/ to live
+            when the whole repo is the workspace.
+          - 'projectfolder': the directory containing the .toe. Use this
+            when the TD project lives in a subdirectory of a larger repo
+            and you open that subdirectory as your AI tool's workspace.
         """
+        # getattr-based access: lets older .toes without Aiprojectroot keep
+        # working with the legacy git-root behavior.
+        mode_par = getattr(self.my.par, 'Aiprojectroot', None)
+        mode = mode_par.eval() if mode_par is not None else 'gitroot'
+        return self._rootForMode(mode)
+
+    def _rootForMode(self, mode):
+        """Resolve a root directory for a given Aiprojectroot mode value.
+
+        Used by _findProjectRoot() and by _migrateRootFiles() to compute
+        both the old and new candidate roots when the parameter flips.
+        """
+        project_dir = Path(project.folder).resolve()
+        if mode == 'projectfolder':
+            return project_dir
+
+        # gitroot: prefer the stored git root from Start/InitGit, else
+        # walk up from project.folder looking for .git.
         git_root = self.my.fetch('_git_root', None, search=False)
         if git_root and git_root != 'no-git':
             return Path(git_root) if not isinstance(git_root, Path) else git_root
-        project_dir = Path(project.folder)
-        home_dir = Path.home()
+
+        # Walk up looking for .git. The home_dir guard prevents picking up
+        # an unrelated repo (e.g. ~/.dotfiles) when project.folder is inside
+        # the home directory. But only apply it when home_dir is actually
+        # an ancestor — otherwise (e.g. a Windows project on D:\) the part-
+        # count comparison wrongly bailed before searching at all (issue #19).
+        try:
+            home_dir = Path.home().resolve()
+        except Exception:
+            home_dir = None
+        home_is_ancestor = bool(
+            home_dir and (home_dir == project_dir or home_dir in project_dir.parents)
+        )
         for parent_dir in [project_dir] + list(project_dir.parents):
-            if parent_dir == home_dir or len(parent_dir.parts) <= len(home_dir.parts):
+            if home_is_ancestor and parent_dir == home_dir:
                 break
             if (parent_dir / '.git').exists():
                 return parent_dir
         return project_dir
+
+    # Marker present in every file Embody writes through _writeTemplate.
+    # Cleanup deletes only files containing this marker -- never touches
+    # user-authored content that happens to share a path.
+    _EMBODY_MARKER = '<!-- Generated by Embody/Envoy'
+
+    def _atomicMove(self, src, dst):
+        """Cross-filesystem-safe atomic move via copy-to-tmp + os.replace.
+
+        Plain shutil.move falls back to copy+delete across filesystems --
+        if interrupted mid-copy, dst may be a partial file. This helper
+        copies to a sibling tmp file, then os.replace's it into place
+        (atomic on a single filesystem), then unlinks src. A failed copy
+        leaves only tmp behind; dst is never in a half-written state.
+
+        Critical for palette catalog files (catalog_*.json), which are
+        large and not regenerated from settings on next load.
+        """
+        import os, shutil
+        src, dst = Path(src), Path(dst)
+        tmp = dst.with_name(dst.name + '.embody-migrate-tmp')
+        try:
+            shutil.copy2(str(src), str(tmp))
+            os.replace(str(tmp), str(dst))
+        except Exception:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            raise
+        try:
+            src.unlink()
+        except OSError as e:
+            self.Log(
+                f'Migration left source at {src}: {e}. The new copy at '
+                f'{dst} is valid; remove the source manually.',
+                'WARNING')
+
+    def _migrateRootFiles(self, old_mode, new_mode):
+        """Relocate Embody/AI config when Aiprojectroot flips.
+
+        Three passes:
+          1. Move Embody persistent state (.embody/config.json, project.json,
+             and palette catalogs which are expensive to regenerate).
+          2. Delete Embody-generated AI files at the old root that carry the
+             marker, plus the regeneratable .embody/ runtime files. Files
+             without the marker (e.g. user-authored .claude/skills/my-skill/)
+             are left untouched.
+          3. Surgically remove just the 'envoy' entry from the old .mcp.json
+             so any other MCP servers the user configured stay intact.
+          4. Prune empty Embody-owned directories.
+
+        AI-tool-facing files are then regenerated at the new root by
+        InitEnvoy() (called from parexec right after this method).
+        """
+        if old_mode == new_mode:
+            return
+        old_root = self._rootForMode(old_mode)
+        new_root = self._rootForMode(new_mode)
+        if old_root == new_root:
+            return
+
+        # --- Pass 1: move Embody persistent state to new root ---
+        moves = [old_root / '.embody' / 'config.json',
+                 old_root / '.embody' / 'project.json']
+        old_embody = old_root / '.embody'
+        if old_embody.is_dir():
+            moves.extend(sorted(old_embody.glob('catalog_*.json')))
+        critical_srcs = [old_root / '.embody' / 'config.json',
+                         old_root / '.embody' / 'project.json']
+        for src in moves:
+            if not src.is_file():
+                continue
+            rel = src.relative_to(old_root)
+            dst = new_root / rel
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                if dst.is_file():
+                    src.unlink()
+                    self.Log(f'Removed stale {rel} at {old_root}', 'DEBUG')
+                else:
+                    self._atomicMove(src, dst)
+                    self.Log(f'Moved {rel} → {new_root}', 'DEBUG')
+            except Exception as e:
+                self.Log(f'Could not migrate {rel}: {e}', 'WARNING')
+
+        # Orphan handling: a failed move leaves the source in place. If
+        # the critical settings file (config.json) is still at old_root
+        # after Pass 1, rename it to .orphan so _findSettingsFile's
+        # fallback doesn't pick up the stale data on the next restart.
+        for orphan in critical_srcs:
+            if orphan.is_file():
+                backup = orphan.with_suffix(orphan.suffix + '.orphan')
+                try:
+                    orphan.rename(backup)
+                    self.Log(
+                        f'Migration left {orphan.relative_to(old_root)} '
+                        f'at old root; renamed to {backup.name} so it does '
+                        f'not interfere with future restores. Delete '
+                        f'manually if no longer needed.',
+                        'WARNING')
+                except OSError as e:
+                    self.Log(
+                        f'Could not rename orphan {orphan}: {e}', 'WARNING')
+
+        # Migrate .claude/settings.local.json separately: it has no marker
+        # so cleanup would skip it (intentional -- it may contain user-added
+        # MCP permissions). Moving it preserves those permissions across the
+        # flip. If both locations have one, leave both alone (don't merge
+        # blindly) and log so the user can reconcile manually.
+        old_settings = old_root / '.claude' / 'settings.local.json'
+        new_settings = new_root / '.claude' / 'settings.local.json'
+        if old_settings.is_file():
+            if new_settings.is_file():
+                self.Log(
+                    f'.claude/settings.local.json exists at both '
+                    f'{old_root} and {new_root} -- keeping both. '
+                    f'Merge manually if needed.',
+                    'WARNING')
+            else:
+                try:
+                    new_settings.parent.mkdir(parents=True, exist_ok=True)
+                    self._atomicMove(old_settings, new_settings)
+                    self.Log(
+                        f'Moved .claude/settings.local.json → {new_root}',
+                        'INFO')
+                except Exception as e:
+                    self.Log(
+                        f'Could not move .claude/settings.local.json: {e}',
+                        'WARNING')
+
+        # --- Pass 2: delete Embody-generated AI files at old root ---
+        self._cleanupOldRootFiles(old_root)
+
+        self.Log(
+            f'AI config root: {old_mode} → {new_mode}. '
+            f'Old root {old_root} cleaned, regenerating at {new_root}.',
+            'INFO')
+
+    def _cleanupOldRootFiles(self, old_root):
+        """Remove Embody-generated AI/MCP config files at the old root.
+
+        Only deletes files containing the _EMBODY_MARKER comment (so any
+        user-authored files at the same paths are preserved). Regeneratable
+        runtime files in .embody/ are deleted unconditionally since they
+        are 100% Embody-owned. .mcp.json is edited surgically to remove
+        just the 'envoy' server entry. Empty Embody-owned directories are
+        pruned after deletion.
+        """
+        deleted = 0
+
+        def remove_if_marked(path):
+            nonlocal deleted
+            if not path.is_file():
+                return
+            try:
+                content = path.read_text(encoding='utf-8', errors='ignore')
+            except OSError as e:
+                self.Log(f'Could not read {path}: {e}', 'WARNING')
+                return
+            if self._EMBODY_MARKER not in content:
+                return
+            try:
+                path.unlink()
+                deleted += 1
+            except OSError as e:
+                self.Log(f'Could not delete {path}: {e}', 'WARNING')
+
+        # Top-level marker files
+        for name in ('AGENTS.md', 'CLAUDE.md', 'ENVOY.md'):
+            remove_if_marked(old_root / name)
+
+        # Tree-scoped marker files: anything Embody writes via _writeTemplate
+        for sub in ('.claude/rules', '.claude/skills',
+                    '.cursor/rules',
+                    '.github/instructions',
+                    '.windsurf/rules'):
+            d = old_root / sub
+            if not d.is_dir():
+                continue
+            for p in d.rglob('*'):
+                if p.is_file():
+                    remove_if_marked(p)
+        # Single-file marker location
+        remove_if_marked(old_root / '.github' / 'copilot-instructions.md')
+
+        # .embody/ runtime files (Embody-owned, no marker -- safe to remove).
+        # The .envoy-tools-cache.json (hidden dot variant) never lived under
+        # .embody/ but is listed here defensively in case a future bridge
+        # version writes one.
+        embody_dir = old_root / '.embody'
+        if embody_dir.is_dir():
+            for name in ('envoy.json', 'envoy-bridge.py',
+                         'envoy-tools-cache.json',
+                         '.envoy-tools-cache.json'):
+                p = embody_dir / name
+                if p.is_file():
+                    try:
+                        p.unlink()
+                        deleted += 1
+                    except OSError as e:
+                        self.Log(f'Could not delete {p}: {e}', 'WARNING')
+
+        # Legacy Embody-owned paths from prior versions. These migrated
+        # away in newer Embody releases (see _configureMCPClient and
+        # _restoreSettings migration blocks). Sweep them at the old root
+        # so a flip-back from a long-lived install doesn't leave drift.
+        legacy_paths = [
+            old_root / '.claude' / 'envoy-bridge.py',     # moved to .embody/
+            old_root / '.envoy-tools-cache.json',         # moved to .embody/
+            old_root / '.envoy.json',                     # moved to .embody/envoy.json
+            old_root / '.embody.json',                    # moved to .embody/config.json
+        ]
+        for legacy in legacy_paths:
+            if legacy.is_file():
+                try:
+                    legacy.unlink()
+                    deleted += 1
+                except OSError as e:
+                    self.Log(f'Could not delete legacy {legacy}: {e}', 'WARNING')
+
+        # .mcp.json: remove only the 'envoy' server entry, preserve others
+        mcp_file = old_root / '.mcp.json'
+        if mcp_file.is_file():
+            try:
+                import json
+                cfg = json.loads(mcp_file.read_text(encoding='utf-8'))
+                servers = cfg.get('mcpServers', {})
+                if 'envoy' in servers:
+                    del servers['envoy']
+                    if servers:
+                        cfg['mcpServers'] = servers
+                        mcp_file.write_text(
+                            json.dumps(cfg, indent=2) + '\n',
+                            encoding='utf-8')
+                        self.Log(
+                            f'Pruned envoy server from {mcp_file} '
+                            f'(other servers preserved)',
+                            'DEBUG')
+                    else:
+                        mcp_file.unlink()
+                        deleted += 1
+            except (json.JSONDecodeError, OSError) as e:
+                self.Log(f'Could not clean old .mcp.json: {e}', 'WARNING')
+
+        # Prune empty Embody-owned dirs (rmdir fails on non-empty -> safe).
+        # Children-first so parents can empty as their leaves go.
+        # First pass: sweep emptied skill/instruction subdirs.
+        for parent in (old_root / '.claude' / 'skills',
+                       old_root / '.github' / 'instructions'):
+            if not parent.is_dir():
+                continue
+            for child in parent.iterdir():
+                if child.is_dir():
+                    try:
+                        child.rmdir()
+                    except OSError:
+                        pass  # User content inside -- leave alone
+        # Second pass: known top-level Embody-owned dirs.
+        for d in (old_root / '.claude' / 'rules',
+                  old_root / '.claude' / 'skills',
+                  old_root / '.claude',
+                  old_root / '.cursor' / 'rules',
+                  old_root / '.cursor',
+                  old_root / '.windsurf' / 'rules',
+                  old_root / '.windsurf',
+                  old_root / '.github' / 'instructions',
+                  old_root / '.github',
+                  old_root / '.embody'):
+            try:
+                if d.is_dir():
+                    d.rmdir()
+            except OSError:
+                pass  # Not empty (user content remains) -- leave alone
+
+        if deleted:
+            self.Log(f'Removed {deleted} Embody-generated file(s) at {old_root}', 'INFO')
 
     def _extractAIConfig(self):
         """Extract AI coding assistant config files based on par.Aiclient."""
@@ -1183,6 +1512,36 @@ class EmbodyExt:
         """Path to .embody/config.json -- consistent with _findProjectRoot()."""
         return self._findProjectRoot() / '.embody' / 'config.json'
 
+    def _findSettingsFile(self) -> Optional[Path]:
+        """Locate .embody/config.json, checking both Aiprojectroot candidate
+        roots.
+
+        At TD launch, _restoreSettings() runs before any param values have
+        been restored -- so Aiprojectroot sits at its baked-in default
+        ('gitroot'). If the user previously flipped to 'projectfolder',
+        their config.json lives at the project folder, not git root. The
+        canonical _settingsPath() lookup would miss it and silently bail,
+        losing every persisted setting on every restart.
+
+        This helper resolves that chicken-and-egg by trying both candidate
+        roots before declaring the file absent. Returns the path if found,
+        else None.
+        """
+        canonical = self._settingsPath()
+        if canonical.is_file():
+            return canonical
+        # Try the alternate location -- the one that would be canonical if
+        # Aiprojectroot were flipped to the other value.
+        for mode in ('gitroot', 'projectfolder'):
+            alt = self._rootForMode(mode) / '.embody' / 'config.json'
+            if alt != canonical and alt.is_file():
+                self.Log(
+                    f'config.json found at alternate root (Aiprojectroot '
+                    f'will be restored from saved value): {alt}',
+                    'INFO')
+                return alt
+        return None
+
     def _projectJsonPath(self) -> Path:
         """Path to .embody/project.json -- committed project metadata.
 
@@ -1298,16 +1657,21 @@ class EmbodyExt:
 
         kick_envoy: if True and Envoyenable is restored to True, defer Start().
         Only set this on the onStart() path -- Verify() owns startup on onCreate()."""
-        path = self._settingsPath()
-        if not path.is_file():
+        # _findSettingsFile handles the Aiprojectroot chicken-and-egg: at
+        # this point Aiprojectroot is at its baked-in default, so a saved
+        # value of 'projectfolder' wouldn't resolve via _settingsPath alone.
+        path = self._findSettingsFile()
+        if path is None:
             # Migrate: check old root-level .embody.json
+            canonical = self._settingsPath()
             old_path = self._findProjectRoot() / '.embody.json'
             if old_path.is_file():
                 try:
-                    path.parent.mkdir(parents=True, exist_ok=True)
+                    canonical.parent.mkdir(parents=True, exist_ok=True)
                     import shutil
-                    shutil.move(str(old_path), str(path))
+                    shutil.move(str(old_path), str(canonical))
                     self.Log('Migrated .embody.json → .embody/config.json', 'INFO')
+                    path = canonical
                 except Exception as e:
                     self.Log(f'Could not migrate .embody.json: {e}', 'WARNING')
                     self.my.store('_init_complete', True)
@@ -1495,8 +1859,15 @@ class EmbodyExt:
             # config.json from a previous install in the same folder was
             # restored, the user must explicitly opt in for this new project.
             # Reset Envoyenable so the prompt is the gate, not old settings.
-            self.my.par.Envoyenable = False
-            self._pending_envoy_prompt = True
+            # Idempotent: do NOT re-queue if a prompt is already pending.
+            # Tests that run multiple Verify() cycles in succession (e.g.
+            # test_custom_parameters' Disable/Enable suite) would otherwise
+            # stack N prompts, each one consuming one seeded auto-response
+            # and the rest hitting ui.messageBox for real -- freezing TD
+            # with modal dialogs the moment the test finishes.
+            if not getattr(self, '_pending_envoy_prompt', False):
+                self.my.par.Envoyenable = False
+                self._pending_envoy_prompt = True
 
     # ==========================================================================
     # SAFE FILE TRACKING
@@ -5466,7 +5837,7 @@ class EmbodyExt:
         self.my.par.Envoystatus = 'Perform Mode'
 
         # Grey out Envoy parameters so user sees they're frozen
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient'):
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot'):
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = False
@@ -5482,7 +5853,7 @@ class EmbodyExt:
         self.my.op('chopexec_exit_tagger').par.active = state.get('exit_tagger_active', True)
 
         # Restore Envoy parameter enable state
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient'):
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot'):
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = True

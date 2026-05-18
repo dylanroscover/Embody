@@ -21,7 +21,7 @@ from pathlib import Path
 from threading import Event
 from typing import Any, Optional, Union
 
-TDN_VERSION = '1.3'
+TDN_VERSION = '1.4'
 
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
@@ -1118,9 +1118,29 @@ class TDNExt:
 						f'Skipping children of {sp} -- has its own TDN '
 						f'externalization (source of truth)', 'INFO')
 
+		# Pre-phase: Skip children of nested TOX-externalized COMPs.
+		# Same principle as TDN: the .tox file owns the child's internals.
+		# Pre-fix .tdn files may still have these children embedded; strip
+		# them so we don't write stale snapshots into the live network.
+		tox_paths = self._getTOXExternalizedPaths()
+		if tox_paths:
+			tox_paths.discard(target_path)  # We ARE importing this one
+		if tox_paths:
+			skipped = self._stripNestedTOXChildren(
+				op_defs, target_path, tox_paths)
+			for sp in skipped:
+				self._log(
+					f'Skipping children of {sp} -- has its own TOX '
+					f'externalization (source of truth)', 'INFO')
+
 		# Cross-validate tdn_ref pointers against table and disk
 		ref_warnings = self._validateTDNRefs(op_defs, target_path)
 		for w in ref_warnings:
+			self._log(w, 'WARNING')
+
+		# Cross-validate tox_ref pointers against table and disk
+		tox_ref_warnings = self._validateTOXRefs(op_defs, target_path)
+		for w in tox_ref_warnings:
 			self._log(w, 'WARNING')
 
 		try:
@@ -1179,6 +1199,14 @@ class TDNExt:
 			restored_count = 0
 			if restore_file_links:
 				restored_count = self._restoreFileLinks(dest)
+
+			# Phase 8.5: Restore TOX content for tox_ref shells.
+			# _createOps deliberately leaves these empty so the .tox
+			# file is the source of truth (not the parent .tdn snapshot).
+			# Set externaltox from the ref string and call _reloadTox so
+			# the child's internals are present immediately after import,
+			# without waiting for the next project open.
+			self._restoreTOXShells(dest)
 
 			# Cleanup temporary operator references from Phase 1
 			def _cleanupRefs(defs):
@@ -1521,12 +1549,15 @@ class TDNExt:
 			else:
 				data['dat_read_only'] = True
 
-		# Recurse into COMP children (sync mode only)
-		# Skip children of palette clones -- they come from /sys/ and
-		# don't need to be stored (TD recreates them from the clone source)
-		# Skip children of COMPs with their own TDN tag -- those are
-		# managed by their own .tdn file to avoid redundant nesting
-		if recurse and hasattr(target, 'children'):
+		# Emit child-reference metadata for COMPs whose contents are
+		# managed by a separate file (TDN/TOX externalization, or a
+		# palette clone). This runs even when recurse=False (async
+		# modular export) so the resulting shell carries a tdn_ref /
+		# tox_ref / palette_clone marker instead of an unmarked empty
+		# COMP. Without this, async exports of a parent containing
+		# externalized children produce shells that look like normal
+		# leaf COMPs and the importer cannot tell them apart.
+		if hasattr(target, 'children'):
 			is_palette = self._isPaletteClone(target)
 			handling = self._resolvePaletteHandling(target) if is_palette else None
 			if is_palette and handling == 'blackbox':
@@ -1557,7 +1588,19 @@ class TDNExt:
 				tdn_ref = self._resolveTDNRef(target)
 				if tdn_ref:
 					data['tdn_ref'] = tdn_ref
-			else:
+			elif self._hasTOXTag(target) and not options.get('embed_all'):
+				# Child's network managed by its own .tox file.
+				# Write a tox_ref pointer for cross-validation.
+				# The .tox is opaque (binary); editing it directly in TD
+				# updates the file on save. The TDN exporter must not
+				# recurse into the child or its internals would be
+				# duplicated into the parent .tdn, defeating the
+				# externalization. Use TDN strategy for git-diffable
+				# nesting; use TOX for opaque encapsulation.
+				tox_ref = self._resolveTOXRef(target)
+				if tox_ref:
+					data['tox_ref'] = tox_ref
+			elif recurse:
 				max_depth = options.get('max_depth')
 				if max_depth is None or depth < max_depth:
 					children = self._exportChildren(
@@ -2627,6 +2670,7 @@ class TDNExt:
 			# Recurse into children for COMPs
 			children = op_def.get('children', [])
 			tdn_ref = op_def.get('tdn_ref')
+			tox_ref = op_def.get('tox_ref')
 			if tdn_ref and new_op.isCOMP:
 				# This COMP's children come from a separate .tdn file.
 				# Shell created here; network populated by
@@ -2634,6 +2678,26 @@ class TDNExt:
 				self._log(
 					f'Skipping children of {new_op.path} -- '
 					f'managed by {tdn_ref}', 'DEBUG')
+			elif tox_ref and new_op.isCOMP:
+				# This COMP's contents come from a separate .tox file.
+				# Shell created here; the .tox load happens via
+				# RestoreTOXComps (frame 45 on project open) or the
+				# externalizations-table reconciliation pass after
+				# import. Setting `externaltox` + calling loadTox here
+				# is intentionally NOT done: doing so during a parent
+				# import would conflict with RestoreTOXComps\' own pass
+				# at frame 45 (it loads the .tox and sets externaltox),
+				# and TDN reconstruction (frame 60) runs AFTER that --
+				# so the .tox would be loaded, then wiped by
+				# clear_first=True. Instead we mark the shell with
+				# storage so a post-import pass can re-trigger restore.
+				try:
+					new_op.store('_pending_tox_restore', tox_ref)
+				except Exception:
+					pass
+				self._log(
+					f'Skipping children of {new_op.path} -- '
+					f'managed by {tox_ref}', 'DEBUG')
 			elif children and new_op.isCOMP:
 				# Clear auto-created default children (e.g. torus1
 				# inside a geometryCOMP) before importing TDN children.
@@ -3509,6 +3573,60 @@ class TDNExt:
 
 		return restored
 
+	def _restoreTOXShells(self, dest) -> int:
+		"""Phase 8.5: Load .tox content for empty shells created from tox_ref.
+
+		_createOps tags any COMP it built from a `tox_ref` entry with a
+		`_pending_tox_restore` storage key holding the relative tox path.
+		This pass walks `dest`'s subtree, sets `externaltox` from that
+		storage, calls `_reloadTox` (which toggles `enableexternaltox` to
+		force TD to re-read the .tox), then clears the marker.
+
+		Without this, `ReconstructTDNComps` (frame 60) with `clear_first=
+		True` would destroy any TOX child that `RestoreTOXComps` (frame 45)
+		had just rebuilt, and the .tox content would never reappear until
+		the next project open.
+
+		Args:
+			dest: The reconstructed COMP operator
+
+		Returns:
+			Number of TOX shells restored.
+		"""
+		embody = self.ownerComp.ext.Embody
+		restored = 0
+
+		def _walk(comp):
+			nonlocal restored
+			for child in list(getattr(comp, 'children', ()) or ()):
+				try:
+					pending = child.fetch('_pending_tox_restore', None,
+										search=False)
+				except Exception:
+					pending = None
+				if pending:
+					try:
+						normalized = embody.normalizePath(pending)
+						child.par.externaltox = normalized
+						child.par.enableexternaltox = True
+						embody._reloadTox(child)
+						child.unstore('_pending_tox_restore')
+						restored += 1
+					except Exception as e:
+						self._log(
+							f'Failed to restore TOX shell {child.path}: {e}',
+							'WARNING')
+				else:
+					if hasattr(child, 'children'):
+						_walk(child)
+
+		_walk(dest)
+		if restored:
+			self._log(
+				f'Restored {restored} TOX shell(s) under {dest.path} from .tox',
+				'INFO')
+		return restored
+
 	# =========================================================================
 	# ASYNC EXPORT HELPERS
 	# =========================================================================
@@ -3531,6 +3649,8 @@ class TDNExt:
 						self._resolvePaletteHandling(child) == 'blackbox'):
 					continue
 				if not embed_all and self._hasTDNTag(child):
+					continue
+				if not embed_all and self._hasTOXTag(child):
 					continue
 				if max_depth is None or depth < max_depth:
 					paths.extend(
@@ -3978,6 +4098,22 @@ class TDNExt:
 				paths.add(table[i, 'path'].val)
 		return paths
 
+	def _getTOXExternalizedPaths(self) -> set:
+		"""Return a set of all TOX-strategy COMP paths from the externalizations table."""
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if not table or table.numRows < 2:
+				return set()
+			if table[0, 'strategy'] is None:
+				return set()
+		except Exception:
+			return set()
+		paths = set()
+		for i in range(1, table.numRows):
+			if table[i, 'strategy'].val == 'tox':
+				paths.add(table[i, 'path'].val)
+		return paths
+
 	def _stripNestedTDNChildren(self, op_defs: list, parent_path: str,
 								tdn_paths: set) -> list:
 		"""Remove children from op_defs for COMPs with their own TDN entry.
@@ -4009,12 +4145,75 @@ class TDNExt:
 					self._stripNestedTDNChildren(children, child_path, tdn_paths))
 		return skipped
 
+	def _stripNestedTOXChildren(self, op_defs: list, parent_path: str,
+								tox_paths: set) -> list:
+		"""Remove children from op_defs for COMPs with their own TOX entry.
+
+		The child COMP shell is still created (its operator definition remains),
+		but its children array is emptied -- the child's own .tox file is the
+		source of truth for its internal network. RestoreTOXComps loads the
+		.tox content on project open; for runtime imports the externaltox
+		parameter is preserved and the user can manually reload.
+
+		Backward-compat path: pre-fix .tdn files may have TOX children
+		embedded. This strip prevents those stale snapshots from being
+		written into the live network.
+
+		Args:
+			op_defs: List of operator definitions (mutated in place)
+			parent_path: TD path of the COMP being imported into
+			tox_paths: Set of all TOX-strategy paths from externalizations table
+
+		Returns:
+			List of child paths that were skipped (for logging)
+		"""
+		skipped = []
+		for op_def in op_defs:
+			name = op_def.get('name')
+			if not name:
+				continue
+			child_path = f"{parent_path.rstrip('/')}/{name}"
+			children = op_def.get('children')
+			if children and child_path in tox_paths:
+				op_def['children'] = []
+				skipped.append(child_path)
+			elif children:
+				skipped.extend(
+					self._stripNestedTOXChildren(children, child_path, tox_paths))
+		return skipped
+
 	def _hasTDNTag(self, target):
 		"""Check if a COMP has its own TDN externalization tag."""
 		if not target.isCOMP:
 			return False
 		tdn_tag = self.ownerComp.par.Tdntag.val
 		return tdn_tag in target.tags
+
+	def _hasTOXTag(self, target):
+		"""Check if a COMP has its own TOX externalization tag."""
+		if not target.isCOMP:
+			return False
+		tox_tag = self.ownerComp.par.Toxtag.val
+		return tox_tag in target.tags
+
+	def _resolveTOXRef(self, target) -> 'Optional[str]':
+		"""Look up a TOX-tagged child COMP's relative file path.
+
+		Returns the child's .tox file path (relative to the project
+		externalization folder) from the externalizations table, or
+		None if the child isn't tracked.
+		"""
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if not table or table.numRows < 2:
+				return None
+			for i in range(1, table.numRows):
+				if (table[i, 'path'].val == target.path
+						and table[i, 'strategy'].val == 'tox'):
+					return table[i, 'rel_file_path'].val
+		except Exception:
+			pass
+		return None
 
 	def _resolveTDNRef(self, target) -> 'Optional[str]':
 		"""Look up a TDN-tagged child COMP's relative file path.
@@ -4077,6 +4276,51 @@ class TDNExt:
 			if children:
 				warnings.extend(
 					self._validateTDNRefs(children, child_path))
+
+		return warnings
+
+	def _validateTOXRefs(self, op_defs: list, parent_path: str) -> list:
+		"""Cross-validate tox_ref pointers against the externalizations table.
+
+		Parity with _validateTDNRefs. Checks two independent sources:
+		1. Each tox_ref in the file corresponds to a table entry with strategy=tox
+		2. Each referenced .tox file exists on disk
+
+		Returns list of warning messages (empty = all valid).
+		"""
+		warnings = []
+		tox_paths = self._getTOXExternalizedPaths()
+
+		for op_def in op_defs:
+			tox_ref = op_def.get('tox_ref')
+			name = op_def.get('name', '?')
+			child_path = f"{parent_path.rstrip('/')}/{name}"
+
+			if tox_ref:
+				# Check 1: table entry exists for this child
+				if child_path not in tox_paths:
+					warnings.append(
+						f'tox_ref for {child_path} points to {tox_ref} '
+						f'but no matching entry in externalizations table')
+
+				# Check 2: referenced file exists on disk
+				try:
+					abs_path = self.ownerComp.ext.Embody.buildAbsolutePath(
+						tox_ref)
+					if not abs_path.is_file():
+						warnings.append(
+							f'tox_ref for {child_path}: file not found: '
+							f'{tox_ref}')
+				except Exception:
+					warnings.append(
+						f'tox_ref for {child_path}: cannot resolve path: '
+						f'{tox_ref}')
+
+			# Recurse into children
+			children = op_def.get('children', [])
+			if children:
+				warnings.extend(
+					self._validateTOXRefs(children, child_path))
 
 		return warnings
 

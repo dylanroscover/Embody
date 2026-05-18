@@ -1048,6 +1048,140 @@ class TestTDNFileIO(EmbodyTestCase):
 		has_file_warning = any('file not found' in w for w in warnings)
 		self.assertTrue(has_file_warning)
 
+	# =================================================================
+	# tox_ref -- export and backward-compat strip
+	# =================================================================
+
+	def test_tox_ref_written_on_export(self):
+		"""Export of parent with TOX-tagged child should include tox_ref
+		and omit children -- the .tox file owns the internals."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'tox_child')
+		child.create(textDAT, 'leaf')
+		# Tag the child for TOX and register in the table
+		tox_tag = self.embody.par.Toxtag.val
+		child.tags.add(tox_tag)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'fake/tox_child.tox',
+			timestamp, False, 1, str(app.build), 'tox')
+		# Export the parent
+		fp = str(Path(self._temp_dir) / 'parent_tox.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'tox_child'][0]
+		self.assertIn('tox_ref', child_entry)
+		self.assertEqual(child_entry['tox_ref'], 'fake/tox_child.tox')
+		self.assertNotIn('children', child_entry)
+
+	def test_tox_ref_absent_without_tag(self):
+		"""Export of parent with non-TOX child should not include tox_ref."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp2')
+		child = parent.create(baseCOMP, 'plain_child')
+		child.create(textDAT, 'leaf')
+		fp = str(Path(self._temp_dir) / 'no_tox_ref.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'plain_child'][0]
+		self.assertNotIn('tox_ref', child_entry)
+		self.assertIn('children', child_entry)
+
+	def test_tox_ref_absent_with_embed_all(self):
+		"""embed_all=True should suppress tox_ref and re-embed children."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp3')
+		child = parent.create(baseCOMP, 'tox_child3')
+		child.create(textDAT, 'leaf')
+		tox_tag = self.embody.par.Toxtag.val
+		child.tags.add(tox_tag)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'fake/tox_child3.tox',
+			timestamp, False, 1, str(app.build), 'tox')
+		fp = str(Path(self._temp_dir) / 'embed_tox.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp, embed_all=True)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'tox_child3'][0]
+		self.assertNotIn('tox_ref', child_entry)
+		self.assertIn('children', child_entry)
+
+	def test_tox_children_stripped_on_import(self):
+		"""Pre-fix .tdn files with embedded TOX children should be stripped
+		on import -- the .tox file owns them."""
+		parent = self.sandbox.create(baseCOMP, 'parent_strip')
+		child = parent.create(baseCOMP, 'tox_strip_child')
+		tox_tag = self.embody.par.Toxtag.val
+		child.tags.add(tox_tag)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'fake/tox_strip_child.tox',
+			timestamp, False, 1, str(app.build), 'tox')
+		# Simulate a pre-fix .tdn with embedded children
+		op_defs = [{
+			'name': 'tox_strip_child',
+			'type': 'baseCOMP',
+			'children': [
+				{'name': 'embedded_dat', 'type': 'textDAT'},
+				{'name': 'embedded_top', 'type': 'noiseTOP'},
+			],
+		}]
+		tox_paths = self.embody.ext.TDN._getTOXExternalizedPaths()
+		self.assertIn(child.path, tox_paths)
+		skipped = self.embody.ext.TDN._stripNestedTOXChildren(
+			op_defs, parent.path, tox_paths)
+		self.assertIn(child.path, skipped)
+		self.assertEqual(op_defs[0]['children'], [])
+
+	def test_tox_type_defaults_not_polluted(self):
+		"""Regression: TOX child internals should not leak into parent
+		type_defaults (the original GH issue #20 symptom)."""
+		parent = self.sandbox.create(baseCOMP, 'tdpollute_parent')
+		# Two TOX-tagged children with identical internal structure
+		for cname in ('tox_a', 'tox_b'):
+			child = parent.create(baseCOMP, cname)
+			child.create(textDAT, 'inner_dat')
+			child.create(noiseTOP, 'inner_top')
+			tox_tag = self.embody.par.Toxtag.val
+			child.tags.add(tox_tag)
+			from datetime import datetime
+			timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+			self.embody_ext._addToTable(child, f'fake/{cname}.tox',
+				timestamp, False, 1, str(app.build), 'tox')
+		fp = str(Path(self._temp_dir) / 'no_pollute.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = json.load(f)
+		td = data.get('type_defaults', {})
+		# textDAT and noiseTOP are the children\'s grandchildren --
+		# they must NOT appear in the parent\'s type_defaults
+		self.assertNotIn('textDAT', td)
+		self.assertNotIn('noiseTOP', td)
+
+	def test_tox_ref_consumed_on_import(self):
+		"""_createOps should skip child creation for tox_ref entries
+		(round-trip with RestoreTOXComps owning the .tox restore)."""
+		parent = self.sandbox.create(baseCOMP, 'tox_consume_parent')
+		op_defs = [{
+			'name': 'tox_consume_child',
+			'type': 'baseCOMP',
+			'tox_ref': 'fake/tox_consume_child.tox',
+		}]
+		created = []
+		self.embody.ext.TDN._createOps(parent, op_defs, created)
+		child = parent.op('tox_consume_child')
+		self.assertIsNotNone(child)
+		# Should have no children -- tox_ref means .tox file owns internals
+		self.assertLen(list(child.children), 0)
+
 	def test_cascade_tags_children(self):
 		"""_cascadeTDNTag should add TDN tag to direct child COMPs."""
 		parent = self.sandbox.create(baseCOMP, 'cascade_parent')

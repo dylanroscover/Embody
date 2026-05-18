@@ -86,7 +86,9 @@ operator
 ├── dat_content_format: "text" | "table"
 ├── children: [operator]
 ├── annotations: [annotation]
-└── palette_clone: boolean
+├── palette_clone: boolean
+├── tdn_ref: string  (mutually exclusive with children — points to child .tdn)
+└── tox_ref: string  (mutually exclusive with children — points to child .tox)
 ```
 
 ### Annotation Object

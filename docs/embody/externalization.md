@@ -65,6 +65,26 @@ COMPs can also be externalized using the **TDN strategy** instead of `.tox`. Thi
 
 See [TDN Format](../tdn/index.md) for format details, and ["Why TDN"](#why-tdn) below for the concrete wins.
 
+### TOX vs TDN: pick by what you want from the file
+
+Both strategies externalize a COMP to its own file on disk. The difference is **what's in the file**, not whether the parent embeds it:
+
+| | TOX | TDN |
+|---|---|---|
+| File format | Binary `.tox` | JSON `.tdn` |
+| Git-diffable | No | Yes |
+| Load speed | Fast (native TD format) | Slower (parsed and rebuilt) |
+| PR review | None — binary blob | Line-by-line parameter diffs |
+| Cross-build portable | TD-build-coupled | Format-versioned, portable |
+| Best for | Palette widgets, third-party COMPs, anything you don't review at the parameter level | Anything you want code-reviewed, anything edited in a text editor, MCP/LLM workflows |
+
+**Both receive the same ownership treatment in parent `.tdn` files.** When the parent of an externalized child is exported as TDN, the parent emits a reference (`tdn_ref` or `tox_ref`) and **does not embed the child's internals**. The child's own file is the source of truth. This applies symmetrically — externalizing as TOX does not mean "embed me in the parent."
+
+If you want a parent `.tdn` that's fully self-contained (snapshot mode), pass `embed_all=True` on export. Otherwise, externalized children stay encapsulated and the parent stays small.
+
+!!! info "If a COMP carries both tags"
+    A COMP with both the TDN tag and the TOX tag is an unusual configuration — strategies are normally mutually exclusive. If it does happen (e.g. tag added by hand), **the TDN tag wins**: the parent emits `tdn_ref` and the COMP is treated as TDN-externalized. To switch a COMP between strategies, remove the old tag first.
+
 ### TDN Mode (master switch)
 
 The `Tdnmode` parameter on the Embody COMP selects how the TDN subsystem behaves at save/open time:

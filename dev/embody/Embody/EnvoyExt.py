@@ -1438,6 +1438,12 @@ class EnvoyMCPServer:
             asyncio.run(uvi_server.serve())
         finally:
             self.running = False
+            # Clear the global handle so the next Start does not mistake
+            # this exited server for a live one that needs draining --
+            # only clear if it is still pointing at OUR instance (a newer
+            # Start may have replaced it already).
+            if getattr(sys, '_envoy_uvi_server', None) is uvi_server:
+                sys._envoy_uvi_server = None
             if sys.platform.startswith('win'):
                 asyncio.set_event_loop_policy(None)
 
@@ -1612,7 +1618,7 @@ class EnvoyExt:
                 f' threads remain '
                 f'(capacity: {self.ThreadManager.ext.ThreadManagerExt.MaxNumberOfThreads.eval()})', 'DEBUG')
 
-    def _forceCloseOldServer(self) -> None:
+    def _forceCloseOldServer(self) -> bool:
         """Force-close a stuck old uvicorn server so the port is freed.
 
         When an old worker thread is stuck (e.g. waiting on a test Event or
@@ -1621,8 +1627,16 @@ class EnvoyExt:
         1. Signals ALL known shutdown events (in case one was orphaned)
         2. Force-closes the uvicorn server's socket listeners
         3. Unblocks any stuck test Event
+
+        Returns True ONLY when we actually closed a live uvicorn server
+        handle of ours (`sys._envoy_uvi_server` was set). Re-signaling
+        stale shutdown events for already-exited threads is housekeeping
+        and does NOT flip the return -- waiting on those is pointless.
+        The drain-wait in `_findAvailablePort` keys off this signal to
+        skip the 500ms sleep when the port holder is foreign/zombie.
         """
-        # Signal all known shutdown events
+        # Signal all known shutdown events (housekeeping -- does not by
+        # itself indicate WE are holding a socket).
         registry = getattr(sys, '_envoy_shutdown_events', {})
         for path, evt in registry.items():
             if not evt.is_set():
@@ -1660,6 +1674,8 @@ class EnvoyExt:
                 except Exception:
                     pass
             sys._envoy_uvi_server = None
+            return True   # We actually closed a live socket of ours.
+        return False  # Nothing of ours was holding any port.
 
     def _findAvailablePort(self, base_port: int, range_size: int = 10) -> 'int | None':
         """Find an available port in [base_port, base_port + range_size).
@@ -1688,12 +1704,8 @@ class EnvoyExt:
         def _port_registered_by_other(port: int) -> bool:
             """Check if another live instance claims this port in envoy.json."""
             try:
-                git_root = self.ownerComp.fetch('_git_root', 'no-git')
-                if git_root == 'no-git':
-                    return False
-                from pathlib import Path
-                config_path = Path(git_root) / '.embody' / 'envoy.json'
-                if not config_path.exists():
+                config_path = self._registryPath()
+                if config_path is None or not config_path.exists():
                     return False
                 config = json.loads(config_path.read_text(encoding='utf-8'))
                 my_pid = _os.getpid()
@@ -1717,24 +1729,46 @@ class EnvoyExt:
         if not _port_taken(base_port):
             return base_port
 
-        # Base port busy -- try to reclaim it from our own stale server
+        # Branch on WHY the port is taken.
+        #
+        # If a foreign live TD instance has it registered in envoy.json,
+        # _forceCloseOldServer cannot help -- that only signals shutdown
+        # for OUR server thread. Jump straight to the range scan instead
+        # of blocking the main thread on a 1.5s poll loop that cannot
+        # change the outcome. (Symptom: ~108 dropped frames per toggle
+        # at 60fps whenever a zombie PID claims the preferred port.)
+        if _port_registered_by_other(base_port):
+            self._log(f'Port {base_port} held by another instance, scanning range...')
+            for offset in range(1, range_size):
+                candidate = base_port + offset
+                if not _port_taken(candidate):
+                    return candidate
+            return None
+
+        # Port is taken but no foreign registry entry. Try force-close --
+        # IF we had anything of ours to close, wait briefly for the socket
+        # to drain. Otherwise the port is held by an UNREGISTERED foreign
+        # process (e.g. zombie TD that isn't in envoy.json); waiting on
+        # that would block the main thread for no benefit -- skip to the
+        # range scan.
         self._log(f'Port {base_port} in use, attempting to free it...')
-        self._forceCloseOldServer()
+        acted = self._forceCloseOldServer()
 
-        # Wait for socket to close (up to ~1.5s).  During an upgrade
-        # (delete old COMP → drop new .tox), the old server thread may still
-        # be draining connections.  0.5s was too short — uvicorn's shutdown
-        # sequence can take 1-3s even after sockets are force-closed.
-        import time as _time
-        for _ in range(15):
-            _time.sleep(0.1)
-            if not _port_taken(base_port):
-                self._log(f'Port {base_port} freed after force-close')
-                return base_port
+        if acted:
+            # We had a stale server -- wait briefly for OS-level close.
+            # Capped at 500ms (5 x 100ms) because force_exit + explicit
+            # sock.close() should free the port near-instantly; longer
+            # waits noticeably stutter the UI.
+            import time as _time
+            for _ in range(5):
+                _time.sleep(0.1)
+                if not _port_taken(base_port):
+                    self._log(f'Port {base_port} freed after force-close')
+                    return base_port
 
-        # Still busy -- it belongs to another process/instance.
-        # Scan the rest of the range without force-close.
-        self._log(f'Port {base_port} held by another instance, scanning range...')
+        # Either nothing of ours was holding the port (foreign zombie), or
+        # the wait expired. Scan the range for any free port.
+        self._log(f'Port {base_port} held by another process, scanning range...')
         for offset in range(1, range_size):
             candidate = base_port + offset
             if not _port_taken(candidate):
@@ -1878,15 +1912,21 @@ class EnvoyExt:
 
         # Auto-configure project files.
         # Each step is independent -- one failure must not block the others.
-        # MCP + AI config: always (uses git root if available, else project.folder)
-        target_dir = git_root if git_root != 'no-git' else None
+        # MCP + AI config: always co-located, honoring Aiprojectroot.
+        try:
+            target_dir = op.Embody.ext.Embody._findProjectRoot()
+        except Exception:
+            # Defensive fallback for older deployments
+            target_dir = git_root if git_root != 'no-git' else None
         self._configureMCPClient(port, target_dir=target_dir)
         try:
             op.Embody.ext.Embody._upgradeEnvoy()
         except Exception as e:
             self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
 
-        # Git config: only when a git repo exists
+        # Git config: only when a git repo exists. Always lives at the git
+        # root regardless of Aiprojectroot -- .gitignore/.gitattributes are
+        # git's files, not Embody's.
         if git_root != 'no-git':
             from pathlib import Path
             git_path = Path(git_root)
@@ -4417,6 +4457,25 @@ class EnvoyExt:
             json.dumps(config, indent=2) + '\n', encoding='utf-8')
         self._log(f'Wrote MCP config to {mcp_file} (HTTP fallback)')
 
+    def _registryPath(self):
+        """Path to .embody/envoy.json honoring Aiprojectroot.
+
+        All registry I/O (port-conflict detection, RefreshRegistry,
+        deregistration) must go through here -- the registry must live
+        co-located with .mcp.json, which itself follows Aiprojectroot
+        via _findProjectRoot. Defaults to legacy git_root behavior if
+        the Embody extension isn't accessible (defensive).
+        """
+        from pathlib import Path
+        try:
+            root = op.Embody.ext.Embody._findProjectRoot()
+            return Path(root) / '.embody' / 'envoy.json'
+        except Exception:
+            git_root = self.ownerComp.fetch('_git_root', 'no-git')
+            if git_root == 'no-git':
+                return None
+            return Path(git_root) / '.embody' / 'envoy.json'
+
     def _deploySettingsLocal(self, claude_dir):
         """Deploy settings.local.json to .claude/ from the template DAT.
 
@@ -4449,15 +4508,24 @@ class EnvoyExt:
     def _findGitRoot(self):
         """Silently find the git repo root. Returns Path or 'no-git'. Never prompts."""
         from pathlib import Path
-        project_dir = Path(project.folder)
-        home_dir = Path.home()
+        project_dir = Path(project.folder).resolve()
+        try:
+            home_dir = Path.home().resolve()
+        except Exception:
+            home_dir = None
+        # Only stop at home_dir when it's actually an ancestor of project_dir.
+        # Otherwise (e.g. Windows project on D:\ while home is on C:\) the
+        # part-count comparison wrongly bailed before searching -- issue #19.
+        home_is_ancestor = bool(
+            home_dir and (home_dir == project_dir or home_dir in project_dir.parents)
+        )
         for parent in [project_dir] + list(project_dir.parents):
-            if parent == home_dir or len(parent.parts) <= len(home_dir.parts):
+            if home_is_ancestor and parent == home_dir:
                 break
             if (parent / '.git').exists():
                 self._log(f'Found git repo at {parent}', 'INFO')
                 return parent
-        self._log(f'No git repo found for {project_dir} (stopped at {home_dir})', 'INFO')
+        self._log(f'No git repo found for {project_dir}', 'INFO')
         return 'no-git'
 
     def _checkOrInitGitRepo(self):
@@ -4467,13 +4535,20 @@ class EnvoyExt:
         from pathlib import Path
         import os, subprocess
 
-        project_dir = Path(project.folder)
-        home_dir = Path.home()
+        project_dir = Path(project.folder).resolve()
+        try:
+            home_dir = Path.home().resolve()
+        except Exception:
+            home_dir = None
 
-        # Walk up looking for .git, but stop before the home directory --
-        # a .git in ~ (e.g. dotfiles repo) is never the intended project repo.
+        # Walk up looking for .git, but stop at the home directory only when
+        # home is actually an ancestor of project_dir (issue #19 -- previously
+        # the comparison broke for projects on a non-home drive on Windows).
+        home_is_ancestor = bool(
+            home_dir and (home_dir == project_dir or home_dir in project_dir.parents)
+        )
         for parent in [project_dir] + list(project_dir.parents):
-            if parent == home_dir or len(parent.parts) <= len(home_dir.parts):
+            if home_is_ancestor and parent == home_dir:
                 break
             if (parent / '.git').exists():
                 self._log(f'Found git repo at {parent}', 'INFO')
@@ -4861,13 +4936,9 @@ class EnvoyExt:
         PID, since EnvoyExt does not retain a runtime port attribute
         (the actual server lives on a worker thread)."""
         import os
-        from pathlib import Path
 
-        git_root = self.ownerComp.fetch('_git_root', 'no-git')
-        if git_root == 'no-git':
-            return
-        config_path = Path(git_root) / '.embody' / 'envoy.json'
-        if not config_path.exists():
+        config_path = self._registryPath()
+        if config_path is None or not config_path.exists():
             return
 
         try:
@@ -4892,17 +4963,19 @@ class EnvoyExt:
             self._log(f'RefreshRegistry failed: {e}', 'WARNING')
 
     def _removeFromRegistry(self, git_root=None):
-        """Remove this instance from the .embody/envoy.json registry on shutdown."""
+        """Remove this instance from the .embody/envoy.json registry on shutdown.
+
+        Honors Aiprojectroot via _registryPath. The git_root kwarg is kept
+        for backward compatibility but only used as a defensive fallback
+        when the live registry path isn't resolvable.
+        """
         import os
         from pathlib import Path
 
-        if git_root is None:
-            git_root = self.ownerComp.fetch('_git_root', 'no-git')
-        if git_root == 'no-git':
-            return
-
-        config_path = Path(git_root) / '.embody' / 'envoy.json'
-        if not config_path.exists():
+        config_path = self._registryPath()
+        if config_path is None and git_root is not None and git_root != 'no-git':
+            config_path = Path(git_root) / '.embody' / 'envoy.json'
+        if config_path is None or not config_path.exists():
             return
 
         try:
