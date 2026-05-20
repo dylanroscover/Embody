@@ -54,6 +54,7 @@ class EmbodyExt:
     _PERSISTED_PARAMS = frozenset({
         # Core
         'Folder', 'Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot',
+        'Aiprojectrootcustom',
         # Tag names
         'Toxtag', 'Tdntag', 'Pytag', 'Csvtag', 'Dattag',
         'Htmltag', 'Jsontag', 'Mdtag', 'Rtftag', 'Txttag',
@@ -676,15 +677,36 @@ class EmbodyExt:
         mode = mode_par.eval() if mode_par is not None else 'gitroot'
         return self._rootForMode(mode)
 
-    def _rootForMode(self, mode):
+    def _rootForMode(self, mode, custom_path=None):
         """Resolve a root directory for a given Aiprojectroot mode value.
 
         Used by _findProjectRoot() and by _migrateRootFiles() to compute
         both the old and new candidate roots when the parameter flips.
+
+        custom_path: explicit override for 'custom' mode. When None and
+        mode == 'custom', reads from the Aiprojectrootcustom parameter.
+        Pass explicitly when computing the OLD root after a path change
+        (parexec's prev value).
         """
         project_dir = Path(project.folder).resolve()
         if mode == 'projectfolder':
             return project_dir
+
+        if mode == 'custom':
+            if custom_path is None:
+                custom_par = getattr(self.my.par, 'Aiprojectrootcustom', None)
+                custom_path = custom_par.eval() if custom_par is not None else ''
+            custom_path = (custom_path or '').strip()
+            if not custom_path:
+                # Empty custom path -- treat as projectfolder until user
+                # picks one. Safer than picking a surprising fallback.
+                return project_dir
+            p = Path(custom_path)
+            if not p.is_absolute():
+                p = (project_dir / p).resolve()
+            else:
+                p = p.resolve()
+            return p
 
         # gitroot: prefer the stored git root from Start/InitGit, else
         # walk up from project.folder looking for .git.
@@ -748,8 +770,10 @@ class EmbodyExt:
                 f'{dst} is valid; remove the source manually.',
                 'WARNING')
 
-    def _migrateRootFiles(self, old_mode, new_mode):
-        """Relocate Embody/AI config when Aiprojectroot flips.
+    def _migrateRootFiles(self, old_mode, new_mode,
+                          old_custom=None, new_custom=None):
+        """Relocate Embody/AI config when Aiprojectroot (or its custom
+        path) flips.
 
         Three passes:
           1. Move Embody persistent state (.embody/config.json, project.json,
@@ -764,11 +788,13 @@ class EmbodyExt:
 
         AI-tool-facing files are then regenerated at the new root by
         InitEnvoy() (called from parexec right after this method).
+
+        old_custom/new_custom: explicit custom-path overrides. Used by
+        parexec when Aiprojectrootcustom changes within 'custom' mode
+        (both modes == 'custom' but the resolved paths differ).
         """
-        if old_mode == new_mode:
-            return
-        old_root = self._rootForMode(old_mode)
-        new_root = self._rootForMode(new_mode)
+        old_root = self._rootForMode(old_mode, custom_path=old_custom)
+        new_root = self._rootForMode(new_mode, custom_path=new_custom)
         if old_root == new_root:
             return
 
@@ -1530,8 +1556,7 @@ class EmbodyExt:
         canonical = self._settingsPath()
         if canonical.is_file():
             return canonical
-        # Try the alternate location -- the one that would be canonical if
-        # Aiprojectroot were flipped to the other value.
+        # Try the alternate predefined modes (gitroot, projectfolder).
         for mode in ('gitroot', 'projectfolder'):
             alt = self._rootForMode(mode) / '.embody' / 'config.json'
             if alt != canonical and alt.is_file():
@@ -1540,6 +1565,21 @@ class EmbodyExt:
                     f'will be restored from saved value): {alt}',
                     'INFO')
                 return alt
+        # Last-resort walk-up from project.folder. Catches the 'custom'
+        # mode chicken-and-egg: the saved custom path lives in
+        # config.json which we haven't read yet, so we can't compute the
+        # canonical custom path. Walking up from the .toe finds any
+        # .embody/config.json a user previously put on the tree.
+        project_dir = Path(project.folder).resolve()
+        for parent_dir in project_dir.parents:
+            candidate = parent_dir / '.embody' / 'config.json'
+            if candidate == canonical:
+                continue
+            if candidate.is_file():
+                self.Log(
+                    f'config.json found by ancestor walk-up: {candidate}',
+                    'INFO')
+                return candidate
         return None
 
     def _projectJsonPath(self) -> Path:
@@ -5837,7 +5877,7 @@ class EmbodyExt:
         self.my.par.Envoystatus = 'Perform Mode'
 
         # Grey out Envoy parameters so user sees they're frozen
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot'):
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = False
@@ -5853,7 +5893,7 @@ class EmbodyExt:
         self.my.op('chopexec_exit_tagger').par.active = state.get('exit_tagger_active', True)
 
         # Restore Envoy parameter enable state
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot'):
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = True
