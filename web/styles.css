@@ -204,6 +204,16 @@ code, kbd, pre {
   border-color: var(--accent);
   color: var(--accent);
 }
+.btn--outline {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.btn--outline:hover {
+  background: var(--accent);
+  color: #0e1612;
+  border-color: var(--accent);
+}
 .btn__icon {
   width: 1.1em;
   height: 1.1em;
@@ -890,6 +900,10 @@ code, kbd, pre {
   border-radius: 5px;
   color: var(--text);
   font-size: 0.8em;
+}
+
+.start__cta {
+  margin-top: 2.5rem;
 }
 
 .start__meta {

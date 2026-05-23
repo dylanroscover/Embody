@@ -70,6 +70,7 @@ markdown_extensions:
 
 nav:
   - Home: index.md
+  - Quickstart: quickstart.md
   - Manifesto: manifesto.md
   - Embody:
     - embody/index.md

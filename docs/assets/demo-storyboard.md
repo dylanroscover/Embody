@@ -72,7 +72,7 @@ Things that would feel natural to include but should not appear in this video:
 - **A logo intro.** No. Cold open into the empty network. Trust the viewer.
 - **"What is TouchDesigner?"** No. The audience for this video already knows.
 - **"What is MCP?"** No. Same reason.
-- **Stats.** No "45 MCP tools" or "30 test suites." That's README copy. The video is emotional, not technical.
+- **Stats.** No "48 MCP tools" or "30 test suites." That's README copy. The video is emotional, not technical.
 - **Comparison to TWOZERO or any other tool.** Naming a competitor in the demo dignifies them. Win on your own terms.
 - **A "team collaboration" beat.** The plan is explicit on this — solo creator in flow is the audience. Don't dilute.
 - **A second prompt that fails and gets fixed.** Tempting because it shows recovery, but it adds 20 seconds and undercuts the speed promise. Save the failure-recovery story for a different video.
