@@ -313,7 +313,11 @@ def onInitRow(comp, row, attribs):
 	data = _source()
 	if data and row < data.numRows:
 		depth = int(data[row, 'depth'].val or '0')
-		attribs.rowIndent = depth * 18
+		# +1 base level so the column-0 expand/collapse glyph also renders on
+		# top-level (depth 0) rows. The List COMP does not display col-0 cell
+		# content at rowIndent 0, which left root rows with children (e.g.
+		# /embody) showing no +/- affordance.
+		attribs.rowIndent = (depth + 1) * 18
 	attribs.bgColor = _row_bg(row)
 
 
