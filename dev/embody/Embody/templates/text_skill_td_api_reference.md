@@ -241,7 +241,7 @@ bounds = pop_op.bounds(delayed=True)  # Non-blocking
 attrs = pop_op.pointAttributes        # Set of attribute names
 ```
 
-Common types: `gridPOP`, `noisePOP`, `transformPOP`, `particlePOP`, `spherePOP`, `linePOP`, `mergePOP`, `nullPOP`, `selectPOP`, `mathPOP`, `cachePOP`, `fileinPOP`, `glslPOP`
+Common types: `gridPOP`, `noisePOP`, `transformPOP`, `particlePOP`, `spherePOP`, `linePOP`, `mergePOP`, `nullPOP`, `selectPOP`, `mathPOP`, `cachePOP`, `glslPOP`. For files: `fileinPOP` (File In POP — meshes/geometry) vs `pointfileinPOP` (Point File In POP — 3D point clouds: `.ply`/`.pts`/`.xyz`/`.e57`, Gaussian splats) are **distinct** operators.
 - Docs: https://docs.derivative.ca/POP_Class
 
 ## `run()` — Delayed Code Execution
