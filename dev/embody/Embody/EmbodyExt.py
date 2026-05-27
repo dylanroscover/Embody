@@ -2850,19 +2850,60 @@ class EmbodyExt:
         return success
 
     @staticmethod
+    def _parFingerprint(operator) -> tuple:
+        """Fingerprint an operator's non-default parameters.
+
+        Mirrors what a TDN export serializes (non-default pars only), so a
+        parameter edit -- constant value, expression, or bind -- changes the
+        fingerprint and marks the TDN COMP dirty. Captures the AUTHORED value
+        (expr for expression mode, bindExpr for bind, val for constant), never
+        .eval(), so no cook side effects and a match for what TDN records.
+        Embody-managed About-page metadata (Build/Date/Touchbuild) is excluded
+        to match TDN export and avoid spurious dirty flags on build bumps.
+        """
+        skip = {'Build', 'Date', 'Touchbuild'}
+        out = []
+        for p in operator.pars():
+            try:
+                if p.name in skip or p.isDefault:
+                    continue
+                mode = p.mode.name
+                if mode == 'EXPRESSION':
+                    v = p.expr
+                elif mode == 'BIND':
+                    v = p.bindExpr
+                else:
+                    v = p.val
+                out.append((p.name, mode, str(v)))
+            except Exception:
+                # A single unreadable par must not break dirty detection.
+                continue
+        out.sort()
+        return tuple(out)
+
+    @staticmethod
     def _computeTDNFingerprint(comp, tdn_paths: set = None) -> tuple:
         """Compute a hashable fingerprint of a TDN COMP's network structure.
 
         Used instead of oper.dirty for TDN COMPs (which always reads True
-        because externaltox is empty). Captures all visual and metadata
-        properties that a TDN export records: name, type, position, size,
-        color, tags, flags, comment, connections, and annotations.
+        because externaltox is empty). Captures everything a TDN export
+        records: the root COMP's own non-default parameters, plus each
+        embedded operator's name, type, position, size, color, tags, flags,
+        comment, non-default parameters, connections, and annotations.
 
         Recurses into child COMPs that are NOT separately TDN-externalized,
         so changes deep inside nested COMPs (e.g. editing a POP inside a
-        geometryCOMP) are detected by the parent's fingerprint.
+        geometryCOMP) are detected by the parent's fingerprint. A separately
+        TDN-externalized child is recorded only structurally -- its own
+        parameters are tracked by its own fingerprint, mirroring how a TDN
+        export emits a reference rather than the child's content.
         """
         parts = []
+        # The root COMP's own parameters are part of its TDN export, so a
+        # top-level parameter edit must change the fingerprint. (Without this,
+        # only structural/layout changes were detected -- param edits on a TDN
+        # COMP went unnoticed by dirty detection.)
+        parts.append(('__self_pars__', EmbodyExt._parFingerprint(comp)))
         for c in sorted(comp.children, key=lambda c: c.name):
             # Skip annotations -- they're fingerprinted separately below
             if c.type == 'annotate':
@@ -2879,8 +2920,14 @@ class EmbodyExt:
             for i, conn in enumerate(c.inputConnectors):
                 for link in conn.connections:
                     parts.append((c.name, 'in', i, link.owner.name))
-            # Recurse into child COMPs that don't have their own TDN file
-            if c.isCOMP and (tdn_paths is None or c.path not in tdn_paths):
+            # A separately TDN-externalized child COMP is referenced, not
+            # embedded -- its params/content are tracked by its own
+            # fingerprint. Embedded ops (non-COMP children, or COMPs without
+            # their own .tdn) have their params recorded here.
+            is_embedded_comp = c.isCOMP and (tdn_paths is None or c.path not in tdn_paths)
+            if not c.isCOMP or is_embedded_comp:
+                parts.append((c.name, 'pars', EmbodyExt._parFingerprint(c)))
+            if is_embedded_comp:
                 child_fp = EmbodyExt._computeTDNFingerprint(c, tdn_paths)
                 parts.append((c.name, 'children', child_fp))
         # All annotations (utility=True or False) -- uses annotation-specific attrs
@@ -3188,6 +3235,13 @@ class EmbodyExt:
             self.param_tracker.updateParamStore(oper)
             self._addToTable(oper, str(rel_path), timestamp, False,
                              build_num, touch_build, 'tdn')
+            # Prime the dirty-detection baseline now, on the just-exported
+            # (clean) network, so the dirty indicator is correct immediately
+            # instead of being set lazily by the first _isTDNDirty scan. Without
+            # this, a param edit landing before that first scan would be absorbed
+            # into the baseline and the COMP would wrongly read clean. Mirrors
+            # SaveTDN, which snapshots the fingerprint after every export.
+            self._storeTDNFingerprint(oper)
             self.Log(f"Added TDN '{oper.path}'", "SUCCESS")
 
             # Cascade: auto-tag child COMPs if enabled
@@ -5809,6 +5863,14 @@ class EmbodyExt:
             # Reconstruct About page from TSV (no longer serialized in .tdn)
             self._reconstructAboutPage(comp, comp_path)
 
+            # Prime dirty-detection baselines on the freshly reconstructed
+            # (clean) network so the dirty indicator is accurate from project
+            # open, rather than being set lazily by the first scan -- which
+            # would absorb any edit made before it and wrongly read clean.
+            # Mirrors _handleTDNAddition and SaveTDN (both snapshot here).
+            self.param_tracker.updateParamStore(comp)
+            self._storeTDNFingerprint(comp)
+
             # Phase E: Post-reconstruction error checking
             comp_errors = self._verifyReconstructedComp(comp)
             if comp_errors:
@@ -7197,10 +7259,12 @@ class EmbodyExt:
                 if result != 0:
                     self.Log(f'Failed to open file location: {filepath}', 'WARNING')
             elif sys.platform.startswith('win'):
+                # explorer.exe /select,<path> returns exit code 1 even on
+                # success (by design -- the launcher detaches). Don't gate
+                # on the return code or every successful click logs a
+                # false-positive warning.
                 filepath = filepath.replace('/', '\\')
-                result = subprocess.call(['explorer', '/select,', filepath])
-                if result != 0:
-                    self.Log(f'Failed to open file location: {filepath}', 'WARNING')
+                subprocess.Popen(['explorer', f'/select,{filepath}'])
         except Exception as e:
             self.Log(f'Failed to open file location: {e}', 'ERROR')
 
