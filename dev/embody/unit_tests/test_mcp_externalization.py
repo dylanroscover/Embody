@@ -2,7 +2,7 @@
 Test suite: MCP externalization integration handlers in EnvoyExt.
 
 Tests _externalize_op, _remove_externalization_tag,
-_get_externalizations, _get_externalization_status.
+_get_externalizations, _get_externalization_status, _save_externalization.
 """
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -153,3 +153,32 @@ class TestMCPExternalization(EmbodyTestCase):
             op_path=dat.path, tag_type='txt')
         self.assertTrue(result.get('success'))
         self.assertEqual(result['tag'], 'txt')
+
+    # --- _save_externalization ---
+
+    def test_save_externalization_comp(self):
+        """Force-saving an externalized COMP writes its file and succeeds."""
+        comp = self.sandbox.create(baseCOMP, 'save_comp')
+        self.envoy._externalize_op(op_path=comp.path)  # TOX strategy
+        result = self.envoy._save_externalization(op_path=comp.path)
+        self.assertTrue(result.get('success'),
+            f'save_externalization failed: {result.get("error")}')
+        self.assertEqual(result['path'], comp.path)
+        # Clean up the tag + file (keeps the externalization folder tidy).
+        self.envoy._remove_externalization_tag(op_path=comp.path)
+
+    def test_save_externalization_nonexistent(self):
+        result = self.envoy._save_externalization(op_path='/nonexistent')
+        self.assertDictHasKey(result, 'error')
+
+    def test_save_externalization_unsynced_dat(self):
+        """A DAT with no file-sync isn't externalized -- save must error."""
+        dat = self.sandbox.create(textDAT, 'unsynced_dat')
+        result = self.envoy._save_externalization(op_path=dat.path)
+        self.assertDictHasKey(result, 'error')
+
+    def test_save_externalization_unsupported_family(self):
+        """Non-COMP, non-DAT operators are unsupported for save."""
+        chop = self.sandbox.create(constantCHOP, 'save_chop')
+        result = self.envoy._save_externalization(op_path=chop.path)
+        self.assertDictHasKey(result, 'error')

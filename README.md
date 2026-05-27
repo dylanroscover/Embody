@@ -150,7 +150,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **53 test suites** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **54 test suites** (1,328 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)

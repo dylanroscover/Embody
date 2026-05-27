@@ -1583,11 +1583,21 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertIn('envoy.json', result['message'])
 
     def test_launch_td_already_running(self):
-        """Refuses to launch if TD is already running."""
-        with patch.object(bridge, 'find_td_pid', return_value=os.getpid()):
-            state = self._make_state(
-                config={'td_executable': '/usr/bin/td', 'toe_path': 'test.toe'})
-            result = bridge.handle_launch_td({}, state)
+        """Refuses to launch if THIS instance is already running.
+
+        The guard is registry-based (v5.0.402): handle_launch_td resolves
+        the target .toe basename and refuses if an instance registered under
+        that name has a live td_pid. Seed the registry with this test
+        process's own PID so is_process_alive() returns True deterministically.
+        """
+        state = self._make_state(config={
+            'td_executable': '/usr/bin/td',
+            'active': 'test',
+            'instances': {
+                'test': {'td_pid': os.getpid(), 'toe_path': 'test.toe'},
+            },
+        })
+        result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
         self.assertIn('already running', result['message'])
 

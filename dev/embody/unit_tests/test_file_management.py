@@ -41,9 +41,32 @@ class TestFileManagement(EmbodyTestCase):
 
     # --- safeDeleteFile ---
 
-    def test_safeDeleteFile_untracked_returns_false(self):
+    def test_safeDeleteFile_nonexistent_returns_false(self):
+        # Short-circuits at is_file() before the tracked-file guard.
         result = self.embody_ext.safeDeleteFile('/nonexistent/fake/file.tox')
         self.assertFalse(result)
+
+    def test_safeDeleteFile_existing_untracked_is_refused(self):
+        """The actual data-loss guard: an EXISTING file that Embody does not
+        track must NOT be deleted without force, and must survive the call.
+        (The nonexistent-path test never reaches this branch.)"""
+        temp_dir = Path(project.folder) / 'embody' / 'unit_tests' / '_test_temp'
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        untracked = temp_dir / 'untracked_keepme.txt'
+        untracked.write_text('not tracked by embody')
+        try:
+            self.assertFalse(self.embody_ext.isTrackedFile(str(untracked)))
+            result = self.embody_ext.safeDeleteFile(str(untracked))  # no force
+            self.assertFalse(result, 'must refuse to delete an untracked file')
+            self.assertTrue(untracked.exists(),
+                'untracked file must survive a non-forced safeDeleteFile')
+        finally:
+            if untracked.exists():
+                untracked.unlink()
+            try:
+                temp_dir.rmdir()
+            except OSError:
+                pass
 
     def test_safeDeleteFile_force_on_temp_file(self):
         # Create a temp file and force-delete it

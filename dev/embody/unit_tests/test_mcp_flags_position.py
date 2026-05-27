@@ -2,7 +2,7 @@
 Test suite: MCP flags and position handlers in EnvoyExt.
 
 Tests _get_op_flags, _set_op_flags, _get_op_position,
-_set_op_position, _layout_children.
+_set_op_position, _layout_children, _get_network_layout.
 """
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -96,4 +96,39 @@ class TestMCPFlagsPosition(EmbodyTestCase):
 
     def test_layout_children_nonexistent(self):
         result = self.envoy._layout_children(op_path='/nonexistent')
+        self.assertDictHasKey(result, 'error')
+
+    # --- _get_network_layout ---
+
+    def test_get_network_layout_lists_children(self):
+        parent = self.sandbox.create(baseCOMP, 'layout_query')
+        parent.create(baseCOMP, 'child_a')
+        parent.create(baseCOMP, 'child_b')
+        result = self.envoy._get_network_layout(comp_path=parent.path)
+        self.assertDictHasKey(result, 'operators')
+        self.assertEqual(result['count'], 2)
+        names = {o['name'] for o in result['operators']}
+        self.assertEqual(names, {'child_a', 'child_b'})
+
+    def test_get_network_layout_entry_has_position_fields(self):
+        parent = self.sandbox.create(baseCOMP, 'layout_fields')
+        parent.create(baseCOMP, 'only_child')
+        result = self.envoy._get_network_layout(comp_path=parent.path)
+        entry = result['operators'][0]
+        for key in ('nodeX', 'nodeY', 'nodeWidth', 'nodeHeight'):
+            self.assertDictHasKey(entry, key)
+        self.assertDictHasKey(result, 'bounding_box')
+
+    def test_get_network_layout_annotations_toggle(self):
+        parent = self.sandbox.create(baseCOMP, 'layout_anno')
+        parent.create(baseCOMP, 'a_child')
+        with_anno = self.envoy._get_network_layout(
+            comp_path=parent.path, include_annotations=True)
+        self.assertDictHasKey(with_anno, 'annotations')
+        without = self.envoy._get_network_layout(
+            comp_path=parent.path, include_annotations=False)
+        self.assertNotIn('annotations', without)
+
+    def test_get_network_layout_nonexistent(self):
+        result = self.envoy._get_network_layout(comp_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
