@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.4",
-	"build": 18,
-	"generator": "Embody/5.0.412",
+	"build": 26,
+	"generator": "Embody/5.0.427",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.412.toe",
-	"exported_at": "2026-05-18T15:41:54Z",
+	"source_file": "Embody-5.427.toe",
+	"exported_at": "2026-05-29T07:29:31Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false,
@@ -221,7 +221,7 @@
 			"name": "button1",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "+  Add tox",
+				"label": "⇄  Convert to tox",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -283,7 +283,7 @@
 			"name": "button2",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "+  Add py",
+				"label": "×  Remove tdn",
 				"colorr": 0.2,
 				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
 				"colorb": 0.2,
@@ -342,440 +342,6 @@
 			]
 		},
 		{
-			"name": "button3",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add json",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [275, -276],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button4",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add xml",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [525, -276],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button5",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add html",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [-225, -451],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button6",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add glsl",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [25, -451],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button7",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add frag",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [275, -451],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button8",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add vert",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [525, -451],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button9",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add txt",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [-225, -626],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
 			"name": "btn_save",
 			"type": "buttonCOMP",
 			"parameters": {
@@ -783,8 +349,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 0.5,
-				"display": false
+				"alignorder": 0.5
 			},
 			"position": [25, 100],
 			"size": [160, 134],
@@ -839,387 +404,14 @@
 			]
 		},
 		{
-			"name": "button10",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add md",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [25, -626],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button11",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add rtf",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [275, -626],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button12",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add csv",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [525, -626],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button13",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add tsv",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [-225, -801],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button14",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add dat",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [25, -801],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
-			"name": "button15",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "+  Add tdn",
-				"colorr": 0.2,
-				"colorg": "=parent.Embody.par.Taggingmenucolorg if me.digits % 2 else parent.Embody.par.Taggingmenucolorg - 0.05",
-				"colorb": 0.2,
-				"alignorder": 1,
-				"topsmoothness": "mipmap",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"position": [275, -801],
-			"size": [160, 76],
-			"storage": {
-				"_tdn_palette_handling": "blackbox"
-			},
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"position": [275, 175],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"position": [65, 175]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"scaletofit": "onlyshrink",
-						"fontalpha": "=parent.Embody.par.Textcolora",
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"reloadbuiltin": false
-					},
-					"position": [74, 26],
-					"size": [113, 64]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"op": ".."
-					},
-					"position": [66, -83]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"position": [247, -81]
-				}
-			]
-		},
-		{
 			"name": "btn_embed",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "⊞  Embed DATs in tdn",
+				"label": "⊞  Embed DATs in tdn  ✓",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 0.65,
-				"display": false
+				"alignorder": 0.65
 			},
 			"position": [260, 275],
 			"size": [160, 134],
@@ -1281,8 +473,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 0.6,
-				"display": false
+				"alignorder": 0.6
 			},
 			"position": [-280, 275],
 			"size": [160, 134],
@@ -1505,8 +696,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 10,
-				"display": false
+				"alignorder": 10
 			},
 			"position": [-820, 275],
 			"size": [160, 134],
@@ -1565,8 +755,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 1,
-				"display": false
+				"alignorder": 1
 			},
 			"position": [-460, 275],
 			"size": [160, 134],
@@ -1630,7 +819,7 @@
 			"name": "switch_family",
 			"type": "switchDAT",
 			"parameters": {
-				"index": 1
+				"index": 2
 			},
 			"flags": ["viewer"],
 			"position": [-600, 0],
@@ -1645,8 +834,7 @@
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
-				"alignorder": 0.66,
-				"display": false
+				"alignorder": 0.66
 			},
 			"position": [440, 275],
 			"size": [160, 134],

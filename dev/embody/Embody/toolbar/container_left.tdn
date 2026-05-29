@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.4",
-	"build": 8,
-	"generator": "Embody/5.0.412",
+	"build": 16,
+	"generator": "Embody/5.0.427",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.412.toe",
-	"exported_at": "2026-05-18T15:41:54Z",
+	"source_file": "Embody-5.427.toe",
+	"exported_at": "2026-05-29T07:29:24Z",
 	"network_path": "/embody/Embody/toolbar/container_left",
 	"options": {
 		"include_dat_content": false,
@@ -104,6 +104,7 @@
 			"type": "textCOMP",
 			"parameters": {
 				"text": "󰓅",
+				"callbacks": "perform_callbacks",
 				"font": "Material Design Icons",
 				"fontsize": 11,
 				"w": 36,
@@ -254,24 +255,6 @@
 			"tdn_ref": "embody/Embody/toolbar/container_left/save_folder.tdn"
 		},
 		{
-			"name": "envoy_status",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "=parent.Embody.par.Envoystatus.eval()",
-				"callbacks": "new_envoy_status_callbacks",
-				"font": "Open Sans",
-				"fontsize": 9,
-				"w": 160,
-				"alignorder": 1100,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
-				"marginl": 3
-			},
-			"position": [1000, 0],
-			"tdn_ref": "embody/Embody/toolbar/container_left/envoy_status.tdn"
-		},
-		{
 			"name": "envoy_toggle",
 			"type": "textCOMP",
 			"parameters": {
@@ -288,6 +271,9 @@
 				"bgalpha": 1
 			},
 			"position": [800, 0],
+			"storage": {
+				"pressed": false
+			},
 			"tdn_ref": "embody/Embody/toolbar/container_left/envoy_toggle.tdn"
 		},
 		{
@@ -398,15 +384,6 @@
 			},
 			"position": [0, -160],
 			"dock": "save_folder"
-		},
-		{
-			"name": "envoy_status_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/envoy_status_callbacks.py"
-			},
-			"position": [0, -160],
-			"dock": "envoy_status"
 		},
 		{
 			"name": "envoy_toggle_callbacks",

@@ -3,10 +3,11 @@ Test suite: MCP TDN network tools.
 
 Covers:
   A. read_tdn returns a valid TDN dict for a representative COMP
-  B. read_tdn respects max_depth and embed_all flags
+  B. read_tdn include_dat_content toggle
   C. read_tdn succeeds in all three Tdnmode values (off / export / full)
   D. Token-budget regression: read_tdn payload is materially smaller than
      an equivalent get_op walk (locks in the central MCP-efficiency claim)
+  E. export_network / import_network MCP handlers round-trip a network
 """
 
 import json
@@ -120,3 +121,49 @@ class TestMCPTDNTools(EmbodyTestCase):
             f'Expected read_tdn to be >5x smaller than get_op walk. '
             f'tdn={tdn_chars} chars, get_op_sum={get_op_chars} chars, '
             f'ratio={ratio:.2f}x')
+
+    # ------------------------------------------------------------------
+    # E. export_network / import_network round-trip
+    # ------------------------------------------------------------------
+
+    def test_export_network_in_memory(self):
+        """_export_network with output_file=None returns a TDN dict (no disk)."""
+        result = self.envoy._export_network(
+            root_path=self.fixture.path, output_file=None)
+        self.assertTrue(result.get('success'),
+            f'export_network failed: {result.get("error")}')
+        self.assertEqual(result['tdn'].get('format'), 'tdn')
+
+    def test_export_network_nonexistent(self):
+        result = self.envoy._export_network(
+            root_path='/nonexistent', output_file=None)
+        self.assertDictHasKey(result, 'error')
+
+    def test_export_then_import_round_trips(self):
+        """Round-trip through the MCP handlers: export the fixture, then
+        import it into a fresh COMP and confirm every child reappears."""
+        export = self.envoy._export_network(
+            root_path=self.fixture.path, output_file=None)
+        self.assertTrue(export.get('success'),
+            f'export failed: {export.get("error")}')
+
+        target = self.sandbox.create(baseCOMP, 'import_target')
+        result = self.envoy._import_network(
+            target_path=target.path, tdn=export['tdn'], clear_first=True)
+        self.assertTrue(result.get('success'),
+            f'import failed: {result.get("error")}')
+
+        names = {c.name for c in target.children}
+        self.assertTrue({'noise', 'level', 'null', 'wave', 'notes'} <= names,
+            f'Imported children missing from target: {names}')
+
+    def test_import_network_invalid_tdn(self):
+        target = self.sandbox.create(baseCOMP, 'import_bad')
+        result = self.envoy._import_network(
+            target_path=target.path, tdn={'not_operators': 1})
+        self.assertDictHasKey(result, 'error')
+
+    def test_import_network_nonexistent_target(self):
+        result = self.envoy._import_network(
+            target_path='/nonexistent', tdn={'operators': []})
+        self.assertDictHasKey(result, 'error')

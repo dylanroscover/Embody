@@ -24,6 +24,7 @@ extglob.FullName
 *.heartbeat
 CrashAutoSave*
 .plan.md
+plan-*.md
 dev/_test_pars_temp/
 site/
 Backup/

@@ -18,7 +18,7 @@ class WindowHeaderExt:
 		# Toolbar buttons hidden in compact mode (envoy_toggle stays visible)
 		self._compact_hide_names = (
 			'save_folder',
-			'envoy_status', 'disable',
+			'disable',
 		)
 
 		# Known-good default display states for maximize restore
@@ -35,7 +35,6 @@ class WindowHeaderExt:
 			'export_comp_tdn':  {'mode': 'constant', 'val': 1},
 			'export_tdn':       {'mode': 'constant', 'val': 1},
 			'import_tdn':       {'mode': 'constant', 'val': 1},
-			'envoy_status':     {'mode': 'constant', 'val': 1},
 			'envoy_toggle':     {'mode': 'constant', 'val': 1},
 		}
 

@@ -90,24 +90,42 @@ def onDeviceChange():
 	return
 
 def onProjectPreSave():
-	# Clear runtime-only storage that must not bake into the .tox.
-	# _git_root is computed fresh at Start() time -- baking it in would cause
-	# every user's project to inherit the dev repo path from the release .tox.
-	parent.Embody.unstore('_git_root')
-	parent.Embody.unstore('_init_complete')
-	# Clear session-only stores before the save so they never bake into the
-	# .tox. _tdn_stripped_paths and _tdn_pane_restore are written and consumed
-	# within a single Ctrl+S cycle -- they have no meaning across sessions.
-	parent.Embody.unstore('_tdn_stripped_paths')
-	parent.Embody.unstore('_tdn_pane_restore')
-	parent.Embody.unstore('_perform_state')
+	# Wrap EVERYTHING in a fail-safe boundary. By the time onProjectPreSave
+	# fires, TD has already opened the .toe target for writing; any unhandled
+	# exception here truncates the save to 0 bytes (issue #21). The boundary
+	# must include the unstores and the Perform Mode check, not just the
+	# externalization pipeline -- a crash in any of them is equally fatal.
+	try:
+		# Clear runtime-only storage that must not bake into the .tox.
+		# _git_root is computed fresh at Start() time -- baking it in would cause
+		# every user's project to inherit the dev repo path from the release .tox.
+		parent.Embody.unstore('_git_root')
+		parent.Embody.unstore('_init_complete')
+		# Clear session-only stores before the save so they never bake into the
+		# .tox. _tdn_stripped_paths and _tdn_pane_restore are written and consumed
+		# within a single Ctrl+S cycle -- they have no meaning across sessions.
+		parent.Embody.unstore('_tdn_stripped_paths')
+		parent.Embody.unstore('_tdn_pane_restore')
+		parent.Embody.unstore('_perform_state')
 
-	# Skip all pre-save processing in Perform Mode.
-	# The .toe still saves normally via TD -- Embody's externalization pipeline is bypassed.
-	if parent.Embody.ext.Embody._performMode:
-		parent.Embody.ext.Embody.Log('Perform Mode -- skipping pre-save externalization', 'INFO')
-		return
+		# Skip all pre-save processing in Perform Mode.
+		# The .toe still saves normally via TD -- Embody's externalization pipeline is bypassed.
+		if parent.Embody.ext.Embody._performMode:
+			parent.Embody.ext.Embody.Log('Perform Mode -- skipping pre-save externalization', 'INFO')
+			return
 
+		_runPreSaveExternalization()
+	except Exception as e:
+		try:
+			parent.Embody.ext.Embody.Log(
+				f'Pre-save externalization failed (save will continue): {e}',
+				'ERROR')
+		except Exception:
+			# Log itself failed -- fall back to print so the message reaches textport
+			print(f'Embody > Pre-save externalization failed: {e}')
+
+
+def _runPreSaveExternalization():
 	# Suppress the delayed Refresh pulse - the continuity check must NOT
 	# fire during the strip/restore window or it will delete files for
 	# temporarily-missing operators inside TDN COMPs.
@@ -230,16 +248,25 @@ def onProjectPreSave():
 	# can be tracked in stripped_info, so post-save never restores it.
 	exported_by_depth = sorted(
 		exported, key=lambda x: x[0].count('/'), reverse=True)
-	stripped_info = []
+
+	# Pre-stage the restore list BEFORE stripping. Each entry in `exported`
+	# corresponds to a successful .tdn export (Phase 1 only appended after
+	# successful write/track/fingerprint), so every entry is safe for post-save
+	# reconstruction. Storing up-front means a mid-strip crash -- caught by
+	# onProjectPreSave's fail-safe boundary -- still leaves post-save with a
+	# complete restore list. Entries already-stripped get rebuilt from .tdn;
+	# entries not-yet-reached are no-op rebuilds (their children survive
+	# untouched in the live session because strip never ran on them).
+	# Without this pre-stage, a mid-strip crash destroyed children with no
+	# recovery list, leaving the live session broken until manual
+	# ReconstructTDNComps() or reopen (the .tdn files on disk are still the
+	# source of truth, so saved data is never lost -- but session integrity is).
+	if exported_by_depth:
+		parent.Embody.store('_tdn_stripped_paths', list(exported_by_depth))
 	for comp_path, rel_tdn_path in exported_by_depth:
 		comp = op(comp_path)
 		if comp:
 			parent.Embody.ext.Embody.StripCompChildren(comp)
-		# Always track -- nested COMPs may already be destroyed by a
-		# parent strip earlier in this loop. They still need restoring.
-		stripped_info.append((comp_path, rel_tdn_path))
-	if stripped_info:
-		parent.Embody.store('_tdn_stripped_paths', stripped_info)
 	return
 
 def onProjectPostSave():

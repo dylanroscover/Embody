@@ -1070,16 +1070,32 @@ class TDNExt:
 					pass
 
 		if clear_first:
-			# Clear dock relationships before destroying -- TD's engine
-			# raises an uncatchable tdError if a dock target is destroyed
-			# before its docked operator.
+			# Excluded COMPs are invisible to TDN -- the owning app owns
+			# their lifecycle. Never destroy them during clear_first: they
+			# are absent from the .tdn, so reconstruction would not recreate
+			# them, making destruction permanent data loss.
+			excluded_children = {
+				c.path for c in dest.children if self._hasExcludeTag(c)}
+			if excluded_children:
+				self._log(
+					f'Preserving {len(excluded_children)} excluded COMP(s) '
+					f'during clear of {dest.path}', 'DEBUG')
+			# Clear dock relationships pointing INTO the destroy set before
+			# destroying -- TD's engine raises an uncatchable tdError if a
+			# dock target is destroyed before its docked operator. This MUST
+			# include a preserved excluded child docked to a soon-destroyed
+			# sibling, else the preservation reintroduces that crash. Docks
+			# between two preserved excluded children are left intact.
 			for child in list(dest.children):
 				try:
-					if child.dock is not None:
+					if (child.dock is not None
+							and child.dock.path not in excluded_children):
 						child.dock = None
 				except Exception:
 					pass
 			for child in list(dest.children):
+				if child.path in excluded_children:
+					continue
 				try:
 					child.destroy()
 				except Exception as e:
@@ -1103,6 +1119,23 @@ class TDNExt:
 				TDNExt._resolve_par_templates(op_defs, par_templates)
 			if type_defaults:
 				TDNExt._merge_type_defaults(op_defs, type_defaults)
+
+		# Pre-phase: Never overwrite a preserved excluded child. A live
+		# excluded COMP is kept by the clear_first pass above; if a stale
+		# .tdn still lists an op with the same name, drop that entry so the
+		# later create/merge phases don't reuse and mutate the app-owned COMP.
+		if dest is not None:
+			excluded_names = {c.name for c in dest.children
+							  if self._hasExcludeTag(c)}
+			if excluded_names:
+				before = len(op_defs)
+				op_defs = [d for d in op_defs
+						   if d.get('name') not in excluded_names]
+				if len(op_defs) != before:
+					self._log(
+						f'Skipping {before - len(op_defs)} stale import '
+						f'entry(ies) matching preserved excluded COMP(s) in '
+						f'{target_path}', 'INFO')
 
 		# Pre-phase: Skip children of nested TDN-externalized COMPs.
 		# If a child COMP has its own .tdn entry in the externalizations table,
@@ -1437,6 +1470,29 @@ class TDNExt:
 					_SYSTEM_PATH_PREFIXES):
 				continue
 
+			# Skip COMPs tagged for exclusion -- the whole subtree is
+			# invisible to TDN (no inline export, no tdn_ref). The owning
+			# application manages their lifecycle.
+			#
+			# Exclusion is honored ONLY for direct children (depth 0) of the
+			# exported boundary, because the strip/clear passes only preserve
+			# direct children. A nested excluded COMP (depth > 0) is NOT
+			# preserved by those passes, so if we also skipped it here the
+			# .tdn would omit it while strip destroyed it -- permanent data
+			# loss. Instead we serialize a nested excluded COMP as ordinary
+			# content (it round-trips and survives), and warn that the tag had
+			# no effect at this depth.
+			if self._hasExcludeTag(child):
+				if depth == 0:
+					continue
+				self._log(
+					f'Excluded COMP {child.path} is nested under a '
+					f'non-excluded COMP -- whole-subtree exclusion only '
+					f'applies to direct children of a TDN boundary. It will '
+					f'be serialized as normal content. Tag the intervening '
+					f'COMP(s), or make it a direct child, to exclude it.',
+					'WARNING')
+
 			if child.name in skip:
 				continue
 
@@ -1455,6 +1511,14 @@ class TDNExt:
 
 	def _exportSingleOp(self, target, options, depth, recurse=True):
 		"""Export a single operator to a dict."""
+		# Backstop: a COMP tagged for exclusion is invisible to TDN, but ONLY
+		# when it is a direct child of the boundary (depth 0) -- the strip/
+		# clear passes only preserve direct children, so a nested excluded
+		# COMP must be serialized as normal content or it is lost. This guards
+		# direct and async callers of the depth-0 case; _exportChildren
+		# already handles the depth>0 warning.
+		if depth == 0 and self._hasExcludeTag(target):
+			return None
 		data = {
 			'name': target.name,
 			'type': target.OPType,
@@ -3640,6 +3704,9 @@ class TDNExt:
 			if child.path in SYSTEM_PATHS or child.path.startswith(
 					_SYSTEM_PATH_PREFIXES):
 				continue
+			# Skip excluded COMPs and their whole subtree -- invisible to TDN.
+			if self._hasExcludeTag(child):
+				continue
 			paths.append(child.path)
 
 			# Recurse into COMPs (but skip palette clone children
@@ -4188,6 +4255,28 @@ class TDNExt:
 			return False
 		tdn_tag = self.ownerComp.par.Tdntag.val
 		return tdn_tag in target.tags
+
+	def _hasExcludeTag(self, target):
+		"""Check if a COMP is tagged to be excluded from the TDN system.
+
+		An excluded COMP (and its whole subtree) is invisible to TDN:
+		never exported, never written to disk, never stripped on save,
+		never destroyed or recreated by reconstruction. The owning
+		application is solely responsible for its lifecycle. Annotation
+		COMPs are never eligible -- their lifecycle is TDN's, not the app's.
+
+		Exclusion is honored only when the tagged COMP is a DIRECT CHILD of
+		a TDN boundary (the exported/stripped root). The strip and clear
+		passes only preserve direct children, so a COMP tagged for exclusion
+		but nested below a non-excluded intermediate cannot be preserved --
+		it is serialized as normal content instead (with a warning) so it
+		round-trips rather than being lost. To exclude such a COMP, tag the
+		intervening COMP(s) or make it a direct child of the boundary.
+		"""
+		if not target.isCOMP or target.type == 'annotate':
+			return False
+		exclude_tag = self.ownerComp.par.Tdnexcludetag.eval()
+		return bool(exclude_tag) and exclude_tag in target.tags
 
 	def _hasTOXTag(self, target):
 		"""Check if a COMP has its own TOX externalization tag."""

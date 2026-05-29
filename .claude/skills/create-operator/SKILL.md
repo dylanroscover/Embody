@@ -21,7 +21,7 @@ Follow these steps every time you create operators via MCP:
 
 ## Operator Type Preferences
 
-- **Prefer POPs over SOPs** for geometry and particle work. POPs (Particle operators) are GPU-accelerated and significantly more performant than SOPs (Surface operators). Only use SOPs when POP equivalents don't exist or when CPU-side geometry manipulation is specifically required.
+- **Prefer POPs over SOPs** for geometry and particle work. POPs (Point Operators) are GPU-accelerated and significantly more performant than SOPs (Surface operators). Only use SOPs when POP equivalents don't exist or when CPU-side geometry manipulation is specifically required.
 
 ## Positioning Rules
 

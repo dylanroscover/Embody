@@ -1,12 +1,14 @@
 """
 Test suite: TDN content safety guards — DAT + storage loss detection,
-combined dialog, and removal of the single-click "Never Ask" footgun.
+combined dialog, and the Skip Once / Always Skip preference buttons.
 
 Covers:
   A. _findAtRiskStorage detects user storage keys on TDN COMPs
   B. Control keys and runtime/skip keys are NOT flagged as at-risk
   C. Combined dialog surfaces both DATs and storage
-  D. Dialog no longer offers "Never Ask" as a button
+  D. Dialog offers Skip Once + an explicit, reversible Always Skip
+     (the old bare single-click "Never Ask" label stays gone); the
+     "Always" buttons persist the Tdndatsafety preference
   E. Skip logs a SUCCESS summary of what was dropped
 """
 
@@ -38,10 +40,10 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         def _stub(title, message, buttons):
             self._captured.append({'title': title, 'message': message,
                                    'buttons': list(buttons)})
-            # Default: return 1 (index for "Skip").
             return self._scripted_choice
 
-        self._scripted_choice = 1
+        # Default: index 2 == "Skip Once" (one-time skip, no persistence).
+        self._scripted_choice = 2
         self.embody_ext._messageBox = _stub
 
     def tearDown(self):
@@ -117,21 +119,59 @@ class TestTDNSafetyGuards(EmbodyTestCase):
             tdn_parent.unstore('embed_storage_in_tdn')
 
     # ------------------------------------------------------------------
-    # B. Dialog — no "Never Ask" button, combined DAT + storage surface
+    # B. Dialog — Skip Once + explicit reversible Always Skip; both
+    #    "Always" buttons persist the Tdndatsafety preference
     # ------------------------------------------------------------------
 
-    def test_prompt_offers_no_never_ask_button(self):
+    def test_prompt_offers_skip_once_and_always_skip(self):
         self.sandbox.store('risky', 'data')
         try:
             self.embody_ext._checkTDNContentSafety()
             self.assertEqual(len(self._captured), 1,
                 'Expected exactly one dialog for at-risk content')
             buttons = self._captured[0]['buttons']
-            self.assertNotIn('Never Ask', buttons,
-                '"Never Ask" button must be removed — it is a silent '
-                'single-click footgun')
-            # Skip is still offered as an escape.
-            self.assertIn('Skip', buttons)
+            # The old bare single-click "Never Ask" / "Skip" labels are gone;
+            # the persistent skip is now the explicit, reversible "Always Skip".
+            self.assertNotIn('Never Ask', buttons)
+            self.assertIn('Skip Once', buttons)
+            self.assertIn('Always Skip', buttons)
+            self.assertIn('Always Externalize', buttons)
+        finally:
+            self.sandbox.unstore('risky')
+
+    def test_always_skip_persists_ignore_preference(self):
+        """'Always Skip' (index 3) sets Tdndatsafety='ignore' so future
+        saves don't warn, and still skips the current save."""
+        self.sandbox.store('risky', 'data')
+        try:
+            self._scripted_choice = 3  # Always Skip
+            self.embody_ext._checkTDNContentSafety()
+            self.assertEqual(self.embody.par.Tdndatsafety.eval(), 'ignore',
+                'Always Skip must persist the ignore preference')
+        finally:
+            self.sandbox.unstore('risky')
+
+    def test_always_externalize_persists_externalize_preference(self):
+        """'Always Externalize' (index 1) sets Tdndatsafety='externalize'."""
+        self.sandbox.store('risky', 'data')
+        try:
+            self._scripted_choice = 1  # Always Externalize
+            self.embody_ext._checkTDNContentSafety()
+            self.assertEqual(self.embody.par.Tdndatsafety.eval(),
+                             'externalize',
+                'Always Externalize must persist the externalize preference')
+        finally:
+            self.sandbox.unstore('risky')
+
+    def test_ignore_preference_suppresses_prompt(self):
+        """With Tdndatsafety='ignore' (the result of Always Skip), no dialog
+        is shown even when at-risk content exists — that is the whole point."""
+        self.embody.par.Tdndatsafety.val = 'ignore'
+        self.sandbox.store('risky', 'data')
+        try:
+            self.embody_ext._checkTDNContentSafety()
+            self.assertEqual(len(self._captured), 0,
+                'ignore preference must suppress the dialog entirely')
         finally:
             self.sandbox.unstore('risky')
 
@@ -156,7 +196,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
     def test_skip_logs_success_summary(self):
         self.sandbox.store('soon_gone', 'value')
         try:
-            self._scripted_choice = 1  # Skip
+            self._scripted_choice = 2  # Skip Once
             log_count_before = self.embody_ext._log_counter
             self.embody_ext._checkTDNContentSafety()
             new_logs = [e for e in self.embody_ext._log_buffer

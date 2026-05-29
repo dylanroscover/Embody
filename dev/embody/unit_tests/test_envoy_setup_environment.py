@@ -14,7 +14,10 @@ introduced by the original sys.modules-clearing path in v5.0.393.
   from a prior failed import)
 """
 
+import os
+import shutil
 import sys
+import tempfile
 import types
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -101,3 +104,179 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 		self.assertIsNot(surviving, half_loaded,
 			'half-loaded mcp parent must have been cleared and re-imported '
 			'(or removed when import failed)')
+
+
+class TestVenvPaths(EmbodyTestCase):
+	"""_venvPaths() produces the plain-data spec handed to the worker thread.
+
+	It reads project.folder (a TD global) and so must run on the main thread;
+	everything downstream (_environmentNeedsInstall, _installDependencies)
+	consumes only the dict it returns."""
+
+	def setUp(self):
+		super().setUp()
+		self.ext = self.embody.ext.Embody
+
+	def test_returns_all_expected_keys(self):
+		spec = self.ext._venvPaths()
+		for key in ('project_dir', 'venv_dir', 'site_packages', 'venv_python',
+					'python_exe', 'deps', 'mcp_min_version'):
+			self.assertIn(key, spec)
+
+	def test_deps_pin_mcp_and_attrs(self):
+		spec = self.ext._venvPaths()
+		self.assertTrue(any(d.startswith('mcp>=') for d in spec['deps']),
+			'deps must pin a minimum mcp version')
+		self.assertIn('attrs<25', spec['deps'])
+
+	def test_min_version_matches_class_constant(self):
+		spec = self.ext._venvPaths()
+		self.assertEqual(spec['mcp_min_version'], self.ext.MCP_MIN_VERSION)
+
+	def test_site_packages_lives_under_venv(self):
+		spec = self.ext._venvPaths()
+		self.assertIn('.venv', spec['venv_dir'])
+		self.assertTrue(spec['site_packages'].startswith(spec['venv_dir']))
+
+
+class TestEnvironmentNeedsInstall(EmbodyTestCase):
+	"""_environmentNeedsInstall() is the cheap, filesystem-only predicate that
+	decides sync (fast) vs async (background install) startup. It must never
+	run a subprocess, hit the network, or import -- it reads the installed
+	version straight from the mcp-X.Y.Z.dist-info directory name."""
+
+	def setUp(self):
+		super().setUp()
+		self.ext = self.embody.ext.Embody
+		self.tmp = tempfile.mkdtemp(prefix='embody_envtest_')
+
+	def tearDown(self):
+		shutil.rmtree(self.tmp, ignore_errors=True)
+		super().tearDown()
+
+	def _spec(self, min_ver='1.26.0'):
+		return {'site_packages': self.tmp, 'mcp_min_version': min_ver}
+
+	def _make_dist(self, name, version):
+		# Mirror a real site-packages layout: the package dir + its dist-info.
+		os.makedirs(os.path.join(self.tmp, name), exist_ok=True)
+		os.makedirs(os.path.join(self.tmp, f'{name}-{version}.dist-info'),
+					exist_ok=True)
+
+	def test_missing_mcp_needs_install(self):
+		self.assertTrue(self.ext._environmentNeedsInstall(self._spec()))
+
+	def test_current_version_no_install(self):
+		self._make_dist('mcp', '1.26.0')
+		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+
+	def test_old_version_needs_install(self):
+		self._make_dist('mcp', '1.0.0')
+		self.assertTrue(self.ext._environmentNeedsInstall(self._spec()))
+
+	def test_newer_version_no_install(self):
+		self._make_dist('mcp', '2.5.0')
+		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+
+	def test_attrs_25_forces_install(self):
+		self._make_dist('mcp', '1.26.0')
+		self._make_dist('attrs', '25.1.0')
+		self.assertTrue(self.ext._environmentNeedsInstall(self._spec()),
+			'attrs 25.x conflicts with TD and must trigger a downgrade install')
+
+	def test_attrs_24_is_fine(self):
+		self._make_dist('mcp', '1.26.0')
+		self._make_dist('attrs', '24.2.0')
+		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+
+	def test_mcp_present_without_metadata_accepts(self):
+		# Package dir but no dist-info: the original fast path accepted this and
+		# proceeded to the import check, so no install is required.
+		os.makedirs(os.path.join(self.tmp, 'mcp'), exist_ok=True)
+		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+
+
+class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
+	"""_installDependencies() runs on a background thread, so it must touch NO
+	TouchDesigner objects -- all output goes through the log callback, never
+	self.Log (which writes the FIFO DAT and reads parameters). These tests stub
+	uv discovery + subprocess so no real install runs, and assert self.Log is
+	never invoked."""
+
+	def setUp(self):
+		super().setUp()
+		self.ext = self.embody.ext.Embody
+		self.mod = self.embody.op('EmbodyExt').module
+		self.tmp = tempfile.mkdtemp(prefix='embody_instest_')
+		self._real_sub = self.mod.subprocess
+		self._real_find = self.ext._findOrInstallUv
+		# Trip-wire: if _installDependencies ever calls self.Log, record it.
+		self._log_calls = []
+		self.ext.Log = lambda *a, **k: self._log_calls.append((a, k))
+
+	def tearDown(self):
+		self.mod.subprocess = self._real_sub
+		self.ext._findOrInstallUv = self._real_find
+		try:
+			del self.ext.Log
+		except Exception:
+			pass
+		shutil.rmtree(self.tmp, ignore_errors=True)
+		super().tearDown()
+
+	def _spec(self):
+		return {
+			'venv_dir': os.path.join(self.tmp, '.venv'),
+			'venv_python': os.path.join(self.tmp, '.venv', 'bin', 'python'),
+			'python_exe': '/usr/bin/python3',
+			'deps': ['mcp>=1.26.0', 'attrs<25'],
+			'site_packages': os.path.join(self.tmp, 'sp'),
+			'mcp_min_version': '1.26.0',
+		}
+
+	def _stub_subprocess(self, run_fn):
+		real = self._real_sub
+
+		class _FakeSub:
+			DEVNULL = getattr(real, 'DEVNULL', -3)
+			CalledProcessError = real.CalledProcessError
+			run = staticmethod(run_fn)
+
+		self.mod.subprocess = _FakeSub
+
+	def test_success_logs_via_callback_not_Log(self):
+		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		runs = []
+		self._stub_subprocess(lambda *a, **k: runs.append(a))
+		msgs = []
+		ok = self.ext._installDependencies(
+			self._spec(), log=lambda m, lvl='INFO': msgs.append((lvl, m)))
+		self.assertTrue(ok)
+		self.assertTrue(any(lvl == 'SUCCESS' for lvl, _ in msgs))
+		self.assertTrue(len(runs) >= 1, 'should have invoked uv to install')
+		self.assertEqual(self._log_calls, [],
+			'must not call self.Log -- illegal from a worker thread')
+
+	def test_failure_returns_false_and_reports_stderr(self):
+		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+
+		def boom(*a, **k):
+			raise self._real_sub.CalledProcessError(1, 'uv', stderr='kaboom')
+
+		self._stub_subprocess(boom)
+		msgs = []
+		ok = self.ext._installDependencies(
+			self._spec(), log=lambda m, lvl='INFO': msgs.append((lvl, m)))
+		self.assertFalse(ok)
+		self.assertTrue(any(lvl == 'ERROR' and 'kaboom' in m for lvl, m in msgs))
+		self.assertEqual(self._log_calls, [])
+
+	def test_no_uv_returns_false(self):
+		self.ext._findOrInstallUv = lambda python_exe, log=None: None
+		self._stub_subprocess(lambda *a, **k: None)
+		msgs = []
+		ok = self.ext._installDependencies(
+			self._spec(), log=lambda m, lvl='INFO': msgs.append((lvl, m)))
+		self.assertFalse(ok)
+		self.assertTrue(any('uv' in m.lower() for _, m in msgs))
+		self.assertEqual(self._log_calls, [])
