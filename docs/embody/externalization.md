@@ -100,6 +100,22 @@ You can switch modes at any time — existing `.tdn` files on disk and tracked C
 !!! note "Opt-in per COMP"
     Regardless of mode, only COMPs you've explicitly tagged with Embody's TDN tag are touched. A fresh `baseCOMP` you just created is invisible to Embody until you tag it.
 
+### Excluding a COMP from TDN (the `tdn_exclude` tag)
+
+The `Tdnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) defines a tag that **opts a single COMP out of the entire TDN system**. Tagged COMPs are invisible to TDN: never exported, never inlined in a parent's `.tdn`, never stripped on save, never destroyed by reconstruction.
+
+**Primary use case: cascade-autotag bypass.** With cascade autotag enabled (`Tdncascade` parameter), tagging a parent COMP `tdn` propagates the `tdn` tag to every child in the subtree. If a specific child should *not* be externalized — typically because it's app-managed (spawned via `op.copy()` at runtime, populated from user data, or otherwise has a lifecycle outside Embody's control) — apply `tdn_exclude` to that child to keep it opted out.
+
+**Why not just leave the tag off?** With cascade autotag on, you can't — the cascade would re-apply `tdn` on the next scan. `tdn_exclude` is the only durable opt-out.
+
+**For app-managed copies**: when a runtime `.copy()` clones a COMP that has `tdn_exclude`, the clone inherits the tag and stays invisible to Embody. This is the recommended pattern for app-spawned content (Moonshine's `proj_<id>` projector chains, for example) — Embody won't track or interfere with the copies.
+
+**Constraints:**
+
+- Only COMPs are excludable. Annotation COMPs are explicitly ineligible.
+- If you nest an excluded COMP under a *non-excluded* TDN COMP, Embody warns at export time that the excluded child will be lost when the non-excluded parent is reconstructed or stripped. The warning names the intervening COMP to tag.
+- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`SaveTDN()` directly on an excluded COMP) currently still writes the `.tdn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
+
 ### Content Safety (save-time check)
 
 When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDN-managed COMPs:

@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.4",
 	"build": 1,
-	"generator": "Embody/5.0.412",
+	"generator": "Embody/5.0.427",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.412.toe",
-	"exported_at": "2026-05-18T15:41:53Z",
+	"source_file": "Embody-5.427.toe",
+	"exported_at": "2026-05-29T07:28:25Z",
 	"network_path": "/embody/Embody/windowHeader/button_max",
 	"options": {
 		"include_dat_content": false,

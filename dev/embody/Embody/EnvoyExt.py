@@ -39,12 +39,16 @@ class EnvoyMCPServer:
 
     def __init__(self, request_queue: Optional[Queue], response_queue: Queue,
                  add_to_refresh_queue: Callable[[dict], None], port: int = 9870,
-                 shutdown_event: Optional[Event] = None) -> None:
+                 shutdown_event: Optional[Event] = None,
+                 startup_event: Optional[Event] = None) -> None:
         self.request_queue: Optional[Queue] = request_queue
         self.response_queue: Queue = response_queue
         self.add_to_refresh_queue: Callable[[dict], None] = add_to_refresh_queue
         self.port: int = port
         self.shutdown_event: Event = shutdown_event or Event()
+        # Set once uvicorn has actually bound + started serving (H1). The main
+        # thread waits on this before declaring the server "Running".
+        self.startup_event: Optional[Event] = startup_event
         self.pending_requests: dict[int, dict] = {}
         self.request_counter: int = 0
         self.lock: Lock = Lock()
@@ -1428,6 +1432,23 @@ class EnvoyMCPServer:
 
         Thread(target=shutdown_monitor, daemon=True).start()
 
+        # H1: signal the main thread once uvicorn has ACTUALLY bound and begun
+        # serving.  uvicorn.Server.started flips True only after the listener
+        # socket is bound and lifespan startup completes -- the only honest
+        # "Running" signal.  Without this the main thread declared Running the
+        # instant the task was enqueued (zombie status over a dead socket).
+        def startup_monitor():
+            import time as _t
+            while not self.shutdown_event.is_set():
+                if getattr(uvi_server, 'started', False):
+                    if self.startup_event is not None:
+                        self.startup_event.set()
+                    return
+                _t.sleep(0.05)
+
+        if self.startup_event is not None:
+            Thread(target=startup_monitor, daemon=True).start()
+
         try:
             # On Windows, use SelectorEventLoop instead of the default ProactorEventLoop.
             # The IOCP proactor can permanently kill the listener socket on server restarts
@@ -1489,7 +1510,20 @@ class EnvoyExt:
         self._last_start_time: float = 0.0  # time.time() when Start() was called
         self._MAX_RESTARTS: int = 3
         self._RESTART_RESET_SECONDS: float = 120.0  # Reset counter after 2 min uptime
+        # H1 startup-readiness state: 'Running' is declared only after the
+        # worker confirms a real bind (via _pollStartup).  _starting guards the
+        # window so duplicate Start() calls are suppressed before envoy_running.
+        self._starting: bool = False
+        self._runtime_port: Optional[int] = None
+        self._startup_event: Optional[Event] = None
+        self._startup_deadline: float = 0.0
         self._venv_recreated: bool = False  # Guard: only auto-recreate venv once per session
+        # Background dependency-bootstrap state (see Start / _beginAsyncBootstrap).
+        # _bootstrap_result is None while the worker runs, then (ok, [(level, msg)..])
+        # once it finishes; the main-thread poll reads it. _bootstrapping guards
+        # against overlapping bootstraps from repeated Start() calls.
+        self._bootstrap_result: Optional[tuple] = None
+        self._bootstrapping: bool = False
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -1778,8 +1812,9 @@ class EnvoyExt:
 
     def Start(self) -> None:
         """Start MCP server via op.TDResources.ThreadManager"""
-        if self.ownerComp.fetch('envoy_running', False):
-            self._log('Server already running (duplicate Start ignored)', 'DEBUG')
+        if self.ownerComp.fetch('envoy_running', False) or self._starting:
+            self._log('Server already running/starting (duplicate Start ignored)',
+                      'DEBUG')
             return
         # The envoy_running store can be lost on extension reinit (file sync
         # replaces baked-in code → extension reinitializes → storage cleared).
@@ -1792,6 +1827,13 @@ class EnvoyExt:
             self.ownerComp.store('envoy_running', True)
             return
 
+        # A background dependency install from a prior Start() is still running;
+        # _pollBootstrap will finish the start when it completes. Don't stack a
+        # second bootstrap on top of it.
+        if self._bootstrapping:
+            self._log('Dependency install already in progress (Start ignored)', 'DEBUG')
+            return
+
         # Resolve git root silently -- Start() never prompts. Dialogs belong only
         # in _enableEnvoy() / InitGit() which are explicitly user-initiated.
         git_root = self.ownerComp.fetch('_git_root', None, search=False)
@@ -1799,11 +1841,26 @@ class EnvoyExt:
             git_root = self._findGitRoot()
             self.ownerComp.store('_git_root', git_root)
 
-        # Ensure Python environment is ready (idempotent fast path if already installed).
-        # If setup fails, abort here -- continuing would crash _runServer with an
-        # inscrutable 'No module named mcp.server' traceback. _setupEnvironment has
-        # already logged the specific failure to the textport.
-        if not op.Embody.ext.Embody._setupEnvironment():
+        # Ensure the Python environment is ready before starting the server.
+        # The fast path (deps already installed and current) is cheap and runs
+        # inline. But a fresh install or a version upgrade has to build the venv
+        # and pip-install the MCP stack -- tens of seconds to minutes of blocking
+        # subprocess work. Running THAT on the main thread froze TD on every
+        # drag-in upgrade (the user watched TD lock up, then recover when pip
+        # finished). So we route the install-needed case through a background
+        # thread and finish the start from _pollBootstrap once it completes.
+        Embody = op.Embody.ext.Embody
+        spec = Embody._venvPaths()
+        if Embody._environmentNeedsInstall(spec):
+            self._beginAsyncBootstrap(git_root, spec)
+            return
+
+        # Fast path: environment already usable. _setupEnvironment here is the
+        # cheap branch (sys.path wiring + the mcp.server import gate); no install
+        # happens. A False return means the venv is present but broken -- abort,
+        # because continuing would crash _runServer with an inscrutable
+        # 'No module named mcp.server' traceback.
+        if not Embody._setupEnvironment():
             self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
             self._log(
                 'Aborting Envoy start -- Python environment is not ready. '
@@ -1812,6 +1869,96 @@ class EnvoyExt:
             )
             return
 
+        self._continueStart(git_root)
+
+    def _beginAsyncBootstrap(self, git_root, spec) -> None:
+        """Install Envoy's Python dependencies on a background thread, then
+        finish the server start.
+
+        Keeps TouchDesigner responsive during the venv build / pip install that
+        a fresh install or a version upgrade triggers. The worker runs
+        EmbodyExt._installDependencies (which touches no TD objects); its log
+        lines are captured and replayed on the main thread by _pollBootstrap,
+        because EmbodyExt.Log writes the FIFO DAT and reads parameters.
+        """
+        self._bootstrapping = True
+        self._bootstrap_result = None
+        self.ownerComp.par.Envoystatus = 'Installing deps... (one-time)'
+        self._log(
+            'Installing Envoy Python dependencies in the background (one-time '
+            'setup). TouchDesigner stays responsive; MCP will connect when this '
+            'finishes.')
+        Embody = op.Embody.ext.Embody
+
+        def worker():
+            msgs = []
+            try:
+                ok = Embody._installDependencies(
+                    spec, log=lambda m, lvl='INFO': msgs.append((lvl, m)))
+            except Exception as e:
+                ok = False
+                msgs.append(('ERROR', f'Dependency install crashed: {e}'))
+            # Atomic publish: the main-thread poll reads this single attribute.
+            self._bootstrap_result = (ok, msgs)
+
+        Thread(target=worker, daemon=True).start()
+        run('args[0]._pollBootstrap(args[1])', self, git_root, delayFrames=30)
+
+    def _pollBootstrap(self, git_root) -> None:
+        """Main-thread poll for the background dependency install (see
+        _beginAsyncBootstrap). Replays captured log lines, honors a mid-install
+        Envoy-disable, then finishes the start or reports failure."""
+        # Stale-instance guard: a save/recompile may have replaced this EnvoyExt
+        # while the worker ran. The fresh instance owns startup now.
+        try:
+            if self.ownerComp.ext.Envoy is not self:
+                return
+        except Exception:
+            return
+
+        result = self._bootstrap_result
+        if result is None:
+            # Worker still installing -- check again shortly.
+            run('args[0]._pollBootstrap(args[1])', self, git_root, delayFrames=30)
+            return
+
+        self._bootstrapping = False
+        ok, msgs = result
+        for lvl, m in msgs:
+            self._log(m, lvl)
+
+        # The user may have toggled Envoy off while deps installed -- honor it
+        # rather than starting a server they just disabled.
+        if not self.ownerComp.par.Envoyenable.eval():
+            self._log('Envoy disabled during dependency install -- not starting.', 'DEBUG')
+            if not str(self.ownerComp.par.Envoystatus.eval()).startswith(
+                    ('Error', 'Disabled', 'Off')):
+                self.ownerComp.par.Envoystatus = 'Disabled'
+            return
+
+        if not ok:
+            self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                'Envoy start aborted -- dependency install failed. '
+                'See messages above.', 'ERROR')
+            return
+
+        # Install done. Confirm the import on the main thread (preserves the
+        # careful pydantic_core handling in _verifyMcpImportable); deps are now
+        # current so _setupEnvironment takes its fast branch -- no second install.
+        if not op.Embody.ext.Embody._setupEnvironment():
+            self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            return
+        self._continueStart(git_root)
+
+    def _continueStart(self, git_root) -> None:
+        """Finish Envoy startup once the Python environment is confirmed ready.
+
+        Runs on the main thread -- either inline from Start() (fast path) or
+        from _pollBootstrap() after a background dependency install. Allocates
+        the port, spawns the server worker via the Thread Manager, and writes
+        the MCP / git config files.
+        """
         base_port = self.ownerComp.par.Envoyport.eval()
         port = self._findAvailablePort(base_port)
         if port is None:
@@ -1827,7 +1974,9 @@ class EnvoyExt:
             # and triggers Stop+Start on change, causing a restart loop.
             # The actual runtime port is shown in Envoystatus instead.
 
-        self.ownerComp.store('envoy_running', True)
+        # H1: do NOT claim running here -- defer until _pollStartup confirms a
+        # real bind. (Previously stored envoy_running=True optimistically, which
+        # produced a zombie "Running" status when the worker never bound.)
 
         # Clean up stale temp files from previous sessions
         self._cleanupTempFiles()
@@ -1839,9 +1988,16 @@ class EnvoyExt:
         _registry[self.ownerComp.path] = self.shutdown_event
         sys._envoy_shutdown_events = _registry
 
+        # H1: fresh readiness event for THIS start; the worker sets it once
+        # uvicorn binds.  _pollStartup waits on it before declaring Running.
+        startup_event = Event()
+        self._startup_event = startup_event
+        self._runtime_port = port
+
         self._server_gen += 1
         gen = self._server_gen
         self._last_start_time = time.time()
+        self._starting = True  # H1: starting window open (suppresses duplicate Start)
 
         self._log(f'Starting Envoy MCP server on port {port}')
 
@@ -1894,7 +2050,8 @@ class EnvoyExt:
         # Create and enqueue a TDTask
         self.current_task = self.ThreadManager.TDTask(
             target=self._runServer,
-            args=(port, self.request_queue, self.response_queue, self.shutdown_event),
+            args=(port, self.request_queue, self.response_queue,
+                  self.shutdown_event, startup_event),
             SuccessHook=guarded_success,
             ExceptHook=guarded_error,
             RefreshHook=self._onRefresh
@@ -1903,12 +2060,23 @@ class EnvoyExt:
             self.current_task, standalone=True)
 
         if thread is None:
+            # H1: no standalone worker means the socket can never bind. Treat as
+            # a startup failure so escalation engages, instead of a zombie that
+            # reports "Running" forever.
             self._log(
-                'Thread Manager at capacity -- Envoy task queued for pool '
-                'execution instead of standalone thread.', 'WARNING')
+                'Thread Manager could not start a standalone server worker.',
+                'ERROR')
+            self._starting = False
+            self._onServerError('Thread Manager could not start server worker')
+            return
 
-        # Update status
-        self.ownerComp.par.Envoystatus = f'Running on port {port}'
+        # H1: status stays 'Starting...' (set above) until the worker confirms
+        # the socket is bound; _pollStartup flips it to 'Running on port N' or
+        # escalates on timeout/failure. Config files below are written
+        # regardless -- the bridge retries until the server is reachable.
+        self._startup_deadline = time.time() + 10.0
+        run(f"op({self.ownerComp.path!r}).ext.Envoy._pollStartup({gen})",
+            fromOP=self.ownerComp, delayFrames=6)
 
         # Auto-configure project files.
         # Each step is independent -- one failure must not block the others.
@@ -1932,6 +2100,41 @@ class EnvoyExt:
             git_path = Path(git_root)
             self._configureGitignore(git_path)
             self._configureGitattributes(git_path)
+
+    def _pollStartup(self, gen: int) -> None:
+        """Main-thread poll (H1): declare 'Running' only after the worker
+        confirms the socket bound; escalate if it never binds in time.
+
+        Replaces the old optimistic 'Running' set in _continueStart, which
+        declared success the instant the task was enqueued -- producing a
+        zombie 'Running' over a dead/never-bound socket.
+        """
+        # Stale guard: a newer Start() (or Stop/error, which clears _starting)
+        # superseded this attempt.
+        if gen != self._server_gen or not self._starting:
+            return
+        ev = self._startup_event
+        if ev is not None and ev.is_set():
+            # Confirmed bound + serving.
+            self._starting = False
+            self.ownerComp.store('envoy_running', True)
+            self.ownerComp.par.Envoystatus = f'Running on port {self._runtime_port}'
+            self._last_start_time = time.time()
+            self._log(
+                f'Envoy MCP server confirmed listening on port '
+                f'{self._runtime_port}', 'DEBUG')
+            return
+        if time.time() >= self._startup_deadline:
+            # Never bound within the readiness window -> route to the error path
+            # so the restart/escalation logic engages (not a silent zombie).
+            self._starting = False
+            self._onServerError(
+                f'Envoy did not bind port {self._runtime_port} within the '
+                f'startup timeout')
+            return
+        # Not yet bound, not timed out -- keep polling.
+        run(f"op({self.ownerComp.path!r}).ext.Envoy._pollStartup({gen})",
+            fromOP=self.ownerComp, delayFrames=6)
 
     def Stop(self) -> None:
         """Stop MCP server"""
@@ -1969,7 +2172,7 @@ class EnvoyExt:
 
     @staticmethod
     def _runServer(port: int, request_queue: Queue, response_queue: Queue,
-                   shutdown_event: Event):
+                   shutdown_event: Event, startup_event: Optional[Event] = None):
         """
         Target function for TDTask - runs MCP server in worker thread.
         IMPORTANT: No TouchDesigner calls allowed here! This is static.
@@ -1984,7 +2187,8 @@ class EnvoyExt:
                 response_queue=response_queue,
                 add_to_refresh_queue=add_to_refresh,
                 port=port,
-                shutdown_event=shutdown_event
+                shutdown_event=shutdown_event,
+                startup_event=startup_event,
             )
             server.run()
         except OSError as e:
@@ -2003,6 +2207,13 @@ class EnvoyExt:
                     f'Another Envoy instance or process may be bound to it.'
                 ) from e
             raise RuntimeError(f'MCP server failed on port {port}: {e}') from e
+        except BaseException as e:
+            # uvicorn calls sys.exit(1) on bind failure -> SystemExit, which is
+            # a BaseException and escapes the handlers above. Without this it
+            # never reaches the ExceptHook (no error -> no restart/escalation ->
+            # zombie "Running"). Normalize so _onServerError fires.
+            raise RuntimeError(
+                f'MCP server exited abnormally on port {port}: {e!r}') from e
 
     # === Thread Manager Callbacks (run on main thread) ===
 
@@ -2076,6 +2287,7 @@ class EnvoyExt:
         self._log('Server thread exited')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
+        self._starting = False
         if self.ownerComp.par.Envoyenable.eval() and not self.ownerComp.ext.Embody._performMode:
             self._scheduleRestart('Server exited unexpectedly')
         # If Envoyenable is already off, Stop() set the status -- don't overwrite
@@ -2085,6 +2297,7 @@ class EnvoyExt:
         self._log(f'Server error: {error}', 'ERROR')
         self.ownerComp.store('envoy_running', False)
         self.current_task = None
+        self._starting = False
         if self.ownerComp.par.Envoyenable.eval() and not self.ownerComp.ext.Embody._performMode:
             self._scheduleRestart(f'Server error: {error}')
 

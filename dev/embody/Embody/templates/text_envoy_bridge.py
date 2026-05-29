@@ -588,6 +588,43 @@ def _is_td_helper_process(pid):
     return any(marker in cmdline for marker in _TD_HELPER_MARKERS)
 
 
+def _process_is_real_td(pid):
+    """True only if PID is a LIVE TouchDesigner *application* process.
+
+    `pgrep -f TouchDesigner` matches any process whose command line merely
+    MENTIONS "TouchDesigner" -- e.g. an unrelated shell or AI-CLI job whose
+    prompt text references TD -- and also lists defunct/zombie processes.
+    Neither is a real TD.  `_process_cmdline()` reads /proc, which does not
+    exist on macOS, so the cmdline-based filters above are no-ops there; this
+    ps-based check is the reliable cross-platform guard.  Verify the process
+    is not a zombie and that its actual executable IS the TD binary.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "state=", "-o", "comm=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, OSError):
+        return False
+    if result.returncode != 0:
+        return False
+    out = result.stdout.strip()
+    if not out:
+        return False
+    parts = out.split(None, 1)
+    state = parts[0] if parts else ""
+    comm = parts[1].strip() if len(parts) > 1 else ""
+    if state.upper().startswith("Z"):
+        return False  # defunct/zombie -- cannot be a live TD
+    # Real TD binary basename is exactly "TouchDesigner" (app-bundle executable
+    # on macOS, bin/TouchDesigner on Linux).  An unrelated process whose argv
+    # merely contains "TouchDesigner" has a different executable (zsh, codex,
+    # python, ...); bundled helpers are named e.g. "TouchDesigner Web Render".
+    return (os.path.basename(comm) == "TouchDesigner"
+            or comm.endswith("/Contents/MacOS/TouchDesigner")
+            or comm.endswith("/bin/TouchDesigner"))
+
+
 def find_all_td_pids():
     """Return a list of all running TouchDesigner PIDs.
 
@@ -639,6 +676,8 @@ def find_all_td_pids():
                     continue
                 if _is_td_helper_process(pid):
                     continue
+                if not _process_is_real_td(pid):
+                    continue  # unrelated process matching the cmdline, or a zombie
                 pids.append(pid)
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         pass

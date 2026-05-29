@@ -10,7 +10,6 @@ import_tdn	left	button	󰋺	Import TDN file	Material Design Icons	11	36	925	Impo
 export_comp_tdn	left	button	󰈝	Export current COMP TDN (Ctrl+Alt+E)	Material Design Icons	11	36	950	export_comp_tdn						0
 export_tdn	left	button	󰈇	Export project TDN (Ctrl+Shift+E)	Material Design Icons	11	36	1000	export_tdn						0
 envoy_toggle	left	button	Envoy	Toggle Envoy MCP server	Open Sans	9	65	1050	toggle_envoy		0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()	0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()	0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()		10
-envoy_status	left	label		Envoy server status	Open Sans	11	160	1100	-					parent.Embody.par.Envoystatus.eval()	3
 pars	right	button	Pars	Open Embody parameters	Open Sans	11	51	350	openParameters						10
 filter	right	input		Filter by name	Open Sans	11	170	25	filter_changed						0
 close	right	button	󰖭	Clear filter	Material Design Icons	11	26	-200	clear_filter						0

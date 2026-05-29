@@ -136,3 +136,94 @@ class TestTDNFingerprint(EmbodyTestCase):
                 emb.param_tracker.removeComp(comp)
             except Exception:
                 pass
+
+
+class TestTDNDirtyState(EmbodyTestCase):
+    """dirtyHandler clean-clearing (Fix #5) and DirtyCount strategy-awareness
+    (Fix #4) for TDN-strategy COMPs.
+
+    These swap a synthetic externalizations table (a TDN row pointing at a
+    real sandbox COMP) so the table-driven dirty paths run without any file
+    I/O or real externalization. The table par is restored in tearDown.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._orig_table = self.embody.par.Externalizations.eval()
+        self._orig_tdnmode = self.embody.par.Tdnmode.eval()
+        self._primed = None
+
+    def tearDown(self):
+        self.embody.par.Externalizations = self._orig_table.path
+        self.embody.par.Tdnmode = self._orig_tdnmode
+        if self._primed is not None:
+            self.embody_ext._tdn_fingerprints.pop(self._primed, None)
+        super().tearDown()
+
+    def _tdn_table(self, comp_path, dirty=''):
+        """Build a synthetic table with one TDN-strategy row and swap it in."""
+        t = self.sandbox.create(tableDAT, 'synthetic_externalizations')
+        t.clear()
+        t.appendRow(['path', 'strategy', 'dirty'])
+        t.appendRow([comp_path, 'tdn', dirty])
+        self.embody.par.Externalizations = t.path
+        return t
+
+    # --- Fix #5: passive scan clears a stale dirty flag on revert ---
+
+    def test_dirtyHandler_clears_stale_dirty_when_clean(self):
+        comp = self.sandbox.create(baseCOMP, 'revert_comp')
+        comp.create(constantCHOP, 'c')
+        t = self._tdn_table(comp.path, dirty='True')  # stale 'dirty' from a prior scan
+        self.embody.par.Tdnmode = 'full'
+        # Prime the baseline so the live network reads CLEAN (matches baseline).
+        self.embody_ext._storeTDNFingerprint(comp)
+        self._primed = comp.path
+        # Passive scan: the COMP is clean now, so the stale flag must clear.
+        self.embody_ext.dirtyHandler(False)
+        self.assertEqual(
+            t[comp.path, 'dirty'].val, '',
+            'A clean TDN COMP must have its stale dirty flag cleared by the '
+            'passive scan (otherwise the indicator sticks after a revert)')
+
+    def test_dirtyHandler_marks_dirty_when_changed(self):
+        comp = self.sandbox.create(baseCOMP, 'change_comp')
+        comp.create(constantCHOP, 'c')
+        t = self._tdn_table(comp.path, dirty='')
+        self.embody.par.Tdnmode = 'full'
+        self.embody_ext._storeTDNFingerprint(comp)
+        self._primed = comp.path
+        # Mutate the network so it diverges from the baseline.
+        comp.create(constantCHOP, 'c2')
+        self.embody_ext.dirtyHandler(False)
+        self.assertEqual(
+            t[comp.path, 'dirty'].val, 'True',
+            'A structurally changed TDN COMP must be flagged dirty')
+
+    # --- Fix #4: DirtyCount trusts the table for TDN COMPs, not oper.dirty ---
+
+    def test_DirtyCount_clean_tdn_comp_not_counted(self):
+        comp = self.sandbox.create(baseCOMP, 'count_clean')
+        comp.create(constantCHOP, 'c')
+        self._tdn_table(comp.path, dirty='')
+        self.assertEqual(
+            self.embody_ext.DirtyCount(), 0,
+            'A clean TDN COMP (table dirty="") must NOT be counted')
+
+    def test_DirtyCount_counts_dirty_tdn_comp_from_table(self):
+        # The decisive case: the table says 'True' while live oper.dirty is
+        # False. The OLD DirtyCount counted COMPs only via oper.dirty or a
+        # 'Par' table value, so it MISSED a 'True' TDN row (and, in real use
+        # where oper.dirty is always True for TDN COMPs, OVER-counted clean
+        # ones). The strategy-aware branch reads the table value for TDN COMPs
+        # regardless of oper.dirty.
+        comp = self.sandbox.create(baseCOMP, 'count_dirty')
+        comp.create(constantCHOP, 'c')
+        self.assertFalse(comp.dirty,
+            'precondition: synthetic sandbox COMP reads oper.dirty=False, so '
+            'only the table-driven branch can produce a nonzero count here')
+        self._tdn_table(comp.path, dirty='True')
+        self.assertEqual(
+            self.embody_ext.DirtyCount(), 1,
+            'A TDN COMP flagged dirty in the table must be counted even when '
+            'live oper.dirty is False')

@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **54 test suites** and **1,328 test methods** covering core externalization, MCP tools, TDN format, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **57 test suites** and **1,377 test methods** covering core externalization, MCP tools, TDN format, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 

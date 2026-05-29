@@ -1,5 +1,68 @@
 # Changelog
 
+## v5.0.428
+
+Everything since v5.0.414, bundled into one release. The headline is **`tdn_exclude`** — a tag that makes a COMP invisible to the TDN system — alongside a **rebuilt TDN dirty-detection pass** that finally notices parameter edits without churning on live expressions, **Envoy resilience hardening** (honest startup status, a `restart_td` zombie fix, status relocated into the window header), a silenceable save-time content-safety dialog, **three issue #21 crash fixes** hardened across the whole table-read surface, a calmer first launch, and a final regression-review pass that corrected several rough edges before release. **57 test suites / 1,401 tests, all passing**, plus a fresh-install smoke test of the release `.tox`.
+
+### TDN exclude tag
+
+- **Feature: `tdn_exclude` — opt a COMP out of the TDN system.** A new `Tdnexcludetag` parameter on the Embody COMP (default `tdn_exclude`) defines a tag that makes a COMP invisible to TDN: never exported (no `tdn_ref`/`tox_ref`, no structural reference), never stripped on save, never destroyed/recreated by `ReconstructTDNComps`'s `clear_first` import. **Primary use case: cascade-autotag bypass** — when `Tdncascade` is on, tagging a parent `tdn` propagates to every child; `tdn_exclude` is the durable opt-out for app-managed children (spawned via `op.copy()` at runtime, populated from user data — e.g. Moonshine's `proj_<id>` chains). Runtime `.copy()` clones inherit the tag and stay invisible. Annotation COMPs are ineligible. `getTags` filters the exclude tag out of its selectors *by parameter name*, so naming it identically to a real tag never drops the real tag. Implemented across `EmbodyExt` (strip, dirty-detection, at-risk walks, cascade, `_getTDNStrategyComps`) and `TDNExt` (`_hasExcludeTag`, export, `_collectAllPaths`, `clear_first` preservation). Docs: [Excluding a COMP from TDN](embody/externalization.md).
+- **Exclusion is honored at a TDN boundary's direct children; nested excluded COMPs are preserved, never lost.** The strip/clear passes preserve an excluded COMP only when it's a direct child of the exported boundary. A COMP tagged for exclusion but nested under a non-excluded intermediate cannot be preserved by those passes — so rather than dropping it from the export while the strip destroys it (silent data loss), Embody now **serializes it as ordinary content** (it round-trips and survives) and warns that the tag had no effect at that depth, naming the COMP to tag instead. Export, fingerprint, strip, and `clear_first` import all apply this rule consistently.
+
+### TDN dirty detection
+
+- **The dirty indicator notices parameter edits — without churning on live expressions.** The per-COMP fingerprint now includes each operator's non-default parameters (its own custom pars and child operators'), recording the **authored** value — `expr` for expression mode, `bindExpr` for bind, `val` for constant — never `par.eval()`. This matches exactly what an externalized `.tox`/`.tdn` serializes, so an *authored* edit flags dirty while a dependency-driven change to a *live expression's evaluated value* (a parameter bound to `absTime.frame`, an audio level, a moving CHOP) does **not** — eliminating perpetual false-dirty re-export churn on animated COMPs. The same authored-capture rule governs `ParameterTracker.captureParameters` (the TOX path), so both dirty mechanisms agree and neither has cook side effects. About-page metadata (Build/Date/Touchbuild) is excluded so build bumps don't dirty the COMP. Baselines are primed at the deterministic clean moments — right after externalize and after reconstruction.
+- **One fingerprint sweep per Refresh.** Dirty detection previously fingerprinted every TDN COMP *twice* per Refresh (an inline loop in `Update` plus `dirtyHandler`) and re-scanned the externalizations table once per COMP per call — a visible frame hitch on large networks. It's now a single sweep in `dirtyHandler`, with `tdn_paths`/exclude-tag computed once and reused, and the redundant per-COMP `compareParameters` pass for TDN COMPs removed (the fingerprint already covers parameters).
+- **`DirtyCount` reads the fingerprint result for TDN COMPs.** It previously used live `oper.dirty`, which is always `True` for a TDN COMP (empty `externaltox`), so every clean TDN COMP showed as dirty in the UI badge. It now trusts the table's fingerprint-derived `dirty` value for TDN-strategy COMPs (and still uses `oper.dirty` for TOX).
+- **A reverted edit clears the dirty flag.** The passive scan set `dirty` when a COMP changed but never cleared it when the COMP became clean again, so the indicator stuck on after a revert. It now clears the flag when the fingerprint matches the baseline.
+- **Fix: `_openFileLocation` no longer logs a false warning on Windows** — `explorer /select` returns exit code 1 even on success; switched to `subprocess.Popen`.
+
+### Envoy resilience
+
+- **Envoy startup status tells the truth.** Status no longer reads "Running on port N" optimistically before the server has bound. Start waits for a real readiness handshake (a worker-thread monitor sets `startup_event` from uvicorn's `started` flag; a deadline-bounded main-thread poll flips status to "Running" *only after* a confirmed bind), and startup failures — including a uvicorn bind error raising `SystemExit`/`BaseException` — route to the error path. A per-generation `_starting` guard prevents duplicate concurrent starts.
+- **Envoy status moved into the window header, prefixed "Envoy".** The standalone toolbar status widget is gone; live state now renders in the top header as "Envoy Running on port N" / "Envoy Disabled" / "Envoy Error: …", prefixed so it reads unambiguously. The stored status par value stays unprefixed, so EnvoyExt's status checks are unaffected.
+- **Fix: `restart_td` no longer false-matches zombie or foreign processes.** Bridge process discovery now validates via `ps` (`_process_is_real_td`) that the process isn't a zombie and its executable basename is actually `TouchDesigner`, instead of a loose `pgrep -f TouchDesigner` match.
+
+### Save-time content safety
+
+- **The "TDN Content at Risk" dialog can be silenced for good.** When a save would drop DAT content or storage from a TDN COMP, the warning now offers a persistent "Always Skip" (sets `Tdndatsafety = 'ignore'`) alongside "Always Externalize" — both reversible via the `Tdndatsafety` parameter.
+
+### Externalizations table
+
+- **`externalizations.tsv` no longer churns phantom timestamp rows per save.** `checkOpsForContinuity` was bumping the `timestamp` column on every row each save (writing the externalized file's mtime, which the strip/restore cycle bumps for every `.tdn` regardless of content) — ~330 lines of diff noise per commit. The continuity scan no longer touches timestamps; the column now reflects only explicit Save/SaveTDN/rename events. Trade-off: an out-of-band edit (e.g. `git pull` brings a new `.tdn`) won't auto-update the TSV timestamp — pulse `Refresh` to sync.
+
+### Crash safety (issue #21)
+
+- **`captureParameters` no longer crashes on broken expressions.** Reading authored values (`expr`/`bindExpr`/`val`) instead of `par.eval()` means a broken expression (`ext.NotYetLoaded.X`, `op('./missing')`, palette-clone expressions) can't raise during the dirty scan.
+- **`_cellVal` guards every externalizations-table read.** TD returns `None` for a missing column or a row-key miss, and `.val` on it raised `AttributeError` — the issue #21 crash. The `_cellVal(row, col, default='')` helper was applied across the entire `EmbodyExt` table-iteration surface (not just the 5 sites the tracebacks pointed at), so the migration/continuity/dirty/dedup paths run against a partial or legacy table without crashing. It also **logs a warning** on a genuine row-level inconsistency (a short/partial row whose column exists in the header) so silent table corruption surfaces, while staying quiet on the normal not-found and legacy-missing-column cases.
+- **`onProjectPreSave` no longer truncates the `.toe` to 0 bytes on an unhandled exception.** The entire externalization pipeline (including the preamble) is wrapped in a fail-safe `try/except` that logs and lets TD finish writing the `.toe`.
+
+### First-launch palette scan
+
+- **A fresh project on a new TD build no longer floods the textport with alarming (but harmless) errors.** The shipped bootstrap catalog now covers build `099.2025.32820` (projects on that build skip the live scan); the scan blocklist gained dependency-requiring families (`tdAbletonPackage`, `ableton*`, `resources`, `world`, `system`); and a first-launch banner frames any remaining scan errors as expected and one-time.
+
+### Window header / UI
+
+- **Fix: top-level manager rows show the expand/collapse glyph.** Depth-0 rows with children now get one base indent level so the +/- affordance renders at the same offset depth-1 rows use.
+- **Fix: removed a duplicate UTF-8 BOM** that an edit had introduced at the top of `WindowHeaderExt.py` — a second `U+FEFF` before the docstring could raise `SyntaxError` when the extension reinitializes.
+
+### Docs
+
+- **New AI-first Quickstart page** (`docs/quickstart.md`) — install → drag in → Enable Envoy → connect your AI client, with per-client steps and troubleshooting; linked from Home, the nav, and the web landing page.
+- **New "Excluding a COMP from TDN" section** documenting the exclude tag.
+- **Reconciled the Envoy MCP tool count to 48** across all current-facing surfaces (the 4 bridge meta-tools are counted separately).
+- **POP skill corrections** — POP = "Point Operators"; File In POP (meshes) and Point File In POP (point clouds) are distinct operators. Template twins synced.
+- **Rewrote the landing-page meta descriptions** to experience-first copy.
+- **Fix: de-mapped dev-only `.claude` files no longer self-delete on an AI-Project-Root flip** (`release-commits.md`, `multi-instance/SKILL.md`) — markers stripped so cleanup treats them as hand-maintained dev files.
+
+### Tests & review
+
+- **57 test suites / 1,401 tests, all passing.** New and updated coverage across the changeset: 21 tests for `tdn_exclude` (including nested-under-normal now *preserved* rather than lost), the TDN fingerprint/dirty-detection suite (the no-churn-on-live-expressions guarantee, `DirtyCount` strategy-awareness, and clean-clear-on-revert), the widened issue #21 cell-read surface, the Envoy startup-status contract, and the save-time content-safety dialog.
+- **Final regression-review pass before release.** A 7-angle review of the branch (line-by-line, removed-behavior, cross-file, plus reuse/simplification/efficiency/altitude) surfaced and fixed: the live-expression dirty churn, the nested-exclude data-loss path, the always-dirty `DirtyCount` for TDN COMPs, the stuck dirty flag, the duplicate BOM, and the double fingerprint sweep. Each fix carries a regression test.
+- **Fresh-install smoke test.** The release `.tox` was loaded into a blank project in a separate TD instance and verified: status `Enabled`, no script errors, all three extensions loaded, Envoy bound, externalizations schema intact, and the header status prefix present.
+
+---
+
 ## v5.0.414
 
 Third value `Custom` for `AI Project Root` (follow-up to Ten0's feedback on issue #19) — lets the user pick any directory as the AI/MCP config root, not just git root or `.toe` folder. Useful for monorepos where multiple `.toe` files share a parent directory and should converge on one set of `AGENTS.md` / `.claude/` / `.mcp.json` / `.embody/` instead of duplicating per project. Plus two defense fixes against a previously-unobserved class of test interference: tests with exhausted or missing seeded responses no longer open real modal dialogs that freeze TD; `Verify()` can no longer queue multiple Envoy opt-in prompts in quick succession.

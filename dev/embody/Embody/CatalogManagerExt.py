@@ -32,14 +32,26 @@ _ABSTRACT_TYPES = frozenset({
 	'ObjectCOMP',
 })
 
-# Palette .tox stems (case-insensitive) skipped during scan — they run
-# invasive init on loadTox: messageBoxes, project.cookRate changes,
-# TDImportCache creation. Loss of palette-clone detection for these is
-# acceptable; almost nobody diffs them in TDN networks.
+# Palette .tox stems (case-insensitive) skipped during the one-time
+# first-launch scan. They either run invasive init on loadTox (messageBoxes,
+# project.cookRate changes, TDImportCache creation) OR fail loudly because
+# their dependencies are absent (Ableton Live, VR hardware, Windows-only
+# ctypes.windll) — flooding the textport with harmless-but-alarming errors
+# that read like Embody is broken. Loss of palette-clone detection for these
+# is acceptable; almost nobody diffs them in TDN networks.
 _PALETTE_SCAN_BLOCKLIST = frozenset({
-	'tdvr',      # forces 90fps, shows VR framerate messageBox
-	'autoui',    # shows "Widget Package Required" messageBox
+	'tdvr',                # forces 90fps, shows VR framerate messageBox
+	'autoui',              # shows "Widget Package Required" messageBox
+	'tdabletonpackage',    # Ableton bridge — needs Ableton Live + tdAbleton
+	'resources',           # VRWorldExt + findMouse (Windows-only windll)
+	'world',               # VRWorldExt + findMouse (Windows-only windll)
+	'system',              # findMouse (Windows-only ctypes.windll)
 })
+
+# Palette .tox stem PREFIXES (case-insensitive) skipped during the scan.
+# The Ableton component family (abletonChain, abletonRack, abletonTrack, ...)
+# all raise AttributeError on init without a connected tdAbletonPackage.
+_PALETTE_SCAN_BLOCKLIST_PREFIXES = ('ableton',)
 
 
 class CatalogManagerExt:
@@ -279,7 +291,8 @@ class CatalogManagerExt:
 				if not fname.endswith('.tox'):
 					continue
 				stem = os.path.splitext(fname)[0].lower()
-				if stem in _PALETTE_SCAN_BLOCKLIST:
+				if stem in _PALETTE_SCAN_BLOCKLIST or stem.startswith(
+						_PALETTE_SCAN_BLOCKLIST_PREFIXES):
 					skipped.append(stem)
 					continue
 				full = os.path.join(root, fname)
@@ -301,6 +314,13 @@ class CatalogManagerExt:
 		self._palette_workspace.nodeY = -1800
 
 		self._log(f'Palette scan: {len(self._palette_queue)} components')
+		self._log(
+			'First-launch only: building the parameter-default catalog from '
+			'the TD palette. Any red errors below come from TD palette samples '
+			'whose dependencies are absent (Ableton needs Live, VR needs '
+			'hardware, some are Windows-only) -- they are HARMLESS, do not '
+			'affect Embody or your project, and this one-time scan is cached '
+			'so it will not run again for this TD build.', 'INFO')
 		self.ownerComp.par.Status = (
 			f'Scanning palette (0/{len(self._palette_queue)})')
 
@@ -399,6 +419,9 @@ class CatalogManagerExt:
 
 		self._log(
 			f'Palette scan complete: {len(self._palette_results)} components')
+		self._log(
+			'Palette catalog cached. Any palette errors printed above were '
+			'expected and can be ignored.', 'INFO')
 
 		# Merge palette results into catalog under reserved _palette key
 		combined = dict(getattr(self, '_op_catalog_pending', {}))

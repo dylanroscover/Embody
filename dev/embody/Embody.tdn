@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.4",
-	"build": 463,
-	"generator": "Embody/5.0.412",
+	"build": 553,
+	"generator": "Embody/5.0.427",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.412.toe",
-	"exported_at": "2026-05-18T15:42:59Z",
+	"source_file": "Embody-5.428.toe",
+	"exported_at": "2026-05-29T15:13:58Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -336,8 +336,7 @@
 			{
 				"name": "Refresh",
 				"style": "Pulse",
-				"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.",
-				"value": true
+				"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
 			},
 			{
 				"name": "Externalizeproject",
@@ -565,6 +564,14 @@
 				"label": ".tdn Tag",
 				"help": "Tag string for .tdn externalization. Applied to COMPs whose children are exported as human-readable JSON network files.",
 				"value": "tdn"
+			},
+			{
+				"name": "Tdnexcludetag",
+				"style": "Str",
+				"label": ".tdn Exclude Tag",
+				"startSection": true,
+				"default": "tdn_exclude",
+				"help": "Tag name (default 'tdn_exclude') that opts a COMP out of the entire TDN system. Primary use: opt a single child out of cascade autotag (when Tdncascade is on, the tdn tag normally propagates from a tdn-tagged parent to all its children -- apply this tag to a child to keep it excluded). Also useful for app-managed COMPs (e.g. spawned via .copy() at runtime) that the application is responsible for. Excluded COMPs are invisible to TDN: never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction."
 			}
 		],
 		"TDN": [
@@ -670,9 +677,15 @@
 				"style": "Menu",
 				"label": "AI Project Root",
 				"default": "gitroot",
-				"menuNames": ["gitroot", "projectfolder"],
-				"menuLabels": ["Git root", "Project folder (.toe directory)"],
+				"menuNames": ["gitroot", "projectfolder", "custom"],
+				"menuLabels": ["Git root", "Project folder (.toe directory)", "Custom"],
 				"help": "Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). \"Git root\" (default) writes at the top of the git repo. \"Project folder\" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace."
+			},
+			{
+				"name": "Aiprojectrootcustom",
+				"style": "Folder",
+				"label": "AI Project Root (Custom)",
+				"help": "Custom directory for AI/MCP config when \"AI Project Root\" is set to \"Custom\". Relative paths are resolved against the .toe directory (e.g. \"../\" places config one level above the .toe -- useful when multiple TouchDesigner projects share a parent folder in a monorepo). Absolute paths are used as-is. Changing this path migrates Embody state and AI config to the new location."
 			},
 			{
 				"name": "Envoyenable",
@@ -695,7 +708,7 @@
 				"label": "Envoy Status",
 				"readOnly": true,
 				"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-				"value": "Running on port 9871"
+				"value": "Running on port 9870"
 			}
 		],
 		"Logs": [
@@ -878,7 +891,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.412"
+				"value": "5.0.427"
 			},
 			{
 				"name": "Touchbuild",
@@ -901,7 +914,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 463
+				"value": 553
 			},
 			{
 				"name": "Github",
@@ -916,7 +929,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-05-18 15:42:59 UTC"
+				"value": "2026-05-29 15:13:58 UTC"
 			},
 			{
 				"name": "Help",
@@ -975,9 +988,8 @@
 	"storage": {
 		"claudius_running": false,
 		"_tdn_restore_failures": ["/embody/base1"],
-		"expand_order": [],
-		"_start_in_progress": true,
-		"_init_complete": true
+		"expand_order": ["/embody"],
+		"_start_in_progress": true
 	},
 	"operators": [
 		{
@@ -1240,7 +1252,7 @@
 				"file": "embody/Embody/EnvoyExt.py"
 			},
 			"position": [-300, 500],
-			"tags": ["TDExtension", "py"]
+			"tags": ["py", "TDExtension"]
 		},
 		{
 			"name": "mousein1",
@@ -1458,7 +1470,7 @@
 			"type": "tableDAT",
 			"parameters": {
 				"file": "embody/Embody/palette_catalog.tsv",
-				"rows": 526
+				"rows": 787
 			},
 			"position": [-500, 200]
 		},
