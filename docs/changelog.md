@@ -1,5 +1,21 @@
 # Changelog
 
+## v5.0.429
+
+A friendlier "Duplicate Path Detected" dialog: a naming convention that auto-resolves the common template-plus-copies case, a strategy prompt for oversized groups, and self-labeling buttons — so you can finally tell which operator is which.
+
+### Duplicate path resolution
+
+- **Feature: `Template Master Name` convention auto-resolves duplicates.** New `Templatemaster` parameter on the Embody COMP (default `__template__`). When a group of operators sharing one external path has **exactly one** whose path contains that name as a whole segment (e.g. a `__template__` parent COMP), it is auto-selected as the master and the rest are tagged `clone` — no dialog. This targets the common app-generated pattern of one template plus many runtime copies (e.g. a `scene_<id>` chain where each copy carries the template's externalized DATs). Opt-in by convention: projects that don't use the name see no change and still get the manual prompt; set the parameter to your own convention (e.g. `_master`) or clear it to always choose by hand. Matches a whole path segment (not a substring), and only when exactly one operator matches — 0 or 2+ are ambiguous and fall through to the prompt. Persisted across upgrades via `config.json`. Implemented as `_resolveByTemplateMarker`, wired into `checkForDuplicates` after the clone/replicant resolvers.
+- **The manual prompt no longer shows N identical buttons.** Operators in a duplicate group usually share a name, so every selection button used to read the same (e.g. eight `fbx_callbacks` buttons with no way to tell them apart). Buttons are now labeled by the path segment that **differs** across the group, numbered to match the dialog body — `1: __template__`, `2: scene_1exalohf`, … (`_duplicateButtonLabels`).
+- **Large groups get a strategy prompt instead of an unreadable button row.** Above `_MAX_MANUAL_BUTTONS` (5) operators, a button per operator overflows the dialog, so the prompt switches to **Keep first as master** / **Dismiss** and points at the Template Master Name convention for hands-off resolution next time (`_promptForLargeDuplicateGroup`).
+
+### Tests & docs
+
+- **Test: 1,413 tests** (+12 in `test_duplicate_handling.py`): convention resolution (single / zero / multiple / empty / custom-marker / exact-segment), the large-group threshold (at-threshold enumerated vs. above-threshold strategy and dismiss), and button-label disambiguation.
+- **Fix: `test_envoyenable_reflects_server_state` skip-list.** Its transitional-state skip set (`Waiting`/`Starting`/`Stopping`) predated the `"Restarting after reinit..."` status added by the v5.0.428 Envoy work, so it could fail during that settle window. Added `Restarting`/`reinit` so it skips — rather than fails — that transitional state (note `"Starting"` is not a substring of `"Restarting"`).
+- **Docs**: new auto-resolution and button behavior documented in [Duplicate Path Handling](embody/externalization.md#duplicate-path-handling); `Template Master Name` parameter added to [Configuration](embody/configuration.md).
+
 ## v5.0.428
 
 Everything since v5.0.414, bundled into one release. The headline is **`tdn_exclude`** — a tag that makes a COMP invisible to the TDN system — alongside a **rebuilt TDN dirty-detection pass** that finally notices parameter edits without churning on live expressions, **Envoy resilience hardening** (honest startup status, a `restart_td` zombie fix, status relocated into the window header), a silenceable save-time content-safety dialog, **three issue #21 crash fixes** hardened across the whole table-read surface, a calmer first launch, and a final regression-review pass that corrected several rough edges before release. **57 test suites / 1,401 tests, all passing**, plus a fresh-install smoke test of the release `.tox`.

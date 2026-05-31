@@ -396,8 +396,11 @@ class TestCustomParameters(EmbodyTestCase):
         """If Envoyenable is True, Envoystatus should contain Running."""
         if self.embody.par.Envoyenable.eval():
             status = str(self.embody.par.Envoystatus.eval())
-            # Skip if server is in a transitional state (port conflicts, startup)
-            if any(s in status for s in ('Waiting', 'Starting', 'Stopping')):
+            # Skip if server is in a transitional state (port conflicts,
+            # startup, or post-reinit restart -- 'Restarting after reinit...'
+            # is reported by the resilience layer until bind is reconfirmed).
+            if any(s in status for s in ('Waiting', 'Starting', 'Stopping',
+                                         'Restarting', 'reinit')):
                 self.skip(f'Server in transitional state: {status}')
             self.assertIn('Running', status)
         else:
