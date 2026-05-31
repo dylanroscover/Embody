@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.4",
-	"build": 553,
-	"generator": "Embody/5.0.427",
+	"build": 578,
+	"generator": "Embody/5.0.429",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.428.toe",
-	"exported_at": "2026-05-29T15:13:58Z",
+	"source_file": "Embody-5.429.toe",
+	"exported_at": "2026-05-31T06:25:53Z",
 	"network_path": "/embody/Embody",
 	"options": {
 		"include_dat_content": false,
@@ -351,6 +351,13 @@
 				"label": "Detect Duplicate Paths",
 				"help": "When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.",
 				"value": true
+			},
+			{
+				"name": "Templatemaster",
+				"style": "Str",
+				"label": "Template Master Name",
+				"default": "__template__",
+				"help": "When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master')."
 			},
 			{
 				"name": "Localtimestamps",
@@ -708,7 +715,7 @@
 				"label": "Envoy Status",
 				"readOnly": true,
 				"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-				"value": "Running on port 9870"
+				"value": "Starting..."
 			}
 		],
 		"Logs": [
@@ -891,7 +898,7 @@
 				"startSection": true,
 				"readOnly": true,
 				"help": "Embody version string (read-only).",
-				"value": "5.0.427"
+				"value": "5.0.429"
 			},
 			{
 				"name": "Touchbuild",
@@ -914,7 +921,7 @@
 				"label": "Build Number",
 				"readOnly": true,
 				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 553
+				"value": 578
 			},
 			{
 				"name": "Github",
@@ -929,7 +936,7 @@
 				"label": "Build Date",
 				"readOnly": true,
 				"help": "Date of this Embody build (read-only).",
-				"value": "2026-05-29 15:13:58 UTC"
+				"value": "2026-05-31 06:25:53 UTC"
 			},
 			{
 				"name": "Help",
@@ -989,7 +996,8 @@
 		"claudius_running": false,
 		"_tdn_restore_failures": ["/embody/base1"],
 		"expand_order": ["/embody"],
-		"_start_in_progress": true
+		"_start_in_progress": true,
+		"_init_complete": true
 	},
 	"operators": [
 		{
@@ -1252,7 +1260,7 @@
 				"file": "embody/Embody/EnvoyExt.py"
 			},
 			"position": [-300, 500],
-			"tags": ["py", "TDExtension"]
+			"tags": ["TDExtension", "py"]
 		},
 		{
 			"name": "mousein1",

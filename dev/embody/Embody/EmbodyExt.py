@@ -67,13 +67,18 @@ class EmbodyExt:
         'Dattagcolorr', 'Dattagcolorg', 'Dattagcolorb',
         # Behavior
         'Logfolder', 'Logtofile', 'Verbose', 'Print',
-        'Detectduplicatepaths', 'Localtimestamps',
+        'Detectduplicatepaths', 'Templatemaster', 'Localtimestamps',
         # TDN
         'Tdnmode',
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
     })
+
+    # Duplicate-path prompt: above this many operators in one group, a
+    # button-per-operator row becomes unreadable (and overflows the dialog),
+    # so we switch to a strategy prompt instead. See _promptForDuplicateGroup.
+    _MAX_MANUAL_BUTTONS = 5
 
     # ==========================================================================
     # INITIALIZATION
@@ -4599,6 +4604,8 @@ class EmbodyExt:
                 continue
             if self._resolveDATsInClonedCOMPs(ops):
                 continue
+            if self._resolveByTemplateMarker(ops):
+                continue
             unresolved.append((path, ops))
 
         if not unresolved:
@@ -4716,16 +4723,78 @@ class EmbodyExt:
             "SUCCESS")
         return True
 
+    def _resolveByTemplateMarker(self, ops: list) -> bool:
+        """Auto-resolve a duplicate group using the master-name convention.
+
+        Reads the ``Templatemaster`` parameter (default ``__template__``).
+        If exactly one operator in the group has that name as a path
+        component (e.g. a ``__template__`` parent COMP), it is tagged as
+        the master and the rest as clones -- no prompt. This makes the
+        common app-generated-instances pattern (one template + many
+        copies) resolve silently, while staying invisible to projects
+        that don't use the convention.
+
+        Returns True only when the marker matches exactly one operator.
+        An empty parameter disables the behavior; 0 or 2+ matches fall
+        through to the normal prompt so the choice stays unambiguous.
+        """
+        marker = self.my.par.Templatemaster.eval().strip()
+        if not marker:
+            return False
+
+        matches = [o for o in ops if marker in o.path.strip('/').split('/')]
+        if len(matches) != 1:
+            return False
+
+        master = matches[0]
+        for o in ops:
+            if o is not master:
+                self._handleDuplicateAsReference(o)
+        clones = len(ops) - 1
+        self.Log(
+            f"Auto-resolved '{master.path}' as master via name convention "
+            f"'{marker}' ({clones} clone{'s' if clones != 1 else ''})",
+            "SUCCESS")
+        return True
+
+    def _duplicateButtonLabels(self, ops: list) -> list:
+        """Build short, distinguishable button labels for a duplicate group.
+
+        Operators in a duplicate group share an external path and usually
+        a name, so the op name alone is ambiguous (every button reads the
+        same). Label each by the first path segment that differs across
+        the group, prefixed with its list number so it maps 1:1 to the
+        numbered list in the dialog body.
+        """
+        seg_lists = [o.path.strip('/').split('/') for o in ops]
+        min_len = min(len(s) for s in seg_lists)
+        diff_idx = next(
+            (idx for idx in range(min_len)
+             if len({s[idx] for s in seg_lists}) > 1),
+            None)
+        labels = []
+        for i, segs in enumerate(seg_lists):
+            seg = segs[diff_idx] if diff_idx is not None else ops[i].name
+            labels.append(f"{i+1}: {seg}")
+        return labels
+
     def _promptForDuplicateGroup(self, path: str, ops: list) -> None:
         """Show a single dialog for a group of operators sharing the same path.
 
         The user picks which operator is the master; all others get
         clone tags. Dismiss skips without tagging (will re-prompt on
-        next cycle).
+        next cycle). Groups larger than ``_MAX_MANUAL_BUTTONS`` are
+        routed to a strategy prompt, since a button per operator becomes
+        unreadable and overflows the dialog.
         """
         op_list = '\n'.join(
             f"  {i+1}. {o.path} ({o.family})" for i, o in enumerate(ops))
-        buttons = ['Dismiss'] + [o.name for o in ops]
+
+        if len(ops) > self._MAX_MANUAL_BUTTONS:
+            self._promptForLargeDuplicateGroup(path, ops, op_list)
+            return
+
+        buttons = ['Dismiss'] + self._duplicateButtonLabels(ops)
 
         choice = self._messageBox(
             'Duplicate Path Detected',
@@ -4747,6 +4816,38 @@ class EmbodyExt:
             self.Log(
                 f"User selected '{ops[master_idx].path}' as master "
                 f"for '{path}'", "SUCCESS")
+
+    def _promptForLargeDuplicateGroup(
+            self, path: str, ops: list, op_list: str) -> None:
+        """Prompt for a duplicate group too large for a per-op button row.
+
+        A button per operator is unusable past a handful, so offer a
+        strategy choice instead: skip, or keep the first-listed operator
+        as master. Points the user at the ``Templatemaster`` naming
+        convention for hands-off resolution next time.
+        """
+        marker = self.my.par.Templatemaster.eval().strip()
+        if marker:
+            tip = (f"Tip: name one operator's COMP '{marker}' to auto-resolve "
+                   f"groups like this without prompting.")
+        else:
+            tip = ("Tip: set the 'Template Master Name' parameter to "
+                   "auto-resolve groups like this by naming convention.")
+
+        choice = self._messageBox(
+            'Duplicate Path Detected',
+            f"{len(ops)} operators share the external path:\n"
+            f"  {path}\n\n"
+            f"Operators:\n{op_list}\n\n"
+            f"That's too many to choose from individually.\n"
+            f"  * Keep first as master: tag operator 1 as master, "
+            f"rest as clones.\n"
+            f"  * Dismiss: skip for now (re-prompts next cycle).\n\n"
+            f"{tip}",
+            buttons=['Dismiss', 'Keep first as master'])
+
+        if choice == 1:
+            self._autoResolveFirstAsMaster(path, ops)
 
     def _promptForBatchResolution(self, unresolved: list) -> str:
         """Ask how to handle multiple unresolved duplicate groups.

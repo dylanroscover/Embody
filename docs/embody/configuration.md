@@ -11,6 +11,7 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Enable/Update** — Initialize or update all externalizations
 - **Externalize Full Project** — Pulse to externalize every eligible operator in the project
 - **Detect Duplicate Paths** — Enable/disable duplicate path detection prompts
+- **Template Master Name** — When a duplicate-path group has exactly one operator whose path contains this name, that operator is auto-selected as the master (default `__template__`). Clear it to always choose the master manually, or set your own convention (e.g. `_master`). See [Duplicate Path Handling](externalization.md#duplicate-path-handling).
 - **Open Manager** / **Close Manager** — Toggle the Manager UI
 
 ### Envoy

@@ -27,8 +27,16 @@ When Embody detects multiple operators pointing to the same external file, it gr
 
 **Automatic resolution (COMPs):** If the operators are COMPs with TouchDesigner clone relationships (`enablecloning` / `clone` parameter), Embody automatically identifies the clone master and tags the others with a `clone` tag — no dialog needed.
 
-**Manual resolution:** For DATs or COMPs without TD clone relationships, Embody shows a single dialog listing all operators that share the path. You select which operator is the **master**; the others receive a `clone` tag.
+**Automatic resolution (naming convention):** Embody also resolves a group without prompting when exactly one operator's path contains the name set in the **Template Master Name** parameter (`Templatemaster`, default `__template__`). That operator is kept as the master and the rest are tagged as clones. This targets the common app-generated pattern of one template (e.g. a `__template__` COMP) plus many runtime copies that share its externalized files.
 
+- The match is on a whole path segment, not a substring — a COMP named `__template__` matches; one named `mytemplate` does not.
+- It only fires when **exactly one** operator in the group matches. Zero or 2+ matches are ambiguous, so Embody falls back to the manual prompt.
+- This is opt-in by convention: if none of your operators are named `__template__`, nothing changes and you keep choosing manually. Set the parameter to your own convention (e.g. `_master`) to use a different name, or clear it to always pick the master by hand.
+
+**Manual resolution:** For groups that none of the automatic resolvers handle, Embody shows a single dialog listing all operators that share the path. You select which operator is the **master**; the others receive a `clone` tag.
+
+- Operators in a group usually share a name, so each selection button is labeled by the path segment that **differs** between them (e.g. `1: __template__`, `2: scene_1exalohf`), numbered to match the list in the dialog body.
+- For large groups (more than five operators), a button per operator becomes unreadable, so the dialog instead offers a strategy choice: **Keep first as master** (tags the first-listed operator as master, the rest as clones) or **Dismiss**. The dialog points you at the Template Master Name convention for hands-off resolution next time.
 - Selecting a master tags all other operators as clones. Changes to the shared file affect all of them.
 - **Dismiss** skips the group for now. Embody will re-prompt on the next Update cycle.
 
