@@ -19,7 +19,7 @@ class TestMCPProjectPerformance(EmbodyTestCase):
         self.envoy = self.embody.ext.Envoy
 
     # =========================================================================
-    # _get_project_performance — return structure
+    # _get_project_performance - return structure
     # =========================================================================
 
     def test_basic_return_structure(self):
@@ -86,7 +86,7 @@ class TestMCPProjectPerformance(EmbodyTestCase):
         self.assertIsNotNone(perform)
 
     # =========================================================================
-    # _get_performance_hotspots — optional hotspot analysis
+    # _get_performance_hotspots - optional hotspot analysis
     # =========================================================================
 
     def test_hotspots_off_by_default(self):

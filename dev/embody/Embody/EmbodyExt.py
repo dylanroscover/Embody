@@ -829,7 +829,7 @@ class EmbodyExt:
         # Walk up looking for .git. The home_dir guard prevents picking up
         # an unrelated repo (e.g. ~/.dotfiles) when project.folder is inside
         # the home directory. But only apply it when home_dir is actually
-        # an ancestor — otherwise (e.g. a Windows project on D:\) the part-
+        # an ancestor - otherwise (e.g. a Windows project on D:\) the part-
         # count comparison wrongly bailed before searching at all (issue #19).
         try:
             home_dir = Path.home().resolve()
@@ -930,7 +930,7 @@ class EmbodyExt:
                     self.Log(f'Removed stale {rel} at {old_root}', 'DEBUG')
                 else:
                     self._atomicMove(src, dst)
-                    self.Log(f'Moved {rel} → {new_root}', 'DEBUG')
+                    self.Log(f'Moved {rel} -> {new_root}', 'DEBUG')
             except Exception as e:
                 self.Log(f'Could not migrate {rel}: {e}', 'WARNING')
 
@@ -972,7 +972,7 @@ class EmbodyExt:
                     new_settings.parent.mkdir(parents=True, exist_ok=True)
                     self._atomicMove(old_settings, new_settings)
                     self.Log(
-                        f'Moved .claude/settings.local.json → {new_root}',
+                        f'Moved .claude/settings.local.json -> {new_root}',
                         'INFO')
                 except Exception as e:
                     self.Log(
@@ -983,7 +983,7 @@ class EmbodyExt:
         self._cleanupOldRootFiles(old_root)
 
         self.Log(
-            f'AI config root: {old_mode} → {new_mode}. '
+            f'AI config root: {old_mode} -> {new_mode}. '
             f'Old root {old_root} cleaned, regenerating at {new_root}.',
             'INFO')
 
@@ -1506,7 +1506,7 @@ class EmbodyExt:
         if not externalizations_dat:
             # Truly fresh install -- create new table as a regular sibling.
             # NOTE: not docked to Embody so the table survives when Embody is
-            # deleted during an upgrade (delete old → drag new .tox).
+            # deleted during an upgrade (delete old -> drag new .tox).
             externalizations_dat = self.my.parent().create(tableDAT, table_name)
             externalizations_dat.nodeX = self.my.nodeX - 200
             externalizations_dat.nodeY = self.my.nodeY
@@ -1822,7 +1822,7 @@ class EmbodyExt:
                     canonical.parent.mkdir(parents=True, exist_ok=True)
                     import shutil
                     shutil.move(str(old_path), str(canonical))
-                    self.Log('Migrated .embody.json → .embody/config.json', 'INFO')
+                    self.Log('Migrated .embody.json -> .embody/config.json', 'INFO')
                     path = canonical
                 except Exception as e:
                     self.Log(f'Could not migrate .embody.json: {e}', 'WARNING')
@@ -1999,11 +1999,11 @@ class EmbodyExt:
             # the prompt; kick Envoy start if the restored settings have it
             # enabled (onValueChange was suppressed during restore).
             if self.my.par.Envoyenable.eval():
-                # Longer delay on the upgrade path (onCreate → Verify) to give
+                # Longer delay on the upgrade path (onCreate -> Verify) to give
                 # the old server thread time to release its port.  onDestroyTD
                 # signals the old shutdown_event, but uvicorn can take 1-3s to
                 # fully close its listener socket.  delayFrames=10 (~0.17s) was
-                # too short, causing EADDRINUSE → auto-restart exhaustion →
+                # too short, causing EADDRINUSE -> auto-restart exhaustion ->
                 # Envoyenable stuck.  60 frames (~1s) is a safer window.
                 run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
         else:
@@ -2426,7 +2426,7 @@ class EmbodyExt:
         ]
 
         # TDN-strategy COMPs are excluded -- their lifecycle is managed by
-        # ToggleTag() → _removeTDNStrategy(), not by tag-presence detection.
+        # ToggleTag() -> _removeTDNStrategy(), not by tag-presence detection.
         # Without this, Full Project TDN exports (which track "/" in the table
         # without tagging the root) get incorrectly removed as "subtractions".
         subtractions = [
@@ -4019,7 +4019,7 @@ class EmbodyExt:
         """Detect if multiple missing operators share a common path prefix change.
 
         When a COMP that is an ancestor of many externalized operators is renamed
-        (e.g., /embody → /myproject), all tracked operators under it go missing
+        (e.g., /embody -> /myproject), all tracked operators under it go missing
         simultaneously. This method detects that pattern and returns the old and
         new prefix so the rename can be handled as a single batch operation
         instead of 50+ individual updateMovedOp calls.
@@ -4100,7 +4100,7 @@ class EmbodyExt:
             if p.startswith(ancestor_path + '/'):
                 return None
 
-        self.Log(f"Detected ancestor rename: {ancestor_path} → {new_prefix} "
+        self.Log(f"Detected ancestor rename: {ancestor_path} -> {new_prefix} "
                  f"({len(missing)} operators affected)", "INFO")
         return (ancestor_path, new_prefix)
 
@@ -4145,16 +4145,16 @@ class EmbodyExt:
             return False
 
         # --- Phase B: Prompt user ---
-        msg = (f"Detected rename: {old_prefix} → {new_prefix}\n\n"
+        msg = (f"Detected rename: {old_prefix} -> {new_prefix}\n\n"
                f"{len(affected)} externalized files will be moved:\n"
-               f"  {old_disk_segment}/...  →  {new_disk_segment}/...\n\n"
+               f"  {old_disk_segment}/...  ->  {new_disk_segment}/...\n\n"
                f"This will rename the folder on disk and update all tracking.\n"
                f"Cancel to leave files at their current location.")
         choice = self._messageBox('Embody -- Ancestor Rename Detected', msg,
                                   ['Cancel', 'Proceed'])
         if choice != 1:
             self.Log(f"Ancestor rename cancelled by user: "
-                     f"{old_prefix} → {new_prefix}", "INFO")
+                     f"{old_prefix} -> {new_prefix}", "INFO")
             return False
 
         # --- Phase C: Rename directory on disk ---
@@ -4179,7 +4179,7 @@ class EmbodyExt:
 
         try:
             old_dir.rename(new_dir)
-            self.Log(f"Renamed directory: {old_disk_segment}/ → "
+            self.Log(f"Renamed directory: {old_disk_segment}/ -> "
                      f"{new_disk_segment}/", "SUCCESS")
         except Exception as e:
             self.Log("Failed to rename directory", "ERROR", str(e))
@@ -4265,7 +4265,7 @@ class EmbodyExt:
                 if old_fp is not None:
                     self._tdn_fingerprints[new_path] = old_fp
 
-        self.Log(f"Ancestor rename complete: {old_prefix} → {new_prefix} "
+        self.Log(f"Ancestor rename complete: {old_prefix} -> {new_prefix} "
                  f"({len(affected)} operators updated)", "SUCCESS")
 
         # --- Phase H: Deferred updates for Embody's own operators ---
@@ -4349,7 +4349,7 @@ class EmbodyExt:
         preference = filecleanup_par.eval() if filecleanup_par else 'ask'
 
         if preference == 'ask':
-            op_list = '\n'.join(f'  • {path}' for path, _, _ in missing_ops)
+            op_list = '\n'.join(f'  - {path}' for path, _, _ in missing_ops)
             count = len(missing_ops)
             noun = 'operator' if count == 1 else 'operators'
             s = '' if count == 1 else 's'
@@ -5773,9 +5773,9 @@ class EmbodyExt:
         """Route a tagger manage-mode button click to the correct handler.
 
         Determines the action from the button label text:
-        - Labels containing 'Remove' → remove externalization
-        - Labels containing 'Convert to' → convert DAT format
-        - Otherwise → switch COMP strategy (TOX↔TDN)
+        - Labels containing 'Remove' -> remove externalization
+        - Labels containing 'Convert to' -> convert DAT format
+        - Otherwise -> switch COMP strategy (TOX<->TDN)
 
         Note: The caller (parexec1 in tagger buttons) is responsible for
         closing the tagger window and deferring if needed (e.g., to let
@@ -6431,7 +6431,7 @@ class EmbodyExt:
             if not comp:
                 continue
 
-            # Resolve embed_dats: per-COMP override → global parameter
+            # Resolve embed_dats: per-COMP override -> global parameter
             per_comp = comp.fetch('embed_dats_in_tdn', None, search=False)
             embed_on = (per_comp if per_comp is not None
                         else self.my.par.Embeddatsintdns.eval())
@@ -7642,7 +7642,7 @@ class EmbodyExt:
         """Derive a TD COMP path from a .tdn file's location relative to project.folder.
 
         Uses Embody's bijective naming convention:
-            {project.folder}/embody/base1.tdn → /embody/base1
+            {project.folder}/embody/base1.tdn -> /embody/base1
 
         Returns the TD path string, or None if the file is outside the project.
         """

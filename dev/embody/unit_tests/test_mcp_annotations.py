@@ -20,7 +20,7 @@ class TestMCPAnnotations(EmbodyTestCase):
         self.workspace = self.sandbox.create(baseCOMP, 'ann_workspace')
 
     # =========================================================================
-    # _create_annotation — modes
+    # _create_annotation - modes
     # =========================================================================
 
     def test_create_annotation_default_mode(self):
@@ -48,7 +48,7 @@ class TestMCPAnnotations(EmbodyTestCase):
         self.assertTrue(result.get('success'))
 
     # =========================================================================
-    # _create_annotation — parameters
+    # _create_annotation - parameters
     # =========================================================================
 
     def test_create_annotation_with_text(self):
@@ -111,7 +111,7 @@ class TestMCPAnnotations(EmbodyTestCase):
         self.assertApproxEqual(ann.par.Backcolorr.eval(), 0.8, tolerance=0.01)
 
     # =========================================================================
-    # _create_annotation — errors
+    # _create_annotation - errors
     # =========================================================================
 
     def test_create_annotation_invalid_mode(self):

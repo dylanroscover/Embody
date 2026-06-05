@@ -274,7 +274,7 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 					   or data[row, 'strategy_state'].val.startswith('TOX')
 					   or data[row, 'strategy_state'].val.startswith('TDN'))
 		if has_ext:
-			attribs.text = '×'
+			attribs.text = 'x'
 			attribs.fontSizeX = 12
 			attribs.textColor = _t['text_dim']
 		else:

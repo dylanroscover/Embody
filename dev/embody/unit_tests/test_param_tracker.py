@@ -125,7 +125,7 @@ class TestParameterTracker(EmbodyTestCase):
 
     def test_captureParameters_broken_expression_does_not_raise(self):
         comp = self._makeCompWithBrokenExpr('broken_expr')
-        # Must not raise — pre-fix this threw td.tdError
+        # Must not raise - pre-fix this threw td.tdError
         result = self.tracker.captureParameters(comp)
         self.assertIsInstance(result, dict)
         self.assertIn('Brokenexpr', result)
@@ -166,7 +166,7 @@ class TestParameterTracker(EmbodyTestCase):
     def test_compareParameters_detects_mode_change_when_broken(self):
         comp = self._makeCompWithBrokenExpr('broken_mode')
         self.tracker.updateParamStore(comp)
-        # Assigning .val auto-switches the param to CONSTANT mode in TD —
+        # Assigning .val auto-switches the param to CONSTANT mode in TD -
         # must be detected as a change.
         comp.par.Brokenexpr.val = 'now constant'
         self.assertTrue(self.tracker.compareParameters(comp))

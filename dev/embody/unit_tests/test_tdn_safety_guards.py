@@ -1,5 +1,5 @@
 """
-Test suite: TDN content safety guards — DAT + storage loss detection,
+Test suite: TDN content safety guards - DAT + storage loss detection,
 combined dialog, and the Skip Once / Always Skip preference buttons.
 
 Covers:
@@ -119,7 +119,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
             tdn_parent.unstore('embed_storage_in_tdn')
 
     # ------------------------------------------------------------------
-    # B. Dialog — Skip Once + explicit reversible Always Skip; both
+    # B. Dialog - Skip Once + explicit reversible Always Skip; both
     #    "Always" buttons persist the Tdndatsafety preference
     # ------------------------------------------------------------------
 
@@ -165,7 +165,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
 
     def test_ignore_preference_suppresses_prompt(self):
         """With Tdndatsafety='ignore' (the result of Always Skip), no dialog
-        is shown even when at-risk content exists — that is the whole point."""
+        is shown even when at-risk content exists - that is the whole point."""
         self.embody.par.Tdndatsafety.val = 'ignore'
         self.sandbox.store('risky', 'data')
         try:
@@ -212,7 +212,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
             self.sandbox.unstore('soon_gone')
 
     # ------------------------------------------------------------------
-    # D. DAT type filter — skip TD-managed, keep user-authored
+    # D. DAT type filter - skip TD-managed, keep user-authored
     # ------------------------------------------------------------------
 
     def _flatten_dats(self, result):

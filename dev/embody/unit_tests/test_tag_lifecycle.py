@@ -1,12 +1,12 @@
 ﻿"""
-Test suite: Tag lifecycle — TagSetter toggle, re-tag cycles, applyTagToOperator edge cases.
+Test suite: Tag lifecycle - TagSetter toggle, re-tag cycles, applyTagToOperator edge cases.
 
 Tests higher-level tag workflows:
   - TagSetter toggle on/off for COMPs and DATs
   - Color reset on toggle off
   - Parameter cleanup on toggle off
   - Re-tag after removal produces clean state
-  - Full lifecycle: tag → externalize → untag → re-tag
+  - Full lifecycle: tag -> externalize -> untag -> re-tag
   - applyTagToOperator with existing externaltox
 """
 
@@ -33,7 +33,7 @@ class TestTagLifecycle(EmbodyTestCase):
         super().tearDown()
 
     # =========================================================================
-    # TagSetter — toggle on
+    # TagSetter - toggle on
     # =========================================================================
 
     def test_tagSetter_toggle_on_comp(self):
@@ -53,7 +53,7 @@ class TestTagLifecycle(EmbodyTestCase):
         self.assertIn(py_tag, dat.tags)
 
     # =========================================================================
-    # TagSetter — toggle off
+    # TagSetter - toggle off
     # =========================================================================
 
     def test_tagSetter_toggle_off_comp(self):
@@ -125,7 +125,7 @@ class TestTagLifecycle(EmbodyTestCase):
         self.assertFalse(comp.par.externaltox.readOnly)
 
     # =========================================================================
-    # TagSetter — validation
+    # TagSetter - validation
     # =========================================================================
 
     def test_tagSetter_wrong_family_returns_false(self):
@@ -190,7 +190,7 @@ class TestTagLifecycle(EmbodyTestCase):
     # =========================================================================
 
     def test_full_lifecycle_tag_externalize_untag_retag(self):
-        """Full cycle: tag → externalize → untag + subtract → re-tag → re-externalize."""
+        """Full cycle: tag -> externalize -> untag + subtract -> re-tag -> re-externalize."""
         comp = self.workspace.create(baseCOMP, 'lifecycle')
         tox_tag = self.embody.par.Toxtag.val
 

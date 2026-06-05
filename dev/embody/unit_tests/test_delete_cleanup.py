@@ -1,5 +1,5 @@
 ﻿"""
-Test suite: Deletion and cleanup — RemoveListerRow, stale rows, file references.
+Test suite: Deletion and cleanup - RemoveListerRow, stale rows, file references.
 
 Tests operator deletion, stale row handling, and the RemoveListerRow method:
   - Delete comp leaves stale table row
@@ -119,7 +119,7 @@ class TestDeleteCleanup(EmbodyTestCase):
         self.assertFalse(found, 'Row should be cleaned up')
 
     # =========================================================================
-    # RemoveListerRow — COMP
+    # RemoveListerRow - COMP
     # =========================================================================
 
     def test_removeListerRow_comp_removes_tag(self):
@@ -169,7 +169,7 @@ class TestDeleteCleanup(EmbodyTestCase):
         self.assertFalse(comp.par.externaltox.readOnly)
 
     # =========================================================================
-    # RemoveListerRow — DAT
+    # RemoveListerRow - DAT
     # =========================================================================
 
     def test_removeListerRow_dat_removes_tag(self):
@@ -201,7 +201,7 @@ class TestDeleteCleanup(EmbodyTestCase):
         self.assertFalse(found, 'Row should be removed from table')
 
     # =========================================================================
-    # RemoveListerRow — edge cases
+    # RemoveListerRow - edge cases
     # =========================================================================
 
     def test_removeListerRow_destroyed_op_no_crash(self):

@@ -24,7 +24,7 @@ class TestLogging(EmbodyTestCase):
         if initial_len < self.embody_ext._log_buffer.maxlen:
             self.assertEqual(new_len, initial_len + 1)
         else:
-            # Buffer is full — length stays at maxlen, newest entry is appended
+            # Buffer is full - length stays at maxlen, newest entry is appended
             self.assertEqual(new_len, self.embody_ext._log_buffer.maxlen)
         self.assertEqual(self.embody_ext._log_buffer[-1]['message'], 'buffer test')
 

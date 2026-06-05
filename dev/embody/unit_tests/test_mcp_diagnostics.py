@@ -81,7 +81,7 @@ class TestMCPDiagnostics(EmbodyTestCase):
     # --- _get_module_help ---
 
     def test_get_module_help_td_attr(self):
-        # Use 'OP' to test the hasattr(td, name) path — fast unlike 'td' (7s)
+        # Use 'OP' to test the hasattr(td, name) path - fast unlike 'td' (7s)
         result = self.envoy._get_module_help(module_name='OP')
         self.assertDictHasKey(result, 'helpText')
         self.assertIn('OP', result['helpText'])

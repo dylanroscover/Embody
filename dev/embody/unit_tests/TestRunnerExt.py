@@ -1,5 +1,5 @@
 ﻿"""
-Embody Test Framework — Test Runner Extension
+Embody Test Framework - Test Runner Extension
 
 Provides test discovery, execution, and reporting for the Embody project.
 Lives at /embody/unit_tests as a TD extension.
@@ -50,7 +50,7 @@ class EmbodyTestCase:
     def embody_ext(self):
         """Resolve EmbodyExt live on every access to avoid stale references.
 
-        Never cache extension references — TD may reinitialize the extension at
+        Never cache extension references - TD may reinitialize the extension at
         any time (e.g., when an externalized .py file changes on disk), which
         silently invalidates any cached reference. Always resolve inline via
         the component (CLAUDE.md rule #26).
@@ -328,7 +328,7 @@ class TestRunnerExt:
         """
         Run tests across multiple frames (one test method per frame).
 
-        Like RunTestsDeferred but more granular — each individual test
+        Like RunTestsDeferred but more granular - each individual test
         method gets its own frame instead of running all methods in a
         suite synchronously. Useful for heavy test suites.
 
@@ -356,7 +356,7 @@ class TestRunnerExt:
             self._reportSummary()
             return
 
-        # Build a flat queue — no sandbox/instance creation yet (deferred to first test)
+        # Build a flat queue - no sandbox/instance creation yet (deferred to first test)
         self._deferred_per_test_queue = []
         for suite_class, module_name in suites:
             methods = sorted(

@@ -1,5 +1,5 @@
 ﻿"""
-Test suite: TDN crash safety — atomic writes, backup rotation, validation,
+Test suite: TDN crash safety - atomic writes, backup rotation, validation,
 and import rollback.
 
 Tests cover:
@@ -360,7 +360,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		self.assertEqual(doc.get('format'), 'tdn')
 
 	def test_E06_missing_tdn_and_backup(self):
-		"""Both .tdn and .bak missing — validation should fail gracefully."""
+		"""Both .tdn and .bak missing - validation should fail gracefully."""
 		result = self.tdn._validate_tdn_file(self._tdn_path)
 		self.assertFalse(result.get('valid'))
 		bak = self.tdn._get_backup_path(
@@ -406,7 +406,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			Path(self._tdn_path).read_text(encoding='utf-8'), v2)
 
 	# =================================================================
-	# F. Stress Tests (TD sandbox — real operators)
+	# F. Stress Tests (TD sandbox - real operators)
 	# =================================================================
 
 	def _buildStressNetwork(self, parent_comp, op_count=1000):
@@ -426,7 +426,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 
 		total = 0
 
-		# TOPs — chained
+		# TOPs - chained
 		tops = []
 		for i in range(n_tops):
 			t = parent_comp.create(noiseTOP, f'top_{i}')
@@ -441,7 +441,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			parent_comp.create(constantCHOP, f'chop_{i}')
 			total += 1
 
-		# SOPs — chained
+		# SOPs - chained
 		sops = []
 		for i in range(n_sops):
 			s = parent_comp.create(gridSOP, f'sop_{i}')
@@ -471,7 +471,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		return total
 
 	def test_F01_1000_operator_export_roundtrip(self):
-		"""1000 operators: export → import → verify count and connections."""
+		"""1000 operators: export -> import -> verify count and connections."""
 		expected = self._buildStressNetwork(self.sandbox, 1000)
 		# Export to temp file
 		tdn_file = os.path.join(self._temp_dir, 'stress.tdn')
@@ -605,7 +605,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			target_path=self.sandbox.path, tdn=partial_tdn, clear_first=True)
 		self.assertTrue(imp_partial.get('success'))
 		partial_created = imp_partial.get('created_count', 0)
-		# Detect mismatch — partial import should have fewer ops
+		# Detect mismatch - partial import should have fewer ops
 		self.assertLess(partial_created, expected - 100,
 			f'Partial import should have significantly fewer ops, got {partial_created}')
 		# Rollback: import full
@@ -617,7 +617,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			f'Full rollback should restore ~{expected} ops, got {full_created}')
 
 	def test_F05_deep_nesting_20_levels(self):
-		"""20 levels deep: export → reimport → verify structure in TDN JSON."""
+		"""20 levels deep: export -> reimport -> verify structure in TDN JSON."""
 		# Build 20-level nesting
 		current = self.sandbox
 		for i in range(20):
@@ -656,7 +656,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			f'Expected 38+ operators for 20 nesting levels, got {created}')
 
 	def test_F06_large_dat_content_roundtrip(self):
-		"""10 DATs × 5000 lines each: export → import → verify content."""
+		"""10 DATs x 5000 lines each: export -> import -> verify content."""
 		total_lines = 5000
 		for i in range(10):
 			d = self.sandbox.create(textDAT, f'bigdat_{i}')
@@ -683,7 +683,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 				f'bigdat_{i} should have ~{total_lines} lines, got {len(lines)}')
 
 	def test_F07_mixed_failure_modes(self):
-		"""500 ops: .tdn + .bak both corrupt → .bak2 holds oldest version.
+		"""500 ops: .tdn + .bak both corrupt -> .bak2 holds oldest version.
 
 		Demonstrates the cascading backup strategy:
 		- v1 = first real export (500 ops)

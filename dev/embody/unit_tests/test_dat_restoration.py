@@ -70,7 +70,7 @@ class TestDATRestoration(EmbodyTestCase):
         return False
 
     # =================================================================
-    # RestoreDATs — basic restoration
+    # RestoreDATs - basic restoration
     # =================================================================
 
     def test_restore_missing_text_dat(self):
@@ -133,7 +133,7 @@ class TestDATRestoration(EmbodyTestCase):
         self.assertApproxEqual(restored.color[2], expected_b)
 
     # =================================================================
-    # RestoreDATs — skip conditions
+    # RestoreDATs - skip conditions
     # =================================================================
 
     def test_restore_skips_existing_dat(self):

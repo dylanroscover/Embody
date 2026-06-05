@@ -1,5 +1,5 @@
 ﻿"""
-Test suite: CRUD operations — handleAddition/handleSubtraction end-to-end.
+Test suite: CRUD operations - handleAddition/handleSubtraction end-to-end.
 
 Tests the full externalization pipeline: adding operators to tracking,
 removing them, table management, path generation, and edge cases.
@@ -29,7 +29,7 @@ class TestCRUDOperators(EmbodyTestCase):
         super().tearDown()
 
     # =========================================================================
-    # handleAddition — COMP
+    # handleAddition - COMP
     # =========================================================================
 
     def test_handleAddition_comp_adds_table_row(self):
@@ -146,7 +146,7 @@ class TestCRUDOperators(EmbodyTestCase):
         self.assertTrue(hasattr(comp.par, 'Build'), 'Should have Build parameter')
 
     # =========================================================================
-    # handleAddition — DAT
+    # handleAddition - DAT
     # =========================================================================
 
     def test_handleAddition_dat_sets_file(self):
@@ -202,7 +202,7 @@ class TestCRUDOperators(EmbodyTestCase):
         self.assertTrue(False, 'Row not found')
 
     # =========================================================================
-    # handleAddition — idempotency
+    # handleAddition - idempotency
     # =========================================================================
 
     def test_handleAddition_idempotent_no_duplicate_rows(self):

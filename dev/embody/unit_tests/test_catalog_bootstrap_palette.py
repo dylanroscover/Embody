@@ -47,7 +47,7 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 			out['TDVR'], {'type': 'containerCOMP', 'min_children': 13})
 
 	def test_A02_build_mismatch_returns_none(self):
-		"""No rows match the requested build → None (triggers runtime scan)."""
+		"""No rows match the requested build -> None (triggers runtime scan)."""
 		self._seed([
 			['name', 'type', 'min_children', 'build'],
 			['3DScope', 'baseCOMP', '2', '099.2025.32280'],
@@ -72,17 +72,17 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 	# =================================================================
 
 	def test_B01_empty_table_returns_none(self):
-		"""A table with only a header row (or less) → None."""
+		"""A table with only a header row (or less) -> None."""
 		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertIsNone(out)
 
 	def test_B02_missing_table_returns_none(self):
-		"""None table → None."""
+		"""None table -> None."""
 		out = self.cat._parseBootstrapPaletteTable(None, '099.2025.32280')
 		self.assertIsNone(out)
 
 	def test_B03_bad_schema_returns_none(self):
-		"""Missing required column → None + warning (no raise)."""
+		"""Missing required column -> None + warning (no raise)."""
 		self._seed([
 			['name', 'type', 'build'],  # missing min_children
 			['3DScope', 'baseCOMP', '099.2025.32280'],
@@ -91,7 +91,7 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 		self.assertIsNone(out)
 
 	def test_B04_dedup_first_wins(self):
-		"""Duplicate name within the same build → first row wins."""
+		"""Duplicate name within the same build -> first row wins."""
 		self._seed([
 			['name', 'type', 'min_children', 'build'],
 			['abletonLink', 'baseCOMP', '2', '099.2025.32280'],
@@ -102,7 +102,7 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 		self.assertEqual(out['abletonLink']['min_children'], 2)
 
 	def test_B05_non_integer_min_children_defaults_to_zero(self):
-		"""Malformed min_children cell → 0, not a raise."""
+		"""Malformed min_children cell -> 0, not a raise."""
 		self._seed([
 			['name', 'type', 'min_children', 'build'],
 			['weird', 'baseCOMP', 'NaN', '099.2025.32280'],

@@ -227,7 +227,7 @@ def _init_file_logging(config_path):
         return
     try:
         if config_path:
-            # Config is in .embody/ — git root is one level up
+            # Config is in .embody/ - git root is one level up
             embody_dir = os.path.dirname(os.path.abspath(config_path))
             git_root = os.path.dirname(embody_dir)
             log_dir = os.path.join(git_root, "dev", "logs")
@@ -793,7 +793,7 @@ def _heartbeat_path(config_path, pid=None):
         pid = os.getpid()
     filename = f"envoy-bridge-{pid}.heartbeat"
     if config_path:
-        # Config is in .embody/ — git root is one level up
+        # Config is in .embody/ - git root is one level up
         embody_dir = os.path.dirname(os.path.abspath(config_path))
         git_root = os.path.dirname(embody_dir)
         log_dir = os.path.join(git_root, "dev", "logs")
@@ -830,7 +830,7 @@ def _list_stale_heartbeats(config_path, max_age_s):
     import glob as _glob
     stale = []
     if config_path:
-        # Config is in .embody/ — git root is one level up
+        # Config is in .embody/ - git root is one level up
         embody_dir = os.path.dirname(os.path.abspath(config_path))
         git_root = os.path.dirname(embody_dir)
         log_dir = os.path.join(git_root, "dev", "logs")
@@ -952,7 +952,7 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
         if td_exe is None:
             return False, warning or "No TouchDesigner install found", None
     else:
-        # Backward compat: no pin → use td_executable verbatim, as before.
+        # Backward compat: no pin -> use td_executable verbatim, as before.
         td_exe = fallback_exe
         if not td_exe:
             return False, "No td_executable configured in envoy.json", None

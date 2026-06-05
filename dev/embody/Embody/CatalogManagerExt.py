@@ -1,5 +1,5 @@
 ﻿"""
-CatalogManager — background scanner and cross-build default patching.
+CatalogManager - background scanner and cross-build default patching.
 
 On every startup, checks if a creation-values catalog exists for the
 current TD build in .embody/. If not, runs a background scan (1-2 ops
@@ -36,13 +36,13 @@ _ABSTRACT_TYPES = frozenset({
 # first-launch scan. They either run invasive init on loadTox (messageBoxes,
 # project.cookRate changes, TDImportCache creation) OR fail loudly because
 # their dependencies are absent (Ableton Live, VR hardware, Windows-only
-# ctypes.windll) — flooding the textport with harmless-but-alarming errors
+# ctypes.windll) - flooding the textport with harmless-but-alarming errors
 # that read like Embody is broken. Loss of palette-clone detection for these
 # is acceptable; almost nobody diffs them in TDN networks.
 _PALETTE_SCAN_BLOCKLIST = frozenset({
 	'tdvr',                # forces 90fps, shows VR framerate messageBox
 	'autoui',              # shows "Widget Package Required" messageBox
-	'tdabletonpackage',    # Ableton bridge — needs Ableton Live + tdAbleton
+	'tdabletonpackage',    # Ableton bridge - needs Ableton Live + tdAbleton
 	'resources',           # VRWorldExt + findMouse (Windows-only windll)
 	'world',               # VRWorldExt + findMouse (Windows-only windll)
 	'system',              # findMouse (Windows-only ctypes.windll)
@@ -110,7 +110,7 @@ class CatalogManagerExt:
 		catalog_path = self._getCatalogPath(self._build_str)
 
 		if os.path.isfile(catalog_path):
-			# Catalog exists — load it
+			# Catalog exists - load it
 			catalog = self._readCatalog(catalog_path)
 			if catalog:
 				self._populateTDNExt(catalog)
@@ -119,7 +119,7 @@ class CatalogManagerExt:
 				self._patchCrossBuildDefaults(catalog)
 				return
 
-		# No catalog — start background scan
+		# No catalog - start background scan
 		self._log(f'No catalog for build {self._build_str}, scanning...')
 		self._startBackgroundScan()
 
@@ -127,7 +127,7 @@ class CatalogManagerExt:
 	# Background Scan
 	# =================================================================
 
-	CHUNK_SIZE = 2  # ops per frame — keeps frame time well under 16ms
+	CHUNK_SIZE = 2  # ops per frame - keeps frame time well under 16ms
 
 	def _startBackgroundScan(self):
 		"""Begin async scan of all creatable op types."""
@@ -186,7 +186,7 @@ class CatalogManagerExt:
 					val = p.val
 					if self._probe_name in str(val):
 						continue
-					# Store native Python types — json.dumps handles
+					# Store native Python types - json.dumps handles
 					# int, float, bool, str natively. This preserves
 					# type info so _valuesDiffer comparisons work
 					# correctly (float 5.0 vs float 5.0, not "5" vs 5.0).
@@ -237,7 +237,7 @@ class CatalogManagerExt:
 		# Run cross-build patch check (uses op-type catalog)
 		self._patchCrossBuildDefaults(self._scan_results)
 
-		# Try bootstrap palette_catalog tableDAT first — if it covers
+		# Try bootstrap palette_catalog tableDAT first - if it covers
 		# the current build, skip the palette scan entirely (saves 5-7s
 		# per TD build on fresh installs).
 		bootstrap_palette = self._loadBootstrapPalette(self._build_str)
@@ -252,7 +252,7 @@ class CatalogManagerExt:
 			self._finalizePaletteScan()
 			return
 
-		# Bootstrap miss — fall back to runtime palette scan.
+		# Bootstrap miss - fall back to runtime palette scan.
 		self._startPaletteScan(self._scan_results)
 
 		# Clean up op-type scan state
@@ -263,7 +263,7 @@ class CatalogManagerExt:
 	# Palette Component Scan
 	# =================================================================
 
-	PALETTE_CHUNK_SIZE = 1  # .tox files per frame — some palette .tox are heavy
+	PALETTE_CHUNK_SIZE = 1  # .tox files per frame - some palette .tox are heavy
 
 	def _startPaletteScan(self, op_catalog):
 		"""Begin async scan of all shipped palette .tox components.
@@ -277,7 +277,7 @@ class CatalogManagerExt:
 		"""
 		palette_dir = self._getPaletteDir()
 		if not palette_dir:
-			# Can't find palette — write op-type-only catalog and finish
+			# Can't find palette - write op-type-only catalog and finish
 			self._writeCatalog(self._getCatalogPath(self._build_str), op_catalog)
 			self.ownerComp.par.Status = 'Enabled'
 			return
@@ -327,7 +327,7 @@ class CatalogManagerExt:
 		# Store op_catalog for combined write in _finalizePaletteScan
 		self._op_catalog_pending = op_catalog
 
-		# Snapshot global timeline/cook state — loading palette components
+		# Snapshot global timeline/cook state - loading palette components
 		# can mutate it, and we must hand it back untouched.
 		self._snapshotTimeState()
 
@@ -376,7 +376,7 @@ class CatalogManagerExt:
 					child_count = len(wrapper.children)
 
 				# Only record the first occurrence of each name (handles
-				# TDAbleton Live 11+ vs Live 9&10 duplicates — same type)
+				# TDAbleton Live 11+ vs Live 9&10 duplicates - same type)
 				if name not in self._palette_results:
 					self._palette_results[name] = {
 						'type': placed_type,
@@ -391,13 +391,13 @@ class CatalogManagerExt:
 					existing.destroy()
 
 		# Loading a palette component may have paused playback or changed
-		# the cook rate — undo any global side effects before yielding.
+		# the cook rate - undo any global side effects before yielding.
 		self._restoreTimeState()
 
 		done = len(self._palette_results)
 		self.ownerComp.par.Status = f'Scanning palette ({done}/{total})'
 
-		# Finalize in-band on last chunk — same guard as op-type scan.
+		# Finalize in-band on last chunk - same guard as op-type scan.
 		if not self._palette_queue:
 			self._finalizePaletteScan()
 			return
@@ -553,7 +553,7 @@ class CatalogManagerExt:
 				current_val = par.val
 				# Compare typed values directly
 				if self._valuesEqual(current_val, new_val):
-					# Current value matches the new default — user had
+					# Current value matches the new default - user had
 					# the old default, it was omitted, TD set the new one.
 					# Restore the old default.
 					self._setParFromCatalogVal(par, old_val)
@@ -597,7 +597,7 @@ class CatalogManagerExt:
 		"""Load catalog data into TDNExt.
 
 		Separates the reserved _palette key from op-type parameter data.
-		Op-type defaults go into _divergent_defaults; palette name→type
+		Op-type defaults go into _divergent_defaults; palette name->type
 		mapping goes into _palette_catalog.
 		"""
 		try:

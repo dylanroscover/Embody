@@ -1187,7 +1187,7 @@ class EnvoyMCPServer:
 
             size_kb = result['size_bytes'] / 1024
             info = (f"TOP capture: {result['original_width']}x{result['original_height']}"
-                    f" → {result['width']}x{result['height']} {result['format'].upper()}"
+                    f" -> {result['width']}x{result['height']} {result['format'].upper()}"
                     f" ({size_kb:.1f} KB)\nSaved to: {file_path}")
 
             # Include inline ImageContent for small images (within Claude Code token limits)
@@ -1301,7 +1301,7 @@ class EnvoyMCPServer:
 
         # Suppress "Stateless session crashed" noise from MCP SDK race condition:
         # In stateless mode, terminate() closes streams while background tasks may
-        # still try to send_log_message → ClosedResourceError. This is cosmetic --
+        # still try to send_log_message -> ClosedResourceError. This is cosmetic --
         # the server recovers immediately. Filter these out instead of escalating
         # the log level (which would hide real errors).
         import anyio
@@ -1817,7 +1817,7 @@ class EnvoyExt:
                       'DEBUG')
             return
         # The envoy_running store can be lost on extension reinit (file sync
-        # replaces baked-in code → extension reinitializes → storage cleared).
+        # replaces baked-in code -> extension reinitializes -> storage cleared).
         # Check the status parameter as a backup -- it survives reinit.
         # Only 'Running' means the server thread is actually active.
         # 'Starting...' is just a UI hint -- not proof of an active thread.
@@ -2140,7 +2140,7 @@ class EnvoyExt:
         """Stop MCP server"""
         # Always reset auto-restart counter on Stop, even when envoy_running
         # is already False.  Without this, the restart-limit path in
-        # _scheduleRestart sets Envoyenable=False → parexec → Stop(), but
+        # _scheduleRestart sets Envoyenable=False -> parexec -> Stop(), but
         # envoy_running was already cleared by _onServerError, so the old
         # code returned early and left _restart_count stuck above MAX.
         # The next manual toggle would immediately hit the limit again,
@@ -4642,7 +4642,7 @@ class EnvoyExt:
             config['mcpServers'] = servers
             mcp_file.write_text(
                 json.dumps(config, indent=2) + '\n', encoding='utf-8')
-            self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge → port {port})')
+            self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge -> port {port})')
 
             # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
             self._deploySettingsLocal(target_dir / '.claude')
@@ -4818,7 +4818,7 @@ class EnvoyExt:
                     return None
                 project_dir = chosen  # use chosen folder for init below
 
-            if choice in (1, 2):  # Initialize Git Here, or Browse → confirmed init
+            if choice in (1, 2):  # Initialize Git Here, or Browse -> confirmed init
                 try:
                     # Strip git env vars that TD's embedded Python may set --
                     # these can cause git init to produce a broken repository.
@@ -4956,7 +4956,7 @@ class EnvoyExt:
 
         CRITICAL: do NOT use ``os.kill(pid, 0)`` on Windows.  CPython's
         posixmodule implements ``os.kill`` on Windows via
-        ``OpenProcess(PROCESS_ALL_ACCESS, …)`` + ``TerminateProcess(handle, sig)``
+        ``OpenProcess(PROCESS_ALL_ACCESS, ...)`` + ``TerminateProcess(handle, sig)``
         regardless of ``sig`` -- when called with ``sig=0`` on a foreign
         TD process Embody has access to, it would silently terminate that
         process with exit code 0.  And when the PID is invalid in a
@@ -5062,7 +5062,7 @@ class EnvoyExt:
             except (json.JSONDecodeError, OSError):
                 pass
 
-        # Migrate old flat format → registry format
+        # Migrate old flat format -> registry format
         if 'instances' not in existing:
             instances = {}
             if 'toe_path' in existing:

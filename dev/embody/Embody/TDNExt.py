@@ -1678,7 +1678,7 @@ class TDNExt:
 		return data
 
 	# =====================================================================
-	# Divergent defaults — correct for p.default lying
+	# Divergent defaults - correct for p.default lying
 	# =====================================================================
 
 	def _loadDivergentDefaults(self):
@@ -1778,7 +1778,7 @@ class TDNExt:
 		p.default lies, or an empty dict if none.
 
 		If the table loaded successfully, a missing op_type means "no
-		divergent defaults for this type" — return {} without probing.
+		divergent defaults for this type" - return {} without probing.
 		On-the-fly probing only runs when the table has no data at all
 		(missing DAT, empty table, or no build columns).
 		"""
@@ -1787,7 +1787,7 @@ class TDNExt:
 		# If table loaded, trust it: missing type = no divergences
 		if self._divergent_defaults:
 			return self._divergent_defaults.get(op_type, {})
-		# No table data — fall back to on-the-fly probing
+		# No table data - fall back to on-the-fly probing
 		return self._getCreationValueOnTheFly(op_type)
 
 	def _getCreationValueOnTheFly(self, op_type):
@@ -2003,7 +2003,7 @@ class TDNExt:
 	def _getSequenceBaseName(par, seq):
 		"""Extract base name from a sequence parameter's full name.
 
-		E.g., 'comb2oper' with seq.name='comb' → 'oper'
+		E.g., 'comb2oper' with seq.name='comb' -> 'oper'
 		"""
 		after_prefix = par.name[len(seq.name):]
 		return after_prefix.lstrip('0123456789')
@@ -2871,7 +2871,7 @@ class TDNExt:
 				continue
 
 			# Multi-component styles: strip first suffix from par name
-			# (e.g., 'Tintr' → 'Tint' for RGB, 'Posx' → 'Pos' for XYZ)
+			# (e.g., 'Tintr' -> 'Tint' for RGB, 'Posx' -> 'Pos' for XYZ)
 			actual_par_name = par_name
 			suffixes = STYLE_SUFFIXES.get(style, [])
 			if suffixes:
@@ -3119,7 +3119,7 @@ class TDNExt:
 
 				if suffixes:
 					# Strip first suffix from par_name to get base
-					# (e.g., 'Tintr' → 'Tint' for RGBA)
+					# (e.g., 'Tintr' -> 'Tint' for RGBA)
 					base_name = par_name
 					first_suffix = suffixes[0]
 					if par_name.endswith(first_suffix):
@@ -4060,7 +4060,7 @@ class TDNExt:
 						return True
 
 		# --- Strategy 2: clone expression heuristic ---
-		# Exclude /sys/TDTox/defaultCOMPs/* — these are TD's native-operator
+		# Exclude /sys/TDTox/defaultCOMPs/* - these are TD's native-operator
 		# templates (every fresh buttonCOMP/panelCOMP/etc. clones from there
 		# by default). Not palette components; internals are minimal and
 		# export cleanly. Treated like any other normal COMP.

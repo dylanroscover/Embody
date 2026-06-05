@@ -74,7 +74,7 @@ class TestSmokeRelease(EmbodyTestCase):
         self.embody.store('_smoke_test_responses', {
             'Other Dialog': 1
         })
-        # Call with a different title — should NOT consume the stored response.
+        # Call with a different title - should NOT consume the stored response.
         # We can't test the ui.messageBox fallback without a modal, so just
         # verify the stored response survives.
         responses = self.embody.fetch('_smoke_test_responses', None,
