@@ -23,7 +23,6 @@ class TestMCPTDNTools(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
         # Build a small deterministic fixture: a baseCOMP with a few
         # distinct operator types inside. Sandbox gets cleaned in tearDown.
         self.fixture = self.sandbox.create(baseCOMP, 'tdn_tools_fixture')
@@ -38,7 +37,7 @@ class TestMCPTDNTools(EmbodyTestCase):
     # ------------------------------------------------------------------
 
     def test_read_tdn_returns_tdn_dict(self):
-        result = self.envoy._read_tdn(comp_path=self.fixture.path)
+        result = self.embody.ext.Envoy._read_tdn(comp_path=self.fixture.path)
         self.assertTrue(result.get('success'),
             f'read_tdn failed: {result.get("error")}')
         tdn = result.get('tdn')
@@ -48,7 +47,7 @@ class TestMCPTDNTools(EmbodyTestCase):
         self.assertIn('version', tdn)
 
     def test_read_tdn_lists_fixture_children(self):
-        result = self.envoy._read_tdn(comp_path=self.fixture.path)
+        result = self.embody.ext.Envoy._read_tdn(comp_path=self.fixture.path)
         names = {o['name'] for o in result['tdn']['operators']}
         self.assertTrue({'noise', 'level', 'null', 'wave', 'notes'} <= names,
             f'Expected fixture children in tdn.operators, got: {names}')
@@ -60,13 +59,13 @@ class TestMCPTDNTools(EmbodyTestCase):
     def test_read_tdn_include_dat_content_toggle(self):
         dat = self.fixture.op('notes')
         dat.text = 'MARKER_CONTENT_42'
-        with_content = self.envoy._read_tdn(
+        with_content = self.embody.ext.Envoy._read_tdn(
             comp_path=self.fixture.path, include_dat_content=True)
         serialized = json.dumps(with_content['tdn'])
         self.assertIn('MARKER_CONTENT_42', serialized,
             'DAT content missing when include_dat_content=True')
 
-        without = self.envoy._read_tdn(
+        without = self.embody.ext.Envoy._read_tdn(
             comp_path=self.fixture.path, include_dat_content=False)
         serialized = json.dumps(without['tdn'])
         self.assertNotIn('MARKER_CONTENT_42', serialized,
@@ -84,7 +83,7 @@ class TestMCPTDNTools(EmbodyTestCase):
         try:
             for mode in ('off', 'export', 'full'):
                 self.embody.par.Tdnmode.val = mode
-                result = self.envoy._read_tdn(comp_path=self.fixture.path)
+                result = self.embody.ext.Envoy._read_tdn(comp_path=self.fixture.path)
                 self.assertTrue(result.get('success'),
                     f'read_tdn failed in mode={mode}: {result.get("error")}')
                 self.assertIn('operators', result['tdn'])
@@ -104,14 +103,14 @@ class TestMCPTDNTools(EmbodyTestCase):
         Floor: 5x reduction. Real-world networks hit 20-90x; keeping the
         floor conservative so this test doesn't flake on tiny fixtures.
         """
-        tdn_result = self.envoy._read_tdn(comp_path=self.fixture.path)
+        tdn_result = self.embody.ext.Envoy._read_tdn(comp_path=self.fixture.path)
         self.assertTrue(tdn_result.get('success'))
         tdn_chars = len(json.dumps(tdn_result['tdn']))
 
         # Walk fixture children via _get_op and sum the payload sizes.
         get_op_chars = 0
         for child in self.fixture.children:
-            op_result = self.envoy._get_op(op_path=child.path)
+            op_result = self.embody.ext.Envoy._get_op(op_path=child.path)
             get_op_chars += len(json.dumps(op_result))
 
         self.assertGreater(get_op_chars, 0,
@@ -128,27 +127,27 @@ class TestMCPTDNTools(EmbodyTestCase):
 
     def test_export_network_in_memory(self):
         """_export_network with output_file=None returns a TDN dict (no disk)."""
-        result = self.envoy._export_network(
+        result = self.embody.ext.Envoy._export_network(
             root_path=self.fixture.path, output_file=None)
         self.assertTrue(result.get('success'),
             f'export_network failed: {result.get("error")}')
         self.assertEqual(result['tdn'].get('format'), 'tdn')
 
     def test_export_network_nonexistent(self):
-        result = self.envoy._export_network(
+        result = self.embody.ext.Envoy._export_network(
             root_path='/nonexistent', output_file=None)
         self.assertDictHasKey(result, 'error')
 
     def test_export_then_import_round_trips(self):
         """Round-trip through the MCP handlers: export the fixture, then
         import it into a fresh COMP and confirm every child reappears."""
-        export = self.envoy._export_network(
+        export = self.embody.ext.Envoy._export_network(
             root_path=self.fixture.path, output_file=None)
         self.assertTrue(export.get('success'),
             f'export failed: {export.get("error")}')
 
         target = self.sandbox.create(baseCOMP, 'import_target')
-        result = self.envoy._import_network(
+        result = self.embody.ext.Envoy._import_network(
             target_path=target.path, tdn=export['tdn'], clear_first=True)
         self.assertTrue(result.get('success'),
             f'import failed: {result.get("error")}')
@@ -159,11 +158,11 @@ class TestMCPTDNTools(EmbodyTestCase):
 
     def test_import_network_invalid_tdn(self):
         target = self.sandbox.create(baseCOMP, 'import_bad')
-        result = self.envoy._import_network(
+        result = self.embody.ext.Envoy._import_network(
             target_path=target.path, tdn={'not_operators': 1})
         self.assertDictHasKey(result, 'error')
 
     def test_import_network_nonexistent_target(self):
-        result = self.envoy._import_network(
+        result = self.embody.ext.Envoy._import_network(
             target_path='/nonexistent', tdn={'operators': []})
         self.assertDictHasKey(result, 'error')

@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.4",
-	"build": 31,
-	"generator": "Embody/5.0.429",
+	"build": 37,
+	"generator": "Embody/5.0.435",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:19Z",
+	"source_file": "Embody-5.436.toe",
+	"exported_at": "2026-06-07T18:25:45Z",
 	"network_path": "/embody/Embody/toolbar/tooltip",
 	"options": {
 		"include_dat_content": false,
@@ -13,9 +13,9 @@
 	},
 	"type": "containerCOMP",
 	"parameters": {
-		"x": 356,
+		"x": 998,
 		"y": 40,
-		"w": 169,
+		"w": 80,
 		"h": 22,
 		"layer": 10,
 		"alignallow": "ignore",
@@ -35,7 +35,7 @@
 			"name": "text",
 			"type": "textCOMP",
 			"parameters": {
-				"text": "Toggle Envoy MCP server",
+				"text": "Clear filter",
 				"callbacks": "text_callbacks",
 				"font": "Open Sans",
 				"fontsize": 10,

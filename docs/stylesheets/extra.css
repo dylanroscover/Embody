@@ -1,4 +1,4 @@
-/* Embody Documentation — Custom Theme
+/* Embody Documentation - Custom Theme
  * Colors derived from the Embody TouchDesigner UI palette
  */
 
@@ -71,7 +71,7 @@
   background-color: #2a4a42;
 }
 
-/* Links — ensure high contrast on dark backgrounds */
+/* Links - ensure high contrast on dark backgrounds */
 [data-md-color-scheme="slate"] .md-typeset a {
   color: #6ee668;
 }

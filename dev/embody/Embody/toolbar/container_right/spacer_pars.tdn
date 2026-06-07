@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.4",
 	"build": 1,
-	"generator": "Embody/5.0.429",
+	"generator": "Embody/5.0.434",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:19Z",
+	"source_file": "Embody-5.434.toe",
+	"exported_at": "2026-06-07T17:32:17Z",
 	"network_path": "/embody/Embody/toolbar/container_right/spacer_pars",
 	"options": {
 		"include_dat_content": false,

@@ -1,4 +1,4 @@
-﻿"""Window header extension: title label + minimize/maximize/close buttons."""
+"""Window header extension: title label + minimize/maximize/close buttons."""
 
 
 class WindowHeaderExt:
@@ -58,7 +58,7 @@ class WindowHeaderExt:
 	def _filter(self):
 		return self._tools.op('container_right') if self._tools else None
 
-	# ── Press / Release ─────────────────────────────────────────────
+	# -- Press / Release ---------------------------------------------
 
 	def OnPress(self):
 		"""Called by panelexec1 on lselect offToOn -- set pressed visual."""
@@ -84,7 +84,7 @@ class WindowHeaderExt:
 				self._lastPressed.store('hover', True)
 		self._lastPressed = None
 
-	# ── Click dispatch ──────────────────────────────────────────────
+	# -- Click dispatch ----------------------------------------------
 
 	def OnClick(self):
 		"""Called by panelexec1 on lselect offToOn."""
@@ -100,7 +100,7 @@ class WindowHeaderExt:
 		if action:
 			action()
 
-	# ── Rollover ────────────────────────────────────────────────────
+	# -- Rollover ----------------------------------------------------
 
 	def OnRollover(self, state):
 		"""Called by panelexec1 on rollover/insideu changes."""
@@ -123,7 +123,7 @@ class WindowHeaderExt:
 		self._lastHovered = None
 		self._clearPressed(restore_hover=False)
 
-	# ── Window actions ──────────────────────────────────────────────
+	# -- Window actions ----------------------------------------------
 
 	def Windowclose(self):
 		"""Close the manager window."""
@@ -189,7 +189,7 @@ class WindowHeaderExt:
 		mgr.par.w = self.min_width
 		run("args[0].par.h = args[1]", mgr, self.min_height, delayFrames=1)
 
-	# ── Helpers ─────────────────────────────────────────────────────
+	# -- Helpers -----------------------------------------------------
 
 	def _findClickedButton(self):
 		"""Find clicked button using insideu position."""

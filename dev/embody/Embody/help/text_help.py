@@ -152,10 +152,12 @@ Manager UI
 ----------
 Press ctrl-shift-o to open the Manager, a TreeLister of all
 externalized operators and their metadata. From here you can:
-- View dirty state and build info for each operator
+- View status for each file: red = unsaved, amber = param change,
+  orange = saved-but-uncommitted (git), green/blue = clean + committed
 - Navigate to any operator by clicking
 - Open file locations in your system file browser
-- Refresh, filter, and search externalizations
+- Refresh, filter, and search externalizations -- type "changed"
+  to show only files with pending changes
 - Trigger Initialize/Update or Reset
 
 Keyboard Shortcuts

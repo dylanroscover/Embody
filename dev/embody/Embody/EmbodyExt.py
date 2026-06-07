@@ -1,4 +1,4 @@
-﻿"""
+"""
 Embody - Automatic TOX and DAT Externalization for TouchDesigner
 
 Embody automatically creates, maintains and updates tox and DAT file
@@ -36,6 +36,7 @@ class EmbodyExt:
         'text_rule_td_python':               'td-python',
         'text_rule_mcp_safety':              'mcp-safety',
         'text_rule_parameters':              'parameters',
+        'text_rule_refresh_after_commit':    'refresh-after-commit',
     }
 
     # Skill DAT name -> slug (Claude Code only)
@@ -829,7 +830,7 @@ class EmbodyExt:
         # Walk up looking for .git. The home_dir guard prevents picking up
         # an unrelated repo (e.g. ~/.dotfiles) when project.folder is inside
         # the home directory. But only apply it when home_dir is actually
-        # an ancestor — otherwise (e.g. a Windows project on D:\) the part-
+        # an ancestor - otherwise (e.g. a Windows project on D:\) the part-
         # count comparison wrongly bailed before searching at all (issue #19).
         try:
             home_dir = Path.home().resolve()
@@ -930,7 +931,7 @@ class EmbodyExt:
                     self.Log(f'Removed stale {rel} at {old_root}', 'DEBUG')
                 else:
                     self._atomicMove(src, dst)
-                    self.Log(f'Moved {rel} → {new_root}', 'DEBUG')
+                    self.Log(f'Moved {rel} -> {new_root}', 'DEBUG')
             except Exception as e:
                 self.Log(f'Could not migrate {rel}: {e}', 'WARNING')
 
@@ -972,7 +973,7 @@ class EmbodyExt:
                     new_settings.parent.mkdir(parents=True, exist_ok=True)
                     self._atomicMove(old_settings, new_settings)
                     self.Log(
-                        f'Moved .claude/settings.local.json → {new_root}',
+                        f'Moved .claude/settings.local.json -> {new_root}',
                         'INFO')
                 except Exception as e:
                     self.Log(
@@ -983,7 +984,7 @@ class EmbodyExt:
         self._cleanupOldRootFiles(old_root)
 
         self.Log(
-            f'AI config root: {old_mode} → {new_mode}. '
+            f'AI config root: {old_mode} -> {new_mode}. '
             f'Old root {old_root} cleaned, regenerating at {new_root}.',
             'INFO')
 
@@ -1420,7 +1421,6 @@ class EmbodyExt:
         target_dir = self._findProjectRoot()
 
         # MCP config (port comes from the running server, or the parameter)
-        envoy = self.my.ext.Envoy
         if self.my.fetch('envoy_running', False):
             # Extract port from current status string
             status = str(self.my.par.Envoystatus.eval())
@@ -1430,7 +1430,7 @@ class EmbodyExt:
         else:
             port = self.my.par.Envoyport.eval()
 
-        envoy._configureMCPClient(port, target_dir=target_dir)
+        self.my.ext.Envoy._configureMCPClient(port, target_dir=target_dir)
 
         # AI client config (CLAUDE.md, AGENTS.md, rules, skills, etc.)
         self._extractAIConfig()
@@ -1457,8 +1457,7 @@ class EmbodyExt:
             self.Log('Envoy is not enabled. Set Envoyenable = True first.', 'WARNING')
             return
 
-        envoy = self.my.ext.Envoy
-        git_root = envoy._checkOrInitGitRepo()
+        git_root = self.my.ext.Envoy._checkOrInitGitRepo()
 
         if git_root is None:
             return  # User cancelled
@@ -1471,8 +1470,8 @@ class EmbodyExt:
         self.my.store('_git_root', git_root)
 
         # Git-specific config
-        envoy._configureGitignore(git_root)
-        envoy._configureGitattributes(git_root)
+        self.my.ext.Envoy._configureGitignore(git_root)
+        self.my.ext.Envoy._configureGitattributes(git_root)
         self.Log(f'Git config generated at {git_root}', 'SUCCESS')
 
         # Regenerate MCP + AI config so paths point to git root
@@ -1506,7 +1505,7 @@ class EmbodyExt:
         if not externalizations_dat:
             # Truly fresh install -- create new table as a regular sibling.
             # NOTE: not docked to Embody so the table survives when Embody is
-            # deleted during an upgrade (delete old → drag new .tox).
+            # deleted during an upgrade (delete old -> drag new .tox).
             externalizations_dat = self.my.parent().create(tableDAT, table_name)
             externalizations_dat.nodeX = self.my.nodeX - 200
             externalizations_dat.nodeY = self.my.nodeY
@@ -1822,7 +1821,7 @@ class EmbodyExt:
                     canonical.parent.mkdir(parents=True, exist_ok=True)
                     import shutil
                     shutil.move(str(old_path), str(canonical))
-                    self.Log('Migrated .embody.json → .embody/config.json', 'INFO')
+                    self.Log('Migrated .embody.json -> .embody/config.json', 'INFO')
                     path = canonical
                 except Exception as e:
                     self.Log(f'Could not migrate .embody.json: {e}', 'WARNING')
@@ -1999,11 +1998,11 @@ class EmbodyExt:
             # the prompt; kick Envoy start if the restored settings have it
             # enabled (onValueChange was suppressed during restore).
             if self.my.par.Envoyenable.eval():
-                # Longer delay on the upgrade path (onCreate → Verify) to give
+                # Longer delay on the upgrade path (onCreate -> Verify) to give
                 # the old server thread time to release its port.  onDestroyTD
                 # signals the old shutdown_event, but uvicorn can take 1-3s to
                 # fully close its listener socket.  delayFrames=10 (~0.17s) was
-                # too short, causing EADDRINUSE → auto-restart exhaustion →
+                # too short, causing EADDRINUSE -> auto-restart exhaustion ->
                 # Envoyenable stuck.  60 frames (~1s) is a safer window.
                 run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=60)
         else:
@@ -2426,7 +2425,7 @@ class EmbodyExt:
         ]
 
         # TDN-strategy COMPs are excluded -- their lifecycle is managed by
-        # ToggleTag() → _removeTDNStrategy(), not by tag-presence detection.
+        # ToggleTag() -> _removeTDNStrategy(), not by tag-presence detection.
         # Without this, Full Project TDN exports (which track "/" in the table
         # without tagging the root) get incorrectly removed as "subtractions".
         subtractions = [
@@ -3216,6 +3215,191 @@ class EmbodyExt:
         else:
             self.Save(op_path)
 
+    # ==========================================================================
+    # GIT STATUS (uncommitted detection for the manager UI)
+    # ==========================================================================
+    # A SECOND status axis, distinct from "unsaved" (live-vs-disk). Externalized
+    # DAT scripts use TD's bidirectional syncfile, so they are always in sync with
+    # disk -- their only meaningful "changed" state is git-relative (on disk but
+    # not committed). Computed once per refresh sweep and stored at runtime (never
+    # written to externalizations.tsv, which would churn). Powers the orange badge
+    # for TOX/TDN/DAT alike. Self-disables outside a git repo.
+
+    def _findGitRootSync(self):
+        """Walk up from project.folder for a .git dir. Returns Path or 'no-git'.
+
+        No subprocess and no prompt -- safe to call on the main-thread refresh
+        sweep. Mirrors EnvoyExt._findGitRoot so the two never disagree.
+        """
+        project_dir = Path(project.folder).resolve()
+        try:
+            home_dir = Path.home().resolve()
+        except Exception:
+            home_dir = None
+        home_is_ancestor = bool(
+            home_dir and (home_dir == project_dir or home_dir in project_dir.parents))
+        for parent in [project_dir] + list(project_dir.parents):
+            if home_is_ancestor and parent == home_dir:
+                break
+            if (parent / '.git').exists():
+                return parent
+        return 'no-git'
+
+    @staticmethod
+    def _parseGitPorcelain(output: str) -> dict:
+        """Parse `git status --porcelain -z` output into {repo_rel_posix: code}.
+
+        `-z` means NUL-separated records and NO path quoting, so paths with
+        spaces/unicode are handled cleanly. A rename/copy record (X or Y in
+        R/C) is followed by an extra NUL-separated origin path; both the new and
+        origin paths are recorded (membership tests only ever hit the one that
+        currently exists on disk). Untracked entries (`??`) count as changed.
+        """
+        result = {}
+        tokens = output.split('\0')
+        i, n = 0, len(tokens)
+        while i < n:
+            tok = tokens[i]
+            if not tok or len(tok) < 3 or tok[2] != ' ':
+                i += 1
+                continue
+            code, path = tok[:2], tok[3:]
+            if path:
+                result[path] = code
+            if code[0] in ('R', 'C'):
+                i += 1
+                if i < n and tokens[i]:
+                    result[tokens[i]] = code
+            i += 1
+        return result
+
+    @staticmethod
+    def _mapChangedToOps(changed, project_prefix, rows):
+        """Map a git {repo_rel_posix: code} set to {op_path: code} for externalized
+        rows.
+
+        `project_prefix` is project.folder relative to the git root as a posix
+        prefix ('' or e.g. 'dev/'); `rows` is an iterable of
+        (op_path, rel_file_path). Pure string math -- no filesystem and no TD
+        access -- so it is both fast (no per-row Path.resolve) and unit-testable.
+        """
+        out = {}
+        if not changed:
+            return out
+        for path, rel in rows:
+            if not path or not rel or path == '/':
+                continue
+            code = changed.get(project_prefix + rel.replace('\\', '/'))
+            if code:
+                out[path] = code
+        return out
+
+    @staticmethod
+    def _rowHasChanges(dirty_val, uncommitted) -> bool:
+        """Whether a manager row has pending changes on EITHER axis: unsaved
+        (`dirty`/`Par`) or git-uncommitted. Single source of truth for the
+        manager's "changed" filter keyword (used by inject_parents)."""
+        is_unsaved = str(dirty_val) in ('True', 'true', '1', 'Par')
+        return is_unsaved or bool(uncommitted)
+
+    def _updateGitStatus(self) -> None:
+        """Kick off an ASYNC git-uncommitted scan on a worker thread; never blocks
+        the refresh frame.
+
+        The `git status` subprocess (tens of ms) and parsing run off the main
+        thread; the cheap, string-based mapping + store happen back on the main
+        thread in the SuccessHook closure, which then refreshes the manager
+        badges. Runtime-only via store('git_status', ...) (never touches
+        externalizations.tsv). No git repo, thread-pool exhaustion, or any failure
+        -> empty/unchanged map; the orange indicator simply does not show.
+
+        Each scan carries a generation id captured in its hooks, and its result
+        state is task-local (closure, not a shared attribute). Only the LATEST
+        generation publishes or clears the in-flight flag -- so a stale task that
+        finally fires after a re-arm is a no-op and cannot clobber a newer scan.
+        """
+        import time
+        now = time.monotonic()
+        # Coalesce: one scan in flight at a time. Re-arm only if a prior scan has
+        # been "running" implausibly long (worker died without a hook firing).
+        if getattr(self, '_git_check_running', False) and \
+                (now - getattr(self, '_git_check_started', 0)) < 10:
+            return
+        # Bump the generation: this supersedes any still-pending stale task.
+        gen = getattr(self, '_git_gen', 0) + 1
+        self._git_gen = gen
+        git_root = self._findGitRootSync()
+        if git_root == 'no-git':
+            self._git_check_running = False
+            self.my.store('git_status', {})
+            return
+        proj = str(Path(project.folder).resolve())
+        git_root_s = str(git_root)
+        clean_env = {
+            k: v for k, v in os.environ.items()
+            if k not in ('GIT_DIR', 'GIT_WORK_TREE',
+                         'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES')}
+        # Never take the optional index lock -- a background status must not
+        # contend with the user's (or an agent's) concurrent git add/commit.
+        clean_env['GIT_OPTIONAL_LOCKS'] = '0'
+        state = {'changed': None}
+        self._git_check_running = True
+        self._git_check_started = now
+
+        # Worker runs on a pool thread -- captures only locals + a pure static, so
+        # it touches NO TD objects (the one sanctioned main->worker handoff).
+        parse = EmbodyExt._parseGitPorcelain
+
+        def worker():
+            try:
+                # --no-optional-locks: never write .git/index (no lock contention).
+                # --untracked-files=all: enumerate files inside new dirs (not `?? dir/`).
+                r = subprocess.run(
+                    ['git', '--no-optional-locks', 'status', '--porcelain', '-z',
+                     '--untracked-files=all', '--', proj],
+                    cwd=git_root_s, capture_output=True, text=True,
+                    env=clean_env, stdin=subprocess.DEVNULL, timeout=5, check=False)
+                state['changed'] = parse(r.stdout or '') if r.returncode == 0 else {}
+            except Exception:
+                state['changed'] = {}
+
+        def done():
+            # Only the latest generation publishes / clears the flag.
+            if gen != getattr(self, '_git_gen', None):
+                return
+            self._git_check_running = False
+            try:
+                prefix = Path(proj).relative_to(Path(git_root_s)).as_posix()
+                prefix = (prefix + '/') if prefix and prefix != '.' else ''
+            except Exception:
+                prefix = ''
+            rows = []
+            table = self.Externalizations
+            if table is not None:
+                for r in range(1, table.numRows):
+                    rows.append((self._cellVal(r, 'path'),
+                                 self._cellVal(r, 'rel_file_path')))
+            self.my.store('git_status',
+                          self._mapChangedToOps(state['changed'] or {}, prefix, rows))
+            # Refresh the manager so the orange badges reflect the new git state.
+            try:
+                self.my.op('list/inject_parents').cook(force=True)
+                self.lister.reset()
+            except Exception:
+                pass
+
+        def failed(e):
+            if gen != getattr(self, '_git_gen', None):
+                return
+            self._git_check_running = False
+            self.Log(f"Git status worker failed: {e}", "DEBUG")
+
+        tm = op.TDResources.ThreadManager
+        task = tm.TDTask(target=worker, SuccessHook=done, ExceptHook=failed)
+        if tm.EnqueueTask(task, standalone=True) is None:
+            # Thread pool at capacity -- abandon; the next refresh retries.
+            self._git_check_running = False
+
     def dirtyHandler(self, update: bool) -> list[str]:
         """Check and optionally update dirty COMPs (both TOX and TDN)."""
         updates = []
@@ -3272,6 +3456,9 @@ class EmbodyExt:
     def updateDirtyStates(self, externalizationsFolder: str) -> None:
         """Update dirty states and check for path/parameter changes."""
         dirties = self.dirtyHandler(False)
+        # Second status axis: git-uncommitted files (orange badge). Read-only,
+        # folder-scoped, self-disabling outside a repo -- see _updateGitStatus.
+        self._updateGitStatus()
         param_changes = []
 
         for oper in self.getExternalizedOps(COMP) + self.getExternalizedOps(DAT):
@@ -4019,7 +4206,7 @@ class EmbodyExt:
         """Detect if multiple missing operators share a common path prefix change.
 
         When a COMP that is an ancestor of many externalized operators is renamed
-        (e.g., /embody → /myproject), all tracked operators under it go missing
+        (e.g., /embody -> /myproject), all tracked operators under it go missing
         simultaneously. This method detects that pattern and returns the old and
         new prefix so the rename can be handled as a single batch operation
         instead of 50+ individual updateMovedOp calls.
@@ -4100,7 +4287,7 @@ class EmbodyExt:
             if p.startswith(ancestor_path + '/'):
                 return None
 
-        self.Log(f"Detected ancestor rename: {ancestor_path} → {new_prefix} "
+        self.Log(f"Detected ancestor rename: {ancestor_path} -> {new_prefix} "
                  f"({len(missing)} operators affected)", "INFO")
         return (ancestor_path, new_prefix)
 
@@ -4145,16 +4332,16 @@ class EmbodyExt:
             return False
 
         # --- Phase B: Prompt user ---
-        msg = (f"Detected rename: {old_prefix} → {new_prefix}\n\n"
+        msg = (f"Detected rename: {old_prefix} -> {new_prefix}\n\n"
                f"{len(affected)} externalized files will be moved:\n"
-               f"  {old_disk_segment}/...  →  {new_disk_segment}/...\n\n"
+               f"  {old_disk_segment}/...  ->  {new_disk_segment}/...\n\n"
                f"This will rename the folder on disk and update all tracking.\n"
                f"Cancel to leave files at their current location.")
         choice = self._messageBox('Embody -- Ancestor Rename Detected', msg,
                                   ['Cancel', 'Proceed'])
         if choice != 1:
             self.Log(f"Ancestor rename cancelled by user: "
-                     f"{old_prefix} → {new_prefix}", "INFO")
+                     f"{old_prefix} -> {new_prefix}", "INFO")
             return False
 
         # --- Phase C: Rename directory on disk ---
@@ -4179,7 +4366,7 @@ class EmbodyExt:
 
         try:
             old_dir.rename(new_dir)
-            self.Log(f"Renamed directory: {old_disk_segment}/ → "
+            self.Log(f"Renamed directory: {old_disk_segment}/ -> "
                      f"{new_disk_segment}/", "SUCCESS")
         except Exception as e:
             self.Log("Failed to rename directory", "ERROR", str(e))
@@ -4265,7 +4452,7 @@ class EmbodyExt:
                 if old_fp is not None:
                     self._tdn_fingerprints[new_path] = old_fp
 
-        self.Log(f"Ancestor rename complete: {old_prefix} → {new_prefix} "
+        self.Log(f"Ancestor rename complete: {old_prefix} -> {new_prefix} "
                  f"({len(affected)} operators updated)", "SUCCESS")
 
         # --- Phase H: Deferred updates for Embody's own operators ---
@@ -4349,7 +4536,7 @@ class EmbodyExt:
         preference = filecleanup_par.eval() if filecleanup_par else 'ask'
 
         if preference == 'ask':
-            op_list = '\n'.join(f'  • {path}' for path, _, _ in missing_ops)
+            op_list = '\n'.join(f'  - {path}' for path, _, _ in missing_ops)
             count = len(missing_ops)
             noun = 'operator' if count == 1 else 'operators'
             s = '' if count == 1 else 's'
@@ -5773,9 +5960,9 @@ class EmbodyExt:
         """Route a tagger manage-mode button click to the correct handler.
 
         Determines the action from the button label text:
-        - Labels containing 'Remove' → remove externalization
-        - Labels containing 'Convert to' → convert DAT format
-        - Otherwise → switch COMP strategy (TOX↔TDN)
+        - Labels containing 'Remove' -> remove externalization
+        - Labels containing 'Convert to' -> convert DAT format
+        - Otherwise -> switch COMP strategy (TOX<->TDN)
 
         Note: The caller (parexec1 in tagger buttons) is responsible for
         closing the tagger window and deferring if needed (e.g., to let
@@ -6431,7 +6618,7 @@ class EmbodyExt:
             if not comp:
                 continue
 
-            # Resolve embed_dats: per-COMP override → global parameter
+            # Resolve embed_dats: per-COMP override -> global parameter
             per_comp = comp.fetch('embed_dats_in_tdn', None, search=False)
             embed_on = (per_comp if per_comp is not None
                         else self.my.par.Embeddatsintdns.eval())
@@ -7642,7 +7829,7 @@ class EmbodyExt:
         """Derive a TD COMP path from a .tdn file's location relative to project.folder.
 
         Uses Embody's bijective naming convention:
-            {project.folder}/embody/base1.tdn → /embody/base1
+            {project.folder}/embody/base1.tdn -> /embody/base1
 
         Returns the TD path string, or None if the file is outside the project.
         """

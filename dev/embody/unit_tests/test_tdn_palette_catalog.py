@@ -21,13 +21,12 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.tdn = self.embody.ext.TDN
 		# Snapshot the live catalog so tests can inject synthetic entries
 		# without polluting cross-test state.
-		self._saved_catalog = dict(self.tdn._palette_catalog)
+		self._saved_catalog = dict(self.embody.ext.TDN._palette_catalog)
 
 	def tearDown(self):
-		self.tdn._palette_catalog = self._saved_catalog
+		self.embody.ext.TDN._palette_catalog = self._saved_catalog
 		super().tearDown()
 
 	# =================================================================
@@ -36,22 +35,22 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 
 	def test_A01_catalog_lookup_positive(self):
 		"""name + OPType match against catalog → detected as palette."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			'myWidget': {'type': 'containerCOMP', 'min_children': 0},
 		}
 		comp = self.sandbox.create(containerCOMP, 'myWidget')
-		self.assertTrue(self.tdn._isPaletteClone(comp),
+		self.assertTrue(self.embody.ext.TDN._isPaletteClone(comp),
 			'Catalog entry with matching name+type must be detected')
 
 	def test_A02_catalog_lookup_wrong_type_rejected(self):
 		"""name match but wrong OPType → not detected via catalog."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			'myWidget': {'type': 'containerCOMP', 'min_children': 0},
 		}
 		# baseCOMP != containerCOMP → catalog match fails.
 		# Empty clone parameter → heuristic fallback also returns False.
 		comp = self.sandbox.create(baseCOMP, 'myWidget')
-		self.assertFalse(self.tdn._isPaletteClone(comp),
+		self.assertFalse(self.embody.ext.TDN._isPaletteClone(comp),
 			'Wrong OPType must not match catalog entry')
 
 	# =================================================================
@@ -60,45 +59,45 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 
 	def test_B01_child_count_floor_rejects_empty_user_comp(self):
 		"""Empty user COMP with palette name → rejected by floor check."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			'buttonCheckbox': {'type': 'containerCOMP', 'min_children': 10},
 		}
 		# floor = max(1, 10//2) = 5; COMP has 0 children → rejected
 		comp = self.sandbox.create(containerCOMP, 'buttonCheckbox')
-		self.assertFalse(self.tdn._isPaletteClone(comp),
+		self.assertFalse(self.embody.ext.TDN._isPaletteClone(comp),
 			'Empty COMP must not match palette entry with min_children=10')
 
 	def test_B02_child_count_floor_tolerates_user_mods(self):
 		"""User who kept most palette children (half count) → still detected."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			'vrHMD': {'type': 'geometryCOMP', 'min_children': 51},
 		}
 		comp = self.sandbox.create(geometryCOMP, 'vrHMD')
 		# floor = max(1, 51//2) = 25; create 26 children (above floor)
 		for i in range(26):
 			comp.create(nullCHOP, f'ch{i}')
-		self.assertTrue(self.tdn._isPaletteClone(comp),
+		self.assertTrue(self.embody.ext.TDN._isPaletteClone(comp),
 			'COMP at half expected child count must still match')
 
 	def test_B03_child_count_floor_when_min_is_one(self):
 		"""min_children=1 → floor 1; 0 children fails, 1+ passes."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			'buttonCheckbox': {'type': 'containerCOMP', 'min_children': 1},
 		}
 		comp = self.sandbox.create(containerCOMP, 'buttonCheckbox')
-		self.assertFalse(self.tdn._isPaletteClone(comp),
+		self.assertFalse(self.embody.ext.TDN._isPaletteClone(comp),
 			'0 children must fail floor when min_children=1')
 		comp.create(nullCHOP, 'ch0')
-		self.assertTrue(self.tdn._isPaletteClone(comp),
+		self.assertTrue(self.embody.ext.TDN._isPaletteClone(comp),
 			'1 child must pass floor when min_children=1')
 
 	def test_B04_child_count_floor_zero_skips_check(self):
 		"""min_children=0 → floor 0, any child count passes."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			'odd': {'type': 'containerCOMP', 'min_children': 0},
 		}
 		comp = self.sandbox.create(containerCOMP, 'odd')
-		self.assertTrue(self.tdn._isPaletteClone(comp),
+		self.assertTrue(self.embody.ext.TDN._isPaletteClone(comp),
 			'min_children=0 must skip the floor check')
 
 	# =================================================================
@@ -107,11 +106,11 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 
 	def test_C01_legacy_string_catalog_format(self):
 		"""Old string-format catalog entries still work."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			'myWidget': 'containerCOMP',  # legacy pre-v5.0.355 format
 		}
 		comp = self.sandbox.create(containerCOMP, 'myWidget')
-		self.assertTrue(self.tdn._isPaletteClone(comp),
+		self.assertTrue(self.embody.ext.TDN._isPaletteClone(comp),
 			'String-format catalog entries must still be detected')
 
 	# =================================================================
@@ -120,7 +119,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 
 	def test_D01_tdbasicwidgets_heuristic(self):
 		"""op.TDBasicWidgets.* clone expr → detected via heuristic fallback."""
-		self.tdn._palette_catalog = {}  # force fallback path
+		self.embody.ext.TDN._palette_catalog = {}  # force fallback path
 		comp = self.sandbox.create(containerCOMP, 'someWidget')
 		# Create a sibling whose path includes the substring, so the clone
 		# expression parses, evaluates to a real op (not under /sys/), and
@@ -128,7 +127,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		# matches the heuristic substring check.
 		self.sandbox.create(baseCOMP, 'TDBasicWidgets_stub')
 		comp.par.clone.expr = "parent().op('TDBasicWidgets_stub')"
-		self.assertTrue(self.tdn._isPaletteClone(comp),
+		self.assertTrue(self.embody.ext.TDN._isPaletteClone(comp),
 			'TDBasicWidgets clone expression must be detected')
 
 	# =================================================================
@@ -138,7 +137,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	def test_E01_animationcomp_dat_content_exported_despite_flag(self):
 		"""animationCOMP internal DATs get content even with content flag False."""
 		self.sandbox.create(animationCOMP, 'anim1')
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=False)
 		self.assertTrue(result.get('success'))
 
@@ -155,7 +154,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		tbl = self.sandbox.create(tableDAT, 'standalone_tbl')
 		tbl.clear()
 		tbl.appendRow(['a', 'b'])
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=False)
 		self.assertTrue(result.get('success'))
 
@@ -173,14 +172,14 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		attrs.appendRow(['marker_a', '123'])
 		attrs.appendRow(['marker_b', '456'])
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=False)
 		self.assertTrue(orig.get('success'))
 
 		# Destroy and re-import
 		for c in list(self.sandbox.children):
 			c.destroy()
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=orig['tdn'])
 		self.assertTrue(result.get('success'), f'Import failed: {result}')
 
@@ -202,12 +201,12 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		anim = self.sandbox.create(animationCOMP, 'anim3')
 		keys = anim.op('keys')
 		self.assertIsNotNone(keys)
-		self.assertTrue(self.tdn._isInsideAnimationCOMP(keys))
+		self.assertTrue(self.embody.ext.TDN._isInsideAnimationCOMP(keys))
 
 	def test_F02_inside_animationcomp_negative(self):
 		"""DAT outside animationCOMP → False."""
 		dat = self.sandbox.create(tableDAT, 'plain_dat')
-		self.assertFalse(self.tdn._isInsideAnimationCOMP(dat))
+		self.assertFalse(self.embody.ext.TDN._isInsideAnimationCOMP(dat))
 
 	# =================================================================
 	# G. Palette Handling Resolver (_resolvePaletteHandling)
@@ -215,7 +214,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 
 	def _fakePalette(self, name='myPalette', typ=containerCOMP):
 		"""Create a COMP that the catalog recognizes as a palette."""
-		self.tdn._palette_catalog = {
+		self.embody.ext.TDN._palette_catalog = {
 			name: {'type': typ.__name__, 'min_children': 0},
 		}
 		return self.sandbox.create(typ, name)
@@ -223,12 +222,12 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	def test_G01_storage_override_blackbox(self):
 		"""Per-COMP storage 'blackbox' wins over any par value."""
 		comp = self._fakePalette()
-		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'blackbox')
+		comp.store(self.embody.ext.TDN._PALETTE_HANDLING_KEY, 'blackbox')
 		saved_par = self.embody.par.Tdnpalettehandling.eval()
 		try:
 			self.embody.par.Tdnpalettehandling = 'fullexport'
 			self.assertEqual(
-				self.tdn._resolvePaletteHandling(comp), 'blackbox',
+				self.embody.ext.TDN._resolvePaletteHandling(comp), 'blackbox',
 				'Storage override must win over par value')
 		finally:
 			self.embody.par.Tdnpalettehandling = saved_par
@@ -236,12 +235,12 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	def test_G02_storage_override_fullexport(self):
 		"""Per-COMP storage 'fullexport' wins too."""
 		comp = self._fakePalette()
-		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'fullexport')
+		comp.store(self.embody.ext.TDN._PALETTE_HANDLING_KEY, 'fullexport')
 		saved_par = self.embody.par.Tdnpalettehandling.eval()
 		try:
 			self.embody.par.Tdnpalettehandling = 'blackbox'
 			self.assertEqual(
-				self.tdn._resolvePaletteHandling(comp), 'fullexport')
+				self.embody.ext.TDN._resolvePaletteHandling(comp), 'fullexport')
 		finally:
 			self.embody.par.Tdnpalettehandling = saved_par
 
@@ -252,7 +251,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		try:
 			self.embody.par.Tdnpalettehandling = 'blackbox'
 			self.assertEqual(
-				self.tdn._resolvePaletteHandling(comp), 'blackbox')
+				self.embody.ext.TDN._resolvePaletteHandling(comp), 'blackbox')
 		finally:
 			self.embody.par.Tdnpalettehandling = saved_par
 
@@ -263,7 +262,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		try:
 			self.embody.par.Tdnpalettehandling = 'fullexport'
 			self.assertEqual(
-				self.tdn._resolvePaletteHandling(comp), 'fullexport')
+				self.embody.ext.TDN._resolvePaletteHandling(comp), 'fullexport')
 		finally:
 			self.embody.par.Tdnpalettehandling = saved_par
 
@@ -276,10 +275,10 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 0})
-			result = self.tdn._resolvePaletteHandling(comp)
+			result = self.embody.ext.TDN._resolvePaletteHandling(comp)
 			self.assertEqual(result, 'blackbox')
 			self.assertEqual(
-				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
+				comp.fetch(self.embody.ext.TDN._PALETTE_HANDLING_KEY, None, search=False),
 				'blackbox',
 				'Choice must be persisted on the target COMP')
 			# Par must remain unchanged for this-COMP choices
@@ -296,10 +295,10 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 1})
-			result = self.tdn._resolvePaletteHandling(comp)
+			result = self.embody.ext.TDN._resolvePaletteHandling(comp)
 			self.assertEqual(result, 'fullexport')
 			self.assertEqual(
-				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
+				comp.fetch(self.embody.ext.TDN._PALETTE_HANDLING_KEY, None, search=False),
 				'fullexport')
 			self.assertEqual(self.embody.par.Tdnpalettehandling.eval(), 'ask')
 		finally:
@@ -314,13 +313,13 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 2})
-			result = self.tdn._resolvePaletteHandling(comp)
+			result = self.embody.ext.TDN._resolvePaletteHandling(comp)
 			self.assertEqual(result, 'blackbox')
 			self.assertEqual(
 				self.embody.par.Tdnpalettehandling.eval(), 'blackbox',
 				'"for all" must flip the par')
 			self.assertIsNone(
-				comp.fetch(self.tdn._PALETTE_HANDLING_KEY, None, search=False),
+				comp.fetch(self.embody.ext.TDN._PALETTE_HANDLING_KEY, None, search=False),
 				'"for all" must not write per-COMP storage')
 		finally:
 			self.embody.par.Tdnpalettehandling = saved_par
@@ -334,7 +333,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			self.embody.store(
 				'_smoke_test_responses',
 				{'Embody - Palette Component Detected': 3})
-			result = self.tdn._resolvePaletteHandling(comp)
+			result = self.embody.ext.TDN._resolvePaletteHandling(comp)
 			self.assertEqual(result, 'fullexport')
 			self.assertEqual(
 				self.embody.par.Tdnpalettehandling.eval(), 'fullexport')
@@ -346,8 +345,8 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		comp = self._fakePalette('fakePal', baseCOMP)
 		# Add an internal child to prove it's skipped
 		comp.create(textDAT, 'internal_child')
-		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'blackbox')
-		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		comp.store(self.embody.ext.TDN._PALETTE_HANDLING_KEY, 'blackbox')
+		result = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(result.get('success'))
 		entry = self._findOpInExport(result['tdn'], 'fakePal')
 		self.assertIsNotNone(entry)
@@ -360,8 +359,8 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 		"""End-to-end: fullexport mode recurses, no palette_clone flag."""
 		comp = self._fakePalette('fakePal2', baseCOMP)
 		comp.create(textDAT, 'internal_child')
-		comp.store(self.tdn._PALETTE_HANDLING_KEY, 'fullexport')
-		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		comp.store(self.embody.ext.TDN._PALETTE_HANDLING_KEY, 'fullexport')
+		result = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(result.get('success'))
 		entry = self._findOpInExport(result['tdn'], 'fakePal2')
 		self.assertIsNotNone(entry)

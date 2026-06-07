@@ -1,5 +1,5 @@
 """
-Test suite: tdn_exclude tag — making a COMP (and its whole subtree)
+Test suite: tdn_exclude tag - making a COMP (and its whole subtree)
 invisible to the TDN system.
 
 A COMP whose tags include the exclude tag (default 'tdn_exclude') is
@@ -31,7 +31,7 @@ class TestTDNExclude(EmbodyTestCase):
 
     @property
     def tdn_ext(self):
-        """Resolve TDNExt live on every access (never cache — reinit-safe)."""
+        """Resolve TDNExt live on every access (never cache - reinit-safe)."""
         return self.embody.ext.TDN
 
     @property
@@ -79,7 +79,7 @@ class TestTDNExclude(EmbodyTestCase):
             'Only COMPs can be excluded; a DAT must return False')
 
     def test_hasExcludeTag_guards_empty_tag_name(self):
-        """If the exclude tag name is blank, nothing must be excluded —
+        """If the exclude tag name is blank, nothing must be excluded -
         an empty tag must never match every operator."""
         c = self.sandbox.create(baseCOMP, 'guard')
         prev = self.embody.par.Tdnexcludetag.val
@@ -99,7 +99,7 @@ class TestTDNExclude(EmbodyTestCase):
         self.assertNotIn(tag, self.embody_ext.getTags(),
             'Exclude tag must not appear in getTags() (all)')
         self.assertNotIn(tag, self.embody_ext.getTags('DAT'),
-            'Exclude tag must not appear in the DAT selector — it would '
+            'Exclude tag must not appear in the DAT selector - it would '
             'wrongly drive DAT externalization')
         self.assertNotIn(tag, self.embody_ext.getTags('comp'))
         self.assertNotIn(tag, self.embody_ext.getTags('tdn'))
@@ -149,7 +149,7 @@ class TestTDNExclude(EmbodyTestCase):
     def test_reconstruct_preserves_excluded_subtree(self):
         parent, keep, drop, inside = self._build()
         doc = self._export_doc(parent)
-        # Reconstruct with clear_first=True — the destroy pass must NOT
+        # Reconstruct with clear_first=True - the destroy pass must NOT
         # touch the excluded COMP (it isn't in the doc, so destroying it
         # would be permanent loss).
         self.tdn_ext.ImportNetwork(
@@ -191,7 +191,7 @@ class TestTDNExclude(EmbodyTestCase):
         parent, keep, drop, inside = self._build()
         # Excluded first
         self.assertNotIn('drop', self._op_names(self._export_doc(parent)))
-        # Remove the tag — COMP returns to normal cascade behaviour
+        # Remove the tag - COMP returns to normal cascade behaviour
         drop.tags.remove(self.exclude_tag)
         names = self._op_names(self._export_doc(parent))
         self.assertIn('drop', names,

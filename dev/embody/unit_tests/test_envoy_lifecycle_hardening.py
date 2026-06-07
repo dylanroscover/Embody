@@ -55,7 +55,6 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
         self.envoy_mod = self.embody.op('EnvoyExt').module
         self._patches = []
         self._runs = []
@@ -63,18 +62,18 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
         self._saved_enable = self.embody.par.Envoyenable.eval()
         self._saved_status = self.embody.par.Envoystatus.eval()
         self._saved_running = self.embody.fetch('envoy_running', None, search=False)
-        self._saved_starting = getattr(self.envoy, '_starting', False)
+        self._saved_starting = getattr(self.embody.ext.Envoy, '_starting', False)
 
         # CRITICAL: _continueStart replaces the live server wiring (queues,
         # generation, shutdown_event, current_task).  If we don't restore it,
         # the running MCP server's worker keeps the OLD queues while _onRefresh
         # drains the NEW empty ones -> every MCP call hangs.  Snapshot it all.
         self._saved_state = {
-            'request_queue': self.envoy.request_queue,
-            'response_queue': self.envoy.response_queue,
-            'server_gen': self.envoy._server_gen,
-            'current_task': self.envoy.current_task,
-            'shutdown_event': self.envoy.shutdown_event,
+            'request_queue': self.embody.ext.Envoy.request_queue,
+            'response_queue': self.embody.ext.Envoy.response_queue,
+            'server_gen': self.embody.ext.Envoy._server_gen,
+            'current_task': self.embody.ext.Envoy.current_task,
+            'shutdown_event': self.embody.ext.Envoy.shutdown_event,
             'sys_queues': dict(getattr(sys, '_envoy_queues', {})),
             'sys_shutdown': dict(getattr(sys, '_envoy_shutdown_events', {})),
         }
@@ -83,7 +82,7 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
         # start. The LIVE server is actually running (envoy_running=True), but
         # these tests drive _continueStart in isolation -- restored in tearDown.
         self.embody.store('envoy_running', False)
-        self.envoy._starting = False
+        self.embody.ext.Envoy._starting = False
 
         self._parexec = self.embody.op('parexec')
         self._saved_parexec_active = None
@@ -110,15 +109,15 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
         # Restore live server wiring so the running MCP server is never left
         # reading swapped-out queues (which would hang all MCP calls).
         st = self._saved_state
-        self.envoy.request_queue = st['request_queue']
-        self.envoy.response_queue = st['response_queue']
-        self.envoy._server_gen = st['server_gen']
-        self.envoy.current_task = st['current_task']
-        self.envoy.shutdown_event = st['shutdown_event']
+        self.embody.ext.Envoy.request_queue = st['request_queue']
+        self.embody.ext.Envoy.response_queue = st['response_queue']
+        self.embody.ext.Envoy._server_gen = st['server_gen']
+        self.embody.ext.Envoy.current_task = st['current_task']
+        self.embody.ext.Envoy.shutdown_event = st['shutdown_event']
         sys._envoy_queues = st['sys_queues']
         sys._envoy_shutdown_events = st['sys_shutdown']
 
-        self.envoy._starting = self._saved_starting
+        self.embody.ext.Envoy._starting = self._saved_starting
         if self._saved_running is None:
             try:
                 self.embody.unstore('envoy_running')
@@ -145,16 +144,16 @@ class EnvoyLifecycleContractBase(EmbodyTestCase):
     def _prepareMockedStart(self, enqueue, port=None):
         if port is None:
             port = int(self.embody.par.Envoyport.eval())
-        self._patch(self.envoy, '_findAvailablePort',
+        self._patch(self.embody.ext.Envoy, '_findAvailablePort',
                     lambda base_port, range_size=10: port)
-        self._patch(self.envoy, '_cleanupTempFiles', lambda: None)
-        self._patch(self.envoy, '_cleanupStaleThreads', lambda: None)
-        self._patch(self.envoy, '_configureMCPClient', lambda *a, **k: None)
-        self._patch(self.envoy, '_configureGitignore', lambda *a, **k: None)
-        self._patch(self.envoy, '_configureGitattributes', lambda *a, **k: None)
+        self._patch(self.embody.ext.Envoy, '_cleanupTempFiles', lambda: None)
+        self._patch(self.embody.ext.Envoy, '_cleanupStaleThreads', lambda: None)
+        self._patch(self.embody.ext.Envoy, '_configureMCPClient', lambda *a, **k: None)
+        self._patch(self.embody.ext.Envoy, '_configureGitignore', lambda *a, **k: None)
+        self._patch(self.embody.ext.Envoy, '_configureGitattributes', lambda *a, **k: None)
         self._patch(self.embody_ext, '_upgradeEnvoy', lambda *a, **k: None)
         self._patch(self.embody_ext, '_findProjectRoot', lambda *a, **k: 'no-git')
-        self._patch(self.envoy, 'ThreadManager', _FakeThreadManager(enqueue))
+        self._patch(self.embody.ext.Envoy, 'ThreadManager', _FakeThreadManager(enqueue))
 
 
 class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
@@ -170,7 +169,7 @@ class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
 
         self.embody.par.Envoyenable = 0
         self._prepareMockedStart(enqueue)
-        self.envoy._continueStart('no-git')
+        self.embody.ext.Envoy._continueStart('no-git')
 
         self.assertTrue(
             any(s.startswith('Starting') for s, _ in seen),
@@ -187,7 +186,7 @@ class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
 
         self.embody.par.Envoyenable = 0
         self._prepareMockedStart(enqueue)
-        self.envoy._continueStart('no-git')
+        self.embody.ext.Envoy._continueStart('no-git')
 
         self.assertFalse(
             self._status().startswith('Running'),
@@ -196,7 +195,7 @@ class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
             self.embody.fetch('envoy_running', False, search=False),
             'envoy_running must stay False until bind is confirmed')
         self.assertFalse(
-            self.envoy._starting,
+            self.embody.ext.Envoy._starting,
             '_starting must be cleared after a never-bound failure')
 
     def test_H1_bind_failure_does_not_leave_running_status(self):
@@ -206,7 +205,7 @@ class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
 
         self.embody.par.Envoyenable = 0
         self._prepareMockedStart(enqueue, port=9870)
-        self.envoy._continueStart('no-git')
+        self.embody.ext.Envoy._continueStart('no-git')
 
         self.assertFalse(
             self._status().startswith('Running'),
@@ -223,13 +222,13 @@ class TestH1StartupStatusTruth(EnvoyLifecycleContractBase):
 
         self.embody.par.Envoyenable = 0
         self._prepareMockedStart(enqueue)
-        self.envoy._continueStart('no-git')
+        self.embody.ext.Envoy._continueStart('no-git')
         # _continueStart leaves _starting True (poll deferred via patched run()).
-        self.assertTrue(self.envoy._starting,
+        self.assertTrue(self.embody.ext.Envoy._starting,
                         'starting window should be open after _continueStart')
         # Start() must short-circuit while starting.
-        before = len(self.envoy.ThreadManager.enqueued)
-        self.envoy.Start()
-        after = len(self.envoy.ThreadManager.enqueued)
+        before = len(self.embody.ext.Envoy.ThreadManager.enqueued)
+        self.embody.ext.Envoy.Start()
+        after = len(self.embody.ext.Envoy.ThreadManager.enqueued)
         self.assertEqual(before, after,
                          'Start() must be a no-op while a start is in progress')

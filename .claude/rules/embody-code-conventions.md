@@ -31,7 +31,13 @@ Use `op.Embody.Log(message, level)` from anywhere. Levels: `'DEBUG'`, `'INFO'`, 
 ## Operator Management
 - **Renaming**: Only rename the operator itself (via MCP `rename_op` or inside TD). NEVER rename externalized files on disk, NEVER manually update `file`/`externaltox`, NEVER edit the table. `checkOpsForContinuity` handles everything.
 - **Creating Python files**: Always create the textDAT in TD first, then externalize via Embody. Never manually set `file`/`syncfile` parameters.
-- **Never cache extension references**: Always call inline: `self.ownerComp.ext.Embody.Method()`. Cached refs go stale on reinit.
+- **Never cache extension references** (HARD RULE): Never assign a TD extension to a variable. Always reference it inline at the point of use.
+  - WRONG: `emb = op.Embody.ext.Embody` then `emb.Foo()`; `self.envoy = self.embody.ext.Envoy` then `self.envoy.Bar()`; `strip = self.ownerComp.ext.TDN._stripBuildSuffix` then `strip(x)` (a bound method holds the instance too).
+  - RIGHT: `op.Embody.ext.Embody.Foo()`, `self.ownerComp.ext.TDN.Bar()`, `self.embody.ext.Envoy.Baz()` -- resolve the chain every time.
+  - WHY: TD reinitializes an extension whenever its externalized `.py` changes on disk (and on reload); any cached reference then points at a dead instance and silently misbehaves.
+  - NOT this rule (fine to assign): the return *value* of a call (`result = op.Embody.ext.TDN.ExportNetwork(...)`), a DAT/op the extension exposes (`table = op.Embody.ext.Embody.Externalizations`), or the COMP itself (`self.embody`, `self.my`, `self.ownerComp`). Only the *extension object* (and its bound methods) may not be stored.
+  - EXCEPTIONS -- only when holding the reference is genuinely unavoidable, mark the assignment with a trailing `# ext-cache-ok` comment so the guard test (`test_no_ext_caching.py`) ignores it: (1) main-thread -> worker handoff (resolve `op...ext...` on the main thread and pass it into a background thread; resolving on a worker is a thread conflict); (2) test monkeypatch save/restore (capture an extension's original method so a `finally` block can restore it after patching). Convenience is never an exception.
+  - ENFORCED: `dev/embody/unit_tests/test_no_ext_caching.py` scans production and test source and fails on any new occurrence.
 
 ## File Editing Impact
 

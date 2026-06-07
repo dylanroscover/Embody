@@ -20,7 +20,6 @@ class TestCatalogPaletteScanTimelineGuard(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.cat = self.embody.ext.CatalogManager
 		self.tl = self.embody.time
 		# Remember the real state so the suite leaves nothing dirty.
 		self._orig = {
@@ -29,10 +28,10 @@ class TestCatalogPaletteScanTimelineGuard(EmbodyTestCase):
 			'cookRate': project.cookRate,
 			'realTime': project.realTime,
 		}
-		self.cat._time_snapshot = None
+		self.embody.ext.CatalogManager._time_snapshot = None
 
 	def tearDown(self):
-		self.cat._time_snapshot = None
+		self.embody.ext.CatalogManager._time_snapshot = None
 		try:
 			self.tl.play = self._orig['play']
 			self.tl.rate = self._orig['rate']
@@ -48,48 +47,48 @@ class TestCatalogPaletteScanTimelineGuard(EmbodyTestCase):
 	def test_A01_restore_undoes_pause(self):
 		"""A palette load that pauses the timeline is undone on restore."""
 		self.tl.play = True
-		self.cat._snapshotTimeState()
+		self.embody.ext.CatalogManager._snapshotTimeState()
 		self.tl.play = False  # simulate a misbehaving palette component
-		self.cat._restoreTimeState()
+		self.embody.ext.CatalogManager._restoreTimeState()
 		self.assertTrue(self.tl.play,
 			'restore must put playback back the way the snapshot found it')
 
 	def test_A02_restore_undoes_cookrate_change(self):
 		"""A palette load that changes cookRate is undone on restore."""
 		project.cookRate = 60
-		self.cat._snapshotTimeState()
+		self.embody.ext.CatalogManager._snapshotTimeState()
 		project.cookRate = 24  # simulate e.g. tdvr forcing a frame rate
-		self.cat._restoreTimeState()
+		self.embody.ext.CatalogManager._restoreTimeState()
 		self.assertEqual(project.cookRate, 60)
 
 	def test_A03_restore_undoes_realtime_change(self):
 		"""A palette load that flips realTime is undone on restore."""
 		project.realTime = True
-		self.cat._snapshotTimeState()
+		self.embody.ext.CatalogManager._snapshotTimeState()
 		project.realTime = False
-		self.cat._restoreTimeState()
+		self.embody.ext.CatalogManager._restoreTimeState()
 		self.assertTrue(project.realTime)
 
 	def test_A04_snapshot_then_no_change_then_restore_is_noop(self):
 		"""Restore with an unchanged state leaves everything alone."""
 		self.tl.play = True
 		project.cookRate = 60
-		self.cat._snapshotTimeState()
-		self.cat._restoreTimeState()
+		self.embody.ext.CatalogManager._snapshotTimeState()
+		self.embody.ext.CatalogManager._restoreTimeState()
 		self.assertTrue(self.tl.play)
 		self.assertEqual(project.cookRate, 60)
 
 	def test_A05_restore_without_snapshot_is_noop(self):
 		"""Restore is safe (and does nothing) when no snapshot was taken."""
-		self.cat._time_snapshot = None
+		self.embody.ext.CatalogManager._time_snapshot = None
 		self.tl.play = False
-		self.cat._restoreTimeState()  # must not raise, must not touch state
+		self.embody.ext.CatalogManager._restoreTimeState()  # must not raise, must not touch state
 		self.assertFalse(self.tl.play)
 
 	def test_A06_snapshot_captures_all_tracked_keys(self):
 		"""The snapshot dict carries every key _restoreTimeState looks for."""
-		self.cat._snapshotTimeState()
-		snap = self.cat._time_snapshot
+		self.embody.ext.CatalogManager._snapshotTimeState()
+		snap = self.embody.ext.CatalogManager._time_snapshot  # ext-cache-ok: save original to restore after monkeypatch
 		self.assertIsInstance(snap, dict)
 		for key in ('play', 'rate', 'cookRate', 'realTime'):
 			self.assertIn(key, snap, f'snapshot missing {key!r}')

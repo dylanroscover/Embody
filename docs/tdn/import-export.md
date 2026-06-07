@@ -29,6 +29,41 @@ For these, reach for the runtime-state MCP tools instead:
 
 ---
 
+## Diffing a Network
+
+There are two diff questions for a TDN-externalized COMP, and they need two different tools — because git can only see files on disk, never TouchDesigner's live in-memory network.
+
+### What's UNSAVED — the `diff_tdn` MCP tool
+
+`diff_tdn` compares the **live** network against its **on-disk `.tdn`** — i.e. what you've changed in TD but haven't saved yet. This is the view git fundamentally cannot provide.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `target` | `""` | Empty (or `"/"`, `"project"`) → **whole project**: every live TDN COMP, summarized. Otherwise a COMP path **or** a `.tdn` file path/bare filename (e.g. `"tooltip.tdn"`), resolved to its COMP → that one COMP in full detail |
+| `max_changed_ops` | `200` | Cap on reported changed operators (single-COMP); an honest `truncated` flag is set when exceeded. The project-wide call uses a fixed per-COMP cap of 50 |
+| `max_bytes` | `60000` | Soft cap on envelope size; past it, per-field change bodies are dropped (`changed_keys` retained) |
+
+The comparison is **semantic, not byte-level**: both sides are normalized through the same `type_defaults` / `par_templates` expansion the format uses (so compression-only differences read as no-change), and the volatile export header (`build`, `generator`, `td_build`, `exported_at`, `source_file`) is ignored. Operators are matched by name per level, so a reorder is clean and a deep child edit marks only that child — not its ancestors.
+
+- **Single COMP** returns a diff envelope: `changed`, `counts{added,removed,modified}`, `added[]`, `removed[]`, `modified[{path,name,type,kind,changed_keys,changes}]`. Per-field changes carry **`old`=disk, `new`=live** — parameters as a list of `{name, old, new}`, other keys (flags, refs, root fields) as `{old, new}`. `kind` is `root | op | annotation`.
+- **Project-wide** returns a summary: `{scope:'project', changed_count, clean_count, skipped_count, changed:[<envelope per changed COMP>], skipped, truncated}`. COMPs whose op no longer exists live are skipped, not exported.
+
+Read-only, non-interactive, pull-only: it never prompts, never mutates TD, and is not auto-run. (Requires TD running.)
+
+### What's COMMITTED — the `.tdn` git diff driver
+
+For "what changed since my last commit / in history," use plain `git diff` / `git log -p` / `git show`. A raw git diff of a `.tdn` would be buried in export-header churn (a re-export bumps the timestamp/build even when nothing changed), so Embody installs a **git textconv diff driver** that strips that volatile header before diffing. The result: a re-export with no real change shows an **empty** diff, and only genuine network changes appear.
+
+Embody auto-configures this the same way it manages `.gitignore`/`.gitattributes`/`.mcp.json` — on Envoy startup it:
+
+1. ensures `.gitattributes` contains `*.tdn ... diff=tdn`,
+2. deploys the converter script to `.embody/tdn_textconv.py` (pure stdlib — no TouchDesigner), and
+3. registers it via `git config diff.tdn.textconv` (the driver definition must live in the repo's local git config — git refuses to run textconv commands defined by a cloned repo).
+
+Nothing to install or run manually; `git diff` on a `.tdn` is clean from then on. The two paths are complementary: `diff_tdn` covers the unsaved window (git can't), and the driver keeps the committed/on-disk view (git's domain) just as clean.
+
+---
+
 ## Exporting a Network
 
 ### Keyboard Shortcuts

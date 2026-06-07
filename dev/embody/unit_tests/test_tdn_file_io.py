@@ -414,33 +414,27 @@ class TestTDNFileIO(EmbodyTestCase):
 
 	def test_strip_build_suffix_dotted(self):
 		"""Build number (e.g. .302) should be stripped."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody-5.302'), 'Embody-5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody-5.302'), 'Embody-5')
 
 	def test_strip_build_suffix_no_build(self):
 		"""Name without build suffix should be unchanged."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody-5'), 'Embody-5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody-5'), 'Embody-5')
 
 	def test_strip_build_suffix_plain_name(self):
 		"""Plain name without any version should be unchanged."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('demo'), 'demo')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('demo'), 'demo')
 
 	def test_strip_build_suffix_number_no_dot(self):
 		"""Trailing number without dot should be preserved."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody5'), 'Embody5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody5'), 'Embody5')
 
 	def test_strip_build_suffix_underscore_number(self):
 		"""Underscore-separated number should be preserved."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody_5'), 'Embody_5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody_5'), 'Embody_5')
 
 	def test_strip_build_suffix_preserves_user_version(self):
 		"""Hyphenated user version should be preserved."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('my-cool-project-3'), 'my-cool-project-3')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('my-cool-project-3'), 'my-cool-project-3')
 
 	# =================================================================
 	# SaveTDN root filename derivation — issue #6 regression
@@ -1049,7 +1043,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertTrue(has_file_warning)
 
 	# =================================================================
-	# tox_ref -- export and backward-compat strip
+	# tox_ref -- export and backward-compat self.embody.ext.TDN._stripBuildSuffix
 	# =================================================================
 
 	def test_tox_ref_written_on_export(self):

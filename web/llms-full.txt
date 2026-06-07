@@ -1,0 +1,2190 @@
+# Embody + Envoy + TDN - full text for AI agents
+
+> Open-source TouchDesigner toolkit. Envoy is an MCP server (48 tools) that lets AI
+> assistants build, wire, parameterize, and debug a LIVE TouchDesigner session; Embody
+> externalizes the network to version-control-friendly text on disk; TDN is the diffable
+> JSON network format that makes both possible. Free, MIT, runs entirely on the user's
+> machine. Requires TouchDesigner 2025.32280+ (Windows/macOS).
+
+This file inlines the essential documentation in one place so an agent can read it in a
+single fetch. Curated index: https://embody.tools/llms.txt  -  For agents: https://embody.tools/for-ai
+Repo: https://github.com/dylanroscover/Embody  -  Docs: https://dylanroscover.github.io/Embody/
+
+Sections below, in order:
+  1. Quickstart
+  2. Envoy - Setup
+  3. Envoy - Claude Code Integration
+  4. Envoy - Tools Reference (the 48 MCP tools + 4 bridge meta-tools)
+  5. TDN - Specification
+  6. TDN - Import & Export
+  7. AI Instructions (AGENTS.md - critical rules for operating in a TD project)
+
+
+==============================================================================
+# Quickstart
+# source: docs/quickstart.md
+==============================================================================
+
+# Quickstart
+
+**From nothing to your first AI-built network in about five minutes.**
+
+The fastest way to experience Embody is the AI way: install one thing, drag in one file, click one button, then *talk* to TouchDesigner and watch it build. You describe what you want in plain language - no coding, no scripting, and git is entirely optional.
+
+Embody itself is free, open source (MIT), and runs entirely on your own machine - no Embody account, no subscription, nothing SaaSy. You'll sign in to your AI assistant (a Claude account for Claude Code, for example), but that's the only login involved. The server Embody starts is local-only; nothing about your project leaves your computer unless you choose to share it.
+
+---
+
+## Step 1 - Get the two prerequisites
+
+You need two things installed before you start:
+
+- **TouchDesigner 2025.32280 or later** - Windows or macOS. [Download from Derivative](https://derivative.ca/download).
+- **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Cursor](https://www.cursor.com/), or [Windsurf](https://windsurf.com/).
+
+!!! note "Never used an AI coding tool?"
+    Claude Code is the gentlest place to start - it runs as a desktop app, a VS Code extension, or a web app, not only in a terminal. The first time, you'll create or sign in to a Claude account and then open a folder; you won't be writing code, just describing what you want in plain language. (The five-minute estimate above assumes TouchDesigner and your AI assistant are already installed - first-time installs take a little longer.)
+
+---
+
+## Step 2 - Download Embody
+
+Grab the latest Embody `.tox` from **[GitHub Releases](https://github.com/dylanroscover/Embody/releases/latest)**. It's a single file.
+
+---
+
+## Step 3 - Drag it into your project
+
+Open your `.toe` project (or a brand-new one) and **drag the `.tox` into the network**. That's the entire install - there's nothing else to set up.
+
+Embody initializes itself automatically over the next couple of frames. The core externalization features are self-contained and need no external dependencies.
+
+---
+
+## Step 4 - Say yes to Envoy, the AI bridge
+
+As soon as Embody finishes initializing, it asks whether you want to set up **Envoy** - its AI bridge. A dialog appears asking **"Enable Envoy?"** with two buttons, **Skip** and **Enable Envoy**. Click **Enable Envoy**.
+
+That single click does everything for you:
+
+- Installs the MCP server's Python dependencies (~30 MB - TouchDesigner goes unresponsive for a few seconds while this runs)
+- Starts a local server on `localhost:9870`
+- Writes the AI config files into your project root - `CLAUDE.md`, `AGENTS.md`, `.mcp.json`, and a `.claude/` folder of rules and skills - so your assistant knows how to talk to TouchDesigner
+
+Clicked **Skip**, or want to turn Envoy off later? Toggle the **Envoy Enable** parameter on the Embody component anytime.
+
+!!! note "If it asks about git"
+    Don't use version control? After you click Enable Envoy, you may see a second dialog recommending a git repo. Among its options, click **Start Without Git** (avoid **Cancel** - that stops the setup). The AI config files are generated either way, and everything works the same.
+
+!!! info "Local and private by default"
+    Envoy only listens on your own computer (`127.0.0.1`) - it's not reachable from the internet or your network. Every Envoy tool is pre-authorized, too, so you're not stuck clicking through permission prompts.
+
+---
+
+## Step 5 - Open your AI assistant and start talking
+
+**Keep TouchDesigner open** - your AI assistant talks to the live session. Now open your AI assistant in the **same folder as your `.toe`** and start a new chat:
+
+- **Claude Code** (the fully auto-configured path): open that folder - `File -> Open Folder` in the desktop or VS Code app, or `cd` into it and run `claude` in a terminal - then start a session. It detects the `.mcp.json` Envoy generated and connects on its own.
+- **Cursor or Windsurf**: open the same folder; you may need to point it at the generated `.mcp.json` yourself - see [Envoy Setup](envoy/setup.md#manual-configuration).
+
+Now just say what you want. Try this:
+
+```text
+Build me a noise-driven particle system.
+```
+
+Watch the operators appear in your live session - wired up, named, annotated, and laid out. Then keep going, conversationally:
+
+```text
+Now make it react to audio, slow it down, and add a bloom on the final output.
+```
+
+You're not getting a screenshot or a code snippet to paste. You're getting the **actual network**, in front of you, ready to play with.
+
+!!! tip "Confirm the connection"
+    If your assistant doesn't seem to see TouchDesigner, ask it to *"list all operators in the project."* If that comes back empty or errors, check that **Envoy Enable** is on and that you started the AI session **after** enabling it. Still stuck? See [Envoy Troubleshooting](envoy/troubleshooting.md).
+
+---
+
+## What you got for free
+
+While you were building, Embody was quietly doing the other half of its job: **every operator can be saved to disk as readable text**. That means every version of your network is something you can diff, review, restore, and hand back to the AI later - no binary black box, no lock-in.
+
+To tag an operator for externalization, select it and press ++lctrl++ twice. To save your changes, press ++ctrl+shift+u++. On the next project open, everything restores from disk automatically.
+
+That's the whole loop - generate, compare, revert, branch - and it all runs at the speed of typing.
+
+!!! tip "Here for version control, not AI?"
+    You can skip Envoy entirely and use Embody as a pure externalization engine - every operator diffable on disk, no AI involved. See [Getting Started](embody/getting-started.md) for that workflow.
+
+---
+
+## Where to go next
+
+| If you want to... | Go here |
+|---|---|
+| Understand externalization in depth | [Getting Started](embody/getting-started.md) |
+| See everything the AI can do | [Envoy Tools Reference](envoy/tools-reference.md) |
+| Configure ports, multiple instances, or permissions | [Envoy Setup](envoy/setup.md) |
+| Fix a connection problem | [Envoy Troubleshooting](envoy/troubleshooting.md) |
+| Understand why this exists | [The Manifesto](manifesto.md) |
+
+The tool keeps up with you, instead of the other way around. That's the whole idea.
+
+
+==============================================================================
+# Envoy - Setup
+# source: docs/envoy/setup.md
+==============================================================================
+
+# Envoy Setup
+
+## Prerequisites
+
+You'll need:
+
+- **TouchDesigner 2025.32280** or later
+- An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), or [Windsurf](https://windsurf.com/)
+
+Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled - no manual Python setup required. This first install (and any later dependency upgrade) runs **in a background thread** so TouchDesigner stays responsive; the Embody COMP shows `Installing deps... (one-time)` while it works and switches to `Running on port ...` once MCP is ready. After that, every startup takes the fast path and skips the install entirely. Envoy validates the virtual environment on each startup and falls back to the system Python if the venv is broken (see [Broken Virtual Environment](troubleshooting.md#broken-virtual-environment)).
+
+## Enabling Envoy
+
+1. **Enable Envoy**: Toggle the **Envoy Enable** parameter on the Embody COMP
+2. **Server starts**: Envoy runs on `localhost:9870` (configurable via **Envoy Port**)
+3. **Auto-configuration**: Envoy creates `.mcp.json` and AI client config files in your git repo root (if available) or project folder. If your project is in a git repo, Envoy also generates `.gitignore` and `.gitattributes` entries.
+4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) - it picks up the `.mcp.json` automatically
+
+## Regenerating Config Files
+
+You can regenerate Envoy's config files at any time from the TD textport or a script:
+
+```python
+op.Embody.InitEnvoy()   # Regenerate MCP + AI client config
+op.Embody.InitGit()     # Init/reconnect git repo + .gitignore/.gitattributes
+```
+
+Use `InitEnvoy()` after updating Embody, changing the AI Client parameter, or if config files were accidentally deleted. Use `InitGit()` after creating a git repo manually, or to refresh `.gitignore`/`.gitattributes` entries. `InitGit()` also calls `InitEnvoy()` to update paths.
+
+## Manual Configuration
+
+If you prefer manual control, create `.mcp.json` in your project directory. You can use either the direct HTTP transport or the STDIO bridge:
+
+**HTTP transport** (simpler, requires TD to be running):
+
+```json
+{
+  "mcpServers": {
+    "envoy": {
+      "type": "http",
+      "url": "http://localhost:9870/mcp"
+    }
+  }
+}
+```
+
+**STDIO bridge** (recommended - supports launching TD from Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "envoy": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["-u", ".embody/envoy-bridge.py", "--port", "9870",
+               "--config", ".embody/envoy.json"]
+    }
+  }
+}
+```
+
+The STDIO bridge provides meta-tools (`get_td_status`, `launch_td`, `restart_td`) that work even when TouchDesigner is not running. See [Claude Code Integration](claude-code.md#stdio-bridge) for details.
+
+## Changing the Port
+
+Change the **Envoy Port** parameter on the Embody COMP. If the server is running, it automatically:
+
+1. Stops the server on the old port
+2. Restarts on the new port (after a 2-frame delay for clean shutdown)
+3. Updates `.mcp.json` with the new port
+
+If the server is not running, changing the port simply updates the parameter value.
+
+## Running Multiple Instances
+
+You can run multiple TouchDesigner instances with Envoy enabled in the same git repo. Each instance automatically claims a unique port from the range `[base_port, base_port + 9]` (default: 9870-9879).
+
+To switch between instances from Claude Code, use the `switch_instance` bridge meta-tool. See [Claude Code Integration](claude-code.md#working-with-multiple-instances) for usage details and [Architecture](architecture.md#multiple-instances) for how it works.
+
+!!! tip
+    Running two instances of the **same `.toe` file** works out of the box - Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.).
+
+## Claude Code Integration
+
+When Envoy starts, it generates a full Claude Code configuration in your project root:
+
+- **`CLAUDE.md`** - project context and critical rules
+- **`.claude/rules/`** - always-loaded conventions (TD Python, network layout, MCP safety)
+- **`.claude/skills/`** - on-demand workflow guides (operator creation, debugging, externalization)
+- **`.claude/commands/`** - slash commands (`/run-tests`, `/status`, `/explore-network`)
+
+These files are regenerated each time Envoy starts to stay up to date. See [Claude Code Integration](claude-code.md) for the full reference.
+
+## MCP Tool Permissions
+
+When Envoy is first enabled, it deploys a `.claude/settings.local.json` file that **auto-authorizes all Envoy MCP tools** - including write operations like `create_op`, `delete_op`, `execute_python`, and `set_dat_content`. This means your AI assistant can act without per-tool confirmation prompts.
+
+If you prefer finer control, edit `.claude/settings.local.json` in your project root after setup. The `allow` array lists tool permission patterns - remove any tools you want Claude Code to prompt you for before executing.
+
+For example, to allow only read-only tools and require confirmation for write operations, keep only the `query_*` and `get_*` entries in the allow list.
+
+## Fresh Clones and TD Version Matching
+
+When you clone a repo someone else built with Embody, the `.embody/envoy.json` file (which records the local TD install path) is gitignored - the path it references won't exist on your machine. Embody handles this by also committing `.embody/project.json`, which records the **TouchDesigner build the project was last saved with** (e.g., `{"td_build": "2025.32660"}`).
+
+The first time the bridge needs to launch TD on a fresh clone, it reads `td_build` from `project.json`, scans your standard TouchDesigner install locations (`/Applications/TouchDesigner*.app` on macOS, `C:\Program Files\Derivative\TouchDesigner.*` on Windows, `/opt/derivative/touchdesigner-*` on Linux), and picks the matching install - exact-build match if you have it, otherwise the closest same-year build (with a warning). If nothing matches, the error response includes the Derivative download link and the exact build number you need.
+
+Backward compatible - projects without `project.json` use `envoy.json`'s `td_executable` exactly as before. See [Architecture](architecture.md#embodyprojectjson-build-pin-committed) for the full match policy.
+
+## Verifying the Connection
+
+After starting Envoy and your MCP client:
+
+1. The Embody COMP should show **Envoy Enable** toggled on and a status indicator
+2. Your MCP client should list the Envoy tools (e.g., `create_op`, `get_op`, `set_parameter`)
+3. Try a simple command like "list all operators in the project" to verify the connection
+
+
+==============================================================================
+# Envoy - Claude Code Integration
+# source: docs/envoy/claude-code.md
+==============================================================================
+
+# Claude Code Integration
+
+When Envoy starts, it generates a complete Claude Code configuration in your project root. This gives Claude Code deep context about TouchDesigner development patterns, your project structure, and the MCP tools available through Envoy.
+
+## Generated Files
+
+| File/Directory | Purpose | Regenerated on start? |
+|---|---|---|
+| `CLAUDE.md` | Project context and critical rules | Yes |
+| `.mcp.json` | MCP server connection config | Yes |
+| `.embody/envoy-bridge.py` | STDIO-to-HTTP bridge for MCP transport | Yes |
+| `.claude/settings.local.json` | Tool permissions and MCP server config | Yes |
+| `.claude/rules/` | Always-loaded conventions (see below) | Yes |
+| `.claude/skills/` | On-demand workflow guides (see below) | Yes |
+
+All generated files except `CLAUDE.md` are automatically added to `.gitignore`.
+
+## Rules (Always-Loaded)
+
+Rules are loaded into every Claude Code conversation automatically. They provide conventions that prevent common mistakes when working with TouchDesigner.
+
+| Rule | What it covers |
+|------|----------------|
+| `network-layout.md` | Grid spacing (200-unit grid), signal flow direction, annotation placement, operator positioning |
+| `td-python.md` | Parameter access (`.eval()` vs `.val`), operator path portability, threading, cook model |
+| `mcp-safety.md` | Thread boundary (never access TD from background thread), localhost binding, 30s timeout |
+| `skill-prerequisites.md` | Which skills must be loaded before calling specific MCP tools |
+
+## Skills (On-Demand)
+
+Skills are loaded only when needed, keeping the context window lean. Claude Code loads them automatically before performing the relevant operation.
+
+| Skill | Trigger |
+|-------|---------|
+| `/create-operator` | Before creating operators via `create_op` |
+| `/create-extension` | Before creating TD extensions via `create_extension` |
+| `/debug-operator` | When diagnosing operator errors |
+| `/externalize-operator` | Before tagging or saving externalizations |
+| `/manage-annotations` | Before creating or modifying annotations |
+| `/td-api-reference` | Before writing TD Python code |
+| `/mcp-tools-reference` | Before the first MCP call in a session |
+
+Each skill contains step-by-step workflows, API details, and common pitfalls specific to that operation.
+
+## Slash Commands
+
+Slash commands are shortcuts you can type directly in Claude Code to trigger common workflows.
+
+### `/run-tests`
+
+Runs the Embody test suite via MCP and reports results.
+
+```
+/run-tests                              # Run all 30 test suites
+/run-tests test_path_utils              # Run a specific suite
+/run-tests test_path_utils test_name    # Run a specific test
+```
+
+Reports pass/fail counts per suite. On failure, automatically reads log files for full error context.
+
+### `/status`
+
+Performs a quick health check of the Embody project:
+
+- Confirms Envoy is connected (TD version, Envoy status)
+- Reports any dirty (unsaved) externalizations
+- Scans for operator errors in the network
+- Checks recent log entries for errors or warnings
+
+### `/explore-network`
+
+Discovers and reports the structure of a TouchDesigner network:
+
+```
+/explore-network                        # Explore the current network
+/explore-network /project1/base1        # Explore a specific path
+```
+
+Returns operators organized by annotation groups, signal flow direction, and any errors found.
+
+## STDIO Bridge
+
+Claude Code connects to Envoy through a STDIO bridge script (`.embody/envoy-bridge.py`) that translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. The bridge provides four meta-tools that work even when TouchDesigner is not running:
+
+| Tool | Description |
+|------|-------------|
+| `get_td_status` | Check if TD is running, whether Envoy is reachable, crash detection, restart attempts remaining, and instance registry status |
+| `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable. On fresh clones (where `.embody/envoy.json`'s `td_executable` path doesn't exist locally), the bridge reads `td_build` from the committed `.embody/project.json` and auto-picks the matching TouchDesigner install - see [Architecture](architecture.md#embodyprojectjson-build-pin-committed). |
+| `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy |
+| `switch_instance` | List all registered TD instances or switch the bridge to a different running instance |
+
+This means Claude Code can start a TD session from scratch - no need to manually open TouchDesigner first. If TD crashes, Claude can detect it and restart automatically.
+
+The bridge also handles crash-loop protection (max 3 launches in 5 minutes), automatic retry with backoff on transient connection failures, and orphan process cleanup when Claude Code exits.
+
+### Working with Multiple Instances
+
+If you have multiple TouchDesigner instances running with Envoy enabled (e.g., your main project and a test project), the bridge connects to one at a time. Use `switch_instance` to move between them:
+
+- **List instances**: Call `switch_instance` with no arguments to see all registered instances and their reachability
+- **Switch**: Call `switch_instance` with the instance name (`.toe` filename without the extension) to redirect all subsequent MCP calls to that instance
+
+Each instance gets its own port automatically (ports 9870-9879). Switching is instant - no restart required.
+
+!!! tip "Same-file instances"
+    Opening the same `.toe` file in multiple TD instances works - Envoy auto-suffixes the registry key (`MyProject`, `MyProject-2`, etc.).
+
+See [Architecture](architecture.md#multiple-instances) for technical details.
+
+## How It Works
+
+Embody stores master copies of all rules and skills as template DATs inside the `templates` baseCOMP. When Envoy starts in a user project, `_extractClaudeConfig()` reads these templates and writes them to the project's `.claude/` directory. This means:
+
+- **Updates are automatic** - upgrading Embody gives you the latest rules and skills
+- **Templates are the source of truth** - the generated `.claude/` files are overwritten on each Envoy start
+- **Project-specific customization** - add your own rules or skills to `.claude/` alongside the generated ones (they won't be overwritten)
+
+## Customization
+
+You can extend the generated configuration:
+
+- **Add project-specific rules**: Create additional `.md` files in `.claude/rules/` - Claude Code loads all rules in this directory
+- **Add custom commands**: Create `.md` files in `.claude/commands/` with prompt instructions
+- **Modify permissions**: Edit `.claude/settings.local.json` to allow or restrict specific tools
+
+!!! warning
+    Don't modify the Envoy-generated rules or skills - they'll be overwritten when Envoy restarts. Add your own files alongside them instead.
+
+
+==============================================================================
+# Envoy - Tools Reference
+# source: docs/envoy/tools-reference.md
+==============================================================================
+
+# Tools Reference
+
+Envoy exposes 48 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+
+## Operator Management
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
+| `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
+| `delete_op` | `op_path` | Delete an operator |
+| `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
+| `rename_op` | `op_path`, `new_name` | Rename an operator |
+| `get_op` | `op_path` | Get full operator info (type, family, parameters, inputs, outputs, children) |
+| `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container. Set `include_utility=True` to include annotations |
+| `find_children` | `op_path`, `name?`, `type?`, `depth?`, `tags?`, `text?`, `comment?`, `include_utility?` | Advanced search using TD's `findChildren` - filter by name pattern, type, depth, tags, text content, or comment |
+| `cook_op` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
+
+## Parameter Control
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`) |
+| `get_parameter` | `op_path`, `par_name` | Get parameter value, mode, expression, bind info, export source, label, range, menu entries, and default |
+
+## DAT Content
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, or `"auto"`) |
+| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. Wipe guardrail refuses `text=""`, `rows=[]`, or `clear=True` with no content unless `confirm_wipe=True` is passed. For partial edits to text DATs, prefer `edit_dat_content` -- it sends only the changed substring. |
+| `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a DAT (mirrors Claude Code's Edit tool). Replaces `old_string` with `new_string`. By default `old_string` must appear exactly once -- pass `replace_all=True` to replace every occurrence. Token-efficient: only the changed substring crosses the wire. Text DATs only; use `set_dat_content(rows=...)` for tables. |
+
+## Operator Flags
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_op_flags` | `op_path` | Get all flags: bypass, lock, display, render, viewer, current, expose, selected, allowCooking |
+| `set_op_flags` | `op_path`, `bypass?`, `lock?`, `display?`, `render?`, `viewer?`, `current?`, `expose?`, `allowCooking?`, `selected?` | Set one or more flags on an operator |
+
+## Positioning & Layout
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_op_position` | `op_path` | Get operator position, size, color, and comment |
+| `get_network_layout` | `comp_path`, `include_annotations?` | Get positions of ALL operators (and annotations) in a COMP in one call. Returns bounding_box. Use instead of repeated `get_op_position` calls |
+| `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set operator position, size, color (`[r,g,b]` floats 0-1), or comment |
+| `layout_children` | `op_path` | Auto-layout all children in a COMP |
+
+## Annotations
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `create_annotation` | `parent_path`, `mode?`, `text?`, `title?`, `x?`, `y?`, `width?`, `height?`, `color?`, `opacity?`, `name?` | Create an annotation. Modes: `"annotate"` (default, has title bar), `"comment"`, `"networkbox"` |
+| `get_annotations` | `parent_path` | List all annotations in a COMP with their properties and enclosed operators |
+| `set_annotation` | `op_path`, `text?`, `title?`, `color?`, `opacity?`, `width?`, `height?`, `x?`, `y?` | Modify properties of an existing annotation |
+| `get_enclosed_ops` | `op_path` | Get operators enclosed by an annotation, or annotations enclosing an operator |
+
+## Connections
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `connect_ops` | `source_path`, `dest_path`, `source_index?`, `dest_index?`, `comp?` | Wire two operators together. Set `comp=True` for COMP connectors (top/bottom) |
+| `disconnect_op` | `op_path`, `input_index?`, `comp?` | Disconnect an operator's input. Set `comp=True` for COMP connectors (top/bottom) |
+| `get_connections` | `op_path` | Get all input/output connections (includes COMP connections for COMPs) |
+
+## Performance Monitoring
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_op_performance` | `op_path`, `include_children?` | Get CPU/GPU cook times, memory usage, cook counts |
+| `get_project_performance` | `include_hotspots?` | Get project-level FPS, frame time, GPU/CPU memory, dropped frames, active ops, GPU temp. Optional hotspot ranking of top N COMPs by cook time |
+
+## Code Execution
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `execute_python` | `code` | Execute Python code in TD. Set `result` variable to return values |
+
+## Introspection & Diagnostics
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_td_info` | _(none)_ | Get TD version, build, OS, and Envoy version |
+| `get_op_errors` | `op_path`, `recurse?` | Get error and warning messages for an operator and its children |
+| `exec_op_method` | `op_path`, `method`, `args?`, `kwargs?` | Call a method on an operator (e.g., `appendRow`, `cook`) |
+| `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
+| `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |
+| `get_module_help` | `module_name` | Get Python help text for a module (supports dotted names like `td.tdu`) |
+
+## Embody Integration
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `externalize_op` | `op_path`, `tag_type?` | Tag and externalize operator to disk (auto-detects type if omitted) |
+| `remove_externalization_tag` | `op_path` | Remove externalization tag |
+| `get_externalizations` | _(none)_ | List all externalized operators with status |
+| `save_externalization` | `op_path` | Force save an externalized operator to disk |
+| `get_externalization_status` | `op_path` | Get dirty state, build number, timestamp, file path |
+
+## TDN Format
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90x fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
+| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
+
+## TOP Capture
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?` | Capture a TOP's output as an image. Saves to temp file and returns the path. Small images (<20 KB) also include an inline MCP `ImageContent` preview. Default: JPEG at 80% quality, max 640px long edge. |
+
+## Logging
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer. Filter by level, source, or use `since_id` for incremental polling |
+| `run_tests` | `suite_name?`, `test_name?` | Run test suites and return results |
+
+!!! info "Auto-piggybacked logs"
+    Every MCP tool response includes a `_logs` field with up to 20 log entries generated since the previous tool call. This lets you monitor operations in real-time without needing to call `get_logs` separately.
+
+## Bridge Meta-Tools
+
+These tools run locally on the STDIO bridge script, not inside TouchDesigner. They work even when TD is not running - this is how Claude Code can launch or restart TD without an active Envoy connection.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
+| `launch_td` | `timeout?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s) |
+| `restart_td` | `timeout?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s) |
+| `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch to a different running instance. See [Multiple Instances](architecture.md#multiple-instances) |
+
+!!! info "Bridge architecture"
+    Claude Code connects to Envoy via a STDIO bridge script (`.embody/envoy-bridge.py`). The bridge translates between Claude Code's STDIO transport and Envoy's HTTP endpoint. It handles MCP protocol handshake locally when TD is down, so these meta-tools are always available. See [Architecture](architecture.md) for details.
+
+## Batch Operations
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `batch_operations` | `operations` | Execute multiple operations in a single request. Reduces latency and token overhead |
+
+`operations` is a list of `{"tool": str, "params": dict}` objects. Each entry maps to an existing tool name and its parameters. Stops on first error.
+
+**When to use**: 3+ calls to the same tool type (positioning, connecting, parameter setting, flags). Use `execute_python` instead when you need conditionals, loops, or computed values between operations.
+
+**Example** - position 4 operators + connect them in one call:
+```json
+{"operations": [
+  {"tool": "set_op_position", "params": {"op_path": "/project1/noise1", "x": 400, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/comp1", "x": 800, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/level1", "x": 1200, "y": 0}},
+  {"tool": "set_op_position", "params": {"op_path": "/project1/null1", "x": 1600, "y": 0}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/noise1", "dest_path": "/project1/comp1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/comp1", "dest_path": "/project1/level1"}},
+  {"tool": "connect_ops", "params": {"source_path": "/project1/level1", "dest_path": "/project1/null1"}}
+]}
+```
+
+## MCP Prompts
+
+| Prompt | Parameters | Description |
+|--------|-----------|-------------|
+| `search_op` | `op_name`, `op_type?` | Guide for searching operators by name |
+| `check_op_errors` | `op_path` | Guide for inspecting and resolving operator errors |
+| `connect_ops` | _(none)_ | Guide for wiring operators together |
+| `create_extension_guide` | _(none)_ | Guide for creating TD extensions with proper patterns |
+
+
+==============================================================================
+# TDN - Specification
+# source: docs/tdn/specification.md
+==============================================================================
+
+# TDN Specification
+
+**Version 1.3**
+
+TDN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional - you generate, and you're stuck with what you got. With it, every step of the loop - generate, compare, revert, branch - runs at the speed of typing.
+
+TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
+
+- File extension: `.tdn`
+- MIME type: `application/json`
+- Encoding: UTF-8
+- JSON Schema: [`tdn.schema.json`](../tdn.schema.json)
+
+---
+
+## Document Structure
+
+A `.tdn` file is a JSON object with the following top-level fields:
+
+```json
+{
+  "format": "tdn",
+  "version": "1.3",
+  "build": 1,
+  "generator": "Embody/5.0.237",
+  "td_build": "2025.32050",
+  "exported_at": "2025-02-19T12:34:56Z",
+  "network_path": "/",
+  "type": "containerCOMP",
+  "options": {
+    "include_dat_content": true,
+    "include_storage": true
+  },
+  "type_defaults": { ... },
+  "par_templates": { ... },
+  "custom_pars": { ... },
+  "parameters": { ... },
+  "flags": [ ... ],
+  "color": [0.3, 0.5, 0.9],
+  "tags": ["tdn"],
+  "comment": "Main UI container",
+  "storage": { ... },
+  "operators": [ ... ],
+  "annotations": [ ... ]
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
+| `version` | string | Yes | Format version. Currently `"1.3"`. |
+| `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
+| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
+| `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
+| `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). |
+| `network_path` | string | Yes | The COMP path represented by this file (e.g., `"/"` for the entire project). |
+| `type` | string | No | TouchDesigner operator type of the target COMP (e.g., `"baseCOMP"`, `"containerCOMP"`, `"geometryCOMP"`). Added in v1.1. Makes the file self-describing for portable import into other projects. On import, a mismatch between this field and the destination COMP's type triggers a warning. |
+| `options` | object | Yes | Export settings used when generating this file. |
+| `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |
+| `options.include_storage` | boolean | No | Whether operator storage entries were included in the export. Absent means `true` (included). Added in v1.2. Can be toggled per-COMP via the `embed_storage_in_tdn` storage key. |
+| `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
+| `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
+| `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
+| `parameters` | object | No | Target COMP's own non-default built-in parameter values. Same format as operator-level [`parameters`](#parameters). Only present if the target COMP has non-default built-in parameters. |
+| `flags` | array | No | Target COMP's own non-default [flags](#flags). Same format as operator-level flags. Added in v1.1. |
+| `color` | `[r, g, b]` | No | Target COMP's node color, if different from default gray. RGB floats 0.0-1.0, rounded to 4 decimal places. Added in v1.1. |
+| `tags` | array of strings | No | Target COMP's tags, if any. Added in v1.1. |
+| `comment` | string | No | Target COMP's node comment, if non-empty. Added in v1.1. |
+| `storage` | object | No | Target COMP's persistent [storage entries](#operator-storage). Same format as operator-level storage. Added in v1.1. |
+| `operators` | array | Yes | Array of [operator objects](#operator-object). |
+| `annotations` | array | No | Array of [annotation objects](#annotations). Only present if the root COMP contains annotations. |
+
+---
+
+## Operator Object
+
+Each entry in the `operators` array (and in nested `children` arrays) is an operator object:
+
+```json
+{
+  "name": "noise1",
+  "type": "noiseTOP",
+  "position": [200, -100],
+  "size": [300, 150],
+  "color": [0.2, 0.6, 0.9],
+  "comment": "Primary noise source",
+  "tags": ["audio", "generator"],
+  "parameters": { ... },
+  "custom_pars": { ... },
+  "flags": [ ... ],
+  "storage": { ... },
+  "startup_storage": { ... },
+  "inputs": [ ... ],
+  "comp_inputs": [ ... ],
+  "dat_content": "...",
+  "dat_content_format": "text",
+  "children": [ ... ],
+  "palette_clone": true
+}
+```
+
+### Field Reference
+
+| Field | Type | Required | Condition for inclusion |
+|-------|------|----------|------------------------|
+| `name` | string | Yes | Always included. The operator's name. |
+| `type` | string | Yes | Always included. TouchDesigner operator type (e.g., `"baseCOMP"`, `"noiseTOP"`, `"textDAT"`, `"waveCHOP"`). |
+| `position` | `[x, y]` | No | Omitted when `[0, 0]` (default). Included only for operators not at the origin. |
+| `size` | `[width, height]` | No | Only if different from the default `[200, 100]`. |
+| `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]` (tolerance: 0.01 per channel). RGB values are floats from 0.0 to 1.0, rounded to 4 decimal places. |
+| `comment` | string | No | Only if non-empty. Annotation text on the node. |
+| `tags` | array of strings | No | Only if the operator has tags. |
+| `dock` | string | No | Only if the operator is docked to another operator. Sibling name or full path. |
+| `parameters` | object | No | Only if there are non-default [built-in parameters](#built-in-parameters) (after [type_defaults](#type-defaults) are factored out). |
+| `custom_pars` | object | No | Only if the operator has [custom parameters](#custom-parameters). Dict keyed by page name. |
+| `flags` | array | No | Only if any [flags](#flags) differ from their defaults. |
+| `storage` | object | No | Only if the operator has non-transient [storage entries](#operator-storage). Dict of key-value pairs. |
+| `startup_storage` | object | No | Only if the operator has [startup storage entries](#startup-storage). Values restored via `storeStartupValue()` on import. |
+| `inputs` | array | No | Only if the operator has [operator-level connections](#operator-connections). |
+| `comp_inputs` | array | No | Only if the operator has [COMP-level connections](#comp-connections). COMPs only. |
+| `dat_content` | string or array | No | Only for DAT-family operators when `include_dat_content` is `true`. See [DAT Content](#dat-content). |
+| `dat_content_format` | string | No | `"text"` or `"table"`. Present whenever `dat_content` is present. |
+| `children` | array | No | Only for COMPs with child operators (excluding palette clones). Contains nested operator objects. See [Children and Hierarchy](#children-and-hierarchy). |
+| `annotations` | array | No | Only for COMPs with [annotations](#annotations). Contains annotation objects. |
+| `palette_clone` | boolean | No | `true` if this COMP is cloned from the TouchDesigner palette (`/sys/`). When set, children are not exported (TD recreates them from the clone source). |
+| `sequences` | object | No | Only if the operator has built-in parameter sequences with non-default block counts or values. See [Built-in Parameter Sequences](#built-in-parameter-sequences). *Added in v1.3.* |
+| `tdn_ref` | string | No | Only for COMPs with their own TDN externalization. Relative file path to the child's `.tdn` file. Mutually exclusive with `children`. See [COMP References](#comp-references-tdn_ref). *Added in v1.2.* |
+| `tox_ref` | string | No | Only for COMPs with their own TOX externalization. Relative file path to the child's `.tox` file. Mutually exclusive with `children`. See [TOX References](#tox-references-tox_ref). *Added in v1.4.* |
+
+### Compact Formatting
+
+Short arrays and objects (<=80 characters when inlined) are written on a single line:
+
+```json
+"position": [200, -100],
+"size": [300, 150],
+"color": [0.2, 0.6, 0.9],
+"tags": ["audio", "generator"],
+"inputs": ["noise1"]
+```
+
+Longer arrays remain multi-line. This dramatically reduces file size while maintaining readability.
+
+---
+
+## Built-in Parameters
+
+The `parameters` object maps parameter names to their values. Only built-in (non-custom) parameters whose current value differs from their default are included. Parameters shared unanimously across all operators of a type are factored into [type_defaults](#type-defaults) instead.
+
+### Parameter Modes
+
+Parameters can be in one of three exportable modes:
+
+**Constant** - the value is stored directly:
+```json
+"parameters": {
+  "tx": 100,
+  "name": "hello",
+  "active": true
+}
+```
+
+**Expression** - prefixed with `=`. A Python expression that TouchDesigner evaluates each frame:
+```json
+"parameters": {
+  "tx": "=absTime.frame * 0.1",
+  "resizecomp": "=me"
+}
+```
+
+**Bind** - prefixed with `~`. A reference expression that binds this parameter to another:
+```json
+"parameters": {
+  "tx": "~op('controller').par.posx"
+}
+```
+
+!!! note
+    A fourth mode, **Export**, exists in TouchDesigner but is not stored in TDN. Export mode is set by the exporting operator, not the parameter itself, and cannot be meaningfully imported.
+
+### Escaping
+
+Constant string values that literally start with `=` or `~` are escaped by doubling the prefix:
+
+| Stored value | Meaning |
+|-------------|---------|
+| `"=foo"` | Expression: `foo` |
+| `"==foo"` | Constant string: `"=foo"` |
+| `"~bar"` | Bind expression: `bar` |
+| `"~~bar"` | Constant string: `"~bar"` |
+
+### Skipped Parameters
+
+The following built-in parameters are never exported, as they are internal actions or not meaningful outside a live project:
+
+**By name:**
+
+- `externaltox`, `enableexternaltox`, `reloadtox`
+- `reinitextensions`, `savebackup`
+- `savecustom`, `reloadcustom`
+- `pageindex`
+
+!!! info
+    `file` and `syncfile` parameters ARE exported when non-default, so that TDN files are self-contained for externalized DATs. This ensures file references survive import into a different project.
+
+**By style:**
+
+- `Pulse` - action buttons (fire-once, no persistent state)
+- `Momentary` - momentary buttons (no persistent state)
+- `Header` - visual section dividers (no value)
+
+**Other exclusions:**
+
+- Read-only parameters
+- Custom parameters (handled separately in `custom_pars`)
+
+### Non-Default Comparison
+
+A constant parameter is included only if its current value differs from its default:
+
+- **Floats**: considered different if `abs(current - default) > 1e-9`
+- **OP-reference parameters**: `None` and `""` are treated as equivalent (both mean "no operator connected")
+- **All other types**: standard equality comparison (`!=`)
+
+### Divergent Defaults and the Creation-Defaults Catalog
+
+Some TouchDesigner operators reset certain parameters during initialization, meaning the value reported by `p.default` differs from the value TouchDesigner actually assigns when the operator is created. For example:
+
+- `cameraCOMP` `tz`: `p.default` reports `0`, but TD creates cameras with `tz = 5`
+- `lightCOMP` `tz`: `p.default` reports `0`, but TD creates lights with `tz = 5`
+- `renderTOP` resolution parameters: reported defaults differ from creation values
+
+If TDN used `p.default` directly for non-default comparison, a user-set value that happens to match `p.default` but differs from the actual creation value would be silently omitted from export. On import, TD would create the operator with the (different) creation value, and the user's intended value would be lost. Conversely, a parameter at the true creation value might be incorrectly included in the export, bloating the file with false positives.
+
+#### The Catalog System
+
+Embody solves this with a three-tier system that discovers and caches the true creation values for every operator type:
+
+**1. Background scan at startup**
+
+On project open, the `CatalogManager` extension checks whether a creation-values catalog exists for the current TD build (stored as a JSON file in the `.embody/` directory at the project root). If no catalog exists, it runs a background scan:
+
+- Iterates every creatable operator type in TouchDesigner (TOPs, CHOPs, SOPs, DATs, MATs, COMPs, POPs)
+- Creates a temporary instance of each type
+- Records `p.val` (the actual value TD assigned) for every non-custom, non-read-only parameter
+
+The catalog stores **all** creation values, not just divergent ones. This means TDN always has the ground-truth creation value for every parameter - `_getCreationDefault()` returns the catalog value directly, falling back to `p.default` only for parameters the catalog doesn't cover. The divergent-default problem (where `p.val` differs from `p.default`) is solved implicitly: by recording what TD actually assigns, the catalog captures both correct and divergent defaults without needing to distinguish between them.
+
+The scan processes 1-2 operator types per frame to avoid dropping frames. The resulting catalog is written to `.embody/catalog_{build}.json` (e.g., `.embody/catalog_099.2025.32280.json`) and cached for future sessions on the same TD build.
+
+**2. Export/import correction**
+
+During TDN export, the `_getCreationDefault()` method checks the catalog before falling back to `p.default`:
+
+```python
+def _getCreationDefault(self, op_type, par_name, par):
+    divergent = self._getDivergentDefaults(op_type)
+    if par_name in divergent:
+        return divergent[par_name]
+    return par.default
+```
+
+This means TDN compares parameter values against the *actual creation value*, not the *reported default*. Parameters are included in the export if and only if the user's value truly differs from what TD would assign to a freshly created operator.
+
+**3. Cross-build patching**
+
+When a `.tdn` file is opened on a different TD build than the one that exported it, creation defaults may have shifted between builds. The `CatalogManager` handles this automatically:
+
+1. Reads the `td_build` field from each `.tdn` file header
+2. Loads the catalog for the source build (if available)
+3. Loads the catalog for the current build
+4. Finds parameters whose creation defaults changed between the two builds
+5. For each affected operator, checks if the current value matches the *new* default - if so, the parameter was omitted during export (because it matched the *old* default), and TD has now assigned the wrong new default
+6. Patches those parameters back to the old creation value
+
+A summary dialog is shown to the user listing every corrected parameter.
+
+#### Fallback chain
+
+The catalog is loaded in priority order:
+
+1. **`.embody/` catalog file** - per-build JSON written by the background scan
+2. **Embedded `divergent_defaults` table** - a DAT inside the Embody COMP with bootstrap data for known TD builds
+3. **On-the-fly probing** - if neither source has data for the current build, a temporary operator is created at export time to discover the true creation value
+
+This ensures correct non-default comparison regardless of TD version, even on builds that Embody has never seen before.
+
+---
+
+## Built-in Parameter Sequences
+
+*Added in v1.3.*
+
+Many TouchDesigner operators have **resizable parameter blocks** - mathmixPOP Combine blocks, glslPOP/glslTOP uniform sequences, attributePOP attribute blocks, constantCHOP channel blocks, etc. These are called **parameter sequences** in TD's API.
+
+The `sequences` object stores per-operator sequence data. It is keyed by sequence name, where each value is an array of block objects containing only non-default parameter values using **base names** (without the sequence prefix or block index):
+
+```json
+{
+  "name": "mathmix1",
+  "type": "mathmixPOP",
+  "sequences": {
+    "comb": [
+      {"oper": "A", "scopea": "P", "result": "startPos"},
+      {"oper": "A + B", "scopea": "vel", "scopeb": "direction", "result": "vel"},
+      {}
+    ]
+  }
+}
+```
+
+### Design
+
+- **Array length = `numBlocks`**: The importer sets `seq.numBlocks = len(blocks)` to create the right number of parameter slots before setting values.
+- **Base names**: `"oper"` rather than `"comb0oper"`. The full parameter name is `{seqName}{blockIndex}{baseName}` (e.g., `comb2oper`), but only the base name is stored. This makes the format portable and readable.
+- **Empty objects `{}`**: Represent blocks where all parameters are at their default values. Included to preserve correct block count and ordering.
+- **Omission**: The `sequences` key is omitted entirely when all sequences on the operator have their default block count and all block values are defaults.
+- **Value shorthand**: Same as built-in parameters - `=` prefix for expressions, `~` prefix for binds, literal values for constants.
+
+### Import Phase
+
+Sequences are expanded in **Phase 2.5** (between custom parameter creation and parameter value setting). This ensures the dynamically-created sequence parameters exist before Phase 3 attempts to set values on them.
+
+### Exclusion from type_defaults
+
+Sequence data is **never included in `type_defaults`**. Sequences are inherently per-instance (different operators have different block counts), so they cannot be compressed into per-type defaults.
+
+---
+
+## Custom Parameters
+
+The `custom_pars` object maps page names to arrays of parameter definitions. Unlike built-in parameters, custom parameters are **always fully exported** (including their definitions, ranges, and current values) because the importer must recreate them from scratch.
+
+!!! note
+    Only COMPs can have custom parameters in TouchDesigner.
+
+### Page-Grouped Format
+
+Custom parameters are grouped by page name. Each page contains an array of parameter definitions:
+
+```json
+"custom_pars": {
+  "Controls": [
+    {
+      "name": "Speed",
+      "style": "Float",
+      "default": 1,
+      "max": 10,
+      "clampMin": true,
+      "normMax": 5,
+      "value": 2.5
+    },
+    {
+      "name": "Mode",
+      "style": "Menu",
+      "menuNames": ["linear", "ease", "bounce"],
+      "menuLabels": ["Linear", "Ease In/Out", "Bounce"],
+      "value": 1
+    }
+  ],
+  "About": [
+    {
+      "name": "Build",
+      "style": "Int",
+      "label": "Build Number",
+      "readOnly": true,
+      "value": 14
+    }
+  ]
+}
+```
+
+The page name is the dict key - individual parameter definitions do not include a `"page"` field.
+
+### Template References
+
+When a page's parameter definitions match a [parameter template](#parameter-templates), the page is stored as a template reference with value overrides:
+
+```json
+"custom_pars": {
+  "About": {
+    "$t": "about",
+    "Build": 14,
+    "Date": "2026-02-19 16:09:43 UTC",
+    "Touchbuild": "2025.32050"
+  }
+}
+```
+
+The `$t` field names the template. Other keys are parameter value overrides (parameter name -> current value). See [Parameter Templates](#parameter-templates).
+
+### Custom Parameter Definition
+
+| Field | Type | Condition | Description |
+|-------|------|-----------|-------------|
+| `name` | string | Always | Base name of the parameter. For multi-component parameters, this is the group name without any suffix (e.g., `"Pos"` for a group of `Posx`, `Posy`, `Posz`). |
+| `label` | string | If different from `name` | Display label shown in the parameter dialog. Omitted when the label matches the parameter name. |
+| `style` | string | Always | Parameter style. See [Supported Styles](#supported-styles). |
+| `size` | integer | Multi-component `Float`/`Int` only | Number of components when > 1 (e.g., `3` for a 3-component float). |
+| `default` | any | If non-standard | Default value. Omitted when the default is a standard value (`0`, `0.0`, `""`, or `false`). |
+| `min` | number | If != `0` | Minimum value. |
+| `max` | number | If != `1` | Maximum value. |
+| `clampMin` | boolean | If `true` | Whether the value is clamped to `min`. |
+| `clampMax` | boolean | If `true` | Whether the value is clamped to `max`. |
+| `normMin` | number | If != `0` | Normalized range minimum (for slider UI). |
+| `normMax` | number | If != `1` | Normalized range maximum (for slider UI). |
+| `menuNames` | array of strings | Manually defined menus | Internal names for each menu option. |
+| `menuLabels` | array of strings | If different from `menuNames` | Display labels for each menu option. Omitted when labels match names. |
+| `menuSource` | string | Dynamically populated menus | DAT path or expression that populates the menu. When present, `menuNames`/`menuLabels` are omitted. |
+| `startSection` | boolean | If `true` | Whether this parameter starts a new visual section. |
+| `readOnly` | boolean | If `true` | Whether the parameter is read-only. |
+| `help` | string | If non-empty | Tooltip help text shown when hovering the parameter in the dialog. Omitted when empty. |
+| `value` | any | Single-component, if non-default | Current value. Can be a constant, `"=expr"` string, or `"~bind"` string. Omitted when the value equals the default. |
+| `values` | array | Multi-component, if any non-default | Current values for each component. Same format as `value` per element. Omitted when all values equal their defaults. |
+
+### Supported Styles
+
+All 32 parameter styles recognized by TDN:
+
+| Style | Category | Description |
+|-------|----------|-------------|
+| `Float` | Numeric | Floating-point number. Supports `size` > 1 for multi-component (suffixed `1`, `2`, `3`...). |
+| `Int` | Numeric | Integer number. Supports `size` > 1 for multi-component (suffixed `1`, `2`, `3`...). |
+| `XY` | Numeric compound | Two-component float (`x`, `y`). |
+| `XYZ` | Numeric compound | Three-component float (`x`, `y`, `z`). |
+| `XYZW` | Numeric compound | Four-component float (`x`, `y`, `z`, `w`). |
+| `WH` | Numeric compound | Two-component float (`w`, `h`). |
+| `UV` | Numeric compound | Two-component float (`u`, `v`). |
+| `UVW` | Numeric compound | Three-component float (`u`, `v`, `w`). |
+| `RGB` | Numeric compound | Three-component float (`r`, `g`, `b`). |
+| `RGBA` | Numeric compound | Four-component float (`r`, `g`, `b`, `a`). |
+| `Str` | String | Text string. |
+| `Menu` | Menu | Dropdown menu. Uses `menuNames`/`menuLabels` for static menus, or `menuSource` for dynamic menus. |
+| `StrMenu` | Menu | Editable string with dropdown suggestions. Uses `menuNames`/`menuLabels` or `menuSource`. |
+| `Toggle` | Boolean | On/off checkbox. |
+| `Pulse` | Action | Fire-once button (no persistent value). |
+| `Momentary` | Action | Button that is active while held. |
+| `Header` | Visual | Section header label (no value). |
+| `File` | Path | File path selector (open). |
+| `FileSave` | Path | File path selector (save). |
+| `Folder` | Path | Folder path selector. |
+| `Python` | Code | Python expression field. |
+| `OP` | Reference | Operator path reference (any type). |
+| `COMP` | Reference | COMP operator reference. |
+| `TOP` | Reference | TOP operator reference. |
+| `CHOP` | Reference | CHOP operator reference. |
+| `SOP` | Reference | SOP operator reference. |
+| `DAT` | Reference | DAT operator reference. |
+| `MAT` | Reference | MAT operator reference. |
+| `POP` | Reference | POP operator reference. |
+| `Object` | Reference | Object COMP reference. |
+| `PanelCOMP` | Reference | Panel COMP reference. |
+| `Sequence` | Sequence | Sequence block parameter. |
+
+### Multi-Component Parameters
+
+Some parameters consist of multiple related components grouped together (called "tuplets" in TouchDesigner).
+
+**Compound styles** (XY, XYZ, XYZW, WH, UV, UVW, RGB, RGBA) have named suffixes:
+
+```json
+{
+  "name": "Pos",
+  "style": "XYZ",
+  "values": [10.0, 20.0, 30.0]
+}
+```
+
+This creates three parameters: `Posx`, `Posy`, `Posz`. The suffix mappings are:
+
+| Style | Suffixes |
+|-------|----------|
+| `XY` | `x`, `y` |
+| `XYZ` | `x`, `y`, `z` |
+| `XYZW` | `x`, `y`, `z`, `w` |
+| `WH` | `w`, `h` |
+| `UV` | `u`, `v` |
+| `UVW` | `u`, `v`, `w` |
+| `RGB` | `r`, `g`, `b` |
+| `RGBA` | `r`, `g`, `b`, `a` |
+
+**Numeric multi-component** (Float or Int with `size` > 1) use numeric suffixes:
+
+```json
+{
+  "name": "Weight",
+  "style": "Float",
+  "size": 3,
+  "values": [0.5, 0.3, 0.2]
+}
+```
+
+This creates three parameters: `Weight1`, `Weight2`, `Weight3`.
+
+---
+
+## Type Defaults
+
+The `type_defaults` section hoists properties that are shared unanimously across **all** operators of a given type into a single location, removing them from individual operators. Supported properties: `parameters`, `flags`, `size`, `color`, and `tags`.
+
+```json
+"type_defaults": {
+  "containerCOMP": {
+    "parameters": {
+      "borderover": false,
+      "reloadbuiltin": false,
+      "resizecomp": "=me",
+      "repocomp": "=me"
+    },
+    "flags": ["viewer"],
+    "size": [300, 150]
+  },
+  "textDAT": {
+    "parameters": {
+      "language": "text"
+    },
+    "flags": ["viewer"],
+    "size": [130, 90],
+    "color": [0.67, 0.67, 0.67],
+    "tags": ["source"]
+  }
+}
+```
+
+### Unanimity Rule
+
+A property enters `type_defaults` **only** if:
+
+1. The operator type appears 2+ times in the export
+2. The property is present on **every** operator of that type
+3. The property has the **same value** across all operators of that type
+
+This eliminates the need for a "reset to default" marker - if a property is in `type_defaults`, every operator of that type has it.
+
+### Import Behavior
+
+On import, `type_defaults` are merged into each operator before the relevant import phase. `parameters` use dict-level merge (operator-specific keys override individual defaults). `flags`, `size`, `color`, and `tags` use whole-value replacement (the operator either has its own value or inherits entirely from type_defaults):
+
+```
+effective_params = type_defaults[op_type].parameters | operator.parameters
+effective_flags  = operator.flags  ?? type_defaults[op_type].flags
+effective_size   = operator.size   ?? type_defaults[op_type].size
+effective_color  = operator.color  ?? type_defaults[op_type].color
+effective_tags   = operator.tags   ?? type_defaults[op_type].tags
+```
+
+### When Type Defaults are Omitted
+
+- If no types have 2+ operators with shared properties, the `type_defaults` key is absent
+- Single-instance operator types never contribute to type_defaults
+
+---
+
+## Parameter Templates
+
+The `par_templates` section extracts custom parameter page definitions that repeat across 2+ operators into named, reusable templates.
+
+```json
+"par_templates": {
+  "about": [
+    {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true},
+    {"name": "Date", "style": "Str", "label": "Build Date", "readOnly": true},
+    {"name": "Touchbuild", "style": "Str", "label": "Touch Build", "readOnly": true}
+  ]
+}
+```
+
+Templates contain parameter definitions **without values** - they define the structure (name, style, label, ranges, etc.) of a page's parameters.
+
+### Template References
+
+Operators reference templates via `$t` in their `custom_pars`:
+
+```json
+"custom_pars": {
+  "About": {
+    "$t": "about",
+    "Build": 14,
+    "Date": "2026-02-19 16:09:43 UTC",
+    "Touchbuild": "2025.32050"
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `$t` | Template name (matches a key in `par_templates`) |
+| Other keys | Value overrides: parameter name -> current value |
+
+### Import Behavior
+
+On import, `$t` references are resolved before Phase 2 (create custom parameters). Each template reference is expanded back into a full array of parameter definitions, with value overrides applied:
+
+```json
+// Resolved from template + overrides:
+"About": [
+  {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true, "value": 14},
+  {"name": "Date", "style": "Str", "label": "Build Date", "readOnly": true, "value": "2026-02-19 16:09:43 UTC"},
+  {"name": "Touchbuild", "style": "Str", "label": "Touch Build", "readOnly": true, "value": "2025.32050"}
+]
+```
+
+### Template Naming
+
+Template names are derived from the page name (lowercased, spaces replaced with underscores). Collision suffixes (`_2`, `_3`) are added if multiple distinct page definitions share the same page name.
+
+### When Templates are Omitted
+
+- If no page definition appears on 2+ operators, the `par_templates` key is absent
+- Pages unique to a single operator are always stored inline
+
+---
+
+## Flags
+
+The `flags` array contains string names of flags whose values differ from their defaults.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `bypass` | `false` | Operator is skipped in the processing chain. |
+| `lock` | `false` | Operator output is locked (frozen). See [Lock Flag Limitation](#lock-flag-limitation). |
+| `display` | `false` | Marks this operator as the display output (blue flag). |
+| `render` | `false` | Marks this operator for rendering (purple flag). |
+| `viewer` | `false` | Shows the operator's viewer on its node tile. |
+| `expose` | `true` | Whether the node is visible in the network editor. |
+| `allowCooking` | `true` | Whether the COMP is allowed to cook. **COMPs only.** |
+
+### Format
+
+Flags that default to `false` are listed by name when set to `true`:
+```json
+"flags": ["viewer", "display"]
+```
+
+Flags that default to `true` use a `-` prefix when set to `false`:
+```json
+"flags": ["-expose"]
+```
+
+Combined example - viewer on, cooking disabled:
+```json
+"flags": ["viewer", "-allowCooking"]
+```
+
+### Lock Flag Limitation
+
+!!! warning "Locked content is NOT preserved for TOPs, CHOPs, or SOPs"
+
+    TDN preserves the **lock flag** for all operator families, but it **cannot store frozen pixel, channel, or geometry data**. After a TDN round-trip (export + import), locked non-DAT operators will be locked but **empty** - no texture, no samples, no mesh.
+
+    **This is by design, not a bug.** Storing binary data would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
+
+    Embody warns you at save time if your network contains locked non-DAT operators.
+
+The `lock` flag applies to **all** operator families - DATs, TOPs, CHOPs, and SOPs - freezing their cooked output so it no longer updates from inputs or parameters. However, TDN only persists the frozen data for DATs.
+
+| Family | Flag persisted? | Frozen data persisted? | Notes |
+|--------|:-:|:-:|---|
+| **DAT** | Yes | Yes (via `dat_content`) | Full round-trip: both the lock state and text/table content are preserved. |
+| **TOP** | Yes | **No** | Pixel data is not stored. On import, the lock flag is set but no texture data exists. The operator will appear black. |
+| **CHOP** | Yes | **No** | Channel data is not stored. On import, the lock flag is set but no sample data exists. |
+| **SOP** | Yes | **No** | Geometry data is not stored. On import, the lock flag is set but no mesh data exists. |
+
+**Workarounds:**
+
+- **Unlock before saving** - the operator will re-cook from its inputs on reload.
+- **Use TOX strategy** instead of TDN for COMPs containing locked non-DAT operators. TOX files are binary and preserve all locked content.
+- **Store data externally** - write pixel data to image files, channel data to CSV, etc., and reference them from your network.
+
+---
+
+## Connections
+
+TouchDesigner operators have two kinds of connections. TDN stores both as string arrays where array position equals the input index.
+
+### Operator Connections
+
+Standard wiring between operators (left/right connectors). Stored in the `inputs` array:
+
+```json
+"inputs": ["noise1"]
+```
+
+Multi-input example - `noise1` at index 0, nothing at index 1, `level1` at index 2:
+```json
+"inputs": ["noise1", null, "level1"]
+```
+
+### COMP Connections
+
+COMP-level wiring (top/bottom connectors). Only applicable to COMPs. Stored in the `comp_inputs` array:
+
+```json
+"comp_inputs": ["container1"]
+```
+
+### Source Resolution
+
+Each string element references the source operator:
+
+- If the source operator is a **sibling** (same parent), only the operator **name** is stored (e.g., `"noise1"`).
+- If the source is in a **different parent**, the full **path** is stored (e.g., `"/project/other/transform1"`).
+- `null` means no connection at that index.
+
+On import, the source is resolved by first looking for a sibling with that name, then falling back to interpreting it as a full path.
+
+---
+
+## Docking
+
+Operators in TouchDesigner can be visually docked to other operators. A docked operator moves with its host in the network editor and can be collapsed into the host's tile.
+
+When an operator is docked, TDN records a `"dock"` field on it:
+
+| Field | Type | Condition |
+|-------|------|-----------|
+| `dock` | string | Only if the operator is docked to another operator. |
+
+The value is the **sibling name** of the dock host when they share a parent COMP, or the **full operator path** for cross-hierarchy docking. This follows the same reference convention as [operator connections](#connections).
+
+Docking is a purely visual/organizational relationship - it has no effect on operator behavior, data flow, or cooking. It is omitted from `type_defaults` because docking is always instance-specific.
+
+**Example:**
+
+```json
+{
+  "name": "info1",
+  "type": "infoDAT",
+  "dock": "noise1"
+}
+```
+
+During import, the dock target is resolved by sibling name first, then full path fallback. If the target cannot be found, a warning is logged and docking is skipped gracefully.
+
+---
+
+## DAT Content
+
+DAT-family operators can optionally include their text or table data. This is controlled by the `include_dat_content` option.
+
+### Text Format
+
+For text-based DATs (textDAT, etc.):
+
+```json
+{
+  "name": "script1",
+  "type": "textDAT",
+  "dat_content": "print('hello world')\nprint('goodbye')",
+  "dat_content_format": "text"
+}
+```
+
+- `dat_content`: raw text string with newlines
+- `dat_content_format`: `"text"`
+
+### Table Format
+
+For table-based DATs (tableDAT, etc.):
+
+```json
+{
+  "name": "lookup1",
+  "type": "tableDAT",
+  "dat_content": [
+    ["name", "value", "type"],
+    ["speed", "1.5", "float"],
+    ["active", "1", "int"]
+  ],
+  "dat_content_format": "table"
+}
+```
+
+- `dat_content`: array of row arrays (each row is an array of cell value strings)
+- `dat_content_format`: `"table"`
+
+### Inclusion Conditions
+
+DAT content is only included when:
+
+1. The operator belongs to the DAT family
+2. The `include_dat_content` option is `true`
+3. The DAT has content (non-empty text or at least one row)
+
+---
+
+## Operator Storage
+
+Every TouchDesigner operator has a `.storage` dictionary for persistent Python data. TDN exports all serializable storage entries except known transient/internal keys used by Embody's runtime.
+
+### Per-COMP Storage Toggle
+
+Storage export can be disabled per-COMP by setting the `embed_storage_in_tdn` storage key to `false` on the target COMP, or globally via Embody's `Embedstorageintdns` parameter. When disabled, the `options.include_storage` field is `false` and operator storage entries are omitted - except for Embody control keys (`embed_dats_in_tdn`, `embed_storage_in_tdn`) which are always preserved to maintain round-trip fidelity of export preferences.
+
+### Format
+
+```json
+{
+  "name": "my_comp",
+  "type": "baseCOMP",
+  "storage": {
+    "count": 42,
+    "label": "hello",
+    "items": [1, 2, 3],
+    "config": {"key": "value"},
+    "coords": {"$type": "tuple", "$value": [10, 20]},
+    "tags": {"$type": "set", "$value": ["a", "b", "c"]},
+    "raw": {"$type": "bytes", "$value": "AAEC/w=="}
+  }
+}
+```
+
+### Value Serialization
+
+Python types that map directly to JSON are stored as-is. Non-JSON types use a `$type`/`$value` wrapper:
+
+| Python Type | JSON Representation |
+|-------------|---------------------|
+| `str`, `int`, `float`, `bool` | Direct JSON value |
+| `None` | `null` |
+| `list` | JSON array (recursive) |
+| `dict` | JSON object (recursive, string keys only) |
+| `tuple` | `{"$type": "tuple", "$value": [...]}` |
+| `set` | `{"$type": "set", "$value": [...]}` (sorted for determinism) |
+| `bytes` | `{"$type": "bytes", "$value": "<base64>"}` |
+
+Values that cannot be serialized to JSON (threading objects, operator references, custom class instances) are silently skipped during export.
+
+### Skipped Keys
+
+The following storage keys are never exported (runtime/transient state managed by Embody):
+
+`_tdn_stripped_paths`, `_git_root`, `envoy_running`, `envoy_shutdown_event`, `expanded_paths`, `manage_file_path`, `visible_count`, `hover`
+
+### Startup Storage
+
+TouchDesigner supports `storeStartupValue(key, value)` - values that reset to their initial state on every project open, regardless of what they were when the file was saved. TDN supports this via an optional `startup_storage` field:
+
+```json
+{
+  "name": "my_comp",
+  "type": "baseCOMP",
+  "storage": {"runtime_count": 0},
+  "startup_storage": {"version": 1, "default_mode": "auto"}
+}
+```
+
+On import, keys in `startup_storage` are restored via `storeStartupValue()`, while keys in `storage` use `store()`.
+
+**Export limitation:** TouchDesigner provides no API to introspect which storage keys were set with `storeStartupValue()` vs `store()`. During automatic export, all entries go into `storage`. The `startup_storage` field must be populated manually or by tools that know the intent (e.g., code generators, StorageManager-aware exporters).
+
+### Import Behavior
+
+Storage is restored during Phase 6a (after DAT content, before positions). Keys in `storage` are restored via `op.store(key, value)`. Keys in `startup_storage` are restored via `op.storeStartupValue(key, value)`. `$type` wrappers are deserialized back to their Python types. Unknown `$type` values are treated as plain dicts with a warning logged.
+
+---
+
+## Children and Hierarchy
+
+COMPs can contain child operators. These are stored in the `children` array, which contains nested operator objects following the exact same schema:
+
+```json
+{
+  "name": "container1",
+  "type": "baseCOMP",
+  "children": [
+    {
+      "name": "noise1",
+      "type": "noiseTOP"
+    },
+    {
+      "name": "null1",
+      "type": "nullTOP",
+      "position": [300, 0],
+      "inputs": ["noise1"]
+    }
+  ]
+}
+```
+
+Note that `container1` omits `position` (defaults to `[0, 0]`) and `noise1` also omits `position`. Only `null1` at `[300, 0]` includes its position.
+
+Nesting is recursive - COMPs inside COMPs can have their own `children`. The optional `max_depth` export parameter limits recursion depth (`null` means unlimited). COMPs may also contain an `annotations` array alongside `children` - see [Annotations](#annotations).
+
+### Nested TDN-Externalized COMPs
+
+When a parent TDN file contains `children` for a child COMP that has its **own** TDN externalization entry in the externalizations table, the child's `children` array is **skipped during import**. The child COMP shell is still created (its operator definition - name, type, position, parameters - is applied), but its internal network is **not** populated from the parent's snapshot. The child's own `.tdn` file is the source of truth for its contents.
+
+This prevents a common problem: if a child COMP is updated and re-exported to its own `.tdn` file, but the parent is not re-exported, importing the parent would silently overwrite the child with stale data. By skipping nested TDN children, each `.tdn` file owns exactly one level of the hierarchy.
+
+**What this means in practice:**
+
+- **Export** is unchanged - parent TDN files still include the full recursive hierarchy in their `children` arrays. This keeps the file self-contained and useful as a portable snapshot.
+- **Import** detects child COMPs with their own TDN entries and skips their children. A log message is emitted for each skipped child (e.g., `Skipping children of /project/parent/child - has its own TDN externalization`).
+- **Reconstruction on project open** imports parents before children (sorted by path depth). Combined with the skip logic, this means each COMP's network is populated exactly once, from its own authoritative `.tdn` file.
+
+If a child COMP is removed from the externalizations table (no longer tagged for TDN), its `children` array in the parent TDN will be imported normally - no special handling needed.
+
+### COMP References (`tdn_ref`)
+
+*Added in TDN v1.2.*
+
+When a parent COMP is exported and a child COMP has its own TDN externalization, the parent's operator definition for that child includes a `tdn_ref` field instead of a `children` array:
+
+```json
+{
+  "name": "audio_mixer",
+  "type": "baseCOMP",
+  "tdn_ref": "Embody/project1/audio_mixer.tdn",
+  "position": [600, 0]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `tdn_ref` | `string` | Relative file path from the externalization folder to the child's `.tdn` file. Includes the COMP name in the path for cross-validation. |
+
+**Mutually exclusive with `children`**: When `tdn_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced file.
+
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. The referenced `.tdn` file is imported separately during reconstruction (sorted by path depth - parents before children).
+
+**Cross-validation**: The `tdn_ref` value is checked against two independent sources:
+
+1. **Externalizations table**: The child COMP's path must have an entry with `strategy='tdn'` and a matching `rel_file_path`.
+2. **Disk**: The referenced `.tdn` file must exist at the resolved absolute path.
+
+Mismatches produce warnings, not errors - the COMP shell is always created regardless. This ensures graceful degradation when files are moved or the table is out of sync.
+
+**Backward compatibility**:
+
+- Files **without** `tdn_ref` (TDN v1.1 and earlier) continue to work. The existing `_stripNestedTDNChildren` mechanism handles them via the externalizations table.
+- Files **with** `tdn_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The `_stripNestedTDNChildren` path handles the nested COMP correctly as a fallback.
+- The `embed_all=True` export option suppresses `tdn_ref` and inlines all children, producing a fully self-contained file regardless of child externalization status.
+
+### TOX References (`tox_ref`)
+
+*Added in TDN v1.4.*
+
+The same ownership principle applies when a child COMP is externalized as `.tox` instead of `.tdn`. The parent's operator definition for that child includes a `tox_ref` field instead of a `children` array:
+
+```json
+{
+  "name": "wave_speed",
+  "type": "sliderCOMP",
+  "tags": ["tox"],
+  "tox_ref": "Embody/project1/wave_speed.tox",
+  "position": [475, 425]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `tox_ref` | `string` | Relative file path from the externalization folder to the child's `.tox` file. |
+
+**Mutually exclusive with `children`**: When `tox_ref` is present, the operator definition does not contain a `children` array. The COMP's internal network is defined entirely in the referenced `.tox` file. This prevents the parent `.tdn` from duplicating the contents of the child `.tox`, which would otherwise pollute `type_defaults` with the child's internal operator types and bloat the parent file.
+
+**Resolution**: On import, the importer creates the COMP shell (name, type, position, parameters, flags) but does not populate its children. `externaltox` is **not** present in the parent `.tdn`'s parameter dict (it's an Embody-managed parameter, excluded from TDN export). Instead, the importer stores the `tox_ref` path on the new shell as `_pending_tox_restore` storage, then a post-import phase (`_restoreTOXShells`) sets `externaltox` from that marker and calls `_reloadTox` to load the `.tox` content immediately. This means the `.tox` content is fully restored after import - both for runtime imports (e.g. `import_network` via MCP) and for project-open reconstruction. `RestoreTOXComps` (frame 45) still handles the case where the parent `.tdn` is not re-imported and the table is the only source.
+
+**TOX vs TDN, when to use which**:
+
+- **TOX**: opaque binary encapsulation. The `.tox` is a single self-contained file, fast to load, but not git-diffable. Suitable for palette widgets, third-party COMPs, and anything where you don't need text-level review of internals.
+- **TDN**: text/JSON snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
+
+Both strategies receive the same ownership treatment in parent `.tdn` files - neither embeds children into the parent. The strategy choice is about the **child file format**, not whether the parent embeds.
+
+**Backward compatibility**:
+
+- Pre-v1.4 `.tdn` files that embedded TOX children's contents still import correctly: on import, `_stripNestedTOXChildren` consults the externalizations table and clears any embedded `children` for TOX-tagged paths. The COMP shell is created and `RestoreTOXComps` loads from the `.tox` file.
+- Files **with** `tox_ref` imported by an older Embody that doesn't recognize the field will silently ignore it. The strip path handles the nested COMP correctly as a fallback.
+- The `embed_all=True` export option suppresses `tox_ref` and inlines all children.
+
+### Palette Clones
+
+COMPs that originate from the TouchDesigner palette (e.g. `abletonLink`, Widget components, anything under `Samples/Palette/`) are detected and marked with `"palette_clone": true`. Their children are **not** exported because TouchDesigner automatically recreates them from the palette source when the project loads.
+
+**Parameter handling for palette clones**: During export, parameters are compared against two baselines - the built-in default (`p.default`) and the clone source's actual value. If a parameter matches `p.default` but differs from the clone source, it is still exported. This prevents user-set values from being silently dropped when they happen to match the built-in default but not the clone source (e.g., a `buttontype` whose `p.default` is `"momentary"` but whose clone source is `"toggledown"`). The `clone` and `enablecloning` parameters are always excluded - TD auto-sets these during rebuild.
+
+#### Palette Detection
+
+Detection uses two strategies:
+
+1. **Palette catalog** (primary): Embody ships a catalog at `embody/Embody/palette_catalog.tsv` built by scanning every `.tox` in TD's installed palette directory. The catalog records each component's `name`, `OPType`, and `min_children` count (264 entries for TD 099.2025.32280). A COMP is detected as a palette if its name matches a catalog entry, its `OPType` matches, and it has at least `min_children // 2` children (a floor that tolerates user modifications while rejecting empty user COMPs that happen to share a palette name).
+2. **Clone expression heuristic** (fallback): if the `clone` parameter points to `/sys/` or references `TDBasicWidgets`, `TDResources`, or `TDTox`, the COMP is detected as a palette. Catches cases where the catalog doesn't cover the current TD build. **Exception**: paths and expressions under `/sys/TDTox/defaultCOMPs/` are explicitly excluded. That directory holds TD's native-operator templates - every freshly-created `buttonCOMP`, `panelCOMP`, etc. clones from there by default, and those are stock types, not palette components. Export them as regular COMPs.
+
+The catalog is loaded into memory by `CatalogManagerExt.EnsureCatalogs()` at startup from the shipped TSV (skipping a runtime scan) or from `.embody/catalog_<build>.json` if already cached locally.
+
+#### Palette Handling
+
+When the export path encounters a detected palette COMP, the `Tdnpalettehandling` parameter on Embody's TDN page decides what to do:
+
+| Value | Behavior |
+|---|---|
+| `Ask` (default) | On first encounter of each palette COMP, prompts with four buttons: **Black Box** (this COMP), **Full Export** (this COMP), **Black Box for All** (flips the project-wide par), **Full Export for All** (flips the project-wide par). The per-COMP decision is persisted via `comp.store('_tdn_palette_handling', 'blackbox'|'fullexport')` so subsequent exports don't re-prompt. |
+| `Black Box` | Always emit `"palette_clone": true` with parameter overrides only. Children are re-dropped from the palette on import. Correct for stock palette COMPs; lets upstream palette updates from Derivative flow through on round-trip. |
+| `Full Export` | Always export all internal children as if the COMP were a regular user COMP. Use when you've heavily customized the palette internals and need that state preserved across round-trip. |
+
+Per-COMP stored decisions take precedence over the project-wide par. To reset a COMP's stored decision, call `comp.unstore('_tdn_palette_handling')`.
+
+---
+
+## Annotations
+
+Annotations are visual documentation elements in TouchDesigner networks (comments, network boxes, and annotate panels). They are stored in an `annotations` array at the top level (for root-level annotations) and optionally on each COMP operator (for nested annotations).
+
+```json
+{
+  "operators": [ ... ],
+  "annotations": [
+    {
+      "name": "annot_core",
+      "mode": "annotate",
+      "title": "Core Tests",
+      "text": "Unit tests for core functionality",
+      "position": [-70, -300],
+      "size": [1070, 660],
+      "color": [0.5, 0.5, 0.5],
+      "opacity": 0.8
+    }
+  ]
+}
+```
+
+For nested COMPs, `annotations` appears alongside `children`:
+
+```json
+{
+  "name": "container1",
+  "type": "baseCOMP",
+  "children": [ ... ],
+  "annotations": [
+    {
+      "name": "annot1",
+      "mode": "comment",
+      "text": "Signal processing chain"
+    }
+  ]
+}
+```
+
+### Annotation Object
+
+| Field | Type | Required | Condition for inclusion |
+|-------|------|----------|------------------------|
+| `name` | string | Yes | Always included. The annotation operator's name. |
+| `mode` | string | Yes | Always included. One of `"annotate"`, `"comment"`, or `"networkbox"`. |
+| `title` | string | No | Only if non-empty. Title bar text (for `annotate` and `networkbox` modes). |
+| `text` | string | No | Only if non-empty. Body text content. |
+| `position` | `[x, y]` | No | Omitted when `[0, 0]` (default). |
+| `size` | `[width, height]` | Yes | Always included - annotations have no standard default size. |
+| `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]`. Background color. |
+| `opacity` | number | No | Only if different from `1.0`. Background opacity (0.0 to 1.0). |
+
+### Import Behavior
+
+Annotations are created during Phase 7a (after operator positions, before file link restoration). Each annotation is created as an `annotateCOMP` with `utility=True` (matching TD's native behavior - annotations are utility operators hidden from `.children`).
+
+---
+
+## Value Serialization
+
+All parameter and content values are converted to JSON-safe types using these rules, applied in order:
+
+| Python Type | JSON Output | Rule |
+|-------------|-------------|------|
+| `None` | string | Converted to empty string `""`. |
+| `bool` | boolean | Stored as-is (`true`/`false`). |
+| `int` | number | Stored as-is. |
+| `float` | number (int) | If the value is a whole number (and fits in 53-bit integer range), it is converted to an integer. E.g., `1.0` becomes `1`. |
+| `float` | number (float) | Rounded to 10 decimal places to eliminate floating-point noise. |
+| `str` | string | Stored as-is (with `=`/`~` [escaping](#escaping) applied for parameter values). |
+| `list` / `tuple` | array | Each element is recursively serialized. |
+| Any other type | string | Converted via `str()`. |
+
+**Color values** (`color` field on operators) are rounded to 4 decimal places.
+
+---
+
+## System Exclusions
+
+The following top-level paths and all their descendants are always excluded from export. These contain TouchDesigner system internals that should not be version-controlled:
+
+| Path | Contents |
+|------|----------|
+| `/local` | Local parameters |
+| `/sys` | System operators (Thread Manager, TDJSON, etc.) |
+| `/perform` | Performance monitoring |
+| `/ui` | UI framework operators |
+
+An operator is excluded if its path equals one of these or starts with one followed by `/` (e.g., `/sys/TDResources` is excluded).
+
+---
+
+## Import Process
+
+Importing a `.tdn` file reconstructs the network in a pre-phase plus eight sequential phases. This ordering ensures that dependencies are satisfied - for example, operators must exist before they can be connected, and positions are set last because creating operators may shift existing nodes.
+
+| Phase | Action | Details |
+|-------|--------|---------|
+| Pre | **Resolve templates and defaults** | If `par_templates` is present, `$t` references in `custom_pars` are expanded to full definitions with value overrides. If `type_defaults` is present, shared properties are merged into each operator (`parameters` via dict merge, `flags`/`size`/`color`/`tags` via whole-value injection; operator-specific values take precedence). |
+| 1 | **Create operators** | All operators are created depth-first. COMPs are created first so their children can be placed inside them. |
+| 2 | **Create custom parameters** | Custom parameter definitions are created on COMPs (pages, types, ranges, menu entries, defaults). |
+| 3 | **Set parameter values** | Both built-in and custom parameter values are applied. `=` prefix sets expression mode, `~` prefix sets bind mode, all other values set constant mode. |
+| 4 | **Set flags** | Operator flags are applied. Array entries without `-` prefix set the flag to `true`; entries with `-` prefix set to `false`. |
+| 5 | **Wire connections** | Operator and COMP connections are established. Source references are resolved (sibling name first, then full path). Array position equals input index. |
+| 6 | **Set DAT content** | Text or table data is loaded into DAT operators. |
+| 6a | **Restore storage** | Storage key-value pairs are restored via `op.store()`. `$type` wrappers are deserialized to Python types (tuple, set, bytes). |
+| 7 | **Set positions** | Node positions, sizes, colors, and comments are applied last. Missing position defaults to `[0, 0]`. |
+| 7a | **Create annotations** | Annotations are created from the `annotations` array (top-level and per-COMP). Each annotation is created as an `annotateCOMP` with `utility=True`, then its mode, title, body text, position, size, color, and opacity are set. |
+
+The importer accepts either a full `.tdn` document (with metadata) or just the `operators` array directly.
+
+### Extension Initialization Timing
+
+!!! danger "Extensions initialize BEFORE TDN import"
+    When a TDN COMP is reconstructed (on project open or after save), the COMP shell is created first and any extensions on it initialize immediately. The TDN import runs **after** extension initialization, calling `ImportNetwork` with `clear_first=True` - which deletes all children and recreates them from the `.tdn` file. This means any state set up by `onInitTD` inside the COMP is **overwritten**.
+
+**Timeline on project open:**
+
+| Step | Frame | What happens |
+|------|-------|--------------|
+| 1 | Early | COMP shell created (exists but empty) |
+| 2 | Early | Extension `__init__` runs |
+| 3 | End of frame | `onInitTD` fires - network may not exist yet |
+| 4 | Frame 60 | `ReconstructTDNComps` runs `ImportNetwork(clear_first=True)` |
+| 5 | Frame 60+ | All children deleted and recreated from `.tdn` |
+
+**Timeline on save (strip/restore cycle):**
+
+| Step | What happens |
+|------|--------------|
+| 1 | Pre-save: children stripped from TDN COMPs |
+| 2 | `.toe` saved without TDN children |
+| 3 | Post-save: `ImportNetwork` re-imports children from `.tdn` |
+| 4 | Extensions may reinitialize during restore |
+
+**Impact:** If an extension's `onInitTD` creates operators, sets parameter values, writes to storage, or builds any state inside the COMP, that work is destroyed by the import. This affects extensions that live inside TDN COMPs **and** extensions whose ownerComp is a TDN-strategy COMP.
+
+**Solution:** Defer initialization using `run()` with `delayFrames`:
+
+```python
+def onInitTD(self):
+    run('args[0].postInit()', self, delayFrames=5)
+
+def postInit(self):
+    """Runs after TDN import completes. Safe to set up state."""
+    pass
+```
+
+The deferred method must be **idempotent** - it will run on every project open, after every save, and on manual reimport. Use a delay of at least 5 frames to ensure all import phases have completed.
+
+For full guidance on writing extensions that coexist with TDN, see the [Extensions](../td-development/extensions.md#initialization-and-tdn-import-timing) documentation.
+
+### Version Compatibility
+
+When importing a full `.tdn` document, the importer checks the metadata fields for compatibility:
+
+- **`version`**: Compared against the current TDN format version. A warning is logged if they differ, indicating the file may use a newer or older schema.
+- **`td_build`**: Compared against the running TouchDesigner version. An informational message is logged if they differ, since operator types and parameter defaults may vary between TD builds.
+- **`build`**: Logged for informational purposes, identifying which save iteration is being imported.
+
+These checks are non-blocking - the import always proceeds regardless of mismatches.
+
+---
+
+## Round-Trip Guarantees
+
+For most networks, export -> import -> re-export produces identical `.tdn` output. The format is designed to be stable across round-trips, with a few documented exceptions.
+
+### Preserved
+
+- **Target COMP metadata** (v1.1+): type, flags, color, tags, comment, storage
+- Operator names, types, and hierarchy
+- Non-default parameter values (constant, expression, and bind modes)
+- Custom parameter definitions (all fields, all styles)
+- Flags, connections, positions, sizes, colors, comments, tags
+- Operator storage (serializable entries only - see [Operator Storage](#operator-storage))
+- Annotations (mode, title, body text, position, size, color, opacity)
+- DAT text and table content (byte-for-byte when `include_dat_content` is `true`)
+- Float values (stable after the first export - see below)
+- Type defaults and parameter templates (re-computed on each export)
+
+### Known Exceptions
+
+**Palette clones** - On first export, a palette-cloned COMP is marked `"palette_clone": true` and its children are skipped. After import, TouchDesigner materializes the children from the clone source. A subsequent re-export will include those children as regular operators. This means the second export is larger than the first. Parameters that match `p.default` but differ from the clone source are preserved (see [Palette Clones](#palette-clones)).
+
+**Color tolerance** - Colors within `0.01` per channel of the default gray `[0.545, 0.545, 0.545]` are treated as default and not exported. A color of `[0.55, 0.55, 0.55]` survives; `[0.546, 0.546, 0.546]` is dropped.
+
+**Float precision** - Values are rounded to 10 decimal places on first export. This can change the last digits of very precise values (e.g., `3.14159265358979` -> `3.1415926536`). After that first rounding, subsequent exports are stable.
+
+**Type defaults recomputation** - Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the JSON structure may differ.
+
+**Locked non-DAT data** - When a TOP, CHOP, or SOP is locked, TDN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
+
+### Intentionally Excluded
+
+The following are never exported and are not considered a loss:
+
+- **Export-mode parameters** - set by the exporting operator, not the parameter itself
+- **Pulse / Momentary / Header styles** - no persistent state
+- **Read-only parameters** - cannot be set on import
+- **COMP externalization parameters** (`externaltox`, `enableexternaltox`, `reloadtox`) - COMP `.tox` externalization is managed separately by Embody
+- **Transient storage keys** - runtime state used by Embody (`envoy_running`, `_git_root`, etc.)
+- **Non-serializable storage values** - threading objects, operator references, custom class instances
+
+---
+
+## Error Handling
+
+TDN import is **best-effort** - individual failures should not abort the entire operation. This section describes the expected behavior for developers working with TDN files.
+
+### Unknown Fields
+
+Developers should ignore unknown fields when parsing TDN documents. This ensures forward compatibility - a file exported by a newer version of Embody can still be imported by an older version, with unrecognized fields silently skipped.
+
+### Failure Modes
+
+| Situation | Expected behavior |
+|-----------|-------------------|
+| Unknown field in any object | Ignore it. |
+| Missing required field (`name`, `type`) on an operator | Skip that operator, log an error. |
+| Missing connection source (operator not found) | Skip that connection, log a warning. |
+| Unrecognized custom parameter `style` | Skip that parameter definition, log a warning. |
+| Unrecognized flag name | Ignore it. |
+| Invalid parameter value type | Attempt type coercion; if impossible, skip with a warning. |
+| Version mismatch (`version`, `td_build`) | Log a warning, proceed with import. |
+| Target COMP type mismatch (`type` vs destination) | Log a warning, proceed with import. The file's `type` field is informational - import does not change the destination COMP's type. |
+| Unknown `$t` template reference | Log a warning, skip that page. |
+| Missing `type_defaults` entry for a type | No-op (operator uses its own properties). |
+| Non-serializable storage value on export | Skip that value, log at DEBUG level. |
+| Unknown `$type` in storage on import | Treat as plain dict, log a warning. |
+| Failed `store()` call on import | Skip that key, log a warning. |
+
+### General Principle
+
+Log warnings for anything skipped so the developer can inspect the result. Never abort an entire import because a single operator, parameter, or connection failed - the partial result is more useful than no result.
+
+---
+
+## Complete Example
+
+A realistic `.tdn` file demonstrating all major features:
+
+```json
+{
+  "format": "tdn",
+  "version": "1.3",
+  "build": 3,
+  "generator": "Embody/5.0.237",
+  "td_build": "2025.32050",
+  "exported_at": "2026-02-19T14:30:00Z",
+  "network_path": "/",
+  "type": "baseCOMP",
+  "options": {
+    "include_dat_content": true,
+    "include_storage": true
+  },
+  "type_defaults": {
+    "baseCOMP": {
+      "parameters": {
+        "resizecomp": "=me",
+        "repocomp": "=me"
+      }
+    }
+  },
+  "par_templates": {
+    "about": [
+      {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true},
+      {"name": "Version", "style": "Str", "label": "Version", "readOnly": true}
+    ]
+  },
+  "operators": [
+    {
+      "name": "controller",
+      "type": "baseCOMP",
+      "color": [0.2, 0.4, 0.8],
+      "comment": "Main controller",
+      "tags": ["core"],
+      "custom_pars": {
+        "Controls": [
+          {
+            "name": "Speed",
+            "style": "Float",
+            "default": 1,
+            "max": 10,
+            "clampMin": true,
+            "normMax": 5,
+            "value": 2.5
+          },
+          {
+            "name": "Mode",
+            "style": "Menu",
+            "menuNames": ["linear", "ease", "bounce"],
+            "menuLabels": ["Linear", "Ease In/Out", "Bounce"],
+            "value": 1
+          },
+          {
+            "name": "Color",
+            "style": "RGB",
+            "clampMin": true,
+            "clampMax": true,
+            "values": [1, 0.5, 0]
+          }
+        ],
+        "About": {
+          "$t": "about",
+          "Build": 3,
+          "Version": "1.0.0"
+        }
+      },
+      "flags": ["viewer"],
+      "comp_inputs": ["renderer"],
+      "children": [
+        {
+          "name": "noise1",
+          "type": "noiseTOP",
+          "parameters": {
+            "type": "sparse",
+            "amp": 0.8,
+            "period": 2,
+            "monochrome": true,
+            "resolutionw": 1920,
+            "resolutionh": 1080
+          }
+        },
+        {
+          "name": "level1",
+          "type": "levelTOP",
+          "position": [300, 0],
+          "parameters": {
+            "opacity": "=parent().par.Speed / 10"
+          },
+          "inputs": ["noise1"],
+          "flags": ["display"]
+        },
+        {
+          "name": "config",
+          "type": "tableDAT",
+          "position": [0, -200],
+          "dat_content": [
+            ["key", "value"],
+            ["resolution", "1920x1080"],
+            ["fps", "60"]
+          ],
+          "dat_content_format": "table",
+          "flags": ["lock"]
+        },
+        {
+          "name": "script1",
+          "type": "textDAT",
+          "position": [300, -200],
+          "dat_content": "# Initialize\nprint('Controller ready')",
+          "dat_content_format": "text"
+        }
+      ]
+    },
+    {
+      "name": "renderer",
+      "type": "baseCOMP",
+      "position": [500, 0],
+      "size": [300, 150],
+      "custom_pars": {
+        "About": {
+          "$t": "about",
+          "Build": 1,
+          "Version": "0.9.0"
+        }
+      }
+    }
+  ]
+}
+```
+
+Key observations:
+
+- **`type_defaults`**: Both `baseCOMP`s share `resizecomp` and `repocomp` expressions, so those are hoisted out of individual operators
+- **`par_templates`**: The "About" page definition is shared between `controller` and `renderer`, with different values
+- **Expression shorthand**: `"=parent().par.Speed / 10"` instead of `{"expr": "..."}`
+- **Flags as arrays**: `["viewer"]`, `["display"]`, `["lock"]`
+- **Simplified connections**: `["noise1"]` instead of `[{"index": 0, "source": "noise1"}]`
+- **Optional position**: `noise1` at `[0, 0]` omits `position`; `controller` at `[0, 0]` also omits it
+- **Compact formatting**: Arrays like `[300, 0]`, `[0.2, 0.4, 0.8]`, `["core"]` are inline
+
+---
+
+## Changelog
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact JSON formatting. |
+| 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |
+| 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDN exports. Pre-save now auto-exports current state before stripping TDN COMPs. |
+| 1.3 | 2026-04-07 | Added built-in parameter sequence support (`sequences` key on operator objects). Operators with resizable parameter blocks (mathmixPOP, glslPOP, attributePOP, constantCHOP, etc.) now round-trip correctly. Added Phase 2.5 to import process. Sequence parameters excluded from `type_defaults` compression and `_buildParCache`. |
+
+
+==============================================================================
+# TDN - Import & Export
+# source: docs/tdn/import-export.md
+==============================================================================
+
+# Read, Import & Export
+
+## Reading a Network (no disk I/O)
+
+### MCP Tool
+
+Use the `read_tdn` tool to return the live network as a TDN dict **without writing anything to disk**. This is the preferred read path for LLM workflows exploring networks of more than ~3 operators - **typically 20-90x fewer tokens** than walking the same subtree with `get_op` + `query_network` because of default-omission, `type_defaults`, and `par_templates` compaction.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `comp_path` | `"/"` | Starting COMP path |
+| `include_dat_content` | Toggle setting | Include DAT text/table content |
+| `max_depth` | `null` (unlimited) | Cap recursion on large roots |
+| `embed_all` | `false` | Recurse into TDN-tagged COMPs instead of skipping their children |
+
+Works in all three `Tdnmode` values (Off / Export-on-Save / Roundtrip) - `read_tdn` reads live state, not `.tdn` files on disk.
+
+### When NOT to use `read_tdn`
+
+For these, reach for the runtime-state MCP tools instead:
+
+| Need | Use |
+|---|---|
+| Evaluated-expression runtime values | `get_parameter` |
+| Cook errors / warnings | `get_op_errors` |
+| DAT / CHOP / TOP output data | `get_dat_content`, `capture_top` |
+| Cook timing | `get_op_performance` |
+| Flag state after runtime mutation | `get_op_flags` |
+
+---
+
+## Exporting a Network
+
+### Keyboard Shortcuts
+
+- ++ctrl+shift+e++ - Export the entire project to a single `.tdn` file
+- ++ctrl+alt+e++ - Export just the current COMP to a `.tdn` file
+
+### MCP Tool
+
+Use the `export_network` tool with these options:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `root_path` | `"/"` | Starting COMP path |
+| `include_dat_content` | Toggle setting | Include DAT text/table content |
+| `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only) |
+| `max_depth` | `null` (unlimited) | Maximum recursion depth |
+
+### What Gets Exported
+
+- All operators under the root path (recursively)
+- Only non-default parameter values
+- Connections between operators
+- Custom parameter definitions
+- Flags, positions, sizes, colors, comments, tags
+- Annotations
+- Optionally: DAT text/table content
+
+### What Gets Excluded
+
+- System paths (`/local`, `/sys`, `/perform`, `/ui`)
+- Pulse, Momentary, and Header parameters (no persistent state)
+- Read-only parameters
+- COMP externalization parameters (`externaltox`, `enableexternaltox`, etc.)
+- Children of palette clones (TD recreates them from the clone source)
+
+---
+
+## Importing a Network
+
+Use the `import_network` MCP tool:
+
+| Parameter | Description |
+|-----------|-------------|
+| `target_path` | Destination COMP path |
+| `tdn` | The `.tdn` JSON document (full document or operators array) |
+| `clear_first` | Delete existing children before importing |
+
+### Import Phases
+
+The import process runs in a pre-phase plus seven sequential phases. This ordering ensures dependencies are satisfied:
+
+| Phase | Action | Details |
+|-------|--------|---------|
+| Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators |
+| 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
+| 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
+| 3 | **Set parameter values** | Both built-in and custom. `=` prefix -> expression, `~` prefix -> bind. |
+| 4 | **Set flags** | Array entries without `-` -> `true`; with `-` -> `false`. |
+| 5 | **Wire connections** | Resolve sources (sibling name first, then full path). |
+| 6 | **Set DAT content** | Text or table data loaded into DATs. |
+| 7 | **Set positions** | Positions, sizes, colors, comments applied last. |
+| 7a | **Create annotations** | Annotations created with `utility=True`. |
+
+### Version Compatibility
+
+The importer checks metadata for compatibility:
+
+- **`version`**: Warning if format version differs
+- **`td_build`**: Info message if TD version differs (parameter defaults may vary)
+- **`build`**: Logged for informational purposes
+
+These checks are non-blocking - import always proceeds.
+
+---
+
+## Error Handling
+
+TDN import is **best-effort** - individual failures don't abort the entire operation.
+
+| Situation | Behavior |
+|-----------|----------|
+| Unknown field | Ignored (forward compatibility) |
+| Missing `name` or `type` | Skip operator, log error |
+| Missing connection source | Skip connection, log warning |
+| Unrecognized parameter style | Skip parameter, log warning |
+| Unrecognized flag | Ignored |
+| Invalid parameter value | Attempt type coercion; skip with warning if impossible |
+| Version mismatch | Log warning, proceed |
+| Unknown `$t` template reference | Log warning, skip page |
+
+!!! info "Design principle"
+    Log warnings for anything skipped so the developer can inspect the result. Never abort an entire import because a single operator, parameter, or connection failed - the partial result is more useful than no result.
+
+
+==============================================================================
+# AI Instructions (AGENTS.md)
+# source: AGENTS.md
+==============================================================================
+
+<!-- Generated by Embody/Envoy - do not edit manually -->
+
+# Embody + Envoy - AI Instructions
+
+This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDesigner externalization) and **Envoy** (MCP server for AI coding tools).
+
+- Embody externalizes TouchDesigner operators to version-controlled files (`.py`, `.tox`, `.tdn`, `.json`, etc.)
+- Envoy provides MCP tools for AI assistants to inspect and modify the live TD network
+- Use the `Aiclient` parameter on the Embody COMP to regenerate these files for your AI tool
+
+> **Note:** For Claude Code users, a `CLAUDE.md` with modular `.claude/rules/` and `.claude/skills/` is also generated. This `AGENTS.md` is the universal fallback read by Cursor, GitHub Copilot, Windsurf, Gemini, and others.
+
+---
+
+## Critical Rules
+
+1. **Prefer `.tdn` files for reading TDN-externalized COMPs** - `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
+2. **Use Envoy MCP tools for live TD state and non-TDN operators** - never say "I can't access that binary file." For operators not externalized as TDN, use MCP tools to inspect and modify them.
+3. **Do NOT assume network paths** - use `query_network` on `/` to discover the actual root structure.
+4. **Default to the current network** - use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
+5. **Never edit `externalizations.tsv` directly** - managed exclusively by Embody's tracking system.
+6. **Always use forward slashes** in file paths.
+7. **Check for errors and warnings after creating operators** - `get_op_errors` with `recurse=true` immediately after creation.
+8. **Thread boundary**: MCP server worker thread must never import TD modules. All TD access goes through `_execute_in_td()`.
+
+---
+
+## TD Python Rules
+
+- **Always use `.eval()`** to get a parameter's current runtime value. `.val` only returns the constant-mode value.
+- **Setting `.val` silently switches mode to CONSTANT** - destroys any active expression.
+- **Toggle parameters** use `0`/`1` (not `"True"`/`"False"`).
+- **Use `opex()`** when the operator must exist - raises immediately with a clear error. `op()` returns `None` silently.
+- **Never call `op()`, `parent()`, or access TD objects at module level** - defer to methods.
+- **NEVER access TD objects from a worker thread** - all TD operations must go through main-thread hooks.
+- **`fetch()` searches UP the parent hierarchy** by default - pass `search=False` for local-only lookup.
+- **`tdu.Dependency`**: Assign to `.val` (`dep.val = 5`), NOT the object itself. Call `.modified()` after mutating contents.
+
+## Network Layout Rules
+
+- **200-unit grid**: All positions snap to multiples of 200. Never place at arbitrary coordinates.
+- **300 units horizontal** between connected operators in a chain.
+- **Left to right** signal flow: inputs on the left, outputs on the right.
+- **NEVER place an operator on top of another** - scan with `query_network` and `get_op_position` before placing.
+- **Every logical group gets an annotation** - use `create_annotation` around each cluster of related operators.
+- **Annotations must enclose their operators**: `nodeX`/`nodeY` is the bottom-left corner - `nodeY` must be below (less than) the lowest operator's Y.
+- **TD Y-axis increases upward** - new rows go downward (decreasing Y).
+
+## MCP Server Safety Rules
+
+- Envoy must bind to `127.0.0.1`, NEVER `0.0.0.0`.
+- `_execute_in_td()` times out at 30 seconds.
+- The MCP server runs as a `standalone=True` TDTask (long-lived, outside the worker pool).
+- Uses `threading.Event` + `Queue` rather than locks because TD's cook cycle is frame-based.
+
+---
+
+## Project Structure
+
+```
+Embody/
++-- AGENTS.md                              # This file - universal AI instructions
++-- CLAUDE.md                              # Claude Code specific instructions (if using Claude)
++-- dev/
+|   +-- embody/
+|   |   +-- externalizations.tsv          # Tracking table (NEVER edit directly)
+|   |   +-- Embody/                       # Main extension source
+|   |       +-- EmbodyExt.py              # Core externalization engine
+|   |       +-- EnvoyExt.py               # MCP server extension
+|   |       +-- TDNExt.py                 # TDN network format export/import
++-- release/
+    +-- Embody-v*.tox                     # Latest release build
+```
+
+## Extension Referencing
+
+```python
+# Promoted methods (uppercase) - called directly on the component:
+op.Embody.Update()
+op.Embody.Save()
+
+# Non-promoted (lowercase) - through ext:
+op.Embody.ext.Embody.getExternalizedOps()
+op.Embody.ext.Envoy.Start()
+```
+
+**NEVER cache extension references in variables** - always call inline.

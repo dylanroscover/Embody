@@ -27,11 +27,10 @@ class TestInstanceKeyRename(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
         self.my_pid = os.getpid()
 
     def test_basename_used_when_registry_empty(self):
-        key = self.envoy._instanceKey('dev/Embody-5.398.toe', {})
+        key = self.embody.ext.Envoy._instanceKey('dev/Embody-5.398.toe', {})
         self.assertEqual(key, 'Embody-5.398')
 
     def test_existing_key_reused_when_toe_path_unchanged(self):
@@ -42,7 +41,7 @@ class TestInstanceKeyRename(EmbodyTestCase):
                 'td_pid': self.my_pid,
             },
         }
-        key = self.envoy._instanceKey('dev/Embody-5.398.toe', instances)
+        key = self.embody.ext.Envoy._instanceKey('dev/Embody-5.398.toe', instances)
         self.assertEqual(key, 'Embody-5.398')
 
     def test_walks_forward_when_toe_path_changes_for_same_pid(self):
@@ -55,7 +54,7 @@ class TestInstanceKeyRename(EmbodyTestCase):
                 'td_pid': self.my_pid,
             },
         }
-        key = self.envoy._instanceKey('dev/Embody-5.399.toe', instances)
+        key = self.embody.ext.Envoy._instanceKey('dev/Embody-5.399.toe', instances)
         self.assertEqual(key, 'Embody-5.399')
 
     def test_reclaims_own_basename_collision(self):
@@ -69,7 +68,7 @@ class TestInstanceKeyRename(EmbodyTestCase):
                 'td_pid': self.my_pid,
             },
         }
-        key = self.envoy._instanceKey('dev/Embody-5.399.toe', instances)
+        key = self.embody.ext.Envoy._instanceKey('dev/Embody-5.399.toe', instances)
         self.assertEqual(key, 'Embody-5.399')
 
     def test_appends_suffix_for_live_foreign_pid_collision(self):
@@ -84,13 +83,13 @@ class TestInstanceKeyRename(EmbodyTestCase):
         # Force the "alive" check by patching _isPidAlive to return
         # True for the foreign pid -- we want to verify the suffix
         # path, not whether arbitrary pids happen to be alive.
-        original = self.envoy._isPidAlive
-        self.envoy._isPidAlive = lambda p: True if p != self.my_pid else False
+        original = self.embody.ext.Envoy._isPidAlive  # ext-cache-ok: save original to restore after monkeypatch
+        self.embody.ext.Envoy._isPidAlive = lambda p: True if p != self.my_pid else False
         try:
-            key = self.envoy._instanceKey(
+            key = self.embody.ext.Envoy._instanceKey(
                 'dev/Embody-5.399.toe', instances)
         finally:
-            self.envoy._isPidAlive = original
+            self.embody.ext.Envoy._isPidAlive = original
         self.assertEqual(key, 'Embody-5.399-2')
 
     def test_reclaims_dead_basename(self):
@@ -103,13 +102,13 @@ class TestInstanceKeyRename(EmbodyTestCase):
             },
         }
         # Force _isPidAlive to return False for the stale pid.
-        original = self.envoy._isPidAlive
-        self.envoy._isPidAlive = lambda p: p == self.my_pid
+        original = self.embody.ext.Envoy._isPidAlive  # ext-cache-ok: save original to restore after monkeypatch
+        self.embody.ext.Envoy._isPidAlive = lambda p: p == self.my_pid
         try:
-            key = self.envoy._instanceKey(
+            key = self.embody.ext.Envoy._instanceKey(
                 'dev/Embody-5.399.toe', instances)
         finally:
-            self.envoy._isPidAlive = original
+            self.embody.ext.Envoy._isPidAlive = original
         self.assertEqual(key, 'Embody-5.399')
 
     def test_old_pid_entry_not_reused_when_toe_changed(self):
@@ -127,13 +126,13 @@ class TestInstanceKeyRename(EmbodyTestCase):
                 'td_pid': self.my_pid,
             },
         }
-        original = self.envoy._isPidAlive
-        self.envoy._isPidAlive = lambda p: p == 12345 or p == self.my_pid
+        original = self.embody.ext.Envoy._isPidAlive  # ext-cache-ok: save original to restore after monkeypatch
+        self.embody.ext.Envoy._isPidAlive = lambda p: p == 12345 or p == self.my_pid
         try:
-            key = self.envoy._instanceKey(
+            key = self.embody.ext.Envoy._instanceKey(
                 'dev/Embody-5.399.toe', instances)
         finally:
-            self.envoy._isPidAlive = original
+            self.embody.ext.Envoy._isPidAlive = original
         # 'Embody-5.399' is owned by a foreign live PID, so we get -2
         self.assertEqual(key, 'Embody-5.399-2')
 
@@ -147,7 +146,6 @@ class TestRegistryDeadPidGC(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
         self.my_pid = os.getpid()
 
     def _write_test_registry(self, tmp_dir, instances, active_key):
@@ -197,12 +195,12 @@ class TestRegistryDeadPidGC(EmbodyTestCase):
                 active_key='self_key',
             )
             # Force is-alive predicate: our PID + nothing else
-            original = self.envoy._isPidAlive
-            self.envoy._isPidAlive = lambda p: p == self.my_pid
+            original = self.embody.ext.Envoy._isPidAlive  # ext-cache-ok: save original to restore after monkeypatch
+            self.embody.ext.Envoy._isPidAlive = lambda p: p == self.my_pid
             try:
-                self.envoy._writeEnvoyConfig(embody_dir, port=9870)
+                self.embody.ext.Envoy._writeEnvoyConfig(embody_dir, port=9870)
             finally:
-                self.envoy._isPidAlive = original
+                self.embody.ext.Envoy._isPidAlive = original
 
             after = self._read_registry(config_path)
             keys = set(after.get('instances', {}).keys())
@@ -244,13 +242,13 @@ class TestRegistryDeadPidGC(EmbodyTestCase):
                 },
                 active_key='self_key',
             )
-            original = self.envoy._isPidAlive
-            self.envoy._isPidAlive = (
+            original = self.embody.ext.Envoy._isPidAlive  # ext-cache-ok: save original to restore after monkeypatch
+            self.embody.ext.Envoy._isPidAlive = (
                 lambda p: p in (self.my_pid, FOREIGN_PID))
             try:
-                self.envoy._writeEnvoyConfig(embody_dir, port=9870)
+                self.embody.ext.Envoy._writeEnvoyConfig(embody_dir, port=9870)
             finally:
-                self.envoy._isPidAlive = original
+                self.embody.ext.Envoy._isPidAlive = original
 
             after = self._read_registry(config_path)
             keys = set(after.get('instances', {}).keys())
@@ -278,25 +276,24 @@ class TestIsPidAliveSafety(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
 
     def test_zero_is_dead(self):
-        self.assertFalse(self.envoy._isPidAlive(0))
+        self.assertFalse(self.embody.ext.Envoy._isPidAlive(0))
 
     def test_none_is_dead(self):
-        self.assertFalse(self.envoy._isPidAlive(None))
+        self.assertFalse(self.embody.ext.Envoy._isPidAlive(None))
 
     def test_negative_is_dead(self):
         # Bare os.kill(-1, 0) on POSIX broadcasts to a process group and
         # on Windows wraps to a giant DWORD.  Must be a clean False.
-        self.assertFalse(self.envoy._isPidAlive(-1))
-        self.assertFalse(self.envoy._isPidAlive(-99999))
+        self.assertFalse(self.embody.ext.Envoy._isPidAlive(-1))
+        self.assertFalse(self.embody.ext.Envoy._isPidAlive(-99999))
 
     def test_string_pid_is_dead(self):
         # Corrupt registries have surfaced non-int PIDs before; the safe
         # path must reject them without raising.
-        self.assertFalse(self.envoy._isPidAlive('12345'))
-        self.assertFalse(self.envoy._isPidAlive(''))
+        self.assertFalse(self.embody.ext.Envoy._isPidAlive('12345'))
+        self.assertFalse(self.embody.ext.Envoy._isPidAlive(''))
 
     def test_bool_pid_is_dead(self):
         # bool is technically an int subclass but is never a real PID.
@@ -305,8 +302,8 @@ class TestIsPidAliveSafety(EmbodyTestCase):
         # Both must be safe; behaviour doesn't matter as long as no
         # SystemError leaks.
         try:
-            self.envoy._isPidAlive(True)
-            self.envoy._isPidAlive(False)
+            self.embody.ext.Envoy._isPidAlive(True)
+            self.embody.ext.Envoy._isPidAlive(False)
         except SystemError:
             self.fail('_isPidAlive must not raise SystemError on bool input')
 
@@ -315,17 +312,17 @@ class TestIsPidAliveSafety(EmbodyTestCase):
         # crashed here with `SystemError: returned a result with an
         # exception set`; this test pins the safe contract.
         try:
-            result = self.envoy._isPidAlive(2 ** 31)
+            result = self.embody.ext.Envoy._isPidAlive(2 ** 31)
         except SystemError as e:
             self.fail(f'_isPidAlive must not surface SystemError: {e}')
         self.assertFalse(result)
 
     def test_own_pid_is_alive(self):
         """The TD process is alive -- its own PID must report True."""
-        self.assertTrue(self.envoy._isPidAlive(os.getpid()))
+        self.assertTrue(self.embody.ext.Envoy._isPidAlive(os.getpid()))
 
     def test_definitely_dead_pid_is_dead(self):
         """A PID far beyond any plausible live process must report False."""
         # 0x7FFFFFFE is just below INT32_MAX -- well outside the live PID
         # range on any sane OS, and not a special-cased ID.
-        self.assertFalse(self.envoy._isPidAlive(0x7FFFFFFE))
+        self.assertFalse(self.embody.ext.Envoy._isPidAlive(0x7FFFFFFE))

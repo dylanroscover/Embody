@@ -39,6 +39,7 @@ HEARTBEAT_TICK_S = 10             # backend HTTP ping (fixed cadence)
 TOOL_CACHE_TTL_S = 5         # How long a cached tool list counts as fresh
 BACKEND_PING_TIMEOUT_S = 2   # Per-ping timeout
 FETCH_TOOLS_TIMEOUT_S = 3    # One-shot tools/list forward timeout
+BUSY_RETRY_WINDOW_S = 30     # Ride out transient TD-busy windows (saves, heavy cooks) before surfacing 'not responding'
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +228,7 @@ def _init_file_logging(config_path):
         return
     try:
         if config_path:
-            # Config is in .embody/ — git root is one level up
+            # Config is in .embody/ - git root is one level up
             embody_dir = os.path.dirname(os.path.abspath(config_path))
             git_root = os.path.dirname(embody_dir)
             log_dir = os.path.join(git_root, "dev", "logs")
@@ -754,7 +755,7 @@ def _heartbeat_path(config_path, pid=None):
         pid = os.getpid()
     filename = f"envoy-bridge-{pid}.heartbeat"
     if config_path:
-        # Config is in .embody/ — git root is one level up
+        # Config is in .embody/ - git root is one level up
         embody_dir = os.path.dirname(os.path.abspath(config_path))
         git_root = os.path.dirname(embody_dir)
         log_dir = os.path.join(git_root, "dev", "logs")
@@ -791,7 +792,7 @@ def _list_stale_heartbeats(config_path, max_age_s):
     import glob as _glob
     stale = []
     if config_path:
-        # Config is in .embody/ — git root is one level up
+        # Config is in .embody/ - git root is one level up
         embody_dir = os.path.dirname(os.path.abspath(config_path))
         git_root = os.path.dirname(embody_dir)
         log_dir = os.path.join(git_root, "dev", "logs")
@@ -913,7 +914,7 @@ def launch_td(config, config_path, project_path=None, existing_pids=None):
         if td_exe is None:
             return False, warning or "No TouchDesigner install found", None
     else:
-        # Backward compat: no pin → use td_executable verbatim, as before.
+        # Backward compat: no pin -> use td_executable verbatim, as before.
         td_exe = fallback_exe
         if not td_exe:
             return False, "No td_executable configured in envoy.json", None
@@ -1469,6 +1470,37 @@ def forward_to_http(url, message, timeout=300):
             pass
 
     return None
+
+
+def forward_with_busy_retry(url, message, state):
+    """Forward to Envoy, riding out transient main-thread-busy windows.
+
+    A heavy main-thread operation in TouchDesigner (a project save, a large
+    cook, a catalog scan) briefly starves Envoy\'s HTTP server thread, so a
+    single forward can fail fast even though TD is alive and answers a moment
+    later. Retry on connection-level errors while the process is alive, up to
+    BUSY_RETRY_WINDOW_S, before letting the error propagate to the
+    "not responding" handler. If the process is dead, fail immediately so the
+    crash path surfaces without delay.
+    """
+    deadline = time.monotonic() + BUSY_RETRY_WINDOW_S
+    attempt = 0
+    while True:
+        try:
+            return forward_to_http(url, message)
+        except (urllib.error.URLError, ConnectionError, OSError):
+            with state:
+                pid = state.td_pid
+            if pid and not is_process_alive(pid):
+                raise
+            if time.monotonic() >= deadline:
+                raise
+            if attempt == 0:
+                log("Envoy momentarily unreachable (TD likely busy, e.g. "
+                    "saving); retrying before reporting an error")
+            idx = min(attempt, len(RETRY_INTERVALS) - 1)
+            time.sleep(RETRY_INTERVALS[idx])
+            attempt += 1
 
 
 def send_response(response):
@@ -2274,7 +2306,7 @@ def main():
         # --- Forward to TD (single attempt -- reconciler handles recovery) ---
         response = None
         try:
-            response = forward_to_http(current_url, message)
+            response = forward_with_busy_retry(current_url, message, state)
             with state:
                 state.last_connected_time = time.time()
         except (urllib.error.URLError, ConnectionError, OSError) as e:

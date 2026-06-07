@@ -23,7 +23,6 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.tdn = self.embody.ext.TDN
 
 	# =================================================================
 	# Helpers
@@ -33,7 +32,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		"""Export → clear children → import → re-export.
 		Returns (original_tdn, reimported_tdn, import_result).
 		"""
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'), f'Export failed: {orig}')
 		orig_tdn = orig['tdn']
@@ -50,12 +49,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 			c.destroy()
 
 		# Import
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=parent.path, tdn=orig_tdn, clear_first=False)
 		self.assertTrue(result.get('success'), f'Import failed: {result}')
 
 		# Re-export
-		reimp = self.tdn.ExportNetwork(
+		reimp = self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, include_dat_content=True)
 		self.assertTrue(reimp.get('success'), f'Re-export failed: {reimp}')
 
@@ -63,7 +62,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def _simulateReconstruction(self, parent):
 		"""Mirrors the real onProjectPreSave strip + ReconstructTDNComps reimport flow."""
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		orig_tdn = orig['tdn']
@@ -75,7 +74,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(len(parent.children), 0)
 
 		# Reconstruct (like ReconstructTDNComps)
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=parent.path, tdn=orig_tdn, clear_first=False)
 		self.assertTrue(result.get('success'), f'Reconstruct failed: {result}')
 
@@ -609,7 +608,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def test_B10_nondefault_only(self):
 		"""Only non-default parameters should be exported."""
 		self.sandbox.create(noiseTOP, 'n')  # All defaults
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		entry = orig['tdn']['operators'][0]
 		# Should have zero or very few parameters (only non-defaults)
@@ -937,7 +936,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		"""Locked non-DAT operators include lock in exported flags."""
 		t = self.sandbox.create(nullTOP, 't')
 		t.lock = True
-		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(result.get('success'))
 		entry = result['tdn']['operators'][0]
 		self.assertIn('lock', entry.get('flags', []))
@@ -961,7 +960,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n = self.sandbox.create(noiseTOP, 'n')
 		n.nodeX = 0
 		n.nodeY = 0
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		entry = orig['tdn']['operators'][0]
 		self.assertNotIn('position', entry)
 
@@ -1028,7 +1027,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# All defaults — position at 0,0, default color, no comment, no tags
 		n.nodeX = 0
 		n.nodeY = 0
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		entry = orig['tdn']['operators'][0]
 		self.assertNotIn('position', entry)
 		self.assertNotIn('comment', entry)
@@ -1085,7 +1084,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		"""DAT content excluded when include_dat_content=False."""
 		d = self.sandbox.create(textDAT, 'd')
 		d.text = 'should not appear'
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=False)
 		entry = orig['tdn']['operators'][0]
 		self.assertNotIn('dat_content', entry)
@@ -1154,7 +1153,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(3):
 			n = self.sandbox.create(noiseTOP, f'n{i}')
 			n.par.seed = 42
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		tdn = orig['tdn']
 		td = tdn.get('type_defaults', {})
 		if 'noiseTOP' in td:
@@ -1166,7 +1165,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(3):
 			n = self.sandbox.create(noiseTOP, f'n{i}')
 			n.par.seed = 42
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		tdn = orig['tdn']
 		td = tdn.get('type_defaults', {})
 		if 'noiseTOP' in td and 'seed' in td['noiseTOP'].get('parameters', {}):
@@ -1191,7 +1190,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		"""Single op should not produce type_defaults."""
 		n = self.sandbox.create(noiseTOP, 'n')
 		n.par.seed = 42
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		td = orig['tdn'].get('type_defaults', {})
 		# With only 1 noiseTOP, no type_defaults for noiseTOP
 		self.assertNotIn('noiseTOP', td)
@@ -1202,7 +1201,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n1.par.seed = 42
 		n2 = self.sandbox.create(noiseTOP, 'n2')
 		n2.par.seed = 99  # Different!
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		td = orig['tdn'].get('type_defaults', {})
 		if 'noiseTOP' in td:
 			# seed should NOT be in type_defaults since not unanimous
@@ -1240,7 +1239,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(3):
 			n = self.sandbox.create(noiseTOP, f'n{i}')
 			n.viewer = True
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		tdn = orig['tdn']
 		td = tdn.get('type_defaults', {})
 		self.assertIn('noiseTOP', td)
@@ -1257,7 +1256,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			n = self.sandbox.create(noiseTOP, f'n{i}')
 			n.nodeWidth = 300
 			n.nodeHeight = 150
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		tdn = orig['tdn']
 		td = tdn.get('type_defaults', {})
 		self.assertIn('noiseTOP', td)
@@ -1272,7 +1271,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(3):
 			n = self.sandbox.create(noiseTOP, f'n{i}')
 			n.color = (0.2, 0.4, 0.8)
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		tdn = orig['tdn']
 		td = tdn.get('type_defaults', {})
 		self.assertIn('noiseTOP', td)
@@ -1286,7 +1285,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(3):
 			n = self.sandbox.create(noiseTOP, f'n{i}')
 			n.tags = ['audio', 'generator']
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		tdn = orig['tdn']
 		td = tdn.get('type_defaults', {})
 		self.assertIn('noiseTOP', td)
@@ -1303,7 +1302,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n1.viewer = True
 		n2 = self.sandbox.create(noiseTOP, 'n2')
 		n2.bypass = True  # Different flags!
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		td = orig['tdn'].get('type_defaults', {})
 		if 'noiseTOP' in td:
 			self.assertNotIn('flags', td['noiseTOP'])
@@ -1334,7 +1333,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n1.viewer = True  # Has non-default flags
 		n2 = self.sandbox.create(noiseTOP, 'n2')
 		# n2 has all default flags — no flags key emitted
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		td = orig['tdn'].get('type_defaults', {})
 		if 'noiseTOP' in td:
 			self.assertNotIn('flags', td['noiseTOP'])
@@ -1345,7 +1344,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n1.tags = ['audio']
 		n2 = self.sandbox.create(noiseTOP, 'n2')
 		n2.tags = ['video']  # Different!
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		td = orig['tdn'].get('type_defaults', {})
 		if 'noiseTOP' in td:
 			self.assertNotIn('tags', td['noiseTOP'])
@@ -1362,7 +1361,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			pg = page.appendInt('Build', label='Build')
 			pg[0].readOnly = True
 			page.appendStr('Version', label='Version')
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		pt = orig['tdn'].get('par_templates', {})
 		self.assertGreater(len(pt), 0, 'No par_templates extracted')
 
@@ -1374,7 +1373,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			pg = page.appendInt('Build', label='Build')
 			pg[0].readOnly = True
 			page.appendStr('Version', label='Version')
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		for entry in orig['tdn']['operators']:
 			cp = entry.get('custom_pars', {})
 			if 'About' in cp and isinstance(cp['About'], dict):
@@ -1388,7 +1387,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			pg = page.appendInt('Build', label='Build')
 			pg[0].readOnly = True
 			c.par.Build = (i + 1) * 10
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		for entry in orig['tdn']['operators']:
 			cp = entry.get('custom_pars', {})
 			if 'About' in cp and isinstance(cp['About'], dict):
@@ -1419,7 +1418,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c2 = self.sandbox.create(baseCOMP, 'c2')
 		page2 = c2.appendCustomPage('Different')
 		page2.appendInt('Other', label='Other')
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		pt = orig['tdn'].get('par_templates', {})
 		# Neither page should be templated (each appears only once)
 		for tname, tdefs in pt.items():
@@ -1515,12 +1514,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def test_K08_clear_first_removes_old(self):
 		"""clear_first=True should remove pre-existing operators."""
 		self.sandbox.create(noiseTOP, 'old_op')
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		# Add another op after export
 		self.sandbox.create(waveCHOP, 'extra')
 		# Import with clear_first
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=orig['tdn'], clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1545,7 +1544,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# Add a child so export has something
 		self.sandbox.create(noiseTOP, 'noise1')
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn_doc = orig['tdn']
@@ -1555,7 +1554,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			'TDN should include target COMP custom_pars')
 
 		# Import with clear_first (simulates reconstruction)
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn_doc, clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1574,9 +1573,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		self.sandbox.create(noiseTOP, 'noise1')
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=orig['tdn'], clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1590,7 +1589,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		self.sandbox.create(noiseTOP, 'noise1')
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		tdn_doc = orig['tdn']
 
@@ -1598,7 +1597,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertIn('parameters', tdn_doc,
 			'TDN should include target COMP non-default parameters')
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn_doc, clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1613,7 +1612,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		self.sandbox.create(noiseTOP, 'noise1')
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		tdn_doc = orig['tdn']
 
@@ -1623,7 +1622,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertFalse(hasattr(self.sandbox.par, 'Threshold'))
 
 		# Import should recreate custom pars from TDN
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn_doc, clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1635,7 +1634,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		"""Import of TDN without top-level custom_pars/parameters must not error."""
 		self.sandbox.create(noiseTOP, 'noise1')
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		tdn_doc = orig['tdn']
 
@@ -1643,7 +1642,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_doc.pop('custom_pars', None)
 		tdn_doc.pop('parameters', None)
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn_doc, clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1654,7 +1653,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def test_K14_target_comp_type_exported(self):
 		"""Top-level 'type' field must match OPType of target COMP."""
-		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(result.get('success'))
 		tdn = result['tdn']
 		self.assertEqual(tdn.get('type'), self.sandbox.OPType)
@@ -1668,7 +1667,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			name = ct.replace('COMP', '').lower()
 			c = self.sandbox.create(ct, name)
 			# Export this child as its own network
-			result = self.tdn.ExportNetwork(root_path=c.path)
+			result = self.embody.ext.TDN.ExportNetwork(root_path=c.path)
 			self.assertTrue(result.get('success'), f'Export failed for {ct}')
 			tdn = result['tdn']
 			self.assertEqual(tdn.get('type'), ct,
@@ -1677,7 +1676,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def test_K16_target_comp_flags_roundtrip(self):
 		"""Flags set on target COMP survive export/import."""
 		self.sandbox.viewer = True
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 		self.assertIn('flags', tdn)
@@ -1685,7 +1684,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		# Clear and reimport
 		self.sandbox.viewer = False
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1697,7 +1696,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.sandbox.tags.add('test_tag')
 		self.sandbox.comment = 'Test comment'
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 		self.assertIn('color', tdn)
@@ -1708,7 +1707,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.sandbox.color = (0.545, 0.545, 0.545)
 		self.sandbox.tags.clear()
 		self.sandbox.comment = ''
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1722,7 +1721,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.sandbox.store('portability_key', 42)
 		self.sandbox.store('config', {'nested': True})
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 		self.assertIn('storage', tdn)
@@ -1730,7 +1729,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# Clear storage and reimport
 		self.sandbox.unstore('portability_key')
 		self.sandbox.unstore('config')
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
@@ -1741,14 +1740,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def test_K19_type_mismatch_warning(self):
 		"""Importing a TDN with mismatched type should warn but succeed."""
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 
 		# Forge a different type
 		tdn['type'] = 'containerCOMP'
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn=tdn, clear_first=True)
 		# Should still succeed (warning only)
@@ -1790,7 +1789,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def test_M01_corrupted_json(self):
 		"""Import with invalid JSON data should fail gracefully."""
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn={'operators': 'not_a_list'})
 		# Should either fail or handle gracefully
@@ -1799,7 +1798,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 	def test_M02_missing_operators_key(self):
 		"""Import with missing operators key should handle gracefully."""
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn={'format': 'tdn', 'version': '1.0'})
 		# Should still succeed (empty operators)
@@ -1815,7 +1814,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				{'name': 'bad', 'type': 'totallyFakeOP'},
 			]
 		}
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn)
 		# Should at least create the good one
 		good = self.sandbox.op('good')
@@ -1830,7 +1829,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				 'inputs': ['nonexistent_source']},
 			]
 		}
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn)
 		# Should still create the operator
 		dst = self.sandbox.op('dst')
@@ -1847,14 +1846,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 				 ]}},
 			]
 		}
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn)
 		c = self.sandbox.op('c')
 		self.assertIsNotNone(c)
 
 	def test_M06_empty_operators_array(self):
 		"""Empty operators array should succeed with 0 created."""
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path,
 			tdn={'format': 'tdn', 'version': '1.0', 'operators': []})
 		self.assertTrue(result.get('success'))
@@ -1869,7 +1868,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				 'flags': ['bypass', 'totally_fake_flag']},
 			]
 		}
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn)
 		n = self.sandbox.op('n')
 		self.assertIsNotNone(n)
@@ -1885,7 +1884,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				 'another_unknown': [1, 2, 3]},
 			]
 		}
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn)
 		self.assertTrue(result.get('success'))
 		self.assertIsNotNone(self.sandbox.op('n'))
@@ -1896,7 +1895,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			{'name': 'a', 'type': 'noiseTOP'},
 			{'name': 'b', 'type': 'textDAT'},
 		]
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=ops)
 		self.assertTrue(result.get('success'))
 		self.assertIsNotNone(self.sandbox.op('a'))
@@ -2201,7 +2200,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_comp.create(baseCOMP, 'inner').create(waveCHOP, 'wave1')
 
 		# Export to TDN (like Update does before strip)
-		export_result = self.tdn.ExportNetwork(
+		export_result = self.embody.ext.TDN.ExportNetwork(
 			root_path=tdn_comp.path, include_dat_content=True)
 		self.assertTrue(export_result.get('success'))
 		tdn_doc = export_result['tdn']
@@ -2211,7 +2210,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(len(tdn_comp.children), 0, 'Strip should remove all children')
 
 		# Restore (like onProjectPostSave)
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=tdn_comp.path, tdn=tdn_doc,
 			clear_first=True, restore_file_links=True)
 		self.assertTrue(result.get('success'))
@@ -2245,7 +2244,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 		try:
 			# Phase 1: Export (like Update does)
-			export_result = self.tdn.ExportNetwork(
+			export_result = self.embody.ext.TDN.ExportNetwork(
 				root_path=tdn_path, include_dat_content=True)
 			self.assertTrue(export_result.get('success'))
 			tdn_doc = export_result['tdn']
@@ -2255,7 +2254,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.assertEqual(len(tdn_comp.children), 0)
 
 			# Phase 3: Restore (like onProjectPostSave)
-			self.tdn.ImportNetwork(
+			self.embody.ext.TDN.ImportNetwork(
 				target_path=tdn_path, tdn=tdn_doc,
 				clear_first=True, restore_file_links=True)
 
@@ -2413,7 +2412,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c = self.sandbox.create(baseCOMP, 'c')
 		c.store('envoy_running', True)
 		c.store('user_data', 42)
-		result = self.tdn.ExportNetwork(
+		result = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		ops = result['tdn']['operators']
 		op_data = [o for o in ops if o['name'] == 'c'][0]
@@ -2425,7 +2424,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def test_Q12_empty_storage_no_field(self):
 		"""Operator with no storage entries has no 'storage' field."""
 		c = self.sandbox.create(baseCOMP, 'c')
-		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		ops = result['tdn']['operators']
 		op_data = [o for o in ops if o['name'] == 'c'][0]
 		self.assertNotIn('storage', op_data)
@@ -2488,7 +2487,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		host = self.sandbox.create(noiseTOP, 'host')
 		docked = self.sandbox.create(infoDAT, 'docked')
 		docked.dock = host
-		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(result.get('success'))
 		ops = {o['name']: o for o in result['tdn']['operators']}
 		self.assertIn('dock', ops['docked'])
@@ -2497,7 +2496,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def test_R02_dock_omitted_when_none(self):
 		"""dock field is absent when an operator is not docked."""
 		self.sandbox.create(noiseTOP, 'op1')
-		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(result.get('success'))
 		ops = {o['name']: o for o in result['tdn']['operators']}
 		self.assertNotIn('dock', ops['op1'])
@@ -2525,7 +2524,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				{'name': 'lonely', 'type': 'infoDAT', 'dock': 'nonexistent'}
 			]
 		}
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn_data, clear_first=True)
 		self.assertTrue(result.get('success'))
 		restored = self.sandbox.op('lonely')
@@ -2575,7 +2574,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		pg = page.appendStr('Touchbuild', label='Touch Build')
 		pg[0].readOnly = True
 		pg[0].val = '2025.32280'
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		for entry in orig['tdn']['operators']:
 			cp = entry.get('custom_pars', {})
@@ -2589,7 +2588,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		pg[0].readOnly = True
 		page.appendStr('Author', label='Author')
 		c.par.Author = 'TestUser'
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		found_about = False
 		for entry in orig['tdn']['operators']:
@@ -2610,7 +2609,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			pg[0].readOnly = True
 			pg = page.appendStr('Touchbuild', label='Touch Build')
 			pg[0].readOnly = True
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		for entry in orig['tdn']['operators']:
 			cp = entry.get('custom_pars', {})
@@ -2625,7 +2624,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		pg[0].readOnly = True
 		pg = page.appendStr('Touchbuild', label='Touch Build')
 		pg[0].readOnly = True
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		top_cp = orig['tdn'].get('custom_pars', {})
 		self.assertNotIn('About', top_cp, 'Root About page should be excluded')
@@ -2643,7 +2642,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			torus.par.rows = 30
 			torus.par.cols = 30
 
-		orig = self.tdn.ExportNetwork(root_path=geo.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=geo.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'), f'Export failed: {orig}')
 		tdn = orig['tdn']
@@ -2654,7 +2653,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			'Customized torus1 should be in TDN export')
 
 		# Clear and reimport
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'), f'Import failed: {result}')
 
@@ -2678,7 +2677,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		xform.par.tx = 2.5
 		xform.inputConnectors[0].connect(box)
 
-		orig = self.tdn.ExportNetwork(root_path=geo.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=geo.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -2691,7 +2690,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			'Deleted torus1 should not be in export')
 
 		# Clear and reimport
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2718,7 +2717,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		geo.par.sx = 2.0
 		geo.par.display = False
 
-		orig = self.tdn.ExportNetwork(root_path=geo.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=geo.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 
@@ -2732,7 +2731,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		geo.par.ty = 0
 		geo.par.sx = 1
 		geo.par.display = True
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2754,7 +2753,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		geo.par.tx = 5.0
 
 		# Simulate pre-save: export then strip
-		orig = self.tdn.ExportNetwork(root_path=geo.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=geo.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -2770,7 +2769,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			msg='Root params should survive strip')
 
 		# Simulate post-save: reimport from TDN
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'),
 			f'Post-save restore failed: {result}')
@@ -2801,7 +2800,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		if not has_torus:
 			return  # Some TD builds may not auto-create torus1
 
-		orig = self.tdn.ExportNetwork(root_path=geo.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=geo.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 
@@ -2816,7 +2815,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertIsNone(geo.op('torus1'),
 			'torus1 should be gone after strip')
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2837,7 +2836,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# as a sibling, not a child, so it would be unresolvable)
 		geo.par.material = './my_mat'
 
-		orig = self.tdn.ExportNetwork(root_path=geo.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=geo.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -2848,7 +2847,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			'material reference should be in TDN export')
 
 		# Clear and reimport
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2876,12 +2875,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# Customize torus so it exports (not trivial)
 		torus.par.rows = 10
 
-		orig = self.tdn.ExportNetwork(root_path=geo.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=geo.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=geo.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2904,13 +2903,13 @@ class TestTDNReconstruction(EmbodyTestCase):
 		cam.par.tx = 10.0
 		cam.par.tz = -5.0
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 
 		# Clear and reimport
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2925,12 +2924,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		light = self.sandbox.create(lightCOMP, 'light_test')
 		light.par.dimmer = 0.5
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2949,7 +2948,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertAlmostEqual(float(cam.par.tz.eval()), 0.0, places=3,
 			msg='Pre-export: tz should be 0')
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -2964,7 +2963,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			'tz=0 must be exported (creation default is 5, not 0)')
 
 		# Clear and reimport
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -2978,7 +2977,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		light = self.sandbox.create(lightCOMP, 'light_tz0')
 		light.par.tz = 0.0
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -2989,7 +2988,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertIn('tz', light_def.get('parameters', {}),
 			'tz=0 must be exported (creation default is 10, not 0)')
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -3004,7 +3003,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		render.par.resolutionw = 256
 		render.par.resolutionh = 256
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -3015,7 +3014,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertIn('resolutionw', render_def.get('parameters', {}),
 			'resolutionw=256 must be exported (creation default is 1280)')
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=tdn, clear_first=True)
 		self.assertTrue(result.get('success'))
 
@@ -3030,7 +3029,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		cam = self.sandbox.create(cameraCOMP, 'cam_default')
 		# Don't change tz — leave it at the creation value of 5.0
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path,
 			include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -3059,7 +3058,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		child.create(nullTOP, 'stale_op')
 
 		# Export parent (captures child_inner with stale_op inside)
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		parent_tdn = orig['tdn']
@@ -3083,7 +3082,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			for c in list(parent.children):
 				c.destroy()
 
-			result = self.tdn.ImportNetwork(
+			result = self.embody.ext.TDN.ImportNetwork(
 				target_path=parent.path, tdn=parent_tdn, clear_first=False)
 			self.assertTrue(result.get('success'), f'Import failed: {result}')
 
@@ -3105,7 +3104,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		child = parent.create(baseCOMP, 'child_normal')
 		child.create(nullTOP, 'normal_op')
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		parent_tdn = orig['tdn']
@@ -3114,7 +3113,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for c in list(parent.children):
 			c.destroy()
 
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=parent.path, tdn=parent_tdn, clear_first=False)
 		self.assertTrue(result.get('success'))
 
@@ -3158,7 +3157,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		child_comp = parent_comp.create(baseCOMP, 'child_comp')
 		child_comp.create(nullTOP, 'deep_op')
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=grandparent.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		gp_tdn = orig['tdn']
@@ -3171,7 +3170,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			for c in list(grandparent.children):
 				c.destroy()
 
-			result = self.tdn.ImportNetwork(
+			result = self.embody.ext.TDN.ImportNetwork(
 				target_path=grandparent.path, tdn=gp_tdn, clear_first=False)
 			self.assertTrue(result.get('success'))
 
@@ -3237,7 +3236,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		widget's internals through round-trip."""
 		btn = self.sandbox.create(buttonCOMP, 'btn3')
 		actual_name = btn.name
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		ops = orig['tdn']['operators']
 		btn_entry = next(e for e in ops if e['name'] == actual_name)
@@ -3278,7 +3277,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# so _exportBuiltinParams already exports it (differs from p.default).
 		# Now set it to p.default value to trigger the bug scenario:
 		btn.par.buttontype = btn.par.buttontype.default
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 		# Find buttontype in either per-op params or type_defaults
@@ -3309,7 +3308,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		so it is correctly omitted by the default-skipping export."""
 		btn = self.sandbox.create(buttonCOMP, 'btn7')
 		actual_name = btn.name
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 		ops = tdn['operators']
@@ -3338,7 +3337,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				},
 			}],
 		}
-		result = self.tdn.ImportNetwork(
+		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=self.sandbox.path, tdn=crafted_tdn,
 			clear_first=False)
 		self.assertTrue(result.get('success'))
@@ -3393,7 +3392,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(3):
 			btn = self.sandbox.create(buttonCOMP, f'btn{20 + i}')
 			names.append(btn.name)
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
 		# Round-trip should preserve all three
@@ -3421,7 +3420,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		base.create(nullTOP, 'inner1')
 		self.sandbox.create(nullTOP, 'null30')
 
-		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		orig = self.embody.ext.TDN.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		ops = orig['tdn']['operators']
 		by_name = {e['name']: e for e in ops}
@@ -3481,7 +3480,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.skip('glslTOP did not create info companion')
 			return
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
@@ -3577,7 +3576,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.skip('glslTOP not available')
 			return
 
-		orig = self.tdn.ExportNetwork(
+		orig = self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, include_dat_content=True)
 		self.assertTrue(orig.get('success'))
 

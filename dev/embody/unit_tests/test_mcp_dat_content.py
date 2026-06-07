@@ -12,14 +12,13 @@ class TestMCPDatContent(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
 
     # --- _get_dat_content ---
 
     def test_get_dat_content_text(self):
         dat = self.sandbox.create(textDAT, 'text_dat')
         dat.text = 'hello world'
-        result = self.envoy._get_dat_content(op_path=dat.path, format='text')
+        result = self.embody.ext.Envoy._get_dat_content(op_path=dat.path, format='text')
         self.assertDictHasKey(result, 'text')
         self.assertEqual(result['text'], 'hello world')
 
@@ -27,23 +26,23 @@ class TestMCPDatContent(EmbodyTestCase):
         dat = self.sandbox.create(tableDAT, 'table_dat')
         dat.appendRow(['a', 'b', 'c'])
         dat.appendRow(['1', '2', '3'])
-        result = self.envoy._get_dat_content(op_path=dat.path, format='table')
+        result = self.embody.ext.Envoy._get_dat_content(op_path=dat.path, format='table')
         self.assertDictHasKey(result, 'rows')
 
     def test_get_dat_content_auto_text(self):
         dat = self.sandbox.create(textDAT, 'auto_text')
         dat.text = 'auto detected'
-        result = self.envoy._get_dat_content(op_path=dat.path, format='auto')
+        result = self.embody.ext.Envoy._get_dat_content(op_path=dat.path, format='auto')
         self.assertDictHasKey(result, 'text')
 
     def test_get_dat_content_auto_table(self):
         dat = self.sandbox.create(tableDAT, 'auto_table')
         dat.appendRow(['x', 'y'])
-        result = self.envoy._get_dat_content(op_path=dat.path, format='auto')
+        result = self.embody.ext.Envoy._get_dat_content(op_path=dat.path, format='auto')
         self.assertDictHasKey(result, 'rows')
 
     def test_get_dat_content_nonexistent(self):
-        result = self.envoy._get_dat_content(
+        result = self.embody.ext.Envoy._get_dat_content(
             op_path='/nonexistent', format='auto')
         self.assertDictHasKey(result, 'error')
 
@@ -51,14 +50,14 @@ class TestMCPDatContent(EmbodyTestCase):
 
     def test_set_dat_content_text(self):
         dat = self.sandbox.create(textDAT, 'set_text')
-        result = self.envoy._set_dat_content(
+        result = self.embody.ext.Envoy._set_dat_content(
             op_path=dat.path, text='new content')
         self.assertTrue(result.get('success'))
         self.assertEqual(dat.text, 'new content')
 
     def test_set_dat_content_rows(self):
         dat = self.sandbox.create(tableDAT, 'set_rows')
-        result = self.envoy._set_dat_content(
+        result = self.embody.ext.Envoy._set_dat_content(
             op_path=dat.path, rows=[['a', 'b'], ['1', '2']])
         self.assertTrue(result.get('success'))
 
@@ -68,7 +67,7 @@ class TestMCPDatContent(EmbodyTestCase):
         dat = self.sandbox.create(tableDAT, 'clear_guard')
         dat.appendRow(['existing', 'data'])
         before = dat.numRows
-        result = self.envoy._set_dat_content(
+        result = self.embody.ext.Envoy._set_dat_content(
             op_path=dat.path, clear=True)
         self.assertDictHasKey(result, 'error')
         self.assertEqual(dat.numRows, before,
@@ -78,7 +77,7 @@ class TestMCPDatContent(EmbodyTestCase):
         """clear=True + confirm_wipe=True bypasses the guard and empties it."""
         dat = self.sandbox.create(tableDAT, 'clear_confirmed')
         dat.appendRow(['existing', 'data'])
-        result = self.envoy._set_dat_content(
+        result = self.embody.ext.Envoy._set_dat_content(
             op_path=dat.path, clear=True, confirm_wipe=True)
         self.assertTrue(result.get('success'))
         self.assertEqual(dat.numRows, 0)
@@ -86,11 +85,11 @@ class TestMCPDatContent(EmbodyTestCase):
     def test_set_dat_content_no_content_refused(self):
         """No actionable args (no text/rows/clear) hits the no-content guard."""
         dat = self.sandbox.create(textDAT, 'no_content')
-        result = self.envoy._set_dat_content(op_path=dat.path)
+        result = self.embody.ext.Envoy._set_dat_content(op_path=dat.path)
         self.assertDictHasKey(result, 'error')
 
     def test_set_dat_content_nonexistent(self):
-        result = self.envoy._set_dat_content(
+        result = self.embody.ext.Envoy._set_dat_content(
             op_path='/nonexistent', text='test')
         self.assertDictHasKey(result, 'error')
 
@@ -99,7 +98,7 @@ class TestMCPDatContent(EmbodyTestCase):
     def test_edit_dat_content_unique_match(self):
         dat = self.sandbox.create(textDAT, 'edit_unique')
         dat.text = 'alpha beta gamma'
-        result = self.envoy._edit_dat_content(
+        result = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='beta', new_string='BETA')
         self.assertTrue(result.get('success'))
         self.assertEqual(dat.text, 'alpha BETA gamma')
@@ -108,7 +107,7 @@ class TestMCPDatContent(EmbodyTestCase):
     def test_edit_dat_content_replace_all(self):
         dat = self.sandbox.create(textDAT, 'edit_all')
         dat.text = 'x x x'
-        result = self.envoy._edit_dat_content(
+        result = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='x', new_string='y', replace_all=True)
         self.assertTrue(result.get('success'))
         self.assertEqual(dat.text, 'y y y')
@@ -118,7 +117,7 @@ class TestMCPDatContent(EmbodyTestCase):
         """Multiple matches without replace_all must error, not guess."""
         dat = self.sandbox.create(textDAT, 'edit_ambiguous')
         dat.text = 'dup dup'
-        result = self.envoy._edit_dat_content(
+        result = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='dup', new_string='z')
         self.assertDictHasKey(result, 'error')
         self.assertEqual(dat.text, 'dup dup', 'ambiguous edit must not mutate')
@@ -126,14 +125,14 @@ class TestMCPDatContent(EmbodyTestCase):
     def test_edit_dat_content_not_found(self):
         dat = self.sandbox.create(textDAT, 'edit_missing')
         dat.text = 'hello'
-        result = self.envoy._edit_dat_content(
+        result = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='nope', new_string='x')
         self.assertDictHasKey(result, 'error')
 
     def test_edit_dat_content_empty_old_string_refused(self):
         dat = self.sandbox.create(textDAT, 'edit_empty')
         dat.text = 'content'
-        result = self.envoy._edit_dat_content(
+        result = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='', new_string='x')
         self.assertDictHasKey(result, 'error')
 
@@ -141,11 +140,11 @@ class TestMCPDatContent(EmbodyTestCase):
         """An edit that would empty the DAT needs confirm_wipe."""
         dat = self.sandbox.create(textDAT, 'edit_wipe')
         dat.text = 'all'
-        refused = self.envoy._edit_dat_content(
+        refused = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='all', new_string='')
         self.assertDictHasKey(refused, 'error')
         self.assertEqual(dat.text, 'all')
-        ok = self.envoy._edit_dat_content(
+        ok = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='all', new_string='',
             confirm_wipe=True)
         self.assertTrue(ok.get('success'))
@@ -155,11 +154,11 @@ class TestMCPDatContent(EmbodyTestCase):
         """Table DATs are not text -- edit_dat_content must redirect."""
         dat = self.sandbox.create(tableDAT, 'edit_table')
         dat.appendRow(['a', 'b'])
-        result = self.envoy._edit_dat_content(
+        result = self.embody.ext.Envoy._edit_dat_content(
             op_path=dat.path, old_string='a', new_string='x')
         self.assertDictHasKey(result, 'error')
 
     def test_edit_dat_content_nonexistent(self):
-        result = self.envoy._edit_dat_content(
+        result = self.embody.ext.Envoy._edit_dat_content(
             op_path='/nonexistent', old_string='a', new_string='b')
         self.assertDictHasKey(result, 'error')

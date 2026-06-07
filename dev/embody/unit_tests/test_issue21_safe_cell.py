@@ -1,10 +1,10 @@
 """
-Test suite: Issue #21 — safe externalizations-table cell access.
+Test suite: Issue #21 - safe externalizations-table cell access.
 
 The reporter hit `'NoneType' object has no attribute 'val'` from five
 distinct call sites after a partial ExternalizeProject cascade left the
 externalizations table in an inconsistent state. The crashes traced to
-unguarded `table[row, col].val` reads — TD returns None when the column
+unguarded `table[row, col].val` reads - TD returns None when the column
 doesn't exist or a row-key lookup misses, and `.val` on None throws.
 
 These tests build a synthetic externalizations table that's missing
@@ -13,7 +13,7 @@ parameter to point at it for the duration of the test, exercise each
 crash site, then restore.
 
 Each test drops ONLY columns that the production code reads downstream
-of the row-match — otherwise the test would short-circuit before the
+of the row-match - otherwise the test would short-circuit before the
 unguarded `.val` call and pass even without the fix.
 
 Also covers Fix 3: onProjectPreSave must contain exceptions so TD can
@@ -35,7 +35,7 @@ class TestIssue21SafeCellAccess(EmbodyTestCase):
 
     def tearDown(self):
         # Restore the real table FIRST so other tests aren't poisoned even
-        # if sandbox cleanup fails. Fail loud if restore fails — silent
+        # if sandbox cleanup fails. Fail loud if restore fails - silent
         # restore failure could mask cross-test contamination.
         original_path = self._original_table.path
         self.embody.par.Externalizations = original_path
@@ -79,7 +79,7 @@ class TestIssue21SafeCellAccess(EmbodyTestCase):
         return bad
 
     # =====================================================================
-    # The 5 crash sites — drop ONLY columns read downstream of row-match
+    # The 5 crash sites - drop ONLY columns read downstream of row-match
     # so the unguarded .val sites are actually exercised
     # =====================================================================
 
@@ -160,7 +160,7 @@ class TestIssue21SafeCellAccess(EmbodyTestCase):
 
     def test_checkOpsForContinuity_does_not_log_internal_error_on_malformed_table(self):
         # Build a table whose path column exists but other required cells
-        # are missing on injected rows — drives unguarded reads beyond the
+        # are missing on injected rows - drives unguarded reads beyond the
         # path check. Inject our own malformed rows so the test doesn't
         # depend on the live table having any data.
         bad = self._buildBadTable(drop_cols=('rel_file_path', 'type', 'strategy'),
@@ -214,12 +214,12 @@ class TestIssue21SafeCellAccess(EmbodyTestCase):
         self.assertEqual(val, '')
 
     def test_cellVal_reads_real_cell_on_well_formed_table(self):
-        # Header row, col 0 — always 'path'
+        # Header row, col 0 - always 'path'
         val = self.embody_ext._cellVal(0, 0)
         self.assertEqual(val, 'path')
 
     def test_cellVal_returns_default_for_short_row_cell(self):
-        # Row exists but has fewer cells than the header declares — the
+        # Row exists but has fewer cells than the header declares - the
         # missing cell read must return the default, not crash.
         bad = self._buildBadTable(drop_cols=(), short_row_at=0, copy_rows=2)
         # Row 1 is the short row; col -1 (last header) was dropped from
@@ -249,7 +249,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
 
     def test_onProjectPreSave_contains_arbitrary_exception_in_pipeline(self):
         # Simulate a failure inside the TDN export phase, not Update itself.
-        # The whole pipeline is wrapped — any exception below the Perform
+        # The whole pipeline is wrapped - any exception below the Perform
         # Mode early-return must be contained.
         execute_mod = op('/embody/Embody/execute').module
         ext_class = type(self.embody_ext)
@@ -266,7 +266,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
     def test_strip_loop_pre_stages_stripped_paths_before_crashing(self):
         # Round-2 Agent 5 / Round-3 stress test: when StripCompChildren raises
         # mid-loop, the new fail-safe wrapper (Fix 3) catches it so the .toe
-        # saves cleanly — but the live session loses children unless the
+        # saves cleanly - but the live session loses children unless the
         # restore list was pre-staged BEFORE the strip. The pre-fix code wrote
         # `_tdn_stripped_paths` only after the whole loop finished, so a mid-
         # strip crash left post-save with no restore list. The fix moves the
@@ -281,7 +281,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         tdn_class = type(self.embody.ext.TDN)
 
         # Capture originals. _read_existing_tdn and _tdn_content_equal are
-        # @staticmethod — must capture/restore via __dict__ to preserve the
+        # @staticmethod - must capture/restore via __dict__ to preserve the
         # descriptor; assigning via cls.attr would silently strip the
         # staticmethod and turn it into a regular method, breaking every
         # other caller that does TDNExt._read_existing_tdn(path).
@@ -307,7 +307,7 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
             strip_calls.append(comp.path if comp else '<None>')
             if len(strip_calls) == 2:
                 raise Exception("simulated mid-strip crash (Tier 1.5 test)")
-            # Don't actually strip — fake comps may not exist
+            # Don't actually strip - fake comps may not exist
 
         # Pre-stage cleanup: ensure no stale storage
         embody.unstore('_tdn_stripped_paths')
@@ -342,11 +342,11 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
         def fake_export(self_, root_path=None, output_file=None, **kwargs):
             return {'success': True, 'tdn': {'version': '1.4', 'root': root_path}}
         tdn_class.ExportNetwork = fake_export
-        # Fake read-existing — wrap in staticmethod() to preserve the
+        # Fake read-existing - wrap in staticmethod() to preserve the
         # descriptor (otherwise other tests calling _read_existing_tdn via
         # an instance break with "takes 1 positional argument but 2 given").
         tdn_class._read_existing_tdn = staticmethod(lambda path: {'version': '1.4'})
-        # Force content-equal to True so the write path is skipped — every
+        # Force content-equal to True so the write path is skipped - every
         # fake export takes the unchanged-skip branch and appends to `exported`
         orig_equal = tdn_class.__dict__['_tdn_content_equal']  # staticmethod descriptor
         tdn_class._tdn_content_equal = staticmethod(lambda a, b: True)
@@ -388,16 +388,16 @@ class TestIssue21PreSaveBoundary(EmbodyTestCase):
     def test_onProjectPreSave_contains_exception_in_preamble(self):
         # Round-2 Agent 1 finding: the unstores and Perform Mode check used
         # to sit OUTSIDE the try/except. After widening the boundary, an
-        # exception in the preamble — anywhere before the helper call —
+        # exception in the preamble - anywhere before the helper call -
         # must also be contained.
         #
         # TD COMPs don't allow monkey-patching their methods (unstore is
         # read-only). Instead patch the EmbodyExt class so that
         # `parent.Embody.ext.Embody._performMode` raises during attribute
-        # access — that lookup happens inside the preamble (line ~107).
+        # access - that lookup happens inside the preamble (line ~107).
         execute_mod = op('/embody/Embody/execute').module
         ext_class = type(self.embody_ext)
-        # _performMode is a property in the class — replace it temporarily
+        # _performMode is a property in the class - replace it temporarily
         original = ext_class.__dict__.get('_performMode')
 
         def boom_perform(self_):

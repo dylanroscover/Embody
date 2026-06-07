@@ -51,7 +51,7 @@ Slash commands are shortcuts you can type directly in Claude Code to trigger com
 Runs the Embody test suite via MCP and reports results.
 
 ```
-/run-tests                              # Run all 30 test suites
+/run-tests                              # Run all 60 test suites
 /run-tests test_path_utils              # Run a specific suite
 /run-tests test_path_utils test_name    # Run a specific test
 ```

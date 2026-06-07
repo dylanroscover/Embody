@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.4",
-	"build": 12,
-	"generator": "Embody/5.0.429",
+	"build": 13,
+	"generator": "Embody/5.0.434",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:22Z",
+	"source_file": "Embody-5.434.toe",
+	"exported_at": "2026-06-07T17:33:15Z",
 	"network_path": "/embody/Embody/templates",
 	"options": {
 		"include_dat_content": false,
@@ -53,6 +53,16 @@
 				"language": "python"
 			},
 			"position": [900, 1200],
+			"tags": ["py"]
+		},
+		{
+			"name": "text_tdn_textconv",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_tdn_textconv.py",
+				"language": "python"
+			},
+			"position": [900, -600],
 			"tags": ["py"]
 		},
 		{
@@ -174,6 +184,17 @@
 			},
 			"position": [1200, -400],
 			"tags": ["md"]
+		},
+		{
+			"name": "text_rule_refresh_after_commit",
+			"type": "textDAT",
+			"parameters": {
+				"file": "embody/Embody/templates/text_rule_refresh_after_commit.py",
+				"write": true,
+				"language": "python"
+			},
+			"position": [1800, 400],
+			"tags": ["py"]
 		},
 		{
 			"name": "text_skill_mcp_tools_reference",
