@@ -1,4 +1,4 @@
-﻿"""
+"""
 Embody Test Framework - Test Runner Extension
 
 Provides test discovery, execution, and reporting for the Embody project.

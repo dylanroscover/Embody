@@ -28,7 +28,6 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.ext = self.embody.ext.Embody
 		# Snapshot every mcp.* entry so the suite leaves sys.modules clean.
 		self._saved = {
 			k: v for k, v in sys.modules.items()
@@ -55,7 +54,7 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 		self._clearMcp()
 		sys.modules['mcp'] = types.ModuleType('mcp')
 		sys.modules['mcp.server'] = types.ModuleType('mcp.server')
-		self.assertTrue(self.ext._verifyMcpImportable('/dummy'))
+		self.assertTrue(self.embody.ext.Embody._verifyMcpImportable('/dummy'))
 
 	def test_A02_already_imported_leaves_sys_modules_untouched(self):
 		"""Fast path must NOT del/reimport on top of a live mcp.server.
@@ -76,7 +75,7 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 		sys.modules['mcp.server'] = server_sentinel
 		sys.modules['mcp.types'] = types_sentinel
 
-		self.assertTrue(self.ext._verifyMcpImportable('/dummy'))
+		self.assertTrue(self.embody.ext.Embody._verifyMcpImportable('/dummy'))
 
 		self.assertIs(sys.modules.get('mcp'), mcp_sentinel,
 			'mcp module object must not be replaced on the fast path')
@@ -98,7 +97,7 @@ class TestVerifyMcpImportableFastPath(EmbodyTestCase):
 		# are fine; what matters is that the fast path did NOT short-circuit
 		# on the half-loaded 'mcp' entry, so 'mcp' is either gone or
 		# replaced by a fresh module after the call.
-		self.ext._verifyMcpImportable('/dummy')
+		self.embody.ext.Embody._verifyMcpImportable('/dummy')
 
 		surviving = sys.modules.get('mcp')
 		self.assertIsNot(surviving, half_loaded,
@@ -115,26 +114,25 @@ class TestVenvPaths(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.ext = self.embody.ext.Embody
 
 	def test_returns_all_expected_keys(self):
-		spec = self.ext._venvPaths()
+		spec = self.embody.ext.Embody._venvPaths()
 		for key in ('project_dir', 'venv_dir', 'site_packages', 'venv_python',
 					'python_exe', 'deps', 'mcp_min_version'):
 			self.assertIn(key, spec)
 
 	def test_deps_pin_mcp_and_attrs(self):
-		spec = self.ext._venvPaths()
+		spec = self.embody.ext.Embody._venvPaths()
 		self.assertTrue(any(d.startswith('mcp>=') for d in spec['deps']),
 			'deps must pin a minimum mcp version')
 		self.assertIn('attrs<25', spec['deps'])
 
 	def test_min_version_matches_class_constant(self):
-		spec = self.ext._venvPaths()
-		self.assertEqual(spec['mcp_min_version'], self.ext.MCP_MIN_VERSION)
+		spec = self.embody.ext.Embody._venvPaths()
+		self.assertEqual(spec['mcp_min_version'], self.embody.ext.Embody.MCP_MIN_VERSION)
 
 	def test_site_packages_lives_under_venv(self):
-		spec = self.ext._venvPaths()
+		spec = self.embody.ext.Embody._venvPaths()
 		self.assertIn('.venv', spec['venv_dir'])
 		self.assertTrue(spec['site_packages'].startswith(spec['venv_dir']))
 
@@ -147,7 +145,6 @@ class TestEnvironmentNeedsInstall(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.ext = self.embody.ext.Embody
 		self.tmp = tempfile.mkdtemp(prefix='embody_envtest_')
 
 	def tearDown(self):
@@ -164,36 +161,36 @@ class TestEnvironmentNeedsInstall(EmbodyTestCase):
 					exist_ok=True)
 
 	def test_missing_mcp_needs_install(self):
-		self.assertTrue(self.ext._environmentNeedsInstall(self._spec()))
+		self.assertTrue(self.embody.ext.Embody._environmentNeedsInstall(self._spec()))
 
 	def test_current_version_no_install(self):
 		self._make_dist('mcp', '1.26.0')
-		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+		self.assertFalse(self.embody.ext.Embody._environmentNeedsInstall(self._spec()))
 
 	def test_old_version_needs_install(self):
 		self._make_dist('mcp', '1.0.0')
-		self.assertTrue(self.ext._environmentNeedsInstall(self._spec()))
+		self.assertTrue(self.embody.ext.Embody._environmentNeedsInstall(self._spec()))
 
 	def test_newer_version_no_install(self):
 		self._make_dist('mcp', '2.5.0')
-		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+		self.assertFalse(self.embody.ext.Embody._environmentNeedsInstall(self._spec()))
 
 	def test_attrs_25_forces_install(self):
 		self._make_dist('mcp', '1.26.0')
 		self._make_dist('attrs', '25.1.0')
-		self.assertTrue(self.ext._environmentNeedsInstall(self._spec()),
+		self.assertTrue(self.embody.ext.Embody._environmentNeedsInstall(self._spec()),
 			'attrs 25.x conflicts with TD and must trigger a downgrade install')
 
 	def test_attrs_24_is_fine(self):
 		self._make_dist('mcp', '1.26.0')
 		self._make_dist('attrs', '24.2.0')
-		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+		self.assertFalse(self.embody.ext.Embody._environmentNeedsInstall(self._spec()))
 
 	def test_mcp_present_without_metadata_accepts(self):
 		# Package dir but no dist-info: the original fast path accepted this and
 		# proceeded to the import check, so no install is required.
 		os.makedirs(os.path.join(self.tmp, 'mcp'), exist_ok=True)
-		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+		self.assertFalse(self.embody.ext.Embody._environmentNeedsInstall(self._spec()))
 
 
 class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
@@ -205,20 +202,19 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.ext = self.embody.ext.Embody
 		self.mod = self.embody.op('EmbodyExt').module
 		self.tmp = tempfile.mkdtemp(prefix='embody_instest_')
 		self._real_sub = self.mod.subprocess
-		self._real_find = self.ext._findOrInstallUv
+		self._real_find = self.embody.ext.Embody._findOrInstallUv  # ext-cache-ok: save original to restore after monkeypatch
 		# Trip-wire: if _installDependencies ever calls self.Log, record it.
 		self._log_calls = []
-		self.ext.Log = lambda *a, **k: self._log_calls.append((a, k))
+		self.embody.ext.Embody.Log = lambda *a, **k: self._log_calls.append((a, k))
 
 	def tearDown(self):
 		self.mod.subprocess = self._real_sub
-		self.ext._findOrInstallUv = self._real_find
+		self.embody.ext.Embody._findOrInstallUv = self._real_find
 		try:
-			del self.ext.Log
+			del self.embody.ext.Embody.Log
 		except Exception:
 			pass
 		shutil.rmtree(self.tmp, ignore_errors=True)
@@ -245,11 +241,11 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 		self.mod.subprocess = _FakeSub
 
 	def test_success_logs_via_callback_not_Log(self):
-		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		self.embody.ext.Embody._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
 		runs = []
 		self._stub_subprocess(lambda *a, **k: runs.append(a))
 		msgs = []
-		ok = self.ext._installDependencies(
+		ok = self.embody.ext.Embody._installDependencies(
 			self._spec(), log=lambda m, lvl='INFO': msgs.append((lvl, m)))
 		self.assertTrue(ok)
 		self.assertTrue(any(lvl == 'SUCCESS' for lvl, _ in msgs))
@@ -258,24 +254,24 @@ class TestInstallDependenciesWorkerSafe(EmbodyTestCase):
 			'must not call self.Log -- illegal from a worker thread')
 
 	def test_failure_returns_false_and_reports_stderr(self):
-		self.ext._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
+		self.embody.ext.Embody._findOrInstallUv = lambda python_exe, log=None: '/fake/uv'
 
 		def boom(*a, **k):
 			raise self._real_sub.CalledProcessError(1, 'uv', stderr='kaboom')
 
 		self._stub_subprocess(boom)
 		msgs = []
-		ok = self.ext._installDependencies(
+		ok = self.embody.ext.Embody._installDependencies(
 			self._spec(), log=lambda m, lvl='INFO': msgs.append((lvl, m)))
 		self.assertFalse(ok)
 		self.assertTrue(any(lvl == 'ERROR' and 'kaboom' in m for lvl, m in msgs))
 		self.assertEqual(self._log_calls, [])
 
 	def test_no_uv_returns_false(self):
-		self.ext._findOrInstallUv = lambda python_exe, log=None: None
+		self.embody.ext.Embody._findOrInstallUv = lambda python_exe, log=None: None
 		self._stub_subprocess(lambda *a, **k: None)
 		msgs = []
-		ok = self.ext._installDependencies(
+		ok = self.embody.ext.Embody._installDependencies(
 			self._spec(), log=lambda m, lvl='INFO': msgs.append((lvl, m)))
 		self.assertFalse(ok)
 		self.assertTrue(any('uv' in m.lower() for _, m in msgs))

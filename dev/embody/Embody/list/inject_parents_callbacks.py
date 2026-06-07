@@ -63,14 +63,26 @@ def onCook(scriptOp):
 		else:
 			filter_text = filter_op.par.text.eval().strip().lower()
 
-	# Apply text filter (case-insensitive substring match against path and file path)
+	# git-uncommitted map ({op_path: code}), computed on the Embody refresh sweep.
+	git_map = parent.Embody.fetch('git_status', {}) or {}
+
+	# Apply text filter. The reserved keyword "changed" shows only rows with
+	# pending changes on either axis -- unsaved (dirty/Par) OR git-uncommitted;
+	# any other text is a case-insensitive substring match on path + file path.
 	if filter_text:
 		matched_paths = set()
-		for path in all_paths:
-			row = data_rows[path]
-			searchable = (path + ' ' + row.get('rel_file_path', '')).lower()
-			if filter_text in searchable:
-				matched_paths.add(path)
+		if filter_text == 'changed':
+			for path in all_paths:
+				row = data_rows[path]
+				if parent.Embody.ext.Embody._rowHasChanges(
+						row.get('dirty', ''), git_map.get(path)):
+					matched_paths.add(path)
+		else:
+			for path in all_paths:
+				row = data_rows[path]
+				searchable = (path + ' ' + row.get('rel_file_path', '')).lower()
+				if filter_text in searchable:
+					matched_paths.add(path)
 
 		# Include ancestor paths to maintain tree structure
 		paths_to_keep = set()
@@ -88,8 +100,8 @@ def onCook(scriptOp):
 
 	# Detect active TDN export
 	exporting_path = None
-	tdn_ext = getattr(parent.Embody.ext, 'TDN', None)
-	export_state = getattr(tdn_ext, '_export_state', None) if tdn_ext else None
+	export_state = getattr(
+		getattr(parent.Embody.ext, 'TDN', None), '_export_state', None)
 	if export_state and not export_state.get('done'):
 		exporting_path = export_state.get('root_path')
 
@@ -186,7 +198,7 @@ def onCook(scriptOp):
 
 	# Write output
 	out_headers = ['path', 'type', 'strategy', 'rel_file_path', 'timestamp',
-	               'build', 'touch_build', 'strategy_state',
+	               'build', 'touch_build', 'strategy_state', 'git_state',
 	               'depth', 'has_children']
 	scriptOp.appendRow(out_headers)
 
@@ -245,6 +257,8 @@ def onCook(scriptOp):
 		else:
 			strategy_state = ''
 
+		git_state = 'Changed' if git_map.get(path) else ''
+
 		scriptOp.appendRow([
 			path,
 			row.get('type', ''),
@@ -254,6 +268,7 @@ def onCook(scriptOp):
 			row.get('build', ''),
 			row.get('touch_build', ''),
 			strategy_state,
+			git_state,
 			str(depth),
 			hc,
 		])

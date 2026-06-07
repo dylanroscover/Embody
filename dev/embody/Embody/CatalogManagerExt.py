@@ -1,4 +1,4 @@
-﻿"""
+"""
 CatalogManager - background scanner and cross-build default patching.
 
 On every startup, checks if a creation-values catalog exists for the
@@ -100,8 +100,8 @@ class CatalogManagerExt:
 		# Idempotent: onStart and onCreate both call this; skip when
 		# the current run already populated the catalog.
 		try:
-			tdn_ext = self.ownerComp.ext.TDN
-			if tdn_ext._divergent_loaded and tdn_ext._palette_catalog:
+			if (self.ownerComp.ext.TDN._divergent_loaded
+					and self.ownerComp.ext.TDN._palette_catalog):
 				return
 		except Exception:
 			pass
@@ -600,20 +600,18 @@ class CatalogManagerExt:
 		Op-type defaults go into _divergent_defaults; palette name->type
 		mapping goes into _palette_catalog.
 		"""
-		try:
-			tdn_ext = self.ownerComp.ext.TDN
-		except Exception:
+		if not getattr(self.ownerComp.ext, 'TDN', None):
 			return
 
 		palette = catalog.get('_palette', {})
 		if palette:
-			tdn_ext._palette_catalog = palette
+			self.ownerComp.ext.TDN._palette_catalog = palette
 
 		# Strip reserved keys so op-type lookup stays clean
 		param_catalog = {k: v for k, v in catalog.items()
 						 if not k.startswith('_')}
-		tdn_ext._divergent_defaults = param_catalog
-		tdn_ext._divergent_loaded = True
+		self.ownerComp.ext.TDN._divergent_defaults = param_catalog
+		self.ownerComp.ext.TDN._divergent_loaded = True
 
 	# =================================================================
 	# Bootstrap Palette Catalog (shipped tableDAT)

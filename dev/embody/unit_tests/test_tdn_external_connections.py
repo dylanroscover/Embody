@@ -24,7 +24,6 @@ class TestTDNExternalConnections(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.tdn = self.embody.ext.TDN
 
 	# --------------------------------------------------------------
 	# Helpers
@@ -55,7 +54,7 @@ class TestTDNExternalConnections(EmbodyTestCase):
 		self.assertEqual(self._countInputWires(base), 1)
 
 		# Export, strip, import (mirrors pre-save / post-save).
-		result = self.tdn.ExportNetwork(root_path=base.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=base.path)
 		self.assertTrue(result.get('success'))
 		tdn_doc = result['tdn']
 
@@ -66,7 +65,7 @@ class TestTDNExternalConnections(EmbodyTestCase):
 		self.assertTrue(stashed,
 			'StripCompChildren did not stash external wires')
 
-		imp = self.tdn.ImportNetwork(
+		imp = self.embody.ext.TDN.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'), f'Import failed: {imp}')
 		self.assertEqual(imp.get('restored_external_connections'), 1)
@@ -85,11 +84,11 @@ class TestTDNExternalConnections(EmbodyTestCase):
 		base.outputConnectors[0].connect(dst.inputConnectors[0])
 		self.assertEqual(self._countInputWires(dst), 1)
 
-		result = self.tdn.ExportNetwork(root_path=base.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
 		self.embody.ext.Embody.StripCompChildren(base)
-		imp = self.tdn.ImportNetwork(
+		imp = self.embody.ext.TDN.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'))
 		self.assertEqual(imp.get('restored_external_connections'), 1)
@@ -104,11 +103,11 @@ class TestTDNExternalConnections(EmbodyTestCase):
 		src.outputConnectors[0].connect(base.inputConnectors[0])
 		base.outputConnectors[0].connect(dst.inputConnectors[0])
 
-		result = self.tdn.ExportNetwork(root_path=base.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
 		self.embody.ext.Embody.StripCompChildren(base)
-		imp = self.tdn.ImportNetwork(
+		imp = self.embody.ext.TDN.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'))
 		self.assertEqual(imp.get('restored_external_connections'), 2)
@@ -130,11 +129,11 @@ class TestTDNExternalConnections(EmbodyTestCase):
 		src.outputConnectors[0].connect(base.inputConnectors[0])
 		base.outputConnectors[0].connect(dst.inputConnectors[0])
 
-		result = self.tdn.ExportNetwork(root_path=base.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
 		# No explicit strip - ImportNetwork should capture in-memory first.
-		imp = self.tdn.ImportNetwork(
+		imp = self.embody.ext.TDN.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'))
 		self.assertEqual(imp.get('restored_external_connections'), 2)
@@ -153,14 +152,14 @@ class TestTDNExternalConnections(EmbodyTestCase):
 		src.outputConnectors[0].connect(base.inputConnectors[0])
 		base.outputConnectors[0].connect(dst.inputConnectors[0])
 
-		result = self.tdn.ExportNetwork(root_path=base.path)
+		result = self.embody.ext.TDN.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
 		self.embody.ext.Embody.StripCompChildren(base)
 		# Delete one remote between capture and restore.
 		src.destroy()
 
-		imp = self.tdn.ImportNetwork(
+		imp = self.embody.ext.TDN.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'))
 		# Only the output wire should be restored.

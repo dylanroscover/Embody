@@ -229,6 +229,9 @@ code, kbd, pre {
   top: clamp(1rem, 2vw, 1.6rem);
   left: clamp(1.25rem, 3vw, 2rem);
   z-index: 100;
+  /* Isolate the mark into its own stacking context so each pill's
+     backdrop-filter composites cleanly over the scrolled hero behind it. */
+  isolation: isolate;
 }
 .mark__link {
   display: inline-flex;
@@ -243,13 +246,21 @@ code, kbd, pre {
   padding: 0.5rem 1rem 0.5rem 0.75rem;
   border-radius: 999px;
   border: 1.5px solid var(--border);
-  background: rgba(24, 30, 30, 0.92);
+  /* Frosted glass. The tint is kept translucent on purpose so the blurred,
+     dimmed hero headline is visibly showing through the pill (real frosted
+     glass, not a flat opaque block). The heavy blur smears the headline, the
+     brightness() knock-down darkens it before the blur spreads it, and the
+     0.62-alpha tint supplies just enough fill to keep the light label text
+     legible without sharp bleed-through. */
+  background: rgba(18, 24, 24, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(120%) brightness(0.5);
+  backdrop-filter: blur(22px) saturate(120%) brightness(0.5);
   transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
 }
 .mark__link:hover {
   color: var(--accent);
   border-color: var(--accent);
-  background: rgba(30, 40, 30, 0.95);
+  background: rgba(30, 40, 30, 0.92);
 }
 .mark__dot {
   width: 8px;
@@ -271,7 +282,13 @@ code, kbd, pre {
 }
 .mark__link--ext {
   border-color: var(--border);
-  background: transparent;
+  /* Same frosted treatment as the embody pill. The --ext rule overrides the
+     background, so it must carry the same translucent dark tint itself (the
+     headline must show through here too). The backdrop-filter is restated
+     explicitly so this pill never loses the blur to specificity. */
+  background: rgba(18, 24, 24, 0.62);
+  -webkit-backdrop-filter: blur(22px) saturate(120%) brightness(0.5);
+  backdrop-filter: blur(22px) saturate(120%) brightness(0.5);
   padding: 0.5rem 1rem 0.5rem 0.75rem;
   font-size: 0.88rem;
   letter-spacing: 0.06em;
@@ -279,7 +296,14 @@ code, kbd, pre {
 .mark__link--ext:hover {
   border-color: var(--accent);
   color: var(--accent);
-  background: rgba(30, 40, 30, 0.95);
+  background: rgba(30, 40, 30, 0.92);
+}
+
+/* Fallback for browsers without backdrop-filter: use near-opaque fills so the
+   nav pills stay readable over the hero without the frosted blur. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .mark__link { background: rgba(16, 21, 21, 0.97); }
+  .mark__link--ext { background: rgba(16, 21, 21, 0.97); }
 }
 
 

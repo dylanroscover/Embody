@@ -2,10 +2,10 @@
 	"format": "tdn",
 	"version": "1.4",
 	"build": 11,
-	"generator": "Embody/5.0.429",
+	"generator": "Embody/5.0.434",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:22Z",
+	"source_file": "Embody-5.434.toe",
+	"exported_at": "2026-06-07T17:33:03Z",
 	"network_path": "/embody/Embody/toolbar/container_left/disable",
 	"options": {
 		"include_dat_content": false,

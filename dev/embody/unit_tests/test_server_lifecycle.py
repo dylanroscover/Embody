@@ -14,7 +14,6 @@ class TestServerLifecycle(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
 
     # --- Status parameters ---
 
@@ -48,44 +47,44 @@ class TestServerLifecycle(EmbodyTestCase):
     # --- Operation routing ---
 
     def test_execute_operation_unknown(self):
-        result = self.envoy._execute_operation(
+        result = self.embody.ext.Envoy._execute_operation(
             'totally_unknown_operation_xyz', {})
         self.assertDictHasKey(result, 'error')
         self.assertIn('Unknown operation', result['error'])
 
     def test_execute_operation_valid(self):
         # get_td_info should always work
-        result = self.envoy._execute_operation('get_td_info', {})
+        result = self.embody.ext.Envoy._execute_operation('get_td_info', {})
         self.assertNotIn('error', result)
         self.assertDictHasKey(result, 'version')
 
     def test_execute_operation_with_params(self):
         comp = self.sandbox.create(baseCOMP, 'routing_test')
-        result = self.envoy._execute_operation(
+        result = self.embody.ext.Envoy._execute_operation(
             'get_op', {'op_path': comp.path})
         self.assertNotIn('error', result)
 
     def test_execute_operation_handler_error(self):
         # Passing invalid params should return error, not crash
-        result = self.envoy._execute_operation(
+        result = self.embody.ext.Envoy._execute_operation(
             'get_op', {'op_path': '/nonexistent_lifecycle_test'})
         self.assertDictHasKey(result, 'error')
 
     # --- Log piggybacking ---
 
     def test_last_served_log_id_exists(self):
-        self.assertTrue(hasattr(self.envoy, '_last_served_log_id'))
+        self.assertTrue(hasattr(self.embody.ext.Envoy, '_last_served_log_id'))
 
     def test_last_served_log_id_is_int(self):
-        self.assertIsInstance(self.envoy._last_served_log_id, int)
+        self.assertIsInstance(self.embody.ext.Envoy._last_served_log_id, int)
 
     # --- Request/response queues ---
 
     def test_request_queue_exists(self):
-        self.assertIsNotNone(self.envoy.request_queue)
+        self.assertIsNotNone(self.embody.ext.Envoy.request_queue)
 
     def test_response_queue_exists(self):
-        self.assertIsNotNone(self.envoy.response_queue)
+        self.assertIsNotNone(self.embody.ext.Envoy.response_queue)
 
     # --- Shutdown event ---
 
@@ -128,25 +127,23 @@ class TestAsyncBootstrap(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
 
     def test_async_methods_exist(self):
         for name in ('_beginAsyncBootstrap', '_pollBootstrap', '_continueStart'):
-            self.assertTrue(hasattr(self.envoy, name),
+            self.assertTrue(hasattr(self.embody.ext.Envoy, name),
                             f'EnvoyExt must define {name}')
 
     def test_embody_bootstrap_pieces_exist(self):
-        emb = self.embody.ext.Embody
         for name in ('_venvPaths', '_environmentNeedsInstall',
                      '_installDependencies'):
-            self.assertTrue(hasattr(emb, name),
+            self.assertTrue(hasattr(self.embody.ext.Embody, name),
                             f'EmbodyExt must define {name}')
 
     def test_bootstrapping_flag_is_bool(self):
-        self.assertIsInstance(self.envoy._bootstrapping, bool)
+        self.assertIsInstance(self.embody.ext.Envoy._bootstrapping, bool)
 
     def test_bootstrap_result_attr_exists(self):
-        self.assertTrue(hasattr(self.envoy, '_bootstrap_result'))
+        self.assertTrue(hasattr(self.embody.ext.Envoy, '_bootstrap_result'))
 
     def test_setup_environment_still_callable(self):
         # The synchronous entry point survives for the venv-recreate recovery

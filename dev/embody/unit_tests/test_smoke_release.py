@@ -92,18 +92,15 @@ class TestSmokeRelease(EmbodyTestCase):
 
     def test_embody_extension_loaded(self):
         """EmbodyExt is accessible on the Embody COMP."""
-        ext = self.embody.ext.Embody
-        self.assertIsNotNone(ext, 'EmbodyExt should be loaded')
+        self.assertIsNotNone(self.embody.ext.Embody, 'EmbodyExt should be loaded')
 
     def test_envoy_extension_loaded(self):
         """EnvoyExt is accessible on the Embody COMP."""
-        ext = self.embody.ext.Envoy
-        self.assertIsNotNone(ext, 'EnvoyExt should be loaded')
+        self.assertIsNotNone(self.embody.ext.Envoy, 'EnvoyExt should be loaded')
 
     def test_tdn_extension_loaded(self):
         """TDNExt is accessible on the Embody COMP."""
-        ext = self.embody.ext.TDN
-        self.assertIsNotNone(ext, 'TDNExt should be loaded')
+        self.assertIsNotNone(self.embody.ext.TDN, 'TDNExt should be loaded')
 
     def test_no_script_errors(self):
         """Embody COMP has no script errors."""

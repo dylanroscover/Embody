@@ -172,7 +172,7 @@ def _write_ready_flag():
             embody = op(embody_path)
             status = embody.par.Status.eval() if embody else 'NOT_FOUND'
             envoy = embody.par.Envoyenable.eval() if embody else False
-            errors = str(embody.scriptErrors) if embody else 'N/A'
+            errors = str(embody.scriptErrors()) if embody else 'N/A'
             f.write(f'status={status}\n')
             f.write(f'envoy_enabled={envoy}\n')
             f.write(f'script_errors={errors}\n')

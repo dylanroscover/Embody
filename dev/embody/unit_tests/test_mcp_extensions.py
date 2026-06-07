@@ -12,12 +12,11 @@ class TestMCPExtensions(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
 
     # --- _create_extension ---
 
     def test_create_extension_new_comp(self):
-        result = self.envoy._create_extension(
+        result = self.embody.ext.Envoy._create_extension(
             parent_path=self.sandbox.path,
             class_name='TestExt')
         self.assertTrue(result.get('success'))
@@ -26,7 +25,7 @@ class TestMCPExtensions(EmbodyTestCase):
 
     def test_create_extension_existing_comp(self):
         comp = self.sandbox.create(baseCOMP, 'ext_target')
-        result = self.envoy._create_extension(
+        result = self.embody.ext.Envoy._create_extension(
             parent_path=comp.path,
             class_name='MyExt',
             existing_comp=True)
@@ -41,26 +40,26 @@ class TestMCPExtensions(EmbodyTestCase):
     def MyMethod(self):
         return 42
 '''
-        result = self.envoy._create_extension(
+        result = self.embody.ext.Envoy._create_extension(
             parent_path=self.sandbox.path,
             class_name='CustomExt',
             code=code)
         self.assertTrue(result.get('success'))
 
     def test_create_extension_nonexistent_parent(self):
-        result = self.envoy._create_extension(
+        result = self.embody.ext.Envoy._create_extension(
             parent_path='/nonexistent',
             class_name='BadExt')
         self.assertDictHasKey(result, 'error')
 
     def test_create_extension_invalid_class_name(self):
-        result = self.envoy._create_extension(
+        result = self.embody.ext.Envoy._create_extension(
             parent_path=self.sandbox.path,
             class_name='123-invalid')
         self.assertDictHasKey(result, 'error')
 
     def test_create_extension_reports_ext_index(self):
-        result = self.envoy._create_extension(
+        result = self.embody.ext.Envoy._create_extension(
             parent_path=self.sandbox.path,
             class_name='SlotTest')
         self.assertDictHasKey(result, 'ext_index')

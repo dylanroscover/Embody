@@ -57,7 +57,7 @@ class TestTagManagement(EmbodyTestCase):
         comp = self.sandbox.create(baseCOMP, 'dup_tag')
         tox_tag = self.embody.par.Toxtag.val
         self.embody_ext.applyTagToOperator(comp, tox_tag)
-        # Apply same tag again - should not error
+        # Apply same tag again — should not error
         result = self.embody_ext.applyTagToOperator(comp, tox_tag)
         self.assertTrue(result)
 

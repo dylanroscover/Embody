@@ -1,4 +1,4 @@
-﻿"""Toolbar extension: centralized click dispatch, tooltip management, filter handling."""
+"""Toolbar extension: centralized click dispatch, tooltip management, filter handling."""
 
 
 class ToolbarExt:

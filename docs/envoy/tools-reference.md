@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 48 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 
@@ -105,6 +105,7 @@ Envoy exposes 48 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
+| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDN networks** — the live in-memory network(s) vs the on-disk `.tdn`(s), the view git can't see. Omit `target` (or pass `""`) for a whole-project summary (every live TDN COMP, which changed + counts); pass a COMP path **or** a `.tdn` file path/bare filename (e.g. `"tooltip.tdn"`, resolved to its COMP) for that one COMP in full per-field detail (`old`=disk, `new`=live). Semantic, not byte-level (volatile export header ignored). Read-only. For committed/history diffs use plain `git diff` — Embody installs a `.tdn` git diff driver that keeps those clean too |
 
 ## TOP Capture
 

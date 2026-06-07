@@ -1,4 +1,4 @@
-﻿"""Window header extension: title label + minimize/maximize/close buttons."""
+"""Window header extension: title label + minimize/maximize/close buttons."""
 
 
 class WindowHeaderExt:

@@ -14,14 +14,13 @@ class TestMCPTopCapture(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.envoy = self.embody.ext.Envoy
 
     # --- Happy path ---
 
     def test_capture_noise_top_jpeg(self):
         top = self.sandbox.create(noiseTOP, 'noise1')
         top.cook(force=True)
-        result = self.envoy._capture_top(op_path=top.path)
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path)
         self.assertTrue(result.get('success'))
         self.assertDictHasKey(result, 'image_b64')
         self.assertDictHasKey(result, 'width')
@@ -32,14 +31,14 @@ class TestMCPTopCapture(EmbodyTestCase):
     def test_capture_noise_top_png(self):
         top = self.sandbox.create(noiseTOP, 'noise_png')
         top.cook(force=True)
-        result = self.envoy._capture_top(op_path=top.path, format='png')
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, format='png')
         self.assertTrue(result.get('success'))
         self.assertEqual(result['format'], 'png')
 
     def test_capture_returns_valid_jpeg(self):
         top = self.sandbox.create(noiseTOP, 'valid_jpg')
         top.cook(force=True)
-        result = self.envoy._capture_top(op_path=top.path, format='jpeg')
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, format='jpeg')
         self.assertTrue(result.get('success'))
         image_bytes = base64.b64decode(result['image_b64'])
         # JPEG files start with FF D8
@@ -49,7 +48,7 @@ class TestMCPTopCapture(EmbodyTestCase):
     def test_capture_returns_valid_png(self):
         top = self.sandbox.create(noiseTOP, 'valid_png')
         top.cook(force=True)
-        result = self.envoy._capture_top(op_path=top.path, format='png')
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, format='png')
         self.assertTrue(result.get('success'))
         image_bytes = base64.b64decode(result['image_b64'])
         # PNG files start with 89 50 4E 47
@@ -63,7 +62,7 @@ class TestMCPTopCapture(EmbodyTestCase):
         top.par.resolutionw = 1024
         top.par.resolutionh = 768
         top.cook(force=True)
-        result = self.envoy._capture_top(op_path=top.path, max_resolution=320)
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, max_resolution=320)
         self.assertTrue(result.get('success'))
         self.assertLessEqual(max(result['width'], result['height']), 320)
         self.assertEqual(result['original_width'], 1024)
@@ -75,7 +74,7 @@ class TestMCPTopCapture(EmbodyTestCase):
         top.par.resolutionw = 256
         top.par.resolutionh = 128
         top.cook(force=True)
-        result = self.envoy._capture_top(op_path=top.path, max_resolution=0)
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, max_resolution=0)
         self.assertTrue(result.get('success'))
         self.assertEqual(result['width'], 256)
         self.assertEqual(result['height'], 128)
@@ -86,7 +85,7 @@ class TestMCPTopCapture(EmbodyTestCase):
         top.par.resolutionw = 64
         top.par.resolutionh = 64
         top.cook(force=True)
-        result = self.envoy._capture_top(op_path=top.path, max_resolution=640)
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, max_resolution=640)
         self.assertTrue(result.get('success'))
         # Should NOT resize since 64 < 640
         self.assertEqual(result['width'], 64)
@@ -95,24 +94,24 @@ class TestMCPTopCapture(EmbodyTestCase):
     # --- Error cases ---
 
     def test_capture_nonexistent_op(self):
-        result = self.envoy._capture_top(op_path='/nonexistent')
+        result = self.embody.ext.Envoy._capture_top(op_path='/nonexistent')
         self.assertDictHasKey(result, 'error')
         self.assertIn('not found', result['error'])
 
     def test_capture_non_top_operator(self):
         dat = self.sandbox.create(textDAT, 'not_a_top')
-        result = self.envoy._capture_top(op_path=dat.path)
+        result = self.embody.ext.Envoy._capture_top(op_path=dat.path)
         self.assertDictHasKey(result, 'error')
         self.assertIn('not a TOP', result['error'])
 
     def test_capture_invalid_format(self):
         top = self.sandbox.create(noiseTOP, 'fmt_noise')
-        result = self.envoy._capture_top(op_path=top.path, format='bmp')
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, format='bmp')
         self.assertDictHasKey(result, 'error')
         self.assertIn('Unsupported format', result['error'])
 
     def test_capture_quality_out_of_range(self):
         top = self.sandbox.create(noiseTOP, 'qual_noise')
-        result = self.envoy._capture_top(op_path=top.path, quality=1.5)
+        result = self.embody.ext.Envoy._capture_top(op_path=top.path, quality=1.5)
         self.assertDictHasKey(result, 'error')
         self.assertIn('Quality must be', result['error'])

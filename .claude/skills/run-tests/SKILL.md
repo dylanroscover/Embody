@@ -6,7 +6,7 @@ disable-model-invocation: true
 
 # Test Suite
 
-Embody has 30 test suites covering core externalization, MCP tools, TDN format, and infrastructure.
+Embody has 60 test suites covering core externalization, MCP tools, TDN format, and infrastructure.
 
 ## Running Tests
 

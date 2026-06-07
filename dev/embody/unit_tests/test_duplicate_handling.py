@@ -256,7 +256,7 @@ class TestCheckForDuplicates(EmbodyTestCase):
 
     def test_group_level_clone_tag_skips_entire_group(self):
         dats = self._make_tagged_dats(['skip_a', 'skip_b', 'skip_c'])
-        # Pre-tag one op with 'clone' - entire group should be skipped
+        # Pre-tag one op with 'clone' — entire group should be skipped
         dats[1].tags.add('clone')
         # Seed a response that should NOT be consumed
         self.embody.store('_smoke_test_responses',
@@ -296,7 +296,7 @@ class TestCheckForDuplicates(EmbodyTestCase):
         self.embody.store('_smoke_test_responses',
                           {'Duplicate Path Detected': 2})
         self.embody_ext.checkForDuplicates()
-        # tri_b is master - others should be clones
+        # tri_b is master — others should be clones
         self.assertIn('clone', dats[0].tags)
         self.assertNotIn('clone', dats[1].tags)
         self.assertIn('clone', dats[2].tags)

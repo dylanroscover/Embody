@@ -66,7 +66,7 @@ class TestBridgeParseArgs(EmbodyTestCase):
             self.assertEqual(port, 9999)
 
     def test_port_flag_at_end_without_value(self):
-        """--port as last arg with no value - uses default."""
+        """--port as last arg with no value — uses default."""
         with patch.object(sys, 'argv', ['envoy_bridge.py', '--port']):
             port, config = bridge.parse_args()
             self.assertEqual(port, bridge.DEFAULT_PORT)
@@ -250,7 +250,7 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
         with patch('urllib.request.urlopen',
                    return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1}, timeout=5)
-        # urlopen(req, timeout=5) - timeout passed as kwarg.
+        # urlopen(req, timeout=5) — timeout passed as kwarg.
         self.assertEqual(mock_urlopen.call_args[1].get('timeout'), 5)
 
 
@@ -319,13 +319,13 @@ class TestBridgeLog(EmbodyTestCase):
 
 
 # =====================================================================
-# wait_for_envoy - Retry / Reconnection Logic
+# wait_for_envoy — Retry / Reconnection Logic
 # =====================================================================
 
 class TestBridgeWaitForEnvoy(EmbodyTestCase):
 
     def test_server_up_immediately(self):
-        """Server responds on first probe - instant success."""
+        """Server responds on first probe — instant success."""
         with patch('urllib.request.urlopen'):
             result = bridge.wait_for_envoy(
                 'http://localhost:9870/mcp', time.monotonic() + 10)
@@ -464,7 +464,7 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
         sleeps = []
 
         fake_time = [0.0]
-        deadline = 0.3  # Very tight - less than RETRY_INTERVALS[0]=0.5
+        deadline = 0.3  # Very tight — less than RETRY_INTERVALS[0]=0.5
 
         def mock_monotonic():
             return fake_time[0]
@@ -519,7 +519,7 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
 
 
 # =====================================================================
-# Main Event Loop - Disconnection & Reconnection Scenarios
+# Main Event Loop — Disconnection & Reconnection Scenarios
 # =====================================================================
 
 class TestBridgeMainLoop(EmbodyTestCase):
@@ -648,7 +648,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('get_td_status', names)
 
     def test_full_mcp_handshake_when_td_down(self):
-        """Full init -> tools/list -> launch_td works without Envoy."""
+        """Full init → tools/list → launch_td works without Envoy."""
         msgs = [
             {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'},
             {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
@@ -720,7 +720,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Single-attempt forwarding (v2: no per-request retries) ---
 
     def test_single_failure_sends_error(self):
-        """Single URLError immediately returns error - no retries."""
+        """Single URLError immediately returns error — no retries."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -733,7 +733,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('connection lost', responses[0]['error']['message'].lower())
 
     def test_failure_notification_no_response(self):
-        """Notification with forward failure - no error sent."""
+        """Notification with forward failure — no error sent."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -744,7 +744,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 0)
 
     def test_single_attempt_only(self):
-        """forward_to_http is called exactly once per request - no retries."""
+        """forward_to_http is called exactly once per request — no retries."""
         import urllib.error
         call_count = [0]
 
@@ -855,7 +855,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertEqual(responses[1]['result'], 'back')  # Retry succeeded
 
     def test_reconnect_fails_sends_error_again(self):
-        """Disconnect, reconnect attempt fails - second error sent."""
+        """Disconnect, reconnect attempt fails — second error sent."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -1003,7 +1003,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 0)
 
     def test_notification_between_requests(self):
-        """Notification sandwiched between requests - only requests get responses."""
+        """Notification sandwiched between requests — only requests get responses."""
         call_count = [0]
 
         def forward(url, msg, **kw):
@@ -1019,7 +1019,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 2)
 
     def test_notification_forward_failure_no_error_sent(self):
-        """Notification that fails forwarding - no error response."""
+        """Notification that fails forwarding — no error response."""
         import urllib.error
 
         def forward(url, msg, **kw):
@@ -1086,7 +1086,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Edge cases ---
 
     def test_request_id_zero_is_valid(self):
-        """JSON-RPC allows id=0 - must NOT be treated as notification."""
+        """JSON-RPC allows id=0 — must NOT be treated as notification."""
         msg = {'jsonrpc': '2.0', 'id': 0, 'method': 'test'}
         responses = self._run_main([msg])
         self.assertLen(responses, 1)
@@ -1110,7 +1110,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 1)
 
     def test_stdin_close_exits_gracefully(self):
-        """Empty stdin (immediate EOF) - main() exits without error."""
+        """Empty stdin (immediate EOF) — main() exits without error."""
         stdin = io.StringIO('')
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -1124,7 +1124,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('stdin closed', stderr.getvalue())
 
     def test_only_empty_lines_exits_gracefully(self):
-        """stdin with only whitespace/empty lines - exits without error."""
+        """stdin with only whitespace/empty lines — exits without error."""
         stdin = io.StringIO('\n\n\n')
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -1146,12 +1146,12 @@ class TestBridgeMainLoop(EmbodyTestCase):
 class TestBridgeEntrypoint(EmbodyTestCase):
     """Test the if __name__ == '__main__' exception handlers.
 
-    These don't go through main() - they wrap it at the top level.
+    These don't go through main() — they wrap it at the top level.
     We test the exception handling logic directly.
     """
 
     def test_keyboard_interrupt_suppressed(self):
-        """KeyboardInterrupt during main() - logged, not propagated."""
+        """KeyboardInterrupt during main() — logged, not propagated."""
         stderr = io.StringIO()
 
         with patch.object(bridge, 'main', side_effect=KeyboardInterrupt), \
@@ -1165,7 +1165,7 @@ class TestBridgeEntrypoint(EmbodyTestCase):
         self.assertIn('Interrupted', stderr.getvalue())
 
     def test_broken_pipe_suppressed(self):
-        """BrokenPipeError (client closed stdout) - silently suppressed."""
+        """BrokenPipeError (client closed stdout) — silently suppressed."""
         with patch.object(bridge, 'main', side_effect=BrokenPipeError):
             # Simulate the __main__ block behavior
             try:
@@ -1338,7 +1338,7 @@ class TestBridgeProjectJsonAndDiscovery(EmbodyTestCase):
         self.assertIn('newest', warn.lower())
 
     def test_select_no_pin_uses_fallback(self):
-        """No td_build -> use fallback verbatim, no warning."""
+        """No td_build → use fallback verbatim, no warning."""
         installs = [('2025.32660', '/Applications/TD2025.app')]
         fallback = sys.executable
         exe, warn = bridge.select_td_install(None, fallback, installs)
@@ -1346,7 +1346,7 @@ class TestBridgeProjectJsonAndDiscovery(EmbodyTestCase):
         self.assertIsNone(warn)
 
     def test_select_no_pin_no_fallback_returns_newest(self):
-        """No pin and no fallback -> newest install, no warning."""
+        """No pin and no fallback → newest install, no warning."""
         installs = [
             ('2025.32700', '/Applications/TD2025.app'),
             ('2024.30000', '/Applications/TD2024.app'),
@@ -1572,7 +1572,7 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertEqual(result['restart_attempts_remaining'], 0)
 
     def test_launch_td_no_executable(self):
-        # Mock find_td_pid -> None so the "already running" guard doesn't
+        # Mock find_td_pid → None so the "already running" guard doesn't
         # short-circuit before we reach the missing-config check.  Without
         # this the test fails on any machine actually running TD (e.g. the
         # Embody dev project itself).
@@ -1937,7 +1937,7 @@ class TestBridgeConnectionLostMessage(EmbodyTestCase):
 
 
 # =====================================================================
-# Bridge v2 - BridgeState, notify_stdout, reconciler, caching, hashing
+# Bridge v2 — BridgeState, notify_stdout, reconciler, caching, hashing
 # =====================================================================
 #
 # These tests cover the v2 upgrade described in
@@ -2016,7 +2016,7 @@ def _make_v2_state(**overrides):
         try:
             inst = BS(**ctor_kwargs)
         except TypeError:
-            # Implementation may differ - try constructing with just url.
+            # Implementation may differ — try constructing with just url.
             inst = BS(url=defaults.get('url', 'http://localhost:9870/mcp'))
         for k, v in defaults.items():
             if k in ctor_keys:
@@ -2027,7 +2027,7 @@ def _make_v2_state(**overrides):
                 pass
         return inst
 
-    # v1 fallback - plain object with lock-compatible context manager
+    # v1 fallback — plain object with lock-compatible context manager
     class _FauxState:
         def __init__(self, d):
             self.__dict__.update(d)
@@ -2063,7 +2063,7 @@ class _StdoutCapture:
 
 
 # =====================================================================
-# Test case 1 - BridgeState locking under contention
+# Test case 1 — BridgeState locking under contention
 # =====================================================================
 
 class TestBridgeStateLocking(EmbodyTestCase):
@@ -2075,7 +2075,7 @@ class TestBridgeStateLocking(EmbodyTestCase):
     def test_concurrent_increment_no_corruption(self):
         state = _make_v2_state()
         # Seed a counter field. BridgeState may not declare this attribute
-        # by default - setattr should succeed either way.
+        # by default — setattr should succeed either way.
         setattr(state, 'counter', 0)
 
         iterations = 10_000
@@ -2103,11 +2103,11 @@ class TestBridgeStateLocking(EmbodyTestCase):
             f'Threads raised: {[type(e).__name__ + ": " + str(e) for e in errors]}')
         self.assertEqual(
             state.counter, 2 * iterations,
-            f'Expected {2 * iterations}, got {state.counter} - lock did not serialize writes')
+            f'Expected {2 * iterations}, got {state.counter} — lock did not serialize writes')
 
 
 # =====================================================================
-# Test case 2 - Tool hash diff detection
+# Test case 2 — Tool hash diff detection
 # =====================================================================
 
 class TestBridgeHashTools(EmbodyTestCase):
@@ -2128,7 +2128,7 @@ class TestBridgeHashTools(EmbodyTestCase):
         self.assertEqual(self.hash_tools(a), self.hash_tools(b))
 
     def test_reordered_lists_same_hash(self):
-        """Order must not affect the hash - plan says 'sort by name first'."""
+        """Order must not affect the hash — plan says 'sort by name first'."""
         a = [self._tool('create_op', 'Create an operator'),
              self._tool('delete_op', 'Delete an operator'),
              self._tool('cook_op', 'Cook an operator')]
@@ -2159,7 +2159,7 @@ class TestBridgeHashTools(EmbodyTestCase):
             'Renamed tool must produce a different hash')
 
     def test_description_change_changes_hash(self):
-        """Description is part of the hash per the plan - any change matters."""
+        """Description is part of the hash per the plan — any change matters."""
         a = [self._tool('create_op', 'Create an operator')]
         b = [self._tool('create_op', 'Create an op')]
         self.assertNotEqual(self.hash_tools(a), self.hash_tools(b))
@@ -2169,14 +2169,14 @@ class TestBridgeHashTools(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 3 - Reconciler state transitions
+# Test case 3 — Reconciler state transitions
 # =====================================================================
 
 class TestBridgeReconcilerTransitions(EmbodyTestCase):
     """
     Verify that reconcile() fires the on_tools_change callback only
-    on connection transitions (False->True and True->False), never on
-    steady-state ticks (True->True).
+    on connection transitions (False→True and True→False), never on
+    steady-state ticks (True→True).
 
     Mock ping sequence: False, True, True, False.
     Expected notifications: 0, 1 (became connected), 1 (unchanged), 2 (became disconnected).
@@ -2201,7 +2201,7 @@ class TestBridgeReconcilerTransitions(EmbodyTestCase):
             ping_idx[0] = i + 1
             return ping_sequence[i]
 
-        # Mock tool fetch to return a stable list - avoids hash-mismatch noise.
+        # Mock tool fetch to return a stable list — avoids hash-mismatch noise.
         # Using ONE stable list means on_tools_change fires only on transitions,
         # not on in-place tool-list changes.
         stable_tools = [{'name': 't1', 'description': 'd1'}]
@@ -2211,7 +2211,7 @@ class TestBridgeReconcilerTransitions(EmbodyTestCase):
         def on_tools_change():
             notify_count[0] += 1
 
-        # Patch only the functions that actually exist on the module -
+        # Patch only the functions that actually exist on the module —
         # the reconciler may use any subset depending on implementation.
         patches_spec = {
             'ping_backend_mcp': fake_ping,
@@ -2248,7 +2248,7 @@ class TestBridgeReconcilerTransitions(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 5 - listChanged: true in initialize response
+# Test case 5 — listChanged: true in initialize response
 # =====================================================================
 
 class TestBridgeListChangedCapability(EmbodyTestCase):
@@ -2304,7 +2304,7 @@ class TestBridgeListChangedCapability(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 7 - tools/list cache hit within 5s
+# Test case 7 — tools/list cache hit within 5s
 # =====================================================================
 
 class TestBridgeToolsListCache(EmbodyTestCase):
@@ -2386,12 +2386,12 @@ class TestBridgeToolsListCache(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 9 - Stdout serialization under concurrent writers
+# Test case 9 — Stdout serialization under concurrent writers
 # =====================================================================
 
 class TestBridgeStdoutSerialization(EmbodyTestCase):
     """
-    10 threads x 100 concurrent calls to notify_stdout must produce
+    10 threads × 100 concurrent calls to notify_stdout must produce
     only valid newline-delimited JSON (no interleaved bytes).
     """
 
@@ -2438,8 +2438,8 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
         raw = capture.getvalue()
         lines = [l for l in raw.split('\n') if l.strip()]
 
-        # Expect exactly 10 x 100 = 1000 lines (unless notify_stdout was
-        # called with fewer args due to TypeError fallback - still should
+        # Expect exactly 10 × 100 = 1000 lines (unless notify_stdout was
+        # called with fewer args due to TypeError fallback — still should
         # be 1000).
         self.assertEqual(
             len(lines), 1000,
@@ -2450,7 +2450,7 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
         for idx, line in enumerate(lines):
             try:
                 obj = json.loads(line)
-                # Must be a notification - no id, has method
+                # Must be a notification — no id, has method
                 if not isinstance(obj, dict) or 'method' not in obj:
                     bad_lines.append((idx, f'not a notification: {line[:80]}'))
                 if obj.get('jsonrpc') != '2.0':

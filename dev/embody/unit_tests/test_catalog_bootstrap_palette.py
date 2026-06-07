@@ -18,7 +18,6 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 
 	def setUp(self):
 		super().setUp()
-		self.cat = self.embody.ext.CatalogManager
 		self.tbl = self.sandbox.create(tableDAT, 'fake_palette_catalog')
 		self.tbl.clear()
 
@@ -38,7 +37,7 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 			['3DScope', 'baseCOMP', '2', '099.2025.32280'],
 			['TDVR', 'containerCOMP', '13', '099.2025.32280'],
 		])
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertIsNotNone(out)
 		self.assertEqual(len(out), 2)
 		self.assertEqual(
@@ -47,12 +46,12 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 			out['TDVR'], {'type': 'containerCOMP', 'min_children': 13})
 
 	def test_A02_build_mismatch_returns_none(self):
-		"""No rows match the requested build -> None (triggers runtime scan)."""
+		"""No rows match the requested build → None (triggers runtime scan)."""
 		self._seed([
 			['name', 'type', 'min_children', 'build'],
 			['3DScope', 'baseCOMP', '2', '099.2025.32280'],
 		])
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2026.99999')
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2026.99999')
 		self.assertIsNone(out)
 
 	def test_A03_multi_build_filters_correctly(self):
@@ -63,7 +62,7 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 			['3DScope', 'baseCOMP', '3', '099.2026.33000'],
 			['TDVR', 'containerCOMP', '13', '099.2026.33000'],
 		])
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertEqual(len(out), 1)
 		self.assertEqual(out['3DScope']['min_children'], 2)
 
@@ -72,42 +71,42 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 	# =================================================================
 
 	def test_B01_empty_table_returns_none(self):
-		"""A table with only a header row (or less) -> None."""
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
+		"""A table with only a header row (or less) → None."""
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertIsNone(out)
 
 	def test_B02_missing_table_returns_none(self):
-		"""None table -> None."""
-		out = self.cat._parseBootstrapPaletteTable(None, '099.2025.32280')
+		"""None table → None."""
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(None, '099.2025.32280')
 		self.assertIsNone(out)
 
 	def test_B03_bad_schema_returns_none(self):
-		"""Missing required column -> None + warning (no raise)."""
+		"""Missing required column → None + warning (no raise)."""
 		self._seed([
 			['name', 'type', 'build'],  # missing min_children
 			['3DScope', 'baseCOMP', '099.2025.32280'],
 		])
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertIsNone(out)
 
 	def test_B04_dedup_first_wins(self):
-		"""Duplicate name within the same build -> first row wins."""
+		"""Duplicate name within the same build → first row wins."""
 		self._seed([
 			['name', 'type', 'min_children', 'build'],
 			['abletonLink', 'baseCOMP', '2', '099.2025.32280'],
 			['abletonLink', 'containerCOMP', '99', '099.2025.32280'],
 		])
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertEqual(out['abletonLink']['type'], 'baseCOMP')
 		self.assertEqual(out['abletonLink']['min_children'], 2)
 
 	def test_B05_non_integer_min_children_defaults_to_zero(self):
-		"""Malformed min_children cell -> 0, not a raise."""
+		"""Malformed min_children cell → 0, not a raise."""
 		self._seed([
 			['name', 'type', 'min_children', 'build'],
 			['weird', 'baseCOMP', 'NaN', '099.2025.32280'],
 		])
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertEqual(out['weird']['min_children'], 0)
 
 	def test_B06_empty_name_row_skipped(self):
@@ -117,7 +116,7 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 			['', 'baseCOMP', '2', '099.2025.32280'],
 			['real', 'baseCOMP', '2', '099.2025.32280'],
 		])
-		out = self.cat._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(self.tbl, '099.2025.32280')
 		self.assertEqual(list(out.keys()), ['real'])
 
 	# =================================================================
@@ -135,7 +134,7 @@ class TestCatalogBootstrapPalette(EmbodyTestCase):
 		live_table = self.embody.op('palette_catalog')
 		if live_table is None:
 			self.skipTest('palette_catalog tableDAT not present yet')
-		out = self.cat._parseBootstrapPaletteTable(live_table, build_str)
+		out = self.embody.ext.CatalogManager._parseBootstrapPaletteTable(live_table, build_str)
 		self.assertIsNotNone(out,
 			f'Shipped palette_catalog has no rows for build {build_str}. '
 			f'Run CatalogManager.ExportPaletteCatalog() after a fresh scan '

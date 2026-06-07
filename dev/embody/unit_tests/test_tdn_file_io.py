@@ -34,7 +34,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		super().tearDown()
 
 	# =================================================================
-	# _splitPerComp - path generation (static method, pure Python)
+	# _splitPerComp — path generation (static method, pure Python)
 	# =================================================================
 
 	def test_splitPerComp_root_creates_project_named_file(self):
@@ -82,7 +82,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		expected = str(Path(self._temp_dir) / 'embody' / 'Embody' / 'help.tdn')
 		self.assertIn(expected, files)
 		for fpath in files:
-			# Check for actual path segment duplication - the root prefix
+			# Check for actual path segment duplication — the root prefix
 			# should not appear twice in the path. Note: embody/Embody is
 			# valid (two different COMPs), but embody/Embody/embody/Embody
 			# would indicate double-nesting.
@@ -346,7 +346,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			self.assertFalse(Path(f).exists())
 
 	# =================================================================
-	# _resolveOutputPath - direct method testing
+	# _resolveOutputPath — direct method testing
 	# =================================================================
 
 	def test_resolve_auto_nonroot_mirrors_td_path(self):
@@ -409,41 +409,35 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"TD path segment appears twice in '{normalized}'")
 
 	# =================================================================
-	# _stripBuildSuffix - stable project TDN filenames
+	# _stripBuildSuffix — stable project TDN filenames
 	# =================================================================
 
 	def test_strip_build_suffix_dotted(self):
 		"""Build number (e.g. .302) should be stripped."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody-5.302'), 'Embody-5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody-5.302'), 'Embody-5')
 
 	def test_strip_build_suffix_no_build(self):
 		"""Name without build suffix should be unchanged."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody-5'), 'Embody-5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody-5'), 'Embody-5')
 
 	def test_strip_build_suffix_plain_name(self):
 		"""Plain name without any version should be unchanged."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('demo'), 'demo')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('demo'), 'demo')
 
 	def test_strip_build_suffix_number_no_dot(self):
 		"""Trailing number without dot should be preserved."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody5'), 'Embody5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody5'), 'Embody5')
 
 	def test_strip_build_suffix_underscore_number(self):
 		"""Underscore-separated number should be preserved."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('Embody_5'), 'Embody_5')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('Embody_5'), 'Embody_5')
 
 	def test_strip_build_suffix_preserves_user_version(self):
 		"""Hyphenated user version should be preserved."""
-		strip = self.embody.ext.TDN._stripBuildSuffix
-		self.assertEqual(strip('my-cool-project-3'), 'my-cool-project-3')
+		self.assertEqual(self.embody.ext.TDN._stripBuildSuffix('my-cool-project-3'), 'my-cool-project-3')
 
 	# =================================================================
-	# SaveTDN root filename derivation - issue #6 regression
+	# SaveTDN root filename derivation — issue #6 regression
 	# =================================================================
 
 	def test_savetdn_root_filename_strips_build_suffix(self):
@@ -457,7 +451,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		This test mirrors the exact derivation SaveTDN uses at opPath == '/'
 		to confirm _stripBuildSuffix is applied.
 		"""
-		# Simulated project names - build-suffixed and plain variants
+		# Simulated project names — build-suffixed and plain variants
 		cases = [
 			('Embody-5.362.toe', 'Embody-5'),
 			('Embody-5.toe',     'Embody-5'),
@@ -490,7 +484,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"_resolveOutputPath returned '{resolved}'")
 
 	# =================================================================
-	# ExportNetwork file output - end-to-end
+	# ExportNetwork file output — end-to-end
 	# =================================================================
 
 	def test_export_file_is_valid_json(self):
@@ -577,7 +571,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertListEqual(entry['dat_content'][2], ['y', '2'])
 
 	def test_export_file_roundtrip_reimport(self):
-		"""Export to file, read back, import - operators should match."""
+		"""Export to file, read back, import — operators should match."""
 		self.sandbox.create(baseCOMP, 'rt_a')
 		dat = self.sandbox.create(textDAT, 'rt_b')
 		dat.text = 'via file'
@@ -907,7 +901,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertIn('waveCHOP', types)
 
 	# =================================================================
-	# tdn_ref - export, import, and cross-validation
+	# tdn_ref — export, import, and cross-validation
 	# =================================================================
 
 	def _get_log_id(self):
@@ -1049,7 +1043,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertTrue(has_file_warning)
 
 	# =================================================================
-	# tox_ref -- export and backward-compat strip
+	# tox_ref -- export and backward-compat self.embody.ext.TDN._stripBuildSuffix
 	# =================================================================
 
 	def test_tox_ref_written_on_export(self):
@@ -1252,7 +1246,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			'Large TDN File': 0})
 		try:
 			self.embody.ext.TDN._warnLargeTDN(str(big_file), '/test')
-			# Dialog was intercepted - warn pref should still be 'ask'
+			# Dialog was intercepted — warn pref should still be 'ask'
 			self.assertEqual(self.embody.par.Tdncascadewarn.eval(), 'ask')
 		finally:
 			self.embody.par.Tdncascadewarn = orig_warn

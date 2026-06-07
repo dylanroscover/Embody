@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: TDN built-in parameter sequence round-trip (v1.3).
 
 Tests export, import, and round-trip fidelity for operators with
@@ -17,20 +17,19 @@ class TestTDNSequences(EmbodyTestCase):
 
     def setUp(self):
         super().setUp()
-        self.tdn = self.embody.ext.TDN
 
     # --- Helper ---
 
     def _export(self, **kwargs):
         defaults = {'root_path': self.sandbox.path}
         defaults.update(kwargs)
-        return self.tdn.ExportNetwork(**defaults)
+        return self.embody.ext.TDN.ExportNetwork(**defaults)
 
     def _roundtrip(self, **export_kwargs):
         """Export sandbox, create target, import with clear, return target."""
         export = self._export(**export_kwargs)
         target = self.sandbox.create(baseCOMP, 'rt_target')
-        self.tdn.ImportNetwork(
+        self.embody.ext.TDN.ImportNetwork(
             target_path=target.path, tdn=export['tdn'])
         return target
 
@@ -210,7 +209,7 @@ class TestTDNSequences(EmbodyTestCase):
         target.op('nokey_chop').seq.const[0].par.name = 'preset'
         target.op('nokey_chop').seq.const[0].par.value = 99.0
 
-        self.tdn.ImportNetwork(target_path=target.path, tdn=op_def)
+        self.embody.ext.TDN.ImportNetwork(target_path=target.path, tdn=op_def)
         imp = target.op('nokey_chop')
         # Without sequences key, existing blocks should not be altered
         self.assertEqual(imp.seq.const[0].par.name.eval(), 'preset')
