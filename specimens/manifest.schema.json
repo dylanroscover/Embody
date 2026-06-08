@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://embody.tools/schemas/specimen-manifest.json",
+  "title": "Embody Specimen Manifest (FROZEN CONTRACT C3)",
+  "description": "Catalog of bundled Specimens. Authoritative file: specimens/manifest.json. The in-COMP manifest Table DAT mirrors these fields. See plan-specimen-collection.md section 5. ASCII only.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "specimens"],
+  "properties": {
+    "version": { "type": "string" },
+    "generated": { "type": "string", "description": "ISO timestamp, stamped by build_specimens.py" },
+    "specimen_count": { "type": "integer", "minimum": 0 },
+    "specimens": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["slug", "name", "category", "difficulty", "description", "requires", "output_op", "tdn_path", "operator_count"],
+        "properties": {
+          "slug": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "name": { "type": "string" },
+          "category": { "type": "string" },
+          "difficulty": { "enum": ["starter", "intermediate", "advanced"] },
+          "description": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "key_ops": { "type": "array", "items": { "type": "string" } },
+          "requires": { "type": "string", "description": "none | MediaPipe | Kinect Azure | RealSense | RayTK | NVIDIA Flex | Shader Park | ISF | Essentia" },
+          "fallback": { "type": ["string", "null"], "description": "procedural-fallback note when the package is absent" },
+          "output_op": { "type": "string", "const": "out", "description": "every Specimen terminates in a Null TOP named out" },
+          "tdn_path": { "type": "string" },
+          "thumbnail_path": { "type": ["string", "null"] },
+          "prompt_path": { "type": ["string", "null"] },
+          "operator_count": { "type": "integer", "minimum": 1 },
+          "warmup_frames": { "type": "integer", "minimum": 0, "default": 3 },
+          "preview": { "type": "boolean", "default": true },
+          "author": { "type": "string", "default": "Embody" },
+          "license": { "type": "string", "default": "CC-BY-4.0" },
+          "build": { "type": "integer", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
