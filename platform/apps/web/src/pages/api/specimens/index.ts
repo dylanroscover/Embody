@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { scanTdn } from "@embody/scanner-ts";
+import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
 import type { SubmitRequest, SubmitResponse } from "@embody/contracts";
 import type { APIRoute } from "astro";
 import {
@@ -69,6 +69,21 @@ export const POST: APIRoute = async ({ request }) => {
         {
           error: "scan_blocked",
           detail: "The submitted TDN includes blocked capability surfaces.",
+          scan
+        },
+        { status: 422 }
+      );
+    }
+
+    // Submit-side hard-block: reject ONLY unambiguous malware (droppers / shell-network-exec /
+    // reverse shells). Generic executable surfaces stay flagged-and-accepted (default-inert import).
+    const malware = detectObviousMalware(parsedTdn.tdn);
+    if (malware.malicious) {
+      return jsonResponse(
+        {
+          error: "rejected_malware",
+          detail: "Submission contains an unambiguously malicious pattern and was rejected.",
+          reasons: malware.reasons,
           scan
         },
         { status: 422 }
