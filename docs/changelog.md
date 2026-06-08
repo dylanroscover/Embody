@@ -13,6 +13,11 @@ A second status axis in the manager -- **git-uncommitted** -- so every externali
 - **Hardened via a 3-agent codex review (no regressions found).** The background scan now runs `git --no-optional-locks status --untracked-files=all` so it never contends for `.git/index.lock` with a concurrent `git add`/`commit` and so a newly externalized file inside a brand-new folder is enumerated (not collapsed to `?? dir/`). The async completion is **generation-guarded** with task-local result state, so a stale scan that fires after a re-arm can never clobber a newer one (or leak its in-flight flag). The hover/rollover state keeps the orange precedence for uncommitted saved rows, and the `tag` label is lowercase there too.
 - **Tests:** new `test_git_status.py` covers the porcelain parser, the file-to-repo path mapping, and the `changed` predicate -- pure logic, no live TD.
 
+### Also rolled up in this release (since v5.0.429)
+
+- **AI-agent discovery surface at embody.tools.** Machine-readable entry points so AI coding assistants can adopt Embody without scraping marketing HTML: an `llms.txt` convention index plus a `llms-full.txt` full corpus, a `/for-ai` page with structured `for-ai.json` / `for-ai.txt` endpoints, and schema.org `SoftwareApplication` JSON-LD across the landing pages.
+- **Em-dash mojibake fix + ASCII-punctuation rule.** Fixed a CP1252 round-trip corruption in shipped `execute.py` (two comments where a UTF-8 em-dash had been re-saved as mojibake), normalized generated/code/config files repo-wide to ASCII punctuation (BOMs preserved; hand-written docs prose exempt), and added a shipped `.claude/rules/ascii-punctuation.md` rule to keep it that way.
+
 ## v5.0.434
 
 A new `diff_tdn` MCP tool for what's UNSAVED in a TDN network -- one COMP or the whole project -- plus a companion git diff driver that keeps committed `.tdn` diffs clean, a project-wide hard rule against caching extension references (with an enforcing test), and a fix for the recurring "TouchDesigner is not responding" error during saves.
