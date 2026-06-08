@@ -1,0 +1,263 @@
+import "@xyflow/react/dist/style.css";
+import "./tdnViewer.css";
+
+import {
+  Background,
+  BackgroundVariant,
+  Controls,
+  Handle,
+  MarkerType,
+  Position,
+  ReactFlow,
+  type Edge,
+  type Node,
+  type NodeProps,
+  type NodeTypes
+} from "@xyflow/react";
+import { memo, useMemo } from "react";
+import type { CSSProperties } from "react";
+import type { GraphAnnotation, NormalizedGraph, RGB } from "@embody/contracts";
+import { parseTDN } from "./parseTDN";
+
+export interface TdnViewerProps {
+  tdn: Record<string, unknown>;
+  className?: string;
+  height?: number | string;
+}
+
+type OperatorNodeData = {
+  name: string;
+  type: string;
+  family: string;
+  familyColor: string;
+  inputCount: number;
+  compInputCount: number;
+};
+
+type OperatorNode = Node<OperatorNodeData, "operator">;
+
+type AnnotationNodeData = {
+  title: string;
+  text: string;
+  width: number;
+  height: number;
+  color: string;
+};
+
+type AnnotationNode = Node<AnnotationNodeData, "annotation">;
+type TdnFlowNode = OperatorNode | AnnotationNode;
+
+const FAMILY_COLORS: Record<string, string> = {
+  TOP: "#6ee668",
+  CHOP: "#9ccb5a",
+  SOP: "#c9954f",
+  DAT: "#d98a6a",
+  MAT: "#b291b0",
+  POP: "#d9c25a",
+  COMP: "#5fa777",
+  OBJECT: "#b9b09d"
+};
+
+const NODE_TYPES: NodeTypes = {
+  annotation: memo(AnnotationBox),
+  operator: memo(OperatorTile)
+};
+
+export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
+  const graph = useMemo(() => parseTDN(tdn), [tdn]);
+  const { nodes, edges } = useMemo(() => toFlowElements(graph), [graph]);
+
+  const style = useMemo<CSSProperties>(
+    () => ({
+      height: typeof height === "number" ? `${height}px` : height
+    }),
+    [height]
+  );
+
+  return (
+    <div className={["tdn-viewer", className].filter(Boolean).join(" ")} style={style}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={NODE_TYPES}
+        fitView
+        fitViewOptions={{ padding: 0.24 }}
+        minZoom={0.12}
+        maxZoom={1.8}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        selectNodesOnDrag={false}
+        panOnDrag
+        panOnScroll
+        zoomOnScroll
+        zoomOnPinch
+        onlyRenderVisibleElements
+        preventScrolling
+      >
+        <Background
+          color="rgba(200, 208, 201, 0.10)"
+          gap={32}
+          size={1}
+          variant={BackgroundVariant.Dots}
+        />
+        <Controls showInteractive={false} />
+      </ReactFlow>
+    </div>
+  );
+}
+
+function OperatorTile({ data }: NodeProps<OperatorNode>) {
+  const inputHandles = Array.from({ length: Math.max(data.inputCount, 1) }, (_, index) => index);
+  const compHandles = Array.from({ length: data.compInputCount }, (_, index) => index);
+
+  return (
+    <div className="tdn-operator" style={{ "--family-color": data.familyColor } as CSSProperties}>
+      {inputHandles.map((index) => (
+        <Handle
+          className="tdn-handle tdn-handle--target"
+          id={`in-${index}`}
+          key={`in-${index}`}
+          position={Position.Left}
+          style={{ top: `${handlePercent(index, inputHandles.length)}%` }}
+          type="target"
+        />
+      ))}
+      {compHandles.map((index) => (
+        <Handle
+          className="tdn-handle tdn-handle--target tdn-handle--comp"
+          id={`comp-in-${index}`}
+          key={`comp-in-${index}`}
+          position={Position.Bottom}
+          style={{ left: `${handlePercent(index, compHandles.length)}%` }}
+          type="target"
+        />
+      ))}
+      <Handle
+        className="tdn-handle tdn-handle--source"
+        id="out"
+        position={Position.Right}
+        type="source"
+      />
+      <div className="tdn-operator__head" />
+      <div className="tdn-operator__body">
+        <div className="tdn-operator__name" title={data.name}>
+          {data.name}
+        </div>
+        <div className="tdn-operator__meta">
+          <span>{data.type}</span>
+          <span className="tdn-operator__family">{data.family}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnnotationBox({ data }: NodeProps<AnnotationNode>) {
+  return (
+    <div
+      className="tdn-annotation"
+      style={
+        {
+          "--annotation-color": data.color,
+          width: data.width,
+          height: data.height
+        } as CSSProperties
+      }
+    >
+      <span>{data.title}</span>
+      {data.text ? <p>{data.text}</p> : null}
+    </div>
+  );
+}
+
+function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: Edge[] } {
+  const inputCounts = new Map<string, number>();
+  const compInputCounts = new Map<string, number>();
+
+  for (const edge of graph.edges) {
+    const counts = edge.comp ? compInputCounts : inputCounts;
+    counts.set(edge.to, Math.max(counts.get(edge.to) ?? 0, edge.inputIndex + 1));
+  }
+
+  const nodes: TdnFlowNode[] = graph.nodes.map((node) => ({
+    id: node.id,
+    type: "operator",
+    position: {
+      x: node.x,
+      y: -node.y
+    },
+    data: {
+      name: node.name,
+      type: node.type,
+      family: node.family,
+      familyColor: FAMILY_COLORS[node.family] ?? FAMILY_COLORS.OBJECT,
+      inputCount: inputCounts.get(node.id) ?? 0,
+      compInputCount: compInputCounts.get(node.id) ?? 0
+    },
+    draggable: false,
+    selectable: false
+  }));
+
+  const edges: Edge[] = graph.edges.map((edge, index) => ({
+    id: `${edge.from}->${edge.to}:${edge.comp ? "comp" : "in"}:${edge.inputIndex}:${index}`,
+    source: edge.from,
+    target: edge.to,
+    sourceHandle: "out",
+    targetHandle: edge.comp ? `comp-in-${edge.inputIndex}` : `in-${edge.inputIndex}`,
+    type: "smoothstep",
+    animated: edge.comp,
+    focusable: false,
+    selectable: false,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      width: 14,
+      height: 14,
+      color: edge.comp ? "#cda05a" : "#6ee668"
+    },
+    style: {
+      stroke: edge.comp ? "rgba(205, 160, 90, 0.74)" : "rgba(110, 230, 104, 0.62)",
+      strokeWidth: edge.comp ? 1.8 : 1.5
+    }
+  }));
+
+  for (const annotation of graph.annotations) {
+    nodes.push(annotationToNode(annotation, nodes.length));
+  }
+
+  return { nodes, edges };
+}
+
+function annotationToNode(annotation: GraphAnnotation, index: number): AnnotationNode {
+  return {
+    id: `annotation-${index}`,
+    type: "annotation",
+    position: {
+      x: annotation.x,
+      y: -annotation.y - annotation.h
+    },
+    data: {
+      title: annotation.title ?? "annotation",
+      text: annotation.text ?? "",
+      width: annotation.w || 280,
+      height: annotation.h || 160,
+      color: annotation.color ? rgbToCss(annotation.color, 0.32) : "rgba(200, 208, 201, 0.24)"
+    },
+    draggable: false,
+    selectable: false,
+    zIndex: -1
+  };
+}
+
+function rgbToCss(rgb: RGB, alpha: number): string {
+  return `rgba(${channel(rgb[0])}, ${channel(rgb[1])}, ${channel(rgb[2])}, ${alpha})`;
+}
+
+function channel(value: number): number {
+  return Math.round(Math.max(0, Math.min(1, value)) * 255);
+}
+
+function handlePercent(index: number, count: number): number {
+  if (count <= 1) return 50;
+  return 20 + (index * 60) / (count - 1);
+}

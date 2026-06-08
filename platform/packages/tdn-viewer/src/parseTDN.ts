@@ -1,0 +1,193 @@
+import type {
+  GraphAnnotation,
+  GraphEdge,
+  GraphNode,
+  NormalizedGraph,
+  RGB
+} from "@embody/contracts";
+
+type TdnDict = Record<string, unknown>;
+
+const FAMILIES = ["TOP", "CHOP", "SOP", "DAT", "MAT", "POP", "COMP"] as const;
+
+export function parseTDN(tdn: TdnDict): NormalizedGraph {
+  const nodes: GraphNode[] = [];
+  const edges: GraphEdge[] = [];
+  const annotations: GraphAnnotation[] = [];
+
+  walkOperators(asRecords(tdn.operators), "");
+  collectAnnotations(asRecords(tdn.annotations), annotations);
+
+  return { nodes, edges, annotations };
+
+  function walkOperators(operators: TdnDict[], parentPath: string): void {
+    for (const op of operators) {
+      const name = readString(op.name);
+      if (!name) continue;
+
+      const id = joinPath(parentPath, name);
+      const type = readString(op.type) || "unknown";
+      const position = readPair(op.position);
+      const size = readOptionalPair(op.size);
+      const color = readRGB(op.color);
+
+      const node: GraphNode = {
+        id,
+        name,
+        type,
+        family: deriveFamily(type),
+        x: position[0],
+        y: position[1]
+      };
+
+      if (color) node.color = color;
+      if (size) {
+        node.w = size[0];
+        node.h = size[1];
+      }
+
+      nodes.push(node);
+
+      collectEdges(asStrings(op.inputs), parentPath, id, false, edges);
+      collectEdges(asStrings(op.comp_inputs), parentPath, id, true, edges);
+      collectAnnotations(asRecords(op.annotations), annotations);
+
+      const childOperators = [
+        ...asRecords(op.children),
+        ...asRecords(op.operators)
+      ];
+      if (childOperators.length > 0) {
+        walkOperators(childOperators, id);
+      }
+    }
+  }
+}
+
+function collectEdges(
+  inputPaths: string[],
+  parentPath: string,
+  targetId: string,
+  comp: boolean,
+  edges: GraphEdge[]
+): void {
+  inputPaths.forEach((inputPath, inputIndex) => {
+    const sourceId = resolveInputPath(parentPath, inputPath);
+    if (!sourceId) return;
+
+    const edge: GraphEdge = {
+      from: sourceId,
+      to: targetId,
+      inputIndex
+    };
+
+    if (comp) edge.comp = true;
+    edges.push(edge);
+  });
+}
+
+function collectAnnotations(items: TdnDict[], annotations: GraphAnnotation[]): void {
+  for (const item of items) {
+    const position = readPair(item.position);
+    const size = readPair(item.size);
+    const color = readRGB(item.color);
+    const annotation: GraphAnnotation = {
+      x: position[0],
+      y: position[1],
+      w: size ? size[0] : 0,
+      h: size ? size[1] : 0
+    };
+
+    const title = readString(item.title) || readString(item.name);
+    const text = readString(item.text);
+    if (title) annotation.title = title;
+    if (text) annotation.text = text;
+    if (color) annotation.color = color;
+
+    annotations.push(annotation);
+  }
+}
+
+function deriveFamily(type: string): string {
+  const upper = type.toUpperCase();
+  for (const family of FAMILIES) {
+    if (upper.endsWith(family)) return family;
+  }
+  return "OBJECT";
+}
+
+function resolveInputPath(parentPath: string, inputPath: string): string | undefined {
+  const trimmed = inputPath.trim();
+  if (!trimmed) return undefined;
+
+  if (trimmed.startsWith("/")) {
+    return normalizeSegments(trimmed.slice(1).split("/"));
+  }
+
+  if (trimmed.includes("/")) {
+    const base = parentPath ? parentPath.split("/") : [];
+    return normalizeSegments([...base, ...trimmed.split("/")]);
+  }
+
+  return joinPath(parentPath, trimmed);
+}
+
+function normalizeSegments(segments: string[]): string {
+  const normalized: string[] = [];
+  for (const segment of segments) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") {
+      normalized.pop();
+      continue;
+    }
+    normalized.push(segment);
+  }
+  return normalized.join("/");
+}
+
+function joinPath(parentPath: string, name: string): string {
+  return parentPath ? `${parentPath}/${name}` : name;
+}
+
+function asRecords(value: unknown): TdnDict[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(isRecord);
+}
+
+function asStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function readPair(value: unknown): [number, number] {
+  if (!Array.isArray(value)) return [0, 0];
+  const x = typeof value[0] === "number" ? value[0] : 0;
+  const y = typeof value[1] === "number" ? value[1] : 0;
+  return [x, y];
+}
+
+function readOptionalPair(value: unknown): [number, number] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const x = value[0];
+  const y = value[1];
+  if (typeof x !== "number" || typeof y !== "number") return undefined;
+  return [x, y];
+}
+
+function readRGB(value: unknown): RGB | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const r = value[0];
+  const g = value[1];
+  const b = value[2];
+  if (typeof r !== "number" || typeof g !== "number" || typeof b !== "number") {
+    return undefined;
+  }
+  return [r, g, b];
+}
+
+function isRecord(value: unknown): value is TdnDict {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}

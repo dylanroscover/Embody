@@ -1,0 +1,178 @@
+---
+import Base from "../../layouts/Base.astro";
+import specimens from "../../fixtures/specimens.json";
+import { specimenThumbnail } from "../../lib/specimenThumb";
+---
+
+<Base
+  title="The Collection - embody.tools"
+  description="Fixture Specimens for the embody.tools design review scaffold."
+>
+  <section class="page-section collection-hero">
+    <p class="eyebrow">The Collection</p>
+    <h1>TouchDesigner networks you can see through</h1>
+    <p class="lede">
+      Each card is a Specimen: a named TDN network with a prompt, an output target, and a
+      readable graph. These fixtures stand in for the future community library.
+    </p>
+    <div class="collection-toolbar">
+      <span class="collection-total mono">{specimens.length} fixture specimens</span>
+      <div class="view-toggle" role="group" aria-label="Collection view">
+        <button type="button" class="view-toggle__button is-active" data-view-option="gallery" aria-pressed="true">Gallery</button>
+        <button type="button" class="view-toggle__button" data-view-option="list" aria-pressed="false">List</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="collection-shell" id="collection-view" data-view="gallery">
+    <section class="page-section tight collection-results">
+      <div class="card-grid">
+        {specimens.map((specimen) => (
+          <a class="specimen-card pillar" href={`/s/${specimen.slug}`}>
+            <div class="thumb">
+              <img
+                src={specimenThumbnail(specimen)}
+                loading="lazy"
+                alt={`${specimen.name} thumbnail placeholder`}
+              />
+            </div>
+            <div class="specimen-card__body">
+              <div class="badge-row">
+                <span class="badge">{specimen.difficulty}</span>
+                <span class:list={["badge", specimen.requires === "none" ? "stock" : "needs"]}>
+                  {specimen.requires === "none" ? "stock TD" : `needs ${specimen.requires}`}
+                </span>
+                <span class="badge specimen-category">{specimen.category}</span>
+              </div>
+              <h3>{specimen.name}</h3>
+              <p>{specimen.description}</p>
+              <span class="card-link">Inspect /s/{specimen.slug}</span>
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
+  </div>
+
+  <script is:inline>
+    const collection = document.querySelector("[data-view]");
+    const viewButtons = document.querySelectorAll("[data-view-option]");
+
+    viewButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const view = button.getAttribute("data-view-option") || "gallery";
+        if (collection) collection.setAttribute("data-view", view);
+
+        viewButtons.forEach((item) => {
+          const selected = item.getAttribute("data-view-option") === view;
+          item.classList.toggle("is-active", selected);
+          item.setAttribute("aria-pressed", String(selected));
+        });
+      });
+    });
+  </script>
+</Base>
+
+<style>
+  .collection-hero {
+    padding-bottom: 56px;
+  }
+
+  .collection-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    max-width: 760px;
+  }
+
+  .collection-results {
+    border-top: 1px solid var(--border-faint);
+  }
+
+  .collection-total {
+    color: var(--text-faint);
+    font-size: 0.76rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 0.25rem;
+  }
+
+  .view-toggle__button {
+    min-height: 32px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    padding: 0 0.85rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: var(--font-display);
+    font-size: 0.82rem;
+    font-weight: 600;
+  }
+
+  .view-toggle__button:hover,
+  .view-toggle__button.is-active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #0e1612;
+  }
+
+  .collection-shell[data-view="gallery"] .card-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .collection-shell[data-view="gallery"] .thumb img {
+    min-height: 230px;
+  }
+
+  .collection-shell[data-view="gallery"] .specimen-card p,
+  .collection-shell[data-view="gallery"] .card-link,
+  .collection-shell[data-view="gallery"] .specimen-category {
+    display: none;
+  }
+
+  .collection-shell[data-view="list"] .card-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+
+  .collection-shell[data-view="list"] .specimen-card {
+    grid-template-columns: minmax(150px, 240px) minmax(0, 1fr);
+  }
+
+  .collection-shell[data-view="list"] .thumb {
+    border-right: 1px solid var(--border-faint);
+    border-bottom: 0;
+  }
+
+  .collection-shell[data-view="list"] .thumb img {
+    min-height: 100%;
+  }
+
+  .collection-shell[data-view="list"] .specimen-card__body {
+    align-content: center;
+  }
+
+  @media (max-width: 700px) {
+    .collection-shell[data-view="list"] .specimen-card {
+      grid-template-columns: 1fr;
+    }
+
+    .collection-shell[data-view="list"] .thumb {
+      border-right: 0;
+      border-bottom: 1px solid var(--border-faint);
+    }
+  }
+</style>

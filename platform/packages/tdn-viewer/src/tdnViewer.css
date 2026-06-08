@@ -1,0 +1,140 @@
+.tdn-viewer {
+  --tdn-bg: var(--bg, #181e1e);
+  --tdn-panel: var(--bg-elevated, #1f2321);
+  --tdn-panel-strong: var(--bg-elevated-2, #283028);
+  --tdn-code: var(--bg-code, #161e1a);
+  --tdn-line: var(--border, #2a4a42);
+  --tdn-line-faint: var(--border-faint, #283028);
+  --tdn-text: var(--text, #c8d0c9);
+  --tdn-muted: var(--text-muted, #97a098);
+  --tdn-faint: var(--text-faint, #6b756c);
+  --tdn-accent: var(--accent, #6ee668);
+  width: 100%;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--tdn-line);
+  border-radius: var(--radius, 14px);
+  background:
+    linear-gradient(rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    var(--tdn-bg);
+  background-size: 32px 32px;
+}
+
+.tdn-viewer .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--tdn-line);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--tdn-panel) 86%, transparent);
+  box-shadow: none;
+}
+
+.tdn-viewer .react-flow__controls-button {
+  width: 30px;
+  height: 30px;
+  border-bottom: 1px solid var(--tdn-line-faint);
+  background: transparent;
+  color: var(--tdn-text);
+}
+
+.tdn-viewer .react-flow__controls-button:hover {
+  background: var(--tdn-panel-strong);
+  color: var(--tdn-accent);
+}
+
+.tdn-viewer .react-flow__attribution {
+  background: color-mix(in srgb, var(--tdn-bg) 76%, transparent);
+  color: var(--tdn-muted);
+}
+
+.tdn-operator {
+  width: 168px;
+  min-height: 74px;
+  overflow: hidden;
+  border: 1px solid var(--tdn-line-faint);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--family-color) 14%, var(--tdn-panel) 86%);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+  color: var(--tdn-text);
+}
+
+.tdn-operator__head {
+  height: 12px;
+  background: var(--family-color);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--family-color) 42%, transparent);
+}
+
+.tdn-operator__body {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px 13px;
+}
+
+.tdn-operator__name {
+  overflow: hidden;
+  color: var(--tdn-text);
+  font: 700 14px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tdn-operator__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--tdn-muted);
+  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.tdn-operator__family {
+  color: var(--family-color);
+}
+
+.tdn-handle {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--tdn-bg);
+  background: var(--tdn-accent);
+}
+
+.tdn-handle--target {
+  left: -5px;
+}
+
+.tdn-handle--source {
+  right: -5px;
+}
+
+.tdn-handle--comp {
+  bottom: -5px;
+}
+
+.tdn-annotation {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid var(--annotation-color);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--annotation-color) 18%, transparent);
+  padding: 12px 14px;
+  color: color-mix(in srgb, var(--tdn-text) 66%, transparent);
+  font: 600 12px/1.2 var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.tdn-annotation span {
+  color: color-mix(in srgb, var(--tdn-text) 82%, transparent);
+}
+
+.tdn-annotation p {
+  max-width: 48ch;
+  margin: 0;
+  color: color-mix(in srgb, var(--tdn-text) 52%, transparent);
+  line-height: 1.35;
+}

@@ -1,0 +1,186 @@
+---
+import { TdnViewer } from "@embody/tdn-viewer";
+import CopyButton from "../../components/CopyButton.astro";
+import Base from "../../layouts/Base.astro";
+import specimens from "../../fixtures/specimens.json";
+import { sampleTdn } from "../../fixtures/sample-tdn";
+
+const fallback = specimens[0];
+if (!fallback) {
+  throw new Error("Missing specimen fixtures.");
+}
+
+const slug = Astro.params.slug ?? fallback.slug;
+const specimen = specimens.find((item) => item.slug === slug) ?? fallback;
+const rawTdn = JSON.stringify(sampleTdn, null, 2);
+const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
+---
+
+<Base
+  title={`${specimen.name} - embody.tools`}
+  description={specimen.description}
+>
+  <section class="page-section detail-hero">
+    <p class="eyebrow">Specimen / {specimen.category}</p>
+    <h1>{specimen.name}</h1>
+    <p class="lede">{specimen.description}</p>
+    <div class="badge-row">
+      <span class="badge">{specimen.difficulty}</span>
+      <span class:list={["badge", specimen.requires === "none" ? "stock" : "needs"]}>
+        {specimen.requires === "none" ? "stock TD" : `needs ${specimen.requires}`}
+      </span>
+      <span class="badge">{specimen.operator_count} operators</span>
+    </div>
+  </section>
+
+  <section class="page-section tight specimen-layout">
+    <div class="viewer-panel pillar">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Node graph preview</p>
+          <h2>{specimen.name} graph</h2>
+        </div>
+        <span class="badge stock">inert preview</span>
+      </div>
+      <TdnViewer tdn={sampleTdn} client:load />
+    </div>
+
+    <aside class="specimen-sidebar">
+      <section class="side-block pillar">
+        <p class="eyebrow">Key ops</p>
+        <div class="op-list">
+          {specimen.key_ops.map((opName) => <span>{opName}</span>)}
+        </div>
+      </section>
+
+      <section class="side-block pillar">
+        <p class="eyebrow">Example prompt</p>
+        <div class="copy-shell">
+          <p class="copy-shell__text">{specimen.prompt}</p>
+          <CopyButton text={specimen.prompt} ariaLabel={`Copy ${specimen.name} example prompt`} />
+        </div>
+      </section>
+
+      <section class="side-block embody-block pillar">
+        <p class="eyebrow">How to embody it</p>
+        <div class="copy-shell">
+          <p>Tell your agent:</p>
+          <p class="copy-shell__text">{embodyPrompt}</p>
+          <CopyButton text={embodyPrompt} ariaLabel={`Copy embody command for ${specimen.name}`} />
+        </div>
+      </section>
+    </aside>
+  </section>
+
+  <section class="page-section tight raw-section">
+    <details class="raw-details pillar">
+      <summary>Show raw TDN JSON</summary>
+      <CopyButton targetId="raw-tdn-json" ariaLabel="Copy raw TDN JSON" class="copy-button--corner" />
+      <pre id="raw-tdn-json"><code>{rawTdn}</code></pre>
+    </details>
+  </section>
+</Base>
+
+<style>
+  .detail-hero {
+    padding-bottom: 48px;
+  }
+
+  .specimen-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 20px;
+    align-items: start;
+  }
+
+  .viewer-panel,
+  .side-block,
+  details {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+
+  .viewer-panel {
+    padding: 18px;
+  }
+
+  .panel-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 18px;
+  }
+
+  .panel-head h2 {
+    margin-bottom: 0;
+    font-size: clamp(24px, 3vw, 38px);
+  }
+
+  .specimen-sidebar {
+    display: grid;
+    gap: 14px;
+  }
+
+  .side-block {
+    padding: 18px;
+  }
+
+  .side-block p {
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  .op-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .op-list span {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    background: rgba(40, 48, 40, 0.54);
+    padding: 8px 10px;
+    color: var(--text);
+    font: 600 12px/1 var(--font-mono);
+  }
+
+  .embody-block {
+    border-color: var(--border);
+  }
+
+  details {
+    position: relative;
+    overflow: hidden;
+  }
+
+  summary {
+    cursor: pointer;
+    padding: 18px 7.4rem 18px 18px;
+    color: var(--accent);
+    font: 600 13px/1 var(--font-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  pre {
+    max-height: 520px;
+    margin: 0;
+    overflow: auto;
+    border: 0;
+    border-top: 1px solid var(--border-faint);
+    border-radius: 0;
+    background: var(--bg-code);
+    padding: 18px;
+    color: var(--text);
+    font: 12px/1.55 var(--font-mono);
+  }
+
+  @media (max-width: 920px) {
+    .specimen-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
