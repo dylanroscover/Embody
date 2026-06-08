@@ -1,0 +1,15 @@
+{
+  "name": "@embody/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Frozen cross-cutting contracts (C1 envelope, C2 capability, C4 api, C6 graph) shared by the web app, scanner-ts, and tdn-viewer. Source-only (.ts); consumed by bundlers.",
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}
