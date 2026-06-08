@@ -109,7 +109,7 @@ If your project isn't in a git repo, add `.mcp.json` manually to your project ro
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 37 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
+...and 42 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
 When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD development patterns, the complete MCP tool reference, and project-specific guidance.
 
