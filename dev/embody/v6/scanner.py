@@ -229,6 +229,20 @@ def _scan_operator_like(op_data, op_path, type_defaults, state):
     _scan_custom_parameters(op_data.get("custom_pars"), op_path, state)
     _scan_sequences(op_data.get("sequences"), op_path, op_type, state)
     _scan_storage(op_data, op_path, state)
+    _scan_external_refs(op_data, op_path, state)
+
+
+def _scan_external_refs(op_data, op_path, state):
+    for key in ("tdn_ref", "tox_ref"):
+        ref = op_data.get(key)
+        if isinstance(ref, str) and ref.strip():
+            _add_count(
+                state,
+                op_path,
+                "external_refs",
+                "COMP references external content via %s (not inlined, not scanned)" % key,
+                ref,
+            )
 
 
 def _scan_execute_dat(op_data, op_path, op_type, state):

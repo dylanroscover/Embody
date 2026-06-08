@@ -22,6 +22,9 @@ export interface CapabilityCounts {
   denylisted_types: number;
   /** file/syncfile params with absolute or traversal (`..`) paths. */
   traversal_paths: number;
+  /** COMPs using tdn_ref/tox_ref - they reference EXTERNAL content not present in this payload,
+   *  so it cannot be scanned. Community submissions must be self-contained (no external_refs). */
+  external_refs: number;
 }
 
 export type CapabilitySurface = keyof CapabilityCounts;
@@ -53,6 +56,7 @@ export const CAPABILITY_SURFACES: readonly CapabilitySurface[] = [
   "storage_payloads",
   "denylisted_types",
   "traversal_paths",
+  "external_refs",
 ] as const;
 
 /** A zeroed CapabilityCounts. */
@@ -65,5 +69,6 @@ export function emptyCapabilityCounts(): CapabilityCounts {
     storage_payloads: 0,
     denylisted_types: 0,
     traversal_paths: 0,
+    external_refs: 0,
   };
 }

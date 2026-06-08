@@ -44,6 +44,7 @@ CAPABILITY_SURFACES = (
     "storage_payloads",
     "denylisted_types",
     "traversal_paths",
+    "external_refs",
 )
 
 

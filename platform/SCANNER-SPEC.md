@@ -31,6 +31,12 @@ Walk every operator (and nested COMP) in the TDN. Classify:
    count is the raw denylisted-op tally).
 7. `traversal_paths` - `file` / `syncfile` (and similar path) params holding an ABSOLUTE path or a
    `..` traversal segment -> disk read/write + SSRF/exfiltration even with zero Python.
+8. `external_refs` - COMPs using `tdn_ref` / `tox_ref` (mutually exclusive with inlined `children`):
+   they reference EXTERNAL .tdn/.tox content NOT present in this payload, so it cannot be scanned.
+   Legitimate inside a user's own Embody project, but a community SUBMISSION must be self-contained:
+   the submit pipeline REJECTS any TDN with `external_refs > 0` (not self-contained), and the Embody
+   import side warns. Scored as `flagged` (not `blocked`) at the scanner level so own-network
+   round-trips still import.
 
 ## AST allowlist (for dat_content AND every =/~ expression)
 `ast.parse` the source, then a NodeVisitor FLAGS any of:

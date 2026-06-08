@@ -240,6 +240,23 @@ class TestScanner(unittest.TestCase):
         self.assertEqual(result["verdict"], "flagged")
         self.assertGreaterEqual(result["counts"]["storage_payloads"], 1)
 
+    def test_external_ref_comp_flags_external_refs(self):
+        # A COMP that references external content (tdn_ref/tox_ref) cannot be scanned
+        # inline -> must be surfaced so the submit pipeline can require self-containment.
+        for key in ("tdn_ref", "tox_ref"):
+            tdn = make_tdn(
+                [{"name": "child1", "type": "baseCOMP", key: "child1.tdn"}]
+            )
+            result = scanner.scan_tdn(tdn)
+            self.assertEqual(result["verdict"], "flagged", key)
+            self.assertGreaterEqual(result["counts"]["external_refs"], 1, key)
+            self.assert_all_evidence_bounded(result)
+
+    def test_clean_network_has_zero_external_refs(self):
+        tdn = make_tdn([{"name": "null1", "type": "nullTOP"}])
+        result = scanner.scan_tdn(tdn)
+        self.assertEqual(result["counts"]["external_refs"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
