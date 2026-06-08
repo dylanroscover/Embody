@@ -3,11 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Fixture-only design review scaffold for embody.tools.",
+  "description": "Astro Worker app for embody.tools.",
   "dependencies": {
     "@astrojs/cloudflare": "^13.6.1",
     "@astrojs/react": "^5.0.3",
     "@embody/contracts": "*",
+    "@embody/scanner-ts": "*",
     "@embody/tdn-viewer": "*",
     "astro": "^6.4.4",
     "react": "^19.2.0",
