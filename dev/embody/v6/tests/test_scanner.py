@@ -257,6 +257,17 @@ class TestScanner(unittest.TestCase):
         result = scanner.scan_tdn(tdn)
         self.assertEqual(result["counts"]["external_refs"], 0)
 
+    def test_internal_scan_error_fails_closed(self):
+        # If the internal walk raises, the scanner must return "blocked", never "clean".
+        original = scanner._scan_tdn_root
+        scanner._scan_tdn_root = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        try:
+            result = scanner.scan_tdn(make_tdn([{"name": "null1", "type": "nullTOP"}]))
+        finally:
+            scanner._scan_tdn_root = original
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertTrue(any(f["detail"].startswith("scanner aborted") for f in result["findings"]))
+
 
 if __name__ == "__main__":
     unittest.main()

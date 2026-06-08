@@ -153,8 +153,19 @@ def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
     state = _ScanState(counts, findings)
     try:
         _scan_tdn_root(tdn, state)
-    except Exception:
-        pass
+    except Exception as exc:
+        # FAIL CLOSED: an internal scan error must NOT be reported as clean - an aborted walk
+        # may have missed surfaces. Treat it as blocked so an unverifiable payload is never
+        # waved through. (Review finding, dimension 5/10.)
+        state.blocked = True
+        findings.append(
+            _finding(
+                "/",
+                "execute_dats",
+                "scanner aborted on internal error; failing closed (treat as unsafe)",
+                type(exc).__name__,
+            )
+        )
 
     if state.blocked:
         verdict = "blocked"
