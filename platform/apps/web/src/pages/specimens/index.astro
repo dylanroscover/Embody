@@ -1,7 +1,26 @@
 ---
+import { env } from "cloudflare:workers";
+import type { SpecimenSummary } from "@embody/contracts";
 import Base from "../../layouts/Base.astro";
-import specimens from "../../fixtures/specimens.json";
+import { fixtureSummaries } from "../../lib/specimenFallback";
 import { specimenThumbnail } from "../../lib/specimenThumb";
+import { listSpecimens } from "../../server/db";
+
+export const prerender = false;
+
+let specimens: SpecimenSummary[] = fixtureSummaries;
+let countLabel = `${fixtureSummaries.length} fixture specimens`;
+
+try {
+  const response = await listSpecimens(env.DB, { pageSize: 100 });
+  if (response.specimens.length > 0) {
+    specimens = response.specimens;
+    countLabel = `${response.count} specimens`;
+  }
+} catch {
+  specimens = fixtureSummaries;
+  countLabel = `${fixtureSummaries.length} fixture specimens`;
+}
 ---
 
 <Base
@@ -16,7 +35,7 @@ import { specimenThumbnail } from "../../lib/specimenThumb";
       readable graph. These fixtures stand in for the future community library.
     </p>
     <div class="collection-toolbar">
-      <span class="collection-total mono">{specimens.length} fixture specimens</span>
+      <span class="collection-total mono">{countLabel}</span>
       <div class="view-toggle" role="group" aria-label="Collection view">
         <button type="button" class="view-toggle__button is-active" data-view-option="gallery" aria-pressed="true">Gallery</button>
         <button type="button" class="view-toggle__button" data-view-option="list" aria-pressed="false">List</button>

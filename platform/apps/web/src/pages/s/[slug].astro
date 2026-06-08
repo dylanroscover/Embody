@@ -1,19 +1,135 @@
 ---
+import { env } from "cloudflare:workers";
+import type { SpecimenDetail } from "@embody/contracts";
 import { TdnViewer } from "@embody/tdn-viewer";
 import CopyButton from "../../components/CopyButton.astro";
+import CopyTdnEnvelopeButton from "../../components/CopyTdnEnvelopeButton";
 import Base from "../../layouts/Base.astro";
-import specimens from "../../fixtures/specimens.json";
+import {
+  findFixtureSpecimen,
+  firstFixtureSpecimen,
+  type FixtureSpecimen
+} from "../../lib/specimenFallback";
 import { sampleTdn } from "../../fixtures/sample-tdn";
+import { getCurrentTdnBlobForSlug, getSpecimenBySlug } from "../../server/db";
+import { getTdn } from "../../server/r2";
 
-const fallback = specimens[0];
-if (!fallback) {
-  throw new Error("Missing specimen fixtures.");
+export const prerender = false;
+
+type DisplaySpecimen = {
+  slug: string;
+  name: string;
+  category: string;
+  difficulty: string;
+  description: string;
+  requires: string;
+  operator_count: number;
+  key_ops: string[];
+  prompt: string;
+  current_version?: number;
+};
+
+const fallback = firstFixtureSpecimen();
+const slug = Astro.params.slug ?? fallback.slug;
+const fixtureSpecimen = findFixtureSpecimen(slug) ?? fallback;
+let specimen = specimenFromFixture(fixtureSpecimen);
+let tdn: Record<string, unknown> = sampleTdn;
+
+try {
+  const liveSpecimen = await getSpecimenBySlug(env.DB, slug);
+  if (liveSpecimen) {
+    specimen = specimenFromLive(liveSpecimen, fixtureSpecimen);
+  }
+} catch {
+  specimen = specimenFromFixture(fixtureSpecimen);
 }
 
-const slug = Astro.params.slug ?? fallback.slug;
-const specimen = specimens.find((item) => item.slug === slug) ?? fallback;
-const rawTdn = JSON.stringify(sampleTdn, null, 2);
+try {
+  const blob = await getCurrentTdnBlobForSlug(env.DB, specimen.slug);
+  if (blob) {
+    const rawBlob = await getTdn(env.BLOBS, blob.key);
+    const parsedTdn = parseTdnObject(rawBlob);
+    if (parsedTdn) {
+      tdn = parsedTdn;
+    }
+  }
+} catch {
+  tdn = sampleTdn;
+}
+
+const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorTypes(tdn);
+const rawTdn = JSON.stringify(tdn, null, 2);
 const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
+
+function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
+  return {
+    slug: fixture.slug,
+    name: fixture.name,
+    category: fixture.category,
+    difficulty: fixture.difficulty,
+    description: fixture.description,
+    requires: fixture.requires,
+    operator_count: fixture.operator_count,
+    key_ops: fixture.key_ops,
+    prompt: fixture.prompt
+  };
+}
+
+function specimenFromLive(
+  live: SpecimenDetail,
+  fixture: FixtureSpecimen | undefined
+): DisplaySpecimen {
+  return {
+    slug: live.slug,
+    name: live.name,
+    category: live.category,
+    difficulty: live.difficulty,
+    description: live.description,
+    requires: live.requires,
+    operator_count: live.op_count,
+    key_ops: fixture?.key_ops ?? [],
+    prompt: fixture?.prompt ?? `Embody the ${live.slug} specimen into my project.`,
+    current_version: live.current_version
+  };
+}
+
+function parseTdnObject(value: string | null): Record<string, unknown> | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function collectOperatorTypes(value: unknown): string[] {
+  const seen = new Set<string>();
+  collectOperatorTypesInto(value, seen);
+  return [...seen].slice(0, 6);
+}
+
+function collectOperatorTypesInto(value: unknown, seen: Set<string>): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.type === "string" && record.type.trim()) {
+    seen.add(record.type);
+  }
+
+  for (const key of ["operators", "children"] as const) {
+    const children = record[key];
+    if (!Array.isArray(children)) continue;
+    for (const child of children) {
+      collectOperatorTypesInto(child, seen);
+    }
+  }
+}
 ---
 
 <Base
@@ -42,14 +158,14 @@ const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
         </div>
         <span class="badge stock">inert preview</span>
       </div>
-      <TdnViewer tdn={sampleTdn} client:load />
+      <TdnViewer tdn={tdn} client:load />
     </div>
 
     <aside class="specimen-sidebar">
       <section class="side-block pillar">
         <p class="eyebrow">Key ops</p>
         <div class="op-list">
-          {specimen.key_ops.map((opName) => <span>{opName}</span>)}
+          {keyOps.map((opName) => <span>{opName}</span>)}
         </div>
       </section>
 
@@ -75,7 +191,14 @@ const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
   <section class="page-section tight raw-section">
     <details class="raw-details pillar">
       <summary>Show raw TDN JSON</summary>
-      <CopyButton targetId="raw-tdn-json" ariaLabel="Copy raw TDN JSON" class="copy-button--corner" />
+      <CopyTdnEnvelopeButton
+        tdn={tdn}
+        slug={specimen.slug}
+        version={specimen.current_version}
+        className="copy-button--corner"
+        client:load
+      />
+      <p class="raw-copy-hint">Paste in TouchDesigner with Embody running.</p>
       <pre id="raw-tdn-json"><code>{rawTdn}</code></pre>
     </details>
   </section>
@@ -163,6 +286,12 @@ const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
     font: 600 13px/1 var(--font-mono);
     letter-spacing: 0.12em;
     text-transform: uppercase;
+  }
+
+  .raw-copy-hint {
+    margin: -6px 18px 14px;
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
   }
 
   pre {
