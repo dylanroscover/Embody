@@ -1,7 +1,7 @@
 ---
-import CopyButton from "../../components/CopyButton.astro";
-import Base from "../../layouts/Base.astro";
-import specimens from "../../fixtures/specimens.json";
+import CopyButton from "../components/CopyButton.astro";
+import Base from "../layouts/Base.astro";
+import specimens from "../fixtures/specimens.json";
 ---
 
 <Base
@@ -55,7 +55,7 @@ import specimens from "../../fixtures/specimens.json";
 
           <div class="guide-card__section">
             <span class="guide-label">Specimen</span>
-            <a class="specimen-link" href={`/s/${specimen.slug}`}>{specimen.name}</a>
+            <a class="specimen-link" href={`/c/${specimen.slug}`}>{specimen.name}</a>
           </div>
 
           <div class="guide-card__section">

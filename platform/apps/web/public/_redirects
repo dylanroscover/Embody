@@ -1,0 +1,5 @@
+/specimens             /collection      301
+/specimens/            /collection      301
+/specimens/field-guide /field-guide     301
+/specimens/search      /collection      301
+/s/*                   /c/:splat        301

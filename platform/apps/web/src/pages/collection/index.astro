@@ -35,7 +35,14 @@ try {
       readable graph. These fixtures stand in for the future community library.
     </p>
     <div class="collection-toolbar">
-      <span class="collection-total mono">{countLabel}</span>
+      <input
+        type="search"
+        class="collection-search"
+        placeholder="filter the collection..."
+        aria-label="Filter specimens"
+        data-collection-search
+      />
+      <span class="collection-total mono" data-collection-count>{countLabel}</span>
       <div class="view-toggle" role="group" aria-label="Collection view">
         <button type="button" class="view-toggle__button is-active" data-view-option="gallery" aria-pressed="true">Gallery</button>
         <button type="button" class="view-toggle__button" data-view-option="list" aria-pressed="false">List</button>
@@ -47,7 +54,11 @@ try {
     <section class="page-section tight collection-results">
       <div class="card-grid">
         {specimens.map((specimen) => (
-          <a class="specimen-card pillar" href={`/s/${specimen.slug}`}>
+          <a
+            class="specimen-card pillar"
+            href={`/c/${specimen.slug}`}
+            data-search={`${specimen.name} ${specimen.description} ${specimen.category} ${specimen.difficulty} ${specimen.requires}`.toLowerCase()}
+          >
             <div class="thumb">
               <img
                 src={specimenThumbnail(specimen)}
@@ -65,7 +76,7 @@ try {
               </div>
               <h3>{specimen.name}</h3>
               <p>{specimen.description}</p>
-              <span class="card-link">Inspect /s/{specimen.slug}</span>
+              <span class="card-link">Inspect /c/{specimen.slug}</span>
             </div>
           </a>
         ))}
@@ -89,6 +100,28 @@ try {
         });
       });
     });
+
+    // Inline search: client-side filter over the loaded specimen set.
+    const searchInput = document.querySelector("[data-collection-search]");
+    const countEl = document.querySelector("[data-collection-count]");
+    const baseCount = countEl ? countEl.textContent : "";
+    const cards = Array.from(document.querySelectorAll(".specimen-card"));
+
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        const q = searchInput.value.trim().toLowerCase();
+        let shown = 0;
+        cards.forEach((card) => {
+          const hay = card.getAttribute("data-search") || "";
+          const match = !q || hay.includes(q);
+          card.classList.toggle("is-hidden", !match);
+          if (match) shown += 1;
+        });
+        if (countEl) {
+          countEl.textContent = q ? `${shown} match${shown === 1 ? "" : "es"}` : baseCount;
+        }
+      });
+    }
   </script>
 </Base>
 
@@ -115,6 +148,32 @@ try {
     font-size: 0.76rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+
+  .collection-search {
+    flex: 1 1 220px;
+    min-width: 170px;
+    max-width: 360px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 0.5rem 1rem;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+
+  .collection-search::placeholder {
+    color: var(--text-faint);
+  }
+
+  .collection-search:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .specimen-card.is-hidden {
+    display: none;
   }
 
   .view-toggle {

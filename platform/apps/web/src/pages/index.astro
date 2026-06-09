@@ -4,90 +4,147 @@ import Base from "../layouts/Base.astro";
 import specimens from "../fixtures/specimens.json";
 import { sampleTdn } from "../fixtures/sample-tdn";
 import { specimenThumbnail } from "../lib/specimenThumb";
+import Pillars from "../components/landing/Pillars.astro";
+import PracticeSection from "../components/landing/PracticeSection.astro";
+import TdnShowcase from "../components/landing/TdnShowcase.astro";
+import QuickstartSteps from "../components/landing/QuickstartSteps.astro";
+import ManifestoSection from "../components/landing/ManifestoSection.astro";
 
 const featured = specimens.slice(0, 3);
+const ogImage = "https://embody.tools/assets/embody-screenshot.png";
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Embody",
+  alternateName: "Embody + Envoy",
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Windows, macOS",
+  description:
+    "Open-source TouchDesigner toolkit. Envoy is an MCP server with 48 tools that lets AI assistants build, wire, parameterize, and debug a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable JSON network format that makes both possible.",
+  url: "https://embody.tools/",
+  downloadUrl: "https://github.com/dylanroscover/Embody/releases/latest",
+  softwareHelp: "https://dylanroscover.github.io/Embody/",
+  codeRepository: "https://github.com/dylanroscover/Embody",
+  license: "https://opensource.org/licenses/MIT",
+  isAccessibleForFree: true,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  author: { "@type": "Person", name: "Dylan Roscover" },
+  publisher: { "@type": "Organization", name: "TEC", url: "https://tec.design" },
+  softwareRequirements: "TouchDesigner 2025.32280 or later",
+  keywords:
+    "TouchDesigner, MCP, Model Context Protocol, AI agent, externalization, version control, TDN, generative art, creative coding, Claude Code, Cursor, Windsurf"
+};
 ---
 
 <Base
-  title="embody.tools - TouchDesigner network specimens"
-  description="A fixture-only design review scaffold for the transparent TouchDesigner network Collection."
+  title="Embody - create at the speed of thought."
+  description="Say what you want, watch operators appear in your live TouchDesigner session - every version saved as readable text. Open source, MIT."
+  ogImage={ogImage}
+  ogUrl="https://embody.tools/"
 >
+  <script type="application/ld+json" slot="head" set:html={JSON.stringify(jsonLd)} />
+
+  <!-- HERO -->
   <section class="hero">
     <div class="hero-graph" aria-hidden="true">
       <TdnViewer tdn={sampleTdn} height="100%" client:load />
     </div>
-    <div class="hero-copy">
-      <p class="eyebrow">embody.tools</p>
-      <h1>speak a TouchDesigner network into being</h1>
-      <p class="lede">
-        Browse a Specimen, inspect the TDN, copy the network, and evolve it in your project.
-        The Collection is built on transparent files instead of opaque recipes.
-      </p>
-      <div class="actions">
-        <a class="btn btn--primary" href="/specimens">Enter the Collection</a>
-        <a class="btn btn--outline" href="/specimens/field-guide">Read the Field Guide</a>
-      </div>
-    </div>
-  </section>
+    <div class="container hero__inner">
+      <p class="eyebrow">open source &middot; MIT &middot; TouchDesigner 2025+</p>
+      <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
 
-  <section class="page-section intro-band">
-    <div>
-      <p class="eyebrow">The transparent TDN moat</p>
-      <h2>every Specimen shows its form</h2>
-    </div>
-    <p class="lede">
-      A Specimen is a tested, instantiable TDN network. The same file powers the node-graph
-      preview, the raw JSON reveal, the clipboard payload, and the future platform API.
-    </p>
-  </section>
-
-  <section class="page-section tight">
-    <div class="section-heading">
-      <p class="eyebrow">First fixtures</p>
-      <h2>signals from the Collection</h2>
-    </div>
-    <div class="card-grid">
-      {featured.map((specimen) => (
-        <a class="specimen-card pillar" href={`/s/${specimen.slug}`}>
-          <div class="thumb">
-            <img
-              src={specimenThumbnail(specimen)}
-              loading="lazy"
-              alt={`${specimen.name} node preview placeholder`}
-            />
-          </div>
-          <div class="specimen-card__body">
-            <div class="badge-row">
-              <span class="badge">{specimen.category}</span>
-              <span class:list={["badge", specimen.requires === "none" ? "stock" : "needs"]}>
-                {specimen.requires === "none" ? "stock TD" : `needs ${specimen.requires}`}
-              </span>
-            </div>
-            <h3>{specimen.name}</h3>
-            <p>{specimen.description}</p>
-          </div>
+      <div class="hero__ctas">
+        <a class="btn btn--primary" href="https://github.com/dylanroscover/Embody/releases/latest">
+          Download the .tox <span aria-hidden="true">&rarr;</span>
         </a>
-      ))}
+        <a class="btn btn--outline" href="https://dylanroscover.github.io/Embody/quickstart/">
+          Quickstart <span aria-hidden="true">&rarr;</span>
+        </a>
+        <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/manifesto/">
+          Read the manifesto
+        </a>
+        <a class="btn btn--ghost" href="https://github.com/dylanroscover/Embody" aria-label="View Embody on GitHub">
+          <svg class="btn__icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.66 7.66 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          GitHub
+        </a>
+      </div>
+
+      <figure class="hero__shot">
+        <img
+          src="/assets/embody-screenshot.png"
+          alt="Embody running inside TouchDesigner - the extension panel docked beside a live network."
+          loading="eager"
+          decoding="async"
+        />
+        <figcaption class="hero__shot__caption">Demo video coming soon &mdash; until then, here's the manager UI.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <Pillars />
+  <PracticeSection />
+  <TdnShowcase />
+  <QuickstartSteps />
+  <ManifestoSection />
+
+  <!-- COLLECTION TEASER -->
+  <section class="section section--collection">
+    <div class="container">
+      <p class="eyebrow">the collection</p>
+      <h2 class="section__title">browse the Collection.</h2>
+      <p class="lede">
+        Transparent TDN networks you can inspect node-for-node, copy to your clipboard, and evolve in your own project.
+      </p>
+
+      <div class="card-grid">
+        {featured.map((specimen) => (
+          <a class="specimen-card pillar" href={`/c/${specimen.slug}`}>
+            <div class="thumb">
+              <img
+                src={specimenThumbnail(specimen)}
+                loading="lazy"
+                alt={`${specimen.name} node preview placeholder`}
+              />
+            </div>
+            <div class="specimen-card__body">
+              <div class="badge-row">
+                <span class="badge">{specimen.category}</span>
+                <span class:list={["badge", specimen.requires === "none" ? "stock" : "needs"]}>
+                  {specimen.requires === "none" ? "stock TD" : `needs ${specimen.requires}`}
+                </span>
+              </div>
+              <h3>{specimen.name}</h3>
+              <p>{specimen.description}</p>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      <p class="start__cta">
+        <a class="btn btn--outline" href="/collection">Enter the Collection <span aria-hidden="true">&rarr;</span></a>
+      </p>
     </div>
   </section>
 </Base>
 
 <style>
+  /* Hero -- the node-graph motif sits behind the headline as faint texture,
+     not a chart (per the unify plan: reuse the graph instead of a radial glow). */
   .hero {
     position: relative;
-    display: grid;
-    min-height: min(720px, calc(100svh - 128px));
     overflow: hidden;
-    align-items: end;
-    padding: clamp(8rem, 14vw, 11rem) max(var(--gutter), calc((100vw - var(--content-max)) / 2 + var(--gutter))) clamp(2.5rem, 5vw, 4rem);
+    padding: clamp(7rem, 12vw, 10rem) 0 clamp(3rem, 6vw, 5rem);
   }
 
   .hero-graph {
     position: absolute;
-    inset: -80px -130px -40px 18%;
+    inset: -80px -130px -40px 22%;
     z-index: 0;
-    opacity: 0.38;
-    filter: blur(0.6px);
+    opacity: 0.22;
+    filter: blur(2px);
     pointer-events: none;
   }
 
@@ -103,61 +160,48 @@ const featured = specimens.slice(0, 3);
     inset: 0;
     z-index: 1;
     content: "";
-    background: linear-gradient(102deg, var(--bg) 26%, rgba(24, 30, 30, 0.5) 52%, transparent 80%);
+    background: linear-gradient(102deg, var(--bg) 30%, rgba(24, 30, 30, 0.55) 56%, transparent 82%);
     pointer-events: none;
   }
 
   .hero::after {
     position: absolute;
     inset: auto 0 0;
-    height: 46%;
+    height: 42%;
     z-index: 1;
     content: "";
     background: linear-gradient(transparent, var(--bg));
     pointer-events: none;
   }
 
-  .hero-copy {
+  .hero__inner {
     position: relative;
     z-index: 2;
-    max-width: 820px;
+    display: flex;
+    flex-direction: column;
+    gap: 2.25rem;
   }
 
-  .hero-copy h1 {
-    text-shadow: 0 2px 30px rgba(8, 12, 8, 0.6);
+  .hero__inner .eyebrow {
+    margin: 0;
   }
 
-  .intro-band {
-    display: grid;
-    grid-template-columns: minmax(240px, 0.8fr) minmax(280px, 1fr);
-    gap: 34px;
-    max-width: none;
-    border-top: 1px solid var(--border-faint);
-    border-bottom: 1px solid var(--border-faint);
-    background: rgba(40, 48, 40, 0.24);
-    padding-top: clamp(2.5rem, 4.5vw, 3.75rem);
-    padding-bottom: clamp(2.5rem, 4.5vw, 3.75rem);
-    padding-right: max(var(--gutter), calc((100vw - var(--content-max)) / 2 + var(--gutter)));
-    padding-left: max(var(--gutter), calc((100vw - var(--content-max)) / 2 + var(--gutter)));
+  .hero__shot {
+    max-width: 900px;
   }
 
-  .section-heading {
-    margin-bottom: 28px;
+  .section--collection .card-grid {
+    margin-top: 2.25rem;
   }
 
   @media (max-width: 760px) {
     .hero {
-      min-height: max(520px, calc(100svh - 180px));
-      padding-top: 72px;
+      padding-top: 6.75rem;
     }
 
     .hero-graph {
-      inset: -60px -220px 90px 0;
-      opacity: 0.28;
-    }
-
-    .intro-band {
-      grid-template-columns: 1fr;
+      inset: -60px -220px 120px 0;
+      opacity: 0.16;
     }
   }
 </style>

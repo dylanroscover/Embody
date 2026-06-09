@@ -4,11 +4,15 @@ import "../styles/embody.css";
 interface Props {
   title?: string;
   description?: string;
+  ogImage?: string;
+  ogUrl?: string;
 }
 
 const {
   title = "embody.tools",
-  description = "The transparent TouchDesigner network Collection."
+  description = "The transparent TouchDesigner network Collection.",
+  ogImage,
+  ogUrl
 } = Astro.props;
 ---
 
@@ -25,28 +29,78 @@ const {
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:site_name" content="embody.tools" />
+    {ogUrl && <meta property="og:url" content={ogUrl} />}
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    <meta name="twitter:card" content={ogImage ? "summary_large_image" : "summary"} />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {ogImage && <meta name="twitter:image" content={ogImage} />}
+    <slot name="head" />
   </head>
   <body>
     <a class="skip-link" href="#content">Skip to content</a>
-    <header class="site-header" aria-label="embody.tools">
-      <div class="mark">
+    <header class="site-header" aria-label="embody.tools" data-site-header>
+      <nav class="site-nav site-nav--left" aria-label="Primary">
         <a class="mark__link" href="/" aria-label="embody.tools home">
           <span class="mark__dot" aria-hidden="true"></span>
           <span class="mark__word">embody.tools</span>
         </a>
-      </div>
-      <nav class="site-nav" aria-label="Primary">
-        <a href="/specimens">collection</a>
-        <a href="/specimens/search">search</a>
-        <a href="/specimens/field-guide">field guide</a>
+        <div class="nav-collapse" data-nav-collapse>
+          <a href="/collection">collection</a>
+          <a href="/field-guide">field guide</a>
+          <a class="nav-collapse__account" href="/submit">submit</a>
+          <a class="nav-collapse__account" href="/signin">sign in</a>
+        </div>
+      </nav>
+      <button class="nav-toggle" type="button" data-nav-toggle aria-label="Toggle navigation" aria-expanded="false">
+        <span class="nav-toggle__bar" aria-hidden="true"></span>
+        <span class="nav-toggle__bar" aria-hidden="true"></span>
+        <span class="nav-toggle__bar" aria-hidden="true"></span>
+      </button>
+      <nav class="site-nav site-nav--right" aria-label="Account">
+        <a href="/submit">submit</a>
+        <a href="/signin">sign in</a>
       </nav>
     </header>
     <main id="content">
       <slot />
     </main>
-    <footer class="site-footer">
-      <span>Specimens are transparent TDN networks.</span>
-      <span>Create at the speed of thought, inspect at the speed of code review.</span>
+    <footer class="footer">
+      <div class="container footer__inner">
+        <div class="footer__col footer__col--brand">
+          <div class="footer__mark">
+            <span class="mark__dot" aria-hidden="true"></span>
+            <span class="footer__word">embody.tools</span>
+          </div>
+          <p class="footer__tag">natural language tools for <a href="https://derivative.ca">TouchDesigner</a></p>
+        </div>
+        <nav class="footer__col" aria-label="Explore">
+          <h4 class="footer__h">Explore</h4>
+          <ul>
+            <li><a href="/collection">collection</a></li>
+            <li><a href="/field-guide">field guide</a></li>
+            <li><a href="https://github.com/dylanroscover/Embody">github</a></li>
+            <li><a href="/for-ai">for AI agents</a></li>
+          </ul>
+        </nav>
+        <nav class="footer__col" aria-label="Reference">
+          <h4 class="footer__h">Reference</h4>
+          <ul>
+            <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
+            <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+            <li><a href="https://dylanroscover.github.io/Embody/manifesto/">manifesto</a></li>
+            <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="container footer__bottom">
+        <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
+        <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+      </div>
     </footer>
     <script>
       const COPY_RESET_MS = 1500;
@@ -84,6 +138,30 @@ const {
           }, COPY_RESET_MS));
         }
       });
+    </script>
+    <script>
+      const siteHeader = document.querySelector("[data-site-header]");
+      const navToggle = document.querySelector("[data-nav-toggle]");
+
+      if (siteHeader && navToggle) {
+        const closeNav = () => {
+          siteHeader.classList.remove("is-open");
+          navToggle.setAttribute("aria-expanded", "false");
+        };
+
+        navToggle.addEventListener("click", () => {
+          const open = siteHeader.classList.toggle("is-open");
+          navToggle.setAttribute("aria-expanded", String(open));
+        });
+
+        siteHeader.querySelectorAll("[data-nav-collapse] a").forEach((link) => {
+          link.addEventListener("click", closeNav);
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeNav();
+        });
+      }
     </script>
   </body>
 </html>

@@ -1,0 +1,75 @@
+---
+// The format that makes it possible -- TDN showcase with a syntax-highlighted sample.
+---
+
+<section class="section section--tdn">
+  <div class="container">
+    <p class="eyebrow">the format that makes it possible</p>
+    <h2 class="section__title">meet TDN.</h2>
+
+    <p class="lede">
+      TDN exports any TouchDesigner network as a single human-readable JSON file &mdash; operators, parameters, connections, layout, annotations, DAT content &mdash; all of it, in text. Every change becomes a clean diff. Every version is a file your AI agent can read, your team can review, and git can meaningfully compare.
+    </p>
+
+    <div class="tdn__grid">
+      <pre class="code" aria-label="Sample TDN file"><code><span class="c-p">{</span>
+  <span class="c-k">"format"</span><span class="c-p">:</span> <span class="c-s">"tdn"</span><span class="c-p">,</span>
+  <span class="c-k">"version"</span><span class="c-p">:</span> <span class="c-s">"1.3"</span><span class="c-p">,</span>
+  <span class="c-k">"generator"</span><span class="c-p">:</span> <span class="c-s">"Embody/5.0.372"</span><span class="c-p">,</span>
+  <span class="c-k">"td_build"</span><span class="c-p">:</span> <span class="c-s">"2025.33020"</span><span class="c-p">,</span>
+  <span class="c-k">"exported_at"</span><span class="c-p">:</span> <span class="c-s">"2026-04-10T08:15:00Z"</span><span class="c-p">,</span>
+  <span class="c-k">"network_path"</span><span class="c-p">:</span> <span class="c-s">"/project1"</span><span class="c-p">,</span>
+  <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"containerCOMP"</span><span class="c-p">,</span>
+  <span class="c-k">"options"</span><span class="c-p">:</span> <span class="c-p">{</span> <span class="c-k">"include_dat_content"</span><span class="c-p">:</span> <span class="c-n">true</span> <span class="c-p">},</span>
+  <span class="c-k">"operators"</span><span class="c-p">:</span> <span class="c-p">[</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"noise1"</span><span class="c-p">,</span>
+      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"noiseTOP"</span><span class="c-p">,</span>
+      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span>
+        <span class="c-k">"amp"</span><span class="c-p">:</span> <span class="c-n">0.8</span><span class="c-p">,</span>
+        <span class="c-k">"period"</span><span class="c-p">:</span> <span class="c-s">"=absTime.frame * 0.1"</span>
+      <span class="c-p">},</span>
+      <span class="c-k">"flags"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"viewer"</span><span class="c-p">]</span>
+    <span class="c-p">},</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"level1"</span><span class="c-p">,</span>
+      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"levelTOP"</span><span class="c-p">,</span>
+      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span>
+        <span class="c-k">"opacity"</span><span class="c-p">:</span> <span class="c-s">"~op('ctrl').par.Fade"</span>
+      <span class="c-p">},</span>
+      <span class="c-k">"inputs"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"noise1"</span><span class="c-p">],</span>
+      <span class="c-k">"flags"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"display"</span><span class="c-p">,</span> <span class="c-s">"render"</span><span class="c-p">],</span>
+      <span class="c-k">"position"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">400</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">]</span>
+    <span class="c-p">}</span>
+  <span class="c-p">],</span>
+  <span class="c-k">"annotations"</span><span class="c-p">:</span> <span class="c-p">[</span>
+    <span class="c-p">{</span>
+      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"annot1"</span><span class="c-p">,</span>
+      <span class="c-k">"mode"</span><span class="c-p">:</span> <span class="c-s">"annotate"</span><span class="c-p">,</span>
+      <span class="c-k">"title"</span><span class="c-p">:</span> <span class="c-s">"noise pipeline"</span><span class="c-p">,</span>
+      <span class="c-k">"position"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">-100</span><span class="c-p">,</span> <span class="c-n">-200</span><span class="c-p">],</span>
+      <span class="c-k">"size"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">700</span><span class="c-p">,</span> <span class="c-n">400</span><span class="c-p">]</span>
+    <span class="c-p">}</span>
+  <span class="c-p">]</span>
+<span class="c-p">}</span></code></pre>
+
+      <ul class="tdn__bullets">
+        <li><strong>Non-default-only</strong> &mdash; only what you actually changed gets written.</li>
+        <li><strong>Type defaults hoisted</strong> &mdash; shared properties dedupe across operators.</li>
+        <li><strong>Expression shorthand</strong> &mdash; <code>=absTime.frame * 0.1</code> instead of verbose wrapper objects.</li>
+        <li><strong>Round-trip safe</strong> &mdash; export &rarr; edit &rarr; import yields the same network.</li>
+        <li><strong>The substrate</strong> for the entire workflow &mdash; forward velocity AND lateral velocity depend on it.</li>
+      </ul>
+    </div>
+
+    <p class="tdn__callout"><span class="tdn__callout-lead">Diffable.</span> Any text tool, any diff viewer, any AI agent can read it.</p>
+
+    <p class="tdn__closer">
+      TDN is what makes the rest of this possible.
+    </p>
+
+    <p class="tdn__link">
+      <a href="https://dylanroscover.github.io/Embody/tdn/specification/">Read the full TDN specification <span aria-hidden="true">&rarr;</span></a>
+    </p>
+  </div>
+</section>
