@@ -1,4 +1,4 @@
-"""Pure Python TDN capability scanner for Embody v6.
+"""Pure Python TDN capability scanner for Embody.
 
 This module intentionally imports no TouchDesigner modules. It accepts a parsed
 TDN dict and returns the frozen C2 CapabilityJson shape from contracts.py.
@@ -9,7 +9,28 @@ import ast
 import json
 import re
 
-import contracts
+
+# ---- C2: capability ------------------------------------------------------------------------
+SCAN_VERDICTS = ("clean", "flagged", "blocked")
+
+# Must match CapabilityCounts keys in capability.ts, in the same order.
+CAPABILITY_SURFACES = (
+    "execute_dats",
+    "file_read_exprs",
+    "web_ops",
+    "extensions",
+    "storage_payloads",
+    "denylisted_types",
+    "traversal_paths",
+    "external_refs",
+)
+
+
+def empty_capability_counts() -> dict:
+    """A zeroed CapabilityCounts dict (all surfaces -> 0)."""
+    return {k: 0 for k in CAPABILITY_SURFACES}
+
+
 
 
 MAX_SERIALIZED_TDN_BYTES = 5 * 1024 * 1024
@@ -112,7 +133,7 @@ class _AstScanResult:
 
 def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
     """Return a C2 CapabilityJson dict for a parsed TDN payload."""
-    counts = contracts.empty_capability_counts()
+    counts = empty_capability_counts()
     findings = []
 
     serialized_size = _serialized_size(tdn)
@@ -169,7 +190,7 @@ def scan_tdn(tdn: dict, scanner_version: str = "v6-scan-1") -> dict:
 
     if state.blocked:
         verdict = "blocked"
-    elif any(counts.get(surface, 0) > 0 for surface in contracts.CAPABILITY_SURFACES):
+    elif any(counts.get(surface, 0) > 0 for surface in CAPABILITY_SURFACES):
         verdict = "flagged"
     else:
         verdict = "clean"
@@ -180,7 +201,7 @@ def _capability(scanner_version, verdict, counts, findings):
     return {
         "scanner_version": scanner_version,
         "verdict": verdict,
-        "counts": {surface: int(counts.get(surface, 0)) for surface in contracts.CAPABILITY_SURFACES},
+        "counts": {surface: int(counts.get(surface, 0)) for surface in CAPABILITY_SURFACES},
         "findings": findings,
     }
 
@@ -637,7 +658,7 @@ def _dat_content_to_text(content):
 
 
 def _add_count(state, op_path, surface, detail, evidence):
-    if surface not in contracts.CAPABILITY_SURFACES:
+    if surface not in CAPABILITY_SURFACES:
         return
     state.counts[surface] += 1
     state.findings.append(_finding(op_path, surface, detail, evidence))

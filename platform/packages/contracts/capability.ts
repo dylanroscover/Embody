@@ -1,5 +1,5 @@
 // FROZEN CONTRACT C2 - TDN capability scan output.
-// Produced by the scanner in BOTH languages (packages/scanner-ts AND dev/embody/v6/scanner.py)
+// Produced by the scanner in BOTH languages (packages/scanner-ts AND dev/embody/Embody/Collection/scanner.py)
 // from identical inputs; they MUST agree on the same TDN fixtures.
 // Consumed by: the Embody import summary, the web capability UI, and D1 `scans.capability_json`.
 // Surface definitions: platform/SCANNER-SPEC.md (contract C8). ASCII only.

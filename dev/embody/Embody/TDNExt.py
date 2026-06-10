@@ -12,9 +12,11 @@ This extension lives on the Embody COMP and is callable via:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -116,6 +118,68 @@ SKIP_STORAGE_KEYS = {
 	'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
 }
 _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
+
+
+# =============================================================================
+# C1 clipboard envelope (_embody_tdn) -- byte-parity with
+# platform/packages/contracts/envelope.ts. Module-level so it stays headless
+# unit-testable (import TDNExt; TDNExt.tdn_sha256(...)) and so the class methods
+# below can call it directly. Trusted own-network Copy/Paste is the only thing
+# that needs it; the untrusted community layer lives in CollectionExt.
+# =============================================================================
+EMBODY_TDN_MARKER = "_embody_tdn"
+EMBODY_TDN_VERSION = 1
+ENVELOPE_SOURCES = ("embody", "embody.tools")
+
+
+def is_embody_tdn_envelope(value) -> bool:
+	if not isinstance(value, dict):
+		return False
+	return (value.get(EMBODY_TDN_MARKER) == EMBODY_TDN_VERSION
+			and value.get("source") in ENVELOPE_SOURCES
+			and isinstance(value.get("sha256"), str)
+			and isinstance(value.get("tdn"), dict))
+
+
+def canonical_tdn_bytes(tdn: dict) -> bytes:
+	"""Canonical JSON bytes used for TDN hashing (must match the TS side)."""
+	return json.dumps(tdn, sort_keys=True, separators=(",", ":"),
+					  ensure_ascii=False).encode("utf-8")
+
+
+def tdn_sha256(tdn: dict) -> str:
+	return hashlib.sha256(canonical_tdn_bytes(tdn)).hexdigest()
+
+
+def wrap_tdn(tdn: dict, source: str, slug=None, version=None) -> dict:
+	if source not in ENVELOPE_SOURCES:
+		raise ValueError("Invalid envelope source: %s" % source)
+	env = {EMBODY_TDN_MARKER: EMBODY_TDN_VERSION, "source": source,
+		   "sha256": tdn_sha256(tdn), "tdn": tdn}
+	if slug is not None:
+		env["slug"] = slug
+	if version is not None:
+		env["version"] = version
+	return env
+
+
+def to_clipboard_str(envelope: dict) -> str:
+	return json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+
+
+def unwrap_clipboard(text: str):
+	try:
+		value = json.loads(text)
+	except Exception:
+		return None
+	return value if is_embody_tdn_envelope(value) else None
+
+
+def verify_envelope_integrity(envelope: dict) -> bool:
+	try:
+		return tdn_sha256(envelope["tdn"]) == envelope["sha256"]
+	except Exception:
+		return False
 
 
 class TDNExt:
@@ -5098,3 +5162,107 @@ class TDNExt:
 			pass  # Fallback below handles this -- avoid recursion in logger
 		# Fallback if Embody ext unavailable
 		print(f'[TDN][{level}] {message}')
+
+	# =========================================================================
+	# CLIPBOARD -- copy/paste networks as portable _embody_tdn envelopes.
+	# Own-network round-trips (source 'embody') import directly -- trusted.
+	# Community envelopes (source 'embody.tools') are delegated to ext.Collection,
+	# which scans + default-inerts them before import so a stranger's code can
+	# never execute on paste. Envelope helpers are module-level (above the class);
+	# the untrusted sandbox lives in the Collection sub-COMP.
+	# =========================================================================
+
+	def CopyNetworkToClipboard(self, comp: 'OP') -> dict:
+		"""Export a COMP's network and write it to the OS clipboard as an
+		_embody_tdn envelope (source 'embody' -- a trusted own-network copy).
+		"""
+		comp = op(comp) if isinstance(comp, str) else comp
+		if comp is None or not comp.isCOMP:
+			return {'ok': False, 'reason': 'not_a_comp'}
+		export = self.ExportNetwork(root_path=comp.path, include_dat_content=True)
+		if not isinstance(export, dict) or not export.get('success'):
+			return {'ok': False, 'reason': 'export_failed', 'detail': (export or {}).get('error')}
+		env = wrap_tdn(export.get('tdn'), source='embody', slug=comp.name)
+		ui.clipboard = to_clipboard_str(env)
+		op_count = len(env['tdn'].get('operators', []))
+		self._log("Copied %s TDN to clipboard (%d ops)" % (comp.name, op_count), 'SUCCESS')
+		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
+
+	def _planPasteFromClipboard(self) -> dict:
+		"""Turn the clipboard envelope into an import plan. Never executes anything.
+
+		Own source -> direct import of the payload. Community source -> hand the
+		inner tdn to ext.Collection (scan + default-inert) so nothing runs on
+		paste. Returns {'ok': False, ...} when there is no usable envelope.
+		"""
+		env = unwrap_clipboard(ui.clipboard or '')
+		if env is None:
+			return {'ok': False, 'reason': 'no_tdn'}
+		tdn = env.get('tdn')
+		source = env.get('source')
+		plan = {'ok': True, 'source': source, 'slug': env.get('slug'),
+				'version': env.get('version'),
+				'integrity_ok': verify_envelope_integrity(env)}
+		if source == 'embody':
+			plan.update({'mode': 'direct', 'tdn': tdn, 'capability': None, 'summary': None})
+			return plan
+		# Community / untrusted -> the Collection sandbox owns scan + inert.
+		collection = self.ownerComp.op('Collection')
+		if collection is None:
+			return {'ok': False, 'reason': 'collection_unavailable'}
+		inert = collection.ext.Collection.PlanCommunityPaste(tdn if isinstance(tdn, dict) else {})
+		plan.update({'mode': inert.get('mode', 'inert'), 'tdn': inert.get('tdn'),
+					 'capability': inert.get('capability'), 'summary': inert.get('summary')})
+		return plan
+
+	def PasteNetworkFromClipboard(self, target: 'OP') -> dict:
+		"""Import a clipboard _embody_tdn envelope INTO the target COMP."""
+		target = op(target) if isinstance(target, str) else target
+		if target is None or not target.isCOMP:
+			return {'ok': False, 'reason': 'not_a_comp'}
+		plan = self._planPasteFromClipboard()
+		if not plan.get('ok'):
+			return plan
+		res = self.ImportNetwork(target.path, plan['tdn'])
+		verdict = (plan.get('capability') or {}).get('verdict')
+		self._log("Pasted TDN into %s (mode=%s, source=%s, verdict=%s)"
+				  % (target.name, plan['mode'], plan.get('source'), verdict), 'SUCCESS')
+		return {'ok': True, 'target': target.path, 'mode': plan['mode'],
+				'source': plan.get('source'), 'verdict': verdict,
+				'summary': plan.get('summary'), 'import': res}
+
+	def PasteNetworkAsNewComp(self) -> dict:
+		"""Ctrl+Shift+V handler: create a new COMP at the current network and
+		paste the clipboard TDN into it. No-op (logged) if the clipboard holds
+		no Embody TDN envelope.
+		"""
+		pane = ui.panes.current
+		owner = pane.owner if pane else None
+		if owner is None or not owner.isCOMP:
+			return {'ok': False, 'reason': 'no_current_network'}
+		plan = self._planPasteFromClipboard()
+		if not plan.get('ok'):
+			self._log('Paste TDN: no Embody TDN on the clipboard', 'INFO')
+			return plan
+		base = owner.create(baseCOMP, 'pasted_tdn')
+		# Drop it at a clear spot rather than piling up at the origin.
+		try:
+			kids = [c for c in owner.children if c is not base]
+			base.nodeX = max((c.nodeX + c.nodeWidth for c in kids), default=0) + 200
+			base.nodeY = 0
+		except Exception:
+			pass
+		res = self.ImportNetwork(base.path, plan['tdn'])
+		verdict = (plan.get('capability') or {}).get('verdict')
+		self._log("Pasted new COMP '%s' from clipboard TDN (mode=%s, source=%s, verdict=%s)"
+				  % (base.name, plan['mode'], plan.get('source'), verdict), 'SUCCESS')
+		return {'ok': True, 'comp': base.path, 'mode': plan['mode'],
+				'source': plan.get('source'), 'verdict': verdict,
+				'summary': plan.get('summary'), 'import': res}
+
+	def ClipboardHasNetwork(self) -> bool:
+		"""True if the OS clipboard holds a valid _embody_tdn envelope."""
+		try:
+			return unwrap_clipboard(ui.clipboard or '') is not None
+		except Exception:
+			return False

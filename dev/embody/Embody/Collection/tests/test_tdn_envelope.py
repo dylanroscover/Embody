@@ -1,11 +1,22 @@
+import io
 import os
-import sys
+import types
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import contracts
-import tdn_envelope
+def load_tdn_ext_headless():
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
+    collection_dir = os.path.dirname(tests_dir)
+    embody_dir = os.path.dirname(collection_dir)
+    path = os.path.join(embody_dir, "TDNExt.py")
+    source = io.open(path, encoding="utf-8-sig").read()
+    module = types.ModuleType("_headless_tdn_ext")
+    module.__file__ = path
+    exec(compile(source, path, "exec"), module.__dict__)
+    return module
+
+
+tdn_envelope = load_tdn_ext_headless()
 
 
 class TestTdnEnvelope(unittest.TestCase):
@@ -14,10 +25,10 @@ class TestTdnEnvelope(unittest.TestCase):
 
         envelope = tdn_envelope.wrap_tdn(tdn, "embody")
 
-        self.assertTrue(contracts.is_embody_tdn_envelope(envelope))
+        self.assertTrue(tdn_envelope.is_embody_tdn_envelope(envelope))
         self.assertEqual(
-            envelope[contracts.EMBODY_TDN_MARKER],
-            contracts.EMBODY_TDN_VERSION,
+            envelope[tdn_envelope.EMBODY_TDN_MARKER],
+            tdn_envelope.EMBODY_TDN_VERSION,
         )
         self.assertEqual(envelope["source"], "embody")
         self.assertEqual(envelope["sha256"], tdn_envelope.tdn_sha256(tdn))
@@ -35,7 +46,7 @@ class TestTdnEnvelope(unittest.TestCase):
             version=7,
         )
 
-        self.assertTrue(contracts.is_embody_tdn_envelope(envelope))
+        self.assertTrue(tdn_envelope.is_embody_tdn_envelope(envelope))
         self.assertEqual(envelope["source"], "embody.tools")
         self.assertEqual(envelope["slug"], "sample-network")
         self.assertEqual(envelope["version"], 7)

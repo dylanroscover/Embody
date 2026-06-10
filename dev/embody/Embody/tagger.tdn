@@ -1,11 +1,11 @@
 {
 	"format": "tdn",
 	"version": "1.4",
-	"build": 26,
-	"generator": "Embody/5.0.429",
+	"build": 28,
+	"generator": "Embody/5.0.440",
 	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:23Z",
+	"source_file": "Embody-6.0.toe",
+	"exported_at": "2026-06-09T03:20:26Z",
 	"network_path": "/embody/Embody/tagger",
 	"options": {
 		"include_dat_content": false,
@@ -106,7 +106,7 @@
 	"type": "containerCOMP",
 	"parameters": {
 		"w": 180,
-		"h": "=28 * me.fetch('visible_count', op('./tags').numRows) + 2",
+		"h": "=28 * (me.fetch('visible_count', op('./tags').numRows) + (2 if (op('./btn_copy_tdn') and op('./btn_copy_tdn').par.display.eval()) else 0)) + 2",
 		"display": false,
 		"resizecomp": "=me",
 		"repocomp": "=me",
@@ -407,7 +407,7 @@
 			"name": "btn_embed",
 			"type": "buttonCOMP",
 			"parameters": {
-				"label": "⊞  Embed DATs in tdn  ✓",
+				"label": "⊞  Embed DATs in tdn",
 				"colorr": 0.2,
 				"colorg": 0.2,
 				"colorb": 0.2,
@@ -689,6 +689,66 @@
 			"inputs": ["parameter1"]
 		},
 		{
+			"name": "btn_copy_tdn",
+			"type": "buttonCOMP",
+			"parameters": {
+				"label": "=chr(10697) + '  Copy tdn'",
+				"colorr": 0.2,
+				"colorg": 0.2,
+				"colorb": 0.2,
+				"alignorder": 2,
+				"display": "=op('btn_portable').par.display.eval()"
+			},
+			"position": [620, 275],
+			"size": [160, 134],
+			"children": [
+				{
+					"name": "out1",
+					"type": "outCHOP",
+					"position": [275, 175],
+					"inputs": ["par1"]
+				},
+				{
+					"name": "par1",
+					"type": "parameterCHOP",
+					"position": [65, 175]
+				},
+				{
+					"name": "text",
+					"type": "textCOMP",
+					"parameters": {
+						"scaletofit": "=parent().par[me.curPar.name] or me.curPar.val",
+						"linespacing": "=parent().par[me.curPar.name] or me.curPar.val",
+						"textpaddingr": "=parent().par[me.curPar.name] or me.curPar.val",
+						"textpaddingb": "=parent().par[me.curPar.name] or me.curPar.val",
+						"textpaddingt": "=parent().par[me.curPar.name] or me.curPar.val",
+						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2",
+						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2",
+						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2"
+					},
+					"position": [74, 26],
+					"size": [113, 96]
+				},
+				{
+					"name": "parexec1",
+					"type": "parameterexecuteDAT",
+					"parameters": {
+						"op": "..",
+						"loadonstart": true
+					},
+					"position": [66, -83]
+				},
+				{
+					"name": "panelexec1",
+					"type": "panelexecuteDAT",
+					"parameters": {
+						"loadonstart": true
+					},
+					"position": [247, -81]
+				}
+			]
+		},
+		{
 			"name": "btn_openfile",
 			"type": "buttonCOMP",
 			"parameters": {
@@ -814,6 +874,66 @@
 			},
 			"position": [-800, -175],
 			"inputs": ["parameter1"]
+		},
+		{
+			"name": "btn_paste_tdn",
+			"type": "buttonCOMP",
+			"parameters": {
+				"label": "=chr(10515) + '  Paste tdn'",
+				"colorr": 0.2,
+				"colorg": 0.2,
+				"colorb": 0.2,
+				"alignorder": 2.1,
+				"display": "=op('btn_portable').par.display.eval()"
+			},
+			"position": [800, 275],
+			"size": [160, 134],
+			"children": [
+				{
+					"name": "out1",
+					"type": "outCHOP",
+					"position": [275, 175],
+					"inputs": ["par1"]
+				},
+				{
+					"name": "par1",
+					"type": "parameterCHOP",
+					"position": [65, 175]
+				},
+				{
+					"name": "text",
+					"type": "textCOMP",
+					"parameters": {
+						"scaletofit": "=parent().par[me.curPar.name] or me.curPar.val",
+						"linespacing": "=parent().par[me.curPar.name] or me.curPar.val",
+						"textpaddingr": "=parent().par[me.curPar.name] or me.curPar.val",
+						"textpaddingb": "=parent().par[me.curPar.name] or me.curPar.val",
+						"textpaddingt": "=parent().par[me.curPar.name] or me.curPar.val",
+						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2",
+						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2",
+						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2"
+					},
+					"position": [74, 26],
+					"size": [113, 96]
+				},
+				{
+					"name": "parexec1",
+					"type": "parameterexecuteDAT",
+					"parameters": {
+						"op": "..",
+						"loadonstart": true
+					},
+					"position": [66, -83]
+				},
+				{
+					"name": "panelexec1",
+					"type": "panelexecuteDAT",
+					"parameters": {
+						"loadonstart": true
+					},
+					"position": [247, -81]
+				}
+			]
 		},
 		{
 			"name": "switch_family",

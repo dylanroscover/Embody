@@ -62,6 +62,11 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 			parent.Embody.ext.TDN.ExportNetworkAsync(
 				root_path=pane.owner.path, output_file='auto')
 
+	# Paste TDN from clipboard as a new COMP at the current network
+	# (paste special; native Ctrl+V cannot be intercepted/suppressed in TD)
+	elif state and key == 'v' and ctrl_or_cmd and lShift:
+		parent.Embody.ext.TDN.PasteNetworkAsNewComp()
+
 	return
 
 # shortcutName is the name of the shortcut

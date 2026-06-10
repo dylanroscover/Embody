@@ -4,7 +4,6 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import contracts
 import scanner
 
 
@@ -43,7 +42,7 @@ class TestScanner(unittest.TestCase):
         result = scanner.scan_tdn(tdn)
 
         self.assertEqual(result["verdict"], "clean")
-        self.assertEqual(result["counts"], contracts.empty_capability_counts())
+        self.assertEqual(result["counts"], scanner.empty_capability_counts())
         self.assertEqual(result["findings"], [])
 
     def test_execute_dat_with_code_flags_execute_surface(self):

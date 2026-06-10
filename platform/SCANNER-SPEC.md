@@ -2,7 +2,7 @@
 
 The scanner classifies the executable / side-effecting surfaces of a TDN payload and emits a
 `CapabilityJson` (contract C2). It is implemented TWICE - `packages/scanner-ts` (server-side,
-on submit AND download) and `dev/embody/v6/scanner.py` (Embody-side, at import). The two MUST
+on submit AND download) and `dev/embody/Embody/Collection/scanner.py` (Embody-side, at import). The two MUST
 produce the SAME verdict + counts on the shared fixtures in `platform/packages/scanner-ts/fixtures/`
 (mirrored to `dev/embody/unit_tests/fixtures/`). A TDN is executable code, not a sandboxed shader -
 see plan-embody-tools-platform.md section 10. ASCII only.

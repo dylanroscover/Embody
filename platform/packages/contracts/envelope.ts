@@ -1,5 +1,5 @@
 // FROZEN CONTRACT C1 - the `_embody_tdn` clipboard wire format.
-// Shared by: Embody Copy/Paste (Python mirror in dev/embody/v6/contracts.py),
+// Shared by: Embody Copy/Paste (Python mirror in dev/embody/Embody/TDNExt.py),
 // the web "Copy TDN" button, and the submit-form "Paste from clipboard" button.
 // Do NOT change without a contract bump (notify all dependents). ASCII only.
 
