@@ -1507,6 +1507,7 @@ class EnvoyExt:
         self._server_gen: int = 0  # Generation counter for stale callback detection
         self._last_served_log_id: int = 0
         self._restart_count: int = 0
+        self._deadTicks: int = 0  # consecutive watchdog ticks seeing a dead/refused socket
         self._last_start_time: float = 0.0  # time.time() when Start() was called
         self._MAX_RESTARTS: int = 3
         self._RESTART_RESET_SECONDS: float = 120.0  # Reset counter after 2 min uptime
@@ -2123,6 +2124,13 @@ class EnvoyExt:
             self._log(
                 f'Envoy MCP server confirmed listening on port '
                 f'{self._runtime_port}', 'DEBUG')
+            # Start the liveness watchdog for THIS generation. It self-heals the
+            # socket if it dies later with no thread-exit callback firing -- the
+            # zombie case behind the recurring "connection dropped while TD runs"
+            # symptom. Pure run()-loop; no operator, no timer.
+            self._deadTicks = 0
+            run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
+                fromOP=self.ownerComp, delayMilliSeconds=4000)
             return
         if time.time() >= self._startup_deadline:
             # Never bound within the readiness window -> route to the error path
@@ -2135,6 +2143,100 @@ class EnvoyExt:
         # Not yet bound, not timed out -- keep polling.
         run(f"op({self.ownerComp.path!r}).ext.Envoy._pollStartup({gen})",
             fromOP=self.ownerComp, delayFrames=6)
+
+    # === Liveness watchdog (pure Python run()-loop -- no operator, no timer) ===
+
+    def _watchdogTick(self, gen: int) -> None:
+        """Self-healing liveness loop. Reschedules itself via run().
+
+        The existing restart paths only fire when the server THREAD exits
+        (_onServerSuccess/_onServerError -> _scheduleRestart). They miss the case
+        where the socket dies but the worker thread stays alive (the zombie behind
+        the recurring "connection dropped while TD is still running"). This tick
+        probes the real socket and, if it is dead while Envoy is enabled, forces a
+        clean restart so every connected bridge (one per Claude session)
+        reconnects on its own -- no manual toggle.
+
+        Singleton per TD instance (one EnvoyExt), so the number of sessions is
+        irrelevant: one watchdog keeps the one shared server alive for all of them.
+        """
+        # Stale: a newer Start (new generation) or an extension reinit replaced us.
+        if gen != self._server_gen:
+            return
+        try:
+            if self.ownerComp.ext.Envoy is not self:
+                return
+        except Exception:
+            return
+        if not self.ownerComp.par.Envoyenable.eval():
+            return  # disabled -> let this loop die; Start re-kicks it on re-enable
+
+        if self._starting:
+            # Startup window belongs to _pollStartup; don't interfere.
+            self._deadTicks = 0
+        else:
+            running = self.ownerComp.fetch('envoy_running', False)
+            if running and self._probeAlive():
+                self._deadTicks = 0
+            else:
+                self._deadTicks += 1
+                if self._deadTicks >= 2:  # ~8s dead while enabled -> revive
+                    self._deadTicks = 0
+                    self._reviveDeadServer(running)
+                    return  # revive -> Start -> _pollStartup kicks a fresh loop
+
+        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
+            fromOP=self.ownerComp, delayMilliSeconds=4000)
+
+    def _probeAlive(self) -> bool:
+        """Fast localhost connect to the runtime port. True iff a listener answers.
+
+        Connection refused / timeout -> dead. Localhost makes this effectively
+        instant (refused returns immediately), so it never stalls the main-thread
+        tick. Unknown port -> True, so we never restart on missing info.
+        """
+        import socket
+        port = getattr(self, '_runtime_port', None)
+        if not port:
+            return True
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(0.25)
+        try:
+            sock.connect(('127.0.0.1', int(port)))
+            return True
+        except Exception:
+            return False
+        finally:
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+    def _reviveDeadServer(self, was_running: bool) -> None:
+        """Socket is dead while Envoy is enabled and no thread-exit callback fired.
+
+        Tear the (possibly stuck) worker down and rebind after a short delay that
+        lets it release the socket -- so the runtime port stays stable on the
+        rebind instead of drifting to port+1, which is what left bridges stranded
+        on a refused port.
+        """
+        port = getattr(self, '_runtime_port', None)
+        self._log(
+            f'Watchdog: MCP socket on port {port} unreachable while enabled '
+            f'(running={was_running}) -- reviving server', 'WARNING')
+        # Bump the generation first so the old worker's exit callbacks (and any
+        # pending poll/watchdog) are treated as stale -- a single clean restart,
+        # not ours plus a _scheduleRestart racing each other.
+        self._server_gen += 1
+        try:
+            self.shutdown_event.set()  # nudge a stuck worker to exit + free the socket
+        except Exception:
+            pass
+        self.ownerComp.store('envoy_running', False)
+        self._starting = False
+        self.ownerComp.par.Envoystatus = 'Reviving (watchdog)...'
+        run(f"op({self.ownerComp.path!r}).ext.Envoy.Start()",
+            fromOP=self.ownerComp, delayFrames=18)
 
     def Stop(self) -> None:
         """Stop MCP server"""
