@@ -36,6 +36,7 @@ class EmbodyExt:
         'text_rule_td_python':               'td-python',
         'text_rule_mcp_safety':              'mcp-safety',
         'text_rule_parameters':              'parameters',
+        'text_rule_performance':             'performance',
     }
 
     # Skill DAT name -> slug (Claude Code only)
@@ -47,6 +48,7 @@ class EmbodyExt:
         'text_skill_manage_annotations':  'manage-annotations',
         'text_skill_td_api_reference':    'td-api-reference',
         'text_skill_mcp_tools_reference': 'mcp-tools-reference',
+        'text_skill_visual_aesthetics':   'visual-aesthetics',
     }
 
     # Parameters persisted to .embody/config.json across upgrades.

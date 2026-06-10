@@ -22,3 +22,4 @@ Systematic approach to diagnosing TD operator errors:
 - **Parameter out of range**: Check parameter values against valid ranges
 - **Missing operator reference**: An expression or parameter references a non-existent operator
 - **Cook error**: The operator can't process its inputs — check input data types match expectations
+- **Black or empty render**: Use `capture_top` on the intended output TOP, then check display/render flags on the output and upstream ops; missing light or camera (a 3D scene renders black without both); no cooking Null terminating the chain; a bypass flag left on; resolution is 0; alpha is premultiplied/zero so the image is present but invisible; and whether the op is cooking (check `cookedThisFrame` via `get_op_performance`, or force a cook). After each fix, use `capture_top` again to confirm the frame renders correctly.
