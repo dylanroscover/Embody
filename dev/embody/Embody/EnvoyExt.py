@@ -1564,6 +1564,18 @@ class EnvoyExt:
             run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
                 delayFrames=30)
 
+        # Arm the liveness watchdog for THIS instance, independent of Start().
+        # Tied to the instance lifetime so a save/reinit whose post-reinit
+        # auto-start never completes (suppressed stale-thread exit, raced port,
+        # or skipped guard) still leaves a watchdog running that revives Envoy.
+        # The tick guards on Envoyenable + _init_complete + _starting + instance
+        # identity, so it stays inert on a fresh .tox drop before the opt-in
+        # prompt and resolves to one loop per instance across reinits.
+        self._deadTicks = 0
+        self._startingTicks = 0
+        run(f"op('{self.ownerComp.path}').ext.Envoy._watchdogTick()",
+            delayMilliSeconds=4000)
+
         # If a deferred test run was in progress, unblock the old worker
         # thread so the old server can shut down cleanly (release the port).
         # The worker checks shutdown_event every 1s, but setting the Event
@@ -2000,17 +2012,6 @@ class EnvoyExt:
         self._last_start_time = time.time()
         self._starting = True  # H1: starting window open (suppresses duplicate Start)
 
-        # Arm the liveness watchdog for THIS generation at startup-begin (not at
-        # bind-confirmation) so it also covers a startup that never binds -- e.g.
-        # an Envoy restart racing a not-yet-freed socket during project.save().
-        # The _starting guard makes it defer (no false revive) until the socket
-        # binds or the startup window times out; a newer gen (revive or
-        # _scheduleRestart) retires this loop. One loop per generation; pure
-        # run(), no operator, no timer.
-        self._deadTicks = 0
-        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
-            fromOP=self.ownerComp, delayMilliSeconds=4000)
-
         self._log(f'Starting Envoy MCP server on port {port}')
 
         # Update status
@@ -2156,46 +2157,70 @@ class EnvoyExt:
 
     # === Liveness watchdog (pure Python run()-loop -- no operator, no timer) ===
 
-    def _watchdogTick(self, gen: int) -> None:
-        """Self-healing liveness loop. Reschedules itself via run().
+    def _watchdogTick(self) -> None:
+        """Self-healing liveness loop, tied to THIS extension instance's lifetime.
 
-        The existing restart paths only fire when the server THREAD exits
-        (_onServerSuccess/_onServerError -> _scheduleRestart). They miss the case
-        where the socket dies but the worker thread stays alive (the zombie behind
-        the recurring "connection dropped while TD is still running"). This tick
-        probes the real socket and, if it is dead while Envoy is enabled, forces a
-        clean restart so every connected bridge (one per Claude session)
-        reconnects on its own -- no manual toggle.
+        Armed once per instance from __init__ (NOT from Start), so it survives a
+        project.save() / extension reinit whose post-reinit auto-start never
+        completes -- the failure that left Envoy down with no watchdog and no
+        recovery (the old server thread's exit callback suppresses itself once a
+        reinit has replaced the instance, and the new instance's Start can be
+        skipped or race the old port). It probes the real socket and revives
+        Envoy whenever it is enabled-but-down (a dropped-socket zombie, a
+        never-bound restart, or a suppressed reinit Start), so every connected
+        bridge reconnects on its own -- no manual toggle.
 
-        Singleton per TD instance (one EnvoyExt), so the number of sessions is
-        irrelevant: one watchdog keeps the one shared server alive for all of them.
+        Lifecycle: ONE loop per EnvoyExt instance. It dies ONLY when a reinit
+        replaces the instance (the identity guard); the new instance's __init__
+        arms a fresh loop. It does NOT die on a server-generation bump (revive or
+        restart) or on a disable -- it keeps ticking idle while disabled so a
+        re-enable resumes self-healing without needing a reinit.
         """
-        # Stale: a newer Start (new generation) or an extension reinit replaced us.
-        if gen != self._server_gen:
-            return
+        # Die ONLY when a reinit has replaced this instance (the new instance
+        # arms its own loop). Server-generation churn must NOT end the loop.
         try:
             if self.ownerComp.ext.Envoy is not self:
                 return
         except Exception:
             return
-        if not self.ownerComp.par.Envoyenable.eval():
-            return  # disabled -> let this loop die; Start re-kicks it on re-enable
 
-        if self._starting:
-            # Startup window belongs to _pollStartup; don't interfere.
-            self._deadTicks = 0
-        else:
-            running = self.ownerComp.fetch('envoy_running', False)
-            if running and self._probeAlive():
+        try:
+            enabled = bool(self.ownerComp.par.Envoyenable.eval())
+            init_done = bool(self.ownerComp.fetch('_init_complete', False, search=False))
+            if not (enabled and init_done):
                 self._deadTicks = 0
+                self._startingTicks = 0          # disabled or pre-init -> idle
+            elif self._starting:
+                # _pollStartup normally clears _starting within the startup
+                # window. If its loop died (stale generation), _starting would
+                # stick True forever and block recovery -- so force a revive
+                # after ~24s stuck in 'starting'.
+                self._deadTicks = 0
+                self._startingTicks = getattr(self, '_startingTicks', 0) + 1
+                if self._startingTicks >= 6:
+                    self._startingTicks = 0
+                    self._reviveDeadServer(
+                        self.ownerComp.fetch('envoy_running', False))
             else:
-                self._deadTicks += 1
-                if self._deadTicks >= 2:  # ~8s dead while enabled -> revive
+                self._startingTicks = 0
+                running = self.ownerComp.fetch('envoy_running', False)
+                if running and self._probeAlive():
                     self._deadTicks = 0
-                    self._reviveDeadServer(running)
-                    return  # revive -> Start -> _pollStartup kicks a fresh loop
+                else:
+                    self._deadTicks += 1
+                    if self._deadTicks >= 2:     # ~8s enabled-but-down -> revive
+                        self._deadTicks = 0
+                        self._reviveDeadServer(running)
+                        # keep monitoring the revived server; do not stop the loop
+        except Exception as e:
+            try:
+                self._log(f'Watchdog tick error (continuing): {e}', 'DEBUG')
+            except Exception:
+                pass
 
-        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
+        # Always reschedule -- the loop is instance-tied; only the identity guard
+        # above ends it. A transient tick error never kills self-healing.
+        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick()",
             fromOP=self.ownerComp, delayMilliSeconds=4000)
 
     def _probeAlive(self) -> bool:
