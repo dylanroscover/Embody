@@ -129,6 +129,8 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 |------|-----------|-------------|
 | `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?` | Capture a TOP's output as an image. Returns file path + optional inline preview |
 
+For visual work, success is verified by capturing and judging the output TOP, not by a clean network alone; see `/visual-aesthetics`.
+
 ## Logging
 
 | Tool | Parameters | Description |

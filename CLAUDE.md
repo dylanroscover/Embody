@@ -30,6 +30,8 @@
 - Checkpoint after each significant step: what changed, what's verified, what's left. Don't continue from a state you can't describe.
 - Fail loud — "done" is wrong if anything was skipped silently, "tests pass" is wrong if any were skipped. Surface uncertainty; don't bury it.
 - Surface conflicts, don't average them: when two patterns or rules contradict, pick one (more recent / more tested), say why, flag the other for cleanup — never silently reconcile.
+- For visual or rendered output, success is a captured, assessed frame, not a clean network. Use `capture_top` to look at the result and judge it (load the `/visual-aesthetics` skill); never declare a visual task done on a black or empty frame.
+- Guard TD's performance and stability: before and after any cook-heavy build, check `get_project_performance`; if FPS drops, frames drop, or GPU/CPU memory runs low, stop and diagnose instead of building further (see `rules/performance.md`). Never freeze or crash the user's TD.
 
 ## Project Structure
 
