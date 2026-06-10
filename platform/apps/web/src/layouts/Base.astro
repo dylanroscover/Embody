@@ -161,6 +161,12 @@ const {
         document.addEventListener("keydown", (event) => {
           if (event.key === "Escape") closeNav();
         });
+
+        document.addEventListener("click", (event) => {
+          if (siteHeader.classList.contains("is-open") && !siteHeader.contains(event.target)) {
+            closeNav();
+          }
+        });
       }
     </script>
   </body>
