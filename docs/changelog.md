@@ -1,5 +1,27 @@
 # Changelog
 
+## v6.0.11
+
+Embody v6's Envoy + agent-guidance release: an MCP connection that self-heals across saves and reinits, the clipboard Copy/Paste loop with community-TDN safety, and new always-loaded guidance (crash avoidance + visual aesthetics) that deploys into user projects.
+
+### Envoy: the connection self-heals (the end of "connected:false")
+
+- **Liveness watchdog, tied to the EnvoyExt instance lifetime.** The long-standing "connection dropped while TouchDesigner keeps running" symptom is fixed by a pure `run()`-loop that probes the MCP socket every ~4s and revives Envoy whenever it is enabled-but-down — a dead socket, OR a `project.save()` / extension reinit that took the server down — force-freeing port 9870 if it is still held and rebinding in ~1s, with no restart and no manual toggle. It is armed from `__init__` (one loop per instance, dying only when a reinit replaces the instance, whose `__init__` arms a fresh one), so a save's mid-cycle reinit — which suppresses the old server thread's exit callback (no `_scheduleRestart`) and can skip or race the new instance's auto-start — can no longer orphan it. The earlier `Start()`-armed approach missed exactly this case. A stuck-`_starting` guard forces a revive if the startup poll loop dies; a tick error never kills the loop. Verified: killing the live listener self-heals in ~6s, and three consecutive `project.save()` cycles each had the watchdog fire (`running=False`), force-free the held port, and rebind in ~1s — the exact scenario that previously left the server permanently down.
+
+### Clipboard: Copy/Paste TDN, with community-source safety
+
+- **Copy/Paste networks through the TDN clipboard.** Copy a COMP's network to the clipboard as a portable `_embody_tdn` envelope (the **Copy tdn** button in the tagger); paste it back with **Ctrl+Shift+V** as a new COMP. The clipboard pure-logic now lives INSIDE the Embody COMP (portable in the `.tox`), not a loose folder.
+- **Community TDN defaults to inert.** Your own TDN pastes apply directly (trusted); TDN whose source is `embody.tools` (the community gallery) is run through a capability scanner and defaults to inert — Execute DATs disarmed, expressions neutralized, IO operators bypassed, storage stripped — while the content is preserved for inspection. Implemented as a `CollectionExt` extension plus self-contained `scanner` / `safe_import` DATs, with envelope hashing byte-compatible with the web contract.
+
+### New agent guidance (rules + skills), deployed to user projects
+
+- **`performance.md` (new, always-loaded).** Crash/freeze avoidance: a metric-gating protocol around heavy builds (baseline `get_project_performance`, re-check after each step, localize with `get_op_performance`), stop conditions with thresholds, a wiki-cited crash-cause table (resolution explosions, unbounded feedback, always-cooking operators, GLSL crashes, GPU/CPU exhaustion), and safe-default caps. Driven by wiki-verified TD performance research.
+- **`visual-aesthetics` (new skill).** Objective composition / value / color / contrast / motion / finishing guidance — each as principle, TD technique, and failure mode — plus a mandatory `capture_top` preview-and-judge loop: never declare a visual task done on a black frame.
+- **Preview-and-judge** reinforced across `create-operator`, `debug-operator`, `mcp-tools-reference`, and `CLAUDE.md`. **`td-connectivity`** now documents the watchdog and "don't restart on a drop — let it self-heal." **`network-layout`** is hardened against the `execute_python` / `.create()` (0, 0) placement bypass.
+- All of the above deploy into user projects via the template map (`performance`, `visual-aesthetics`, and `td-connectivity` newly registered).
+
+This is the first changelog entry for the Embody/Envoy (TouchDesigner) side of v6; earlier v6.0.x builds were the embody.tools platform (web gallery, server-side scanner, backend) under `platform/`.
+
 ## v5.0.429
 
 A friendlier "Duplicate Path Detected" dialog: a naming convention that auto-resolves the common template-plus-copies case, a strategy prompt for oversized groups, and self-labeling buttons — so you can finally tell which operator is which.

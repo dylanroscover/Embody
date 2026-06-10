@@ -22,9 +22,9 @@ The bridge runs a background reconciler thread that continuously manages connect
 Connectivity self-heals at two independent layers, so a dropped connection almost never needs manual recovery:
 
 - **The bridge reconciler** (client-side, described above) reconnects the STDIO bridge to a live Envoy.
-- **The Envoy liveness watchdog** (TD-side, in EnvoyExt) revives the Envoy MCP server itself. It is a pure `run()`-loop that probes the server socket every ~4s; when the socket is dead while Envoy is enabled -- the "connection dropped while TD keeps running" zombie -- it rebinds the server in ~6-8s. No operator, no timer. One loop per server generation, armed at startup-begin so it also covers a restart that never binds (e.g. the Envoy restart racing a not-yet-freed socket during `project.save()`).
+- **The Envoy liveness watchdog** (TD-side, in EnvoyExt) revives the Envoy MCP server itself. It is a pure `run()`-loop that probes the server socket every ~4s and revives whenever Envoy is enabled-but-down -- a dead socket while TD keeps running, OR a `project.save()` / extension reinit that took the server down -- force-freeing port 9870 if it is still held and rebinding in seconds. No operator, no timer. It is armed from EnvoyExt's `__init__` and tied to the instance lifetime (one loop per instance, dying only when a reinit replaces the instance, whose `__init__` then arms a fresh one), so a save/reinit whose post-reinit auto-start never completes still leaves a live watchdog to recover Envoy.
 
-This is proven, not aspirational: killing the live listener socket is detected and rebound by the watchdog in ~6-8s with no restart, and the bridge then returns to `connected:true` on its own.
+This is verified, not aspirational: killing the live listener socket self-heals in ~6s, and two `project.save()` cycles each had the watchdog fire (`running=False`), force-free the still-held port, and rebind in ~1s -- all with no restart, after which the bridge returns to `connected:true` on its own.
 
 ## Recovery — Manual Intervention
 

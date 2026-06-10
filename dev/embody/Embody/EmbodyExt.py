@@ -37,6 +37,7 @@ class EmbodyExt:
         'text_rule_mcp_safety':              'mcp-safety',
         'text_rule_parameters':              'parameters',
         'text_rule_performance':             'performance',
+        'text_rule_td_connectivity':         'td-connectivity',
     }
 
     # Skill DAT name -> slug (Claude Code only)
