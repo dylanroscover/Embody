@@ -2,13 +2,15 @@
 
 ## Placement Procedure (follow every time)
 
+**No exemptions — this governs EVERY operator you create or move, whether through the `create_op` / `create_annotation` MCP tools OR through `execute_python` (`comp.create(...)`, `.copy()`, `.copyOPs()`).** `execute_python` creation is the silent trap: it bypasses the `/create-operator` skill and every gate below, and TD's bare `.create()` drops each new op at **(0, 0)**, stacked on the last. If you create or move operators inside an `execute_python` call, you are on the hook for applying this procedure by hand — above all the **Verify** step, which is the backstop that catches a (0, 0) pileup before it ships. Convenience batching in `execute_python` does not buy you out of layout.
+
 1. **Read first**: `get_network_layout` + `get_annotations` on the parent COMP. Understand existing positions, groups, and flow before touching anything.
 2. **Flag problems**: If the existing layout is messy (overlapping ops, orphaned ops outside annotations, broken grid alignment), tell the user before adding to it. Do not silently work around a bad layout.
 3. **Identify the target group**: Determine which annotation group the new operator belongs to. If none fits, you will create a new one.
 4. **Compute position**: Use actual `nodeWidth`/`nodeHeight` from `get_network_layout`. New operators extend the group to the **right**: `rightmost_nodeX + rightmost_nodeWidth + 200` (snapped to 200-unit grid). If adding a parallel chain, go **down** (lowest Y in the group − 400). Never assume a fixed operator width — operators range from 100 to 300+ units wide.
 5. **Batch-compute all positions** before placing anything. Never place one operator, then figure out where the next one goes.
 6. **Place, connect, then update the annotation** to enclose the new operators. Use `set_annotation` to expand width/height if needed.
-7. **Verify**: After placing, call `get_network_layout` again. Confirm no overlaps, no ops outside annotations, and grid alignment is intact.
+7. **Verify (mandatory gate)**: After placing, call `get_network_layout` again. Confirm no overlaps, **nothing left at (0, 0)**, no ops outside annotations, and grid alignment is intact. **No turn that creates or moves operators may end without this check** — it is the single backstop that works no matter which path (MCP tool or `execute_python`) created them.
 
 ## Grid and Spacing
 
@@ -63,6 +65,7 @@ Some operators auto-spawn companion DATs that are **docked** to them via `op.doc
 ## Anti-Patterns
 
 - Placing at `[0, 0]` or the origin without reading existing layout.
+- **Creating ops via `execute_python` (`comp.create(...)`) and forgetting they obey this rule.** TD's `.create()` defaults to (0, 0); the `/create-operator` skill and the gates here only fire on the `create_op` tool. Every `execute_python` that creates operators must position them on the grid and end with the **Verify** step — this is the exact bypass that produced a whole sub-COMP stacked at (0, 0).
 - Placing "near" a related op by picking a mathematically close but visually wrong position — filling a gap in the middle of a finished row instead of extending rightward.
 - **Using fixed offsets like `nodeX + 300` without accounting for `nodeWidth`** — this is the #1 cause of overlapping operators when ops are wider than ~100 units.
 - Using TD's `COMP.layout()` — it produces overlapping, unreadable results.
