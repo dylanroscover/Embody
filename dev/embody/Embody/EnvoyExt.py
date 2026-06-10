@@ -2000,6 +2000,17 @@ class EnvoyExt:
         self._last_start_time = time.time()
         self._starting = True  # H1: starting window open (suppresses duplicate Start)
 
+        # Arm the liveness watchdog for THIS generation at startup-begin (not at
+        # bind-confirmation) so it also covers a startup that never binds -- e.g.
+        # an Envoy restart racing a not-yet-freed socket during project.save().
+        # The _starting guard makes it defer (no false revive) until the socket
+        # binds or the startup window times out; a newer gen (revive or
+        # _scheduleRestart) retires this loop. One loop per generation; pure
+        # run(), no operator, no timer.
+        self._deadTicks = 0
+        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
+            fromOP=self.ownerComp, delayMilliSeconds=4000)
+
         self._log(f'Starting Envoy MCP server on port {port}')
 
         # Update status
@@ -2124,13 +2135,12 @@ class EnvoyExt:
             self._log(
                 f'Envoy MCP server confirmed listening on port '
                 f'{self._runtime_port}', 'DEBUG')
-            # Start the liveness watchdog for THIS generation. It self-heals the
-            # socket if it dies later with no thread-exit callback firing -- the
-            # zombie case behind the recurring "connection dropped while TD runs"
-            # symptom. Pure run()-loop; no operator, no timer.
-            self._deadTicks = 0
-            run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
-                fromOP=self.ownerComp, delayMilliSeconds=4000)
+            # The liveness watchdog is already running for this generation (armed
+            # at _continueStart); a confirmed bind just flips it from the _starting
+            # defer-state into active socket monitoring on its next tick. It
+            # self-heals the socket if it dies later with no thread-exit callback
+            # firing -- the zombie behind the recurring "connection dropped while
+            # TD runs" symptom.
             return
         if time.time() >= self._startup_deadline:
             # Never bound within the readiness window -> route to the error path
