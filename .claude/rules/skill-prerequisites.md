@@ -16,4 +16,5 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Diagnosing operator errors | `/debug-operator` |
 | Building or refining any visual / rendered output (generative art, VJ visuals, shaders, scenes, renders, anything shown on screen) | `/visual-aesthetics` |
 | `switch_instance` or multi-instance workflows | `/multi-instance` |
+| Building or persisting a Specimen (gallery TDN networks) | `/specimen-authoring` |
 | First MCP call in a new session | `/mcp-tools-reference` |

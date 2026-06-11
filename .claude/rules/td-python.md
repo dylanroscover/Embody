@@ -21,7 +21,7 @@ See `parameters.md` for all parameter rules — reading/writing values, designin
 - **Don't abbreviate domain terms** — `CalcTDNFp()` is cryptic; `ComputeTDNFingerprint()` reads instantly. Screen space is cheap; comprehension is not.
 - **Booleans read as questions** — `isPaletteClone()`, `hasExternalWires()`, `canExportDAT()`. Not `paletteCheck()` or `wiresState()`.
 - **Public vs private** — TD extension methods promoted to the COMP are UpperCamelCase (`EnsureCatalogs`, `Update`); internal helpers are `_lowerCamelCase` (`_loadBootstrapPalette`). Keep the public surface minimal and obviously-named.
-- **Operator names follow the same rule** — `tdn_exporter` > `proc1`, `palette_catalog` > `table2`. The network reads like prose when operators are named for their role.
+- **Operator names: `optype_name` for processing ops, role name for the rest.** Prefix data-flow operators (TOP/CHOP/SOP/MAT/POP) with their op type so the network self-documents -- `glsl_colorize`, `noise_terrain`, `feedback_state`, `blur_soften` (the suffix still names the role; `glsl_colorize` > `glsl1`). **Exempt from the prefix:** (a) COMPs reached by a parent/global shortcut or holding an extension -- the shortcut *is* the name (`Embody`, never `comp_embody`); (b) a contract-fixed terminal, e.g. a specimen's output is an Out TOP named `out1`; (c) DATs, which stay role-named (`tdn_exporter`, not `text_tdn_exporter`; a `json`-named DAT also shadows stdlib). The network should still read like prose.
 
 When in doubt: write the one-line docstring *first*. If the name isn't already in that docstring, the name is wrong.
 
@@ -119,6 +119,9 @@ This applies to:
 
 - **Pull-based**: Operators only cook when downstream demands output. Parameter changes make nodes dirty but don't trigger immediate cooks.
 - **Always-cook operators**: Output nodes and Render TOPs cook every frame regardless.
+- **Time-dependent ops cook only when demanded.** An op that references time (an `absTime` parameter expression, a Feedback TOP, anything clock-driven) is *flagged* to cook every frame -- but it still only cooks when something pulls its output: a viewer, a Render/Out TOP, a displayed COMP, or a force-cook. With nothing demanding it, a correctly-built animated network sits frozen on its last cooked frame. This is the #1 cause of "my network isn't animating" -- the chain is right but undemanded. View the terminal op (or drive it) to run it in a sandbox; cook N frames before baking a thumbnail.
+- **`cook(force=True)` does NOT advance a feedback loop within a frame.** A Feedback TOP captures its target on frame boundaries, so force-cooking the chain repeatedly inside one synchronous Python loop returns the *same* state each time (`totalCooks` may not even increment). Evolution needs real frames to pass with the chain demanded -- drive it with `run(..., delayFrames=1)` or an Execute DAT `onFrameStart`, never a `for` loop.
+- **Animate cheaply: static source + cheap downstream.** A heavy generator (high-octave fBm, large feedback sim) cannot re-render every frame at high resolution. Make it *static* (remove every time reference so it cooks once and caches) and put the motion in a cheap downstream op -- animate the *sampling* (drift/rotate/warp the read coordinates), not the source. Verify with `cookedThisFrame`: the source reads `False`, the animated op `True`.
 
 ## Storage and Dependencies
 

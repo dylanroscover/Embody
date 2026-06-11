@@ -26,7 +26,7 @@
           "key_ops": { "type": "array", "items": { "type": "string" } },
           "requires": { "type": "string", "description": "none | MediaPipe | Kinect Azure | RealSense | RayTK | NVIDIA Flex | Shader Park | ISF | Essentia" },
           "fallback": { "type": ["string", "null"], "description": "procedural-fallback note when the package is absent" },
-          "output_op": { "type": "string", "const": "out", "description": "every Specimen terminates in a Null TOP named out" },
+          "output_op": { "type": "string", "const": "out1", "description": "every Specimen terminates in an Out TOP named out1" },
           "tdn_path": { "type": "string" },
           "thumbnail_path": { "type": ["string", "null"] },
           "prompt_path": { "type": ["string", "null"] },
