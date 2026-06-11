@@ -1,54 +1,53 @@
 # TDN Specification
 
-**Version 1.3**
+**Version 2.0**
 
 TDN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional — you generate, and you're stuck with what you got. With it, every step of the loop — generate, compare, revert, branch — runs at the speed of typing.
 
-TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
+TDN (TouchDesigner Network) is a YAML-based file format (a strict JSON superset, so legacy JSON .tdn files still parse) for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
 - File extension: `.tdn`
-- MIME type: `application/json`
+- MIME type: `application/yaml`
 - Encoding: UTF-8
-- JSON Schema: [`tdn.schema.json`](../tdn.schema.json)
+- Schema: [`tdn.schema.json`](../tdn.schema.json) — validates the parsed structure; YAML and JSON decode to the same object.
 
 ---
 
 ## Document Structure
 
-A `.tdn` file is a JSON object with the following top-level fields:
+A `.tdn` file is a YAML document with the following top-level fields:
 
-```json
-{
-  "format": "tdn",
-  "version": "1.3",
-  "build": 1,
-  "generator": "Embody/5.0.237",
-  "td_build": "2025.32050",
-  "exported_at": "2025-02-19T12:34:56Z",
-  "network_path": "/",
-  "type": "containerCOMP",
-  "options": {
-    "include_dat_content": true,
-    "include_storage": true
-  },
-  "type_defaults": { ... },
-  "par_templates": { ... },
-  "custom_pars": { ... },
-  "parameters": { ... },
-  "flags": [ ... ],
-  "color": [0.3, 0.5, 0.9],
-  "tags": ["tdn"],
-  "comment": "Main UI container",
-  "storage": { ... },
-  "operators": [ ... ],
-  "annotations": [ ... ]
-}
+```yaml
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.4
+td_build: '2025.32050'
+exported_at: '2025-02-19T12:34:56Z'
+network_path: /
+type: containerCOMP
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults: { ... }
+par_templates: { ... }
+custom_pars: { ... }
+parameters: { ... }
+flags: [ ... ]
+color: [0.3, 0.5, 0.9]
+tags: [tdn]
+comment: Main UI container
+storage: { ... }
+operators: [ ... ]
+annotations: [ ... ]
 ```
+
+A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 importers read both transparently (see [Back-compatibility](#back-compatibility)).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
-| `version` | string | Yes | Format version. Currently `"1.3"`. |
+| `version` | string | Yes | Format version. Currently `2.0`. Files `<2.0` are JSON; `>=2.0` are YAML. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
@@ -129,17 +128,34 @@ Each entry in the `operators` array (and in nested `children` arrays) is an oper
 
 ### Compact Formatting
 
-Short arrays and objects (≤80 characters when inlined) are written on a single line:
+Short numeric vectors (position, size, color — up to four elements) are written inline with YAML flow style; longer or non-numeric sequences fall to block style:
 
-```json
-"position": [200, -100],
-"size": [300, 150],
-"color": [0.2, 0.6, 0.9],
-"tags": ["audio", "generator"],
-"inputs": ["noise1"]
+```yaml
+position: [200, -100]
+size: [300, 150]
+color: [0.2, 0.6, 0.9]
+tags:
+  - audio
+  - generator
+inputs:
+  - noise1
 ```
 
-Longer arrays remain multi-line. This dramatically reduces file size while maintaining readability.
+This keeps the most common short vectors compact while longer arrays stay readable line-by-line.
+
+---
+
+## Back-compatibility
+
+v2.0 is the first YAML release of the format. Because YAML is a strict superset of JSON, importers read **both** new YAML files and legacy JSON `.tdn` (versions `1.x`) transparently:
+
+- Importers parse **json-first**: a document beginning with `{` or `[` is read by the JSON parser (with any leading UTF-8 BOM and whitespace stripped first), and only otherwise by the YAML parser. Correctness is therefore independent of whether a fast YAML C library is present.
+- Legacy `.tdn` were tab-indented JSON, which YAML forbids as indentation; the json-first path reads them losslessly.
+- The v1.5 array-of-lines `dat_content` and the older newline-escaped string form both still import (see [DAT Content](#dat-content)).
+
+Migration is **lazy**: an existing JSON `.tdn` is rewritten as YAML the next time Embody saves it. A v2.0 YAML file opened by a pre-2.0 Embody build (JSON-only reader) will not parse — new builds read old files, but old builds cannot read new ones.
+
+**Hand-edit caveats** (do not apply to Embody-written files, which never emit these): a hand-written YAML float needing float typing must include a decimal point (`1.0e-07`, not `1e-07`); duplicate mapping keys are silently last-wins. Round-trip through Embody after manual edits.
 
 ---
 
@@ -742,6 +758,31 @@ DAT-family operators can optionally include their text or table data. This is co
 
 For text-based DATs (textDAT, etc.):
 
+```yaml
+- name: script1
+  type: textDAT
+  dat_content: |
+    print('hello world')
+    print('goodbye')
+  dat_content_format: text
+```
+
+- `dat_content`: the DAT's text, stored in v2.0 as a **plain string**. Multi-line scripts are rendered on disk as a YAML **literal block scalar** (`|`), so the text stays human-readable and git diffs it line-by-line. Single-line content stays a compact inline string.
+- `dat_content_format`: `text`
+
+**Trailing-newline chomping.** YAML's literal block scalar preserves the exact number of trailing newlines through a chomping indicator chosen automatically by the writer: `|-` (strip) when the text has no trailing newline, `|` (clip) for a single trailing newline, and `|+` (keep) for two or more. The round-trip is therefore byte-exact for trailing whitespace.
+
+**Back-compatibility:** v1.5 stored a multi-line text DAT's `dat_content` as an **array of line-strings**, and v1.x earlier stored it as a single newline-escaped string. Both still import unchanged — a string is used as-is, an array is joined with `\n`. Examples of the still-valid legacy forms:
+
+```json
+{
+  "name": "script1",
+  "type": "textDAT",
+  "dat_content": ["print('hello world')", "print('goodbye')"],
+  "dat_content_format": "text"
+}
+```
+
 ```json
 {
   "name": "script1",
@@ -751,28 +792,22 @@ For text-based DATs (textDAT, etc.):
 }
 ```
 
-- `dat_content`: raw text string with newlines
-- `dat_content_format`: `"text"`
-
 ### Table Format
 
 For table-based DATs (tableDAT, etc.):
 
-```json
-{
-  "name": "lookup1",
-  "type": "tableDAT",
-  "dat_content": [
-    ["name", "value", "type"],
-    ["speed", "1.5", "float"],
-    ["active", "1", "int"]
-  ],
-  "dat_content_format": "table"
-}
+```yaml
+- name: lookup1
+  type: tableDAT
+  dat_content:
+    - [name, value, type]
+    - [speed, '1.5', float]
+    - [active, '1', int]
+  dat_content_format: table
 ```
 
 - `dat_content`: array of row arrays (each row is an array of cell value strings)
-- `dat_content_format`: `"table"`
+- `dat_content_format`: `table`
 
 ### Inclusion Conditions
 
@@ -781,6 +816,10 @@ DAT content is only included when:
 1. The operator belongs to the DAT family
 2. The `include_dat_content` option is `true`
 3. The DAT has content (non-empty text or at least one row)
+
+### Boilerplate Omission
+
+Auto-created default docked compute DATs (the "Example Compute Shader" companion that TouchDesigner spawns alongside a `glslTOP` / `glslmultiTOP`) are **not serialized** when their text still matches TD's default template. TD recreates the exact default on import, so omitting it keeps the file smaller with no loss. A compute DAT whose shader has been edited away from the default is exported normally.
 
 ---
 
@@ -1154,7 +1193,7 @@ For full guidance on writing extensions that coexist with TDN, see the [Extensio
 
 When importing a full `.tdn` document, the importer checks the metadata fields for compatibility:
 
-- **`version`**: Compared against the current TDN format version. A warning is logged if they differ, indicating the file may use a newer or older schema.
+- **`version`**: Compared against the current TDN format version. Because older files remain back-compatible, a warning is logged **only when the file's version is newer** than the running build (the genuinely risky direction, where the file may use schema this build does not understand). Equal or older versions import silently.
 - **`td_build`**: Compared against the running TouchDesigner version. An informational message is logged if they differ, since operator types and parameter defaults may vary between TD builds.
 - **`build`**: Logged for informational purposes, identifying which save iteration is being imported.
 
@@ -1222,7 +1261,7 @@ Developers should ignore unknown fields when parsing TDN documents. This ensures
 | Unrecognized custom parameter `style` | Skip that parameter definition, log a warning. |
 | Unrecognized flag name | Ignore it. |
 | Invalid parameter value type | Attempt type coercion; if impossible, skip with a warning. |
-| Version mismatch (`version`, `td_build`) | Log a warning, proceed with import. |
+| Version mismatch (`version`, `td_build`) | Proceed with import. For `version`, log a warning only when the file is newer than the running build; older or equal versions are silent. For `td_build`, log an informational message. |
 | Target COMP type mismatch (`type` vs destination) | Log a warning, proceed with import. The file's `type` field is informational — import does not change the destination COMP's type. |
 | Unknown `$t` template reference | Log a warning, skip that page. |
 | Missing `type_defaults` entry for a type | No-op (operator uses its own properties). |
@@ -1240,134 +1279,100 @@ Log warnings for anything skipped so the developer can inspect the result. Never
 
 A realistic `.tdn` file demonstrating all major features:
 
-```json
-{
-  "format": "tdn",
-  "version": "1.3",
-  "build": 3,
-  "generator": "Embody/5.0.237",
-  "td_build": "2025.32050",
-  "exported_at": "2026-02-19T14:30:00Z",
-  "network_path": "/",
-  "type": "baseCOMP",
-  "options": {
-    "include_dat_content": true,
-    "include_storage": true
-  },
-  "type_defaults": {
-    "baseCOMP": {
-      "parameters": {
-        "resizecomp": "=me",
-        "repocomp": "=me"
-      }
-    }
-  },
-  "par_templates": {
-    "about": [
-      {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true},
-      {"name": "Version", "style": "Str", "label": "Version", "readOnly": true}
-    ]
-  },
-  "operators": [
-    {
-      "name": "controller",
-      "type": "baseCOMP",
-      "color": [0.2, 0.4, 0.8],
-      "comment": "Main controller",
-      "tags": ["core"],
-      "custom_pars": {
-        "Controls": [
-          {
-            "name": "Speed",
-            "style": "Float",
-            "default": 1,
-            "max": 10,
-            "clampMin": true,
-            "normMax": 5,
-            "value": 2.5
-          },
-          {
-            "name": "Mode",
-            "style": "Menu",
-            "menuNames": ["linear", "ease", "bounce"],
-            "menuLabels": ["Linear", "Ease In/Out", "Bounce"],
-            "value": 1
-          },
-          {
-            "name": "Color",
-            "style": "RGB",
-            "clampMin": true,
-            "clampMax": true,
-            "values": [1, 0.5, 0]
-          }
-        ],
-        "About": {
-          "$t": "about",
-          "Build": 3,
-          "Version": "1.0.0"
-        }
-      },
-      "flags": ["viewer"],
-      "comp_inputs": ["renderer"],
-      "children": [
-        {
-          "name": "noise1",
-          "type": "noiseTOP",
-          "parameters": {
-            "type": "sparse",
-            "amp": 0.8,
-            "period": 2,
-            "monochrome": true,
-            "resolutionw": 1920,
-            "resolutionh": 1080
-          }
-        },
-        {
-          "name": "level1",
-          "type": "levelTOP",
-          "position": [300, 0],
-          "parameters": {
-            "opacity": "=parent().par.Speed / 10"
-          },
-          "inputs": ["noise1"],
-          "flags": ["display"]
-        },
-        {
-          "name": "config",
-          "type": "tableDAT",
-          "position": [0, -200],
-          "dat_content": [
-            ["key", "value"],
-            ["resolution", "1920x1080"],
-            ["fps", "60"]
-          ],
-          "dat_content_format": "table",
-          "flags": ["lock"]
-        },
-        {
-          "name": "script1",
-          "type": "textDAT",
-          "position": [300, -200],
-          "dat_content": "# Initialize\nprint('Controller ready')",
-          "dat_content_format": "text"
-        }
-      ]
-    },
-    {
-      "name": "renderer",
-      "type": "baseCOMP",
-      "position": [500, 0],
-      "size": [300, 150],
-      "custom_pars": {
-        "About": {
-          "$t": "about",
-          "Build": 1,
-          "Version": "0.9.0"
-        }
-      }
-    }
-  ]
-}
+```yaml
+format: tdn
+version: '2.0'
+build: 3
+generator: Embody/6.0.4
+td_build: '2025.32050'
+exported_at: '2026-02-19T14:30:00Z'
+network_path: /
+type: baseCOMP
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  baseCOMP:
+    parameters:
+      resizecomp: =me
+      repocomp: =me
+par_templates:
+  about:
+    - {name: Build, style: Int, label: Build Number, readOnly: true}
+    - {name: Version, style: Str, label: Version, readOnly: true}
+operators:
+  - name: controller
+    type: baseCOMP
+    color: [0.2, 0.4, 0.8]
+    comment: Main controller
+    tags: [core]
+    custom_pars:
+      Controls:
+        - name: Speed
+          style: Float
+          default: 1
+          max: 10
+          clampMin: true
+          normMax: 5
+          value: 2.5
+        - name: Mode
+          style: Menu
+          menuNames: [linear, ease, bounce]
+          menuLabels: [Linear, Ease In/Out, Bounce]
+          value: 1
+        - name: Color
+          style: RGB
+          clampMin: true
+          clampMax: true
+          values: [1, 0.5, 0]
+      About:
+        $t: about
+        Build: 3
+        Version: 1.0.0
+    flags: [viewer]
+    comp_inputs: [renderer]
+    children:
+      - name: noise1
+        type: noiseTOP
+        parameters:
+          type: sparse
+          amp: 0.8
+          period: 2
+          monochrome: true
+          resolutionw: 1920
+          resolutionh: 1080
+      - name: level1
+        type: levelTOP
+        position: [300, 0]
+        parameters:
+          opacity: =parent().par.Speed / 10
+        inputs: [noise1]
+        flags: [display]
+      - name: config
+        type: tableDAT
+        position: [0, -200]
+        dat_content:
+          - [key, value]
+          - [resolution, 1920x1080]
+          - [fps, '60']
+        dat_content_format: table
+        flags: [lock]
+      - name: script1
+        type: textDAT
+        position: [300, -200]
+        dat_content: |
+          # Initialize
+          print('Controller ready')
+        dat_content_format: text
+  - name: renderer
+    type: baseCOMP
+    position: [500, 0]
+    size: [300, 150]
+    custom_pars:
+      About:
+        $t: about
+        Build: 1
+        Version: 0.9.0
 ```
 
 Key observations:
@@ -1390,3 +1395,6 @@ Key observations:
 | 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |
 | 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDN exports. Pre-save now auto-exports current state before stripping TDN COMPs. |
 | 1.3 | 2026-04-07 | Added built-in parameter sequence support (`sequences` key on operator objects). Operators with resizable parameter blocks (mathmixPOP, glslPOP, attributePOP, constantCHOP, etc.) now round-trip correctly. Added Phase 2.5 to import process. Sequence parameters excluded from `type_defaults` compression and `_buildParCache`. |
+| 1.4 | 2026-05-XX | Added `tox_ref` for COMPs with their own TOX externalization (relative path to the child's `.tox`, mutually exclusive with `children`). |
+| 1.5 | 2026-06-10 | A text DAT's `dat_content` may now be an **array of line-strings** (multi-line) as well as a plain string (single-line), rejoined with `\n` on import. Keeps `.tdn` files readable and git-diffable line-by-line. Import is fully back-compatible with the v1.x string form. The version-mismatch warning now fires only when the file is newer than the running build. |
+| 2.0 | 2026-06-10 | The on-disk format is now **YAML** (a strict JSON superset). Multi-line `dat_content` reverts to a **plain string** rendered as a YAML literal block scalar (`|`), preserving exact trailing newlines via `\|`/`\|-`/`\|+` chomping. Importers parse json-first (BOM/whitespace-stripped), so legacy tab-indented JSON `.tdn` (v1.x/v1.5) still load losslessly with no migration gate. Auto-created default docked compute DATs are no longer serialized (TD recreates them on import). Files are roughly 17% smaller and read top-to-bottom without escaped newlines. MIME type is now `application/yaml`. |

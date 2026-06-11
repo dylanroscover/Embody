@@ -5617,8 +5617,7 @@ class EmbodyExt:
             return
 
         try:
-            import json
-            tdn_doc = json.loads(abs_path.read_text(encoding='utf-8'))
+            tdn_doc = self.my.ext.TDN.tdn_load(abs_path.read_text(encoding='utf-8'))
         except Exception as e:
             self.Log(f'Failed to read TDN for {oper.path}: {e}', 'ERROR')
             return
@@ -6066,8 +6065,8 @@ class EmbodyExt:
                 continue
 
             try:
-                import json
-                tdn_doc = json.loads(abs_path.read_text(encoding='utf-8'))
+                tdn_doc = self.my.ext.TDN.tdn_load(
+                    abs_path.read_text(encoding='utf-8'))
             except Exception as e:
                 self.Log(f'Failed to read TDN for {comp_path}: {e}', 'ERROR')
                 errors_total += 1
@@ -6099,8 +6098,7 @@ class EmbodyExt:
                     backup_path = self.my.ext.TDN._get_backup_path_instance(
                         str(abs_path))
                     if backup_path.is_file():
-                        import json as _json
-                        backup_tdn = _json.loads(
+                        backup_tdn = self.my.ext.TDN.tdn_load(
                             backup_path.read_text(encoding='utf-8'))
                         rb_result = self.my.ext.TDN.ImportNetwork(
                             target_path=comp_path, tdn=backup_tdn,

@@ -306,8 +306,8 @@ def onProjectPostSave():
 					parent.Embody.ext.Embody.Log(
 						f'Post-save restore: .tdn file missing: {rel_path}', 'WARNING')
 					continue
-				import json
-				tdn_doc = json.loads(abs_path.read_text(encoding='utf-8'))
+				tdn_doc = parent.Embody.ext.TDN.tdn_load(
+					abs_path.read_text(encoding='utf-8'))
 				parent.Embody.ext.TDN.ImportNetwork(
 					target_path=comp_path, tdn=tdn_doc, clear_first=True,
 					restore_file_links=True)
@@ -324,8 +324,7 @@ def onProjectPostSave():
 					backup_path = parent.Embody.ext.TDN._get_backup_path_instance(
 						str(abs_path))
 					if backup_path.is_file():
-						import json as _json
-						backup_tdn = _json.loads(
+						backup_tdn = parent.Embody.ext.TDN.tdn_load(
 							backup_path.read_text(encoding='utf-8'))
 						parent.Embody.ext.TDN.ImportNetwork(
 							target_path=comp_path, tdn=backup_tdn,

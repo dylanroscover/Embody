@@ -98,6 +98,90 @@ class TestTDNExportImport(EmbodyTestCase):
         # Should not have dat_content key
         self.assertNotIn('dat_content', dat_entry)
 
+    # --- v2.0: multi-line text dat_content stored as a plain string ---
+
+    def test_export_multiline_dat_content_is_string(self):
+        """v2.0: a multi-line text DAT exports dat_content as a plain
+        string (not a list); YAML's literal block scalar (|) renders it
+        readably on disk. This inverts the v1.5 list behavior."""
+        original = 'line one\nline two\nline three'
+        dat = self.sandbox.create(textDAT, 'ml_dat')
+        dat.text = original
+        result = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=True)
+        dat_entry = None
+        for o in result['tdn']['operators']:
+            if o['name'] == 'ml_dat':
+                dat_entry = o
+                break
+        self.assertIsNotNone(dat_entry)
+        self.assertEqual(dat_entry.get('dat_content_format'), 'text')
+        content = dat_entry['dat_content']
+        self.assertIsInstance(content, str)
+        self.assertEqual(content, original)
+
+    def test_export_single_line_dat_content_is_string(self):
+        """v2.0: a single-line text DAT keeps dat_content as a plain
+        string (as all text dat_content does in v2.0)."""
+        dat = self.sandbox.create(textDAT, 'sl_dat')
+        dat.text = 'just one line'
+        result = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=True)
+        dat_entry = None
+        for o in result['tdn']['operators']:
+            if o['name'] == 'sl_dat':
+                dat_entry = o
+                break
+        self.assertIsNotNone(dat_entry)
+        self.assertEqual(dat_entry.get('dat_content_format'), 'text')
+        self.assertIsInstance(dat_entry['dat_content'], str)
+        self.assertEqual(dat_entry['dat_content'], 'just one line')
+
+    def test_roundtrip_preserves_multiline_dat_content(self):
+        """v2.0: a full export -> import of a multi-line text DAT leaves
+        target.text byte-identical to the original."""
+        original = 'alpha\nbeta\n\ngamma\n'
+        dat = self.sandbox.create(textDAT, 'ml_rt')
+        dat.text = original
+        export = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=True)
+        target = self.sandbox.create(baseCOMP, 'ml_rt_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        imported = target.op('ml_rt')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.text, original)
+
+    def test_import_back_compat_string_dat_content(self):
+        """Back-compat: an op_def whose dat_content is a plain string
+        (the v1.x form) still sets target.text on import."""
+        target = self.sandbox.create(baseCOMP, 'compat_target')
+        tdn = {'operators': [
+            {'name': 'legacy_dat', 'type': 'textDAT',
+             'dat_content': 'old\nstyle\nstring',
+             'dat_content_format': 'text'}
+        ]}
+        result = self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        self.assertTrue(result.get('success'))
+        imported = target.op('legacy_dat')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.text, 'old\nstyle\nstring')
+
+    def test_import_back_compat_list_dat_content(self):
+        """Back-compat: an op_def whose dat_content is a list of line-
+        strings (the v1.5 form) still imports, joined with '\\n'."""
+        target = self.sandbox.create(baseCOMP, 'compat_list_target')
+        lines = ['old', 'style', 'list']
+        tdn = {'operators': [
+            {'name': 'legacy_list_dat', 'type': 'textDAT',
+             'dat_content': lines,
+             'dat_content_format': 'text'}
+        ]}
+        result = self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        self.assertTrue(result.get('success'))
+        imported = target.op('legacy_list_dat')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.text, '\n'.join(lines))
+
     # --- ImportNetwork ---
 
     def test_import_basic(self):

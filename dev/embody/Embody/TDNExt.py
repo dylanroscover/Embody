@@ -18,12 +18,85 @@ import os
 import shutil
 import sys
 import tempfile
+import yaml  # PyYAML (pre-installed in TD and shell python)
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
 from typing import Any, Optional, Union
 
-TDN_VERSION = '1.4'
+# CSafe is ~10x faster AND -- critically -- CSafeLoader reads legacy
+# tab-indented JSON .tdn that the pure-python SafeLoader REJECTS. Fall back
+# to pure-python Safe* only if libyaml is truly absent.
+try:
+	_TDN_BaseDumper = yaml.CSafeDumper
+	_TDN_BaseLoader = yaml.CSafeLoader
+except AttributeError:
+	_TDN_BaseDumper = yaml.SafeDumper
+	_TDN_BaseLoader = yaml.SafeLoader
+
+
+class _TDNYamlDumper(_TDN_BaseDumper):
+	"""Private subclass so TDN representers never leak into the global SafeDumper."""
+	pass
+
+
+def _tdn_str_representer(dumper, data):
+	# Multi-line strings -> literal block scalar (|) for readability.
+	# Single-line -> default; SafeDumper auto-quotes ambiguous scalars so
+	# they round-trip as str. Tab-bearing multi-line falls back to
+	# double-quoted (lossless, not pretty); boilerplate-omission removes
+	# the only such strings in practice.
+	style = '|' if '\n' in data else None
+	return dumper.represent_scalar('tag:yaml.org,2002:str', data, style=style)
+
+
+def _tdn_list_representer(dumper, data):
+	# Short pure-numeric vectors (position/size/color, <=4) stay inline [a, b];
+	# everything else block style. bool is excluded (isinstance(True,int)).
+	flow = (len(data) <= 4
+			and all(isinstance(x, (int, float)) and not isinstance(x, bool)
+					for x in data))
+	return dumper.represent_sequence('tag:yaml.org,2002:seq', data,
+									 flow_style=flow)
+
+
+_TDNYamlDumper.add_representer(str, _tdn_str_representer)
+_TDNYamlDumper.add_representer(list, _tdn_list_representer)
+
+
+def tdn_dump(data) -> str:
+	"""Serialize a TDN document to deterministic, readable YAML v2.0.
+
+	Always ends with a single trailing newline (yaml.dump emits one; the
+	defensive guard locks the contract test_export_file_not_truncated relies on).
+	"""
+	out = yaml.dump(data, Dumper=_TDNYamlDumper, sort_keys=False,
+					width=4096, allow_unicode=True)
+	return out if out.endswith('\n') else out + '\n'
+
+
+def tdn_load(text):
+	"""Parse a .tdn document. Reads YAML v2.0 AND legacy JSON v1.x.
+
+	CRITICAL back-compat: existing .tdn are TAB-indented JSON (json.dumps
+	indent='\\t'), which YAML FORBIDS as indentation. CSafeLoader is lenient
+	and reads them, but pure-python SafeLoader raises ScannerError on the tab.
+	So: json-first when the doc starts with { or [, else YAML. json.loads is
+	fed the BOM/whitespace-STRIPPED text (a leading UTF-8 BOM makes json.loads
+	raise 'Unexpected UTF-8 BOM'); the inner except is narrowed to
+	JSONDecodeError so a genuinely-corrupt brace-doc does NOT silently degrade
+	to a lenient YAML re-parse on non-decode errors.
+	"""
+	stripped = text.lstrip('﻿').lstrip()
+	if stripped[:1] in ('{', '['):
+		try:
+			return json.loads(stripped)   # FIX (Review 1 HIGH): stripped, not text
+		except json.JSONDecodeError:      # FIX (Review 1 LOW): narrowed except
+			pass
+	return yaml.load(text, Loader=_TDN_BaseLoader)
+
+
+TDN_VERSION = '2.0'  # was '1.5'
 
 # Parameters to always skip (Embody-managed or internal)
 SKIP_PARAMS = {
@@ -183,7 +256,7 @@ def verify_envelope_integrity(envelope: dict) -> bool:
 
 
 class TDNExt:
-	"""Extension for exporting/importing TouchDesigner networks as .tdn JSON."""
+	"""Extension for exporting/importing TouchDesigner networks as .tdn (YAML v2.0)."""
 
 	def __init__(self, ownerComp: 'COMP') -> None:
 		self.ownerComp: 'COMP' = ownerComp
@@ -206,6 +279,18 @@ class TDNExt:
 		# Populated by CatalogManagerExt after palette scan completes.
 		# Used by _isPaletteClone() as the primary detection method.
 		self._palette_catalog: dict[str, dict] = {}
+		# TD's live default compute-shader text, captured lazily once for
+		# boilerplate omission (see _defaultComputeShaderText).
+		self._default_compute_text: Optional[str] = None
+
+	# =========================================================================
+	# TDN SERIALIZATION (YAML v2.0) -- exposed for cross-extension access via
+	# parent.Embody.ext.TDN.tdn_dump / parent.Embody.ext.TDN.tdn_load.
+	# Internal callers use the module-level funcs directly.
+	# =========================================================================
+
+	tdn_dump = staticmethod(tdn_dump)
+	tdn_load = staticmethod(tdn_load)
 
 	# =========================================================================
 	# CRASH SAFETY -- atomic writes, backup rotation, validation
@@ -306,9 +391,9 @@ class TDNExt:
 		if not text:
 			return {'valid': False, 'error': 'File is empty'}
 		try:
-			doc = json.loads(text)
-		except json.JSONDecodeError as e:
-			return {'valid': False, 'error': f'Invalid JSON: {e}'}
+			doc = tdn_load(text)
+		except Exception as e:
+			return {'valid': False, 'error': f'Invalid TDN: {e}'}
 		if not isinstance(doc, dict):
 			return {'valid': False, 'error': 'Root is not a JSON object'}
 		if doc.get('format') != 'tdn':
@@ -325,7 +410,7 @@ class TDNExt:
 
 		1. Rotate backups (.bak, .bak2)
 		2. Atomic write (temp file + rename + fsync)
-		3. Post-write validation (read back + JSON parse)
+		3. Post-write validation (read back + TDN parse)
 		4. If validation fails, restore from .bak
 
 		Returns {'success': True} or {'error': '...'}.
@@ -405,7 +490,7 @@ class TDNExt:
 			p = Path(file_path)
 			if not p.is_file():
 				return None
-			return json.loads(p.read_text(encoding='utf-8'))
+			return tdn_load(p.read_text(encoding='utf-8'))
 		except Exception:
 			return None
 
@@ -1084,10 +1169,15 @@ class TDNExt:
 		if isinstance(tdn, dict) and 'operators' in tdn:
 			# Version compatibility checks
 			tdn_version = tdn.get('version', '1.0')
-			if tdn_version != TDN_VERSION:
+			try:
+				_file_newer = (tuple(int(x) for x in str(tdn_version).split('.'))
+							   > tuple(int(x) for x in TDN_VERSION.split('.')))
+			except Exception:
+				_file_newer = (str(tdn_version) != TDN_VERSION)
+			if _file_newer:
 				self._log(
-					f'TDN version mismatch: file is v{tdn_version}, '
-					f'current is v{TDN_VERSION}', 'WARNING')
+					f'TDN file is v{tdn_version}, newer than this build '
+					f'(v{TDN_VERSION}); some content may not import', 'WARNING')
 
 			source_td = tdn.get('td_build', '')
 			current_td = f'{app.version}.{app.build}'
@@ -1476,15 +1566,11 @@ class TDNExt:
 
 		try:
 			with open(file_path, 'r', encoding='utf-8') as f:
-				tdn_data = json.load(f)
-		except json.JSONDecodeError as e:
-			self._log(f'Invalid JSON in TDN file: {e}', 'ERROR')
-			ui.status = f'TDN Import: Invalid JSON -- {e}'
-			return {'error': f'Invalid JSON in TDN file: {e}'}
+				tdn_data = tdn_load(f.read())
 		except Exception as e:
-			self._log(f'Failed to read TDN file: {e}', 'ERROR')
-			ui.status = f'TDN Import: {e}'
-			return {'error': f'Failed to read TDN file: {e}'}
+			self._log(f'Invalid TDN file: {e}', 'ERROR')
+			ui.status = f'TDN Import: Invalid TDN -- {e}'
+			return {'error': f'Invalid TDN file: {e}'}
 
 		self._log(f'Importing from {file_path} into {target_path}...', 'INFO')
 		return self.ImportNetwork(target_path, tdn_data, clear_first=clear_first)
@@ -2695,6 +2781,55 @@ class TDNExt:
 		except Exception:
 			return False
 
+	# TD's default compute-shader template, used as a FALLBACK only when live
+	# capture fails. Live capture (below) is authoritative -- TD's default could
+	# drift across builds. Note the literal tab before 'vec4 color;'.
+	_DEFAULT_COMPUTE_SHADER_FALLBACK = (
+		'// Example Compute Shader\n\n'
+		'// uniform float exampleUniform;\n\n'
+		'layout (local_size_x = 8, local_size_y = 8) in;\n'
+		'void main()\n'
+		'{\n'
+		'\tvec4 color;\n'
+		'\t//color = texelFetch(sTD2DInputs[0], ivec2(gl_GlobalInvocationID.xy), 0);\n'
+		'\tcolor = vec4(1.0);\n'
+		'\t// We need to use TDImageStoreOutput() so that 8-bit textures that are sRGB\n'
+		'\t// encoded can be written to correctly from incoming linear values.\n'
+		'\t// imageStore() does not do this automatically, while pixel shader outputs do.\n'
+		'\tTDImageStoreOutput(0, gl_GlobalInvocationID, color);\n'
+		'}\n'
+	)
+
+	def _defaultComputeShaderText(self):
+		"""Return TD's LIVE default compute-shader text, captured once and cached.
+
+		Creates a throwaway glslTOP, reads its docked <name>_compute DAT text,
+		destroys it, and caches the result on the instance. Falls back to a
+		hardcoded literal only if live capture fails (e.g. headless tests).
+		"""
+		cached = getattr(self, '_default_compute_text', None)
+		if cached is not None:
+			return cached
+		text = None
+		throwaway = None
+		try:
+			throwaway = self.ownerComp.create(glslTOP)
+			compute = throwaway.op(f'{throwaway.name}_compute')
+			if compute is not None:
+				text = compute.text
+		except Exception as e:
+			self._log(f'Live compute-shader default capture failed: {e}', 'DEBUG')
+		finally:
+			try:
+				if throwaway is not None:
+					throwaway.destroy()
+			except Exception:
+				pass
+		if text is None:
+			text = self._DEFAULT_COMPUTE_SHADER_FALLBACK
+		self._default_compute_text = text
+		return text
+
 	def _exportDATContent(self, target):
 		"""Export DAT text or table content."""
 		try:
@@ -2711,7 +2846,19 @@ class TDNExt:
 				}
 			else:
 				text = target.text
+				# Boilerplate omission: a docked compute companion DAT whose
+				# text is TD's default compute-shader template carries no
+				# information -- TD auto-recreates it on glsl op create/import,
+				# and _setDATContent only writes when dat_content is PRESENT.
+				# Omitting it shrinks the file and removes the only tab-bearing
+				# strings (so every surviving shader stays a clean | block).
+				if (target.family == 'DAT' and target.dock is not None
+						and target.name == f'{target.dock.name}_compute'
+						and text == self._defaultComputeShaderText()):
+					return None  # omit; TD recreates this exact default on glsl create
 				if text:
+					# v2.0: store the plain string; YAML's literal block scalar (|)
+					# renders multi-line scripts readably and diffs line-by-line.
 					return {
 						'dat_content': text,
 						'dat_content_format': 'text',
@@ -3394,7 +3541,8 @@ class TDNExt:
 						for row in content:
 							target.appendRow(row)
 					else:
-						target.text = content
+						# v2.0 writes a plain string; v1.5 wrote a list of lines -- join for back-compat:
+						target.text = '\n'.join(content) if isinstance(content, list) else content
 				except Exception as e:
 					# Downgrade "not editable" errors to DEBUG -- expected
 					# for auto-generated companion DATs (info DATs, etc.)
@@ -4549,37 +4697,15 @@ class TDNExt:
 	# =========================================================================
 
 	@staticmethod
-	def _compact_json_dumps(data):
-		"""Serialize to JSON with tab indentation, inlining short arrays/objects.
+	def _compact_json_dumps(data):  # name kept; body now YAML v2.0
+		"""Serialize a TDN dict to a readable, deterministic YAML v2.0 string.
 
-		Short arrays (<=80 chars when inlined) are collapsed to single lines.
-		This includes position, size, color, tags, connection arrays, and
-		custom parameter value arrays.
+		The name is retained so all callers (TDNExt 555/804, execute.py 187)
+		stay valid. _tdn_list_representer inlines short numeric vectors and
+		literal block scalars render multi-line scripts readably -- replacing
+		the old json.dumps(indent='\\t') + regex array-inlining serializer.
 		"""
-		import re
-		raw = json.dumps(data, indent='\t', ensure_ascii=False)
-
-		def try_compact(match):
-			content = match.group(0)
-			# Remove internal newlines and tabs
-			compacted = re.sub(r'\s*\n\s*', ' ', content)
-			compacted = re.sub(r'\[\s+', '[', compacted)
-			compacted = re.sub(r'\s+\]', ']', compacted)
-			compacted = re.sub(r'\{\s+', '{', compacted)
-			compacted = re.sub(r'\s+\}', '}', compacted)
-			compacted = re.sub(r',\s+', ', ', compacted)
-			if len(compacted) <= 80:
-				return compacted
-			return content
-
-		# Compact arrays of simple values (numbers, short strings, booleans, null)
-		raw = re.sub(
-			r'\[\s*\n\s*(?:(?:-?\d+(?:\.\d+)?|"[^"\n]{0,50}"|true|false|null)'
-			r'(?:,\s*\n\s*(?:-?\d+(?:\.\d+)?|"[^"\n]{0,50}"|true|false|null))*'
-			r')\s*\n\s*\]',
-			try_compact, raw)
-
-		return raw + '\n'
+		return tdn_dump(data)
 
 	@staticmethod
 	def _compute_type_defaults(operators):

@@ -74,7 +74,7 @@ Use the `import_network` MCP tool:
 | Parameter | Description |
 |-----------|-------------|
 | `target_path` | Destination COMP path |
-| `tdn` | The `.tdn` JSON document (full document or operators array) |
+| `tdn` | The TDN document, parsed object (full document or operators array) |
 | `clear_first` | Delete existing children before importing |
 
 ### Import Phases

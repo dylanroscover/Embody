@@ -1,20 +1,18 @@
 # JSON Schema
 
-The TDN format includes a JSON Schema that can be used for validation and IDE auto-completion.
+The TDN format includes a JSON Schema that can be used for validation and IDE auto-completion. `.tdn` files are YAML in v2.0 (a strict JSON superset, so legacy JSON `.tdn` still validate against this schema); the schema validates the parsed structure, which is identical for YAML and JSON sources.
 
 ## Schema File
 
 The schema is available at [`tdn.schema.json`](../tdn.schema.json) in the repository.
 
-You can reference it in your `.tdn` files for editor support:
+You can reference it from the top of your `.tdn` files for editor support:
 
-```json
-{
-  "$schema": "https://raw.githubusercontent.com/dylanroscover/Embody/main/docs/tdn.schema.json",
-  "format": "tdn",
-  "version": "1.0",
-  ...
-}
+```yaml
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dylanroscover/Embody/main/docs/tdn.schema.json
+format: tdn
+version: '2.0'
+# ...
 ```
 
 ## What the Schema Validates
@@ -30,7 +28,17 @@ You can reference it in your `.tdn` files for editor support:
 
 ## Using with VS Code
 
-Add this to your VS Code `settings.json` to get auto-completion and validation for `.tdn` files:
+With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, add this to your VS Code `settings.json` to get auto-completion and validation for `.tdn` files (v2.0 YAML):
+
+```json
+{
+  "yaml.schemas": {
+    "./docs/tdn.schema.json": ["*.tdn"]
+  }
+}
+```
+
+For legacy JSON `.tdn` files (pre-2.0), use the built-in JSON schema mapping instead:
 
 ```json
 {

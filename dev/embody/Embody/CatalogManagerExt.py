@@ -473,7 +473,7 @@ class CatalogManagerExt:
 				if not os.path.isfile(abs_path):
 					continue
 				with open(abs_path, 'r', encoding='utf-8') as f:
-					tdn_doc = json.loads(f.read())
+					tdn_doc = self.ownerComp.ext.TDN.tdn_load(f.read())
 				source_build = tdn_doc.get('td_build', '')
 			except Exception:
 				continue

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/dylanroscover/Embody/blob/main/docs/tdn.schema.json",
   "title": "TDN (TouchDesigner Network)",
-  "description": "JSON schema for TDN v1.4 - a human-readable format for representing TouchDesigner operator networks.",
+  "description": "Schema for TDN v2.0 - a human-readable YAML format (reads legacy JSON .tdn) for representing TouchDesigner operator networks. The .tdn file is now YAML; this schema validates the parsed structure, identical for YAML and JSON sources.",
   "type": "object",
   "required": ["format", "version", "generator", "td_build", "exported_at", "network_path", "options", "operators"],
   "additionalProperties": false,
@@ -13,7 +13,7 @@
     },
     "version": {
       "type": "string",
-      "description": "Format version (e.g., \"1.0\")."
+      "description": "Format version. Currently \"2.0\". Files <2.0 are JSON; >=2.0 are YAML."
     },
     "build": {
       "type": ["integer", "null"],
@@ -500,13 +500,17 @@
             { "type": "string" },
             {
               "type": "array",
+              "items": { "type": "string" }
+            },
+            {
+              "type": "array",
               "items": {
                 "type": "array",
                 "items": { "type": "string" }
               }
             }
           ],
-          "description": "DAT text (string) or table data (array of row arrays). DATs only."
+          "description": "DAT text content: a plain string for text DATs (v2.0; multi-line rendered as a YAML literal block scalar on disk); an array of line-strings is accepted for v1.5 back-compat (joined with newlines on import); or an array of row-arrays for table DATs. DATs only."
         },
         "dat_content_format": {
           "type": "string",

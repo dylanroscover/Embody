@@ -501,7 +501,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertTrue(result.get('success'))
 		self.assertTrue(Path(fp).exists())
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		self.assertEqual(data['format'], 'tdn')
 
 	def test_export_file_includes_source_file(self):
@@ -512,7 +512,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		self.assertIn('source_file', data)
 		self.assertEqual(data['source_file'], project.name)
 
@@ -524,7 +524,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		names = [o['name'] for o in data['operators']]
 		self.assertIn('op_a', names)
 		self.assertIn('op_b', names)
@@ -539,7 +539,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			content = f.read()
-		data = json.loads(content)
+		data = self.embody.ext.TDN.tdn_load(content)
 		self.assertEqual(len(data['operators']), 25)
 		self.assertTrue(content.endswith('\n'))
 
@@ -552,7 +552,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'dc'][0]
 		self.assertEqual(entry['dat_content'], 'Exported content check')
 		self.assertEqual(entry['dat_content_format'], 'text')
@@ -569,7 +569,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'tbl'][0]
 		self.assertEqual(entry['dat_content_format'], 'table')
 		self.assertEqual(len(entry['dat_content']), 3)
@@ -586,7 +586,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			tdn_data = json.load(f)
+			tdn_data = self.embody.ext.TDN.tdn_load(f.read())
 		target = self.sandbox.create(baseCOMP, 'rt_target')
 		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=target.path, tdn=tdn_data)
@@ -617,7 +617,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		self.assertIn('version', data)
 		self.assertIn('generator', data)
 		self.assertIn('td_build', data)
@@ -633,7 +633,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'dst'][0]
 		self.assertIn('inputs', entry)
 		self.assertEqual(entry['inputs'][0], 'src')
@@ -648,7 +648,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'cp'][0]
 		self.assertIn('custom_pars', entry)
 		par_names = []
@@ -665,7 +665,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		a_entry = [o for o in data['operators'] if o['name'] == 'la'][0]
 		self.assertIn('children', a_entry)
 		b_entry = [o for o in a_entry['children'] if o['name'] == 'lb'][0]
@@ -681,7 +681,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'flagged'][0]
 		self.assertIn('flags', entry)
 		self.assertIn('bypass', entry['flags'])
@@ -695,7 +695,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'positioned'][0]
 		self.assertEqual(entry['position'], [500, 300])
 
@@ -707,7 +707,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'colored'][0]
 		self.assertIn('color', entry)
 		self.assertApproxEqual(entry['color'][0], 1.0)
@@ -723,7 +723,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'tagged'][0]
 		self.assertIn('tags', entry)
 		self.assertIn('mytag', entry['tags'])
@@ -751,13 +751,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertIn('error', result)
 		self.assertIn('not found', result['error'])
 
-	def test_importFromFile_invalid_json(self):
+	def test_importFromFile_invalid_tdn(self):
 		bad = str(Path(self._temp_dir) / 'bad.tdn')
 		Path(bad).write_text('{{{invalid')
 		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path=bad, target_path=self.sandbox.path)
 		self.assertIn('error', result)
-		self.assertIn('Invalid JSON', result['error'])
+		self.assertIn('Invalid TDN', result['error'])
 
 	def test_importFromFile_empty_string_path(self):
 		result = self.embody.ext.TDN.ImportNetworkFromFile(
@@ -794,7 +794,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		self.assertEqual(len(data['operators']), n)
 
 	def test_export_large_dat_not_truncated(self):
@@ -807,7 +807,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'big'][0]
 		self.assertEqual(entry['dat_content'], text)
 
@@ -821,7 +821,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'uni'][0]
 		self.assertEqual(entry['dat_content'], utext)
 
@@ -832,7 +832,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		self.assertEqual(len(data['operators']), 0)
 
 	def test_export_file_encoding_utf8(self):
@@ -846,7 +846,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		with open(fp, 'rb') as f:
 			raw = f.read()
 		text = raw.decode('utf-8')
-		data = json.loads(text)
+		data = self.embody.ext.TDN.tdn_load(text)
 		entry = [o for o in data['operators'] if o['name'] == 'enc'][0]
 		self.assertEqual(entry['dat_content'],
 			'\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8')
@@ -859,22 +859,29 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		self.assertEqual(data['format'], 'tdn')
 
-	def test_export_file_json_indented(self):
-		"""Exported JSON should be indented (human-readable)."""
+	def test_export_file_indented(self):
+		"""Exported v2.0 YAML should be space-indented (human-readable).
+
+		v2.0 writes YAML, which PyYAML always space-indents (never tabs).
+		The file must still be multi-line and re-parse to the same document.
+		"""
 		self.sandbox.create(baseCOMP, 'indent_check')
 		fp = str(Path(self._temp_dir) / 'indent.tdn')
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			content = f.read()
-		# Indented JSON contains tabs (our format uses tab indentation)
-		self.assertIn('\t', content)
+		# v2.0 YAML is space-indented; PyYAML never emits tab indentation.
+		self.assertIn('  ', content)
 		# Should have newlines between entries
 		lines = content.strip().split('\n')
 		self.assertGreater(len(lines), 1)
+		# And it must round-trip back to a valid TDN document.
+		data = self.embody.ext.TDN.tdn_load(content)
+		self.assertEqual(data['format'], 'tdn')
 
 	def test_export_dat_content_excluded_when_disabled(self):
 		"""DAT content should be absent when include_dat_content=False."""
@@ -885,7 +892,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=False)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		entry = [o for o in data['operators'] if o['name'] == 'no_content'][0]
 		self.assertNotIn('dat_content', entry)
 
@@ -899,7 +906,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		types = {o['type'] for o in data['operators']}
 		self.assertIn('baseCOMP', types)
 		self.assertIn('textDAT', types)
@@ -945,7 +952,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'child_comp'][0]
 		self.assertIn('tdn_ref', child_entry)
@@ -960,7 +967,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'child_comp'][0]
 		self.assertNotIn('tdn_ref', child_entry)
@@ -988,7 +995,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp, embed_all=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'child_comp'][0]
 		self.assertNotIn('tdn_ref', child_entry)
@@ -1070,7 +1077,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'tox_child'][0]
 		self.assertIn('tox_ref', child_entry)
@@ -1086,7 +1093,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'plain_child'][0]
 		self.assertNotIn('tox_ref', child_entry)
@@ -1107,7 +1114,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp, embed_all=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'tox_child3'][0]
 		self.assertNotIn('tox_ref', child_entry)
@@ -1159,7 +1166,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = self.embody.ext.TDN.tdn_load(f.read())
 		td = data.get('type_defaults', {})
 		# textDAT and noiseTOP are the children\'s grandchildren --
 		# they must NOT appear in the parent\'s type_defaults

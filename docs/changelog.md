@@ -1,5 +1,21 @@
 # Changelog
 
+## v6.0.16
+
+The on-disk `.tdn` format graduates to **TDN v2.0: YAML**. Networks now serialize as a single self-contained YAML document instead of JSON, so a `.tdn` reads top-to-bottom like the network it describes — and your shaders and scripts read like code, not escaped strings.
+
+### TDN v2.0: the file format is now YAML
+
+- **YAML, a strict JSON superset.** A `.tdn` is now one YAML document. Multi-line `dat_content` (GLSL, Python, any `textDAT` script) is stored as a plain string rendered as a YAML literal block scalar (`|`), so the source reads top-to-bottom with no escaped newlines and git diffs it line-by-line. This reverts the v1.5 array-of-lines workaround — the block scalar does the same job natively, and more readably. Short numeric vectors (position, size, color) stay inline (`[200, -100]`); longer or non-numeric sequences use block style.
+- **Lossless and deterministic.** Round-trips are byte-exact: trailing-newline count is preserved through automatic `|` / `|-` / `|+` chomping, and the output is stable across re-dumps (no key reordering, no anchors) so re-saving an unchanged network produces no diff. Verified byte-identical on the shipped specimens including real shader text, tabs, and trailing newlines.
+- **Reads legacy JSON — no migration gate.** Existing `.tdn` (versions `1.x`/`1.5`, written as tab-indented JSON) still import unchanged. Importers parse **json-first**: a document starting with `{` or `[` is read by the JSON parser (after stripping any leading UTF-8 BOM and whitespace), and only otherwise by YAML — so back-compat does not depend on a YAML C library, and tab-indented legacy files (which YAML forbids as indentation) load losslessly. Migration is lazy: a JSON `.tdn` is rewritten as YAML the next time Embody saves it.
+- **Smaller files via boilerplate omission.** Auto-created default docked compute DATs (the "Example Compute Shader" companion TD spawns alongside a `glslTOP`/`glslmultiTOP`) are no longer serialized when unchanged — TD recreates the exact default on import. Combined with the YAML representation, files are roughly **17% smaller**. The MIME type is now `application/yaml`.
+- **One-time migration diff.** The first re-save of an existing JSON `.tdn` produces a one-time whole-file diff as it converts to YAML; this is expected and benign. A v2.0 YAML file cannot be read by a pre-2.0 Embody build (JSON-only) — new builds read old files, but not the reverse.
+
+### Docs
+
+- The [TDN Specification](tdn/specification.md), [format overview](tdn/index.md), [examples](tdn/examples.md), [import/export](tdn/import-export.md), [schema guide](tdn/schema.md), and [supported formats](embody/supported-formats.md) are rewritten for v2.0 YAML, with back-compatibility, literal-block `dat_content`, chomping, and boilerplate-omission documented. `tdn.schema.json` validates the parsed structure, identical for YAML and JSON sources.
+
 ## v6.0.11
 
 Embody v6's Envoy + agent-guidance release: an MCP connection that self-heals across saves and reinits, the clipboard Copy/Paste loop with community-TDN safety, and new always-loaded guidance (crash avoidance + visual aesthetics) that deploys into user projects.

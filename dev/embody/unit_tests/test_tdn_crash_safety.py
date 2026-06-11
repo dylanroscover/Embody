@@ -207,7 +207,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		Path(self._tdn_path).write_text(full[:len(full)//2], encoding='utf-8')
 		result = self.tdn._validate_tdn_file(self._tdn_path)
 		self.assertFalse(result.get('valid'))
-		self.assertIn('Invalid JSON', result.get('error', ''))
+		self.assertIn('Invalid TDN', result.get('error', ''))
 
 	def test_C03_validate_missing_format_key(self):
 		"""JSON without 'format' key should fail."""
@@ -356,7 +356,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 			self._tdn_path, self._proj_folder, '.bak')
 		self.assertTrue(bak.is_file())
 		# Backup can be parsed as valid TDN
-		doc = json.loads(bak.read_text(encoding='utf-8'))
+		doc = self.tdn.tdn_load(bak.read_text(encoding='utf-8'))
 		self.assertEqual(doc.get('format'), 'tdn')
 
 	def test_E06_missing_tdn_and_backup(self):
@@ -485,7 +485,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		self.assertTrue(validation.get('valid'),
 			f'Validation failed: {validation}')
 		# Verify TDN JSON has correct operator count
-		tdn_doc = json.loads(Path(tdn_file).read_text(encoding='utf-8'))
+		tdn_doc = self.tdn.tdn_load(Path(tdn_file).read_text(encoding='utf-8'))
 		top_level_ops = len(tdn_doc.get('operators', []))
 		self.assertGreater(top_level_ops, 900,
 			f'Expected 900+ top-level ops in TDN, got {top_level_ops}')
@@ -557,7 +557,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		self.assertTrue(r.get('success'))
 		# Read the valid content before corrupting
 		valid_content = Path(tdn_file).read_text(encoding='utf-8')
-		valid_tdn = json.loads(valid_content)
+		valid_tdn = self.tdn.tdn_load(valid_content)
 		# Corrupt the file
 		Path(tdn_file).write_text('CORRUPTED!!!', encoding='utf-8')
 		# Verify corruption is detectable
@@ -735,7 +735,7 @@ class TestTDNCrashSafety(EmbodyTestCase):
 		self.assertTrue(v.get('valid'),
 			f'.bak2 should be valid: {v}')
 		# Recover from .bak2
-		recovered_tdn = json.loads(
+		recovered_tdn = self.tdn.tdn_load(
 			bak2.read_text(encoding='utf-8'))
 		imp = self.tdn.ImportNetwork(
 			target_path=self.sandbox.path,
