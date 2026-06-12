@@ -52,7 +52,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
 | `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). |
-| `network_path` | string | Yes | The COMP path represented by this file (e.g., `"/"` for the entire project). |
+| `network_path` | string | Yes | The COMP path represented by this file (e.g., `"/"` for the entire project). On paste/import as a *new* COMP, its basename names the new COMP (e.g., `"/specimen_lab/noise_terrain"` -> `noise_terrain`), sanitized via `tdu.validName`, collisions uniquified. |
 | `type` | string | No | TouchDesigner operator type of the target COMP (e.g., `"baseCOMP"`, `"containerCOMP"`, `"geometryCOMP"`). Added in v1.1. Makes the file self-describing for portable import into other projects. On import, a mismatch between this field and the destination COMP's type triggers a warning. |
 | `options` | object | Yes | Export settings used when generating this file. |
 | `options.include_dat_content` | boolean | Yes | Whether DAT text/table content was included in the export. |

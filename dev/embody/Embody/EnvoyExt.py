@@ -1,4 +1,4 @@
-﻿"""
+"""
 Envoy - MCP Server for TouchDesigner
 
 Enables AI coding assistants to interact with TouchDesigner via the Model Context Protocol.
@@ -1146,21 +1146,23 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def capture_top(op_path: str, format: str = "jpeg", quality: float = 0.8,
-                        max_resolution: int = 640) -> list:
+                        max_resolution: int = 640, inline: bool = False) -> list:
             """
             Capture a TOP operator's output as an image.
 
-            Returns the image saved to a temp file (path included in response).
-            Small images are also returned inline as MCP ImageContent for direct viewing.
+            Returns the image saved to a temp file; Read that path to view it.
+            Inline base64 previews are token-heavy, so they are OFF by default --
+            pass inline=True to also embed a small preview in the response.
 
             Args:
                 op_path: Path to a TOP operator (e.g., "/project1/null1")
                 format: Image format - "jpeg" (smaller, lossy) or "png" (lossless)
                 quality: JPEG compression quality 0.0-1.0 (ignored for PNG)
                 max_resolution: Max pixels on longest edge. 0 = native resolution.
+                inline: If True, also embed a small base64 preview (token-heavy).
 
             Returns:
-                List with text metadata and optional inline image preview
+                Text metadata with the saved file path; plus an inline image if inline=True.
             """
             import base64
             import os
@@ -1190,11 +1192,12 @@ class EnvoyMCPServer:
                     f" -> {result['width']}x{result['height']} {result['format'].upper()}"
                     f" ({size_kb:.1f} KB)\nSaved to: {file_path}")
 
-            # Include inline ImageContent for small images (within Claude Code token limits)
-            if result['size_bytes'] < 20000:
+            # Inline base64 images are token-heavy, so only embed when the caller
+            # explicitly asks (inline=True) and the image is small. By default
+            # return just the path; Read the file when actually judging a frame.
+            if inline and result['size_bytes'] < 20000:
                 return [info, self._Image(data=image_bytes, format=result['format'])]
-            else:
-                return info + "\n(Use Read tool on the file path above to view the image)"
+            return info + "\n(Use Read tool on the file path above to view the image)"
 
         # === Logging ===
 
@@ -1573,7 +1576,12 @@ class EnvoyExt:
         # prompt and resolves to one loop per instance across reinits.
         self._deadTicks = 0
         self._startingTicks = 0
-        run(f"op('{self.ownerComp.path}').ext.Envoy._watchdogTick()",
+        # Tag this armed chain with a monotonic generation (stored on the COMP
+        # so it survives the reinit storm). Only the newest generation's tick
+        # proceeds; the rest exit as stale -- one live loop per save, not ~N.
+        _wd_gen = self.ownerComp.fetch('_watchdog_gen', 0) + 1
+        self.ownerComp.store('_watchdog_gen', _wd_gen)
+        run(f"op('{self.ownerComp.path}').ext.Envoy._watchdogTick({_wd_gen})",
             delayMilliSeconds=4000)
 
         # If a deferred test run was in progress, unblock the old worker
@@ -2157,7 +2165,7 @@ class EnvoyExt:
 
     # === Liveness watchdog (pure Python run()-loop -- no operator, no timer) ===
 
-    def _watchdogTick(self) -> None:
+    def _watchdogTick(self, gen: int = 0) -> None:
         """Self-healing liveness loop, tied to THIS extension instance's lifetime.
 
         Armed once per instance from __init__ (NOT from Start), so it survives a
@@ -2176,6 +2184,18 @@ class EnvoyExt:
         restart) or on a disable -- it keeps ticking idle while disabled so a
         re-enable resumes self-healing without needing a reinit.
         """
+        # Collapse the armed-tick storm from a save strip/restore (one tick is
+        # armed per reinit, and the run() string re-resolves to the current
+        # instance so the identity guard below cannot dedupe them) into a
+        # single live loop: only the newest armed generation proceeds; older
+        # armed ticks are stale and exit here without rescheduling, reviving,
+        # or logging. gen == 0 is a legacy tick armed before this guard existed
+        # -- let it proceed so the loop is never orphaned across the upgrade.
+        try:
+            if gen and gen != self.ownerComp.fetch('_watchdog_gen', 0):
+                return
+        except Exception:
+            pass
         # Die ONLY when a reinit has replaced this instance (the new instance
         # arms its own loop). Server-generation churn must NOT end the loop.
         try:
@@ -2220,7 +2240,7 @@ class EnvoyExt:
 
         # Always reschedule -- the loop is instance-tied; only the identity guard
         # above ends it. A transient tick error never kills self-healing.
-        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick()",
+        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
             fromOP=self.ownerComp, delayMilliSeconds=4000)
 
     def _probeAlive(self) -> bool:
@@ -2254,7 +2274,21 @@ class EnvoyExt:
         lets it release the socket -- so the runtime port stays stable on the
         rebind instead of drifting to port+1, which is what left bridges stranded
         on a refused port.
+
+        A project.save() strip/restore reinits this extension many times; each
+        reinit arms a watchdog tick, and ~4s later they ALL come due in the same
+        frame and each calls here -- the 18-21x "reviving server" spam plus an
+        equal pile of Start() schedules. Collapse them to ONE revive per short
+        frame cooldown: the same-frame storm fires once; a genuine later outage
+        (dead ticks are >=~8s apart) still revives normally. This runs in the
+        stable fire-frame (not mid-reinit), so the COMP store is reliable here
+        even though the per-reinit generation counter armed during the storm is
+        not -- which is why the dedup lives here and not only on the tick.
         """
+        now = absTime.frame
+        if now - self.ownerComp.fetch('_last_revive_frame', -100000) < 120:
+            return  # already revived for this death event -- drop the duplicate
+        self.ownerComp.store('_last_revive_frame', now)
         port = getattr(self, '_runtime_port', None)
         self._log(
             f'Watchdog: MCP socket on port {port} unreachable while enabled '
@@ -2354,15 +2388,29 @@ class EnvoyExt:
 
     # === Thread Manager Callbacks (run on main thread) ===
 
-    def _send_response(self, request_id, result):
-        """Send a response back to the worker thread with piggybacked logs."""
+    def _attachNotableLogs(self, result):
+        """Piggyback only WARNING/ERROR logs onto a response, capped small, to
+        keep MCP responses token-lean. The served-cursor still advances over
+        ALL new entries so nothing is re-served on the next call; the full
+        INFO/DEBUG/SUCCESS history is available on demand via the get_logs tool.
+        (INFO noise -- 'Processing:', the echoed code, 'completed successfully'
+        -- previously rode along on every single response.)"""
         log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
-        if log_buffer:
-            recent = [e for e in log_buffer
-                      if e['id'] > self._last_served_log_id]
-            if recent:
-                result['_logs'] = recent[-20:]
-                self._last_served_log_id = recent[-1]['id']
+        if not log_buffer:
+            return
+        recent = [e for e in log_buffer
+                  if e['id'] > self._last_served_log_id]
+        if not recent:
+            return
+        self._last_served_log_id = recent[-1]['id']
+        notable = [e for e in recent
+                   if e.get('level') in ('WARNING', 'ERROR')]
+        if notable:
+            result['_logs'] = notable[-8:]
+
+    def _send_response(self, request_id, result):
+        """Send a response back to the worker thread (token-lean log piggyback)."""
+        self._attachNotableLogs(result)
 
         self.response_queue.put({
             'id': request_id,
@@ -2645,14 +2693,13 @@ class EnvoyExt:
         if runner and not runner._running:
             self._restoreStatusAfterTests()
             result = runner._getSummary()
-            # Piggyback logs
-            log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
-            if log_buffer:
-                recent = [e for e in log_buffer
-                          if e['id'] > self._last_served_log_id]
-                if recent:
-                    result['_logs'] = recent[-20:]
-                    self._last_served_log_id = recent[-1]['id']
+            # Token-lean: drop the per-test PASS objects (the full suite is
+            # ~1400 of them) -- keep the counts and only the failures/errors.
+            # Full per-test detail is in the test log file under dev/logs/.
+            if isinstance(result.get('results'), list):
+                result['results'] = [r for r in result['results']
+                                     if r.get('status') != 'PASS']
+            self._attachNotableLogs(result)
             # Signal the worker thread directly via the Event
             pending['holder']['result'] = result
             pending['event'].set()
@@ -4538,7 +4585,7 @@ class EnvoyExt:
         # Protect .tdn files belonging to other tracked TDN COMPs
         protected = self.ownerComp.ext.Embody._getAllTrackedTDNFiles(
             exclude_path=root_path) if output_file else None
-        return self.ownerComp.ext.TDN.ExportNetwork(
+        result = self.ownerComp.ext.TDN.ExportNetwork(
             root_path=root_path,
             include_dat_content=include_dat_content,
             output_file=output_file,
@@ -4546,6 +4593,21 @@ class EnvoyExt:
             cleanup_protected=protected,
             embed_all=embed_all,
         )
+        # Token-lean: when the .tdn was written to a file, don't echo the whole
+        # document back -- return a compact summary and let the caller Read the
+        # file on demand (CLAUDE.md already prefers reading .tdn from disk).
+        if (output_file and isinstance(result, dict)
+                and result.get('file') and isinstance(result.get('tdn'), dict)):
+            doc = result.pop('tdn')
+            result['summary'] = {
+                'network_path': doc.get('network_path'),
+                'version': doc.get('version'),
+                'operators': len(doc.get('operators', [])),
+                'annotations': len(doc.get('annotations', [])),
+            }
+            result['note'] = ('Full .tdn written to file; Read the file for '
+                              'operators, params and DAT content.')
+        return result
 
     def _import_network(self, target_path, tdn, clear_first=False):
         """Delegate to TDN extension for network import."""

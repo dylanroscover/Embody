@@ -64,6 +64,20 @@ class TestTdnEnvelope(unittest.TestCase):
 
         self.assertEqual(unwrapped, envelope)
 
+    def test_clipboard_str_is_indented_but_hash_unchanged(self):
+        # The clipboard string is pretty-printed for readability, but the
+        # integrity hash is over the canonical inner tdn -- not the string --
+        # so indentation must never change the sha256 or break the round-trip.
+        tdn = {"b": 2, "a": {"name": "base1"}}
+        envelope = tdn_envelope.wrap_tdn(tdn, "embody", slug="indent", version=1)
+        text = tdn_envelope.to_clipboard_str(envelope)
+
+        self.assertIn("\n", text)            # multi-line == indented
+        self.assertIn("  ", text)            # has indentation
+        self.assertEqual(envelope["sha256"], tdn_envelope.tdn_sha256(tdn))
+        self.assertTrue(tdn_envelope.verify_envelope_integrity(
+            tdn_envelope.unwrap_clipboard(text)))
+
     def test_unwrap_malformed_json_returns_none(self):
         self.assertIsNone(tdn_envelope.unwrap_clipboard("not json"))
 
@@ -91,6 +105,21 @@ class TestTdnEnvelope(unittest.TestCase):
     def test_wrap_raises_value_error_on_bad_source(self):
         with self.assertRaises(ValueError):
             tdn_envelope.wrap_tdn({"operators": []}, "other")
+
+    def test_resolve_name_from_network_path_basename(self):
+        tdn = {"network_path": "/specimen_lab/murmuration"}
+        self.assertEqual(tdn_envelope.resolve_tdn_name(tdn, slug="ignored"),
+                         "murmuration")
+
+    def test_resolve_name_skips_root_path_and_uses_slug(self):
+        # network_path "/" has no basename -> fall through to the slug
+        self.assertEqual(tdn_envelope.resolve_tdn_name({"network_path": "/"},
+                                                       slug="from-web"),
+                         "from-web")
+
+    def test_resolve_name_returns_none_when_nothing_usable(self):
+        self.assertIsNone(tdn_envelope.resolve_tdn_name({}))
+        self.assertIsNone(tdn_envelope.resolve_tdn_name(None))
 
 
 if __name__ == "__main__":

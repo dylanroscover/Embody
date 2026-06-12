@@ -34,7 +34,7 @@
     },
     "network_path": {
       "type": "string",
-      "description": "The COMP path represented by this file (e.g., \"/\" for the entire project)."
+      "description": "The COMP path represented by this file (e.g., \"/\" for the entire project). On paste/import as a new COMP, its basename names the new COMP (sanitized, collisions uniquified)."
     },
     "options": {
       "type": "object",

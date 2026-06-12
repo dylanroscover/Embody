@@ -1,7 +1,27 @@
 {
   "version": "1.0.0",
-  "specimen_count": 3,
+  "specimen_count": 4,
   "specimens": [
+    {
+      "slug": "murmuration",
+      "name": "Murmuration",
+      "category": "simulation",
+      "difficulty": "advanced",
+      "description": "A dense GPU particle swarm that flocks like a starling murmuration at dusk - cohering, separating, aligning, and flowing around a slow invisible attractor with curl-noise wander. True per-neighbor Reynolds flocking computed on the GPU (a Neighbor POP index list iterated in a GLSL POP), rendered as luminous additive point sprites.",
+      "tags": ["simulation", "glsl", "pop", "flocking", "particles", "generative"],
+      "key_ops": ["particlePOP", "neighborPOP", "glslPOP", "pointspriteMAT"],
+      "requires": "none",
+      "fallback": null,
+      "output_op": "out1",
+      "tdn_path": "simulation/murmuration.tdn",
+      "thumbnail_path": null,
+      "prompt_path": "simulation/murmuration.prompt.md",
+      "operator_count": 18,
+      "warmup_frames": 300,
+      "preview": true,
+      "author": "Embody",
+      "license": "CC-BY-4.0"
+    },
     {
       "slug": "reaction-diffusion",
       "name": "Reaction-Diffusion (Gray-Scott)",

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Embody - Automatic TOX and DAT Externalization for TouchDesigner
 
 Embody automatically creates, maintains and updates tox and DAT file
@@ -6447,10 +6447,14 @@ class EmbodyExt:
                 parent_op = dat.parent()
                 while parent_op and parent_op.path != comp_path:
                     # Skip DATs inside a deeper TDN COMP (its own settings
-                    # cover them) or inside an excluded COMP (app-managed,
-                    # invisible to TDN -- never at risk).
+                    # cover them), inside an excluded COMP (app-managed,
+                    # invisible to TDN), or inside a palette clone -- a clone's
+                    # internal DATs are regenerable palette boilerplate (e.g. an
+                    # annotateCOMP's button help tables), never user content, so
+                    # they must never trip the content-safety warning.
                     if (parent_op.path in tdn_paths
-                            or self.my.ext.TDN._hasExcludeTag(parent_op)):
+                            or self.my.ext.TDN._hasExcludeTag(parent_op)
+                            or self.my.ext.TDN._isPaletteClone(parent_op)):
                         inside_nested = True
                         break
                     parent_op = parent_op.parent()
@@ -6548,13 +6552,20 @@ class EmbodyExt:
                 # to TDN, never at risk.
                 if self.my.ext.TDN._hasExcludeTag(target):
                     continue
-                # Skip ops inside a nested TDN COMP or inside an excluded COMP
+                # Skip palette clones -- their storage is palette-managed
+                # boilerplate (e.g. an annotateCOMP's AnnotateExtStored),
+                # never user content.
+                if self.my.ext.TDN._isPaletteClone(target):
+                    continue
+                # Skip ops inside a nested TDN COMP, an excluded COMP, or a
+                # palette clone (regenerable palette internals -- not authored).
                 if target is not comp:
                     inside_nested = False
                     parent_op = target.parent()
                     while parent_op and parent_op.path != comp_path:
                         if (parent_op.path in tdn_paths
-                                or self.my.ext.TDN._hasExcludeTag(parent_op)):
+                                or self.my.ext.TDN._hasExcludeTag(parent_op)
+                                or self.my.ext.TDN._isPaletteClone(parent_op)):
                             inside_nested = True
                             break
                         parent_op = parent_op.parent()

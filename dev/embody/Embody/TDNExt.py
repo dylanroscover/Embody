@@ -1,4 +1,4 @@
-﻿"""
+"""
 TDN -- TouchDesigner Network open format (.tdn)
 
 Exports and imports TouchDesigner networks as human-readable JSON files.
@@ -237,7 +237,11 @@ def wrap_tdn(tdn: dict, source: str, slug=None, version=None) -> dict:
 
 
 def to_clipboard_str(envelope: dict) -> str:
-	return json.dumps(envelope, ensure_ascii=False, separators=(",", ":"))
+	# Pretty-printed so a pasted envelope is human-readable. Indentation does
+	# NOT affect integrity: the sha256 is computed over canonical_tdn_bytes(tdn)
+	# (sorted keys, no spaces), and unwrap_clipboard parses with json.loads
+	# (whitespace-insensitive), so round-trips and web byte-parity are preserved.
+	return json.dumps(envelope, ensure_ascii=False, indent=2)
 
 
 def unwrap_clipboard(text: str):
@@ -253,6 +257,24 @@ def verify_envelope_integrity(envelope: dict) -> bool:
 		return tdn_sha256(envelope["tdn"]) == envelope["sha256"]
 	except Exception:
 		return False
+
+
+def resolve_tdn_name(tdn, slug=None):
+	"""Best name for a network being pasted from a TDN: the `network_path`
+	basename (a required field, so always present except for a whole-project
+	"/" export) -> envelope `slug` -> None. The caller sanitizes the result
+	with tdu.validName and supplies its own final fallback. Pure (no TD state)
+	so it stays headless unit-testable.
+	"""
+	if isinstance(tdn, dict):
+		path = (tdn.get("network_path") or "").rstrip("/")
+		if path:
+			base = path.split("/")[-1]
+			if base:
+				return base
+	if slug:
+		return str(slug)
+	return None
 
 
 class TDNExt:
@@ -490,7 +512,11 @@ class TDNExt:
 			p = Path(file_path)
 			if not p.is_file():
 				return None
-			return tdn_load(p.read_text(encoding='utf-8'))
+			result = tdn_load(p.read_text(encoding='utf-8'))
+			# A valid .tdn is a mapping. YAML happily parses garbage like
+			# 'not valid json {{{' into a scalar string (legacy JSON would have
+			# raised), so reject any non-dict as corrupt/unreadable.
+			return result if isinstance(result, dict) else None
 		except Exception:
 			return None
 
@@ -1432,7 +1458,7 @@ class TDNExt:
 				tdn_sequences = tdn.get('sequences', {})
 				for seq_name, blocks in tdn_sequences.items():
 					try:
-						seq = dest.seq[seq_name]
+						seq = self._getSequenceByName(dest, seq_name)
 						seq.numBlocks = len(blocks)
 						for i, block_data in enumerate(blocks):
 							if not block_data:
@@ -3183,7 +3209,7 @@ class TDNExt:
 		# Phase 2.5 sets numBlocks and block values.
 		for seq_name, count in seq_template_counts.items():
 			try:
-				seq = target.seq[seq_name]
+				seq = self._getSequenceByName(target, seq_name)
 				seq.blockSize = count
 			except Exception as e:
 				self._log(
@@ -3209,7 +3235,7 @@ class TDNExt:
 			if sequences and target:
 				for seq_name, blocks in sequences.items():
 					try:
-						seq = target.seq[seq_name]
+						seq = self._getSequenceByName(target, seq_name)
 					except Exception:
 						self._log(
 							f'Sequence "{seq_name}" not found on '
@@ -3246,6 +3272,21 @@ class TDNExt:
 				resolved = target or self._resolveOp(parent, op_def)
 				if resolved and resolved.isCOMP:
 					self._expandSequences(resolved, children)
+
+	@staticmethod
+	def _getSequenceByName(target, seq_name):
+		"""Resolve a built-in/custom sequence by name.
+
+		`op.seq[name]` (subscript) silently returns None for some operators --
+		notably POPs, whose point/prim/attr sequences appear in iteration but
+		are not addressable by subscript -- and `op.seq.name` (attribute)
+		raises there. Iteration finds them reliably on every op type, so
+		resolve by iterating. Returns None when no sequence matches.
+		"""
+		try:
+			return next((s for s in target.seq if s.name == seq_name), None)
+		except Exception:
+			return None
 
 	@staticmethod
 	def _resolveSequenceBlockPar(target, seq, block, block_index, base_name):
@@ -3322,6 +3363,18 @@ class TDNExt:
 				value = par_def['value']
 				if value is not None:
 					self._setParValue(target, par_name, value)
+			# A custom par whose value equals its (non-standard) default has
+			# its value OMITTED on export; the param is recreated with the
+			# right .default but its .val stays at 0/min. Initialize .val from
+			# the default so default-valued custom params round-trip. Single-
+			# component only: Pulse has no value, and a multi-component def
+			# carries one 'default' that does not map cleanly across components.
+			elif ('values' not in par_def and 'default' in par_def
+					and style not in ('Pulse', 'Momentary', 'Header')):
+				suffixes = STYLE_SUFFIXES.get(style, [])
+				size = par_def.get('size') or 1
+				if not suffixes and size == 1:
+					self._setParValue(target, par_name, par_def['default'])
 
 			# Multi-component values
 			if 'values' in par_def:
@@ -5314,15 +5367,62 @@ class TDNExt:
 		self._log("Copied %s TDN to clipboard (%d ops)" % (comp.name, op_count), 'SUCCESS')
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
 
-	def _planPasteFromClipboard(self) -> dict:
-		"""Turn the clipboard envelope into an import plan. Never executes anything.
-
-		Own source -> direct import of the payload. Community source -> hand the
-		inner tdn to ext.Collection (scan + default-inert) so nothing runs on
-		paste. Returns {'ok': False, ...} when there is no usable envelope.
+	def CopySelectedToClipboard(self) -> dict:
+		"""Ctrl+Shift+C handler: copy the COMP selected in the current network
+		to the OS clipboard as a portable _embody_tdn envelope. Mirror of
+		PasteNetworkAsNewComp (Ctrl+Shift+V). No-op (logged) when the current
+		network has no single COMP selected.
 		"""
-		env = unwrap_clipboard(ui.clipboard or '')
+		pane = ui.panes.current
+		owner = pane.owner if pane else None
+		if owner is None or not owner.isCOMP:
+			return {'ok': False, 'reason': 'no_current_network'}
+		comps = [c for c in owner.selectedChildren if c.isCOMP]
+		if not comps:
+			self._log('Copy TDN: select a COMP in the network first', 'INFO')
+			return {'ok': False, 'reason': 'no_comp_selected'}
+		if len(comps) > 1:
+			self._log('Copy TDN: %d COMPs selected; copying the first (%s)'
+					  % (len(comps), comps[0].name), 'INFO')
+		return self.CopyNetworkToClipboard(comps[0])
+
+	def _planPasteFromClipboard(self) -> dict:
+		"""Turn the clipboard into an import plan. Never executes anything.
+
+		Own envelope source -> direct import. Community envelope source -> hand
+		the inner tdn to ext.Collection (scan + default-inert) so nothing runs
+		on paste. A bare .tdn document with no envelope -- e.g. a .tdn file's
+		text copied from an editor -- carries NO provenance, so it is sandboxed
+		(inert) like community content; use ImportNetworkFromFile for a trusted
+		local file. Returns {'ok': False, ...} with no usable TDN.
+		"""
+		raw = ui.clipboard or ''
+		env = unwrap_clipboard(raw)
 		if env is None:
+			# No _embody_tdn envelope -- maybe a bare .tdn document (YAML or
+			# JSON), e.g. a .tdn file's text copied from an editor. It carries
+			# NO provenance, so treat it as untrusted: route through the
+			# Collection sandbox (scan + default-inert) exactly like community
+			# content, so pasting a stranger's .tdn can't run code on paste.
+			# (A trusted local file should use ImportNetworkFromFile.)
+			doc = None
+			if raw.strip():
+				try:
+					doc = tdn_load(raw)
+				except Exception:
+					doc = None
+			if isinstance(doc, dict) and 'operators' in doc:
+				collection = self.ownerComp.op('Collection')
+				if collection is None:
+					return {'ok': False, 'reason': 'collection_unavailable'}
+				inert = collection.ext.Collection.PlanCommunityPaste(doc)
+				return {'ok': True, 'source': 'file',
+						'mode': inert.get('mode', 'inert'),
+						'tdn': inert.get('tdn'),
+						'capability': inert.get('capability'),
+						'summary': inert.get('summary'),
+						'slug': doc.get('slug'), 'version': doc.get('version'),
+						'integrity_ok': True}
 			return {'ok': False, 'reason': 'no_tdn'}
 		tdn = env.get('tdn')
 		source = env.get('source')
@@ -5359,8 +5459,9 @@ class TDNExt:
 
 	def PasteNetworkAsNewComp(self) -> dict:
 		"""Ctrl+Shift+V handler: create a new COMP at the current network and
-		paste the clipboard TDN into it. No-op (logged) if the clipboard holds
-		no Embody TDN envelope.
+		paste the clipboard TDN into it, named after the TDN (its network_path
+		basename, else slug). Accepts an Embody envelope or a bare .tdn
+		document. No-op (logged) when the clipboard holds neither.
 		"""
 		pane = ui.panes.current
 		owner = pane.owner if pane else None
@@ -5368,9 +5469,12 @@ class TDNExt:
 			return {'ok': False, 'reason': 'no_current_network'}
 		plan = self._planPasteFromClipboard()
 		if not plan.get('ok'):
-			self._log('Paste TDN: no Embody TDN on the clipboard', 'INFO')
+			self._log('Paste TDN: clipboard holds no Embody envelope or .tdn document', 'INFO')
 			return plan
-		base = owner.create(baseCOMP, 'pasted_tdn')
+		# Name the new COMP after the TDN (network_path basename, else envelope
+		# slug), sanitized; TD uniquifies collisions.
+		comp_name = tdu.validName(resolve_tdn_name(plan.get('tdn'), plan.get('slug')) or 'pasted_tdn') or 'pasted_tdn'
+		base = owner.create(baseCOMP, comp_name)
 		# Drop it at a clear spot rather than piling up at the origin.
 		try:
 			kids = [c for c in owner.children if c is not base]
