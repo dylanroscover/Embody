@@ -1,0 +1,42 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="Sign In - embody.tools"
+  description="Accounts are coming soon to embody.tools."
+>
+  <section class="page-section coming-soon">
+    <p class="eyebrow">Sign in</p>
+    <h1>accounts are coming soon</h1>
+    <p class="lede">
+      Sign-in is not wired up yet. The Collection is fully browsable without an
+      account today.
+    </p>
+    <p class="coming-soon__back">
+      <a href="/collection">Browse the Collection</a>
+    </p>
+  </section>
+</Base>
+
+<style>
+  .coming-soon {
+    padding-bottom: 56px;
+  }
+
+  .coming-soon__back {
+    margin-top: 2rem;
+  }
+
+  .coming-soon__back a {
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .coming-soon__back a:hover {
+    color: var(--text);
+  }
+</style>

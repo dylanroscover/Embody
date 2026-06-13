@@ -170,7 +170,7 @@ export async function getSpecimenBySlug(
     ...rowToSummary(row),
     capability: parseCapability(row.capability_json),
     current_version: Number(row.current_version ?? 1),
-    tags: (tagRows.results ?? []).map((tag) => tag.name),
+    tags: (tagRows.results ?? []).map((tag: TagRow) => tag.name),
     created_at: row.created_at,
     updated_at: row.updated_at
   };

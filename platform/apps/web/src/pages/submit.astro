@@ -1,0 +1,42 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="Submit a Specimen - embody.tools"
+  description="Specimen submissions are coming soon to embody.tools."
+>
+  <section class="page-section coming-soon">
+    <p class="eyebrow">Submit</p>
+    <h1>specimen submissions are coming soon</h1>
+    <p class="lede">
+      Soon you will be able to share your own transparent TouchDesigner Specimens
+      here for the Collection. We are still building the submission flow.
+    </p>
+    <p class="coming-soon__back">
+      <a href="/collection">Browse the Collection</a>
+    </p>
+  </section>
+</Base>
+
+<style>
+  .coming-soon {
+    padding-bottom: 56px;
+  }
+
+  .coming-soon__back {
+    margin-top: 2rem;
+  }
+
+  .coming-soon__back a {
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  .coming-soon__back a:hover {
+    color: var(--text);
+  }
+</style>

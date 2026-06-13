@@ -60,7 +60,8 @@ export function byteLength(value: string): number {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  const buffer = new Uint8Array(bytes).buffer;
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");

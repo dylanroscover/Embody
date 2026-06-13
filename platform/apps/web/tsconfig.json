@@ -5,5 +5,5 @@
     "jsxImportSource": "react",
     "types": ["astro/client"]
   },
-  "include": ["src", "astro.config.mjs"]
+  "include": ["src", "astro.config.mjs", "worker-configuration.d.ts"]
 }

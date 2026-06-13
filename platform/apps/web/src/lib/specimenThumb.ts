@@ -158,11 +158,11 @@ function gradeBars(seed: number): string {
 
 function shade(seed: number, offset: number): string {
   const greens = ["#151f1b", "#18261f", "#1b2b22", "#16211c", "#202a22", "#17251e"];
-  return greens[(seed + offset * 7) % greens.length];
+  return greens[(seed + offset * 7) % greens.length] ?? greens[0]!;
 }
 
 function pick(index: number, items: string[]): string {
-  return items[index % items.length];
+  return items[index % items.length] ?? items[0]!;
 }
 
 function wave(seed: number, index: number, scale: number): number {

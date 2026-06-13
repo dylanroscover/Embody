@@ -11,7 +11,9 @@ export function canonicalTdnBytes(tdn: Record<string, unknown>): Uint8Array {
 }
 
 export async function canonicalTdnSha256(tdn: Record<string, unknown>): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", canonicalTdnBytes(tdn));
+  const bytes = canonicalTdnBytes(tdn);
+  const buffer = new Uint8Array(bytes).buffer;
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
   return [...new Uint8Array(digest)]
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");

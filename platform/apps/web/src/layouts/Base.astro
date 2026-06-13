@@ -163,7 +163,11 @@ const {
         });
 
         document.addEventListener("click", (event) => {
-          if (siteHeader.classList.contains("is-open") && !siteHeader.contains(event.target)) {
+          const target = event.target as Node | null;
+          if (
+            siteHeader.classList.contains("is-open") &&
+            (target === null || !siteHeader.contains(target))
+          ) {
             closeNav();
           }
         });
