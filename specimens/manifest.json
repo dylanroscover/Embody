@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "specimen_count": 5,
+  "specimen_count": 6,
   "specimens": [
     {
       "slug": "murmuration",
@@ -98,6 +98,26 @@
       "prompt_path": "generative/plasma-interference.prompt.md",
       "operator_count": 5,
       "warmup_frames": 30,
+      "preview": true,
+      "author": "Embody",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "slug": "mandelbulb-march",
+      "name": "Mandelbulb March",
+      "category": "raymarching-sdf",
+      "difficulty": "advanced",
+      "description": "A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.",
+      "tags": ["raymarching", "sdf", "glsl", "fractal", "3d", "mandelbulb"],
+      "key_ops": ["glslTOP"],
+      "requires": "none",
+      "fallback": null,
+      "output_op": "out1",
+      "tdn_path": "raymarching-sdf/mandelbulb-march.tdn",
+      "thumbnail_path": null,
+      "prompt_path": "raymarching-sdf/mandelbulb-march.prompt.md",
+      "operator_count": 5,
+      "warmup_frames": 8,
       "preview": true,
       "author": "Embody",
       "license": "CC-BY-4.0"

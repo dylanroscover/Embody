@@ -1,0 +1,493 @@
+format: tdn
+version: '2.0'
+build: null
+generator: Embody/6.0.26
+td_build: 099.2025.32820
+source_file: Embody-6.26.toe
+exported_at: '2026-06-13T16:55:40Z'
+network_path: /specimen_lab/mandelbulb_march
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  textDAT:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Mandelbulb:
+  - name: Power
+    style: Float
+    startSection: true
+    default: 8
+    min: 2.0
+    max: 12.0
+    clampMin: true
+    clampMax: true
+    normMin: 2.0
+    normMax: 12.0
+    help: Mandelbulb exponent in z=z^Power+c. 8 is the classic bulb; 2-4 = blobby organic forms; 10-12 = more lobes and finer detail.
+  - name: Detail
+    style: Float
+    label: Surface Detail
+    default: 0.6
+    clampMin: true
+    clampMax: true
+    help: Raymarch hit threshold, remapped to a 0.0015->0.0004 epsilon. Higher resolves finer fractal crenellation at more cost near grazing rays.
+  - name: Glow
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: Proximity/iteration glow added along every ray. Close-but-miss rays accumulate an exponential halo. 0 = matte; 3 = ethereal bloom.
+  - name: Orbitspeed
+    style: Float
+    label: Orbit Speed
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: Multiplies absTime.seconds into the camera orbit. 0 freezes a still; 1 is a slow cinematic orbit. Only the camera moves -- the fractal math is identical each frame.
+  - name: Hue
+    style: Float
+    default: 0.55
+    clampMin: true
+    clampMax: true
+    help: Base hue offset of the orbit-trap cosine palette. Rotates the whole color identity (surface, glow, rim, background sun) through the spectrum.
+  - name: Sunazim
+    style: Float
+    label: Sun Azimuth
+    startSection: true
+    default: 35
+    min: -180.0
+    max: 180.0
+    clampMin: true
+    clampMax: true
+    normMin: -180.0
+    normMax: 180.0
+    help: Azimuth (degrees) of the key light, converted with elevation into a unit direction so normalize() never sees a zero vector. Rotates where the soft key light and shadow fall.
+  - name: Sunelev
+    style: Float
+    label: Sun Elevation
+    default: 45
+    min: -10.0
+    max: 90.0
+    clampMin: true
+    clampMax: true
+    normMin: -10.0
+    normMax: 90.0
+    help: Elevation (degrees) of the key light. High = top-down soft light with short shadows; low = dramatic raking light with long soft shadows.
+color: [0.67, 0.67, 0.67]
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - viewer
+  position: [800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_mandelbulb
+- name: annotate1
+  type: annotateCOMP
+  parameters:
+    order: =me.digits or 0
+    layerzone: =0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1
+  sequences:
+    ext:
+    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
+      promote: true
+  custom_pars:
+    Text:
+    - name: Titletext
+      style: Str
+      label: Title Text
+      startSection: true
+      default: Annotate
+      help: Text in the title bar.
+      value: Mandelbulb Raymarcher
+    - name: Titleheight
+      style: Int
+      label: Title Height
+      default: 30
+      clampMin: true
+      normMin: 5.0
+      normMax: 100.0
+      help: Height of the title bar. Title font height adjusts automatically to fill.
+    - name: Titlealign
+      style: Menu
+      label: Title Align
+      default: left
+      menuNames:
+      - left
+      - center
+      - right
+      menuLabels:
+      - Left
+      - Center
+      - Right
+      help: Alignment of title text.
+    - name: Bodytext
+      style: Str
+      label: Body Text
+      startSection: true
+      help: Text in the body area. Use an expression for newlines etc.
+      value: 'One GLSL TOP raymarches the Mandelbulb SDF. The distance estimator iterates z = z^Power + c in spherical form, tracking the running derivative (dr) for a true distance bound and the closest approach to the axes (an orbit trap) for color. An orbiting camera marches rays toward the surface; soft shadows, a fresnel rim, and a proximity glow finish it. Every loop is bounded by a constant (DE_ITER / MARCH_STEPS / SHADOW_STEPS) so the GPU stays safe. No input, no feedback. Params: Power, Surface Detail, Glow, Orbit Speed, Hue, Sun Azimuth, Sun Elevation.'
+    - name: Bodyfontsize
+      style: Int
+      label: Body Font Size
+      default: 10
+      clampMin: true
+      normMin: 8.0
+      normMax: 100.0
+      help: Size of text in the body area.
+    - name: Bodylimitwidth
+      style: Toggle
+      label: Limit Body Text Width
+      help: Limit the width of the text area.
+    - name: Bodymaxwidth
+      style: Int
+      label: Max Body Text Width
+      default: 1000
+      clampMin: true
+      normMin: 100.0
+      normMax: 2000.0
+      help: Width limit that will cause wraparound or cut-off. Measured in Panel units.
+    Settings:
+    - name: Mode
+      style: Menu
+      default: comment
+      menuNames:
+      - comment
+      - networkbox
+      - annotate
+      menuLabels:
+      - Comment
+      - Network Box
+      - Annotate
+      help: 'Switch between Comment, Network Box, and Annotate Modes. '
+      value: annotate
+    - name: Smartquote
+      style: Toggle
+      label: Smart Quote
+      startSection: true
+      help: Converts quotes, ellipsis, and dashes to more typographically nice unicode versions.
+    - name: Bodywordwrap
+      style: Toggle
+      label: Body Word Wrap
+      default: true
+      help: Wrap body text when it extends past right bound.
+    - name: Backcolorr
+      style: RGBA
+      label: Back Color
+      startSection: true
+      default: 1
+      help: Background color base.
+      values: [0.16, 0.13, 0.22]
+    - name: Backcoloralpha
+      style: Float
+      label: Back Color Alpha
+      default: 1
+      clampMin: true
+      clampMax: true
+      help: Back color alpha.
+    - name: Opacity
+      style: Float
+      label: Annotate Opacity
+      default: 1
+      clampMin: true
+      clampMax: true
+      help: Opacity of the entire Annotate.
+      value: 0.3
+    OP Viewer:
+    - name: Opviewerdisplay
+      style: Toggle
+      label: Viewer Display
+      help: Turn the visibility of the viewer specified in the OP parameter below on or off.
+    - name: Opviewer
+      style: OP
+      label: OP
+      help: The operator whose viewer is displayed in the Annotate.
+    - name: Opviewerinteractive
+      style: Toggle
+      label: OP Viewer Interactive
+      help: Allow interaction with the OP viewer.
+    - name: Opvieweroversize
+      style: Menu
+      label: Size/Aspect Override
+      startSection: true
+      default: 'False'
+      menuNames:
+      - natural
+      - specify
+      - autofit
+      menuLabels:
+      - Natural
+      - Specify
+      - Auto-Fit
+      help: Use the Size/Aspect Override to control viewer's size in the background.
+      value: natural
+    - name: Opviewersize
+      style: WH
+      label: Size/Aspect
+      default: 800
+      clampMin: true
+      normMin: 1.0
+      normMax: 1000.0
+      help: Diplay viewer as-if it were being displayed at this resolution. This is particularly useful for zooming into operators that don't have a built-in resolution, like CHOPs, SOPs, and DATs.
+    - name: Opviewerscale
+      style: Float
+      label: Scale
+      startSection: true
+      default: 1
+      normMax: 2.0
+      help: Scale the viewer by this factor.
+    - name: Opviewerjustifyx
+      style: Float
+      label: Justify X
+      normMin: -1.0
+      help: Move the border of the viewer towards left edge of Annotate when negative or towards right edge when positive.
+    - name: Opviewerjustifyy
+      style: Float
+      label: Justify Y
+      normMin: -1.0
+    - name: Opviewerfillbodytitle
+      style: Toggle
+      label: Cover Body and Title
+      help: When True, allow viewer to display in the Annotate title area as well as body.
+    - name: Opviewerzoom
+      style: Float
+      label: OP Viewer Zoom
+      startSection: true
+      default: 1
+      min: 0.001
+      clampMin: true
+      normMin: 1.0
+      normMax: 5.0
+      help: Zoom the viewer by this scale factor without increasing the size of its display area in the Annotate.
+    - name: Opvieweroffsetx
+      style: XYZW
+      label: OP Viewer Offset
+      help: Offsets the displayed area within the viewer. Combined with OP Viewer Zoom, this lets you display a specific area of a viewer, such as a CHOP channel or table cell.
+    - name: Opviewerfillalpha
+      style: Float
+      label: Fill Alpha
+      startSection: true
+      default: 1
+      clampMin: true
+      clampMax: true
+      help: Alpha value of the background area in the OP Viewer.
+    About:
+    - name: Version
+      style: Str
+      startSection: true
+      default: '1.0'
+      readOnly: true
+      help: Annotate COMP default setup version.
+    - name: Help
+      style: Pulse
+      help: Click to open help page.
+  flags:
+  - display
+  position: [180, -190]
+  size: [820, 450]
+  color: [0.45, 0.45, 0.45]
+  palette_clone: true
+- name: glsl_mandelbulb
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_mandelbulb_pixel
+    computedat: glsl_mandelbulb_compute
+    outputresolution: custom
+    resolutionw: 768
+    resolutionh: 768
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uParams
+      valuex: =parent().par.Power.eval()
+      valuey: =parent().par.Detail.eval()
+      valuez: =parent().par.Glow.eval()
+      valuew: =absTime.seconds*parent().par.Orbitspeed.eval()
+    - name: uLight
+      valuex: =math.cos(math.radians(parent().par.Sunelev.eval()))*math.sin(math.radians(parent().par.Sunazim.eval()))
+      valuey: =math.sin(math.radians(parent().par.Sunelev.eval()))
+      valuez: =math.cos(math.radians(parent().par.Sunelev.eval()))*math.cos(math.radians(parent().par.Sunazim.eval()))
+      valuew: =parent().par.Hue.eval()
+  position: [400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_mandelbulb_info
+  type: infoDAT
+  parameters:
+    op: glsl_mandelbulb
+  flags:
+  - viewer
+  position: [400, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_mandelbulb
+  dat_read_only: true
+- name: glsl_mandelbulb_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [550, -120]
+  dock: glsl_mandelbulb
+  dat_content: |
+    // Mandelbulb March -- raymarched 3D Mandelbulb, orbit-trap color, soft light.
+    // uParams: x=Power  y=Detail  z=Glow  w=time(=absTime*OrbitSpeed)
+    // uLight : xyz=sun unit dir (from azim/elev)  w=Hue
+    uniform vec4 uParams;
+    uniform vec4 uLight;
+    out vec4 fragColor;
+
+    const int   DE_ITER     = 12;   // bounded fractal iterations
+    const int   MARCH_STEPS = 96;   // bounded raymarch steps
+    const int   SHADOW_STEPS = 28;  // bounded soft-shadow march
+    const float MAX_DIST = 8.0;
+
+    vec4 g_trap;   // orbit-trap accumulator (set in DE, read for color)
+
+    float mandelbulbDE(vec3 pos){
+        vec3 z = pos;
+        float dr = 1.0;
+        float r  = 0.0;
+        float power = uParams.x;
+        vec4  trap = vec4(1e10);
+        for(int i = 0; i < DE_ITER; i++){
+            r = length(z);
+            if(r > 2.0) break;
+            trap = min(trap, vec4(abs(z), r));
+            float theta = acos(clamp(z.z / r, -1.0, 1.0));
+            float phi   = atan(z.y, z.x);
+            dr = pow(r, power - 1.0) * power * dr + 1.0;
+            float zr = pow(r, power);
+            theta *= power;
+            phi   *= power;
+            z = zr * vec3(sin(theta) * cos(phi),
+                          sin(theta) * sin(phi),
+                          cos(theta));
+            z += pos;
+        }
+        g_trap = trap;
+        return 0.5 * log(r) * r / dr;
+    }
+
+    vec3 calcNormal(vec3 p, float eps){
+        vec2 e = vec2(eps, 0.0);
+        return normalize(vec3(
+            mandelbulbDE(p + e.xyy) - mandelbulbDE(p - e.xyy),
+            mandelbulbDE(p + e.yxy) - mandelbulbDE(p - e.yxy),
+            mandelbulbDE(p + e.yyx) - mandelbulbDE(p - e.yyx)));
+    }
+
+    float softShadow(vec3 ro, vec3 rd, float k){
+        float res = 1.0;
+        float t = 0.02;
+        for(int i = 0; i < SHADOW_STEPS; i++){
+            vec3 p = ro + rd * t;
+            float h = mandelbulbDE(p);
+            if(h < 0.0008) return 0.0;
+            res = min(res, k * h / t);
+            t += clamp(h, 0.01, 0.2);
+            if(t > 4.0) break;
+        }
+        return clamp(res, 0.0, 1.0);
+    }
+
+    vec3 palette(float h){
+        return 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + h));
+    }
+
+    void main(){
+        vec2 res = uTDOutputInfo.res.zw;          // output pixel resolution (no inputs -> not uTD2DInfos)
+        vec2 uv  = (gl_FragCoord.xy - 0.5 * res) / res.y;
+
+        float t = uParams.w;
+
+        float ca = t * 0.25;
+        float cam_r = 4.5;                         // hero distance: whole bulb in frame w/ generous negative space
+        vec3 ro = vec3(sin(ca) * cam_r, 0.55 * sin(t * 0.13), cos(ca) * cam_r);
+        vec3 ta = vec3(0.0);
+        vec3 ww = normalize(ta - ro);
+        vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));
+        vec3 vv = cross(uu, ww);
+        float fov = 1.4;
+        vec3 rd = normalize(uv.x * uu + uv.y * vv + fov * ww);
+
+        float detail = mix(0.0015, 0.0004, clamp(uParams.y, 0.0, 1.0));
+        float tDist = 0.0;
+        float glowAcc = 0.0;
+        bool  hit = false;
+        vec4  trap = vec4(1e10);
+        for(int i = 0; i < MARCH_STEPS; i++){
+            vec3 p = ro + rd * tDist;
+            float d = mandelbulbDE(p);
+            glowAcc += exp(-d * 28.0);
+            if(d < detail * (1.0 + tDist)){
+                hit  = true;
+                trap = g_trap;
+                break;
+            }
+            tDist += d;
+            if(tDist > MAX_DIST) break;
+        }
+
+        vec3 col = vec3(0.0);
+        if(hit){
+            vec3 p = ro + rd * tDist;
+            vec3 n = calcNormal(p, detail * 1.5);
+            vec3 sun = normalize(uLight.xyz);
+
+            float dif = clamp(dot(n, sun), 0.0, 1.0);
+            float sh  = softShadow(p + n * 0.002, sun, 16.0);
+            float sky = 0.5 + 0.5 * n.y;
+            float ao = clamp(1.0 - (tDist - 2.0) * 0.15, 0.3, 1.0);
+
+            float hue = uLight.w + trap.w * 0.18 + trap.x * 0.25;
+            vec3 base = palette(hue);
+            base = mix(base, base.zxy, clamp(trap.y * 0.6, 0.0, 1.0));
+
+            col  = base * (0.18 * sky);
+            col += base * dif * sh * vec3(1.0, 0.93, 0.82);
+            float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 3.0);
+            col += fres * 0.25 * palette(hue + 0.5);
+            col *= ao;
+        } else {
+            vec3 sun = normalize(uLight.xyz);
+            float g = 0.5 + 0.5 * rd.y;
+            col = mix(vec3(0.015, 0.018, 0.03), vec3(0.04, 0.05, 0.08), g);
+            col += pow(clamp(dot(rd, sun), 0.0, 1.0), 8.0) * 0.06 * palette(uLight.w + 0.5);
+        }
+
+        col += palette(uLight.w + 0.15) * glowAcc * (0.012 * uParams.z);
+
+        col = col / (1.0 + col);
+        col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));
+        fragColor = vec4(col, 1.0);
+    }
+  dat_content_format: text
+- name: glsl_mandelbulb_compute
+  type: textDAT
+  parameters:
+    language: glsl
+  flags:
+  - viewer
+  position: [250, -120]
+  dock: glsl_mandelbulb
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Mandelbulb Raymarcher
+  text: 'One GLSL TOP raymarches the Mandelbulb SDF. The distance estimator iterates z = z^Power + c in spherical form, tracking the running derivative (dr) for a true distance bound and the closest approach to the axes (an orbit trap) for color. An orbiting camera marches rays toward the surface; soft shadows, a fresnel rim, and a proximity glow finish it. Every loop is bounded by a constant (DE_ITER / MARCH_STEPS / SHADOW_STEPS) so the GPU stays safe. No input, no feedback. Params: Power, Surface Detail, Glow, Orbit Speed, Hue, Sun Azimuth, Sun Elevation.'
+  position: [180, -190]
+  size: [820, 450]
+  color: [0.16, 0.13, 0.22]
+  opacity: 0.3
