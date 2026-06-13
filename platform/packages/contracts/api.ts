@@ -20,6 +20,8 @@ export interface SpecimenSummary {
   tier: Tier;
   likes_count: number;
   views_count: number;
+  /** How many times this specimen's TDN envelope has been copied from the website. */
+  copies_count: number;
 }
 
 export interface SpecimenDetail extends SpecimenSummary {
@@ -33,9 +35,16 @@ export interface SpecimenDetail extends SpecimenSummary {
 
 export interface ListResponse {
   specimens: SpecimenSummary[];
+  /** Total number of specimens matching the active filter/search (server total). */
   count: number;
   page: number;
   pageSize: number;
+  /**
+   * Opaque keyset cursor for the NEXT page, or null when the current page is the
+   * last. Pass it back as `?cursor=` to fetch the following page in O(page) cost.
+   * Present on the cursor-paginated list/collection path; absent on legacy callers.
+   */
+  nextCursor?: string | null;
 }
 
 export interface SearchResponse {

@@ -11,8 +11,9 @@ import {
   type FixtureSpecimen
 } from "../../lib/specimenFallback";
 import { sampleTdn } from "../../fixtures/sample-tdn";
-import { getCurrentTdnBlobForSlug, getSpecimenBySlug } from "../../server/db";
-import { getTdn } from "../../server/r2";
+import { specimenGraph } from "../../fixtures/specimen-graphs";
+import { getSpecimenBySlug } from "../../server/db";
+import { getParsedTdnForSlug } from "../../server/tdn";
 
 export const prerender = false;
 
@@ -33,7 +34,6 @@ const fallback = firstFixtureSpecimen();
 const slug = Astro.params.slug ?? fallback.slug;
 const fixtureSpecimen = findFixtureSpecimen(slug) ?? fallback;
 let specimen = specimenFromFixture(fixtureSpecimen);
-let tdn: Record<string, unknown> = sampleTdn;
 
 try {
   const liveSpecimen = await getSpecimenBySlug(env.DB, slug);
@@ -44,21 +44,27 @@ try {
   specimen = specimenFromFixture(fixtureSpecimen);
 }
 
+// Resolve the real specimen network for the viewer + copy + raw view.
+// Fallback chain: parsed R2 .tdn YAML -> bundled stripped graph -> sampleTdn.
+// Raw view prefers the real blob YAML; tdnToYaml is only a fallback.
+let tdn: Record<string, unknown>;
+let rawTdn: string;
+
 try {
-  const blob = await getCurrentTdnBlobForSlug(env.DB, specimen.slug);
-  if (blob) {
-    const rawBlob = await getTdn(env.BLOBS, blob.key);
-    const parsedTdn = parseTdnObject(rawBlob);
-    if (parsedTdn) {
-      tdn = parsedTdn;
-    }
+  const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, specimen.slug);
+  if (parsed) {
+    tdn = parsed.tdn;
+    rawTdn = parsed.raw;
+  } else {
+    tdn = specimenGraph(specimen.slug) ?? sampleTdn;
+    rawTdn = tdnToYaml(tdn);
   }
 } catch {
-  tdn = sampleTdn;
+  tdn = specimenGraph(specimen.slug) ?? sampleTdn;
+  rawTdn = tdnToYaml(tdn);
 }
 
 const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorTypes(tdn);
-const rawTdn = tdnToYaml(tdn);
 const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
 
 function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
@@ -91,21 +97,6 @@ function specimenFromLive(
     prompt: fixture?.prompt ?? `Embody the ${live.slug} specimen into my project.`,
     current_version: live.current_version
   };
-}
-
-function parseTdnObject(value: string | null): Record<string, unknown> | null {
-  if (!value) return null;
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    return null;
-  }
-
-  return null;
 }
 
 function collectOperatorTypes(value: unknown): string[] {

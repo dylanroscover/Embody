@@ -11,8 +11,12 @@
     "@embody/scanner-ts": "*",
     "@embody/tdn-viewer": "*",
     "astro": "^6.4.4",
+    "better-auth": "^1.6.18",
+    "kysely": "^0.29.2",
+    "kysely-d1": "^0.4.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",

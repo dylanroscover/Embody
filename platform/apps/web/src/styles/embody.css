@@ -192,12 +192,65 @@ pre {
 
 .site-nav--left { left: clamp(1.25rem, 3vw, 2rem); }
 
-/* Single collapsible link cluster beside the mark: collection, field guide,
-   submit, sign in, manifesto, and the GitHub star pill. */
+/* Single collapsible link cluster beside the mark: a top auth section
+   (register / sign in), then collection, field guide, submit, manifesto, and
+   the GitHub star pill. */
 .nav-collapse {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* Top auth section: REGISTER (filled accent) on the left, SIGN IN (outline) on
+   the right, as a split full-width row. It reads as a real button pair only in
+   the stacked dropdown panel below the breakpoint; on the compact desktop pill
+   bar it collapses to two inline pills that sit flush with the other links so
+   the inline bar still reads sensibly. */
+.nav-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Scoped under .nav-collapse so these win over the generic `.nav-collapse a`
+   pill styling (which has higher specificity than a bare `.nav-auth__btn`). */
+.nav-collapse .nav-auth__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.5rem 0.95rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.nav-collapse .nav-auth__btn--register {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.nav-collapse .nav-auth__btn--register:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: var(--bg);
+}
+
+.nav-collapse .nav-auth__btn--signin {
+  border-color: var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
+.nav-collapse .nav-auth__btn--signin:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
 }
 
 /* Link pills -- scoped to nav-collapse so .mark__link keeps its own distinct
@@ -324,7 +377,25 @@ pre {
 
   .site-header.is-open .nav-collapse { display: flex; }
 
-  .nav-collapse a {
+  /* Auth section, dropdown form: a full-width split row -- REGISTER and SIGN IN
+     each take half -- pinned to the top with a divider below it, so it reads as
+     a prominent button pair to perform first, ahead of the plain link list. */
+  .nav-collapse .nav-auth {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.4rem 0.25rem 0.65rem;
+    margin-bottom: 0.3rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-collapse .nav-auth__btn {
+    flex: 1 1 0;
+    justify-content: center;
+    padding: 0.65rem 0.85rem;
+    border-radius: 12px;
+  }
+
+  .nav-collapse a:not(.nav-auth__btn) {
     flex-direction: column;
     align-items: flex-start;
     justify-content: flex-start;

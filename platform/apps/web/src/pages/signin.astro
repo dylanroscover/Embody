@@ -1,42 +1,333 @@
 ---
+import { env } from "cloudflare:workers";
 import Base from "../layouts/Base.astro";
+import { githubOAuthEnabled, type AuthEnv } from "../lib/auth";
+
+export const prerender = false;
+
+// If already signed in, send the user to their profile (or the collection).
+const user = Astro.locals.user;
+if (user) {
+  return Astro.redirect(`/u/${user.handle}`);
+}
+
+const githubEnabled = githubOAuthEnabled(env as unknown as AuthEnv);
+
+// `next` lets a gated page (e.g. /submit) bounce the user back after sign-in.
+const rawNext = Astro.url.searchParams.get("next") ?? "";
+const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
 ---
 
 <Base
-  title="Sign In - embody.tools"
-  description="Accounts are coming soon to embody.tools."
+  title="Sign in - embody.tools"
+  description="Sign in or create an account on embody.tools."
 >
-  <section class="page-section coming-soon">
-    <p class="eyebrow">Sign in</p>
-    <h1>accounts are coming soon</h1>
+  <section class="page-section auth">
+    <p class="eyebrow">Account</p>
+    <h1 id="auth-heading">sign in</h1>
     <p class="lede">
-      Sign-in is not wired up yet. The Collection is fully browsable without an
-      account today.
+      Create an account or sign in to submit Specimens and like the networks you
+      love. The Collection stays fully browsable without an account.
     </p>
-    <p class="coming-soon__back">
-      <a href="/collection">Browse the Collection</a>
+
+    <div class="auth-card" data-next={nextPath}>
+      <div class="auth-toggle" role="tablist" aria-label="Sign in or register">
+        <button type="button" class="auth-toggle__btn is-active" data-mode="signin" role="tab" aria-selected="true">
+          sign in
+        </button>
+        <button type="button" class="auth-toggle__btn" data-mode="register" role="tab" aria-selected="false">
+          register
+        </button>
+      </div>
+
+      <p class="auth-error" data-auth-error hidden role="alert"></p>
+
+      <form class="auth-form" data-auth-form novalidate>
+        <label class="auth-field" data-field="name" hidden>
+          <span>name</span>
+          <input type="text" name="name" autocomplete="name" placeholder="Your name" />
+        </label>
+        <label class="auth-field">
+          <span>email</span>
+          <input type="email" name="email" autocomplete="email" required placeholder="you@example.com" />
+        </label>
+        <label class="auth-field">
+          <span>password</span>
+          <input type="password" name="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters" />
+        </label>
+        <button type="submit" class="btn btn--primary auth-submit" data-auth-submit>
+          sign in
+        </button>
+      </form>
+
+      {githubEnabled && (
+        <>
+          <div class="auth-divider"><span>or</span></div>
+          <button type="button" class="btn btn--outline auth-github" data-github>
+            continue with GitHub
+          </button>
+        </>
+      )}
+    </div>
+
+    <p class="auth-back">
+      <a href="/collection">Browse the Collection instead</a>
     </p>
   </section>
 </Base>
 
+<script>
+  import { authClient } from "../lib/authClient";
+
+  const card = document.querySelector<HTMLDivElement>(".auth-card");
+  const form = document.querySelector<HTMLFormElement>("[data-auth-form]");
+  const errorBox = document.querySelector<HTMLParagraphElement>("[data-auth-error]");
+  const submitBtn = document.querySelector<HTMLButtonElement>("[data-auth-submit]");
+  const nameField = document.querySelector<HTMLLabelElement>('[data-field="name"]');
+  const passwordInput = form?.querySelector<HTMLInputElement>('input[name="password"]');
+  const toggles = Array.from(document.querySelectorAll<HTMLButtonElement>(".auth-toggle__btn"));
+  const githubBtn = document.querySelector<HTMLButtonElement>("[data-github]");
+
+  let mode: "signin" | "register" = "signin";
+
+  const nextPath = card?.dataset.next || "";
+  const fallbackRedirect = "/collection";
+
+  function destination(handle?: string): string {
+    if (nextPath) return nextPath;
+    if (handle) return `/u/${handle}`;
+    return fallbackRedirect;
+  }
+
+  function showError(message: string) {
+    if (!errorBox) return;
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function clearError() {
+    if (!errorBox) return;
+    errorBox.textContent = "";
+    errorBox.hidden = true;
+  }
+
+  function setMode(next: "signin" | "register") {
+    mode = next;
+    clearError();
+    for (const btn of toggles) {
+      const active = btn.dataset.mode === next;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+    }
+    if (nameField) nameField.hidden = next !== "register";
+    if (submitBtn) submitBtn.textContent = next === "register" ? "create account" : "sign in";
+    if (passwordInput) {
+      passwordInput.autocomplete = next === "register" ? "new-password" : "current-password";
+    }
+  }
+
+  for (const btn of toggles) {
+    btn.addEventListener("click", () => setMode(btn.dataset.mode as "signin" | "register"));
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearError();
+    if (!submitBtn) return;
+
+    const data = new FormData(form);
+    const email = String(data.get("email") || "").trim();
+    const password = String(data.get("password") || "");
+    const name = String(data.get("name") || "").trim();
+
+    if (!email || !password) {
+      showError("Email and password are required.");
+      return;
+    }
+    if (mode === "register" && password.length < 8) {
+      showError("Password must be at least 8 characters.");
+      return;
+    }
+
+    submitBtn.disabled = true;
+    const original = submitBtn.textContent;
+    submitBtn.textContent = mode === "register" ? "creating..." : "signing in...";
+
+    try {
+      if (mode === "register") {
+        const res = await authClient.signUp.email({
+          email,
+          password,
+          name: name || email.split("@")[0] || email
+        });
+        if (res.error) {
+          showError(res.error.message || "Could not create the account.");
+          return;
+        }
+      } else {
+        const res = await authClient.signIn.email({ email, password });
+        if (res.error) {
+          showError(res.error.message || "Invalid email or password.");
+          return;
+        }
+      }
+      // Session cookie is set; the destination page reads it server-side.
+      window.location.assign(destination());
+    } catch (err) {
+      console.error("auth submit failed", err);
+      showError("Something went wrong. Please try again.");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = original;
+    }
+  });
+
+  githubBtn?.addEventListener("click", async () => {
+    clearError();
+    try {
+      await authClient.signIn.social({
+        provider: "github",
+        callbackURL: destination()
+      });
+    } catch (err) {
+      console.error("github sign-in failed", err);
+      showError("GitHub sign-in failed. Please try again.");
+    }
+  });
+
+  setMode("signin");
+</script>
+
 <style>
-  .coming-soon {
+  .auth {
     padding-bottom: 56px;
   }
 
-  .coming-soon__back {
+  .auth-card {
+    margin-top: 2rem;
+    max-width: 30rem;
+    padding: 1.75rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .auth-toggle {
+    display: flex;
+    gap: 0.25rem;
+    padding: 0.25rem;
+    background: var(--bg);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.25rem;
+  }
+
+  .auth-toggle__btn {
+    flex: 1;
+    padding: 0.55rem 0.75rem;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-family: var(--font-display);
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .auth-toggle__btn.is-active {
+    background: var(--bg-elevated);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+
+  .auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .auth-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .auth-field > span {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .auth-field input {
+    padding: 0.65rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 1rem;
+  }
+
+  .auth-field input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+
+  .auth-submit {
+    margin-top: 0.25rem;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .auth-github {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .auth-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.8rem;
+    margin: 1.1rem 0;
+  }
+
+  .auth-divider::before,
+  .auth-divider::after {
+    content: "";
+    flex: 1;
+    border-top: 1px solid var(--border-faint);
+  }
+
+  .auth-divider span {
+    padding: 0 0.75rem;
+  }
+
+  .auth-error {
+    margin-bottom: 1rem;
+    padding: 0.65rem 0.75rem;
+    background: rgba(220, 80, 80, 0.12);
+    border: 1px solid rgba(220, 80, 80, 0.4);
+    border-radius: var(--radius-sm);
+    color: #ff9b9b;
+    font-size: 0.9rem;
+  }
+
+  .auth-back {
     margin-top: 2rem;
   }
 
-  .coming-soon__back a {
+  .auth-back a {
     color: var(--accent);
     font-family: var(--font-display);
-    font-size: 1.05rem;
     font-weight: 600;
-    letter-spacing: -0.015em;
   }
 
-  .coming-soon__back a:hover {
+  .auth-back a:hover {
     color: var(--text);
   }
 </style>

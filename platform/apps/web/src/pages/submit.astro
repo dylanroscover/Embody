@@ -1,42 +1,295 @@
 ---
+import { env } from "cloudflare:workers";
 import Base from "../layouts/Base.astro";
+
+export const prerender = false;
+
+// Real session gate: unauthenticated visitors go to sign-in and bounce back.
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect("/signin?next=/submit");
+}
+
+const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
 ---
 
 <Base
   title="Submit a Specimen - embody.tools"
-  description="Specimen submissions are coming soon to embody.tools."
+  description="Share a transparent TouchDesigner Specimen with the Collection."
 >
-  <section class="page-section coming-soon">
-    <p class="eyebrow">Submit</p>
-    <h1>specimen submissions are coming soon</h1>
+  <section class="page-section submit">
+    <div class="submit-head">
+      <p class="eyebrow">Submit</p>
+      <p class="submit-who">
+        signed in as <a href={`/u/${user.handle}`}>{user.handle}</a>
+        <button type="button" class="submit-signout" data-signout>sign out</button>
+      </p>
+    </div>
+    <h1>share a specimen</h1>
     <p class="lede">
-      Soon you will be able to share your own transparent TouchDesigner Specimens
-      here for the Collection. We are still building the submission flow.
+      Paste a TDN network to share it with the Collection. Every submission is
+      scanned for capability surfaces before it goes live. This form is a working
+      scaffold of the submission pipeline.
     </p>
-    <p class="coming-soon__back">
-      <a href="/collection">Browse the Collection</a>
+
+    <p class="submit-status" data-submit-status hidden role="status"></p>
+
+    <form class="submit-form" data-submit-form novalidate>
+      <label class="submit-field">
+        <span>title</span>
+        <input type="text" name="title" required maxlength="160" placeholder="Feedback Bloom" />
+      </label>
+      <label class="submit-field">
+        <span>description</span>
+        <textarea name="description" rows="3" maxlength="4000" placeholder="What it does and how to read it."></textarea>
+      </label>
+      <label class="submit-field">
+        <span>tags <em>(comma separated)</em></span>
+        <input type="text" name="tags" placeholder="feedback, generative, TOP" />
+      </label>
+      <label class="submit-field">
+        <span>license</span>
+        <input type="text" name="license" value="CC-BY-4.0" maxlength="80" />
+      </label>
+      <label class="submit-field">
+        <span>TDN (JSON)</span>
+        <textarea name="tdn" rows="10" required placeholder={'{\n  "name": "my_network",\n  "type": "baseCOMP",\n  "children": []\n}'} class="submit-tdn"></textarea>
+      </label>
+      <button type="submit" class="btn btn--primary submit-go" data-submit-go>
+        submit specimen
+      </button>
+    </form>
+
+    <p class="submit-back">
+      <a href="/collection">Back to the Collection</a>
     </p>
   </section>
 </Base>
 
+<script define:vars={{ isDev }}>
+  const form = document.querySelector("[data-submit-form]");
+  const statusBox = document.querySelector("[data-submit-status]");
+  const goBtn = document.querySelector("[data-submit-go]");
+  const signoutBtn = document.querySelector("[data-signout]");
+
+  function setStatus(message, kind) {
+    if (!statusBox) return;
+    statusBox.textContent = message;
+    statusBox.dataset.kind = kind;
+    statusBox.hidden = false;
+  }
+
+  signoutBtn?.addEventListener("click", async () => {
+    const { authClient } = await import("../lib/authClient");
+    await authClient.signOut();
+    window.location.assign("/");
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!goBtn) return;
+    const data = new FormData(form);
+
+    const title = String(data.get("title") || "").trim();
+    const tdnRaw = String(data.get("tdn") || "").trim();
+    if (!title) {
+      setStatus("A title is required.", "error");
+      return;
+    }
+    if (!tdnRaw) {
+      setStatus("Paste a TDN JSON network.", "error");
+      return;
+    }
+    try {
+      JSON.parse(tdnRaw);
+    } catch {
+      setStatus("TDN must be valid JSON.", "error");
+      return;
+    }
+
+    const tags = String(data.get("tags") || "")
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+
+    // In dev (ENVIRONMENT=development) Turnstile is bypassed with this token.
+    // Production must mount a real Turnstile widget and send its token here.
+    const turnstileToken = isDev ? "dev-bypass" : "";
+    if (!turnstileToken) {
+      setStatus(
+        "Turnstile is not wired for production yet. See owner_todo.",
+        "error"
+      );
+      return;
+    }
+
+    const payload = {
+      title,
+      description: String(data.get("description") || "").trim(),
+      tags,
+      license: String(data.get("license") || "CC-BY-4.0").trim() || "CC-BY-4.0",
+      tdn: tdnRaw,
+      turnstileToken
+    };
+
+    goBtn.disabled = true;
+    const original = goBtn.textContent;
+    goBtn.textContent = "submitting...";
+    setStatus("Scanning and submitting...", "pending");
+
+    try {
+      const res = await fetch("/api/specimens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        setStatus("Your session expired. Redirecting to sign in...", "error");
+        window.location.assign("/signin?next=/submit");
+        return;
+      }
+      if (!res.ok) {
+        setStatus(body.detail || body.error || `Submission failed (${res.status}).`, "error");
+        return;
+      }
+      setStatus("Submitted. Redirecting to your specimen...", "ok");
+      window.location.assign(`/c/${body.slug}`);
+    } catch (err) {
+      console.error("submit failed", err);
+      setStatus("Something went wrong. Please try again.", "error");
+    } finally {
+      goBtn.disabled = false;
+      goBtn.textContent = original;
+    }
+  });
+</script>
+
 <style>
-  .coming-soon {
+  .submit {
     padding-bottom: 56px;
   }
 
-  .coming-soon__back {
+  .submit-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .submit-who {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+  }
+
+  .submit-who a {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .submit-signout {
+    margin-left: 0.75rem;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 0.25rem 0.6rem;
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .submit-signout:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  .submit-form {
+    margin-top: 2rem;
+    max-width: 42rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .submit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .submit-field > span {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .submit-field > span em {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-faint);
+    font-style: normal;
+  }
+
+  .submit-field input,
+  .submit-field textarea {
+    padding: 0.65rem 0.75rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 1rem;
+  }
+
+  .submit-tdn {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+  }
+
+  .submit-field input:focus,
+  .submit-field textarea:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+
+  .submit-go {
+    align-self: flex-start;
+  }
+
+  .submit-status {
+    margin-top: 1.25rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    border: 1px solid var(--border);
+  }
+
+  .submit-status[data-kind="error"] {
+    background: rgba(220, 80, 80, 0.12);
+    border-color: rgba(220, 80, 80, 0.4);
+    color: #ff9b9b;
+  }
+
+  .submit-status[data-kind="ok"] {
+    background: rgba(110, 230, 104, 0.12);
+    border-color: rgba(110, 230, 104, 0.4);
+    color: var(--accent);
+  }
+
+  .submit-back {
     margin-top: 2rem;
   }
 
-  .coming-soon__back a {
+  .submit-back a {
     color: var(--accent);
     font-family: var(--font-display);
-    font-size: 1.05rem;
     font-weight: 600;
-    letter-spacing: -0.015em;
   }
 
-  .coming-soon__back a:hover {
+  .submit-back a:hover {
     color: var(--text);
   }
 </style>

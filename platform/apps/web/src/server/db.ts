@@ -9,8 +9,24 @@ import {
   type Tier
 } from "@embody/contracts";
 import type { RequestUser } from "./auth";
+import { fixtureSummaries } from "../lib/specimenFallback";
 
 export type SpecimenSort = "recent" | "updated" | "popular" | "views" | "name";
+
+// Collection-page sort vocabulary (newest | copied | az). Maps onto the
+// keyset-paginated query in listSpecimens. Kept distinct from the legacy
+// SpecimenSort union so existing callers (and their query string) are unchanged.
+export type CollectionSort = "newest" | "copied" | "az";
+
+export type TrustLevel = "anon" | "verified" | "curator" | "admin";
+
+export interface UserProfile {
+  handle: string;
+  avatar_url: string | null;
+  bio: string | null;
+  trust_level: TrustLevel;
+  created_at: string;
+}
 
 export interface ListSpecimensOptions {
   sort?: SpecimenSort;
@@ -18,6 +34,28 @@ export interface ListSpecimensOptions {
   author?: string;
   page?: number;
   pageSize?: number;
+}
+
+export interface CollectionListOptions {
+  /** Full-text query (FTS via specimens_fts). Empty/undefined = no text filter. */
+  q?: string;
+  category?: string;
+  difficulty?: string;
+  requires?: string;
+  sort?: CollectionSort;
+  /** Opaque keyset cursor from a previous page's nextCursor. */
+  cursor?: string;
+  pageSize?: number;
+}
+
+// Decoded keyset cursor. `k` is the primary sort key value at the boundary row
+// (created_at string, copies_count number, or title string); `slug` is the
+// stable tiebreaker. `sort` guards against a cursor minted under a different
+// sort being replayed.
+interface CollectionCursor {
+  sort: CollectionSort;
+  k: string | number;
+  slug: string;
 }
 
 export interface InsertSpecimenInput {
@@ -52,6 +90,7 @@ interface SpecimenSummaryRow {
   tier: string;
   likes_count: number;
   views_count: number;
+  copies_count: number;
 }
 
 interface SpecimenDetailRow extends SpecimenSummaryRow {
@@ -59,6 +98,11 @@ interface SpecimenDetailRow extends SpecimenSummaryRow {
   current_version: number | null;
   created_at: string;
   updated_at: string;
+}
+
+// Collection rows carry created_at too (the keyset key for the "newest" sort).
+interface CollectionRow extends SpecimenSummaryRow {
+  created_at: string;
 }
 
 interface TagRow {
@@ -79,8 +123,13 @@ const SUMMARY_COLUMNS = [
   "u.handle AS author_handle",
   "s.tier",
   "s.likes_count",
-  "s.views_count"
+  "s.views_count",
+  "s.copies_count"
 ].join(", ");
+
+// Collection query needs created_at on top of the summary columns (keyset key
+// for the "newest" sort).
+const COLLECTION_COLUMNS = `${SUMMARY_COLUMNS}, s.created_at`;
 
 const SORT_SQL: Record<SpecimenSort, string> = {
   recent: "s.created_at DESC",
@@ -88,6 +137,44 @@ const SORT_SQL: Record<SpecimenSort, string> = {
   popular: "s.likes_count DESC",
   views: "s.views_count DESC",
   name: "s.title COLLATE NOCASE ASC"
+};
+
+// Per collection sort: the indexed ORDER BY (with s.slug as the stable
+// tiebreaker), the keyset comparison operator, the SQL expression that produces
+// the cursor key, and how the key column reads off a row. Keyset pagination
+// means each page is a single indexed range scan -- cost is O(pageSize), not
+// O(offset), so it holds at thousands of rows.
+interface CollectionSortPlan {
+  // ORDER BY clause (primary key + slug tiebreaker), shared by count-free page reads.
+  orderBy: string;
+  // Comparison that selects rows strictly AFTER the cursor row, in sort order.
+  // ? is the primary key value, then s.slug, then the key value again.
+  keyset: string;
+  // Reads the primary sort key value off a fetched collection row.
+  keyOf: (row: CollectionRow) => string | number;
+}
+
+const COLLECTION_SORT_PLAN: Record<CollectionSort, CollectionSortPlan> = {
+  // Newest first: created_at DESC, slug ASC. After a boundary row we want rows
+  // with an older created_at, or the same created_at and a later slug.
+  newest: {
+    orderBy: "s.created_at DESC, s.slug ASC",
+    keyset: "(s.created_at < ? OR (s.created_at = ? AND s.slug > ?))",
+    keyOf: (row) => row.created_at
+  },
+  // Most copied first: copies_count DESC, slug ASC.
+  copied: {
+    orderBy: "s.copies_count DESC, s.slug ASC",
+    keyset: "(s.copies_count < ? OR (s.copies_count = ? AND s.slug > ?))",
+    keyOf: (row) => Number(row.copies_count ?? 0)
+  },
+  // A-Z: title (case-insensitive) ASC, slug ASC.
+  az: {
+    orderBy: "s.title COLLATE NOCASE ASC, s.slug ASC",
+    keyset:
+      "(s.title COLLATE NOCASE > ? OR (s.title COLLATE NOCASE = ? AND s.slug > ?))",
+    keyOf: (row) => row.title
+  }
 };
 
 export async function listSpecimens(
@@ -129,6 +216,147 @@ export async function listSpecimens(
     count: Number(countRow?.count ?? 0),
     page,
     pageSize
+  };
+}
+
+// Server-side list/filter/sort/paginate for the public collection page and its
+// /api/specimens GET. Search is FTS (specimens_fts), facets are indexed equality
+// filters, and pagination is KEYSET (cursor) so each page is a single bounded
+// range scan -- O(pageSize), holding at thousands of rows. Returns the same
+// ListResponse shape plus an opaque nextCursor (null on the last page).
+export async function listSpecimensForCollection(
+  db: D1Database,
+  options: CollectionListOptions = {}
+): Promise<ListResponse> {
+  const pageSize = normalizePageSize(options.pageSize);
+  const sort = normalizeCollectionSort(options.sort ?? "az");
+  const plan = COLLECTION_SORT_PLAN[sort];
+
+  const where = ["s.visibility = 'public'"];
+  const joins: string[] = [];
+  const filterParams: (string | number)[] = [];
+
+  // FTS keyword filter: join the rowid mirror and MATCH. bm25 ordering is NOT
+  // used here -- the page order is the chosen sort -- but MATCH still restricts
+  // the candidate set cheaply via the FTS index.
+  const matchQuery = options.q ? toFtsQuery(options.q) : "";
+  if (matchQuery) {
+    // FTS5 MATCH must reference the virtual table by name (no alias). Join on
+    // rowid the same way searchSpecimensFts does; the MATCH predicate restricts
+    // the candidate set via the FTS index before the facet/keyset filters run.
+    joins.push("JOIN specimens_fts ON specimens_fts.rowid = s.rowid");
+    where.push("specimens_fts MATCH ?");
+    filterParams.push(matchQuery);
+  }
+
+  const category = (options.category ?? "").trim();
+  if (category) {
+    where.push("s.category = ?");
+    filterParams.push(category);
+  }
+
+  const difficulty = (options.difficulty ?? "").trim();
+  if (difficulty) {
+    where.push("s.difficulty = ?");
+    filterParams.push(difficulty);
+  }
+
+  const requires = (options.requires ?? "").trim();
+  if (requires) {
+    where.push("s.requires = ?");
+    filterParams.push(requires);
+  }
+
+  const joinSql = joins.join("\n");
+  const whereSql = where.join(" AND ");
+
+  // Total matching the active filter set (server total for the count label).
+  const countRow = await db
+    .prepare(
+      `SELECT COUNT(*) AS count
+       FROM specimens s
+       JOIN users_profile u ON u.id = s.author_id
+       ${joinSql}
+       WHERE ${whereSql}`
+    )
+    .bind(...filterParams)
+    .first<{ count: number }>();
+
+  // Keyset: when a cursor is supplied (and it matches the active sort), add the
+  // "strictly after the boundary row" predicate so the scan resumes in place.
+  const cursor = decodeCollectionCursor(options.cursor, sort);
+  const pageWhere = [...where];
+  const pageParams = [...filterParams];
+  if (cursor) {
+    pageWhere.push(plan.keyset);
+    pageParams.push(cursor.k, cursor.k, cursor.slug);
+  }
+
+  // Over-fetch one row to detect whether a further page exists, without a
+  // second query.
+  const rows = await db
+    .prepare(
+      `SELECT ${COLLECTION_COLUMNS}
+       FROM specimens s
+       JOIN users_profile u ON u.id = s.author_id
+       ${joinSql}
+       WHERE ${pageWhere.join(" AND ")}
+       ORDER BY ${plan.orderBy}
+       LIMIT ?`
+    )
+    .bind(...pageParams, pageSize + 1)
+    .all<CollectionRow>();
+
+  const fetched = rows.results ?? [];
+  const hasMore = fetched.length > pageSize;
+  const pageRows = hasMore ? fetched.slice(0, pageSize) : fetched;
+  const lastRow = pageRows[pageRows.length - 1];
+
+  const nextCursor =
+    hasMore && lastRow
+      ? encodeCollectionCursor({ sort, k: plan.keyOf(lastRow), slug: lastRow.slug })
+      : null;
+
+  return {
+    specimens: pageRows.map(rowToSummary),
+    count: Number(countRow?.count ?? 0),
+    page: 1,
+    pageSize,
+    nextCursor
+  };
+}
+
+// Distinct facet values for the collection filter dropdowns. A handful of cheap
+// SELECT DISTINCT reads over indexed columns -- run once at SSR to populate the
+// category / requires <select>s with every value that exists, not just those on
+// the first page (so the facets stay correct at thousands of rows).
+export interface CollectionFacets {
+  categories: string[];
+  requires: string[];
+}
+
+export async function getCollectionFacets(db: D1Database): Promise<CollectionFacets> {
+  const categories = await db
+    .prepare(
+      `SELECT DISTINCT category AS value
+       FROM specimens
+       WHERE visibility = 'public' AND category <> ''
+       ORDER BY category COLLATE NOCASE ASC`
+    )
+    .all<{ value: string }>();
+
+  const requires = await db
+    .prepare(
+      `SELECT DISTINCT requires AS value
+       FROM specimens
+       WHERE visibility = 'public' AND requires <> ''
+       ORDER BY requires COLLATE NOCASE ASC`
+    )
+    .all<{ value: string }>();
+
+  return {
+    categories: (categories.results ?? []).map((row) => row.value),
+    requires: (requires.results ?? []).map((row) => row.value)
   };
 }
 
@@ -174,6 +402,93 @@ export async function getSpecimenBySlug(
     created_at: row.created_at,
     updated_at: row.updated_at
   };
+}
+
+export async function getUserByHandle(
+  db: D1Database,
+  handle: string
+): Promise<UserProfile | null> {
+  const trimmed = handle.trim();
+  if (!trimmed) return null;
+
+  try {
+    const row = await db
+      .prepare(
+        `SELECT handle, avatar_url, bio, trust_level, created_at
+         FROM users_profile
+         WHERE handle = ?
+         LIMIT 1`
+      )
+      .bind(trimmed)
+      .first<{
+        handle: string;
+        avatar_url: string | null;
+        bio: string | null;
+        trust_level: string;
+        created_at: string;
+      }>();
+
+    if (row) {
+      return {
+        handle: row.handle,
+        avatar_url: row.avatar_url,
+        bio: row.bio,
+        trust_level: normalizeTrustLevel(row.trust_level),
+        created_at: row.created_at
+      };
+    }
+  } catch {
+    // D1 unavailable in local dev; fall through to the fixture profile.
+  }
+
+  return fallbackUserProfile(trimmed);
+}
+
+export async function listSpecimensByAuthor(
+  db: D1Database,
+  handle: string
+): Promise<SpecimenSummary[]> {
+  const trimmed = handle.trim();
+  if (!trimmed) return [];
+
+  try {
+    const rows = await db
+      .prepare(
+        `SELECT ${SUMMARY_COLUMNS}
+         FROM specimens s
+         JOIN users_profile u ON u.id = s.author_id
+         WHERE u.handle = ? AND s.visibility = 'public'
+         ORDER BY s.created_at DESC, s.slug ASC`
+      )
+      .bind(trimmed)
+      .all<SpecimenSummaryRow>();
+
+    const mapped = (rows.results ?? []).map(rowToSummary);
+    if (mapped.length > 0) return mapped;
+  } catch {
+    // D1 unavailable in local dev; fall through to the fixture set.
+  }
+
+  return fallbackSpecimensByAuthor(trimmed);
+}
+
+// Fallback profile derived from the fixture set, so /u/<handle> works in dev
+// (empty/unreachable D1) exactly like the collection page does. Only the
+// curator handle that backs the fixtures resolves; any other handle is null.
+function fallbackUserProfile(handle: string): UserProfile | null {
+  if (!fallbackSpecimensByAuthor(handle).length) return null;
+
+  return {
+    handle,
+    avatar_url: null,
+    bio: "First-party Embody specimen author. Curating the transparent TDN Collection.",
+    trust_level: "curator",
+    created_at: "2026-01-01T00:00:00Z"
+  };
+}
+
+function fallbackSpecimensByAuthor(handle: string): SpecimenSummary[] {
+  return fixtureSummaries.filter((summary) => summary.author_handle === handle);
 }
 
 export async function getCurrentTdnBlobForSlug(
@@ -388,6 +703,52 @@ export function normalizeSpecimenSort(value: string | null): SpecimenSort {
   return "recent";
 }
 
+export function normalizeCollectionSort(value: string | null | undefined): CollectionSort {
+  if (value === "newest" || value === "copied") return value;
+  return "az";
+}
+
+// Keyset cursor (de)serialization. The cursor is an opaque base64url token of a
+// small JSON object; it is reproducible across requests and never trusted as a
+// SQL fragment -- only its decoded { k, slug } values are bound as parameters.
+function encodeCollectionCursor(cursor: CollectionCursor): string {
+  const json = JSON.stringify([cursor.sort, cursor.k, cursor.slug]);
+  return base64UrlEncode(json);
+}
+
+function decodeCollectionCursor(
+  value: string | undefined,
+  sort: CollectionSort
+): CollectionCursor | null {
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(base64UrlDecode(value)) as unknown;
+    if (!Array.isArray(parsed) || parsed.length !== 3) return null;
+
+    const [cursorSort, k, slug] = parsed;
+    // A cursor minted under a different sort is meaningless against this order;
+    // ignore it and serve from the top rather than paginate incoherently.
+    if (cursorSort !== sort) return null;
+    if (typeof slug !== "string") return null;
+    if (typeof k !== "string" && typeof k !== "number") return null;
+
+    return { sort, k, slug };
+  } catch {
+    return null;
+  }
+}
+
+function base64UrlEncode(value: string): string {
+  // btoa expects Latin-1; the cursor payload is ASCII JSON, so this is safe.
+  return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlDecode(value: string): string {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
+  return atob(padded);
+}
+
 function specimenListQuery(options: ListSpecimensOptions): {
   joins: string;
   where: string[];
@@ -437,7 +798,8 @@ function rowToSummary(row: SpecimenSummaryRow): SpecimenSummary {
     author_handle: row.author_handle,
     tier: normalizeTier(row.tier),
     likes_count: Number(row.likes_count ?? 0),
-    views_count: Number(row.views_count ?? 0)
+    views_count: Number(row.views_count ?? 0),
+    copies_count: Number(row.copies_count ?? 0)
   };
 }
 
@@ -464,6 +826,11 @@ function normalizeDifficulty(value: string): Difficulty {
 function normalizeTier(value: string): Tier {
   if (value === "verified" || value === "featured") return value;
   return "community";
+}
+
+function normalizeTrustLevel(value: string): TrustLevel {
+  if (value === "verified" || value === "curator" || value === "admin") return value;
+  return "anon";
 }
 
 function parseCapability(value: string | null): CapabilityJson {

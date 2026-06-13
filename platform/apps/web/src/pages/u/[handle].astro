@@ -1,0 +1,285 @@
+---
+import { env } from "cloudflare:workers";
+import type { SpecimenSummary } from "@embody/contracts";
+import Base from "../../layouts/Base.astro";
+import {
+  getUserByHandle,
+  listSpecimensByAuthor,
+  type UserProfile
+} from "../../server/db";
+
+export const prerender = false;
+
+const handle = (Astro.params.handle ?? "").trim();
+
+let profile: UserProfile | null = null;
+let specimens: SpecimenSummary[] = [];
+
+if (handle) {
+  try {
+    profile = await getUserByHandle(env.DB, handle);
+  } catch {
+    profile = null;
+  }
+
+  if (profile) {
+    try {
+      specimens = await listSpecimensByAuthor(env.DB, profile.handle);
+    } catch {
+      specimens = [];
+    }
+  }
+}
+
+if (!profile) {
+  Astro.response.status = 404;
+}
+
+const totalCopies = specimens.reduce((sum, item) => sum + item.copies_count, 0);
+const memberSince = profile ? memberYear(profile.created_at) : "";
+const avatarInitial = profile ? initialFor(profile.handle) : "?";
+
+function initialFor(value: string): string {
+  const cleaned = value.replace(/[^a-z0-9]/gi, "");
+  return (cleaned[0] ?? value[0] ?? "?").toUpperCase();
+}
+
+function memberYear(value: string): string {
+  const year = value.slice(0, 4);
+  return /^\d{4}$/.test(year) ? year : "";
+}
+
+function pluralize(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+}
+---
+
+{
+  profile ? (
+    <Base
+      title={`@${profile.handle} - embody.tools`}
+      description={profile.bio ?? `Specimens shared by @${profile.handle} on embody.tools.`}
+    >
+      <section class="page-section profile-header">
+        <div class="profile-id">
+          {profile.avatar_url ? (
+            <img class="avatar avatar--img" src={profile.avatar_url} alt={`@${profile.handle}`} />
+          ) : (
+            <span class="avatar avatar--initial" aria-hidden="true">{avatarInitial}</span>
+          )}
+          <div class="profile-meta">
+            <p class="eyebrow">Contributor</p>
+            <h1>@{profile.handle}</h1>
+            {profile.bio && <p class="lede">{profile.bio}</p>}
+            <div class="badge-row">
+              <span class:list={["badge", `trust-${profile.trust_level}`]}>{profile.trust_level}</span>
+              {memberSince && <span class="badge">member since {memberSince}</span>}
+            </div>
+            <p class="stat-line">
+              <strong>{pluralize(specimens.length, "specimen")}</strong>
+              <span class="dot" aria-hidden="true">&middot;</span>
+              <strong>{pluralize(totalCopies, "copy")}</strong> total
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-section tight specimen-section">
+        <p class="eyebrow">Shared specimens</p>
+        {specimens.length > 0 ? (
+          <ul class="specimen-list">
+            {specimens.map((item) => (
+              <li class="specimen-row pillar">
+                <a class="specimen-row__main" href={`/c/${item.slug}`}>
+                  <span class="specimen-row__name">{item.name}</span>
+                  <span class="specimen-row__cat mono">{item.category}</span>
+                </a>
+                <div class="badge-row specimen-row__badges">
+                  <span class="badge">{item.difficulty}</span>
+                  <span class:list={["badge", item.requires === "none" ? "stock" : "needs"]}>
+                    {item.requires === "none" ? "stock TD" : `needs ${item.requires}`}
+                  </span>
+                  <span class="badge specimen-row__copies">{pluralize(item.copies_count, "copy")}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p class="muted empty-note">No public specimens shared yet.</p>
+        )}
+      </section>
+    </Base>
+  ) : (
+    <Base title="User not found - embody.tools" description="No such contributor.">
+      <section class="page-section profile-missing">
+        <p class="eyebrow">404</p>
+        <h1>User not found</h1>
+        <p class="lede">
+          {handle ? <>There is no contributor with the handle <span class="mono">@{handle}</span>.</> : "No handle was provided."}
+        </p>
+        <div class="actions">
+          <a class="btn btn--outline" href="/collection">Browse the Collection</a>
+        </div>
+      </section>
+    </Base>
+  )
+}
+
+<style>
+  .profile-header {
+    padding-bottom: clamp(2rem, 4vw, 3rem);
+  }
+
+  .profile-id {
+    display: flex;
+    align-items: flex-start;
+    gap: clamp(1.25rem, 3vw, 2.25rem);
+  }
+
+  .avatar {
+    flex: none;
+    width: clamp(84px, 12vw, 128px);
+    height: clamp(84px, 12vw, 128px);
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .avatar--img {
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+  }
+
+  .avatar--initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    background: var(--accent-dim);
+    color: var(--accent);
+    font: 600 clamp(2.25rem, 5vw, 3.25rem)/1 var(--font-display);
+  }
+
+  .profile-meta {
+    min-width: 0;
+  }
+
+  .profile-meta h1 {
+    margin-bottom: 1rem;
+    font-size: clamp(2.1rem, 5.5vw, 3.6rem);
+  }
+
+  .profile-meta .lede {
+    margin-bottom: 1.25rem;
+  }
+
+  .profile-meta .eyebrow {
+    margin-bottom: 0.85rem;
+  }
+
+  .stat-line {
+    margin: 1.1rem 0 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+  }
+
+  .stat-line strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .stat-line .dot {
+    margin: 0 0.5rem;
+    color: var(--text-faint);
+  }
+
+  .badge.trust-curator,
+  .badge.trust-admin {
+    border-color: rgba(110, 230, 104, 0.34);
+    color: var(--accent);
+  }
+
+  .badge.trust-verified {
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  .specimen-section .eyebrow {
+    margin-bottom: 1.4rem;
+  }
+
+  .specimen-list {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .specimen-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.85rem 1.25rem;
+    padding: 1.05rem 1.25rem;
+  }
+
+  .specimen-row__main {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.85rem;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .specimen-row__name {
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .specimen-row:hover {
+    border-color: var(--border);
+  }
+
+  .specimen-row:hover .specimen-row__name {
+    color: var(--accent);
+  }
+
+  .specimen-row__cat {
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .specimen-row__badges {
+    flex: none;
+  }
+
+  .empty-note {
+    margin: 0;
+  }
+
+  .profile-missing {
+    padding-bottom: clamp(3rem, 6vw, 5rem);
+  }
+
+  @media (max-width: 640px) {
+    .profile-id {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .specimen-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>

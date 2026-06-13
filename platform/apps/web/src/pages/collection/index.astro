@@ -1,159 +1,674 @@
 ---
 import { env } from "cloudflare:workers";
-import type { SpecimenSummary } from "@embody/contracts";
+import type { ListResponse, SpecimenSummary } from "@embody/contracts";
 import Base from "../../layouts/Base.astro";
+import SpecimenCover from "../../components/SpecimenCover.astro";
 import { fixtureSummaries } from "../../lib/specimenFallback";
-import { specimenThumbnail } from "../../lib/specimenThumb";
-import { listSpecimens } from "../../server/db";
+import { specimenGraph } from "../../fixtures/specimen-graphs";
+import { sampleTdn } from "../../fixtures/sample-tdn";
+import {
+  getCollectionFacets,
+  listSpecimensForCollection,
+  type CollectionFacets
+} from "../../server/db";
 
 export const prerender = false;
 
-let specimens: SpecimenSummary[] = fixtureSummaries;
-let countLabel = `${fixtureSummaries.length} fixture specimens`;
+// Page size for the collection. ~24 keeps the first SSR paint fast and bounds
+// every subsequent fetch -- the page NEVER loads the whole set. FTS handles
+// search at thousands of rows; keyset (cursor) pagination keeps each page O(24).
+const PAGE_SIZE = 24;
+const DEFAULT_SORT = "az" as const;
+
+// SSR the FIRST page server-side (fast paint + SEO). The search box, facet
+// filters, sort, and infinite scroll then talk to /api/specimens and take over
+// the grid client-side. On any D1 error we degrade to the embedded fixture set
+// so the page is never blank.
+let firstPage: SpecimenSummary[];
+let totalCount: number;
+let nextCursor: string | null;
+let facets: CollectionFacets;
+let usingFixtures = false;
 
 try {
-  const response = await listSpecimens(env.DB, { pageSize: 100 });
+  const response: ListResponse = await listSpecimensForCollection(env.DB, {
+    sort: DEFAULT_SORT,
+    pageSize: PAGE_SIZE
+  });
   if (response.specimens.length > 0) {
-    specimens = response.specimens;
-    countLabel = `${response.count} specimens`;
+    firstPage = response.specimens;
+    totalCount = response.count;
+    nextCursor = response.nextCursor ?? null;
+    facets = await getCollectionFacets(env.DB);
+  } else {
+    throw new Error("empty");
   }
 } catch {
-  specimens = fixtureSummaries;
-  countLabel = `${fixtureSummaries.length} fixture specimens`;
+  usingFixtures = true;
+  firstPage = [...fixtureSummaries]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, PAGE_SIZE);
+  totalCount = fixtureSummaries.length;
+  nextCursor = null;
+  facets = {
+    categories: [...new Set(fixtureSummaries.map((s) => s.category))].sort(),
+    requires: [...new Set(fixtureSummaries.map((s) => s.requires))].sort()
+  };
 }
+
+const countLabel = usingFixtures
+  ? `${totalCount} fixture specimens`
+  : `${totalCount} specimen${totalCount === 1 ? "" : "s"}`;
+
+const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
 ---
 
 <Base
   title="The Collection - embody.tools"
-  description="Fixture Specimens for the embody.tools design review scaffold."
+  description="Specimens for the embody.tools design review scaffold."
 >
   <section class="page-section collection-hero">
     <p class="eyebrow">The Collection</p>
     <h1>TouchDesigner networks you can see through</h1>
     <p class="lede">
-      Each card is a Specimen: a named TDN network with a prompt, an output target, and a
-      readable graph. These fixtures stand in for the future community library.
+      Copy any specimen's TDN to your clipboard and paste it straight into a TouchDesigner .toe running Embody.
     </p>
+
     <div class="collection-toolbar">
       <input
         type="search"
         class="collection-search"
-        placeholder="filter the collection..."
-        aria-label="Filter specimens"
+        placeholder="search the collection..."
+        aria-label="Search specimens"
         data-collection-search
       />
-      <span class="collection-total mono" data-collection-count>{countLabel}</span>
-      <div class="view-toggle" role="group" aria-label="Collection view">
-        <button type="button" class="view-toggle__button is-active" data-view-option="gallery" aria-pressed="true">Gallery</button>
-        <button type="button" class="view-toggle__button" data-view-option="list" aria-pressed="false">List</button>
+
+      <div class="toolbar-controls">
+        <span class="collection-total mono" data-collection-count>{countLabel}</span>
+
+        <label class="sort-control">
+          <span class="sort-control__label mono">category</span>
+          <select class="sort-select mono" aria-label="Filter by category" data-collection-category>
+            <option value="" selected>all</option>
+            {facets.categories.map((value) => (
+              <option value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+
+        <label class="sort-control">
+          <span class="sort-control__label mono">level</span>
+          <select class="sort-select mono" aria-label="Filter by difficulty" data-collection-difficulty>
+            <option value="" selected>all</option>
+            {DIFFICULTIES.map((value) => (
+              <option value={value}>{value}</option>
+            ))}
+          </select>
+        </label>
+
+        <label class="sort-control">
+          <span class="sort-control__label mono">sort</span>
+          <select class="sort-select mono" aria-label="Sort specimens" data-collection-sort>
+            <option value="az" selected>A-Z</option>
+            <option value="newest">Newest</option>
+            <option value="copied">Most copied</option>
+          </select>
+        </label>
+
+        <div class="view-toggle" role="group" aria-label="Collection view">
+          <button
+            type="button"
+            class="view-toggle__button is-active"
+            data-view-option="list"
+            aria-label="List view"
+            aria-pressed="true"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="3" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="6" y="3.5" width="8" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="2" y="7" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="6" y="7.5" width="8" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="2" y="11" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="6" y="11.5" width="8" height="1.4" rx="0.7" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="view-toggle__button"
+            data-view-option="gallery"
+            aria-label="Gallery view"
+            aria-pressed="false"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor" />
+              <rect x="9" y="2" width="5" height="5" rx="1" fill="currentColor" />
+              <rect x="2" y="9" width="5" height="5" rx="1" fill="currentColor" />
+              <rect x="9" y="9" width="5" height="5" rx="1" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   </section>
 
-  <div class="collection-shell" id="collection-view" data-view="gallery">
+  <div
+    class="collection-shell"
+    id="collection-view"
+    data-view="list"
+    data-page-size={PAGE_SIZE}
+    data-next-cursor={nextCursor ?? ""}
+    data-base-count={countLabel}
+    data-fixtures={usingFixtures ? "1" : "0"}
+  >
     <section class="page-section tight collection-results">
-      <div class="card-grid">
-        {specimens.map((specimen) => (
-          <a
-            class="specimen-card pillar"
-            href={`/c/${specimen.slug}`}
+      <div class="card-grid" data-card-grid>
+        {firstPage.map((specimen) => (
+          <article
+            class="specimen-card"
+            data-specimen
+            data-slug={specimen.slug}
+            data-name={specimen.name}
+            data-href={`/c/${specimen.slug}`}
+            data-copied={specimen.copies_count}
+            data-copies={specimen.copies_count}
             data-search={`${specimen.name} ${specimen.description} ${specimen.category} ${specimen.difficulty} ${specimen.requires}`.toLowerCase()}
           >
-            <div class="thumb">
-              <img
-                src={specimenThumbnail(specimen)}
-                loading="lazy"
-                alt={`${specimen.name} thumbnail placeholder`}
+            <div class="specimen-card__cover">
+              <SpecimenCover
+                slug={specimen.slug}
+                name={specimen.name}
+                category={specimen.category}
+                tdn={specimenGraph(specimen.slug) ?? sampleTdn}
               />
             </div>
+
             <div class="specimen-card__body">
               <div class="badge-row">
                 <span class="badge">{specimen.difficulty}</span>
-                <span class:list={["badge", specimen.requires === "none" ? "stock" : "needs"]}>
-                  {specimen.requires === "none" ? "stock TD" : `needs ${specimen.requires}`}
-                </span>
                 <span class="badge specimen-category">{specimen.category}</span>
+                <span class="badge license">CC-BY</span>
               </div>
-              <h3>{specimen.name}</h3>
-              <p>{specimen.description}</p>
-              <span class="card-link">Inspect /c/{specimen.slug}</span>
+
+              <div class="specimen-card__name-row">
+                <h3 class="specimen-card__name">{specimen.name}</h3>
+
+                <button
+                  type="button"
+                  class="card-copy"
+                  data-card-copy
+                  data-slug={specimen.slug}
+                  aria-label={`Copy TDN envelope for ${specimen.name}`}
+                  title="Copy TDN for TouchDesigner"
+                >
+                  <svg
+                    class="card-copy__icon card-copy__icon--copy"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  <svg
+                    class="card-copy__icon card-copy__icon--check"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="card-copy__count mono" data-copy-count>{specimen.copies_count}</span>
+                </button>
+              </div>
+
+              <a
+                class="specimen-card__author mono"
+                href={`/u/${specimen.author_handle}`}
+                aria-label={`View ${specimen.author_handle}'s profile`}
+              >
+                <span class="specimen-card__author-avatar" aria-hidden="true">{specimen.author_handle.charAt(0).toUpperCase()}</span>
+                <span class="specimen-card__author-handle">by @{specimen.author_handle}</span>
+              </a>
+
+              <p class="specimen-card__desc">{specimen.description}</p>
+
+              <div class="card-actions">
+                <a class="card-link mono" href={`/c/${specimen.slug}`}>
+                  inspect /c/{specimen.slug}
+                </a>
+              </div>
             </div>
-          </a>
+          </article>
         ))}
       </div>
+
+      <p class="empty-state mono" data-empty-state hidden>No specimens match that filter.</p>
+      <p class="empty-state mono" data-loading-state hidden>loading...</p>
+
+      <!--
+        Infinite-scroll sentinel. When it nears the viewport the client module
+        FETCHES the next page from /api/specimens via the keyset cursor and
+        APPENDS the returned cards -- it never loads the whole set. Search, facet
+        filters, and sort issue a fresh /api/specimens request and REPLACE the
+        grid; the cursor resets to that result's nextCursor.
+      -->
+      <div class="scroll-sentinel" data-scroll-sentinel aria-hidden="true"></div>
     </section>
   </div>
 
-  <script is:inline>
-    const collection = document.querySelector("[data-view]");
-    const viewButtons = document.querySelectorAll("[data-view-option]");
+  <script>
+    // Server-driven collection: the SSR first page paints instantly; this module
+    // then runs all search / facet / sort as DEBOUNCED /api/specimens requests
+    // that REPLACE the grid, and infinite scroll fetches the NEXT page via the
+    // keyset cursor and APPENDS it. The set is never loaded all at once. Covers
+    // for appended cards mount a React SpecimenCoverGraph (which lazy-fetches its
+    // own graph), so thousands of graphs are never bundled. If the API errors,
+    // the page degrades gracefully to the already-painted SSR first page.
+    import { createElement } from "react";
+    import { createRoot, type Root } from "react-dom/client";
+    import type { ListResponse, SpecimenSummary } from "@embody/contracts";
+    import SpecimenCoverGraph from "../../components/SpecimenCoverGraph";
+    import { specimenThumbnail } from "../../lib/specimenThumb";
+
+    interface CopyResponse {
+      envelope: unknown;
+      copies_count?: number;
+    }
+
+    const STORAGE_KEY = "embody:collection:view";
+    const DEBOUNCE_MS = 220;
+    const COPY_RESET_MS = 1500;
+
+    const shell = document.querySelector<HTMLElement>("[data-view]");
+    const grid = document.querySelector<HTMLElement>("[data-card-grid]");
+    const viewButtons = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-view-option]")
+    );
+    const searchInput = document.querySelector("[data-collection-search]") as HTMLInputElement | null;
+    const categorySelect = document.querySelector("[data-collection-category]") as HTMLSelectElement | null;
+    const difficultySelect = document.querySelector("[data-collection-difficulty]") as HTMLSelectElement | null;
+    const requiresSelect = document.querySelector("[data-collection-requires]") as HTMLSelectElement | null;
+    const sortSelect = document.querySelector("[data-collection-sort]") as HTMLSelectElement | null;
+    const countEl = document.querySelector<HTMLElement>("[data-collection-count]");
+    const emptyEl = document.querySelector<HTMLElement>("[data-empty-state]");
+    const loadingEl = document.querySelector<HTMLElement>("[data-loading-state]");
+    const sentinel = document.querySelector<HTMLElement>("[data-scroll-sentinel]");
+
+    const baseCount = shell?.getAttribute("data-base-count") ?? (countEl?.textContent ?? "");
+    const usingFixtures = shell?.getAttribute("data-fixtures") === "1";
+    const pageSize = Number(shell?.getAttribute("data-page-size") || "24") || 24;
+
+    // ---- View toggle (LIST default, list-left / gallery-right) ----
+    function setView(view: string): void {
+      if (shell) shell.setAttribute("data-view", view);
+      viewButtons.forEach((item) => {
+        const selected = item.getAttribute("data-view-option") === view;
+        item.classList.toggle("is-active", selected);
+        item.setAttribute("aria-pressed", String(selected));
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY, view);
+      } catch {
+        /* localStorage persistence is a nice-to-have; ignore failures. */
+      }
+    }
+
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === "list" || saved === "gallery") setView(saved);
+    } catch {
+      /* ignore */
+    }
 
     viewButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const view = button.getAttribute("data-view-option") || "gallery";
-        if (collection) collection.setAttribute("data-view", view);
-
-        viewButtons.forEach((item) => {
-          const selected = item.getAttribute("data-view-option") === view;
-          item.classList.toggle("is-active", selected);
-          item.setAttribute("aria-pressed", String(selected));
-        });
-      });
+      button.addEventListener("click", () =>
+        setView(button.getAttribute("data-view-option") || "list")
+      );
     });
 
-    // Inline search: client-side filter over the loaded specimen set.
-    const searchInput = document.querySelector("[data-collection-search]");
-    const countEl = document.querySelector("[data-collection-count]");
-    const baseCount = countEl ? countEl.textContent : "";
-    const cards = Array.from(document.querySelectorAll(".specimen-card"));
+    // ---- React cover roots: mount SpecimenCoverGraph into appended cards ----
+    // SSR cards already carry a client:visible island; appended cards get the
+    // SAME component mounted here (no SSR tdn prop, so it lazy-fetches its graph).
+    // We lazy-mount with an IntersectionObserver to mirror client:visible -- a
+    // card's viewer only spawns when it scrolls near the viewport.
+    const coverRoots = new WeakMap<Element, Root>();
+    const coverObserver =
+      "IntersectionObserver" in window
+        ? new IntersectionObserver(
+            (entries, obs) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                obs.unobserve(entry.target);
+                mountCover(entry.target as HTMLElement);
+              }
+            },
+            { rootMargin: "240px 0px" }
+          )
+        : null;
 
-    if (searchInput) {
-      searchInput.addEventListener("input", () => {
-        const q = searchInput.value.trim().toLowerCase();
-        let shown = 0;
-        cards.forEach((card) => {
-          const hay = card.getAttribute("data-search") || "";
-          const match = !q || hay.includes(q);
-          card.classList.toggle("is-hidden", !match);
-          if (match) shown += 1;
-        });
-        if (countEl) {
-          countEl.textContent = q ? `${shown} match${shown === 1 ? "" : "es"}` : baseCount;
+    function mountCover(mountEl: HTMLElement): void {
+      if (coverRoots.has(mountEl)) return;
+      const slug = mountEl.getAttribute("data-cover-mount");
+      if (!slug) return;
+      const root = createRoot(mountEl);
+      coverRoots.set(mountEl, root);
+      root.render(createElement(SpecimenCoverGraph, { slug }));
+    }
+
+    function observeCover(mountEl: HTMLElement): void {
+      if (coverObserver) coverObserver.observe(mountEl);
+      else mountCover(mountEl); // no observer support: mount immediately
+    }
+
+    // ---- Cover flip (network <-> result), card click, per-card copy ----
+    // Delegated from the grid so they work for SSR AND appended cards alike.
+    function flipCover(option: Element): void {
+      const cover = option.closest<HTMLElement>("[data-cover-shell]");
+      if (!cover) return;
+      const mode = option.getAttribute("data-cover-option") || "network";
+      cover.setAttribute("data-cover", mode);
+      cover.querySelectorAll<HTMLElement>("[data-cover-option]").forEach((item) => {
+        const on = item.getAttribute("data-cover-option") === mode;
+        item.classList.toggle("is-active", on);
+        item.setAttribute("aria-pressed", String(on));
+      });
+      const net = cover.querySelector(".cover__layer--network");
+      const res = cover.querySelector(".cover__layer--result");
+      if (net) net.setAttribute("aria-hidden", String(mode !== "network"));
+      if (res) res.setAttribute("aria-hidden", String(mode !== "result"));
+    }
+
+    async function runCopy(button: HTMLElement): Promise<void> {
+      const slug = button.getAttribute("data-slug");
+      if (!slug) return;
+      const counter = button.querySelector<HTMLElement>("[data-copy-count]");
+      button.classList.remove("is-copied", "is-failed");
+      try {
+        const response = await fetch(
+          `/api/specimens/${encodeURIComponent(slug)}/copy`,
+          { method: "POST" }
+        );
+        if (!response.ok) throw new Error(`copy failed: ${response.status}`);
+        const data = (await response.json()) as CopyResponse;
+        await navigator.clipboard.writeText(JSON.stringify(data.envelope));
+        if (counter && typeof data.copies_count === "number") {
+          counter.textContent = String(data.copies_count);
+          button.closest("[data-specimen]")?.setAttribute("data-copies", String(data.copies_count));
         }
+        button.classList.add("is-copied");
+      } catch {
+        button.classList.add("is-failed");
+      }
+      window.setTimeout(() => button.classList.remove("is-copied", "is-failed"), COPY_RESET_MS);
+    }
+
+    if (grid) {
+      grid.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const flip = target.closest<HTMLElement>("[data-cover-option]");
+        if (flip) {
+          event.preventDefault();
+          flipCover(flip);
+          return;
+        }
+
+        const copy = target.closest<HTMLElement>("[data-card-copy]");
+        if (copy) {
+          event.preventDefault();
+          event.stopPropagation();
+          void runCopy(copy);
+          return;
+        }
+
+        // Interactive islands (cover canvas) and real links/controls opt out.
+        if (
+          target.closest("[data-cover-interactive], a, button, input, select, textarea")
+        ) {
+          return;
+        }
+        const card = target.closest<HTMLElement>("[data-specimen]");
+        const href = card?.getAttribute("data-href");
+        if (href) window.location.href = href;
       });
     }
+
+    // ---- Card markup for APPENDED (client-fetched) cards ----
+    // Mirrors the SSR article in collection/index.astro: badges (difficulty /
+    // stock-TD-or-needs / category / CC-BY), the cover shell (network skeleton +
+    // result placeholder + flip), the name row + per-card copy counter, the
+    // prominent author chip linking to /u/<handle>, the description, and the
+    // inspect link. The cover network layer is an empty mount node the React
+    // root fills in (lazy-fetched graph).
+    function esc(value: string): string {
+      const el = document.createElement("div");
+      el.textContent = value;
+      return el.innerHTML;
+    }
+
+    function buildCard(s: SpecimenSummary): HTMLElement {
+      const search = `${s.name} ${s.description} ${s.category} ${s.difficulty} ${s.requires}`.toLowerCase();
+      const thumb = specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
+      const initial = (s.author_handle || "?").charAt(0).toUpperCase();
+
+      const article = document.createElement("article");
+      article.className = "specimen-card";
+      article.setAttribute("data-specimen", "");
+      article.setAttribute("data-slug", s.slug);
+      article.setAttribute("data-name", s.name);
+      article.setAttribute("data-href", `/c/${s.slug}`);
+      article.setAttribute("data-copied", String(s.copies_count ?? 0));
+      article.setAttribute("data-copies", String(s.copies_count ?? 0));
+      article.setAttribute("data-search", search);
+
+      article.innerHTML = `
+        <div class="specimen-card__cover">
+          <div class="cover" data-cover="network" data-cover-shell data-cover-interactive>
+            <div class="cover__layer cover__layer--network" aria-hidden="false">
+              <div class="cover-mount" data-cover-mount="${esc(s.slug)}"></div>
+            </div>
+            <div class="cover__layer cover__layer--result" aria-hidden="true">
+              <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} preview placeholder" />
+              <span class="cover__soon mono">preview coming soon</span>
+            </div>
+            <div class="cover__flip" role="group" aria-label="${esc(s.name)} cover view">
+              <button type="button" class="cover__flip-btn is-active" data-cover-option="network" aria-pressed="true" title="Show network graph">network</button>
+              <button type="button" class="cover__flip-btn" data-cover-option="result" aria-pressed="false" title="Show rendered result">result</button>
+            </div>
+          </div>
+        </div>
+        <div class="specimen-card__body">
+          <div class="badge-row">
+            <span class="badge">${esc(s.difficulty)}</span>
+            <span class="badge specimen-category">${esc(s.category)}</span>
+            <span class="badge license">CC-BY</span>
+          </div>
+          <div class="specimen-card__name-row">
+            <h3 class="specimen-card__name">${esc(s.name)}</h3>
+            <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Copy TDN envelope for ${esc(s.name)}" title="Copy TDN for TouchDesigner">
+              <svg class="card-copy__icon card-copy__icon--copy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+              <svg class="card-copy__icon card-copy__icon--check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+              <span class="card-copy__count mono" data-copy-count>${esc(String(s.copies_count ?? 0))}</span>
+            </button>
+          </div>
+          <a class="specimen-card__author mono" href="/u/${esc(s.author_handle)}" aria-label="View ${esc(s.author_handle)}'s profile">
+            <span class="specimen-card__author-avatar" aria-hidden="true">${esc(initial)}</span>
+            <span class="specimen-card__author-handle">by @${esc(s.author_handle)}</span>
+          </a>
+          <p class="specimen-card__desc">${esc(s.description)}</p>
+          <div class="card-actions">
+            <a class="card-link mono" href="/c/${esc(s.slug)}">inspect /c/${esc(s.slug)}</a>
+          </div>
+        </div>
+      `;
+
+      const mount = article.querySelector<HTMLElement>("[data-cover-mount]");
+      if (mount) observeCover(mount);
+      return article;
+    }
+
+    // ---- Server-driven list state ----
+    let cursor = shell?.getAttribute("data-next-cursor") || "";
+    let requestSeq = 0; // guards against out-of-order debounced responses
+    let loadingMore = false;
+
+    function buildQuery(withCursor: boolean): string {
+      const params = new URLSearchParams();
+      const q = searchInput?.value.trim();
+      if (q) params.set("q", q);
+      if (categorySelect?.value) params.set("category", categorySelect.value);
+      if (difficultySelect?.value) params.set("difficulty", difficultySelect.value);
+      if (requiresSelect?.value) params.set("requires", requiresSelect.value);
+      if (sortSelect?.value) params.set("sort", sortSelect.value);
+      params.set("pageSize", String(pageSize));
+      if (withCursor && cursor) params.set("cursor", cursor);
+      return params.toString();
+    }
+
+    function setCount(total: number): void {
+      if (countEl) countEl.textContent = `${total} specimen${total === 1 ? "" : "s"}`;
+    }
+
+    function appendSpecimens(specimens: SpecimenSummary[]): void {
+      if (!grid) return;
+      const frag = document.createDocumentFragment();
+      for (const s of specimens) frag.appendChild(buildCard(s));
+      grid.appendChild(frag);
+    }
+
+    function syncSentinel(): void {
+      if (sentinel) sentinel.toggleAttribute("hidden", !cursor);
+    }
+
+    // REPLACE the grid with a fresh server result (search / facet / sort change).
+    async function runQuery(): Promise<void> {
+      // Fixtures fallback (D1 unreachable at SSR): there is no live API set to
+      // page over, so keep the painted SSR first page rather than blank it.
+      if (usingFixtures) return;
+
+      const seq = ++requestSeq;
+      if (loadingEl) loadingEl.hidden = false;
+      try {
+        const response = await fetch(`/api/specimens?${buildQuery(false)}`);
+        if (!response.ok) throw new Error(`list failed: ${response.status}`);
+        const data = (await response.json()) as ListResponse;
+        if (seq !== requestSeq) return; // a newer query superseded this one
+
+        if (grid) grid.replaceChildren();
+        cursor = data.nextCursor || "";
+        appendSpecimens(data.specimens || []);
+        setCount(typeof data.count === "number" ? data.count : (data.specimens?.length ?? 0));
+        if (emptyEl) emptyEl.hidden = (data.specimens?.length ?? 0) !== 0;
+        syncSentinel();
+      } catch {
+        // Degrade gracefully: leave whatever is already on screen in place.
+        if (seq === requestSeq && countEl) countEl.textContent = baseCount;
+      } finally {
+        if (seq === requestSeq && loadingEl) loadingEl.hidden = true;
+      }
+    }
+
+    // APPEND the next page (infinite scroll via the keyset cursor).
+    async function loadMore(): Promise<void> {
+      if (usingFixtures || loadingMore || !cursor) return;
+      loadingMore = true;
+      if (loadingEl) loadingEl.hidden = false;
+      try {
+        const response = await fetch(`/api/specimens?${buildQuery(true)}`);
+        if (!response.ok) throw new Error(`page failed: ${response.status}`);
+        const data = (await response.json()) as ListResponse;
+        cursor = data.nextCursor || "";
+        appendSpecimens(data.specimens || []);
+        if (typeof data.count === "number") setCount(data.count);
+        syncSentinel();
+      } catch {
+        // Stop paging on error; the cursor is left as-is so a later scroll retries.
+      } finally {
+        loadingMore = false;
+        if (loadingEl) loadingEl.hidden = true;
+      }
+    }
+
+    // ---- Debounced controls ----
+    let debounceTimer: number | undefined;
+    function scheduleQuery(): void {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => void runQuery(), DEBOUNCE_MS);
+    }
+
+    searchInput?.addEventListener("input", scheduleQuery);
+    categorySelect?.addEventListener("change", () => void runQuery());
+    difficultySelect?.addEventListener("change", () => void runQuery());
+    requiresSelect?.addEventListener("change", () => void runQuery());
+    sortSelect?.addEventListener("change", () => void runQuery());
+
+    // ---- Infinite scroll: fetch + append the next page near the bottom ----
+    if (sentinel && "IntersectionObserver" in window) {
+      const pager = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) void loadMore();
+          }
+        },
+        { rootMargin: "480px 0px" }
+      );
+      pager.observe(sentinel);
+    }
+
+    // Wire SSR per-card copy buttons that the React island owns inside the cover?
+    // No -- copy buttons live in the card body (SSR HTML), and the delegated grid
+    // click handler above covers them for SSR and appended cards alike.
+
+    // Initial sentinel visibility (hidden when there is no next page).
+    syncSentinel();
   </script>
 </Base>
 
 <style>
+  /* Compact header: keep the focus on the cards, not the title block
+     (product-owner feedback). Shrink the h1 + lede and trim padding. */
   .collection-hero {
-    padding-bottom: 56px;
+    padding-top: 1.6rem;
+    padding-bottom: 1.4rem;
+  }
+
+  .collection-hero h1 {
+    margin: 0.35rem 0 0;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    line-height: 1.15;
+  }
+
+  .collection-hero .lede {
+    margin: 0.45rem 0 0;
+    font-size: 0.92rem;
+    color: var(--text-muted);
   }
 
   .collection-toolbar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    max-width: 760px;
-  }
-
-  .collection-results {
-    border-top: 1px solid var(--border-faint);
-  }
-
-  .collection-total {
-    color: var(--text-faint);
-    font-size: 0.76rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    gap: 0.75rem 1rem;
+    margin-top: 1.1rem;
   }
 
   .collection-search {
-    flex: 1 1 220px;
+    flex: 1 1 240px;
     min-width: 170px;
-    max-width: 360px;
+    max-width: 420px;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: rgba(24, 30, 30, 0.72);
@@ -172,85 +687,380 @@ try {
     border-color: var(--accent);
   }
 
-  .specimen-card.is-hidden {
-    display: none;
+  .toolbar-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem 1rem;
   }
 
-  .view-toggle {
+  .collection-total {
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* ---- Sort control ---- */
+  .sort-control {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.4rem;
+  }
+
+  .sort-control__label {
+    color: var(--text-faint);
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .sort-select {
+    appearance: none;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: rgba(24, 30, 30, 0.72);
-    padding: 0.25rem;
+    padding: 0.32rem 1.7rem 0.32rem 0.75rem;
+    color: var(--text);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2397a098' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.7rem center;
+  }
+
+  .sort-select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  /* ---- Icon view toggle (LIST left, GALLERY right) ---- */
+  .view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 3px;
   }
 
   .view-toggle__button {
-    min-height: 32px;
-    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 30px;
+    border: 0;
     border-radius: 999px;
     background: transparent;
-    padding: 0 0.85rem;
     color: var(--text-muted);
     cursor: pointer;
-    font-family: var(--font-display);
-    font-size: 0.82rem;
-    font-weight: 600;
   }
 
-  .view-toggle__button:hover,
+  .view-toggle__button:hover {
+    color: var(--text);
+  }
+
   .view-toggle__button.is-active {
-    border-color: var(--accent);
     background: var(--accent);
     color: #0e1612;
   }
 
+  /* ---- Results ---- */
+  /* The divider above the grid gets generous breathing room so the grid does
+     not crowd the line (product-owner feedback: v1 was too tight). */
+  .collection-results {
+    border-top: 1px solid var(--border-faint);
+    padding-top: 2.6rem;
+    margin-top: 1.4rem;
+  }
+
+  .scroll-sentinel {
+    height: 1px;
+    width: 100%;
+  }
+
+  .scroll-sentinel[hidden] {
+    display: none;
+  }
+
+  .empty-state {
+    margin: 2rem 0 0;
+    color: var(--text-faint);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* Reset the card-grid + card from embody.css globals: this page owns its own
+     dense layout and a restructured card (cover island + body). */
+  .collection-shell .card-grid {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .specimen-card {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: inherit;
+    /* The whole card is clickable (-> /c/<slug>); the cover and copy button
+       opt out of navigation in the inline script. */
+    cursor: pointer;
+    transition: border-color 180ms ease, background 180ms ease;
+  }
+
+  /* Cards stay put on hover -- only border/background respond (product-owner
+     feedback: drop the "move up" lift). Neutralize any inherited transform. */
+  .specimen-card:hover {
+    border-color: var(--border);
+    background: var(--bg-elevated-2);
+    transform: none;
+  }
+
+  .specimen-card.is-hidden {
+    display: none;
+  }
+
+  .specimen-card__cover {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-code);
+  }
+
+  .specimen-card__body {
+    display: grid;
+    align-content: start;
+    gap: 0.55rem;
+    padding: 0.95rem 1rem 1rem;
+  }
+
+  /* Name on the left, copy icon floated to the right, on one row. */
+  .specimen-card__name-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .specimen-card__name {
+    margin: 0;
+    font-size: 1.02rem;
+    line-height: 1.25;
+    min-width: 0;
+  }
+
+  .specimen-card:hover .specimen-card__name {
+    color: var(--accent);
+  }
+
+  /* ---- Author: shown prominently -- the collection is about its people. ---- */
+  .specimen-card__author {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    align-self: start;
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .specimen-card__author-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #0e1612;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .specimen-card__author-handle {
+    color: var(--accent);
+  }
+
+  .specimen-card__author:hover .specimen-card__author-handle {
+    color: var(--accent-hover);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .specimen-card__desc {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  .badge-row {
+    gap: 0.35rem;
+  }
+
+  /* Compact badges -- denser than the global default. */
+  .specimen-card .badge {
+    min-height: 22px;
+    padding: 0 0.5rem;
+    font-size: 0.64rem;
+    letter-spacing: 0.04em;
+  }
+
+  .specimen-card .badge.license {
+    border-color: rgba(178, 145, 176, 0.45);
+    color: #b291b0;
+  }
+
+  /* ---- Card actions: inspect link + per-card copy icon ---- */
+  .card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .card-link {
+    color: var(--accent);
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+  }
+
+  .card-link:hover {
+    color: var(--accent-hover);
+  }
+
+  .card-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 0.22rem 0.55rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+  }
+
+  .card-copy:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .card-copy:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .card-copy__icon {
+    flex: none;
+  }
+
+  /* Show the copy glyph by default, the check only in the copied state. */
+  .card-copy__icon--check {
+    display: none;
+  }
+
+  .card-copy.is-copied {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .card-copy.is-copied .card-copy__icon--copy {
+    display: none;
+  }
+
+  .card-copy.is-copied .card-copy__icon--check {
+    display: inline;
+  }
+
+  .card-copy.is-failed {
+    border-color: #c46b6b;
+    color: #c46b6b;
+  }
+
+  .card-copy__count {
+    font-size: 0.66rem;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    min-width: 0.8ch;
+    text-align: right;
+  }
+
+  /* ---- GALLERY: dense grid, small min card width ---- */
   .collection-shell[data-view="gallery"] .card-grid {
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+    gap: 0.9rem;
   }
 
-  .collection-shell[data-view="gallery"] .thumb img {
-    min-height: 230px;
+  .collection-shell[data-view="gallery"] .specimen-card__cover {
+    border-bottom: 1px solid var(--border-faint);
   }
 
-  .collection-shell[data-view="gallery"] .specimen-card p,
+  /* Trim the gallery body to the essentials -- name + badges only. */
+  .collection-shell[data-view="gallery"] .specimen-card__desc,
   .collection-shell[data-view="gallery"] .card-link,
   .collection-shell[data-view="gallery"] .specimen-category {
     display: none;
   }
 
+  .collection-shell[data-view="gallery"] .specimen-card__body {
+    gap: 0.5rem;
+    padding: 0.7rem 0.8rem 0.85rem;
+  }
+
+  /* ---- LIST: tight horizontal rows ---- */
   .collection-shell[data-view="list"] .card-grid {
-    display: grid;
     grid-template-columns: 1fr;
-    gap: 0.85rem;
+    gap: 0.6rem;
   }
 
   .collection-shell[data-view="list"] .specimen-card {
-    grid-template-columns: minmax(150px, 240px) minmax(0, 1fr);
+    grid-template-columns: minmax(180px, 248px) minmax(0, 1fr);
+    align-items: stretch;
   }
 
-  .collection-shell[data-view="list"] .thumb {
+  .collection-shell[data-view="list"] .specimen-card__cover {
     border-right: 1px solid var(--border-faint);
-    border-bottom: 0;
   }
 
-  .collection-shell[data-view="list"] .thumb img {
-    min-height: 100%;
+  .collection-shell[data-view="list"] .specimen-card__cover :global(.cover) {
+    aspect-ratio: auto;
+    height: 100%;
+    min-height: 132px;
+  }
+
+  /* List rows are compact -- hide the TdnViewer's react-flow zoom/fit controls
+     in list view only (they stay in gallery, where covers are larger). */
+  .collection-shell[data-view="list"] .specimen-card__cover :global(.react-flow__controls) {
+    display: none;
   }
 
   .collection-shell[data-view="list"] .specimen-card__body {
     align-content: center;
+    padding: 0.85rem 1.1rem;
   }
 
-  @media (max-width: 700px) {
+  @media (max-width: 640px) {
     .collection-shell[data-view="list"] .specimen-card {
       grid-template-columns: 1fr;
     }
 
-    .collection-shell[data-view="list"] .thumb {
+    .collection-shell[data-view="list"] .specimen-card__cover {
       border-right: 0;
       border-bottom: 1px solid var(--border-faint);
+    }
+
+    .collection-shell[data-view="list"] .specimen-card__cover :global(.cover) {
+      aspect-ratio: 16 / 9;
     }
   }
 </style>

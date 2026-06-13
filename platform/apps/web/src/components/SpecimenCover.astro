@@ -1,0 +1,211 @@
+---
+// SpecimenCover: a single specimen card cover.
+//
+// Renders TWO layers and lets the card flip between them with a per-card
+// toggle (no extra JS island here for the flip -- the collection page's inline
+// script flips the data-cover attribute, and CSS swaps which layer is visible):
+//
+//   NETWORK (default): the interactive TdnViewer node-graph for this specimen,
+//     mounted as the SpecimenCoverGraph island. Lazy-mounted with client:visible
+//     so the React/ReactFlow island only hydrates when the card scrolls into
+//     view -- many cards never spawn many live viewers at once. The island
+//     LAZY-FETCHES the graph from /api/specimens/<slug>/tdn?format=graph on
+//     mount, so the page NEVER bundles thousands of graphs at build time. An
+//     optional SSR `tdn` prop is a fast path for the first page (no fetch).
+//
+//   RESULT: a tasteful placeholder (specimenThumbnail SVG) because rendered
+//     thumbnails are not baked yet (thumbnail_path is null). Never a broken img.
+//
+// All styles are scoped to this component.
+import SpecimenCoverGraph from "./SpecimenCoverGraph";
+import { specimenThumbnail } from "../lib/specimenThumb";
+
+interface Props {
+  slug: string;
+  name: string;
+  category: string;
+  /**
+   * Optional SSR graph (specimen-graphs fixture) for the first, server-rendered
+   * page -- a fast paint with no fetch. Omit it and the island lazy-fetches the
+   * graph itself; this is the path that scales to thousands of cards.
+   */
+  tdn?: Record<string, unknown>;
+}
+
+const { slug, name, category, tdn } = Astro.props;
+const thumb = specimenThumbnail({ slug, name, category });
+---
+
+<!--
+  data-cover-interactive marks the whole cover as a "do not navigate" island:
+  the collection page's card-click handler bails when the click originates here,
+  so dragging/panning the TdnViewer canvas or tapping the flip buttons never
+  fires the card's navigation to /c/<slug>.
+-->
+<div class="cover" data-cover="network" data-cover-shell data-cover-interactive>
+  <div class="cover__layer cover__layer--network" aria-hidden="false">
+    <SpecimenCoverGraph slug={slug} tdn={tdn} client:visible />
+  </div>
+  <div class="cover__layer cover__layer--result" aria-hidden="true">
+    <img src={thumb} loading="lazy" alt={`${name} preview placeholder`} />
+    <span class="cover__soon mono">preview coming soon</span>
+  </div>
+
+  <div class="cover__flip" role="group" aria-label={`${name} cover view`}>
+    <button
+      type="button"
+      class="cover__flip-btn is-active"
+      data-cover-option="network"
+      aria-pressed="true"
+      title="Show network graph"
+    >network</button>
+    <button
+      type="button"
+      class="cover__flip-btn"
+      data-cover-option="result"
+      aria-pressed="false"
+      title="Show rendered result"
+    >result</button>
+  </div>
+</div>
+
+<style>
+  .cover {
+    position: relative;
+    aspect-ratio: 16 / 11;
+    overflow: hidden;
+    background: var(--bg-code);
+  }
+
+  .cover__layer {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* The TdnViewer renders its own full-bleed flow canvas; pin it to the box. */
+  .cover__layer--network :global(.tdn-viewer) {
+    height: 100% !important;
+    width: 100%;
+  }
+
+  /* Light skeleton shown while the cover island lazy-fetches its graph (and the
+     resting state if that fetch fails -- never a broken viewer). Rendered by the
+     SpecimenCoverGraph React island, so the selectors are :global. */
+  .cover__layer--network :global(.cover-skeleton) {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: var(--bg-code);
+  }
+
+  .cover__layer--network :global(.cover-skeleton__shimmer) {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 20%,
+      rgba(110, 230, 104, 0.06) 45%,
+      rgba(110, 230, 104, 0.1) 50%,
+      rgba(110, 230, 104, 0.06) 55%,
+      transparent 80%
+    );
+    background-size: 220% 100%;
+    animation: cover-skeleton-sweep 1.4s ease-in-out infinite;
+  }
+
+  .cover__layer--network :global(.cover-skeleton.is-error .cover-skeleton__shimmer) {
+    animation: none;
+    background: none;
+  }
+
+  @keyframes cover-skeleton-sweep {
+    from {
+      background-position: 180% 0;
+    }
+    to {
+      background-position: -80% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cover__layer--network :global(.cover-skeleton__shimmer) {
+      animation: none;
+    }
+  }
+
+  .cover__layer--result img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .cover__soon {
+    position: absolute;
+    left: 50%;
+    bottom: 0.7rem;
+    transform: translateX(-50%);
+    color: var(--text-faint);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* Default state: network visible, result hidden. */
+  .cover[data-cover="network"] .cover__layer--result {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .cover[data-cover="result"] .cover__layer--network {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .cover__flip {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    z-index: 4;
+    display: inline-flex;
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(14, 22, 18, 0.82);
+    backdrop-filter: blur(6px);
+    padding: 2px;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .cover:hover .cover__flip,
+  .cover:focus-within .cover__flip {
+    opacity: 1;
+  }
+
+  .cover__flip-btn {
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    padding: 0.2rem 0.6rem;
+    color: var(--text-faint);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  .cover__flip-btn:hover {
+    color: var(--text);
+  }
+
+  .cover__flip-btn.is-active {
+    background: var(--accent);
+    color: #0e1612;
+  }
+</style>

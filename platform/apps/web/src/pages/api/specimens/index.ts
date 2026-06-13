@@ -4,8 +4,8 @@ import type { SubmitRequest, SubmitResponse } from "@embody/contracts";
 import type { APIRoute } from "astro";
 import {
   insertSpecimenWithVersion,
-  listSpecimens,
-  normalizeSpecimenSort
+  listSpecimensForCollection,
+  normalizeCollectionSort
 } from "../../../server/db";
 import { requireUser } from "../../../server/auth";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
@@ -14,14 +14,26 @@ import { verifyTurnstile } from "../../../server/turnstile";
 
 export const prerender = false;
 
+// Server-side list/filter/sort/paginate for the collection page. Accepts:
+//   q          full-text query (FTS via specimens_fts)
+//   category   exact category facet
+//   difficulty starter | intermediate | advanced
+//   requires   exact requires facet ("none", "MediaPipe", ...)
+//   sort       newest | copied | az (default az)
+//   cursor     opaque keyset cursor from a prior page's nextCursor
+//   pageSize   default 24, max 100
+// Returns { specimens, count, page, pageSize, nextCursor }; cost is O(pageSize).
 export const GET: APIRoute = async ({ url }) => {
   try {
-    const response = await listSpecimens(env.DB, {
-      sort: normalizeSpecimenSort(url.searchParams.get("sort")),
-      tag: url.searchParams.get("tag") ?? undefined,
-      author: url.searchParams.get("author") ?? undefined,
-      page: parsePositiveInteger(url.searchParams.get("page")),
-      pageSize: parsePositiveInteger(url.searchParams.get("pageSize"))
+    const params = url.searchParams;
+    const response = await listSpecimensForCollection(env.DB, {
+      q: params.get("q") ?? undefined,
+      category: params.get("category") ?? undefined,
+      difficulty: params.get("difficulty") ?? undefined,
+      requires: params.get("requires") ?? undefined,
+      sort: normalizeCollectionSort(params.get("sort")),
+      cursor: params.get("cursor") ?? undefined,
+      pageSize: parsePositiveInteger(params.get("pageSize"))
     });
 
     return jsonResponse(response, {
