@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "specimen_count": 4,
+  "specimen_count": 5,
   "specimens": [
     {
       "slug": "murmuration",
@@ -78,6 +78,26 @@
       "prompt_path": "3d/noise-terrain.prompt.md",
       "operator_count": 20,
       "warmup_frames": 60,
+      "preview": true,
+      "author": "Embody",
+      "license": "CC-BY-4.0"
+    },
+    {
+      "slug": "plasma-interference",
+      "name": "Plasma (Sine Interference)",
+      "category": "generative",
+      "difficulty": "intermediate",
+      "description": "A flowing GPU plasma. Two sine-wave fields at slightly detuned scales beat against each other into shimmering moire fringes, a slow rotating domain warp bends the coordinates into liquid motion, and the result is mapped through a cyclic cosine palette. Self-contained and stateless - one GLSL TOP, no input, no feedback - so it drops in anywhere as a VJ loop, texture, or displacement source.",
+      "tags": ["generative", "glsl", "plasma", "palette", "vj", "texture"],
+      "key_ops": ["glslTOP"],
+      "requires": "none",
+      "fallback": null,
+      "output_op": "out1",
+      "tdn_path": "generative/plasma-interference.tdn",
+      "thumbnail_path": null,
+      "prompt_path": "generative/plasma-interference.prompt.md",
+      "operator_count": 5,
+      "warmup_frames": 30,
       "preview": true,
       "author": "Embody",
       "license": "CC-BY-4.0"
