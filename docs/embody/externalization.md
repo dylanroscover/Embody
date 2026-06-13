@@ -69,7 +69,7 @@ This table serves as the source of truth for what files Embody manages. Only fil
 
 ## TDN Strategy
 
-COMPs can also be externalized using the **TDN strategy** instead of `.tox`. This exports the COMP's network as human-readable JSON (`.tdn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
+COMPs can also be externalized using the **TDN strategy** instead of `.tox`. This exports the COMP's network as human-readable YAML (`.tdn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
 
 See [TDN Format](../tdn/index.md) for format details, and ["Why TDN"](#why-tdn) below for the concrete wins.
 
@@ -79,7 +79,7 @@ Both strategies externalize a COMP to its own file on disk. The difference is **
 
 | | TOX | TDN |
 |---|---|---|
-| File format | Binary `.tox` | JSON `.tdn` |
+| File format | Binary `.tox` | YAML `.tdn` |
 | Git-diffable | No | Yes |
 | Load speed | Fast (native TD format) | Slower (parsed and rebuilt) |
 | PR review | None — binary blob | Line-by-line parameter diffs |
@@ -161,16 +161,16 @@ TDN isn't just a different file format — it unlocks workflows that binary `.to
 
 A real leaf-component file like `envoy_toggle.tdn` is ~1.3 KB — 38 readable lines including only the ~15 parameters whose values actually differ from a `textCOMP`'s defaults.
 
-**Git three-way merge on real conflicts.** `.toe` is binary, so git can't three-way merge it — one side wins, the other loses. `.tdn` is JSON; git merges it like any other text file, and conflicts show up as readable diffs you can resolve by reading intent:
+**Git three-way merge on real conflicts.** `.toe` is binary, so git can't three-way merge it — one side wins, the other loses. `.tdn` is YAML; git merges it like any other text file, and conflicts show up as readable diffs you can resolve by reading intent:
 
-```
-"Speed": {
+```yaml
+- name: Speed
+  style: Float
 <<<<<<< HEAD
-    "value": 1.5
+  default: 1.5
 =======
-    "value": 2.0
+  default: 2.0
 >>>>>>> feature/faster-playback
-}
 ```
 
 **PR review humans can actually do.** A `.toe` diff is literally `Binary files differ`. A `.tdn` parameter change is a one-line delta. Reviewers comment on specific lines, request changes, and approve — the same workflow as any other text code review.
@@ -193,7 +193,7 @@ Embody automatically restores all externalized operators when a project is opene
 | Strategy | Restoration Method | Toggle |
 |----------|-------------------|--------|
 | **TOX** | Missing COMPs are restored from `.tox` files on disk | `Toxrestoreonstart` (ON by default) |
-| **TDN** | Children are reconstructed from `.tdn` JSON files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
+| **TDN** | Children are reconstructed from `.tdn` YAML files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
 | **DAT** | Synced from external files via TouchDesigner's native `file` parameter | Always active |
 
 In **Roundtrip** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdn` files exist purely for git diff / MCP reads.

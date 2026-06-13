@@ -23,6 +23,7 @@ version: '2.0'
 build: 1
 generator: Embody/6.0.4
 td_build: '2025.32050'
+source_file: MyProject.toe
 exported_at: '2025-02-19T12:34:56Z'
 network_path: /
 type: containerCOMP
@@ -51,6 +52,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
+| `source_file` | string | No | Basename of the `.toe` project file the COMP was exported from (e.g., `"MyProject.toe"`). Informational provenance only; not used on import. |
 | `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). |
 | `network_path` | string | Yes | The COMP path represented by this file (e.g., `"/"` for the entire project). On paste/import as a *new* COMP, its basename names the new COMP (e.g., `"/specimen_lab/noise_terrain"` -> `noise_terrain`), sanitized via `tdu.validName`, collisions uniquified. |
 | `type` | string | No | TouchDesigner operator type of the target COMP (e.g., `"baseCOMP"`, `"containerCOMP"`, `"geometryCOMP"`). Added in v1.1. Makes the file self-describing for portable import into other projects. On import, a mismatch between this field and the destination COMP's type triggers a warning. |
@@ -75,27 +77,25 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 
 Each entry in the `operators` array (and in nested `children` arrays) is an operator object:
 
-```json
-{
-  "name": "noise1",
-  "type": "noiseTOP",
-  "position": [200, -100],
-  "size": [300, 150],
-  "color": [0.2, 0.6, 0.9],
-  "comment": "Primary noise source",
-  "tags": ["audio", "generator"],
-  "parameters": { ... },
-  "custom_pars": { ... },
-  "flags": [ ... ],
-  "storage": { ... },
-  "startup_storage": { ... },
-  "inputs": [ ... ],
-  "comp_inputs": [ ... ],
-  "dat_content": "...",
-  "dat_content_format": "text",
-  "children": [ ... ],
-  "palette_clone": true
-}
+```yaml
+- name: noise1
+  type: noiseTOP
+  position: [200, -100]
+  size: [300, 150]
+  color: [0.2, 0.6, 0.9]
+  comment: Primary noise source
+  tags: [audio, generator]
+  parameters: { ... }
+  custom_pars: { ... }
+  flags: [ ... ]
+  storage: { ... }
+  startup_storage: { ... }
+  inputs: [ ... ]
+  comp_inputs: [ ... ]
+  dat_content: ...
+  dat_content_format: text
+  children: [ ... ]
+  palette_clone: true
 ```
 
 ### Field Reference
@@ -168,27 +168,24 @@ The `parameters` object maps parameter names to their values. Only built-in (non
 Parameters can be in one of three exportable modes:
 
 **Constant** — the value is stored directly:
-```json
-"parameters": {
-  "tx": 100,
-  "name": "hello",
-  "active": true
-}
+```yaml
+parameters:
+  tx: 100
+  name: hello
+  active: true
 ```
 
 **Expression** — prefixed with `=`. A Python expression that TouchDesigner evaluates each frame:
-```json
-"parameters": {
-  "tx": "=absTime.frame * 0.1",
-  "resizecomp": "=me"
-}
+```yaml
+parameters:
+  tx: =absTime.frame * 0.1
+  resizecomp: =me
 ```
 
 **Bind** — prefixed with `~`. A reference expression that binds this parameter to another:
-```json
-"parameters": {
-  "tx": "~op('controller').par.posx"
-}
+```yaml
+parameters:
+  tx: "~op('controller').par.posx"
 ```
 
 !!! note
@@ -311,18 +308,14 @@ Many TouchDesigner operators have **resizable parameter blocks** — mathmixPOP 
 
 The `sequences` object stores per-operator sequence data. It is keyed by sequence name, where each value is an array of block objects containing only non-default parameter values using **base names** (without the sequence prefix or block index):
 
-```json
-{
-  "name": "mathmix1",
-  "type": "mathmixPOP",
-  "sequences": {
-    "comb": [
-      {"oper": "A", "scopea": "P", "result": "startPos"},
-      {"oper": "A + B", "scopea": "vel", "scopeb": "direction", "result": "vel"},
-      {}
-    ]
-  }
-}
+```yaml
+- name: mathmix1
+  type: mathmixPOP
+  sequences:
+    comb:
+    - {oper: A, scopea: P, result: startPos}
+    - {oper: A + B, scopea: vel, scopeb: direction, result: vel}
+    - {}
 ```
 
 ### Design
@@ -354,36 +347,27 @@ The `custom_pars` object maps page names to arrays of parameter definitions. Unl
 
 Custom parameters are grouped by page name. Each page contains an array of parameter definitions:
 
-```json
-"custom_pars": {
-  "Controls": [
-    {
-      "name": "Speed",
-      "style": "Float",
-      "default": 1,
-      "max": 10,
-      "clampMin": true,
-      "normMax": 5,
-      "value": 2.5
-    },
-    {
-      "name": "Mode",
-      "style": "Menu",
-      "menuNames": ["linear", "ease", "bounce"],
-      "menuLabels": ["Linear", "Ease In/Out", "Bounce"],
-      "value": 1
-    }
-  ],
-  "About": [
-    {
-      "name": "Build",
-      "style": "Int",
-      "label": "Build Number",
-      "readOnly": true,
-      "value": 14
-    }
-  ]
-}
+```yaml
+custom_pars:
+  Controls:
+  - name: Speed
+    style: Float
+    default: 1
+    max: 10
+    clampMin: true
+    normMax: 5
+    value: 2.5
+  - name: Mode
+    style: Menu
+    menuNames: [linear, ease, bounce]
+    menuLabels: [Linear, Ease In/Out, Bounce]
+    value: 1
+  About:
+  - name: Build
+    style: Int
+    label: Build Number
+    readOnly: true
+    value: 14
 ```
 
 The page name is the dict key — individual parameter definitions do not include a `"page"` field.
@@ -392,15 +376,13 @@ The page name is the dict key — individual parameter definitions do not includ
 
 When a page's parameter definitions match a [parameter template](#parameter-templates), the page is stored as a template reference with value overrides:
 
-```json
-"custom_pars": {
-  "About": {
-    "$t": "about",
-    "Build": 14,
-    "Date": "2026-02-19 16:09:43 UTC",
-    "Touchbuild": "2025.32050"
-  }
-}
+```yaml
+custom_pars:
+  About:
+    $t: about
+    Build: 14
+    Date: 2026-02-19 16:09:43 UTC
+    Touchbuild: '2025.32050'
 ```
 
 The `$t` field names the template. Other keys are parameter value overrides (parameter name → current value). See [Parameter Templates](#parameter-templates).
@@ -474,12 +456,10 @@ Some parameters consist of multiple related components grouped together (called 
 
 **Compound styles** (XY, XYZ, XYZW, WH, UV, UVW, RGB, RGBA) have named suffixes:
 
-```json
-{
-  "name": "Pos",
-  "style": "XYZ",
-  "values": [10.0, 20.0, 30.0]
-}
+```yaml
+- name: Pos
+  style: XYZ
+  values: [10.0, 20.0, 30.0]
 ```
 
 This creates three parameters: `Posx`, `Posy`, `Posz`. The suffix mappings are:
@@ -497,13 +477,11 @@ This creates three parameters: `Posx`, `Posy`, `Posz`. The suffix mappings are:
 
 **Numeric multi-component** (Float or Int with `size` > 1) use numeric suffixes:
 
-```json
-{
-  "name": "Weight",
-  "style": "Float",
-  "size": 3,
-  "values": [0.5, 0.3, 0.2]
-}
+```yaml
+- name: Weight
+  style: Float
+  size: 3
+  values: [0.5, 0.3, 0.2]
 ```
 
 This creates three parameters: `Weight1`, `Weight2`, `Weight3`.
@@ -514,28 +492,26 @@ This creates three parameters: `Weight1`, `Weight2`, `Weight3`.
 
 The `type_defaults` section hoists properties that are shared unanimously across **all** operators of a given type into a single location, removing them from individual operators. Supported properties: `parameters`, `flags`, `size`, `color`, and `tags`.
 
-```json
-"type_defaults": {
-  "containerCOMP": {
-    "parameters": {
-      "borderover": false,
-      "reloadbuiltin": false,
-      "resizecomp": "=me",
-      "repocomp": "=me"
-    },
-    "flags": ["viewer"],
-    "size": [300, 150]
-  },
-  "textDAT": {
-    "parameters": {
-      "language": "text"
-    },
-    "flags": ["viewer"],
-    "size": [130, 90],
-    "color": [0.67, 0.67, 0.67],
-    "tags": ["source"]
-  }
-}
+```yaml
+type_defaults:
+  containerCOMP:
+    parameters:
+      borderover: false
+      reloadbuiltin: false
+      resizecomp: =me
+      repocomp: =me
+    flags:
+    - viewer
+    size: [300, 150]
+  textDAT:
+    parameters:
+      language: text
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    tags:
+    - source
 ```
 
 ### Unanimity Rule
@@ -571,14 +547,12 @@ effective_tags   = operator.tags   ?? type_defaults[op_type].tags
 
 The `par_templates` section extracts custom parameter page definitions that repeat across 2+ operators into named, reusable templates.
 
-```json
-"par_templates": {
-  "about": [
-    {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true},
-    {"name": "Date", "style": "Str", "label": "Build Date", "readOnly": true},
-    {"name": "Touchbuild", "style": "Str", "label": "Touch Build", "readOnly": true}
-  ]
-}
+```yaml
+par_templates:
+  about:
+  - {name: Build, style: Int, label: Build Number, readOnly: true}
+  - {name: Date, style: Str, label: Build Date, readOnly: true}
+  - {name: Touchbuild, style: Str, label: Touch Build, readOnly: true}
 ```
 
 Templates contain parameter definitions **without values** — they define the structure (name, style, label, ranges, etc.) of a page's parameters.
@@ -587,15 +561,13 @@ Templates contain parameter definitions **without values** — they define the s
 
 Operators reference templates via `$t` in their `custom_pars`:
 
-```json
-"custom_pars": {
-  "About": {
-    "$t": "about",
-    "Build": 14,
-    "Date": "2026-02-19 16:09:43 UTC",
-    "Touchbuild": "2025.32050"
-  }
-}
+```yaml
+custom_pars:
+  About:
+    $t: about
+    Build: 14
+    Date: 2026-02-19 16:09:43 UTC
+    Touchbuild: '2025.32050'
 ```
 
 | Field | Description |
@@ -607,13 +579,12 @@ Operators reference templates via `$t` in their `custom_pars`:
 
 On import, `$t` references are resolved before Phase 2 (create custom parameters). Each template reference is expanded back into a full array of parameter definitions, with value overrides applied:
 
-```json
-// Resolved from template + overrides:
-"About": [
-  {"name": "Build", "style": "Int", "label": "Build Number", "readOnly": true, "value": 14},
-  {"name": "Date", "style": "Str", "label": "Build Date", "readOnly": true, "value": "2026-02-19 16:09:43 UTC"},
-  {"name": "Touchbuild", "style": "Str", "label": "Touch Build", "readOnly": true, "value": "2025.32050"}
-]
+```yaml
+# Resolved from template + overrides:
+About:
+- {name: Build, style: Int, label: Build Number, readOnly: true, value: 14}
+- {name: Date, style: Str, label: Build Date, readOnly: true, value: 2026-02-19 16:09:43 UTC}
+- {name: Touchbuild, style: Str, label: Touch Build, readOnly: true, value: '2025.32050'}
 ```
 
 ### Template Naming
@@ -644,18 +615,23 @@ The `flags` array contains string names of flags whose values differ from their 
 ### Format
 
 Flags that default to `false` are listed by name when set to `true`:
-```json
-"flags": ["viewer", "display"]
+```yaml
+flags:
+- viewer
+- display
 ```
 
 Flags that default to `true` use a `-` prefix when set to `false`:
-```json
-"flags": ["-expose"]
+```yaml
+flags:
+- -expose
 ```
 
 Combined example — viewer on, cooking disabled:
-```json
-"flags": ["viewer", "-allowCooking"]
+```yaml
+flags:
+- viewer
+- -allowCooking
 ```
 
 ### Lock Flag Limitation
@@ -693,21 +669,26 @@ TouchDesigner operators have two kinds of connections. TDN stores both as string
 
 Standard wiring between operators (left/right connectors). Stored in the `inputs` array:
 
-```json
-"inputs": ["noise1"]
+```yaml
+inputs:
+- noise1
 ```
 
 Multi-input example — `noise1` at index 0, nothing at index 1, `level1` at index 2:
-```json
-"inputs": ["noise1", null, "level1"]
+```yaml
+inputs:
+- noise1
+- null
+- level1
 ```
 
 ### COMP Connections
 
 COMP-level wiring (top/bottom connectors). Only applicable to COMPs. Stored in the `comp_inputs` array:
 
-```json
-"comp_inputs": ["container1"]
+```yaml
+comp_inputs:
+- container1
 ```
 
 ### Source Resolution
@@ -738,12 +719,10 @@ Docking is a purely visual/organizational relationship — it has no effect on o
 
 **Example:**
 
-```json
-{
-  "name": "info1",
-  "type": "infoDAT",
-  "dock": "noise1"
-}
+```yaml
+- name: info1
+  type: infoDAT
+  dock: noise1
 ```
 
 During import, the dock target is resolved by sibling name first, then full path fallback. If the target cannot be found, a warning is logged and docking is skipped gracefully.
@@ -833,20 +812,17 @@ Storage export can be disabled per-COMP by setting the `embed_storage_in_tdn` st
 
 ### Format
 
-```json
-{
-  "name": "my_comp",
-  "type": "baseCOMP",
-  "storage": {
-    "count": 42,
-    "label": "hello",
-    "items": [1, 2, 3],
-    "config": {"key": "value"},
-    "coords": {"$type": "tuple", "$value": [10, 20]},
-    "tags": {"$type": "set", "$value": ["a", "b", "c"]},
-    "raw": {"$type": "bytes", "$value": "AAEC/w=="}
-  }
-}
+```yaml
+- name: my_comp
+  type: baseCOMP
+  storage:
+    count: 42
+    label: hello
+    items: [1, 2, 3]
+    config: {key: value}
+    coords: {$type: tuple, $value: [10, 20]}
+    tags: {$type: set, $value: [a, b, c]}
+    raw: {$type: bytes, $value: AAEC/w==}
 ```
 
 ### Value Serialization
@@ -875,13 +851,11 @@ The following storage keys are never exported (runtime/transient state managed b
 
 TouchDesigner supports `storeStartupValue(key, value)` — values that reset to their initial state on every project open, regardless of what they were when the file was saved. TDN supports this via an optional `startup_storage` field:
 
-```json
-{
-  "name": "my_comp",
-  "type": "baseCOMP",
-  "storage": {"runtime_count": 0},
-  "startup_storage": {"version": 1, "default_mode": "auto"}
-}
+```yaml
+- name: my_comp
+  type: baseCOMP
+  storage: {runtime_count: 0}
+  startup_storage: {version: 1, default_mode: auto}
 ```
 
 On import, keys in `startup_storage` are restored via `storeStartupValue()`, while keys in `storage` use `store()`.
@@ -898,23 +872,17 @@ Storage is restored during Phase 6a (after DAT content, before positions). Keys 
 
 COMPs can contain child operators. These are stored in the `children` array, which contains nested operator objects following the exact same schema:
 
-```json
-{
-  "name": "container1",
-  "type": "baseCOMP",
-  "children": [
-    {
-      "name": "noise1",
-      "type": "noiseTOP"
-    },
-    {
-      "name": "null1",
-      "type": "nullTOP",
-      "position": [300, 0],
-      "inputs": ["noise1"]
-    }
-  ]
-}
+```yaml
+- name: container1
+  type: baseCOMP
+  children:
+  - name: noise1
+    type: noiseTOP
+  - name: null1
+    type: nullTOP
+    position: [300, 0]
+    inputs:
+    - noise1
 ```
 
 Note that `container1` omits `position` (defaults to `[0, 0]`) and `noise1` also omits `position`. Only `null1` at `[300, 0]` includes its position.
@@ -941,13 +909,11 @@ If a child COMP is removed from the externalizations table (no longer tagged for
 
 When a parent COMP is exported and a child COMP has its own TDN externalization, the parent's operator definition for that child includes a `tdn_ref` field instead of a `children` array:
 
-```json
-{
-  "name": "audio_mixer",
-  "type": "baseCOMP",
-  "tdn_ref": "Embody/project1/audio_mixer.tdn",
-  "position": [600, 0]
-}
+```yaml
+- name: audio_mixer
+  type: baseCOMP
+  tdn_ref: Embody/project1/audio_mixer.tdn
+  position: [600, 0]
 ```
 
 | Field | Type | Description |
@@ -977,14 +943,13 @@ Mismatches produce warnings, not errors — the COMP shell is always created reg
 
 The same ownership principle applies when a child COMP is externalized as `.tox` instead of `.tdn`. The parent's operator definition for that child includes a `tox_ref` field instead of a `children` array:
 
-```json
-{
-  "name": "wave_speed",
-  "type": "sliderCOMP",
-  "tags": ["tox"],
-  "tox_ref": "Embody/project1/wave_speed.tox",
-  "position": [475, 425]
-}
+```yaml
+- name: wave_speed
+  type: sliderCOMP
+  tags:
+  - tox
+  tox_ref: Embody/project1/wave_speed.tox
+  position: [475, 425]
 ```
 
 | Field | Type | Description |
@@ -998,7 +963,7 @@ The same ownership principle applies when a child COMP is externalized as `.tox`
 **TOX vs TDN, when to use which**:
 
 - **TOX**: opaque binary encapsulation. The `.tox` is a single self-contained file, fast to load, but not git-diffable. Suitable for palette widgets, third-party COMPs, and anything where you don't need text-level review of internals.
-- **TDN**: text/JSON snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
+- **TDN**: text/YAML snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
 
 Both strategies receive the same ownership treatment in parent `.tdn` files — neither embeds children into the parent. The strategy choice is about the **child file format**, not whether the parent embeds.
 
@@ -1041,39 +1006,29 @@ Per-COMP stored decisions take precedence over the project-wide par. To reset a 
 
 Annotations are visual documentation elements in TouchDesigner networks (comments, network boxes, and annotate panels). They are stored in an `annotations` array at the top level (for root-level annotations) and optionally on each COMP operator (for nested annotations).
 
-```json
-{
-  "operators": [ ... ],
-  "annotations": [
-    {
-      "name": "annot_core",
-      "mode": "annotate",
-      "title": "Core Tests",
-      "text": "Unit tests for core functionality",
-      "position": [-70, -300],
-      "size": [1070, 660],
-      "color": [0.5, 0.5, 0.5],
-      "opacity": 0.8
-    }
-  ]
-}
+```yaml
+operators: [ ... ]
+annotations:
+- name: annot_core
+  mode: annotate
+  title: Core Tests
+  text: Unit tests for core functionality
+  position: [-70, -300]
+  size: [1070, 660]
+  color: [0.5, 0.5, 0.5]
+  opacity: 0.8
 ```
 
 For nested COMPs, `annotations` appears alongside `children`:
 
-```json
-{
-  "name": "container1",
-  "type": "baseCOMP",
-  "children": [ ... ],
-  "annotations": [
-    {
-      "name": "annot1",
-      "mode": "comment",
-      "text": "Signal processing chain"
-    }
-  ]
-}
+```yaml
+- name: container1
+  type: baseCOMP
+  children: [ ... ]
+  annotations:
+  - name: annot1
+    mode: comment
+    text: Signal processing chain
 ```
 
 ### Annotation Object
@@ -1226,7 +1181,7 @@ For most networks, export → import → re-export produces identical `.tdn` out
 
 **Float precision** — Values are rounded to 10 decimal places on first export. This can change the last digits of very precise values (e.g., `3.14159265358979` → `3.1415926536`). After that first rounding, subsequent exports are stable.
 
-**Type defaults recomputation** — Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the JSON structure may differ.
+**Type defaults recomputation** — Type defaults and parameter templates are recomputed from scratch on each export. If operator populations change between exports (operators added/removed), different properties may qualify as "unanimous" for type_defaults, and different pages may qualify as templates. The final network state is always identical, but the YAML structure may differ.
 
 **Locked non-DAT data** — When a TOP, CHOP, or SOP is locked, TDN preserves the lock flag but not the frozen pixel, channel, or geometry data. After import, the operator is locked but empty. See [Lock Flag Limitation](#lock-flag-limitation).
 
@@ -1285,6 +1240,7 @@ version: '2.0'
 build: 3
 generator: Embody/6.0.4
 td_build: '2025.32050'
+source_file: MyProject.toe
 exported_at: '2026-02-19T14:30:00Z'
 network_path: /
 type: baseCOMP
@@ -1379,11 +1335,11 @@ Key observations:
 
 - **`type_defaults`**: Both `baseCOMP`s share `resizecomp` and `repocomp` expressions, so those are hoisted out of individual operators
 - **`par_templates`**: The "About" page definition is shared between `controller` and `renderer`, with different values
-- **Expression shorthand**: `"=parent().par.Speed / 10"` instead of `{"expr": "..."}`
-- **Flags as arrays**: `["viewer"]`, `["display"]`, `["lock"]`
-- **Simplified connections**: `["noise1"]` instead of `[{"index": 0, "source": "noise1"}]`
+- **Expression shorthand**: `=parent().par.Speed / 10` instead of a nested `{expr: ...}` mapping
+- **Flags as arrays**: `[viewer]`, `[display]`, `[lock]`
+- **Simplified connections**: `[noise1]` instead of a list of `{index: 0, source: noise1}` mappings
 - **Optional position**: `noise1` at `[0, 0]` omits `position`; `controller` at `[0, 0]` also omits it
-- **Compact formatting**: Arrays like `[300, 0]`, `[0.2, 0.4, 0.8]`, `["core"]` are inline
+- **Compact formatting**: Short numeric/string vectors like `[300, 0]`, `[0.2, 0.4, 0.8]`, `[core]` use inline YAML flow style
 
 ---
 
@@ -1391,7 +1347,7 @@ Key observations:
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact JSON formatting. |
+| 1.0 | 2026-02-19 | Initial release with 8 format optimizations: expression shorthand (`=`/`~` prefixes), flags as arrays, page-grouped custom parameters, type defaults, parameter templates, optional position, simplified connections, compact formatting. |
 | 1.0 | 2026-02-22 | Extended `type_defaults` to support `flags`, `size`, `color`, and `tags` in addition to `parameters`. Backward-compatible: old importers ignore unknown keys, new importers handle files without the new keys. |
 | 1.0 | 2026-03-01 | Added annotation support (`annotations` array at top level and per-COMP). Added Phase 7a to import process. Removed `file`/`syncfile` from SKIP_PARAMS so DAT file references are preserved in TDN exports. Pre-save now auto-exports current state before stripping TDN COMPs. |
 | 1.3 | 2026-04-07 | Added built-in parameter sequence support (`sequences` key on operator objects). Operators with resizable parameter blocks (mathmixPOP, glslPOP, attributePOP, constantCHOP, etc.) now round-trip correctly. Added Phase 2.5 to import process. Sequence parameters excluded from `type_defaults` compression and `_buildParCache`. |

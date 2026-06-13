@@ -167,13 +167,13 @@ Tag operators for externalization, query status, and force-save to disk — the 
 
 ### TDN Format
 
-Read any COMP's live network as `.tdn` JSON (no disk I/O), export it to disk, or import JSON back as a live network. Used for Embody's TDN externalization strategy and for LLM-efficient snapshots of network state — `read_tdn` is typically **20-90× fewer tokens** than walking the same subtree via `get_op` + `query_network`.
+Read any COMP's live network as `.tdn` (no disk I/O), export it to disk, or import a TDN document back as a live network. Used for Embody's TDN externalization strategy and for LLM-efficient snapshots of network state — `read_tdn` is typically **20-90× fewer tokens** than walking the same subtree via `get_op` + `query_network`.
 
 | Tool | Description |
 |---|---|
 | `read_tdn` | Read a live network as a TDN dict (in-memory, no disk write). Preferred for AI exploration of networks ≥3 operators |
 | `export_network` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus stale-file cleanup |
-| `import_network` | Recreate a network from `.tdn` JSON |
+| `import_network` | Recreate a network from `.tdn` |
 
 ### TOP Capture
 

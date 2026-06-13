@@ -858,7 +858,7 @@ TDN strip/restore hardening, `file`/`syncfile` export, post-import validation, T
 
 TDN strategy externalization, strip/restore save cycle, compact TDN format.
 
-- New externalization strategy: COMPs can use TDN (JSON export/import) instead of TOX, enabling human-readable diffs
+- New externalization strategy: COMPs can use TDN (export/import) instead of TOX, enabling human-readable diffs
 - Strip/restore save cycle: TDN-strategy COMP children are stripped before `.toe` save and reconstructed from `.tdn` on project open, keeping the `.toe` small
 - Compact TDN format: `type_defaults` hoists shared parameter values, `par_templates` deduplicates custom parameter definitions, expression shorthand (`=` prefix for expressions, `~` for binds)
 - Per-COMP split export mode: large networks export as one `.tdn` file per COMP for git-friendly directory structures
@@ -899,7 +899,7 @@ Rewrite test runner, fix `run()` safety, add 6 new test suites, update documenta
 Major release — Envoy MCP server, TDN format, comprehensive testing.
 
 - **Envoy MCP Server**: 40+ tools for Claude Code integration
-- **TDN Format**: JSON export/import for operator networks
+- **TDN Format**: export/import for operator networks
 - **Test Framework**: 26 test suites with sandbox isolation
 - **Structured Logging**: Multi-destination logging system
 - **CLAUDE.md Auto-Generation**: Project context for AI assistants

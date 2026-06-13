@@ -33,7 +33,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. TDN is what makes the rest of this possible.
+    TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. TDN is what makes the rest of this possible.
 
     [:octicons-arrow-right-24: Learn about TDN](tdn/index.md)
 
@@ -69,7 +69,7 @@ You describe what you want. The AI works with your live network — operators, c
 |---|---------|-------------|
 | :material-sync: | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores from disk on project open |
 | :material-robot: | **Envoy MCP Server** | 48 tools connect AI assistants to your live TD session |
-| :material-file-document: | **TDN Format** | Export/import operator networks as diffable JSON for code review and snapshots |
+| :material-file-document: | **TDN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — minimal friction |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |
 | :material-test-tube: | **41 Test Suites** | Comprehensive automated testing framework |

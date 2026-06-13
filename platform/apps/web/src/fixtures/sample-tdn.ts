@@ -1,10 +1,21 @@
+// Faithful TDN v2.0 sample network. TDN files are YAML on disk; this fixture is
+// the parsed object the TdnViewer renders and that [slug].astro serializes for the
+// "raw TDN" panel. Keys, ordering, and value shorthand mirror a real v2.0 export
+// (see specimens/simulation/murmuration.tdn).
 export const sampleTdn = {
   format: "tdn",
-  version: "1.4",
-  build: 1,
-  generator: "embody.tools fixture",
+  version: "2.0",
+  build: null,
+  generator: "Embody/6.0.16",
+  td_build: "099.2025.32820",
+  source_file: "Embody-6.16.toe",
+  exported_at: "2026-06-12T00:27:58Z",
   network_path: "/project1/infinite_zoom_tunnel",
   type: "baseCOMP",
+  options: {
+    include_dat_content: true,
+    include_storage: true
+  },
   color: [0.22, 0.5, 0.32],
   operators: [
     {
@@ -30,8 +41,8 @@ export const sampleTdn = {
       },
       position: [0, -100],
       size: [130, 90],
-      inputs: ["level1"],
-      color: [0.16, 0.72, 0.38]
+      color: [0.16, 0.72, 0.38],
+      inputs: ["level1"]
     },
     {
       name: "transform1",
@@ -67,8 +78,8 @@ export const sampleTdn = {
       },
       position: [900, 100],
       size: [130, 90],
-      inputs: ["composite1"],
-      color: [0.62, 0.55, 0.16]
+      color: [0.62, 0.55, 0.16],
+      inputs: ["composite1"]
     },
     {
       name: "out",
@@ -78,8 +89,8 @@ export const sampleTdn = {
       },
       position: [1200, 100],
       size: [130, 90],
-      inputs: ["level1"],
-      color: [0.16, 0.72, 0.38]
+      color: [0.16, 0.72, 0.38],
+      inputs: ["level1"]
     }
   ],
   annotations: [

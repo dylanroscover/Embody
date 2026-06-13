@@ -20,7 +20,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 **Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
 
-**TDN** — *the substrate that makes both possible.* TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDN is what makes the rest of this possible.
+**TDN** — *the substrate that makes both possible.* TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent understand what's on the screen, what lets you diff one attempt against another, and what lets a network reconstruct itself from text on the next project open. TDN is what makes the rest of this possible.
 
 ![Embody Manager UI](docs/assets/embody-screenshot.png)
 
@@ -44,7 +44,7 @@ my-project/              ← project folder (optionally a git repo)
 ├── my-project.toe       ← your TouchDesigner project
 ├── base1/               ← externalized operators
 │   ├── base2.tox        ← COMP (TOX strategy)
-│   ├── base3.tdn        ← COMP (TDN strategy — diffable JSON)
+│   ├── base3.tdn        ← COMP (TDN strategy — diffable YAML)
 │   └── text1.py         ← DAT
 └── ...
 ```
@@ -105,7 +105,7 @@ If your project isn't in a git repo, add `.mcp.json` manually to your project ro
 | `set_parameter` | Set values, expressions, or bind modes on any parameter |
 | `connect_ops` | Wire operators together |
 | `execute_python` | Run arbitrary Python in TD's main thread |
-| `export_network` | Export networks to diffable `.tdn` JSON |
+| `export_network` | Export networks to diffable `.tdn` YAML |
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
@@ -117,7 +117,7 @@ When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD 
 
 ## TDN Network Format
 
-TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable JSON file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it on the next project open.
+TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable YAML file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it on the next project open.
 
 This is the substrate. Every other capability — AI-driven building, version control, automatic restoration — builds on top of it.
 

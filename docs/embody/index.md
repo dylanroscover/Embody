@@ -24,7 +24,7 @@ Embody maintains a two-way relationship between your `.toe` and the files on dis
 | **TD → disk** | ++ctrl+shift+u++ (Update) | Dirty COMPs and DATs write their current state to external files |
 | **Disk → TD** | Project open | All externalized operators rebuild from disk automatically |
 
-The files are the persistent record. The `.toe` is a working state. On every project open, Embody restores everything that was externalized — TOX-strategy COMPs from `.tox` files, TDN-strategy COMPs from `.tdn` JSON files, and DATs via TouchDesigner's native file parameter.
+The files are the persistent record. The `.toe` is a working state. On every project open, Embody restores everything that was externalized — TOX-strategy COMPs from `.tox` files, TDN-strategy COMPs from `.tdn` YAML files, and DATs via TouchDesigner's native file parameter.
 
 ### Dirty Tracking
 

@@ -27,6 +27,10 @@
       "type": "string",
       "description": "TouchDesigner version and build number (e.g., \"2025.32050\")."
     },
+    "source_file": {
+      "type": "string",
+      "description": "Basename of the .toe project file the COMP was exported from (e.g., \"MyProject.toe\"). Informational provenance only; not used on import."
+    },
     "exported_at": {
       "type": "string",
       "format": "date-time",

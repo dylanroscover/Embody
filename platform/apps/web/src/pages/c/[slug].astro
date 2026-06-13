@@ -58,7 +58,7 @@ try {
 }
 
 const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorTypes(tdn);
-const rawTdn = JSON.stringify(tdn, null, 2);
+const rawTdn = tdnToYaml(tdn);
 const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
 
 function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
@@ -130,6 +130,127 @@ function collectOperatorTypesInto(value: unknown, seen: Set<string>): void {
     }
   }
 }
+
+// Render a parsed TDN object as faithful TDN v2.0 YAML for the raw view.
+// Matches Embody's writer: 2-space indent, flow style for short numeric
+// vectors, literal block scalar (|, |-, |+) for multi-line strings, and
+// expression/bind prefixes (=, ~) carried through untouched in the values.
+function tdnToYaml(value: unknown): string {
+  if (value === null || value === undefined) return "{}\n";
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return `${emitScalar(value)}\n`;
+  }
+  const body = emitMapping(value as Record<string, unknown>, 0);
+  return body.length > 0 ? `${body}\n` : "{}\n";
+}
+
+function isShortNumericVector(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= 4 &&
+    value.every((item) => typeof item === "number")
+  );
+}
+
+function needsQuoting(value: string): boolean {
+  if (value === "") return true;
+  // Reserved YAML scalars and indicators that must be quoted as plain text.
+  if (/^[\s]|[\s]$/.test(value)) return true;
+  if (/^(true|false|null|yes|no|on|off|~)$/i.test(value)) return true;
+  if (/^[-+]?(\d|\.\d)/.test(value) && /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(value)) {
+    return true;
+  }
+  // ISO-8601 dates/timestamps -- quote so they stay strings, not YAML !!timestamp.
+  if (/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?([.,]\d+)?(Z|[-+]\d{2}:?\d{2})?)?$/.test(value)) {
+    return true;
+  }
+  if (/^[!&*?|>%@`"'#,\[\]{}]/.test(value)) return true;
+  if (/[:#]\s/.test(value) || /:$/.test(value) || /\s#/.test(value)) return true;
+  if (value.includes(": ")) return true;
+  return false;
+}
+
+function emitScalar(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "null";
+  const text = String(value);
+  if (text.includes("\n")) {
+    // Single-line emitter never receives newlines; guarded by emitValue.
+    return JSON.stringify(text);
+  }
+  return needsQuoting(text) ? `'${text.replace(/'/g, "''")}'` : text;
+}
+
+function emitBlockScalar(text: string, indent: string): string {
+  const trailing = text.match(/\n*$/)?.[0].length ?? 0;
+  const chomp = trailing === 0 ? "|-" : trailing === 1 ? "|" : "|+";
+  const lines = text.replace(/\n+$/, "").split("\n");
+  const child = `${indent}  `;
+  const rendered = lines
+    .map((line) => (line.length > 0 ? `${child}${line}` : ""))
+    .join("\n");
+  return `${chomp}\n${rendered}`;
+}
+
+function emitValue(value: unknown, indent: string): string {
+  if (value === null || value === undefined) return " null";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return " []";
+    if (isShortNumericVector(value)) {
+      return ` [${value.map((item) => emitScalar(item)).join(", ")}]`;
+    }
+    return `\n${emitSequence(value, indent)}`;
+  }
+  if (typeof value === "object") {
+    const mapping = emitMapping(value as Record<string, unknown>, indent.length + 2);
+    return mapping.length > 0 ? `\n${mapping}` : " {}";
+  }
+  if (typeof value === "string" && value.includes("\n")) {
+    return ` ${emitBlockScalar(value, indent)}`;
+  }
+  return ` ${emitScalar(value)}`;
+}
+
+function emitMapping(obj: Record<string, unknown>, indentSize: number): string {
+  const indent = " ".repeat(indentSize);
+  const lines: string[] = [];
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === undefined) continue;
+    lines.push(`${indent}${emitKey(key)}:${emitValue(val, indent)}`);
+  }
+  return lines.join("\n");
+}
+
+function emitSequence(items: unknown[], indent: string): string {
+  const lines: string[] = [];
+  for (const item of items) {
+    if (item !== null && typeof item === "object" && !Array.isArray(item)) {
+      const mapping = emitMapping(item as Record<string, unknown>, indent.length + 2);
+      if (mapping.length === 0) {
+        lines.push(`${indent}- {}`);
+      } else {
+        // Inline the first key on the dash line, dedent the rest under it.
+        const trimmed = mapping.slice(indent.length + 2);
+        lines.push(`${indent}- ${trimmed}`);
+      }
+    } else if (isShortNumericVector(item)) {
+      lines.push(`${indent}- [${item.map((sub) => emitScalar(sub)).join(", ")}]`);
+    } else if (Array.isArray(item)) {
+      lines.push(`${indent}-${emitValue(item, `${indent}  `)}`);
+    } else if (typeof item === "string" && item.includes("\n")) {
+      lines.push(`${indent}- ${emitBlockScalar(item, `${indent}  `)}`);
+    } else {
+      lines.push(`${indent}- ${emitScalar(item)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function emitKey(key: string): string {
+  return needsQuoting(key) ? `'${key.replace(/'/g, "''")}'` : key;
+}
 ---
 
 <Base
@@ -190,7 +311,7 @@ function collectOperatorTypesInto(value: unknown, seen: Set<string>): void {
 
   <section class="page-section tight raw-section">
     <details class="raw-details pillar">
-      <summary>Show raw TDN JSON</summary>
+      <summary>Show raw TDN YAML</summary>
       <CopyTdnEnvelopeButton
         tdn={tdn}
         slug={specimen.slug}
@@ -199,7 +320,7 @@ function collectOperatorTypesInto(value: unknown, seen: Set<string>): void {
         client:load
       />
       <p class="raw-copy-hint">Paste in TouchDesigner with Embody running.</p>
-      <pre id="raw-tdn-json"><code>{rawTdn}</code></pre>
+      <pre id="raw-tdn-yaml"><code>{rawTdn}</code></pre>
     </details>
   </section>
 </Base>
