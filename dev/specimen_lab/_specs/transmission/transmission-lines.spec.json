@@ -1,0 +1,165 @@
+{
+  "slug": "transmission-lines",
+  "name": "Transmission Lines",
+  "category": "transmission",
+  "difficulty": "intermediate",
+  "one_liner": "A bundle of glowing fiber-optic cables receding into a dark vanishing point, with bright light pulses racing down each glass core at near-light speed -- uncompressed video carried as light in glass.",
+  "visual_description": "Looking down a bundle of thin fiber-optic strands as they sweep across a near-black field and converge toward a deep vanishing point with atmospheric haze. Each strand is a faintly lit glass tube; inside it, discrete bright dashes of light -- the light pulses carrying data -- race along the core at high speed, leaving short streaking trails and an internal-reflection shimmer that bounces along the glass. The bundle is mostly cyan (the hero fiber color), with a few strands in phosphor-green, magenta, and amber to read as separated essence channels. Near strands in the foreground are thick, bright, and bokeh-soft (shallow depth of field); far strands dim into the haze. The pulses are quantized -- you can count them -- and they all pulse a touch brighter on a steady PTP beat. Volumetric glow blooms each pulse into a halo; the brightest pulses occasionally throw a tiny lens streak. It reads instantly as light traveling through glass: video over fiber at the speed of light.",
+  "technique": "Single self-contained GLSL TOP generator (no input). The shader lays out N analytic fiber strands as smooth curves across the frame converging toward a vanishing point, computes per-pixel distance to the nearest strand (a thin glowing tube with an internal-reflection gradient), and then renders traveling light pulses as bright Gaussian dashes whose position along each strand advances with time and wraps (endless travel). Depth is faked by a per-strand depth value driving width, brightness, haze, and a cheap depth-of-field blur weight. A PTP beat brightens all pulses in lockstep. Everything is cheap per-pixel trig + a bounded strand loop. Bloom finish carries the volumetric glow. No feedback, no input -- drops in anywhere.",
+  "network_plan": [
+    {
+      "name": "glsl_fibers",
+      "type": "glslTOP",
+      "role": "The whole piece. Generator (no input): N fiber strands converging to a vanishing point, glass-tube glow with internal-reflection gradient, traveling light pulses, depth haze + fake DOF, PTP beat. Generator MUST use uTDOutputInfo.res; NEVER uTD2DInfos on a no-input generator. outputresolution custom 1280x720, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 400, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_fibers_pixel",
+        "computedat": "glsl_fibers_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uFiber", "type": "vec4", "valuex": "=parent().par.Strands.eval()", "valuey": "=parent().par.Bundlewidth.eval()", "valuez": "=parent().par.Vanishdepth.eval()", "valuew": "=parent().par.Glassglow.eval()" },
+          { "name": "uPulse", "type": "vec4", "valuex": "=parent().par.Pulsespeed.eval()", "valuey": "=parent().par.Pulsedensity.eval()", "valuez": "=parent().par.Pulselength.eval()", "valuew": "=absTime.seconds*parent().par.Pulsespeed.eval()" },
+          { "name": "uLook", "type": "vec4", "valuex": "=parent().par.Haze.eval()", "valuey": "=parent().par.Dof.eval()", "valuez": "=parent().par.Ptprate.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom",
+      "type": "glslTOP",
+      "role": "Bloom + finish. Input0 = glsl_fibers. Bright-pass + bounded blur added back for volumetric pulse glow; a faint scanline + grain. outputresolution custom 1280x720, rgba16float. Place nodeX 800, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_bloom_pixel",
+        "computedat": "glsl_bloom_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.55, "valuez": 0, "valuew": 0 }
+        ]
+      },
+      "inputs": ["glsl_fibers"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named out1. Viewer flagged. Place nodeX 1200, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_bloom"]
+    },
+    {
+      "name": "glsl_fibers_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_fibers. See glsl[0]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_fibers_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_fibers.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_fibers_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_fibers.",
+      "params": { "op": "glsl_fibers" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_bloom. See glsl[1]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_bloom.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_bloom.",
+      "params": { "op": "glsl_bloom" },
+      "inputs": []
+    },
+    {
+      "name": "annotate_fibers",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the fiber generator (glsl_fibers). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Fiber Strands & Light Pulses",
+        "Bodytext": "One generator GLSL TOP. N analytic strands converge to a vanishing point; per pixel it finds the nearest strand and draws a glowing glass tube with an internal-reflection gradient. Traveling light pulses are bright Gaussian dashes whose position advances with time and wraps -- endless light in glass. A per-strand depth drives width, brightness, haze, and a fake depth-of-field weight for real Z-space.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over bloom + out (glsl_bloom, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Volumetric Bloom & Finish",
+        "Bodytext": "Bloom blows each white-hot pulse into a colored halo for the volumetric light-in-glass look; a faint scanline + grain keeps the dark gradient clean at booth scale. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_fibers_pixel",
+      "stage": "pixel",
+      "code": "// Transmission Lines -- glowing fiber bundle with traveling light pulses.\nuniform vec4 uFiber;   // x=strands, y=bundleWidth, z=vanishDepth, w=glassGlow\nuniform vec4 uPulse;   // x=pulseSpeed, y=pulseDensity, z=pulseLength, w=time(=absTime*Speed)\nuniform vec4 uLook;    // x=haze, y=dof, z=ptpRate, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\nfloat hash11(float p){ return fract(sin(p*127.1)*43758.5453); }\n\n// per-strand color: mostly cyan, a few green/magenta/amber essence channels\nvec3 strandColor(float i){\n    float k = mod(i, 7.0);\n    if(k < 4.0) return vec3(0.00, 0.85, 1.00);   // cyan hero\n    if(k < 5.0) return vec3(0.20, 1.00, 0.42);   // green\n    if(k < 6.0) return vec3(1.00, 0.20, 0.62);   // magenta\n    return vec3(1.00, 0.70, 0.10);               // amber\n}\n\nvoid main(){\n    vec2 uv = vUV.st;\n    float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;\n    vec2 p = vec2((uv.x-0.5)*aspect, uv.y-0.5);\n\n    vec3 col = mix(vec3(0.010,0.012,0.016), vec3(0.02,0.024,0.03), 1.0 - length(p)); // charcoal ground\n\n    float nS    = clamp(uFiber.x, 1.0, 28.0);\n    float bw    = uFiber.y;\n    float vDepth= uFiber.z;\n    float gglow = uFiber.w;\n    float t     = uPulse.w;\n    float pdens = uPulse.y;\n    float plen  = uPulse.z;\n    float haze  = uLook.x;\n    float dof   = uLook.y;\n\n    // vanishing point toward the right-center (signal flow l->r into the distance)\n    vec2 vp = vec2(0.45*aspect, 0.02);\n\n    const int MAXS = 28;\n    for(int i=0;i<MAXS;i++){\n        if(float(i) >= nS) break;\n        float fi = float(i);\n        float depth = fi / max(1.0, nS-1.0);        // 0 = near (foreground), 1 = far\n        float sd = hash11(fi*3.1);\n\n        // strand baseline: spread vertically near the camera, converge to vp far away\n        float y0 = (sd*2.0-1.0) * bw;\n        // smooth curve from a left spread point to the vanishing point\n        vec2 a = vec2(-0.6*aspect, y0);\n        vec2 b = vp;\n        // gentle bow so strands read as relaxed cable, not laser-straight\n        vec2 bow = vec2(0.0, (hash11(fi*7.7)*2.0-1.0)*0.12);\n        vec2 mid = mix(a,b,0.5) + bow;\n\n        // project p onto the quadratic curve by sampling s and taking the min distance\n        float best = 1e9; float bestS = 0.0;\n        const int STEPS = 24;\n        for(int j=0;j<=STEPS;j++){\n            float s = float(j)/float(STEPS);\n            float u = 1.0-s;\n            vec2 cp = u*u*a + 2.0*u*s*mid + s*s*b;\n            float d = length(p - cp);\n            if(d < best){ best = d; bestS = s; }\n        }\n\n        // width + brightness fall off with depth (perspective + haze)\n        float w = mix(0.014, 0.003, depth);\n        float dofBlur = 1.0 + dof * abs(depth - 0.0) * 6.0;   // near strands sharper; tweak\n        w *= mix(1.0, dofBlur, 0.5);\n\n        vec3 sc = strandColor(fi);\n        // glass tube: thin core + internal-reflection gradient (brighter on one edge)\n        float tube = smoothstep(w, 0.0, best);\n        float refl = smoothstep(w*3.0, 0.0, best) * (0.5 + 0.5*sin(bestS*40.0 + t*2.0));\n        float dim = mix(1.0, 0.25, depth);                  // far strands dim into haze\n        col += sc * (tube*0.20 + refl*0.10*gglow) * dim;\n\n        // traveling light pulses: bright Gaussian dashes along bestS, advancing + wrapping\n        float speedJ = 0.6 + 0.6*hash11(fi*4.2);\n        for(int k=0;k<6;k++){\n            float fk = float(k);\n            float phase = fract(hash11(fi*9.0+fk*2.3) + t*speedJ);\n            float along = bestS - phase;\n            // pulse only where we are ON the strand\n            float onStrand = smoothstep(w*2.5, 0.0, best);\n            float pulse = exp(-pow(along/plen, 2.0)*30.0) * onStrand;\n            // density gate: only render this pulse if it's in the active set\n            if(fk < pdens){\n                vec3 core = mix(sc, vec3(1.0), 0.6);        // white-hot core\n                col += core * pulse * dim * 1.6;\n            }\n        }\n    }\n\n    // PTP beat: all pulses breathe brighter in lockstep\n    float beat = fract(uLook.w * uLook.z);\n    float flash = pow(max(0.0, 1.0 - beat*4.0), 3.0);\n    col *= 1.0 + 0.4*flash;\n\n    // atmospheric haze toward the vanishing point + edge falloff\n    float toVP = length(p - vp);\n    col += vec3(0.02,0.03,0.04) * haze * smoothstep(0.6, 0.0, toVP);\n    col *= mix(1.0, 0.55, smoothstep(0.5, 1.0, length(p)));\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloom_pixel",
+      "stage": "pixel",
+      "code": "// Volumetric bloom + scanline + grain finish.\nuniform vec4 uBloom;   // x=strength, y=threshold\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;\n    vec3 src = texture(sTD2DInputs[0], uv).rgb;\n    float thr = uBloom.y;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 7;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/24.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*2.5).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    vec3 col = src + (sum/max(wsum,1e-4)) * uBloom.x;\n    float scan = 0.97 + 0.03*sin(uv.y * uTDOutputInfo.res.w * 3.14159);\n    col *= scan;\n    col += (hash21(uv*uTDOutputInfo.res.zw)-0.5) * 0.012;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Strands", "label": "Strand Count", "style": "Int", "default": 14, "range": [1, 28], "drives": "uFiber.x -- number of fiber strands in the bundle. More = a denser, more premium fiber bundle. Note: each strand runs a bounded inner sample/pulse loop, so cost scales with count; cap 28." },
+    { "name": "Bundlewidth", "label": "Bundle Spread", "style": "Float", "default": 0.4, "range": [0.1, 0.8], "drives": "uFiber.y -- vertical spread of the strands near the camera before they converge to the vanishing point. Wider = a fanned bundle; tight = a focused cable." },
+    { "name": "Vanishdepth", "label": "Vanishing Depth", "style": "Float", "default": 1.0, "range": [0.3, 2.0], "drives": "uFiber.z -- how strongly the strands recede toward the vanishing point (perspective depth). Higher = a deeper Z-space tunnel of fiber." },
+    { "name": "Glassglow", "label": "Glass Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFiber.w -- strength of the internal-reflection shimmer gradient along each glass tube. The light-bouncing-in-glass look." },
+    { "name": "Pulsespeed", "label": "Pulse Speed", "style": "Float", "default": 0.6, "range": [0.0, 2.0], "drives": "uPulse.x and the time term uPulse.w -- how fast the light pulses race down the strands. 0 freezes them (and drops time-dependence); higher = near-light-speed streaks." },
+    { "name": "Pulsedensity", "label": "Pulse Density", "style": "Int", "default": 4, "range": [1, 6], "drives": "uPulse.y -- how many light pulses travel down each strand at once (1-6). More = a busier data stream." },
+    { "name": "Pulselength", "label": "Pulse Length", "style": "Float", "default": 0.06, "range": [0.02, 0.2], "drives": "uPulse.z -- the length of each Gaussian light dash. Short = crisp countable packets; long = streaking light trails." },
+    { "name": "Haze", "label": "Atmospheric Haze", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.x -- volumetric haze building toward the vanishing point. Adds depth so distant strands dim out into fog." },
+    { "name": "Dof", "label": "Depth of Field", "style": "Float", "default": 0.5, "range": [0.0, 1.5], "drives": "uLook.y -- fake depth-of-field weight: near strands stay sharp, far ones soften (bokeh-glow). Adds the shallow-DOF premium look." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uLook.z -- frequency of the PTP sync pulse all light pulses breathe brighter to in lockstep." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.4, "range": [0.0, 3.0], "drives": "uBloom.x -- intensity of the volumetric bloom glow added over the pulses. The booth-scale wow knob." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "fiber_cyan": ["#00E5FF", "#18FFE0"],
+    "essence_channels": { "green": "#39FF6A", "magenta": "#FF2E9A", "amber": "#FFB000" },
+    "white_hot_pulse": ["#FFFFFF", "#EAFBFF"],
+    "ratio": "~85% dark charcoal + dim glass tubes, ~15% saturated pulse/glow; cyan dominant (fiber hero color), green/magenta/amber as a few essence strands."
+  },
+  "wow_factor": 4,
+  "conference_fit": "The most direct visualization of the medium itself -- light pulses traveling through fiber-optic glass, which is literally how uncompressed video moves over IP. Cyan-dominant (the fiber-optic-coded hero color) on a dark premium stage, with deep Z-space, atmospheric haze, and shallow DOF that read as a high-end render at 10+ feet. The traveling pulses are quantized and countable (close-inspection payoff) and snap to a PTP beat (ST2110 timing). A clean, self-contained generator -- ideal as a looping backdrop while the denser packet/crosspoint pieces anchor the foreground.",
+  "prompt": {
+    "one_liner": "A self-contained fiber-optic bundle generator: glowing glass strands receding to a vanishing point with bright light pulses racing down each core (cyan hero + green/magenta/amber essence channels), depth haze, fake DOF, a PTP beat, and a volumetric bloom finish.",
+    "evolve": "Raise Strand Count + Pulse Density for a busier bundle; raise Pulse Speed for near-light-speed streaks (0 freezes); shorten Pulse Length for crisp countable packets or lengthen for light trails. Raise Atmospheric Haze + Depth of Field for a deeper, dreamier render. Sweep PTP Beat for the sync breath. Feed out1 into the kaleidoscope specimen for a radial fiber mandala, or composite under the packet-fabric swarm. Drive Pulse Speed from audio for a reactive loop. To extend: add chromatic dispersion (split the pulse into RGB along the strand) at the brightest pulses.",
+    "compose_with": ["packet-fabric", "signal-waveform"]
+  },
+  "warmup_frames": 60,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_fibers has NO input -- MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h)); uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h or it renders 1x1. glsl_bloom HAS an input so sTD2DInputs[0] + uTDOutputInfo.res are valid.\\n\\nLOOP BOUNDS (GPU crash safety): the fiber shader has THREE nested constant-bounded loops -- outer strands (MAXS=28), an inner curve-projection sample (STEPS=24), and a per-strand pulse loop (k<6). All are bounded by CONSTANT literals (the param-driven counts only EARLY-OUT via break against the constant bound) so no unbounded GPU loop. COST: with all caps maxed this is 28*(24+6) ~= 840 iterations per pixel at 1280x720 -- the heaviest of the transmission set. GATE PERFORMANCE: baseline get_project_performance before, re-check after; if fps drops below ~90% of target, lower the default Strand Count or reduce STEPS to 16. The default 14 strands is comfortable. This is a true generator (not a heavy-fBm-then-cheap-downstream case) so it recomputes per frame -- acceptable at these caps, but it is the one piece to watch.\\n\\nUNIFORMS: glslTOP declares uniforms MANUALLY. vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nCOOK DEMAND: time-dependent via absTime in uPulse.w and uLook.w. Cooks every frame only when out1 demanded; add a temp Execute DAT OUTSIDE the COMP in the sandbox; verify with two captures separated by a real sleep. Pulse Speed=0 freezes the pulses but uLook.w still references absTime (PTP beat), so the TOP keeps cooking -- correct.\\n\\nDOCKED DATS: glsl_fibers + glsl_bloom each dock pixel+compute+info; HUG all six under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source for a clean YAML literal block.\\n\\nTDN ROUND-TRIP: all 11 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~9."
+}

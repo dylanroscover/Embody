@@ -1,0 +1,341 @@
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.28
+td_build: 099.2025.32820
+source_file: Embody-6.29.toe
+exported_at: '2026-06-14T05:20:44Z'
+network_path: /specimen_lab/noise_terrain/light
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  mergePOP:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  circlePOP:
+    parameters:
+      connectivity: surface
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  primitivePOP:
+    parameters:
+      addpts: true
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  tubePOP:
+    parameters:
+      orient: z
+      rows: 2
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+par_templates:
+  points:
+  - label: Point
+    name: pt
+    style: Sequence
+  - label: Position
+    name: Posx
+    sequence: pt
+    style: XYZW
+type: lightCOMP
+parameters:
+  ty: 10
+  tz: 0
+  rx: -22
+  ry: -45
+  lighttype: distant
+flags:
+- display
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: copy1
+  type: copyPOP
+  parameters:
+    ncy: 2
+    rx: 90
+  flags:
+  - viewer
+  position: [520, 670]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - tube_attenuated
+- name: merge1
+  type: mergePOP
+  sequences:
+    input:
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+  position: [250, 500]
+  inputs:
+  - rectangle1
+  - tube_cone1
+  - tube_cone2
+  - primitive1
+  - line_atten
+  - circle_attenStart
+  - circle_attenEnd
+- name: merge2
+  type: mergePOP
+  sequences:
+    input:
+    - {}
+    - {}
+  position: [950, 230]
+  inputs:
+  - connectivity1
+  - circle1
+- name: merge3
+  type: mergePOP
+  sequences:
+    input:
+    - {}
+    - {}
+  position: [620, 290]
+  inputs:
+  - pointgen1
+  - transform1
+- name: circle1
+  type: circlePOP
+  parameters:
+    scale: 0.2
+  position: [780, 170]
+- name: sphere1
+  type: spherePOP
+  parameters:
+    radx: 0.05
+    rady: 0.05
+    radz: 0.05
+    freq: 3
+  flags:
+  - viewer
+  position: [520, 890]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: pointgen1
+  type: pointgeneratorPOP
+  parameters:
+    shape: circle
+    numpoints: 17
+    sx: 0.2
+    sy: 0.2
+    sz: 0.2
+  flags:
+  - viewer
+  position: [270, 290]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: line_atten
+  type: linePOP
+  parameters:
+    divs: 1
+    bypass: =not parent().par.attenuated
+  sequences:
+    pt:
+    - posz: =-parent().par.attenuationstart
+    - posz: =-parent().par.attenuationend
+  custom_pars:
+    Points:
+      $t: points
+  flags:
+  - viewer
+  position: [0, 230]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: primitive1
+  type: primitivePOP
+  parameters:
+    method: pattern
+  sequences:
+    prim:
+    - type: lines
+      pattern: 0 1 0 2 0 3 0 4
+    pt:
+    - {}
+    - posx: =mod.math.sin(mod.math.radians(parent().par.coneangle/2)) + mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+      posz: =-op('tube_cone1').par.height
+    - posx: =mod.math.sin(-mod.math.radians(parent().par.coneangle/2)) - mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+      posz: =0-op('tube_cone1').par.height
+    - posy: =-mod.math.sin(-mod.math.radians(parent().par.coneangle/2)) - mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+      posz: =-op('tube_cone1').par.height
+    - posy: =mod.math.sin(-mod.math.radians(parent().par.coneangle/2)) - mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+      posz: =-op('tube_cone1').par.height
+  custom_pars:
+    Points:
+      $t: points
+  flags:
+  - viewer
+  position: [0, 390]
+- name: rectangle1
+  type: rectanglePOP
+  parameters:
+    sizeu: 0.02
+    sizev: 0.5
+    anchorv: 0
+  flags:
+  - viewer
+  position: [0, 730]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: transform1
+  type: transformPOP
+  parameters:
+    tz: 0.8
+  flags:
+  - viewer
+  position: [450, 370]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - pointgen1
+- name: tube_cone1
+  type: tubePOP
+  parameters:
+    radx: =mod.math.sin(mod.math.radians(parent().par.coneangle/2))
+    rady: 0.01
+    height: =mod.math.cos(mod.math.radians(parent().par.coneangle/2))
+    tz: =-me.par.height*0.5
+  position: [0, 620]
+- name: tube_cone2
+  type: tubePOP
+  parameters:
+    radx: =mod.math.sin(mod.math.radians(parent().par.coneangle/2)) + mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+    rady: =mod.math.sin(mod.math.radians(parent().par.coneangle/2))
+    height: 0
+    tz: =-op('tube_cone1').par.height
+  position: [0, 500]
+- name: connectivity1
+  type: connectivityPOP
+  parameters:
+    surftype: lines
+  flags:
+  - viewer
+  position: [780, 290]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - merge3
+- name: circle_attenEnd
+  type: circlePOP
+  parameters:
+    radx: 0.1
+    rady: 0.1
+    tz: =-parent().par.attenuationend
+    bypass: =not parent().par.attenuated
+- name: primitive_cross
+  type: primitivePOP
+  parameters:
+    method: set
+    setprimtype: lines
+  sequences:
+    pt:
+    - posx: -0.2
+    - posx: 0.2
+    - posy: -0.2
+    - posy: 0.2
+    - posz: -0.2
+    - posz: 0.2
+  custom_pars:
+    Points:
+      $t: points
+  flags:
+  - display
+  - render
+  - viewer
+  position: [520, 1000]
+- name: tube_attenuated
+  type: tubePOP
+  parameters:
+    surftype: rows
+    radx: =parent().par.attenuationend
+    rady: =parent().par.attenuationstart
+    height: 0
+    bypass: =not parent().par.attenuated
+  position: [368, 673]
+- name: merge_pointLight
+  type: mergePOP
+  sequences:
+    input:
+    - {}
+    - {}
+    - {}
+    - {}
+  position: [760, 820]
+  inputs:
+  - sphere1
+  - primitive_quadrants
+  - copy1
+- name: switch_lightType
+  type: switchPOP
+  parameters:
+    index: =parent().par.lighttype.menuIndex
+  flags:
+  - display
+  - render
+  - viewer
+  position: [1140, 500]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - merge_pointLight
+  - merge1
+  - merge2
+- name: circle_attenStart
+  type: circlePOP
+  parameters:
+    radx: 0.1
+    rady: 0.1
+    tz: =-parent().par.attenuationstart
+    bypass: =not parent().par.attenuated
+  position: [0, 120]
+- name: primitive_quadrants
+  type: primitivePOP
+  parameters:
+    method: set
+    setprimtype: lines
+  sequences:
+    pt:
+    - posx: 0.07
+      posy: 0.07
+      posz: 0.07
+    - posx: -0.07
+      posy: -0.07
+      posz: -0.07
+    - posx: -0.07
+      posy: 0.07
+      posz: 0.07
+    - posx: 0.07
+      posy: -0.07
+      posz: -0.07
+    - posx: 0.07
+      posy: 0.07
+      posz: -0.07
+    - posx: -0.07
+      posy: -0.07
+      posz: 0.07
+    - posx: -0.07
+      posy: 0.07
+      posz: -0.07
+    - posx: 0.07
+      posy: -0.07
+      posz: 0.07
+  custom_pars:
+    Points:
+      $t: points
+  flags:
+  - viewer
+  position: [520, 780]

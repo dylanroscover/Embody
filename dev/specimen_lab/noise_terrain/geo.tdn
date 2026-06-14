@@ -1,0 +1,95 @@
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.28
+td_build: 099.2025.32820
+source_file: Embody-6.29.toe
+exported_at: '2026-06-14T05:20:44Z'
+network_path: /specimen_lab/noise_terrain/geo
+options:
+  include_dat_content: false
+  include_storage: true
+type: geometryCOMP
+parameters:
+  material: glsl_snow
+flags:
+- display
+- render
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: null_geo
+  type: nullPOP
+  flags:
+  - render
+  position: [1200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - facet_normals
+- name: glsl_terrain
+  type: glslPOP
+  parameters:
+    computedat: glsl_terrain_compute
+    outputattrs: '*'
+  sequences:
+    vec:
+    - name: uShape
+      type: vec4
+      valuex: =parent(2).par.Height.eval()
+      valuey: =parent(2).par.Ridge.eval()
+      valuez: =parent(2).par.Warp.eval()
+      valuew: =parent(2).par.Seed.eval()
+    - name: uTime
+      type: vec4
+      valuex: =absTime.seconds*parent(2).par.Morphspeed.eval()
+  position: [400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - grid_terrain
+- name: grid_terrain
+  type: gridPOP
+  parameters:
+    sizex: 20
+    sizey: 20
+    cols: 128
+    rows: 128
+    rx: -90
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: facet_normals
+  type: facetPOP
+  parameters:
+    operation: cusp
+    angle: 160
+  position: [800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_terrain
+- name: glsl_terrain_info
+  type: infoDAT
+  parameters:
+    op: glsl_terrain
+  flags:
+  - viewer
+  position: [485, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_terrain
+- name: glsl_terrain_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/geo/glsl_terrain_compute.glsl
+    syncfile: true
+    language: glsl
+  flags:
+  - viewer
+  position: [335, -120]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - glsl
+  dock: glsl_terrain

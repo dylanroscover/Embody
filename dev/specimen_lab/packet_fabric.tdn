@@ -1,0 +1,402 @@
+format: tdn
+version: '2.0'
+build: null
+generator: Embody/6.0.28
+td_build: 099.2025.32820
+source_file: Embody-6.29.toe
+exported_at: '2026-06-14T05:20:43Z'
+network_path: /specimen_lab/packet_fabric
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  compositeTOP:
+    parameters:
+      operand: add
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  glslPOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  glslTOP:
+    parameters:
+      outputresolution: custom
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Controls:
+  - name: Maxpackets
+    style: Int
+    default: 5000
+    min: 200.0
+    max: 16000.0
+    clampMin: true
+    clampMax: true
+    normMin: 200.0
+    normMax: 16000.0
+    help: how many packets cascade down the fabric. Cost scales with this (GPU), NOT with output resolution, so it is independent of the 4K story. Watch GPU headroom; cap 16000.
+  - name: Flowspeed
+    style: Float
+    default: 0.45
+    max: 1.5
+    clampMin: true
+    clampMax: true
+    normMax: 1.5
+    help: how fast packets descend each link per second. 0 freezes the cascade (drops time-dependence); higher = near-light-speed rain.
+  - name: Linkcount
+    style: Int
+    default: 26
+    min: 4.0
+    max: 64.0
+    clampMin: true
+    clampMax: true
+    normMin: 4.0
+    normMax: 64.0
+    help: number of distinct sender->receiver vertical links. More = a busier topology.
+  - name: Curveamount
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: how much each vertical link bows horizontally (fiber slack). 0 = straight drops; higher = graceful arcs.
+  - name: Streams
+    style: Int
+    default: 3
+    min: 1.0
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 3.0
+    help: number of separated ST2110 essence classes (1=video, 2=+audio, 3=+ancillary). Colors packets cyan/green/amber by PartId class.
+  - name: Ptprate
+    style: Float
+    default: 0.5
+    min: 0.1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMin: 0.1
+    normMax: 2.0
+    help: frequency of the PTP grandmaster sync pulse all packets flash to in lockstep. The rhythmic heartbeat.
+  - name: Pulsestrength
+    style: Float
+    default: 1.4
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: how brightly packets flash on each PTP beat. 0 = steady cascade; higher = a dramatic synchronized strobe.
+  - name: Fieldscale
+    style: Float
+    default: 1.35
+    min: 0.5
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMin: 0.5
+    normMax: 2.0
+    help: spread of node anchors across the tall field. Higher = a wider, more sprawling fabric.
+  - name: Jitter
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: tiny per-packet phase stagger so the cascade looks like real quantized traffic, not a marching grid. 0 = perfectly synced ranks.
+  - name: Bloom
+    style: Float
+    default: 1.3
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: intensity of the bright-pass glow added back. The booth-scale wow knob.
+  - name: Bloomwidth
+    style: Float
+    default: 2.2
+    min: 1.0
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 4.0
+    help: blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res).
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+color: [0.67, 0.67, 0.67]
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  position: [6000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - comp_bloom
+- name: geo_seed
+  type: gridPOP
+  parameters:
+    rows: 64
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: null_sim
+  type: nullPOP
+  position: [1800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_advect
+- name: res_down
+  type: resolutionTOP
+  parameters:
+    outputresolution: custom
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+    format: rgba16float
+  position: [4200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - comp_over
+- name: comp_over
+  type: compositeTOP
+  position: [3600, 0]
+  inputs:
+  - render_swarm
+  - glsl_fabric
+- name: comp_bloom
+  type: compositeTOP
+  position: [5400, 0]
+  inputs:
+  - comp_over
+  - glsl_bloomblur
+- name: glsl_color
+  type: glslPOP
+  parameters:
+    computedat: glsl_color_compute
+    outputattrs: '*'
+  sequences:
+    attr:
+    - customname: Color
+      numcomps: '4'
+    - customname: PointScale
+    vec:
+    - name: uClock
+      type: vec4
+      valuex: =parent().par.Ptprate.eval()
+      valuey: =absTime.seconds
+      valuez: =parent().par.Streams.eval()
+      valuew: =parent().par.Pulsestrength.eval()
+  position: [2400, 0]
+  inputs:
+  - null_sim
+- name: mat_sprite
+  type: pointspriteMAT
+  parameters:
+    colormap: sprite_dot
+    pointsize: 7
+    skelrootpath: =parent()
+    blending: true
+    destblend: one
+    depthtest: false
+    depthwriting: false
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: sprite_dot
+  type: glslTOP
+  parameters:
+    pixeldat: sprite_dot_pixel
+    computedat: sprite_dot_compute
+    resolutionw: 64
+    resolutionh: 64
+  position: [0, -640]
+- name: glsl_advect
+  type: glslPOP
+  parameters:
+    computedat: glsl_advect_compute
+    outputattrs: P
+  sequences:
+    vec:
+    - name: uFlow
+      type: vec4
+      valuex: =parent().par.Flowspeed.eval()
+      valuey: =parent().par.Linkcount.eval()
+      valuez: =parent().par.Curveamount.eval()
+      valuew: =absTime.seconds*parent().par.Flowspeed.eval()
+    - name: uClock
+      type: vec4
+      valuex: 0
+      valuey: =parent().par.Fieldscale.eval()
+      valuew: =parent().par.Jitter.eval()
+  position: [1200, 0]
+  inputs:
+  - particle_pop
+- name: glsl_fabric
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_fabric_pixel
+    computedat: glsl_fabric_compute
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uFab
+      valuex: =parent().par.Linkcount.eval()
+      valuey: =parent().par.Fieldscale.eval()
+      valuez: =absTime.seconds
+      valuew: =parent().par.Streams.eval()
+  position: [0, -320]
+- name: particle_pop
+  type: particlePOP
+  parameters:
+    targetpop: null_sim
+    maxparticles: =parent().par.Maxpackets.eval()
+    birthrate: =parent().par.Maxpackets.eval()
+    life: 1000
+    timeintegration: false
+  position: [600, -320]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - geo_seed
+- name: render_swarm
+  type: rendersimpleTOP
+  parameters:
+    camdistance: 8
+    bgcolorr: 0.02
+    bgcolorg: 0.025
+    bgcolorb: 0.035
+    bgcolora: 1
+    pop: glsl_color
+    materialsource: matnode
+    mat: mat_sprite
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+    format: rgba16float
+  position: [3000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_bloomblur
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_bloomblur_pixel
+    computedat: glsl_bloomblur_compute
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+  sequences:
+    vec:
+    - name: uBloom
+      valuex: =parent().par.Bloom.eval()
+      valuey: 0.45
+      valuez: =parent().par.Bloomwidth.eval()
+  position: [4800, 0]
+  inputs:
+  - res_down
+- name: glsl_color_info
+  type: infoDAT
+  parameters:
+    op: glsl_color
+  position: [2550, -120]
+  dock: glsl_color
+- name: sprite_dot_info
+  type: infoDAT
+  parameters:
+    op: sprite_dot
+  position: [300, -760]
+  dock: sprite_dot
+- name: glsl_advect_info
+  type: infoDAT
+  parameters:
+    op: glsl_advect
+  position: [1350, -120]
+  dock: glsl_advect
+- name: glsl_fabric_info
+  type: infoDAT
+  parameters:
+    op: glsl_fabric
+  position: [300, -440]
+  dock: glsl_fabric
+- name: sprite_dot_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [150, -760]
+  dock: sprite_dot
+- name: glsl_fabric_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [150, -440]
+  dock: glsl_fabric
+- name: glsl_color_compute
+  type: textDAT
+  position: [2400, -120]
+  dock: glsl_color
+- name: sprite_dot_compute
+  type: textDAT
+  position: [0, -760]
+  dock: sprite_dot
+- name: glsl_advect_compute
+  type: textDAT
+  position: [1200, -120]
+  dock: glsl_advect
+- name: glsl_bloomblur_info
+  type: infoDAT
+  parameters:
+    op: glsl_bloomblur
+  position: [5100, -120]
+  dock: glsl_bloomblur
+- name: glsl_fabric_compute
+  type: textDAT
+  position: [0, -440]
+  dock: glsl_fabric
+- name: glsl_bloomblur_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [4950, -120]
+  dock: glsl_bloomblur
+- name: glsl_bloomblur_compute
+  type: textDAT
+  position: [4800, -120]
+  dock: glsl_bloomblur

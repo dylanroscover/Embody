@@ -1,0 +1,168 @@
+{
+  "slug": "signal-arc",
+  "name": "Signal Arc",
+  "category": "transmission",
+  "difficulty": "advanced",
+  "one_liner": "Living electrical energy: branching lightning arcs of cyan signal leap between a central grandmaster node and the field, crackling on a PTP beat -- signal energy made visible as light.",
+  "visual_description": "On a deep-black stage, a bright grandmaster node pulses at the center. From it, jagged branching arcs of electricity -- cyan signal energy -- leap outward toward dim receiver nodes scattered in the field, forking and re-forking like real lightning, with white-hot cores and cyan/teal coronas. The arcs are not static: they writhe and re-strike, and on a steady PTP beat the central node flashes and a sync ring of energy expands outward, every arc igniting brighter in lockstep -- the grandmaster clock synchronizing the field. A few arcs carry the essence colors (a green branch, a magenta branch, an amber branch) so it reads as separated signal energy. Fine secondary filaments fuzz off the main bolts; the whole field has a faint electric haze and an occasional micro RGB-split flicker. Heavy bloom turns the bolt cores into searing light and the coronas into atmospheric glow. It reads instantly as raw signal energy / electricity -- the most visceral, kinetic piece on the floor.",
+  "technique": "Single self-contained GLSL TOP generator (no input). Branching lightning is drawn analytically: for each of N bolts, march a polyline from the center toward a target node, displacing each segment by domain-warped value noise (the jagged path), and accumulate the per-pixel minimum distance to the bolt segments into a glow field; forks spawn child segments at a few points. A sharp inner line + soft corona give the white-hot-core/cyan-halo look. A PTP grandmaster beat re-strikes the bolts (re-seeds the noise phase) and expands a sync ring. Bounded constant loops for bolts/segments. Bloom + grain finish. No feedback, no input -- drops in anywhere.",
+  "network_plan": [
+    {
+      "name": "glsl_arcs",
+      "type": "glslTOP",
+      "role": "The whole piece. Generator (no input): branching lightning bolts from a center node, noise-displaced polylines, forks, white-hot core + cyan corona, PTP re-strike + sync ring. Generator MUST use uTDOutputInfo.res; NEVER uTD2DInfos on a no-input generator. outputresolution custom 1280x720, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 400, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_arcs_pixel",
+        "computedat": "glsl_arcs_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uArc", "type": "vec4", "valuex": "=parent().par.Bolts.eval()", "valuey": "=parent().par.Jaggedness.eval()", "valuez": "=parent().par.Branchiness.eval()", "valuew": "=absTime.seconds*parent().par.Restrikerate.eval()" },
+          { "name": "uEnergy", "type": "vec4", "valuex": "=parent().par.Corewidth.eval()", "valuey": "=parent().par.Coronaglow.eval()", "valuez": "=parent().par.Reach.eval()", "valuew": "=parent().par.Filaments.eval()" },
+          { "name": "uClock", "type": "vec4", "valuex": "=parent().par.Ptprate.eval()", "valuey": "=parent().par.Syncring.eval()", "valuez": "=parent().par.Palette.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom",
+      "type": "glslTOP",
+      "role": "Bloom + finish. Input0 = glsl_arcs. Bright-pass + bounded wide blur added back for searing bolt glow; faint grain + occasional micro RGB-split flicker on the PTP beat. outputresolution custom 1280x720, rgba16float. Place nodeX 800, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_bloom_pixel",
+        "computedat": "glsl_bloom_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.45, "valuez": "=parent().par.Rgbsplit.eval()", "valuew": "=absTime.seconds*parent().par.Ptprate.eval()" }
+        ]
+      },
+      "inputs": ["glsl_arcs"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named out1. Viewer flagged. Place nodeX 1200, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_bloom"]
+    },
+    {
+      "name": "glsl_arcs_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_arcs. See glsl[0]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_arcs_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_arcs.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_arcs_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_arcs.",
+      "params": { "op": "glsl_arcs" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_bloom. See glsl[1]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_bloom.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_bloom.",
+      "params": { "op": "glsl_bloom" },
+      "inputs": []
+    },
+    {
+      "name": "annotate_arcs",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the arc generator (glsl_arcs). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Branching Signal Arcs",
+        "Bodytext": "One generator GLSL TOP. For each bolt, a polyline marches from the central grandmaster node toward a receiver, each segment displaced by domain-warped value noise (the jagged lightning path), with forks spawning child branches. Per pixel it accumulates the minimum distance to all segments into a glow field: a sharp white-hot core + a soft cyan corona. A PTP beat re-strikes the bolts and expands a sync ring -- the grandmaster clock synchronizing the field.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over bloom + out (glsl_bloom, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Searing Bloom & Finish",
+        "Bodytext": "Heavy bloom turns the bolt cores into searing light and the coronas into atmospheric glow; an occasional micro RGB-split flicker on the PTP beat adds electric authenticity. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_arcs_pixel",
+      "stage": "pixel",
+      "code": "// Signal Arc -- branching lightning energy from a central grandmaster node.\nuniform vec4 uArc;     // x=bolts, y=jaggedness, z=branchiness, w=strikeTime(=absTime*restrikeRate)\nuniform vec4 uEnergy;  // x=coreWidth, y=coronaGlow, z=reach, w=filaments\nuniform vec4 uClock;   // x=ptpRate, y=syncRing, z=palette, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\nfloat hash11(float p){ return fract(sin(p*127.1)*43758.5453); }\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nfloat vnoise(vec2 p){\n    vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);\n    return mix(mix(hash21(i), hash21(i+vec2(1,0)), u.x),\n               mix(hash21(i+vec2(0,1)), hash21(i+vec2(1,1)), u.x), u.y);\n}\n\n// distance from point p to segment a-b\nfloat segDist(vec2 p, vec2 a, vec2 b){\n    vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0); return length(pa-ba*h);\n}\n\n// per-bolt essence color: mostly cyan, a few essence channels\nvec3 boltColor(float i, float hue){\n    float k = mod(i, 9.0);\n    vec3 c;\n    if(k < 6.0) c = vec3(0.10, 0.85, 1.00);      // cyan signal\n    else if(k < 7.0) c = vec3(0.25, 1.00, 0.45);  // green\n    else if(k < 8.0) c = vec3(1.00, 0.22, 0.62);  // magenta\n    else c = vec3(1.00, 0.70, 0.12);              // amber\n    // small hue nudge from palette param\n    return mix(c, c.gbr, hue*0.4);\n}\n\nvoid main(){\n    vec2 uv = vUV.st;\n    float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;\n    vec2 p = vec2((uv.x-0.5)*aspect, uv.y-0.5);\n\n    vec3 col = mix(vec3(0.008,0.010,0.014), vec3(0.0,0.0,0.0), length(p));  // deep black ground\n\n    vec2 center = vec2(0.0, 0.0);\n    float nB    = clamp(uArc.x, 1.0, 12.0);\n    float jag   = uArc.y;\n    float branch= uArc.z;\n    float strike= uArc.w;\n    float cw    = uEnergy.x;\n    float corona= uEnergy.y;\n    float reach = uEnergy.z;\n    float fil   = uEnergy.w;\n    float hue   = uClock.z;\n\n    float glowAccum = 0.0;\n    vec3  colorAccum = vec3(0.0);\n\n    const int MAXB = 12;     // bolts\n    const int SEG  = 14;     // segments per bolt\n    for(int b=0; b<MAXB; b++){\n        if(float(b) >= nB) break;\n        float fb = float(b);\n        float ang = (fb/nB)*6.28318 + hash11(fb*5.1)*0.4;\n        // re-strike: a new noise phase each PTP-ish strike interval\n        float strikeId = floor(strike + hash11(fb*2.3));\n        float seed = fb*13.0 + strikeId*7.0;\n        // target node out in the field\n        vec2 target = center + vec2(cos(ang), sin(ang)) * reach * (0.6 + 0.4*hash11(seed));\n\n        vec2 prev = center;\n        vec3 bc = boltColor(fb, hue);\n        for(int s=1; s<=SEG; s++){\n            float fs = float(s)/float(SEG);\n            vec2 base = mix(center, target, fs);\n            // jagged displacement perpendicular to the bolt, from noise\n            vec2 dir = normalize(target - center + 1e-5);\n            vec2 nrm = vec2(-dir.y, dir.x);\n            float n = vnoise(vec2(seed, fs*8.0)) - 0.5;\n            float disp = n * jag * 0.12 * sin(fs*PI);  // taper to 0 at endpoints\n            vec2 cur = base + nrm * disp;\n\n            float d = segDist(p, prev, cur);\n            float core = smoothstep(cw, 0.0, d);\n            float halo = smoothstep(cw*10.0*corona, 0.0, d) * 0.18;\n            float g = core*1.4 + halo;\n            glowAccum += g;\n            colorAccum += mix(bc, vec3(1.0), core) * g;\n\n            // a fork: spawn a short child branch at a couple of points\n            if(branch > 0.5 && (s == 5 || s == 9)){\n                float fa = (hash11(seed+fs)*2.0-1.0) * 1.2;\n                vec2 fdir = mat2(cos(fa),-sin(fa),sin(fa),cos(fa)) * dir;\n                vec2 fend = cur + fdir * reach * 0.25 * branch;\n                float fd = segDist(p, cur, fend);\n                float fc = smoothstep(cw*0.8, 0.0, fd);\n                float fh = smoothstep(cw*7.0*corona, 0.0, fd) * 0.12;\n                float fg = fc*1.0 + fh;\n                glowAccum += fg;\n                colorAccum += mix(bc, vec3(1.0), fc) * fg;\n            }\n            prev = cur;\n        }\n    }\n\n    // fine secondary filament fuzz around the bolts\n    float fuzz = vnoise(p*40.0 + strike) * vnoise(p*17.0 - strike);\n    colorAccum += vec3(0.10,0.6,0.8) * fuzz * fil * 0.15 * smoothstep(0.0, 0.6, glowAccum);\n\n    col += colorAccum;\n\n    // grandmaster node: a bright pulsing core at center\n    float beat = fract(uClock.w * uClock.x);\n    float nodePulse = 0.6 + 0.4*pow(max(0.0,1.0-beat*4.0),2.0);\n    col += vec3(0.6,0.95,1.0) * smoothstep(0.05, 0.0, length(p)) * nodePulse * 2.0;\n\n    // PTP sync ring: an expanding ring of energy on each beat\n    float ringR = beat * reach * 1.2;\n    float ring = smoothstep(0.02, 0.0, abs(length(p) - ringR)) * (1.0 - beat);\n    col += vec3(0.15,0.7,0.9) * ring * uClock.y;\n\n    // electric haze + edge falloff\n    col += vec3(0.01,0.02,0.03) * smoothstep(0.7,0.0,length(p));\n    col *= mix(1.0, 0.6, smoothstep(0.5, 1.05, length(p)));\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloom_pixel",
+      "stage": "pixel",
+      "code": "// Searing bloom + grain + PTP-synced micro RGB-split flicker.\nuniform vec4 uBloom;   // x=strength, y=threshold, z=rgbSplit, w=ptpTime\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;\n    float beat = fract(uBloom.w);\n    float ev = pow(max(0.0, 1.0 - beat*8.0), 4.0);\n    float sp = uBloom.z * (0.001 + 0.004*ev);\n    vec3 src;\n    src.r = texture(sTD2DInputs[0], uv + vec2(sp,0.0)).r;\n    src.g = texture(sTD2DInputs[0], uv).g;\n    src.b = texture(sTD2DInputs[0], uv - vec2(sp,0.0)).b;\n    float thr = uBloom.y;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 7;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/26.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*2.6).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    vec3 col = src + (sum/max(wsum,1e-4)) * uBloom.x;\n    col += (hash21(uv*uTDOutputInfo.res.zw + beat*53.0)-0.5) * 0.013;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Bolts", "label": "Bolt Count", "style": "Int", "default": 7, "range": [1, 12], "drives": "uArc.x -- number of lightning arcs leaping from the grandmaster node. More = a denser electric storm. Each bolt runs a constant-bounded segment loop, so cost scales with count; cap 12." },
+    { "name": "Jaggedness", "label": "Jaggedness", "style": "Float", "default": 1.0, "range": [0.0, 2.5], "drives": "uArc.y -- amplitude of the noise displacement of each bolt segment. 0 = straight rays; higher = wild jagged lightning." },
+    { "name": "Branchiness", "label": "Branchiness", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uArc.z -- how strongly forks spawn child branches off the main bolts. 0 = clean single bolts; higher = a forking lightning tree." },
+    { "name": "Restrikerate", "label": "Re-Strike Rate", "style": "Float", "default": 1.5, "range": [0.0, 6.0], "drives": "uArc.w (the strike-phase time term) -- how often the bolts re-strike with a new jagged path. 0 freezes a single strike; higher = rapid crackling." },
+    { "name": "Corewidth", "label": "Core Width", "style": "Float", "default": 0.004, "range": [0.001, 0.02], "drives": "uEnergy.x -- thickness of the white-hot bolt core. Thin = a sharp arc; thicker = a heavier energy channel." },
+    { "name": "Coronaglow", "label": "Corona Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.5], "drives": "uEnergy.y -- width of the soft cyan corona around each bolt before bloom. The atmospheric energy halo." },
+    { "name": "Reach", "label": "Reach", "style": "Float", "default": 0.5, "range": [0.2, 1.0], "drives": "uEnergy.z -- how far the bolts (and the PTP sync ring) extend from the center toward the field edges. Higher = bolts that span the whole stage." },
+    { "name": "Filaments", "label": "Filaments", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uEnergy.w -- amount of fine secondary filament fuzz around the bolts. The crackling micro-detail. 0 = clean bolts." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uClock.x -- frequency of the PTP grandmaster pulse: the node flash, the sync ring, and the RGB-split flicker all beat to this. The synchronization heartbeat." },
+    { "name": "Syncring", "label": "Sync Ring", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uClock.y -- brightness of the expanding PTP sync ring of energy. 0 hides it; higher makes the grandmaster sync pulse dramatic." },
+    { "name": "Palette", "label": "Palette Shift", "style": "Float", "default": 0.0, "range": [0.0, 1.0], "drives": "uClock.z -- nudges the bolt colors around the signal palette (cyan -> green/amber/magenta channels). 0 = cyan-dominant electric storm." },
+    { "name": "Rgbsplit", "label": "RGB Split", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uBloom.z -- strength of the micro RGB chromatic-separation flicker pulsed on the PTP beat in the finish pass. The broadcast electric jitter." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.6, "range": [0.0, 3.0], "drives": "uBloom.x -- intensity of the searing bloom over the bolt cores. The booth-scale wow knob; high values make the arcs read as raw light energy." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "signal_cyan": ["#00E5FF", "#18FFE0"],
+    "essence_channels": { "green": "#39FF6A", "magenta": "#FF2E9A", "amber": "#FFB000" },
+    "white_hot_core": ["#FFFFFF", "#EAFBFF"],
+    "rgb_split": { "red": "#FF0033", "green": "#00FF66", "blue": "#2A6BFF" },
+    "ratio": "~85% deep-black stage, ~15% saturated electric energy; cyan dominant (signal energy), green/amber/magenta a few essence arcs, RGB-split only as a PTP-beat flicker event."
+  },
+  "wow_factor": 5,
+  "conference_fit": "The most visceral, kinetic piece -- raw signal energy as branching lightning leaping from a grandmaster node, crackling and re-striking, synchronizing the whole field on a PTP beat. It dramatizes ST2110's PTP grandmaster timing (the central node + expanding sync ring + lockstep flash) as living electricity, on a deep-black premium stage with cyan signal energy. Reads as pure power from across the room and rewards close inspection (forks, filaments, re-strike). A high-energy anchor that pairs with the calmer fiber/scope pieces; unmistakably on-theme as 'electrical / energy / signal.'",
+  "prompt": {
+    "one_liner": "A self-contained electrical-energy generator: branching cyan lightning arcs leap from a central grandmaster node, displaced by noise into jagged forking bolts that re-strike and ignite in lockstep on a PTP sync ring, finished with searing bloom and a PTP-beat RGB-split flicker.",
+    "evolve": "Raise Bolt Count + Branchiness for a dense forking storm; raise Jaggedness for wilder paths; raise Re-Strike Rate for rapid crackling (0 freezes a single strike). Push Corona Glow + Bloom for searing energy; raise Filaments for crackling fuzz. Lower PTP Beat Rate and raise Sync Ring for a slow dramatic grandmaster pulse. Sweep Palette Shift for green/amber/magenta essence arcs. Feed out1 into the kaleidoscope for a radial energy mandala, or composite as an energetic foreground over the packet-fabric. Drive Re-Strike / PTP from audio transients for a reactive booth loop.",
+    "compose_with": ["packet-fabric", "transmission-lines"]
+  },
+  "warmup_frames": 60,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_arcs has NO input -- MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h)); uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h or it renders 1x1. glsl_bloom HAS an input so sTD2DInputs[0] + uTDOutputInfo.res are valid.\\n\\nLOOP BOUNDS (GPU crash safety): nested constant-bounded loops -- outer bolts (MAXB=12), inner segments (SEG=14), plus the bloom tap loop (R=7). The param counts only early-out via break against the CONSTANT bounds, so no unbounded GPU loop. COST: with all caps maxed ~12*14 = 168 segDist evals per pixel plus 2 forks each, at 1280x720 -- moderate. GATE PERFORMANCE: baseline get_project_performance before, re-check after; if fps drops below ~90% of target, lower default Bolt Count or SEG. Default 7 bolts is comfortable. True generator, recomputes per frame -- acceptable at these caps.\\n\\nUNIFORMS: glslTOP declares uniforms MANUALLY. vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nCOOK DEMAND: time-dependent via absTime in uArc.w (strike phase) and uClock.w (PTP). Cooks every frame only when out1 demanded; add a temp Execute DAT OUTSIDE the COMP; verify with two captures separated by a real sleep. Re-Strike Rate=0 freezes the strike phase but uClock.w still references absTime (PTP node pulse + sync ring), so the TOP keeps cooking -- correct.\\n\\nDOCKED DATS: glsl_arcs + glsl_bloom each dock pixel+compute+info; HUG all six under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source.\\n\\nLOOK CHECK: lightning is easy to make read as mush -- judge by an actual capture (load visual-aesthetics). Verify bolts read as discrete jagged arcs with white-hot cores (not a uniform glow blob), forks are legible, and the bloom does not wash everything flat-white. Tune Core Width / Corona / Bloom defaults against a real frame before persisting. The grandmaster node + sync ring must be clearly centered and pulsing.\\n\\nTDN ROUND-TRIP: all 13 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~9."
+}

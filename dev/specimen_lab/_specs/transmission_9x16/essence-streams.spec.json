@@ -1,0 +1,178 @@
+{
+  "slug": "essence-streams",
+  "name": "Essence Streams",
+  "category": "transmission",
+  "aspect": "9:16",
+  "dev_resolution": [720, 1280],
+  "difficulty": "intermediate",
+  "one_liner": "Three luminous vertical rivers of light -- cyan video, green audio, amber ancillary -- flow down a tall portrait frame side by side, the ST2110 separated essences made visible as parallel streams of pure signal.",
+  "visual_description": "A 9:16 portrait frame on near-black ground, divided into three tall vertical channels running floor-to-ceiling. Each channel is a luminous flowing ribbon of light: the left a cyan video stream, the center a phosphor-green audio stream, the right an amber ancillary stream -- the three ST2110 essences, separated and parallel. Inside each ribbon, fine bright filaments and quantized data-cells stream DOWNWARD at slightly different speeds, like three rivers of light moving at their own cadence; a soft caustic shimmer plays across the surface of each. The ribbons have crisp hairline edges and a glowing core that fades to the dark gutters between them, where faint tick-marks and a hairline rule separate the channels like a premium engineering readout. On a steady PTP beat the three streams flash brighter in lockstep and a thin horizontal sync line sweeps across all three at once -- proof they share one grandmaster clock even while flowing independently. Controlled lush bloom turns the brightest filaments into halos that bleed slightly past the channel edges. It reads instantly as three separated signal flows running in disciplined parallel: the core idea of ST2110, composed tall.",
+  "technique": "Single self-contained GLSL TOP generator (no input) plus a SEPARATE downsampled bloom chain. The 4K-cheap re-architecture: the frame is divided into 3 vertical bands by an O(1) band-fold (floor(uv.x * 3) picks the channel, fract gives the local position) -- NO loop over streams or elements. Inside each band the flowing content is pure procedural per-pixel math: layered flowing value-noise scrolled downward (cheap trig + a tiny hash, no fBm octave loop), quantized into bright data-cells by a fract()/smoothstep cell function, with a crisp hairline channel edge via fwidth(). The channel color is chosen by the band index (cyan/green/amber). Different scroll speeds per band give the three-rivers cadence. A PTP beat (single absTime term) flashes all three and sweeps one horizontal sync line. Per-pixel cost is a small CONSTANT -- a handful of sin()/hash() calls, zero loops in the generator. The bloom is its own chain (downsample 1/4 -> bright-pass+blur at low res -> composite-add), so glow cost is ~1/16 of full-res and constant at 4K.",
+  "network_plan": [
+    {
+      "name": "glsl_streams",
+      "type": "glslTOP",
+      "role": "The generator. NO input -- MUST use uTDOutputInfo.res; NEVER uTD2DInfos. Three vertical essence channels via an O(1) band-fold (NO stream loop, NO fBm octave loop): per-pixel flowing noise + quantized data-cells + crisp hairline edges (fwidth) + PTP beat. outputresolution custom 720x1280, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 0, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_streams_pixel",
+        "computedat": "glsl_streams_compute",
+        "outputresolution": "custom",
+        "resolutionw": 720,
+        "resolutionh": 1280,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uChan", "type": "vec4", "valuex": "=parent().par.Streams.eval()", "valuey": "=parent().par.Gutter.eval()", "valuez": "=parent().par.Edgeglow.eval()", "valuew": "=parent().par.Celldensity.eval()" },
+          { "name": "uFlow", "type": "vec4", "valuex": "=parent().par.Flowspeed.eval()", "valuey": "=parent().par.Filaments.eval()", "valuez": "=parent().par.Shimmer.eval()", "valuew": "=absTime.seconds*parent().par.Flowspeed.eval()" },
+          { "name": "uLook", "type": "vec4", "valuex": "=parent().par.Ptprate.eval()", "valuey": "=parent().par.Syncline.eval()", "valuez": "=parent().par.Brightness.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "res_down",
+      "type": "resolutionTOP",
+      "role": "Downsample to 1/4 of output res for the cheap bloom. Input0 = glsl_streams. Width/height = int(Outw/4)/int(Outh/4) so it tracks dev AND 4K. rgba16float. Place nodeX 300, nodeY -400.",
+      "params": { "outputresolution": "custom", "resolutionw": "=int(parent().par.Outw.eval()/4)", "resolutionh": "=int(parent().par.Outh.eval()/4)", "format": "rgba16float" },
+      "inputs": ["glsl_streams"]
+    },
+    {
+      "name": "glsl_bloomblur",
+      "type": "glslTOP",
+      "role": "Bright-pass + blur at 1/4 res (cheap, constant cost at 4K). Input0 = res_down. Bloom-only output. outputresolution = 1/4 of Outw/Outh. rgba16float. Place nodeX 600, nodeY -400.",
+      "params": {
+        "pixeldat": "glsl_bloomblur_pixel",
+        "computedat": "glsl_bloomblur_compute",
+        "outputresolution": "custom",
+        "resolutionw": "=int(parent().par.Outw.eval()/4)",
+        "resolutionh": "=int(parent().par.Outh.eval()/4)",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.55, "valuez": "=parent().par.Bloomwidth.eval()", "valuew": 0 } ]
+      },
+      "inputs": ["res_down"]
+    },
+    {
+      "name": "comp_bloom",
+      "type": "compTOP",
+      "role": "Composite-add the upscaled 1/4-res bloom back over the sharp full-res generator. in0 = glsl_streams (sharp), in1 = glsl_bloomblur (auto-upscaled glow). operand=add, resolutionmenu=input. rgba16float. Place nodeX 900, nodeY 0.",
+      "params": { "operand": "add", "resolutionmenu": "input", "format": "rgba16float" },
+      "inputs": ["glsl_streams", "glsl_bloomblur"]
+    },
+    {
+      "name": "glsl_finish",
+      "type": "glslTOP",
+      "role": "Cheap O(1) finish (no loops): faint grain + edge vignette + a hairline channel-gutter overlay reinforced sharp at full res. Input0 = comp_bloom. outputresolutionmenu=input. rgba16float. Place nodeX 1200, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_finish_pixel",
+        "computedat": "glsl_finish_compute",
+        "outputresolutionmenu": "input",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uFin", "type": "vec4", "valuex": "=parent().par.Grain.eval()", "valuey": "=parent().par.Vignette.eval()", "valuez": "=parent().par.Streams.eval()", "valuew": "=absTime.seconds" } ]
+      },
+      "inputs": ["comp_bloom"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named exactly out1. Viewer flagged. Place nodeX 1500, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_finish"]
+    },
+    { "name": "glsl_streams_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_streams. See glsl[0]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_streams_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_streams.", "params": {}, "inputs": [] },
+    { "name": "glsl_streams_info", "type": "infoDAT", "role": "Docked info DAT for glsl_streams.", "params": { "op": "glsl_streams" }, "inputs": [] },
+    { "name": "glsl_bloomblur_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_bloomblur. See glsl[1]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_bloomblur_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_bloomblur.", "params": {}, "inputs": [] },
+    { "name": "glsl_bloomblur_info", "type": "infoDAT", "role": "Docked info DAT for glsl_bloomblur.", "params": { "op": "glsl_bloomblur" }, "inputs": [] },
+    { "name": "glsl_finish_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_finish. See glsl[2]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_finish_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_finish.", "params": {}, "inputs": [] },
+    { "name": "glsl_finish_info", "type": "infoDAT", "role": "Docked info DAT for glsl_finish.", "params": { "op": "glsl_finish" }, "inputs": [] },
+    {
+      "name": "annotate_streams",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the generator (glsl_streams). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Band-Fold Essence Channels (O(1)/pixel)",
+        "Bodytext": "One generator GLSL TOP. floor(uv.x * 3) folds each pixel into ONE of three vertical channels -- cyan video, green audio, amber ancillary -- with NO loop over streams. Inside each band the flowing content is pure per-pixel math: scrolled value-noise + fract()-quantized data-cells + crisp hairline edges via fwidth(). Three scroll speeds give the three-rivers cadence. A PTP beat flashes all three in lockstep -- one grandmaster clock, three separated flows.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_bloom",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the cheap bloom chain (res_down, glsl_bloomblur, comp_bloom). Mode annotate.",
+      "params": {
+        "Titletext": "Downsampled Bloom (1/16 cost at 4K)",
+        "Bodytext": "The glow is a SEPARATE chain: downsample to 1/4 res, bright-pass + blur there (touching ~1/16 the pixels), then Composite-ADD the upscaled glow back over the sharp full-res channels. The bloom bleeds slightly past each channel edge for a lush look -- at a fraction of full-res cost, constant as the output grows to 4K.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over finish + out (glsl_finish, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Finish & Out",
+        "Bodytext": "A cheap O(1) finish pass re-asserts crisp hairline channel gutters at full res, adds film grain against banding, and a vignette for the premium dark stage. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_streams_pixel",
+      "stage": "pixel",
+      "code": "// Essence Streams -- three vertical signal channels via an O(1) band-fold. No loops.\nuniform vec4 uChan;   // x=streams, y=gutter, z=edgeGlow, w=cellDensity\nuniform vec4 uFlow;   // x=flowSpeed, y=filaments, z=shimmer, w=time(=absTime*flowSpeed)\nuniform vec4 uLook;   // x=ptpRate, y=syncLine, z=brightness, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\n// cheap 2D value noise (single lookup, smooth) -- no octave loop\nfloat vnoise(vec2 p){\n    vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);\n    return mix(mix(hash21(i), hash21(i+vec2(1,0)), u.x),\n               mix(hash21(i+vec2(0,1)), hash21(i+vec2(1,1)), u.x), u.y);\n}\n\nvec3 channelColor(float c){\n    if(c < 0.5) return vec3(0.00, 0.85, 1.00);   // cyan video\n    if(c < 1.5) return vec3(0.22, 1.00, 0.42);   // green audio\n    return vec3(1.00, 0.69, 0.00);               // amber ancillary\n}\n\nvoid main(){\n    vec2 uv = vUV.st;             // 0..1, y up\n    float nC   = clamp(uChan.x, 1.0, 3.0);\n    float gut  = uChan.y;         // gutter (dark gap) width fraction\n    float eg   = uChan.z;         // edge glow\n    float cd   = uChan.w;         // cell density\n    float fspd = uFlow.x;\n    float fil  = uFlow.y;\n    float shim = uFlow.z;\n    float t    = uFlow.w;\n    float bright = uLook.z;\n\n    vec3 col = vec3(0.010, 0.012, 0.016);   // near-black ground\n\n    // --- O(1) band-fold: which channel is this pixel in, and where across it ---\n    float bandF = uv.x * nC;        // 0..nC\n    float ci    = floor(bandF);     // channel index\n    float ci_c  = clamp(ci, 0.0, nC-1.0);\n    float lx    = fract(bandF);     // 0..1 across the channel\n\n    // gutter mask: dark hairline gaps between channels (and at the frame edges)\n    float halfGut = gut*0.5;\n    float inBand  = smoothstep(0.0, 0.02, lx-halfGut) * smoothstep(1.0, 0.98, lx+halfGut);\n    // crisp channel edge with fwidth for resolution independence\n    float aa = fwidth(lx) * 1.5;\n    float edgeL = smoothstep(halfGut+aa, halfGut-aa, abs(lx-halfGut));\n    float edgeR = smoothstep(halfGut+aa, halfGut-aa, abs(lx-(1.0-halfGut)));\n\n    vec3 cc = channelColor(ci_c);\n\n    // --- flowing content inside the band: scrolled noise + quantized data-cells ---\n    // each channel scrolls down at its own speed (the three-rivers cadence)\n    float speedJ = mix(0.7, 1.3, hash21(vec2(ci_c, 3.0)));\n    float scroll = uv.y + t*speedJ;            // y up, +t scrolls content down past the frame\n    // fine filaments: layered cheap noise, no octave loop (two fixed-freq lookups)\n    float fa = vnoise(vec2(lx*6.0, scroll*5.0));\n    float fb = vnoise(vec2(lx*13.0 + 4.0, scroll*11.0 - 2.0));\n    float flow = mix(fa, fb, 0.4);\n    float filaments = smoothstep(0.55, 0.9, flow) * fil;\n    // quantized data-cells marching down the channel\n    float cellY = scroll * mix(8.0, 26.0, cd);\n    float cell  = smoothstep(0.15, 0.45, fract(cellY)) * (1.0 - smoothstep(0.55, 0.85, fract(cellY)));\n    float cellBright = 0.4 + 0.6*hash21(vec2(floor(cellY), ci_c));\n    // caustic shimmer across the surface\n    float caustic = 0.5 + 0.5*sin(lx*PI*3.0 + scroll*6.0 + ci_c*2.0);\n\n    float body = (0.18 + 0.5*filaments + 0.5*cell*cellBright) * inBand;\n    body += caustic * 0.08 * shim * inBand;\n    col += cc * body * bright;\n    // bright hairline channel edges (the engineering rule)\n    col += cc * (edgeL+edgeR) * 0.5 * eg;\n    // white-hot lift on the densest filaments/cells\n    col += vec3(1.0) * smoothstep(0.8, 1.0, filaments+cell*cellBright) * inBand * 0.4;\n\n    // --- PTP beat: all three channels flash + a single horizontal sync line sweeps ---\n    float beat = fract(uLook.w * uLook.x);\n    float flash = pow(max(0.0, 1.0 - beat*4.0), 3.0);\n    col *= 1.0 + 0.4*flash;\n    float syncY = 1.0 - beat;                  // sweeps top->bottom each beat\n    float sline = smoothstep(0.006, 0.0, abs(uv.y - syncY));\n    col += vec3(0.6,0.9,1.0) * sline * uLook.y * (0.6+0.4*flash);\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloomblur_pixel",
+      "stage": "pixel",
+      "code": "// Bright-pass + gaussian blur at 1/4 resolution (cheap, constant at 4K).\nuniform vec4 uBloom;   // x=strength, y=threshold, z=blurWidth\nout vec4 fragColor;\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;   // 1/lowW, 1/lowH\n    float thr = uBloom.y;\n    float bw  = uBloom.z;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/22.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*bw).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    fragColor = vec4((sum/max(wsum,1e-4)) * uBloom.x, 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_finish_pixel",
+      "stage": "pixel",
+      "code": "// Cheap O(1) finish: crisp gutter rule + grain + vignette. No blur loops.\nuniform vec4 uFin;   // x=grain, y=vignette, z=streams, w=absTime\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    vec3 col = texture(sTD2DInputs[0], uv).rgb;\n    float nC = clamp(uFin.z, 1.0, 3.0);\n    // re-assert crisp hairline gutters between channels at full res\n    float lx = fract(uv.x * nC);\n    float aa = fwidth(lx);\n    float rule = smoothstep(aa*2.0, 0.0, min(lx, 1.0-lx));\n    col *= 1.0 - 0.5*rule;          // thin dark separator\n    // vignette\n    vec2 p = uv - 0.5;\n    float vig = 1.0 - uFin.y * smoothstep(0.35, 0.85, length(vec2(p.x*0.6, p.y)));\n    col *= vig;\n    // grain\n    col += (hash21(uv*uTDOutputInfo.res.zw + uFin.w*60.0)-0.5) * 0.012 * uFin.x;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Streams", "label": "Essence Streams", "style": "Int", "default": 3, "range": [1, 3], "drives": "uChan.x -- number of vertical essence channels (1=cyan video, 2=+green audio, 3=+amber ancillary). The ST2110 separated flows. The band-fold costs nothing per pixel regardless of count." },
+    { "name": "Gutter", "label": "Channel Gutter", "style": "Float", "default": 0.06, "range": [0.0, 0.2], "drives": "uChan.y -- width of the dark hairline gap between channels. 0 = the streams touch; higher = more separation, more disciplined engineering readout." },
+    { "name": "Edgeglow", "label": "Edge Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uChan.z -- brightness of the crisp hairline channel edges (the engineering rule). The premium-readout accent." },
+    { "name": "Celldensity", "label": "Cell Density", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uChan.w -- density of the quantized data-cells marching down each channel. Low = a smooth flowing ribbon; high = a busy stream of countable cells." },
+    { "name": "Flowspeed", "label": "Flow Speed", "style": "Float", "default": 0.4, "range": [0.0, 2.0], "drives": "uFlow.x and the time term uFlow.w -- how fast the content streams downward. 0 freezes the flow (and drops that time-dependence); higher = rushing rivers of signal." },
+    { "name": "Filaments", "label": "Filaments", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFlow.y -- amount of fine bright filament detail inside each ribbon. 0 = smooth ribbons; higher = intricate flowing signal texture." },
+    { "name": "Shimmer", "label": "Shimmer", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFlow.z -- strength of the caustic surface shimmer across each channel. The light-on-water quality." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uLook.x -- frequency of the PTP sync pulse all three streams flash to in lockstep, and the horizontal sync line sweep rate." },
+    { "name": "Syncline", "label": "Sync Line", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.y -- brightness of the horizontal PTP sync line that sweeps across all three channels at once (proof of one shared grandmaster clock). 0 hides it." },
+    { "name": "Brightness", "label": "Brightness", "style": "Float", "default": 1.0, "range": [0.3, 2.0], "drives": "uLook.z -- overall channel-body brightness before bloom. Tune so the streams glow without clipping flat before the bloom carries the halo." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.3, "range": [0.0, 3.0], "drives": "uBloom.x in glsl_bloomblur -- intensity of the downsampled bloom. The booth-scale wow knob; the glow bleeds slightly past the channel edges." },
+    { "name": "Bloomwidth", "label": "Bloom Width", "style": "Float", "default": 2.2, "range": [1.0, 4.0], "drives": "uBloom.z -- blur step in the 1/4-res bloom pass. Wider = a softer atmospheric halo, still cheap (low-res)." },
+    { "name": "Grain", "label": "Grain", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFin.x -- film-grain amount. Kills banding on the dark gutters at booth scale." },
+    { "name": "Vignette", "label": "Vignette", "style": "Float", "default": 0.6, "range": [0.0, 1.5], "drives": "uFin.y -- edge darkening for the premium dark stage." },
+    { "name": "Outw", "label": "Output Width", "style": "Int", "default": 720, "range": [256, 3840], "drives": "Render width (generator + comp). The /4 bloom buffer auto-tracks this. 720 dev, 2160 for 4K portrait -- glow cost stays constant." },
+    { "name": "Outh", "label": "Output Height", "style": "Int", "default": 1280, "range": [256, 3840], "drives": "Render height. 1280 dev, 3840 for 4K portrait. The /4 bloom buffer auto-tracks this." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "essence_triplet": { "video_cyan": "#00E5FF", "audio_green": "#39FF6A", "ancillary_amber": "#FFB000" },
+    "white_hot_core": ["#FFFFFF", "#EAFBFF"],
+    "ratio": "~80% dark ground + dim channel bodies, ~20% saturated essence color split equally across the three streams; cyan/green/amber each own a channel, white-hot only at the densest filaments + the PTP flash."
+  },
+  "performance_notes": "WHY IT STAYS CHEAP AT 4K: (1) ZERO loops in the generator. There is no loop over streams (a single floor()/fract() band-fold picks the channel) and no fBm octave loop (the flowing texture is two fixed-frequency value-noise lookups plus a couple of sin() terms). Per-pixel cost is a small fixed set of hash + trig ops -- identical whether the output is 720x1280 or 2160x3840, so it is O(pixels) with a tiny constant, the cheapest profile in the set. (2) Stream Count raises detail with NO added pixel cost (band-fold is index math). (3) Crisp channel edges via fwidth() -- resolution-independent, no super-sampling. (4) The bloom is a separate downsampled chain (1/4 res blur -> upscale -> add), touching ~1/16 the pixels at a ratio FIXED across resolutions. BUDGET: generator ~= 4-5 hash/noise evals + 4-6 trig terms per pixel, no loops; the 1/4-res blur is the only loop and is pinned at 1/16-scale. This is the lowest-cost piece -- comfortable at 4K with large headroom. Gate get_project_performance before/after to confirm.",
+  "wow_factor": 4,
+  "conference_fit": "The single clearest statement of ST2110's foundational idea -- the separated essences -- composed natively tall: three luminous rivers of cyan/green/amber running in disciplined parallel down a portrait wall, flashing together on the shared PTP clock. The vertical three-column split is unmistakably ON-brand monochrome-discipline-that-erupts-into-signal-color, and it suits a tall LED totem perfectly. Cheapest piece to run, so it is the safe always-on backdrop or the calm counterpoint to the kinetic pieces; reads instantly from across the room (three colored rivers) and rewards close inspection (countable data-cells, filaments, the sync sweep).",
+  "warmup_frames": 60,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_streams has NO input -- MUST use uTDOutputInfo.res; uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h (720x1280) or it renders 1x1. res_down/glsl_bloomblur/comp_bloom/glsl_finish HAVE inputs so sTD2DInputs[0] is valid.\\n\\nUNIFORMS: each glslTOP declares uniforms MANUALLY via the vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nRESOLUTION TRACKING (4K story): Outw/Outh drive the generator size, comp output (resolutionmenu='input'), and the bloom buffer at 1/4 via int(Outw/4)/int(Outh/4) on res_down + glsl_bloomblur. 4K portrait: set Outw=2160, Outh=3840; bloom auto-stays at 540x960. Verify res_down reports 1/4 size after the change.\\n\\nCHEAP-BLOOM WIRING: glsl_streams -> res_down -> glsl_bloomblur (bloom-only) ; comp_bloom in0=glsl_streams (sharp), in1=glsl_bloomblur (upscaled glow), operand=add ; comp_bloom -> glsl_finish -> out1. ALTERNATIVE: a Blur TOP with Pre-Shrink=1/4 + a Level bright-pass can replace res_down+glsl_bloomblur; the GLSL path is specified for explicit control.\\n\\nCRISP EDGES: channel edges + gutter rule use fwidth() so hairlines stay 1px at 4K. Verify in a 4K capture.\\n\\nCOOK DEMAND: time-dependent via absTime in uFlow.w + uLook.w (+ grain). Cooks every frame only when out1 demanded; temp Execute DAT OUTSIDE the COMP cooking out1; verify animation with two captures + a real sleep. Flow Speed=0 freezes the flow but the PTP beat + grain still reference absTime so the TOP keeps cooking -- correct.\\n\\nLOOK CHECK: judge by an actual capture (load visual-aesthetics). Verify the three channels read as distinct colored rivers with crisp hairline gutters, the data-cells are countable (not mush), and the PTP sync line sweeps cleanly across all three. Tune Brightness so additive bloom does not wash to flat white.\\n\\nDOCKED DATS: glsl_streams + glsl_bloomblur + glsl_finish each dock pixel+compute+info; HUG all nine under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source.\\n\\nTDN ROUND-TRIP: all 16 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~15."
+}

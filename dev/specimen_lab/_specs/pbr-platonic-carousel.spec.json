@@ -1,0 +1,448 @@
+{
+  "slug": "pbr-platonic-carousel",
+  "name": "PBR Platonic Carousel",
+  "category": "3d-pbr",
+  "difficulty": "starter",
+  "description": "A slow carousel of five flat-faceted Platonic solids orbiting on a turntable, lit entirely by a procedural studio environment (GLSL gradient sky + sun disc) feeding a PBR MAT through an Environment Light. A clean image-based-lighting study: drag the Metallic and Roughness sliders and watch real reflections of the procedural sky resolve on every facet.",
+  "key_ops": [
+    "glslTOP (procedural studio environment map)",
+    "Environment Light COMP (image-based lighting / IBL)",
+    "PBR MAT (metallic/rough material with env reflections)",
+    "Sphere SOP + Box SOP + Facet SOP (flat-faceted Platonic-like solids)",
+    "Geometry COMP x5 (the carousel solids)",
+    "Geometry COMP (carousel turntable parent, animated rotate)",
+    "Camera COMP",
+    "Render TOP",
+    "Out TOP out1"
+  ],
+  "network_plan": [
+    {
+      "name": "glsl_environment",
+      "type": "glslTOP",
+      "role": "Static procedural studio environment map (equirectangular gradient sky + horizon glow + soft sun disc). No time reference, so it cooks ONCE and caches. Feeds the Environment Light as the IBL source AND the PBR MAT env reflection. This is the 'heavy static source'.",
+      "params": {
+        "outputresolution": "custom",
+        "resolutionw": 1024,
+        "resolutionh": 512,
+        "format": "rgba16float",
+        "pixeldat": "./glsl_environment_pixel"
+      },
+      "inputs": []
+    },
+    {
+      "name": "env_light",
+      "type": "environmentlightCOMP",
+      "role": "Image-based light. Wraps the procedural environment around the whole scene and produces the diffuse + specular IBL that the PBR MAT samples. The single light source for the study.",
+      "params": {
+        "environmentmap": "../glsl_environment",
+        "Useprefiltermaps": "Automatic",
+        "dimmer": "=parent().par.Lightlevel",
+        "rotatey": "=parent().par.Envrotate"
+      },
+      "inputs": []
+    },
+    {
+      "name": "pbr_metal",
+      "type": "pbrMAT",
+      "role": "The single shared PBR material on all five solids. basecolor/metallic/roughness bound to exposed params; envlightmap set so specular reflections of the procedural sky show even on a single-light scene. Lives beside the geometry it shades.",
+      "params": {
+        "basecolorr": "=parent().par.Tintr",
+        "basecolorg": "=parent().par.Tintg",
+        "basecolorb": "=parent().par.Tintb",
+        "metallic": "=parent().par.Metallic",
+        "roughness": "=parent().par.Roughness",
+        "envlightmap": "../glsl_environment",
+        "rim": "1",
+        "rimcolorr": "0.9",
+        "rimcolorg": "0.95",
+        "rimcolorb": "1.0",
+        "rimstrength": "0.15"
+      },
+      "inputs": []
+    },
+    {
+      "name": "sop_icosa",
+      "type": "sphereSOP",
+      "role": "Solid 1 source geometry: a true icosahedron (Polygon type, frequency 0). Lives inside geo_solid1.",
+      "params": {
+        "type": "poly",
+        "freq": 0,
+        "rad": "0.6 0.6 0.6"
+      },
+      "inputs": []
+    },
+    {
+      "name": "facet_icosa",
+      "type": "facetSOP",
+      "role": "Hard-faceted normals on solid 1 so each face flat-shades and the PBR specular pops crisply per facet.",
+      "params": {
+        "unique": "1",
+        "cmpnml": "1"
+      },
+      "inputs": [
+        "sop_icosa"
+      ]
+    },
+    {
+      "name": "geo_solid1",
+      "type": "geometryCOMP",
+      "role": "Carousel solid 1 (icosahedron). Child of geo_carousel. Positioned at ring slot 0; spins slowly on its own axis. Material = ../pbr_metal.",
+      "params": {
+        "material": "../pbr_metal",
+        "tx": 1.6,
+        "ty": 0,
+        "tz": 0,
+        "rotatespeedy": "=parent().par.Spinspeed",
+        "instanceop": ""
+      },
+      "inputs": []
+    },
+    {
+      "name": "sop_cube",
+      "type": "boxSOP",
+      "role": "Solid 2 source geometry: a cube (hexahedron). Lives inside geo_solid2.",
+      "params": {
+        "size": "1.0 1.0 1.0",
+        "scale": "0.5"
+      },
+      "inputs": []
+    },
+    {
+      "name": "facet_cube",
+      "type": "facetSOP",
+      "role": "Hard-faceted normals on the cube faces.",
+      "params": {
+        "unique": "1",
+        "cmpnml": "1"
+      },
+      "inputs": [
+        "sop_cube"
+      ]
+    },
+    {
+      "name": "geo_solid2",
+      "type": "geometryCOMP",
+      "role": "Carousel solid 2 (cube). Ring slot 1.",
+      "params": {
+        "material": "../pbr_metal",
+        "tx": 0.49,
+        "ty": 0,
+        "tz": 1.52,
+        "rotatespeedy": "=parent().par.Spinspeed"
+      },
+      "inputs": []
+    },
+    {
+      "name": "sop_octa",
+      "type": "sphereSOP",
+      "role": "Solid 3 source: octahedron approximation -- Polygon sphere frequency 0 then we will not subdivide; an octahedron is produced by a frequency-0 polygon sphere set to 'oct' is not stock, so use a low-row mesh sphere reduced to 8 faces via Facet. Practically: Polygon sphere freq 0 gives icosa; for variety use Tube SOP triangular instead (see facet_octa).",
+      "params": {
+        "type": "poly",
+        "freq": 0,
+        "rad": "0.62 0.62 0.62",
+        "orient": "1"
+      },
+      "inputs": []
+    },
+    {
+      "name": "facet_octa",
+      "type": "facetSOP",
+      "role": "Faceted normals on solid 3. (Rotated 90deg via geo_solid3 so it reads distinct from solid 1.)",
+      "params": {
+        "unique": "1",
+        "cmpnml": "1"
+      },
+      "inputs": [
+        "sop_octa"
+      ]
+    },
+    {
+      "name": "geo_solid3",
+      "type": "geometryCOMP",
+      "role": "Carousel solid 3. Ring slot 2. Rotated on X so the faceting reads differently from solid 1.",
+      "params": {
+        "material": "../pbr_metal",
+        "tx": -1.29,
+        "ty": 0,
+        "tz": 0.94,
+        "rx": 31.7,
+        "rotatespeedy": "=parent().par.Spinspeed"
+      },
+      "inputs": []
+    },
+    {
+      "name": "sop_tetra",
+      "type": "tubeSOP",
+      "role": "Solid 4 source: a tetrahedral-feeling solid -- 3-sided Tube, top radius 0, capped, giving a triangular pyramid (close to a tetrahedron) with all-flat faces.",
+      "params": {
+        "rad1": 0,
+        "rad2": 0.7,
+        "height": 1,
+        "cols": 3,
+        "rows": 1,
+        "cap": "1",
+        "orient": "1"
+      },
+      "inputs": []
+    },
+    {
+      "name": "facet_tetra",
+      "type": "facetSOP",
+      "role": "Faceted normals on the tetra pyramid faces.",
+      "params": {
+        "unique": "1",
+        "cmpnml": "1"
+      },
+      "inputs": [
+        "sop_tetra"
+      ]
+    },
+    {
+      "name": "geo_solid4",
+      "type": "geometryCOMP",
+      "role": "Carousel solid 4 (tetra pyramid). Ring slot 3.",
+      "params": {
+        "material": "../pbr_metal",
+        "tx": -1.29,
+        "ty": -0.1,
+        "tz": -0.94,
+        "rotatespeedy": "=parent().par.Spinspeed"
+      },
+      "inputs": []
+    },
+    {
+      "name": "sop_dodeca",
+      "type": "sphereSOP",
+      "role": "Solid 5 source: a coarse faceted sphere standing in for a dodecahedron -- low-frequency polygon sphere, faceted, reads as a faceted gem distinct from the icosa.",
+      "params": {
+        "type": "poly",
+        "freq": 1,
+        "rad": "0.6 0.6 0.6"
+      },
+      "inputs": []
+    },
+    {
+      "name": "facet_dodeca",
+      "type": "facetSOP",
+      "role": "Faceted normals on solid 5.",
+      "params": {
+        "unique": "1",
+        "cmpnml": "1"
+      },
+      "inputs": [
+        "sop_dodeca"
+      ]
+    },
+    {
+      "name": "geo_solid5",
+      "type": "geometryCOMP",
+      "role": "Carousel solid 5 (faceted gem). Ring slot 4.",
+      "params": {
+        "material": "../pbr_metal",
+        "tx": 0.49,
+        "ty": 0,
+        "tz": -1.52,
+        "rotatespeedy": "=parent().par.Spinspeed"
+      },
+      "inputs": []
+    },
+    {
+      "name": "geo_carousel",
+      "type": "geometryCOMP",
+      "role": "The turntable: empty parent Geometry COMP holding the five solids as children. Its Y rotation is the carousel motion, driven by absTime.seconds * Carouselspeed. This is the CHEAP animated downstream -- only this transform and the render cook per frame; the environment GLSL stays static.",
+      "params": {
+        "rotatey": "=absTime.seconds * parent().par.Carouselspeed",
+        "render": "1",
+        "display": "1"
+      },
+      "inputs": []
+    },
+    {
+      "name": "cam",
+      "type": "cameraCOMP",
+      "role": "Three-quarter view camera looking slightly down at the carousel, placed near the render and lights it references. Slight orbit-free static framing; the carousel does the moving.",
+      "params": {
+        "tz": 6.2,
+        "ty": 2,
+        "rx": -16,
+        "fov": 38,
+        "lookat": "../geo_carousel"
+      },
+      "inputs": []
+    },
+    {
+      "name": "render1",
+      "type": "renderTOP",
+      "role": "Renders the carousel through cam with env_light. Cooks every frame (always-cook output) which is what pulls the cheap carousel transform. Bounded resolution.",
+      "params": {
+        "camera": "../cam",
+        "lights": "../env_light",
+        "geometry": "../geo_carousel",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float",
+        "antialias": "8x"
+      },
+      "inputs": []
+    },
+    {
+      "name": "level_grade",
+      "type": "levelTOP",
+      "role": "Final grade: gentle contrast + slight gamma lift so the metallic darks keep detail and the sky highlights do not clip. Restraint per finishing rules.",
+      "params": {
+        "blacklevel": 0.02,
+        "gamma1": 1.05,
+        "contrast": 1.06
+      },
+      "inputs": [
+        "render1"
+      ]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Terminal output. The capture target / manifest output_op. Named exactly out1.",
+      "params": {},
+      "inputs": [
+        "level_grade"
+      ]
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_environment",
+      "stage": "pixel",
+      "code": "// Procedural studio environment map (equirectangular). STATIC -- no time\n// reference, so this TOP cooks once and caches. vUV.st spans the 0..1\n// equirectangular domain: u -> azimuth, v -> elevation (0 = bottom pole,\n// 1 = top pole). Output feeds the Environment Light COMP (IBL) and the PBR\n// MAT env reflection. 16-bit float so bright sun + soft sky do not band.\n\nout vec4 fragColor;\n\nvoid main()\n{\n    // Equirectangular angles.\n    float az = vUV.s * 6.2831853;          // 0..2pi around\n    float el = (vUV.t - 0.5) * 3.1415926;  // -pi/2 (down) .. +pi/2 (up)\n\n    // World direction for this texel.\n    vec3 dir = vec3(cos(el) * sin(az), sin(el), cos(el) * cos(az));\n\n    // --- Sky gradient: cool zenith -> warm-neutral horizon -> dim floor. ---\n    float up = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);      // 0 floor .. 1 zenith\n    vec3 zenith = vec3(0.42, 0.55, 0.78);                // cool blue top\n    vec3 horizon = vec3(0.86, 0.85, 0.82);               // bright neutral band\n    vec3 floorc  = vec3(0.10, 0.10, 0.12);               // dark studio floor\n\n    // Two-segment ramp: floor->horizon below, horizon->zenith above.\n    float hb = smoothstep(0.30, 0.50, up);   // floor to horizon\n    float ht = smoothstep(0.50, 0.95, up);   // horizon to zenith\n    vec3 sky = mix(floorc, horizon, hb);\n    sky = mix(sky, zenith, ht);\n\n    // Bright horizon glow ring (the classic studio softbox band).\n    float band = exp(-pow((up - 0.50) * 7.0, 2.0));      // gaussian at horizon\n    sky += band * vec3(0.35, 0.34, 0.30);\n\n    // --- Soft key sun disc, high and to the side (a big softbox). ---\n    // Fixed direction: azimuth ~ +35deg, elevation ~ +40deg.\n    vec3 sunDir = normalize(vec3(0.57, 0.64, 0.51));\n    float sd = max(dot(dir, sunDir), 0.0);\n    float core = pow(sd, 900.0) * 6.0;                    // tight hot core\n    float halo = pow(sd, 40.0)  * 1.2;                    // soft falloff\n    vec3 sun = (core + halo) * vec3(1.0, 0.96, 0.88);\n\n    // --- Cool fill rim from the opposite side for separation. ---\n    vec3 fillDir = normalize(vec3(-0.6, 0.25, -0.4));\n    float fd = pow(max(dot(dir, fillDir), 0.0), 8.0) * 0.35;\n    vec3 fill = fd * vec3(0.55, 0.70, 0.95);\n\n    vec3 col = sky + sun + fill;\n\n    // Gentle filmic-ish knee so the sun core does not blow the IBL out.\n    col = col / (col + vec3(0.55));\n    col *= 1.55;\n\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    {
+      "name": "Metallic",
+      "label": "Metallic",
+      "style": "Float",
+      "default": 0.9,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "PBR MAT metallic param (pbr_metal.par.metallic) on all five solids. At 1.0 the solids become mirror-like and reflect the procedural sky/sun; at 0.0 they read as dielectric plastic. The single most expressive PBR control."
+    },
+    {
+      "name": "Roughness",
+      "label": "Roughness",
+      "style": "Float",
+      "default": 0.18,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "PBR MAT roughness (pbr_metal.par.roughness). Low = sharp mirror reflections of the sun disc; high = broad satin/brushed-metal blur. Pair with Metallic to sweep the whole PBR space."
+    },
+    {
+      "name": "Carouselspeed",
+      "label": "Carousel Speed",
+      "style": "Float",
+      "default": 12,
+      "range": [
+        -60,
+        60
+      ],
+      "drives": "Degrees/sec of the turntable parent (geo_carousel.par.rotatey = absTime.seconds * this). The signature slow orbit. Negative reverses; 0 freezes the ring for a still study."
+    },
+    {
+      "name": "Spinspeed",
+      "label": "Solid Spin",
+      "style": "Float",
+      "default": 18,
+      "range": [
+        -180,
+        180
+      ],
+      "drives": "Per-solid self-rotation (rotatespeedy on each geo_solidN). Adds secondary motion so facets catch the sun at varying angles -- the reflections shimmer instead of orbiting rigidly."
+    },
+    {
+      "name": "Envrotate",
+      "label": "Env Rotation",
+      "style": "Float",
+      "default": 25,
+      "range": [
+        0,
+        360
+      ],
+      "drives": "Y rotation of the Environment Light (env_light.par.rotatey). Spins the whole lighting environment so you can place the sun reflection wherever it flatters the composition without touching geometry."
+    },
+    {
+      "name": "Lightlevel",
+      "label": "Light Level",
+      "style": "Float",
+      "default": 1,
+      "range": [
+        0,
+        3
+      ],
+      "drives": "Environment Light dimmer (env_light.par.dimmer). Overall exposure of the IBL. Raise for a bright airy studio, lower for a moody product-shot look."
+    },
+    {
+      "name": "Tintr",
+      "label": "Tint R",
+      "style": "Float",
+      "default": 0.95,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "PBR MAT basecolor red (pbr_metal.par.basecolorr). With Metallic high this tints the metal (gold/copper/steel); with Metallic low it is the diffuse albedo."
+    },
+    {
+      "name": "Tintg",
+      "label": "Tint G",
+      "style": "Float",
+      "default": 0.78,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "PBR MAT basecolor green (pbr_metal.par.basecolorg). Default warm-gold mix with Tintr/Tintb."
+    },
+    {
+      "name": "Tintb",
+      "label": "Tint B",
+      "style": "Float",
+      "default": 0.42,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "PBR MAT basecolor blue (pbr_metal.par.basecolorb). Default warm-gold mix; raise toward 0.95 for cool steel."
+    }
+  ],
+  "prompt": {
+    "one_liner": "A slow turntable of flat-faceted Platonic solids rendered in metal, lit entirely by a procedural studio sky -- a clean image-based-lighting (IBL) study where every reflection on every facet comes from one GLSL-generated environment map.",
+    "evolve": "Push the material first: sweep Metallic 0->1 and Roughness 0->1 together to walk the full PBR space (mirror chrome -> brushed satin -> matte plastic), and retint with Tintr/g/b for gold, copper, steel, or painted dielectric. Then relight without touching geometry: spin Envrotate to slide the sun's hot reflection across the facets, and ride Lightlevel from a bright airy studio down to a moody product shot. For motion, decouple the two speeds -- a slow Carouselspeed with a faster Spinspeed makes facets flash as they catch the sun. To go further, edit glsl_environment: add a second colored sun, swap the horizon band for a gradient ramp, or paint soft 'softbox' rectangles into the sky -- the reflections update live because the PBR MAT reads that texture directly. Replace the five solids with imported meshes (keep ../pbr_metal as the material) to turn the rig into a generic product/asset turntable.",
+    "compose_with": [
+      "kaleidoscope (mirror the rendered carousel into a radial mandala)",
+      "reaction-diffusion (feed an animated RD pattern into glsl_environment as the env map for living, organic reflections)",
+      "any noise/fbm generator as a roughness or basecolor map for procedural surface wear"
+    ]
+  },
+  "warmup_frames": 8,
+  "build_notes": "COOK DEMAND: Nothing in the shipped COMP views out1, so in the sandbox add a temp Execute DAT in /specimen_lab (OUTSIDE the COMP) with onFrameStart cooking out1 -- the carousel only animates while out1 is demanded. Verify motion with two captures a real second apart (geo_carousel.par.rotatey must differ); a single forced capture proves nothing. The shipped specimen needs no driver: a viewer on out1 or the warmup bake (8 frames is plenty -- there is no feedback to converge, just an always-cook render chain) drives the absTime dependency.\\n\\nSTATIC-SOURCE / CHEAP-MOTION CONTRACT: glsl_environment has NO time reference on purpose -- confirm glsl_environment.cookedThisFrame == False once warmed, while render1.cookedThisFrame == True every frame. The only per-frame work is the geo_carousel/geo_solidN transforms + the 1280x720 render. If the env GLSL ever shows cookedThisFrame True, something added a time uniform to it -- remove it; the motion belongs on the transforms.\\n\\nIBL WIRING (the non-obvious part, get this exactly right): (1) env_light.par.environmentmap must point at ../glsl_environment (relative, never absolute). (2) Set env_light Use Pre-Filter Maps = Automatic so TD builds diffuse+specular prefilter maps from the procedural sky -- this is what makes rough metal look correct. Because the map is STATIC, Automatic prefilters once and caches; do NOT leave it Off (rough reflections will be wrong) and do NOT animate the env texture or Automatic re-prefilters every frame and tanks fps. (3) render1.par.lights must include env_light, and render1.par.geometry = ../geo_carousel. (4) The PBR MAT also gets envlightmap = ../glsl_environment so specular reflections read even though the scene has a single light. Verify with capture_top: at Roughness 0.18 / Metallic 0.9 you should see a crisp sun-disc reflection sliding across facets as the carousel turns -- if facets are flat black, the env_light is not reaching render1 or prefilter is Off.\\n\\nLAYOUT / DOCKED DATs: glsl_environment is a GLSL TOP -- it docks pixel/compute/info DATs that TD scatters. Hug them under the host (pixel DAT directly below) in the SAME execute_python that creates the op, then get_network_layout to confirm. The pixel DAT is referenced via pixeldat='./glsl_environment_pixel'. Each geo_solidN holds its own sphere/box/tube + facet SOP; keep each solid's SOPs inside its Geometry COMP, annotated as one group; the five carousel solids form one annotation, the environment+light another, camera+render+grade a third.\\n\\nGEOMETRY HONESTY: stock TD ships no one-click Platonic SOP. sop_icosa (Sphere SOP, Polygon type, freq 0) is a TRUE icosahedron; sop_cube (Box SOP) is a true cube; sop_tetra (Tube SOP, rad1=0, 3 cols, capped) is a triangular pyramid standing in for a tetrahedron; sop_octa/sop_dodeca are low-freq polygon spheres faceted to read as distinct faceted gems. Every solid runs through a Facet SOP (unique=1, cmpnml=1) so faces flat-shade with hard per-face normals -- this is what makes the PBR specular pop crisply per facet rather than smearing across a smooth sphere. Do not subdivide; ridged extra geometry just aliases the highlights.\\n\\nPERFORMANCE: bounded by design -- 1024x512 env (cooked once), 1280x720 render, 8x antialias, ~17 ops, no feedback, five low-poly solids. Should hold target fps comfortably on any 2025 GPU. Gate it anyway: get_project_performance before/after; watch that Use Pre-Filter Maps Automatic did not get stuck re-prefiltering (gpuCookTime on env_light should be ~0 after the first frame). A concurrent capture_top stalls the GPU and dips the fps reading -- take a clean reading without it.\\n\\nTDN IMPORT GOTCHA: TDN does not round-trip custom-parameter VALUES when they equal the default -- a freshly imported specimen comes in with Metallic=0, Roughness=0, all Tint=0, speeds=0 (inert, matte black, frozen) until something applies default->value. On re-import verify and do a one-time revert-to-default (or set par.val=par.default for the 9 exposed params). All env_light/pbr_metal/geo bindings are EXPRESSIONS referencing those params, so until the values populate the scene renders dark and still -- this is the known importer limitation, not a build error.\\n\\nVERIFY BEFORE PERSIST: capture out1 and judge against visual-aesthetics -- one clear focal solid (the front-of-ring solid catching the sun), warm-gold metal against a cool sky for temperature contrast, facets giving crisp value-contrast highlights, the dark studio floor giving figure-ground separation. If the whole frame is mid-gray haze, the level_grade or prefilter is wrong. Out TOP is named exactly out1 (not a Null).\"",
+  "critique": {
+    "td_plausible": false,
+    "clears_bar": false,
+    "requires_none": true,
+    "photogenic": 4,
+    "verdict": "revise",
+    "issues": [
+      "BROKEN ANIMATION: Geometry COMP has no `rotatey` and no `rotatespeedy` parameter (verified live). geo_carousel.par.rotatey is invalid -- must be `ry`. The per-solid `rotatespeedy` on all five geo_solidN DOES NOT EXIST, so the Spinspeed control drives nothing and there is no continuous self-spin parameter on a Geometry COMP at all. geo_carousel.par.display=1 is also invalid (use `render`).",
+      "FABRICATED pbrMAT params: pbrMAT has NO `envlightmap`, NO `rim`, no `rimcolorr/g/b`, no `rimstrength` (verified live -- rim is a `rimlight0enable/rimlight0colorr/rimlight0strength` sequence). Build-notes wiring point (4) 'The PBR MAT also gets envlightmap=../glsl_environment' references a nonexistent parameter. PBR env reflections come ONLY from the Environment Light in the scene, not a per-material map.",
+      "WRONG Environment Light param names: `environmentmap` is wrong (real name `envlightmap`); `rotatey` is wrong for env rotation (real `envlightmaprotatex/y/z`); `Useprefiltermaps`/'Automatic' is wrong (real `envlightmapprefilter`, menu value `automatic`). The Envrotate control binds to env_light.par.rotatey which is the COMP transform, not the env map rotation -- wrong effect.",
+      "BROKEN reference paths throughout: every sibling reference inside the root COMP must be a BARE NAME, not `../`. Verified live: env_light's `../glsl_environment` produced 'Invalid path ... This node has no effect' and rendered fully black until changed to the sibling name. The same `../` error affects pbr_metal material refs (`../pbr_metal`), render1 (`../cam`,`../env_light`,`../geo_carousel`), env_light, and cam.lookat (`../geo_carousel`). The build notes emphatically demand `../` 'get this exactly right' -- which is exactly backwards for same-COMP siblings.",
+      "WRONG SOP/MAT param names: Facet SOP `cmpnml` does not exist (faceting toggle is `cusp`; `unique` is correct). Box SOP `size`/`scale` do not exist (real `sizex/y/z`, `s`). Sphere SOP `rad` does not exist (real `radx/y/z`) -- affects sop_icosa, sop_octa, sop_dodeca. Render TOP antialias `'8x'` invalid (menu is aa1..aa32; use `aa8`).",
+      "GEOMETRY VARIETY false: Sphere SOP poly freq 0 = true icosahedron (12pts/20 faces, confirmed), but freq 1 ALSO yields an identical 20-prim/12-pt icosahedron -- so sop_dodeca (freq 1) is geometrically identical to sop_icosa, not the 'distinct faceted gem' claimed. Two of five carousel solids are the same shape.",
+      "VISUAL GAP: an Environment Light does NOT render the env map as a visible background (verified: pure black behind the lit metal). The spec's stated composition -- 'warm-gold metal against a cool sky for temperature contrast', 'dark studio floor giving figure-ground separation' -- assumes a visible sky/floor backdrop that will not appear. Without separately compositing glsl_environment behind render1, the result is metal floating on black, not a studio scene.",
+      "sop_octa role text is incoherent (admits 'oct is not stock', then says use Tube instead, but the type stays sphereSOP) -- it is just another freq-0 icosa identical to sop_icosa, contradicting the 'octahedron' label and the variety goal."
+    ],
+    "fixes": "\"1) Animation: drive the carousel with geo_carousel.par.ry = '=absTime.seconds * parent().par.Carouselspeed'. Geometry COMPs have no rotatespeed param -- to keep Spinspeed, drive each geo_solidN.par.ry = '=absTime.seconds * parent().par.Spinspeed' (or drop Spinspeed and one exposed param). Remove the invalid `display` param (use only `render`). 2) Drop all fabricated pbrMAT params: remove envlightmap, rim, rimcolorr/g/b, rimstrength. If a rim is wanted, use the rimlight0* sequence (rimlight=1, rimlight0enable=1, rimlight0colorr/g/b, rimlight0strength). PBR reflections already come from env_light -- no per-mat env map needed. 3) Env Light params: environmentmap->envlightmap; for Envrotate use envlightmaprotatey; prefilter via envlightmapprefilter='automatic'. 4) Fix EVERY reference to a bare sibling name (no `../`): env_light envlightmap='glsl_environment'; geo_solidN material='pbr_metal'; render1 camera='cam', lights='env_light', geometry='geo_carousel'; cam lookat='geo_carousel'. 5) SOP/MAT params: Facet cusp=1 (drop cmpnml); Box sizex/y/z=1 and s=0.5 (drop size/scale); Sphere radx/y/z=0.6 (drop rad); render antialias='aa8'. 6) Make the five solids actually distinct: keep sop_icosa (sphere poly freq0); cube (box); tetra (tube rad1=0,cols=3,cap=1) -- these three are genuinely different. For the other two, use a higher-freq faceted sphere (e.g. mesh sphere rows/cols ~6) and a cylinder/prism, NOT freq-1 poly sphere (identical to icosa). Fix or delete the self-contradicting sop_octa role text. 7) Composition: add the visible backdrop -- either composite glsl_environment (or a darkened crop of it) behind render1 with an Over/Composite TOP, or accept a deliberate black-background product-shot look and rewrite the description (remove 'cool sky'/'studio floor'/'figure-ground' claims). After fixes, re-verify with two captures a real second apart that geo_carousel.par.ry differs and metal reflects the moving sky.\""
+  }
+}

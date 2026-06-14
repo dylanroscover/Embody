@@ -1,0 +1,210 @@
+{
+  "slug": "waveform-stack",
+  "name": "Waveform Stack",
+  "category": "transmission",
+  "aspect": "9:16",
+  "dev_resolution": [720, 1280],
+  "difficulty": "intermediate",
+  "one_liner": "A tall stack of glowing phosphor oscilloscope traces filling a portrait frame floor-to-ceiling -- a multi-channel signal monitor where each essence gets its own scope lane, all sweeping in lockstep on a PTP beat over a gold graticule.",
+  "visual_description": "A 9:16 portrait scope screen on near-black ground, carrying a faint gold graticule (IRE-style divisions + lane dividers). Stacked VERTICALLY, one above the next, are N glowing signal lanes -- a tall multi-channel waveform monitor. Each lane holds one horizontally-running broadcast trace: phosphor-green audio at the bottom, cyan video luma, magenta chroma, and more essence channels above, each wobbling with rich harmonic detail. A single white-hot vertical playhead sweeps left-to-right across ALL lanes at once with a long phosphor afterglow tail decaying behind it -- one sweep, many channels, exactly like a real engineering monitor. The whole stack breathes on a steady PTP beat: every couple seconds the traces flash brighter and a thin horizontal sync bar wipes down the stack. Controlled lush bloom blooms the white playhead and trace cores into colored halos; crisp hairline traces stay sharp. A faint scanline + grain and an occasional micro RGB-split at the brightest peak sell the broadcast-engineering authenticity. It reads instantly as a tall multi-channel signal monitor -- the most legible video-engineering motif, composed for a vertical wall.",
+  "technique": "Single self-contained GLSL TOP generator (no input), plus a bounded low-res Feedback TOP for the phosphor afterglow, finished by a SEPARATE downsampled bloom chain. The 4K-cheap re-architecture: the lanes are stacked vertically, so each pixel maps DIRECTLY to its lane via an O(1) row-fold (floor(uv.y * N) picks the lane, fract gives the within-lane position) -- NO loop over traces. Within the lane it evaluates ONE analytic signal (summed detuned sines = a rich broadcast waveform) and draws a crisp line via a smoothstep on the pixel-derivative (fwidth) for a hairline trace at any resolution. The sweeping playhead + afterglow are single absTime terms. The feedback afterglow runs at a FIXED low resolution (not full 4K) so the CRT persistence is bounded and cheap. The bloom is its own chain (downsample 1/4 -> bright-pass+blur at low res -> composite-add), so glow cost is ~1/16 of full-res and constant at 4K.",
+  "network_plan": [
+    {
+      "name": "glsl_scope",
+      "type": "glslTOP",
+      "role": "The scope generator. NO input -- MUST use uTDOutputInfo.res; NEVER uTD2DInfos. Gold graticule + N vertically-stacked lanes via an O(1) row-fold (NO trace loop), one analytic trace per lane, crisp hairline via fwidth, sweeping playhead + afterglow + PTP flash. outputresolution custom 720x1280, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 0, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_scope_pixel",
+        "computedat": "glsl_scope_compute",
+        "outputresolution": "custom",
+        "resolutionw": 720,
+        "resolutionh": 1280,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uWave", "type": "vec4", "valuex": "=parent().par.Lanes.eval()", "valuey": "=parent().par.Frequency.eval()", "valuez": "=parent().par.Amplitude.eval()", "valuew": "=absTime.seconds*parent().par.Speed.eval()" },
+          { "name": "uSweep", "type": "vec4", "valuex": "=parent().par.Sweeprate.eval()", "valuey": "=parent().par.Afterglow.eval()", "valuez": "=parent().par.Ptprate.eval()", "valuew": "=parent().par.Linewidth.eval()" },
+          { "name": "uLook", "type": "vec4", "valuex": "=parent().par.Graticule.eval()", "valuey": "=parent().par.Harmonics.eval()", "valuez": "=parent().par.Glow.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "res_fb",
+      "type": "resolutionTOP",
+      "role": "Downsample the scope to a FIXED low resolution for the bounded phosphor-feedback loop (the afterglow does not need 4K; a fixed small buffer keeps it cheap and never grows). Input0 = glsl_scope. custom 360x640 (fixed). rgba16float. Place nodeX 300, nodeY 300.",
+      "params": { "outputresolution": "custom", "resolutionw": 360, "resolutionh": 640, "format": "rgba16float" },
+      "inputs": ["glsl_scope"]
+    },
+    {
+      "name": "level_decay",
+      "type": "levelTOP",
+      "role": "Decay stage for the phosphor afterglow feedback. opacity = Afterglow (<1) so the previous frame fades. blacklevel 0. Bounds the feedback. Place nodeX 700, nodeY 500.",
+      "params": { "opacity": "=parent().par.Afterglow.eval()", "blacklevel": 0.0 },
+      "inputs": ["feedback_glow"]
+    },
+    {
+      "name": "comp_trail",
+      "type": "compTOP",
+      "role": "Combine the fresh low-res scope with the decayed previous frame so the playhead leaves a CRT persistence tail. in0 = res_fb (fresh), in1 = level_decay (decayed history). operand = max (glow persists but never runs away). Fixed 360x640. Place nodeX 1000, nodeY 300.",
+      "params": { "operand": "max", "resolutionmenu": "input" },
+      "inputs": ["res_fb", "level_decay"]
+    },
+    {
+      "name": "feedback_glow",
+      "type": "feedbackTOP",
+      "role": "Holds the previous combined frame for the afterglow. top = comp_trail (closes the loop). Fixed 360x640 rgba16float so it never grows. The decay in level_decay (opacity<1) keeps it bounded. Place nodeX 700, nodeY 300.",
+      "params": { "top": "comp_trail", "format": "rgba16float" },
+      "inputs": ["comp_trail"]
+    },
+    {
+      "name": "comp_scope",
+      "type": "compTOP",
+      "role": "Composite the full-res sharp scope OVER the upscaled low-res afterglow trail (so traces stay crisp at 4K while the phosphor tail glows softly behind). in0 = glsl_scope (sharp full-res), in1 = comp_trail (low-res afterglow, auto-upscaled). operand = over (or add). resolutionmenu = input. rgba16float. Place nodeX 1300, nodeY 0.",
+      "params": { "operand": "over", "resolutionmenu": "input", "format": "rgba16float" },
+      "inputs": ["glsl_scope", "comp_trail"]
+    },
+    {
+      "name": "res_down",
+      "type": "resolutionTOP",
+      "role": "Downsample the composited scope to 1/4 res for the cheap bloom. Input0 = comp_scope. width/height = int(Outw/4)/int(Outh/4). rgba16float. Place nodeX 1600, nodeY 400.",
+      "params": { "outputresolution": "custom", "resolutionw": "=int(parent().par.Outw.eval()/4)", "resolutionh": "=int(parent().par.Outh.eval()/4)", "format": "rgba16float" },
+      "inputs": ["comp_scope"]
+    },
+    {
+      "name": "glsl_bloomblur",
+      "type": "glslTOP",
+      "role": "Bright-pass + blur at 1/4 res (cheap, constant at 4K). Input0 = res_down. Bloom-only output. outputresolution = 1/4 of Outw/Outh. rgba16float. Place nodeX 1900, nodeY 400.",
+      "params": {
+        "pixeldat": "glsl_bloomblur_pixel",
+        "computedat": "glsl_bloomblur_compute",
+        "outputresolution": "custom",
+        "resolutionw": "=int(parent().par.Outw.eval()/4)",
+        "resolutionh": "=int(parent().par.Outh.eval()/4)",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.5, "valuez": "=parent().par.Bloomwidth.eval()", "valuew": 0 } ]
+      },
+      "inputs": ["res_down"]
+    },
+    {
+      "name": "glsl_finish",
+      "type": "glslTOP",
+      "role": "Composite-add the upscaled bloom AND apply the cheap broadcast finish in one pass: in0 = comp_scope (sharp), in1 = glsl_bloomblur (upscaled glow). Adds bloom, a scanline/CRT overlay, grain, and an occasional micro RGB-split on the PTP tick. NO blur loop here (bloom already done at low res). outputresolutionmenu = input. rgba16float. Place nodeX 2200, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_finish_pixel",
+        "computedat": "glsl_finish_compute",
+        "outputresolutionmenu": "input",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uFin", "type": "vec4", "valuex": "=parent().par.Scanlines.eval()", "valuey": "=parent().par.Rgbsplit.eval()", "valuez": "=parent().par.Lanes.eval()", "valuew": "=absTime.seconds*parent().par.Ptprate.eval()" } ]
+      },
+      "inputs": ["comp_scope", "glsl_bloomblur"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named exactly out1. Viewer flagged. Place nodeX 2500, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_finish"]
+    },
+    { "name": "glsl_scope_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_scope. See glsl[0]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_scope_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_scope.", "params": {}, "inputs": [] },
+    { "name": "glsl_scope_info", "type": "infoDAT", "role": "Docked info DAT for glsl_scope.", "params": { "op": "glsl_scope" }, "inputs": [] },
+    { "name": "glsl_bloomblur_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_bloomblur. See glsl[1]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_bloomblur_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_bloomblur.", "params": {}, "inputs": [] },
+    { "name": "glsl_bloomblur_info", "type": "infoDAT", "role": "Docked info DAT for glsl_bloomblur.", "params": { "op": "glsl_bloomblur" }, "inputs": [] },
+    { "name": "glsl_finish_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_finish. See glsl[2]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_finish_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_finish.", "params": {}, "inputs": [] },
+    { "name": "glsl_finish_info", "type": "infoDAT", "role": "Docked info DAT for glsl_finish.", "params": { "op": "glsl_finish" }, "inputs": [] },
+    {
+      "name": "annotate_scope",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the scope generator (glsl_scope). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Row-Fold Lane Stack (O(1)/pixel)",
+        "Bodytext": "One generator GLSL TOP. floor(uv.y * N) folds each pixel into ONE vertically-stacked scope lane with NO loop over traces. Within the lane it evaluates one analytic broadcast signal (summed detuned sines) and draws a crisp hairline trace via fwidth() -- sharp at any resolution. A single white-hot vertical playhead sweeps across ALL lanes at once. Green audio at the bottom, cyan video, magenta chroma above -- the ST2110 essences, one lane each.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_glow",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the bounded low-res phosphor feedback (res_fb, level_decay, comp_trail, feedback_glow). Mode annotate.",
+      "params": {
+        "Titletext": "Phosphor Afterglow (bounded, low-res feedback)",
+        "Bodytext": "The playhead leaves a real CRT persistence tail via a Feedback TOP -- but run at a FIXED low resolution (360x640), not 4K, so the afterglow is cheap and the loop can never grow. comp_trail maxes the fresh frame with the decayed previous frame, feedback_glow holds it, and level_decay (opacity<1) fades old energy so it cannot run away. The soft tail is upscaled behind the sharp full-res traces.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the bloom + finish + out (res_down, glsl_bloomblur, glsl_finish, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Downsampled Bloom & Broadcast Finish",
+        "Bodytext": "Bloom is a SEPARATE downsampled chain (downsample 1/4 -> blur there -> the finish pass adds the upscaled glow back), NOT a full-res tap loop -- ~1/16 the cost, constant at 4K. The finish pass also lays a scanline/CRT overlay, grain, and an occasional micro RGB-split on the PTP beat for broadcast authenticity. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_scope_pixel",
+      "stage": "pixel",
+      "code": "// Waveform Stack -- N vertically-stacked scope lanes via an O(1) row-fold. No trace loop.\nuniform vec4 uWave;    // x=lanes, y=frequency, z=amplitude, w=time(=absTime*Speed)\nuniform vec4 uSweep;   // x=sweepRate, y=afterglow, z=ptpRate, w=lineWidth\nuniform vec4 uLook;    // x=graticule, y=harmonics, z=glow, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\n// a rich broadcast-like signal: summed detuned harmonics, per-lane seeded\nfloat signal(float x, float seed, float freq, float harm, float t){\n    float v = 0.0;\n    v += sin(x*freq + t + seed);\n    v += 0.5  * sin(x*freq*2.03 + t*1.3 + seed*1.7);\n    v += 0.33 * sin(x*freq*3.97 + t*0.8 + seed*2.3) * harm;\n    v += 0.22 * sin(x*freq*7.1  - t*1.1 + seed*0.5) * harm;\n    return v / 2.0;   // ~[-1,1]\n}\n\nvec3 laneColor(float i){\n    // bottom lane green (audio), then cyan (video), magenta (chroma), amber, repeat\n    float k = mod(i, 4.0);\n    if(k < 0.5) return vec3(0.18, 1.00, 0.40);   // green audio\n    if(k < 1.5) return vec3(0.00, 0.85, 1.00);   // cyan video\n    if(k < 2.5) return vec3(1.00, 0.18, 0.60);   // magenta chroma\n    return vec3(1.00, 0.70, 0.10);               // amber\n}\n\nvoid main(){\n    vec2 uv = vUV.st;\n    float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;\n\n    vec3 col = vec3(0.010, 0.012, 0.016);   // near-black scope ground\n\n    float nL   = clamp(uWave.x, 1.0, 8.0);\n    float freq = uWave.y;\n    float amp  = uWave.z;\n    float harm = uLook.y;\n    float t    = uWave.w;\n    float lw   = uSweep.w;\n    float glow = uLook.z;\n    float grat = uLook.x;\n\n    // --- gold graticule: horizontal IRE divisions + vertical divisions ---\n    vec2 g = abs(fract(uv * vec2(8.0, nL*3.0)) - 0.5);\n    float grid = smoothstep(0.49, 0.5, max(g.x, g.y));\n    col += vec3(0.20, 0.16, 0.05) * grid * 0.16 * grat;\n\n    // --- O(1) row-fold: which lane is this pixel in, and where within it ---\n    float laneF = uv.y * nL;        // 0..nL (bottom..top)\n    float li    = floor(laneF);\n    float li_c  = clamp(li, 0.0, nL-1.0);\n    float ly    = fract(laneF);     // 0..1 within the lane\n    // lane divider hairline (crisp via fwidth)\n    float aaY = fwidth(laneF);\n    float divider = smoothstep(aaY*1.5, 0.0, min(ly, 1.0-ly));\n    col += vec3(0.18,0.15,0.05) * divider * 0.12 * grat;\n\n    // --- the one analytic trace in this lane ---\n    vec3 lc   = laneColor(li_c);\n    float seed = li_c*2.1 + 0.3;\n    float ampL = mix(1.0, 0.55, mod(li_c,2.0));   // alternate lane swing a touch\n    float s    = signal((uv.x*2.0-1.0)*aspect, seed, freq, harm, t);\n    float yc   = 0.5 + s * amp * ampL * 0.34;     // center of the lane + signal swing\n    float d    = abs(ly - yc);\n    float aa   = fwidth(ly) * 1.5;\n    float line = smoothstep(lw+aa, lw-aa, d);      // crisp hairline core at any res\n    float halo = smoothstep(lw*8.0*glow, 0.0, d) * 0.32;\n\n    // --- sweeping white-hot vertical playhead across ALL lanes + phosphor afterglow ---\n    float head = fract(uLook.w * uSweep.x);\n    float ageBehind = head - uv.x;\n    if(ageBehind < 0.0) ageBehind += 1.0;\n    float persistence = exp(-ageBehind * mix(8.0, 1.5, uSweep.y));\n    float bright = (line + halo) * persistence;\n    vec3 c = mix(lc, vec3(1.0), line * smoothstep(0.06, 0.0, ageBehind));   // white at the head\n    col += c * bright;\n    // the playhead column itself glows white-hot\n    float headCol = smoothstep(0.004, 0.0, abs(uv.x - head));\n    col += vec3(0.8,0.95,1.0) * headCol * line * 1.2;\n\n    // --- PTP beat: stack flashes + a horizontal sync bar wipes DOWN ---\n    float beat = fract(uLook.w * uSweep.z);\n    float flash = pow(max(0.0, 1.0 - beat*4.0), 3.0);\n    col += vec3(0.05, 0.08, 0.10) * flash;\n    float bar = smoothstep(0.006, 0.0, abs(uv.y - (1.0-beat)));   // wipes top->bottom\n    col += vec3(0.10, 0.20, 0.24) * bar * 0.6;\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloomblur_pixel",
+      "stage": "pixel",
+      "code": "// Bright-pass + gaussian blur at 1/4 resolution (cheap, constant at 4K).\nuniform vec4 uBloom;   // x=strength, y=threshold, z=blurWidth\nout vec4 fragColor;\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;\n    float thr = uBloom.y;\n    float bw  = uBloom.z;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/22.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*bw).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    fragColor = vec4((sum/max(wsum,1e-4)) * uBloom.x, 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_finish_pixel",
+      "stage": "pixel",
+      "code": "// Composite-add the 1/4-res bloom over the sharp scope + scanline + grain + PTP RGB-split.\n// in0 = sharp comp_scope, in1 = upscaled bloom. No blur loop here.\nuniform vec4 uFin;   // x=scanlines, y=rgbSplit, z=lanes, w=ptpTime\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    float beat = fract(uFin.w);\n    float ev = pow(max(0.0, 1.0 - beat*6.0), 4.0);     // brief event on the tick\n    float sp = uFin.y * (0.0015 + 0.004*ev);\n    // sharp source with a PTP-pulsed chroma separation\n    vec3 src;\n    src.r = texture(sTD2DInputs[0], uv + vec2(sp,0.0)).r;\n    src.g = texture(sTD2DInputs[0], uv).g;\n    src.b = texture(sTD2DInputs[0], uv - vec2(sp,0.0)).b;\n    vec3 bloom = texture(sTD2DInputs[1], uv).rgb;       // upscaled 1/4-res glow\n    vec3 col = src + bloom;\n    // CRT scanline overlay (horizontal lines across the tall frame)\n    float lc = clamp(uFin.z*48.0, 60.0, 720.0);\n    float scan = 1.0 - uFin.x * 0.30 * (0.5 + 0.5*sin(uv.y * lc * 6.28318));\n    col *= scan;\n    col += (hash21(uv*uTDOutputInfo.res.zw + beat*97.0)-0.5) * 0.014;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Lanes", "label": "Lane Count", "style": "Int", "default": 4, "range": [1, 8], "drives": "uWave.x -- number of vertically-stacked scope lanes (1=green audio only; more add cyan video, magenta chroma, amber...). The ST2110 separated essences, one lane each. The row-fold costs nothing per pixel regardless of count." },
+    { "name": "Frequency", "label": "Frequency", "style": "Float", "default": 8.0, "range": [1.0, 30.0], "drives": "uWave.y -- base spatial frequency of the waveforms. Low = slow rolling signal; high = dense rapid oscillation across the lane." },
+    { "name": "Amplitude", "label": "Amplitude", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uWave.z -- vertical swing of each trace within its lane. 0 = flat baselines; higher = tall dramatic waveforms (clamped to stay in-lane)." },
+    { "name": "Speed", "label": "Signal Speed", "style": "Float", "default": 1.0, "range": [0.0, 4.0], "drives": "Multiplies absTime into uWave.w -- how fast the waveform content evolves. 0 freezes the shape (the sweep still moves)." },
+    { "name": "Sweeprate", "label": "Sweep Rate", "style": "Float", "default": 0.4, "range": [0.05, 2.0], "drives": "uSweep.x -- how fast the white-hot playhead sweeps left-to-right across all lanes (Hz). The scope refresh feel." },
+    { "name": "Afterglow", "label": "Afterglow", "style": "Float", "default": 0.85, "range": [0.5, 0.97], "drives": "uSweep.y (in-shader persistence) AND level_decay.opacity (the low-res Feedback TOP decay). Higher = a longer CRT phosphor tail. Below 1 keeps the feedback bounded." },
+    { "name": "Linewidth", "label": "Line Width", "style": "Float", "default": 0.006, "range": [0.002, 0.02], "drives": "uSweep.w -- thickness of the trace core (within-lane UV). Thin = a crisp precise scope line; thicker = a heavier glowing beam. Crisp at any res via fwidth()." },
+    { "name": "Graticule", "label": "Graticule", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.x -- brightness of the gold graticule grid + lane dividers. 0 hides the grid; higher makes the engineering scope frame prominent." },
+    { "name": "Harmonics", "label": "Harmonics", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.y -- amount of high harmonic detail in the signal. 0 = a clean fundamental sine; higher = a rich complex broadcast waveform." },
+    { "name": "Glow", "label": "Trace Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.z -- width of the soft halo around each trace before bloom. The signature scope-beam glow." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uSweep.z (stack flash + sync bar) and uFin.w (RGB-split timing) -- frequency of the PTP sync pulse the whole stack breathes to." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.2, "range": [0.0, 3.0], "drives": "uBloom.x in glsl_bloomblur (downsampled chain) -- intensity of the bloom added back. The booth-scale glow knob." },
+    { "name": "Bloomwidth", "label": "Bloom Width", "style": "Float", "default": 2.2, "range": [1.0, 4.0], "drives": "uBloom.z -- blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res)." },
+    { "name": "Scanlines", "label": "CRT Scanlines", "style": "Float", "default": 0.6, "range": [0.0, 1.5], "drives": "uFin.x -- strength of the CRT scanline overlay in the finish pass. 0 = clean digital; higher = a heavier broadcast-CRT texture." },
+    { "name": "Rgbsplit", "label": "RGB Split", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFin.y -- strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick." },
+    { "name": "Outw", "label": "Output Width", "style": "Int", "default": 720, "range": [256, 3840], "drives": "Render width (generator + comps). The /4 bloom buffer auto-tracks. 720 dev, 2160 for 4K portrait. (The phosphor feedback is fixed-low-res independent of this.)" },
+    { "name": "Outh", "label": "Output Height", "style": "Int", "default": 1280, "range": [256, 3840], "drives": "Render height. 1280 dev, 3840 for 4K portrait. The /4 bloom buffer auto-tracks." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "graticule_gold": "#FFB000",
+    "trace_green_audio": ["#39FF6A", "#00FF66"],
+    "trace_cyan_video": "#00E5FF",
+    "trace_magenta_chroma": "#FF2E9A",
+    "white_hot_playhead": ["#FFFFFF", "#EAFBFF"],
+    "ratio": "~85% dark scope ground + gold graticule restraint, ~15% saturated phosphor traces; green leads (the engineering signature), cyan/magenta/amber differentiate the stacked essences."
+  },
+  "performance_notes": "WHY IT STAYS CHEAP AT 4K: (1) NO trace loop -- a single row-fold (floor/fract on uv.y) picks the one lane the pixel belongs to, then evaluates ONE analytic signal. The old signal-waveform looped over all traces per pixel; here Lane Count adds no pixel cost. (2) The trace is drawn with fwidth()-based smoothstep for a crisp hairline at ANY resolution -- no super-sampling. (3) The phosphor afterglow uses a Feedback TOP at a FIXED low resolution (360x640), NOT 4K, so the only stateful element is small and bounded (decay<1, max-composite) -- it never grows and is cheap regardless of output size; its soft tail is upscaled behind the sharp traces. (4) The bloom is a separate downsampled chain (1/4-res blur -> upscale -> add), touching ~1/16 the pixels at a ratio fixed across resolutions -- NOT the old full-res 13x13 tap loop. BUDGET: generator ~= a graticule eval + a row-fold + one ~7-term signal eval + a couple of smoothsteps per pixel, no loops; the feedback is pinned at 360x640; the bloom blur is pinned at 1/16-scale. Gate get_project_performance before/after; comfortable at 4K. BYPASS feedback_glow while wiring; watch feedback_glow gpuCookTime/gpuMemUsedMB do not climb every frame (would mean decay>=1).",
+  "wow_factor": 4,
+  "conference_fit": "The single most legible 'video engineering' motif, re-composed tall: a multi-channel waveform monitor whose lanes STACK up the portrait frame, green audio at the bottom rising through cyan video, magenta chroma and amber above, one white playhead sweeping them all. Gold graticule + green phosphor trace is the literal vectorscope/waveform-monitor palette every broadcast engineer recognizes. The PTP sync breath ties it to ST2110 timing; the stacked lanes show the separated essences as discrete monitor channels. The vertical stack maps perfectly to a portrait LED tower -- it reads as a real rack-mounted multi-channel monitor turned on its side. A premium, cheap, unmistakably on-theme quieter counterpoint to the kinetic packet/fiber pieces.",
+  "warmup_frames": 90,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_scope has NO input -- MUST use uTDOutputInfo.res; uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h (720x1280) or it renders 1x1. res_fb/level_decay/comp_trail/feedback_glow/comp_scope/res_down/glsl_bloomblur/glsl_finish all HAVE inputs.\\n\\nUNIFORMS: each glslTOP declares uniforms MANUALLY via the vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nFEEDBACK SAFETY (performance.md): the afterglow loop runs at a FIXED 360x640 (res_fb downsamples into it) so it never grows with output res. level_decay opacity = Afterglow (<1, default 0.85); comp_trail operand=max so glow persists but cannot exceed the fresh peak. BYPASS feedback_glow while wiring. Watch feedback_glow gpuCookTime/gpuMemUsedMB across checks; if either climbs every frame with no param change the decay went >=1. 16f not 32f -- a light persistence trail, not a precision sim.\\n\\nWIRING ORDER (the loop is a cycle): create glsl_scope, res_fb, level_decay, comp_trail, feedback_glow, comp_scope, res_down, glsl_bloomblur, glsl_finish, out1; wire glsl_scope->res_fb->comp_trail(in0), level_decay->comp_trail(in1); comp_trail->feedback_glow; feedback_glow->level_decay; glsl_scope->comp_scope(in0), comp_trail->comp_scope(in1); comp_scope->res_down->glsl_bloomblur; comp_scope->glsl_finish(in0), glsl_bloomblur->glsl_finish(in1); glsl_finish->out1. THEN set feedback_glow.top='comp_trail' (the Target closes the loop, not a wire).\\n\\nRESOLUTION TRACKING (4K story): Outw/Outh drive the generator size, the comps (resolutionmenu='input'), and the bloom buffer at 1/4 (int(Outw/4)/int(Outh/4) on res_down + glsl_bloomblur). The feedback buffers are FIXED 360x640 -- independent of Outw/Outh (afterglow doesn't need 4K). 4K portrait: set Outw=2160, Outh=3840; bloom auto-stays at 540x960. Verify res_down reports 1/4 size.\\n\\nCRISP EDGES: traces + lane dividers use fwidth() so hairlines stay 1px at 4K. Verify in a 4K capture.\\n\\nCOOK DEMAND: time-dependent via absTime in the uniforms + the feedback. Cooks every frame only when out1 demanded; temp Execute DAT OUTSIDE the COMP cooking out1; verify with two captures + a real sleep. Speed=0 freezes the waveform shape but the sweep/PTP still reference absTime so the TOP keeps cooking (a moving playhead over a frozen signal) -- correct.\\n\\nLOOK CHECK: judge by an actual capture (load visual-aesthetics). Verify the lanes read as distinct stacked channels with crisp dividers, the playhead sweeps cleanly across all lanes with a real phosphor tail, and the traces are crisp hairlines (not blurry) at 4K. Tune Line Width / Glow / Bloom against a real frame.\\n\\nDOCKED DATS: glsl_scope + glsl_bloomblur + glsl_finish each dock pixel+compute+info; HUG all nine under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source.\\n\\nTDN ROUND-TRIP: all 17 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~18."
+}

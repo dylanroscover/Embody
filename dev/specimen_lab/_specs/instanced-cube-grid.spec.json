@@ -1,0 +1,332 @@
+{
+  "slug": "instanced-cube-grid",
+  "name": "Instanced Cube Grid",
+  "category": "generative-geometry",
+  "difficulty": "starter",
+  "description": "A 3D grid of GPU-instanced cubes whose per-cube scale and color are driven by a single 3D noise field that drifts through the static grid, producing a cheap, hypnotic breathing/wave effect. A clean teaching reference for CHOP-driven hardware instancing.",
+  "key_ops": [
+    "boxSOP",
+    "scriptCHOP",
+    "noiseCHOP",
+    "mathCHOP",
+    "mergeCHOP",
+    "geometryCOMP",
+    "constantMAT",
+    "cameraCOMP",
+    "lightCOMP",
+    "renderTOP",
+    "outTOP"
+  ],
+  "network_plan": [
+    {
+      "name": "box_cube",
+      "type": "boxSOP",
+      "role": "The single source primitive that gets hardware-instanced once per grid cell. Small so cubes never overlap at base scale.",
+      "params": {
+        "sizex": 0.6,
+        "sizey": 0.6,
+        "sizez": 0.6
+      },
+      "inputs": []
+    },
+    {
+      "name": "grid_positions",
+      "type": "scriptCHOP",
+      "role": "Builds the STATIC 3D grid of instance positions, one sample per cube, with channels tx/ty/tz. Cooks only when Gridsize or Spacing changes (it references the params), not every frame. Sample count = Gridsize*Gridsize*Layers and that count sets the instance count. Also emits a per-cube channel 'cellid' (0..1 normalized index) used later to add spatial variety to the color.",
+      "params": {
+        "callbacks": "see GLSL/scripts note -- onCook body is provided in build_notes"
+      },
+      "inputs": []
+    },
+    {
+      "name": "noise_field",
+      "type": "noiseCHOP",
+      "role": "Samples one 3D noise field at every grid position. Wired so its INPUT is the grid positions (tx,ty,tz become the sample coordinates), giving each cube a smooth noise value that varies coherently across space. Animated cheaply by drifting the noise sample space in Z over time (Translate Z = absTime.seconds*Flowspeed) so the field FLOWS through the static grid -- this is the only per-frame cook in the chain. Period scales with Noisescale so the user controls pattern tightness. Output is renamed to a single channel 'n' (range ~ -1..1).",
+      "params": {
+        "type": "Sparse",
+        "period": "=4.0/parent().par.Noisescale.eval()",
+        "amplitude": 1,
+        "harmonics": 2,
+        "roughness": 0.4,
+        "translatez": "=absTime.seconds*parent().par.Flowspeed.eval()",
+        "channelname": "n"
+      },
+      "inputs": [
+        "grid_positions"
+      ]
+    },
+    {
+      "name": "math_scale",
+      "type": "mathCHOP",
+      "role": "Maps the noise channel 'n' (~ -1..1) into a positive per-cube scale. Remaps -1..1 to 0..1 then to [base .. base+amp] using Cubescale. Renames the result to sx (and the Reorder/rename downstream fans it to sx/sy/sz). Uniform scale keeps cubes cubic.",
+      "params": {
+        "fromrange1": -1,
+        "fromrange2": 1,
+        "torange1": "=0.15",
+        "torange2": "=0.15+parent().par.Cubescale.eval()",
+        "preoff": 0,
+        "gain": 1
+      },
+      "inputs": [
+        "noise_field"
+      ]
+    },
+    {
+      "name": "rename_scale",
+      "type": "renameCHOP",
+      "role": "Renames the single remapped channel to the three uniform-scale instance channels sx sy sz so one noise value scales the cube uniformly.",
+      "params": {
+        "renamefrom": "*",
+        "renameto": "sx sy sz"
+      },
+      "inputs": [
+        "math_scale"
+      ]
+    },
+    {
+      "name": "color_expr",
+      "type": "expressionCHOP",
+      "role": "Turns the noise channel 'n' (plus the static 'cellid' for spatial spread) into per-instance RGB. Computes a hue from n and Huespread, then a compact HSV->RGB done as three expression channels r,g,b. Saturation/value fixed for a punchy, readable look. Input is a Merge of noise_field and the cellid channel so both are available.",
+      "params": {
+        "expr0": "0.5+0.5*math.sin(6.28318*(me.inputVal['n']*parent().par.Huespread.eval()+me.inputVal['cellid']*0.15)+0.0)",
+        "expr1": "0.5+0.5*math.sin(6.28318*(me.inputVal['n']*parent().par.Huespread.eval()+me.inputVal['cellid']*0.15)+2.0944)",
+        "expr2": "0.5+0.5*math.sin(6.28318*(me.inputVal['n']*parent().par.Huespread.eval()+me.inputVal['cellid']*0.15)+4.18879)"
+      },
+      "inputs": [
+        "merge_noise_id"
+      ]
+    },
+    {
+      "name": "merge_noise_id",
+      "type": "mergeCHOP",
+      "role": "Joins the live noise channel 'n' with the static 'cellid' channel so color_expr can read both. Sample-aligned (same length as the grid).",
+      "params": {},
+      "inputs": [
+        "noise_field",
+        "cellid_extract"
+      ]
+    },
+    {
+      "name": "cellid_extract",
+      "type": "selectCHOP",
+      "role": "Pulls the static 'cellid' channel out of the grid_positions CHOP so it can be merged alongside the live noise without re-cooking the grid.",
+      "params": {
+        "channames": "cellid"
+      },
+      "inputs": [
+        "grid_positions"
+      ]
+    },
+    {
+      "name": "rename_color",
+      "type": "renameCHOP",
+      "role": "Renames the three expression channels to the instance color channels r g b.",
+      "params": {
+        "renamefrom": "chan1 chan2 chan3",
+        "renameto": "r g b"
+      },
+      "inputs": [
+        "color_expr"
+      ]
+    },
+    {
+      "name": "instance_data",
+      "type": "mergeCHOP",
+      "role": "Final per-instance attribute table: merges tx ty tz (positions) + sx sy sz (scale) + r g b (color) into ONE CHOP whose sample count = instance count. This single CHOP is what the Geometry COMP reads -- the heart of the specimen.",
+      "params": {},
+      "inputs": [
+        "grid_positions",
+        "rename_scale",
+        "rename_color"
+      ]
+    },
+    {
+      "name": "geo",
+      "type": "geometryCOMP",
+      "role": "Hardware-instances box_cube once per sample of instance_data. Instancing ON, count from the instance CHOP length. Maps named channels: tx/ty/tz->translate, sx/sy/sz->scale, r/g/b->instance color. Renders with the Constant MAT.",
+      "params": {
+        "instancing": 1,
+        "instanceop": "./instance_data_in or ../instance_data (see notes)",
+        "instancecountmode": "oplength",
+        "instancetx": "tx",
+        "instancety": "ty",
+        "instancetz": "tz",
+        "instancesx": "sx",
+        "instancesy": "sy",
+        "instancesz": "sz",
+        "instancerotmodp": "none",
+        "instancecolormode": "explicit",
+        "instancecolorr": "r",
+        "instancecolorg": "g",
+        "instancecolorb": "b",
+        "material": "./mat_cube or ../mat_cube"
+      },
+      "inputs": [
+        "box_cube"
+      ]
+    },
+    {
+      "name": "mat_cube",
+      "type": "constantMAT",
+      "role": "Flat, cheap shading that passes the per-instance color straight through (no lighting cost, keeps the grid reading as pure color). Uses instance color.",
+      "params": {
+        "colorr": 1,
+        "colorg": 1,
+        "colorb": 1,
+        "useinstancecolor": 1
+      },
+      "inputs": []
+    },
+    {
+      "name": "cam",
+      "type": "cameraCOMP",
+      "role": "Single perspective camera framing the whole grid at a slight 3/4 angle so depth and the wave through Z read clearly.",
+      "params": {
+        "tx": 0,
+        "ty": 3,
+        "tz": 18,
+        "rx": -9,
+        "ry": 0,
+        "rz": 0,
+        "fov": 40
+      },
+      "inputs": []
+    },
+    {
+      "name": "light_key",
+      "type": "lightCOMP",
+      "role": "One key light. Constant MAT ignores lighting, but the light is kept so a user who swaps in a Phong MAT immediately gets shading -- documents the upgrade path.",
+      "params": {
+        "tx": 6,
+        "ty": 10,
+        "tz": 8,
+        "dimmer": 1
+      },
+      "inputs": []
+    },
+    {
+      "name": "render_grid",
+      "type": "renderTOP",
+      "role": "Renders geo through cam with light_key at bounded resolution. Anti-aliasing on for clean cube edges. This op is always-cook (Render TOP), which is what pulls the noise field every frame.",
+      "params": {
+        "camera": "cam",
+        "geometry": "geo",
+        "lights": "light_key",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "antialias": "4xtemporal or 8x",
+        "bgalpha": 1
+      },
+      "inputs": []
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output / capture target. Terminates the chain. Exactly 'out1'.",
+      "params": {},
+      "inputs": [
+        "render_grid"
+      ]
+    }
+  ],
+  "glsl": [],
+  "exposed_params": [
+    {
+      "name": "Gridsize",
+      "label": "Grid Size",
+      "style": "Int",
+      "default": 12,
+      "range": [
+        4,
+        24
+      ],
+      "drives": "Cubes per edge along X and Y in the Script CHOP grid generator. Total cubes = Gridsize*Gridsize*6 layers (e.g. 12 -> 864). Higher = denser grid, more cubes, more GPU instances. Re-cooks grid_positions only when changed."
+    },
+    {
+      "name": "Spacing",
+      "label": "Cube Spacing",
+      "style": "Float",
+      "default": 1,
+      "range": [
+        0.5,
+        3
+      ],
+      "drives": "Distance between adjacent cube centers in the Script CHOP grid layout (tx/ty/tz step). Visibly spreads the grid apart or packs it tight; combined with Box SOP size 0.6 controls how close cubes get at full scale."
+    },
+    {
+      "name": "Flowspeed",
+      "label": "Flow Speed",
+      "style": "Float",
+      "default": 0.4,
+      "range": [
+        0,
+        2
+      ],
+      "drives": "Rate the 3D noise field drifts through the static grid: noise_field Translate Z = absTime.seconds*Flowspeed. This is the animation -- the wave of scale/color flowing along Z. 0 freezes the pattern; higher = faster hypnotic flow."
+    },
+    {
+      "name": "Noisescale",
+      "label": "Noise Scale",
+      "style": "Float",
+      "default": 1.2,
+      "range": [
+        0.2,
+        4
+      ],
+      "drives": "Spatial frequency of the noise via noise_field Period (period = 4.0/Noisescale). Low = broad, sweeping swells across the whole grid; high = tight, busy per-cube variation. Controls the visual 'tightness' of the pattern."
+    },
+    {
+      "name": "Cubescale",
+      "label": "Cube Scale",
+      "style": "Float",
+      "default": 0.85,
+      "range": [
+        0,
+        1.5
+      ],
+      "drives": "Amplitude of the per-cube scale response in math_scale (torange2 = 0.15+Cubescale). 0 = all cubes flat at the 0.15 floor (uniform); higher = noise pushes cubes from tiny to large, creating the relief/breathing depth."
+    },
+    {
+      "name": "Huespread",
+      "label": "Hue Spread",
+      "style": "Float",
+      "default": 1,
+      "range": [
+        0,
+        3
+      ],
+      "drives": "How many hue cycles the noise value sweeps across in color_expr (multiplies n inside the sin-based HSV). Low = subtle monochrome shifts; high = full rainbow banding that flows with the noise wave. Drives per-instance r/g/b."
+    }
+  ],
+  "prompt": {
+    "one_liner": "A 3D grid of GPU-instanced cubes that breathe and shift color as a single 3D noise field drifts through them -- cheap, hypnotic, and a clean reference for CHOP-driven hardware instancing.",
+    "evolve": "Swap the Constant MAT for a PBR or Phong MAT (the key light is already in place) for shaded, glossy cubes. Replace box_cube with any SOP (sphere, tetra, a custom mesh) to instance a different primitive at zero extra cost. Feed the noise channel into instance rotation (instancerx/ry/rz) for tumbling cells. Drive Flowspeed/Huespread from audio (Audio Spectrum CHOP -> Math) for a reactive VJ loop. Layer a Bloom/Blur on out1 for glow. Replace the Script CHOP grid with a SOP-to-CHOP off any geometry to instance over an arbitrary point cloud.",
+    "compose_with": [
+      "kaleidoscope",
+      "reaction-diffusion"
+    ]
+  },
+  "warmup_frames": 8,
+  "build_notes": "COOK DEMAND: The chain is time-dependent only through noise_field's Translate Z (=absTime.seconds*Flowspeed). render_grid is a Render TOP (always-cook) so it pulls the noise field every frame -- the grid animates whenever out1 is viewed or the build pipeline cooks warmup_frames. In the sandbox, nothing views out1: add a TEMP frame-driver Execute DAT in /specimen_lab (OUTSIDE the COMP) with an onFrameStart that cooks out1, then verify animation across two real frames (capture, sleep ~1s, capture, compare -- the wave should have moved in Z). The driver lives outside the COMP so it never exports. warmup_frames=8 is plenty (no feedback accumulation).\\n\\nSTATIC-SOURCE / CHEAP-MOTION: grid_positions, box_cube, and cellid_extract are STATIC -- they cook once and cache (grid_positions references only Gridsize/Spacing, not time). After warmup, confirm grid_positions.cookedThisFrame==False and noise_field.cookedThisFrame==True. The motion is entirely in re-sampling the static noise field at a drifting Z offset; nothing heavy re-cooks per frame. This is the whole point: 864 cubes animate at ~free cost.\\n\\nSCRIPT CHOP onCook body (grid_positions) -- builds static grid + normalized cellid:\\n  def onCook(scriptOp):\\n      scriptOp.clear()\\n      p = parent()\\n      g = int(p.par.Gridsize.eval()); layers = 6; sp = p.par.Spacing.eval()\\n      n = g*g*layers\\n      tx = scriptOp.appendChan('tx'); ty = scriptOp.appendChan('ty')\\n      tz = scriptOp.appendChan('tz'); cid = scriptOp.appendChan('cellid')\\n      scriptOp.numSamples = n\\n      ox = (g-1)*0.5*sp; oy = (layers-1)*0.5*sp; oz = (g-1)*0.5*sp\\n      i = 0\\n      for yz in range(layers):\\n          for yy in range(g):\\n              for xx in range(g):\\n                  tx[i] = xx*sp - ox; ty[i] = yz*sp - oy; tz[i] = yy*sp - oz\\n                  cid[i] = i / max(1, n-1); i += 1\\n  Add a Parameter Execute DAT (or a parexec) so changing Gridsize/Spacing re-cooks grid_positions; simplest is to reference the params inside onCook (done) -- TD dirties the Script CHOP when a referenced par changes. Cap Gridsize at 24 (24*24*6 = 3456 instances) to stay well within budget.\\n\\nINSTANCE OP WIRING: geo reads ONE CHOP (instance_data) holding tx/ty/tz/sx/sy/sz/r/g/b, sample count = instance count. Use a RELATIVE ref for instanceop and material (e.g. '../instance_data' if the CHOP sits beside geo, or place a Null/In inside geo -- never an absolute path). Set instancecountmode to CHOP/OP length so count auto-tracks Gridsize. Map the named channels in the Instance pages; instance color mode = explicit, r/g/b from the channels. mat_cube must have useinstancecolor ON or every cube renders white.\\n\\nPERFORMANCE: 1280x720 render, <=3456 cubes, Constant MAT (no lighting math), single noise sample per cube per frame -- comfortably real-time. Box SOP size 0.6 < Spacing 1.0 default so cubes never interpenetrate at base scale; if a user maxes Cubescale and minimizes Spacing they will overlap (acceptable, visually fine). No feedback loop, no 4K, no unbounded anything. Gate with get_project_performance before/after; the only per-frame cost is noise_field + render. Antialias 8x is cheap at this poly count; drop to none if fps dips on weak GPUs.\\n\\nLAYOUT/DOCK: No GLSL ops, so no scattered pixel/compute/info DATs to hug. The Script CHOP and Render TOP have no auto-docked DATs. Standard left-to-right flow: SOP+CHOP-build cluster -> geo+materials cluster -> camera/light/render cluster -> out1. Annotate three sections: 'Static Grid + Noise Field', 'Instanced Geometry + Color', 'Render to out1'. Keep cam and light_key near render_grid (they feed it); keep mat_cube beside geo (it shades it).\\n\\nTDN VALUE GOTCHA: exposed params export definitions (default/range/help) but NOT current value when value==default. On re-import the params recreate with correct default but .val stays at min/0, so the imported specimen can be inert (Cubescale=0 -> flat, Flowspeed=0 -> frozen). Verify on re-import and add a one-time revert-to-default (or onInitTD setting par.val=par.default) until the TDN importer applies default->value.",
+  "critique": {
+    "td_plausible": true,
+    "clears_bar": true,
+    "requires_none": true,
+    "photogenic": 4,
+    "verdict": "revise",
+    "issues": [
+      "BLOCKER - Geometry COMP instancecolormode='explicit' is INVALID. Verified against docs.derivative.ca/Geometry_COMP: the only valid menu values are 'replace', 'multiply', 'add', 'subtract'. There is no 'explicit'. With useinstancecolor on a Constant MAT and no SOP Cd attribute, the default 'replace' is what's actually wanted, but the spec names a value that does not exist and the build will error or fall back.",
+      "BLOCKER - Geometry COMP color-channel wiring is incomplete/wrong. To drive per-instance color you must set instancecolorop (the OP holding r/g/b -> here '../instance_data') AND set instancecolorr/g/b to the channel names r/g/b. The spec sets instancecolorr/g/b but never sets instancecolorop, so the color channels have no source op. (Note instanceop transforms instances but color is read via the separate instancecolorop slot.)",
+      "BLOCKER - Noise CHOP parameter tokens are wrong and will fail to set. Verified names: amplitude->'amp' (spec uses 'amplitude'), harmonics->'harmon' (spec uses 'harmonics'), roughness->'rough' (spec uses 'roughness'), Translate Z->'tz' (spec uses 'translatez'). Also type value must be lowercase 'sparse', not 'Sparse'. period and channelname are correct.",
+      "BLOCKER - Render TOP antialias values are invalid. Verified menu values: aa1/aa2/aa4/aa8mid/aa8high/aa16low/aa16mid/aa16high/aa32. '4xtemporal' and '8x' do not exist. Use 'aa4' or 'aa8high'.",
+      "BLOCKER - render_grid sets resolutionw/h=1280x720 but omits outputresolution. Verified: resolutionw/h only apply when outputresolution='Custom Resolution'. Without it the Render TOP uses its default/global resolution and the 1280x720 cap is silently ignored.",
+      "BLOCKER - Render TOP background alpha: spec uses 'bgalpha':1. The parameter is 'bgcolora' (4th component of bgcolor), there is no 'bgalpha'. (Also bgalpha=1 opaque contradicts the prompt's 'Layer a Bloom/Blur on out1 for glow' / compositing intent; for a drop-in VJ element transparent bg, bgcolora=0, is usually wanted - flag to author.)",
+      "MAJOR - expressionCHOP output channel names are assumed. The spec's rename_color renames 'chan1 chan2 chan3' to r/g/b, but an Expression CHOP passes through the INPUT channel names by default; its input here is merge_noise_id whose channels are 'n' and 'cellid', so the expr outputs are likely named 'n','cellid' (or the expr index names), not 'chan1/chan2/chan3'. The rename mapping will silently match nothing. Must verify actual output channel names at build time (or use a Rename with renamefrom='*' and a 3-name renameto, or set the Expression CHOP to output explicit channel names).",
+      "MAJOR - instance_data sample-count alignment risk. It merges grid_positions (tx/ty/tz/cellid), rename_scale (sx/sy/sz), rename_color (r/g/b). grid_positions still carries the 'cellid' channel into the merge - harmless extra channel, but worth pruning. More importantly all three branches must have identical numSamples = instance count; the Noise CHOP 'one index in = one sample out' preserves count, so this holds IF grid_positions truly sets numSamples = g*g*layers. Confirmed the onCook sets scriptOp.numSamples = n before/around appendChan - order is fine (numSamples settable, appendChan returns indexable Channel, chan[i]=value valid).",
+      "MINOR - description/exposed_params inconsistency on layer count. network_plan/build_notes hardcode layers=6 (Gridsize*Gridsize*6); Gridsize default 12 -> 864, max 24 -> 3456. Consistent internally, but 'Layers' is mentioned in grid_positions role as if variable while it is a fixed constant 6. Cosmetic - document it as fixed or expose it.",
+      "MINOR - geo.instanceop and material values are written as prose ('./instance_data_in or ../instance_data (see notes)', './mat_cube or ../mat_cube'). These must resolve to a single concrete RELATIVE ref at build time. instance_data is a sibling of geo (both inside the COMP), so instanceop='../instance_data' and material='../mat_cube' (or a Null/In inside geo). Not a correctness bug in the design, but the TDN value cannot ship as an either/or string.",
+      "NOTE (not a defect) - TDN value round-trip caveat in build_notes is correct and important: imported specimen comes in inert (Cubescale/Flowspeed at min/0). The onInitTD par.val=par.default workaround is the right call and matches the specimen-authoring skill's known limitation."
+    ],
+    "fixes": "Set geo.instancecolormode to a valid value - use 'replace' (default), NOT 'explicit'. Add instancecolorop='../instance_data' so the r/g/b channels have a source; keep instancecolorr='r', instancecolorg='g', instancecolorb='b'. Fix Noise CHOP param tokens: amplitude->amp, harmonics->harmon, roughness->rough, translatez->tz, and type='sparse' (lowercase). On render_grid add outputresolution='Custom Resolution' (or the menu token, verify with get_parameter) so resolutionw=1280/resolutionh=720 actually apply; change antialias from '4xtemporal or 8x' to 'aa4' (or 'aa8high'); change 'bgalpha':1 to 'bgcolora' (and decide opaque vs transparent - for a drop-in compositing element prefer bgcolora=0). Resolve the expressionCHOP color naming: at build time inspect color_expr's actual output channel names and set rename_color.renamefrom to the real names (or renamefrom='*' with renameto='r g b' if exactly 3 channels), since '/chan1 chan2 chan3' likely won't match (input channels n/cellid pass through). Pin geo.instanceop and material to single concrete relative refs ('../instance_data', '../mat_cube'). Optionally prune the stray 'cellid' channel from grid_positions before the final instance_data merge. After fixes: build in /specimen_lab, add the temp frame-driver Execute DAT, verify two-frame animation (wave moves in Z), capture out1 and confirm it is not black, and confirm grid_positions.cookedThisFrame==False while noise_field.cookedThisFrame==True. The core design (Noise CHOP fed grid positions as XYZ sample coords, drifting tz over time, CHOP-driven hardware instancing, Constant MAT useinstancecolor) is sound and clears all four bar points - this is a parameter-token/wiring correctness pass, not a redesign."
+  }
+}

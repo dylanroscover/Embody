@@ -8,6 +8,8 @@ description: "Grid spacing, signal flow, operator placement, and annotation rule
 
 **No exemptions — this governs EVERY operator you create or move, whether through the `create_op` / `create_annotation` MCP tools OR through `execute_python` (`comp.create(...)`, `.copy()`, `.copyOPs()`).** `execute_python` creation is the silent trap: it bypasses the `/create-operator` skill and every gate below, and TD's bare `.create()` drops each new op at **(0, 0)**, stacked on the last. If you create or move operators inside an `execute_python` call, you are on the hook for applying this procedure by hand — above all the **Verify** step, which is the backstop that catches a (0, 0) pileup before it ships. Convenience batching in `execute_python` does not buy you out of layout.
 
+**Envoy enforces this at the tool layer.** Every `execute_python` is linted: if it leaves newly-created ops at **(0, 0)**, overlapping a sibling, or with docked DATs scattered far from their host, a `LAYOUT WARNING` rides back on the response (in `_logs`). Treat that warning as a **hard stop** — run `get_network_layout` and reposition before continuing; do not end the turn with it unaddressed. (`create_op` already auto-positions, so this gap is `execute_python` / `comp.create()` / `.copy()` only.) This is the single canonical statement of the trap — everything below just references it.
+
 1. **Read first**: `get_network_layout` + `get_annotations` on the parent COMP. Understand existing positions, groups, and flow before touching anything.
 2. **Flag problems**: If the existing layout is messy (overlapping ops, orphaned ops outside annotations, broken grid alignment), tell the user before adding to it. Do not silently work around a bad layout.
 3. **Identify the target group**: Determine which annotation group the new operator belongs to. If none fits, you will create a new one.
@@ -82,8 +84,7 @@ Hosts and what they dock: execute/callback DATs (`chopExecuteDAT`, `datExecuteDA
 
 ## Anti-Patterns
 
-- Placing at `[0, 0]` or the origin without reading existing layout.
-- **Creating ops via `execute_python` (`comp.create(...)`) and forgetting they obey this rule.** TD's `.create()` defaults to (0, 0); the `/create-operator` skill and the gates here only fire on the `create_op` tool. Every `execute_python` that creates operators must position them on the grid and end with the **Verify** step — this is the exact bypass that produced a whole sub-COMP stacked at (0, 0).
+- **Leaving `execute_python`-created ops at (0, 0) / overlapping** — the most common layout failure (see the Placement Procedure note: `create_op` auto-positions, `execute_python` does not). Envoy now emits a `LAYOUT WARNING` for it, but position + Verify regardless of the warning.
 - Placing "near" a related op by picking a mathematically close but visually wrong position — filling a gap in the middle of a finished row instead of extending rightward.
 - **Using fixed offsets like `nodeX + 300` without accounting for `nodeWidth`** — this is the #1 cause of overlapping operators when ops are wider than ~100 units.
 - Using TD's `COMP.layout()` — it produces overlapping, unreadable results.

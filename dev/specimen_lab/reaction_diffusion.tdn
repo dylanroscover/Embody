@@ -1,0 +1,467 @@
+format: tdn
+version: '2.0'
+build: 3
+generator: Embody/6.0.28
+td_build: 099.2025.32820
+source_file: Embody-6.29.toe
+exported_at: '2026-06-14T05:20:41Z'
+network_path: /specimen_lab/reaction_diffusion
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  annotateCOMP:
+    parameters:
+      order: =me.digits or 0
+      layerzone: =0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1
+    flags:
+    - display
+    color: [0.45, 0.45, 0.45]
+  glslTOP:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+par_templates:
+  about:
+  - default: '1.0'
+    help: Annotate COMP default setup version.
+    name: Version
+    readOnly: true
+    startSection: true
+    style: Str
+  - help: Click to open help page.
+    name: Help
+    style: Pulse
+  text:
+  - default: Annotate
+    help: Text in the title bar.
+    label: Title Text
+    name: Titletext
+    startSection: true
+    style: Str
+  - clampMin: true
+    default: 30
+    help: Height of the title bar. Title font height adjusts automatically to fill.
+    label: Title Height
+    name: Titleheight
+    normMax: 100.0
+    normMin: 5.0
+    style: Int
+  - default: left
+    help: Alignment of title text.
+    label: Title Align
+    menuLabels:
+    - Left
+    - Center
+    - Right
+    menuNames:
+    - left
+    - center
+    - right
+    name: Titlealign
+    style: Menu
+  - help: Text in the body area. Use an expression for newlines etc.
+    label: Body Text
+    name: Bodytext
+    startSection: true
+    style: Str
+  - clampMin: true
+    default: 10
+    help: Size of text in the body area.
+    label: Body Font Size
+    name: Bodyfontsize
+    normMax: 100.0
+    normMin: 8.0
+    style: Int
+  - help: Limit the width of the text area.
+    label: Limit Body Text Width
+    name: Bodylimitwidth
+    style: Toggle
+  - clampMin: true
+    default: 1000
+    help: Width limit that will cause wraparound or cut-off. Measured in Panel units.
+    label: Max Body Text Width
+    name: Bodymaxwidth
+    normMax: 2000.0
+    normMin: 100.0
+    style: Int
+  settings:
+  - default: comment
+    help: 'Switch between Comment, Network Box, and Annotate Modes. '
+    menuLabels:
+    - Comment
+    - Network Box
+    - Annotate
+    menuNames:
+    - comment
+    - networkbox
+    - annotate
+    name: Mode
+    style: Menu
+  - help: Converts quotes, ellipsis, and dashes to more typographically nice unicode versions.
+    label: Smart Quote
+    name: Smartquote
+    startSection: true
+    style: Toggle
+  - default: true
+    help: Wrap body text when it extends past right bound.
+    label: Body Word Wrap
+    name: Bodywordwrap
+    style: Toggle
+  - default: 1
+    help: Background color base.
+    label: Back Color
+    name: Backcolorr
+    startSection: true
+    style: RGBA
+  - clampMax: true
+    clampMin: true
+    default: 1
+    help: Back color alpha.
+    label: Back Color Alpha
+    name: Backcoloralpha
+    style: Float
+  - clampMax: true
+    clampMin: true
+    default: 1
+    help: Opacity of the entire Annotate.
+    label: Annotate Opacity
+    name: Opacity
+    style: Float
+  op_viewer:
+  - help: Turn the visibility of the viewer specified in the OP parameter below on or off.
+    label: Viewer Display
+    name: Opviewerdisplay
+    style: Toggle
+  - help: The operator whose viewer is displayed in the Annotate.
+    label: OP
+    name: Opviewer
+    style: OP
+  - help: Allow interaction with the OP viewer.
+    label: OP Viewer Interactive
+    name: Opviewerinteractive
+    style: Toggle
+  - default: 'False'
+    help: Use the Size/Aspect Override to control viewer's size in the background.
+    label: Size/Aspect Override
+    menuLabels:
+    - Natural
+    - Specify
+    - Auto-Fit
+    menuNames:
+    - natural
+    - specify
+    - autofit
+    name: Opvieweroversize
+    startSection: true
+    style: Menu
+  - clampMin: true
+    default: 800
+    help: Diplay viewer as-if it were being displayed at this resolution. This is particularly useful for zooming into operators that don't have a built-in resolution, like CHOPs, SOPs, and DATs.
+    label: Size/Aspect
+    name: Opviewersize
+    normMax: 1000.0
+    normMin: 1.0
+    style: WH
+  - default: 1
+    help: Scale the viewer by this factor.
+    label: Scale
+    name: Opviewerscale
+    normMax: 2.0
+    startSection: true
+    style: Float
+  - help: Move the border of the viewer towards left edge of Annotate when negative or towards right edge when positive.
+    label: Justify X
+    name: Opviewerjustifyx
+    normMin: -1.0
+    style: Float
+  - label: Justify Y
+    name: Opviewerjustifyy
+    normMin: -1.0
+    style: Float
+  - help: When True, allow viewer to display in the Annotate title area as well as body.
+    label: Cover Body and Title
+    name: Opviewerfillbodytitle
+    style: Toggle
+  - clampMin: true
+    default: 1
+    help: Zoom the viewer by this scale factor without increasing the size of its display area in the Annotate.
+    label: OP Viewer Zoom
+    min: 0.001
+    name: Opviewerzoom
+    normMax: 5.0
+    normMin: 1.0
+    startSection: true
+    style: Float
+  - help: Offsets the displayed area within the viewer. Combined with OP Viewer Zoom, this lets you display a specific area of a viewer, such as a CHOP channel or table cell.
+    label: OP Viewer Offset
+    name: Opvieweroffsetx
+    style: XYZW
+  - clampMax: true
+    clampMin: true
+    default: 1
+    help: Alpha value of the background area in the OP Viewer.
+    label: Fill Alpha
+    name: Opviewerfillalpha
+    startSection: true
+    style: Float
+type: baseCOMP
+custom_pars:
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Output width (px), 4K. The reaction sim stays bounded 16:9; out1 upscales to this.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Output height (px), 4K.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  position: [2750, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - res_up
+- name: res_up
+  type: resolutionTOP
+  parameters:
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  position: [2500, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_colorize
+- name: annotate1
+  type: annotateCOMP
+  sequences:
+    ext:
+    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
+      promote: true
+  custom_pars:
+    Text:
+      $t: text
+      Titletext: Seed
+      Bodytext: Initial conditions. A=1 everywhere; B=1 in a jittered grid of spots, setting where the reaction begins.
+    Settings:
+      $t: settings
+      Mode: annotate
+      Backcolorr: [0.12, 0.19, 0.16]
+      Opacity: 0.3
+    OP Viewer:
+      $t: op_viewer
+      Opvieweroversize: natural
+    About:
+      $t: about
+  position: [-220, -190]
+  size: [570, 450]
+  palette_clone: true
+- name: annotate2
+  type: annotateCOMP
+  sequences:
+    ext:
+    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
+      promote: true
+  custom_pars:
+    Text:
+      $t: text
+      Titletext: Reaction-Diffusion Loop
+      Bodytext: 'The Gray-Scott core: chemical state is held between frames and updated by diffusion + reaction each frame. Feed/kill rates choose the pattern regime. Cooks every frame when the output is demanded.'
+    Settings:
+      $t: settings
+      Mode: annotate
+      Backcolorr: [0.1, 0.18, 0.26]
+      Opacity: 0.3
+    OP Viewer:
+      $t: op_viewer
+      Opvieweroversize: natural
+    About:
+      $t: about
+  position: [830, -190]
+  size: [720, 450]
+  palette_clone: true
+- name: annotate3
+  type: annotateCOMP
+  sequences:
+    ext:
+    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
+      promote: true
+  custom_pars:
+    Text:
+      $t: text
+      Titletext: Colorize & Output
+      Bodytext: Maps B concentration to a deep-navy -> teal -> cream palette with a soft vignette, terminating in the output Null.
+    Settings:
+      $t: settings
+      Mode: annotate
+      Backcolorr: [0.2, 0.16, 0.21]
+      Opacity: 0.3
+    OP Viewer:
+      $t: op_viewer
+      Opvieweroversize: natural
+    About:
+      $t: about
+  position: [2030, -190]
+  size: [920, 450]
+  palette_clone: true
+- name: glsl_seed
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_seed_pixel
+    computedat: seed_compute
+    outputresolution: custom
+    resolutionw: 1280
+    resolutionh: 720
+    format: rgba32float
+- name: glsl_rd_step
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_rd_step_pixel
+    computedat: rd_step_compute
+    outputresolution: custom
+    resolutionw: 1280
+    resolutionh: 720
+    format: rgba32float
+  position: [1200, 0]
+  inputs:
+  - feedback_state
+- name: glsl_colorize
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_colorize_pixel
+    computedat: colorize_compute
+  position: [2250, 0]
+  inputs:
+  - glsl_rd_step
+- name: feedback_state
+  type: feedbackTOP
+  parameters:
+    top: glsl_rd_step
+    format: rgba32float
+  flags:
+  - viewer
+  position: [900, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_seed
+- name: glsl_seed_info
+  type: infoDAT
+  parameters:
+    op: glsl_seed
+  position: [0, -120]
+  dock: glsl_seed
+- name: glsl_seed_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_seed_pixel.glsl
+    extension: frag
+  position: [150, -120]
+  dock: glsl_seed
+- name: glsl_rd_step_info
+  type: infoDAT
+  parameters:
+    op: glsl_rd_step
+  position: [1200, -120]
+  dock: glsl_rd_step
+- name: glsl_seed_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_seed_compute.glsl
+  position: [-150, -120]
+  dock: glsl_seed
+- name: glsl_colorize_info
+  type: infoDAT
+  parameters:
+    op: glsl_colorize
+  position: [2250, -120]
+  dock: glsl_colorize
+- name: glsl_rd_step_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_rd_step_pixel.glsl
+    extension: frag
+  position: [1350, -120]
+  dock: glsl_rd_step
+- name: glsl_colorize_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_colorize_pixel.glsl
+    extension: frag
+  position: [2400, -120]
+  dock: glsl_colorize
+- name: glsl_rd_step_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_rd_step_compute.glsl
+  position: [1050, -120]
+  dock: glsl_rd_step
+- name: glsl_colorize_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_colorize_compute.glsl
+  position: [2100, -120]
+  dock: glsl_colorize
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Seed
+  text: Initial conditions. A=1 everywhere; B=1 in a jittered grid of spots, setting where the reaction begins.
+  position: [-220, -190]
+  size: [570, 450]
+  color: [0.12, 0.19, 0.16]
+  opacity: 0.3
+- name: annotate2
+  mode: annotate
+  title: Reaction-Diffusion Loop
+  text: 'The Gray-Scott core: chemical state is held between frames and updated by diffusion + reaction each frame. Feed/kill rates choose the pattern regime. Cooks every frame when the output is demanded.'
+  position: [830, -190]
+  size: [720, 450]
+  color: [0.1, 0.18, 0.26]
+  opacity: 0.3
+- name: annotate3
+  mode: annotate
+  title: Colorize & Output
+  text: Maps B concentration to a deep-navy -> teal -> cream palette with a soft vignette, terminating in the output Null.
+  position: [2030, -190]
+  size: [920, 450]
+  color: [0.2, 0.16, 0.21]
+  opacity: 0.3

@@ -1,0 +1,349 @@
+{
+  "slug": "procedural-tube-path",
+  "name": "Procedural Tube Path",
+  "category": "generative-geometry",
+  "difficulty": "intermediate",
+  "description": "A glossy tube swept along a noise-driven 3D curve, lit with a rim light and slowly drifting in 3D. Real generative geometry (Line -> Noise -> Resample -> Sweep), animated cheaply by orbiting the view instead of recooking the mesh -- with an optional in-place curve morph.",
+  "key_ops": [
+    "lineSOP",
+    "noiseSOP",
+    "resampleSOP",
+    "circleSOP",
+    "sweepSOP",
+    "geometryCOMP",
+    "phongMAT",
+    "cameraCOMP",
+    "lightCOMP",
+    "renderTOP",
+    "outTOP"
+  ],
+  "network_plan": [
+    {
+      "name": "line_backbone",
+      "type": "lineSOP",
+      "role": "Straight 40-point line that becomes the raw spine before noise bends it into a flowing path.",
+      "params": {
+        "pa": [
+          0,
+          0,
+          -4
+        ],
+        "pb": [
+          0,
+          0,
+          4
+        ],
+        "points": 40
+      },
+      "inputs": []
+    },
+    {
+      "name": "noise_curve",
+      "type": "noiseSOP",
+      "role": "Bends the straight line into an organic 3D path by displacing each point's position. Low-frequency Sparse noise keeps the curve smooth and flowing, not jagged. The static default (no time on tz) means this cooks once and caches; raising Morphspeed binds tz to absTime to make the path deform IN PLACE.",
+      "params": {
+        "type": "sparse",
+        "operation": "pos",
+        "amp": "=parent().par.Curveamp",
+        "period": "=parent().par.Curvescale",
+        "harmon": 2,
+        "rough": 0.45,
+        "seed": "=parent().par.Seed",
+        "tz": "=absTime.seconds*parent().par.Morphspeed"
+      },
+      "inputs": [
+        "line_backbone"
+      ]
+    },
+    {
+      "name": "resample_smooth",
+      "type": "resampleSOP",
+      "role": "Re-spaces the displaced points into even-length segments along the arc. This both smooths the backbone (removes the original even-Z spacing kinks) and gives the Sweep a uniform tube wall. Measure=Along Arc for accuracy on the curved spline.",
+      "params": {
+        "method": "dist",
+        "measure": "arc",
+        "dolength": 1,
+        "length": 0.22
+      },
+      "inputs": [
+        "noise_curve"
+      ]
+    },
+    {
+      "name": "circle_section",
+      "type": "circleSOP",
+      "role": "The closed cross-section profile swept along the backbone to form the tube wall. Drives tube smoothness via divs (radial resolution). Tube thickness is the cross-section Scale set on the Sweep, not the radius here, so radx/rady stay at 1.",
+      "params": {
+        "type": "polygon",
+        "arc": "closed",
+        "orient": "xy",
+        "divs": "=parent().par.Tuberes",
+        "radx": 1,
+        "rady": 1
+      },
+      "inputs": []
+    },
+    {
+      "name": "sweep_tube",
+      "type": "sweepSOP",
+      "role": "THE core technique. Input 0 = cross-section (circle), Input 1 = backbone (resampled curve). Places a scaled copy of the circle perpendicular to the curve at every backbone point, skinning a tube. Scale param sets tube radius; computes the surface and normals for lighting.",
+      "params": {
+        "scale": "=parent().par.Tuberadius",
+        "twist": "=parent().par.Twist",
+        "newg": 1,
+        "cap": "none"
+      },
+      "inputs": [
+        "circle_section",
+        "resample_smooth"
+      ]
+    },
+    {
+      "name": "geo_tube",
+      "type": "geometryCOMP",
+      "role": "Hosts the swept tube for rendering and carries the CHEAP animation: a constant rotation on ry/rz driven by absTime so the lit tube turns and the specular highlight sweeps across it -- a matrix multiply, no SOP recook. Material assigned via the Render/Material page.",
+      "params": {
+        "render": 1,
+        "material": "./phong_tube",
+        "rx": "=absTime.seconds*parent().par.Spinspeed*7",
+        "ry": "=absTime.seconds*parent().par.Spinspeed*13",
+        "instanceop": ""
+      },
+      "inputs": [
+        "sweep_tube"
+      ]
+    },
+    {
+      "name": "phong_tube",
+      "type": "phongMAT",
+      "role": "Glossy lit material. Tight specular + a colored rim light give the 'how is that one mesh so dimensional' look as the geo rotates. Diffuse/rim colors exposed as the palette controls. Lives directly inside the COMP, beside geo_tube which it shades.",
+      "params": {
+        "diffuser": "=parent().par.Colorr",
+        "diffuseg": "=parent().par.Colorg",
+        "diffuseb": "=parent().par.Colorb",
+        "specr": 0.9,
+        "specg": 0.9,
+        "specb": 1,
+        "shininess": 65,
+        "rimlight0enable": 1,
+        "rimlight0colorr": "=parent().par.Rimr",
+        "rimlight0colorg": "=parent().par.Rimg",
+        "rimlight0colorb": "=parent().par.Rimb",
+        "rimlight0width": 0.55,
+        "rimlight0strength": 1.6
+      },
+      "inputs": []
+    },
+    {
+      "name": "cam",
+      "type": "cameraCOMP",
+      "role": "Perspective camera looking at the tube. Slow cheap orbit: tx/tz driven by absTime via sin/cos so the camera circles the geometry. Placed near render/light per layout rules.",
+      "params": {
+        "tx": "=sin(absTime.seconds*parent().par.Spinspeed*0.4)*9",
+        "ty": 1.5,
+        "tz": "=cos(absTime.seconds*parent().par.Spinspeed*0.4)*9",
+        "lookat": "geo_tube",
+        "fov": 40
+      },
+      "inputs": []
+    },
+    {
+      "name": "light_key",
+      "type": "lightCOMP",
+      "role": "Key light for the diffuse + specular sweep. Warm-neutral, positioned high and to one side so the tube's curvature reads.",
+      "params": {
+        "tx": 5,
+        "ty": 6,
+        "tz": 4,
+        "dimmer": 1.1,
+        "colorr": 1,
+        "colorg": 0.98,
+        "colorb": 0.92
+      },
+      "inputs": []
+    },
+    {
+      "name": "render_tube",
+      "type": "renderTOP",
+      "role": "Renders geo_tube with cam and light_key. Bounded resolution 1280x720, antialiasing on for clean tube edges, transparent-friendly dark bg so the rim light pops.",
+      "params": {
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "camera": "cam",
+        "lights": "light_key",
+        "geometry": "geo_tube",
+        "antialias": "8x",
+        "bgcolorr": 0.02,
+        "bgcolorg": 0.025,
+        "bgcolorb": 0.035,
+        "bgalpha": 1
+      },
+      "inputs": []
+    },
+    {
+      "name": "blur_bloom",
+      "type": "blurTOP",
+      "role": "Soft, bounded blur of the render -- the bright pass of a one-op bloom. Cheap at 1280px, no feedback so no runaway.",
+      "params": {
+        "size": "=parent().par.Glow*22"
+      },
+      "inputs": [
+        "render_tube"
+      ]
+    },
+    {
+      "name": "comp_bloom",
+      "type": "compositeTOP",
+      "role": "Adds the blurred bright pass back over the sharp render (screen/add) for a controlled glow on the highlights. Glow=0 leaves the render untouched because the blur of a clamped scene contributes little, scaled by the param.",
+      "params": {
+        "operand": "add",
+        "prefit": "resize"
+      },
+      "inputs": [
+        "render_tube",
+        "blur_bloom"
+      ]
+    },
+    {
+      "name": "level_grade",
+      "type": "levelTOP",
+      "role": "Final grade: slight gamma/contrast lift so the tube and background separate cleanly. Cheap per-pixel.",
+      "params": {
+        "gamma1": 1.05,
+        "blacklevel": 0.01,
+        "contrast": 1.06
+      },
+      "inputs": [
+        "comp_bloom"
+      ]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Contract-fixed terminal / capture target (manifest output_op). Clean single output at 1280x720.",
+      "params": {},
+      "inputs": [
+        "level_grade"
+      ]
+    }
+  ],
+  "glsl": [],
+  "exposed_params": [
+    {
+      "name": "Curveamp",
+      "label": "Curve Amount",
+      "style": "Float",
+      "default": 2.2,
+      "range": [
+        0,
+        5
+      ],
+      "drives": "noise_curve.amp -- how far the noise bends the spine off the straight line. 0 = nearly straight rod, high = wild looping path."
+    },
+    {
+      "name": "Curvescale",
+      "label": "Curve Scale",
+      "style": "Float",
+      "default": 6,
+      "range": [
+        1,
+        15
+      ],
+      "drives": "noise_curve.period -- spatial wavelength of the noise. Low = tight knotty wiggles, high = long lazy sweeps."
+    },
+    {
+      "name": "Tuberadius",
+      "label": "Tube Radius",
+      "style": "Float",
+      "default": 0.35,
+      "range": [
+        0.05,
+        1.2
+      ],
+      "drives": "sweep_tube.scale -- thickness of the swept tube. Thin = wire/noodle, thick = fat pipe."
+    },
+    {
+      "name": "Tuberes",
+      "label": "Tube Resolution",
+      "style": "Int",
+      "default": 18,
+      "range": [
+        3,
+        48
+      ],
+      "drives": "circle_section.divs -- radial facet count of the cross-section. 3 = triangular prism, high = perfectly round tube."
+    },
+    {
+      "name": "Twist",
+      "label": "Twist",
+      "style": "Float",
+      "default": 0,
+      "range": [
+        -3,
+        3
+      ],
+      "drives": "sweep_tube.twist -- rotates the cross-section along the backbone; with a faceted Tuberes it reads as a candy-cane spiral on the surface."
+    },
+    {
+      "name": "Spinspeed",
+      "label": "Drift Speed",
+      "style": "Float",
+      "default": 0.5,
+      "range": [
+        0,
+        3
+      ],
+      "drives": "geo_tube.rx/ry rotation AND cam orbit -- the CHEAP animation. Scales the whole slow-drift motion; 0 freezes the view, geometry never recooks."
+    },
+    {
+      "name": "Morphspeed",
+      "label": "Morph Speed",
+      "style": "Float",
+      "default": 0,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "noise_curve.tz = absTime*Morphspeed -- the OPTIONAL in-place curve deformation. 0 (default) keeps the SOP chain static/cached; raise it to make the path slowly reshape (this makes the SOPs recook every frame, so keep it low)."
+    },
+    {
+      "name": "Glow",
+      "label": "Glow",
+      "style": "Float",
+      "default": 0.4,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "blur_bloom.size and the strength of the bloom add -- soft halo around the lit highlights and rim. 0 = crisp render, high = dreamy."
+    }
+  ],
+  "prompt": {
+    "one_liner": "A glossy tube swept along a noise-bent 3D curve, lit with a rim light and slowly drifting -- real generative geometry, animated by orbiting the view instead of recooking the mesh.",
+    "evolve": "Push Curveamp up and Curvescale down for a knotted tangle, or the reverse for a single lazy ribbon. Crank Twist with a low Tuberes (3-6) for a faceted candy-cane spiral. Set Morphspeed above 0 to make the path slowly reshape in place (it recooks the SOPs -- keep it under ~0.3). Try a near-black background with a saturated Rim color for neon-pipe energy, or warm diffuse + soft Glow for blown-glass. Swap the Sweep cross-section circle for a star or square SOP to change the tube profile entirely. For a forest of tubes, instance geo_tube across a grid with per-instance Seed.",
+    "compose_with": [
+      "kaleidoscope",
+      "reaction-diffusion"
+    ]
+  },
+  "warmup_frames": 8,
+  "build_notes": "COOK DEMAND: The chain only animates when out1 is demanded (viewer, capture, or warmup bake). In the sandbox add a temp Execute DAT in /specimen_lab (OUTSIDE the COMP) with onFrameStart cooking out1; it never exports. Verify motion with two captures separated by real wall-clock seconds (background sleep), not one forced frame -- a single capture proves nothing.\\n\\nCHEAP-MOTION ARCHITECTURE (the whole point): the SOP geometry (line_backbone -> noise_curve -> resample_smooth -> sweep_tube) is STATIC and cooks ONCE at the default Morphspeed=0, because noise_curve.tz = absTime*0 = constant. All visible motion is geo_tube's rotation expressions + the cam orbit -- pure matrix transforms, no SOP recook. Confirm sweep_tube.cookedThisFrame == False while the view animates and render_tube.cookedThisFrame == True. Morphspeed > 0 deliberately breaks this (binds tz to time -> SOPs recook every frame); that is the trade the param documents, so warn users and keep its range capped low.\\n\\nSWEEP WIRING IS ORDER-SENSITIVE: Sweep input 0 = cross-section (circle_section), input 1 = backbone (resample_smooth). Reversed, you get a tube-shaped backbone swept along a tiny circle -- garbage. Use newg=1 so the swept surface gets a clean group; cap='none' leaves the tube open-ended (set to a rounded/flat cap if a closed pill is wanted). Resample BEFORE the sweep, not after -- resampling a tube mesh is meaningless; resampling the curve is what makes the tube wall uniform.\\n\\nPERFORMANCE: all bounded. Render 1280x720, 8x AA. ~40 backbone points x Tuberes(18) cross-section = a few thousand polys -- trivial CPU/GPU. The bloom is a single Blur + Composite-add (no feedback loop), cheap at 720p. No 4K, no feedback, no unbounded anything. Gate with get_project_performance before/after; the only regression risk is a user setting Tuberes near 48 AND Morphspeed high (SOPs recook a denser mesh every frame) -- still small, but note it. Keep light_key as ONE light; the rim light is a MAT feature (rimlight0*), not a second Light COMP, so it costs nothing extra.\\n\\nMATERIAL PROXIMITY: phong_tube sits directly inside the COMP beside geo_tube (the geo it shades) and is assigned via geo_tube.par.material='./phong_tube'. cam and light_key sit near render_tube. Param expressions on child ops reach the COMP via parent().par.X (verify parent().path == the specimen COMP path before trusting the depth).\\n\\nTDN VALUE-ROUNDTRIP TRAP: exposed params export their defaults but NOT current values; a fresh import recreates them at 0/min, so Curveamp/Tuberadius/etc. land inert and the tube collapses to a flat zero-amplitude rod. After ImportNetwork, do a one-time revert-to-default (set par.val = par.default for all 8) or the specimen imports broken. This is a known collection-wide issue -- verify it in the re-import check.\\n\\nDOCKED DATS: no GLSL here, but phongMAT and the render chain dock nothing problematic; still run get_network_layout after building to confirm nothing scattered. Annotate per section: Backbone Curve (line/noise/resample), Tube Sweep (circle/sweep), Render Scene (geo/mat/cam/light/render), Look (blur/composite/level/out1) -- >=400 units between boxes.",
+  "critique": {
+    "td_plausible": true,
+    "clears_bar": true,
+    "requires_none": true,
+    "photogenic": 4,
+    "verdict": "revise",
+    "issues": [
+      "BUG (breaks palette): Phong MAT diffuse color tokens are wrong. Spec uses diffuser/diffuseg/diffuseb; the real TD 2025 tokens are diffr/diffg/diffb (verified docs.derivative.ca/Phong_MAT). The diffuse expressions land on nonexistent params and are dropped on import - tube renders with default diffuse, not the exposed color.",
+      "BUG (missing param): The phong_tube material references =parent().par.Colorr/Colorg/Colorb, but exposed_params never defines Colorr/Colorg/Colorb (only Rimr/Rimg/Rimb exist). The diffuse-color control the description promises does not exist. Either add Colorr/g/b to exposed_params or repoint the MAT.",
+      "BUG (no spine bend): Noise SOP has no 'operation' parameter. Spec sets operation:pos; the correct token is 'attribute' (value 'pos' is right). With the wrong token dropped, the Noise SOP does not displace position and the backbone may stay a near-straight rod - defeating the whole 'noise-bent curve' premise.",
+      "BUG (invalid par): Sweep SOP has no 'cap' parameter (capping is a separate Cap SOP). cap:'none' is invalid and dropped. build_notes claiming cap='none' leaves the tube open-ended is false - the Sweep has no cap control at all.",
+      "BUG (invalid menu value): Render TOP antialias:'8x' is a label, not a settable value. Valid internal values are aa1/aa2/aa4/aa8mid/aa8high/aa16low/aa16mid/aa16high/aa32 (verified docs.derivative.ca/Render_TOP). '8x' would be rejected/dropped, falling back to no AA.",
+      "BUG (wrong token): Render TOP background alpha token is bgcolora, not bgalpha. bgalpha:1 is dropped; the dark bg's alpha defaults instead of the intended 1.0.",
+      "CONCERN (possible black/flat lighting): TD docs do not confirm the Sweep SOP outputs point/vertex normals. Without normals, the Phong diffuse+specular+rim look - the entire 'how is one mesh so dimensional' hook - renders flat or wrong. Untested in spec; must be verified empirically and likely needs a normal-computing step (Facet SOP) between sweep_tube and geo_tube.",
+      "MINOR: Line SOP point A/B use array shorthand (pa:[..]/pb:[..]). The real tokens are component-split: pax/pay/paz, pbx/pby/pbz. Whether the TDN importer expands the array form is importer-dependent; component-token form is the safe, verified shape."
+    ],
+    "fixes": "\"1) Phong diffuse: change diffuser/diffuseg/diffuseb -> diffr/diffg/diffb. 2) Add exposed params Colorr/Colorg/Colorb (Float, default e.g. 0.2/0.5/0.9, range 0-1, startSection) so the diffuse expressions resolve - OR point diffr/diffg/diffb at existing params. 3) Noise SOP: change 'operation':'pos' -> 'attribute':'pos'. 4) Remove the invalid Sweep 'cap':'none'; if a closed pill is wanted, append a Cap SOP after sweep_tube (cap both ends) and update build_notes - do not claim Sweep has a cap param. 5) Render antialias: change '8x' -> 'aa8high' (or 'aa8mid'). 6) Render bgalpha:1 -> bgcolora:1. 7) Insert a Facet SOP (computenormals=1, or post=1) between sweep_tube and geo_tube to guarantee surface normals for Phong lighting; verify the lit/specular/rim look in a real capture (two captures seconds apart) before shipping - do not declare done on an unlit or flat frame. 8) Optional but safer: express Line points as pax/pay/paz/pbx/pby/pbz component tokens instead of pa/pb arrays. After all edits, re-import via import_network(clear_first=True), do the documented revert-to-default on all exposed params, then capture out1 to confirm a lit, bent, glossy tube (not a flat rod or black frame).\""
+  }
+}

@@ -1,0 +1,317 @@
+format: tdn
+version: '2.0'
+build: null
+generator: Embody/6.0.28
+td_build: 099.2025.32820
+source_file: Embody-6.29.toe
+exported_at: '2026-06-14T05:20:42Z'
+network_path: /specimen_lab/crosspoint_matrix
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  glslTOP:
+    parameters:
+      outputresolution: custom
+      format: rgba16float
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Matrix:
+  - name: Gridsize
+    style: Int
+    label: Matrix Size (N)
+    startSection: true
+    default: 20
+    min: 4.0
+    max: 40.0
+    clampMin: true
+    clampMax: true
+    normMin: 4.0
+    normMax: 40.0
+    help: NxN crosspoint matrix dimension.
+  - name: Activeroutes
+    style: Int
+    label: Active Routes
+    default: 16
+    min: 1.0
+    max: 20.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 20.0
+    help: Routes lit simultaneously.
+  - name: Latticeglow
+    style: Float
+    label: Lattice Glow
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Brightness of the dim unlit grid.
+  - name: Crosspointglow
+    style: Float
+    label: Crosspoint Glow
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Brightness of lit crosspoints + paths.
+  - name: Packetspeed
+    style: Float
+    label: Packet Speed
+    startSection: true
+    default: 0.5
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Speed packets race the L-path. 0 freezes.
+  - name: Packetdensity
+    style: Int
+    label: Packet Density
+    default: 8
+    min: 1.0
+    max: 10.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 10.0
+    help: Packets per active route.
+  - name: Streams
+    style: Int
+    label: Essence Streams
+    default: 3
+    min: 1.0
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 3.0
+    help: Separated essence colors (cyan/green/amber).
+  - name: Ptprate
+    style: Float
+    label: PTP Beat Rate
+    startSection: true
+    default: 0.5
+    min: 0.1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMin: 0.1
+    normMax: 2.0
+    help: PTP sync pulse frequency.
+  - name: Reconfigrate
+    style: Float
+    label: Reconfigure Rate
+    default: 0.25
+    min: 0.05
+    clampMin: true
+    clampMax: true
+    normMin: 0.05
+    help: How often active routes reconfigure.
+  - name: Lockindicators
+    style: Float
+    label: Lock Indicators
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Corner PTP-lock dot brightness.
+  - name: Bloom
+    style: Float
+    startSection: true
+    default: 1.1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: Bloom over lit crosspoints + packets.
+  - name: Glitch
+    style: Float
+    default: 0.8
+    max: 2.0
+    clampMin: true
+    normMax: 2.0
+    help: 'VHS glitch amount: chroma split, tape jitter/tear, rolling scanlines, grain.'
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+color: [0.67, 0.67, 0.67]
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - viewer
+  position: [3000, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_bloom
+- name: res_down
+  type: resolutionTOP
+  parameters:
+    outputresolution: custom
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+    format: rgba16float
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_matrix
+- name: comp_bloom
+  type: compositeTOP
+  parameters:
+    operand: add
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+    format: rgba16float
+  position: [1800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_matrix
+  - glsl_bloomblur
+- name: glsl_bloom
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_bloom_pixel
+    computedat: glsl_bloom_compute
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uBloom
+      valuex: =parent().par.Bloom.eval()
+      valuey: 0.5
+      valuez: =parent().par.Glitch.eval()
+      valuew: =absTime.seconds
+  position: [2400, 0]
+  inputs:
+  - comp_bloom
+- name: glsl_matrix
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_matrix_pixel
+    computedat: glsl_matrix_compute
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uGrid
+      valuex: =parent().par.Gridsize.eval()
+      valuey: =parent().par.Activeroutes.eval()
+      valuez: =parent().par.Latticeglow.eval()
+      valuew: =parent().par.Crosspointglow.eval()
+    - name: uPacket
+      valuex: =parent().par.Packetspeed.eval()
+      valuey: =parent().par.Packetdensity.eval()
+      valuez: =parent().par.Streams.eval()
+      valuew: =absTime.seconds*parent().par.Packetspeed.eval()
+    - name: uClock
+      valuex: =parent().par.Ptprate.eval()
+      valuey: =parent().par.Reconfigrate.eval()
+      valuez: =parent().par.Lockindicators.eval()
+      valuew: =absTime.seconds
+- name: glsl_bloomblur
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_bloomblur_pixel
+    computedat: glsl_bloomblur_compute
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+  sequences:
+    vec:
+    - name: uBloom
+      valuex: =parent().par.Bloom.eval()
+      valuey: 0.45
+      valuez: 2.2
+  position: [1200, 0]
+  inputs:
+  - res_down
+- name: glsl_bloom_info
+  type: infoDAT
+  parameters:
+    op: glsl_bloom
+  position: [2700, -120]
+  dock: glsl_bloom
+- name: glsl_bloom_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [2550, -120]
+  dock: glsl_bloom
+- name: glsl_matrix_info
+  type: infoDAT
+  parameters:
+    op: glsl_matrix
+  position: [300, -120]
+  dock: glsl_matrix
+- name: glsl_matrix_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [150, -120]
+  dock: glsl_matrix
+- name: glsl_bloom_compute
+  type: textDAT
+  position: [2400, -120]
+  dock: glsl_bloom
+- name: glsl_bloomblur_info
+  type: infoDAT
+  parameters:
+    op: glsl_bloomblur
+  position: [1500, -120]
+  dock: glsl_bloomblur
+- name: glsl_matrix_compute
+  type: textDAT
+  position: [0, -120]
+  dock: glsl_matrix
+- name: glsl_bloomblur_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [1350, -120]
+  dock: glsl_bloomblur
+- name: glsl_bloomblur_compute
+  type: textDAT
+  position: [1200, -120]
+  dock: glsl_bloomblur

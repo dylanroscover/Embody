@@ -3108,11 +3108,85 @@ class EnvoyExt:
 
         return result
 
+    def _lintLayout(self, comp):
+        """Return layout-violation strings for a COMP's direct children: ops
+        stacked at (0,0), overlapping ops, and docked DATs scattered far from
+        their host. Enforces network-layout.md after execute_python, which --
+        unlike create_op -- uses raw comp.create()/copy() and never positions."""
+        try:
+            kids = [c for c in comp.children if c.type != 'annotate']
+        except Exception:
+            return []
+        if len(kids) < 2 or len(kids) > 250:
+            return []
+        docked = set()
+        for c in kids:
+            for d in getattr(c, 'docked', ()):
+                docked.add(d.path)
+        main = [c for c in kids if c.path not in docked]
+        issues = []
+        zeros = [c for c in main if c.nodeX == 0 and c.nodeY == 0]
+        if len(zeros) >= 2:
+            issues.append('%d ops stacked at (0,0): %s'
+                          % (len(zeros), ', '.join(z.name for z in zeros[:6])))
+        n = len(main)
+        if n <= 80:
+            ov = 0
+            for i in range(n):
+                a = main[i]
+                for j in range(i + 1, n):
+                    b = main[j]
+                    if (a.nodeX < b.nodeX + b.nodeWidth and a.nodeX + a.nodeWidth > b.nodeX and
+                            a.nodeY < b.nodeY + b.nodeHeight and a.nodeY + a.nodeHeight > b.nodeY):
+                        ov += 1
+            if ov:
+                issues.append('%d overlapping op pair(s)' % ov)
+        scattered = sum(1 for c in main for d in getattr(c, 'docked', ())
+                        if abs(d.nodeX - c.nodeX) > 500 or abs(d.nodeY - c.nodeY) > 500)
+        if scattered:
+            issues.append('%d docked DAT(s) scattered far from host' % scattered)
+        return issues
+
+    def _lintNewOps(self, pre_paths):
+        """After execute_python, WARN if it left newly-created ops piled at
+        (0,0) or overlapping in their parent COMP. The warning rides back on the
+        response via _attachNotableLogs, so network-layout.md is enforced at the
+        tool layer instead of relying on the caller to run the Verify step."""
+        if pre_paths is None:
+            return
+        try:
+            new_parents = {}
+            for o in root.findChildren(depth=12):
+                if o.path in pre_paths:
+                    continue
+                par = o.parent()
+                if par is not None:
+                    new_parents.setdefault(par.path, par)
+            for par in new_parents.values():
+                issues = self._lintLayout(par)
+                if issues:
+                    self._log(
+                        'LAYOUT WARNING: ' + par.path + ' -- ' + '; '.join(issues)
+                        + '. execute_python does NOT auto-position ops (create_op does); '
+                        'run get_network_layout and reposition per network-layout.md.',
+                        'WARNING')
+        except Exception:
+            pass
+
     def _execute_python(self, code: str) -> dict:
         """Execute arbitrary Python code"""
         code_preview = code[:200] + ('...' if len(code) > 200 else '')
         self._log(f'execute_python: {code_preview}')
         try:
+            # Snapshot op paths so we can lint ONLY the ops this call creates.
+            # execute_python uses raw comp.create()/copy() (no auto-position),
+            # the exact path that keeps dropping ops at (0,0); _lintNewOps below
+            # turns that into a WARNING on the response.
+            try:
+                pre_paths = set(o.path for o in root.findChildren(depth=12))
+            except Exception:
+                pre_paths = None
+
             # Create a namespace with useful globals
             namespace = {
                 'op': op,
@@ -3128,6 +3202,7 @@ class EnvoyExt:
             # Return the 'result' variable if set
             result = namespace.get('result')
             self._log(f'execute_python: completed successfully')
+            self._lintNewOps(pre_paths)
             if result is not None:
                 return {'success': True, 'result': str(result)}
             return {'success': True}

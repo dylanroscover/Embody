@@ -1,0 +1,31 @@
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.28
+td_build: 099.2025.32820
+source_file: Embody-6.29.toe
+exported_at: '2026-06-14T05:20:44Z'
+network_path: /specimen_lab/noise_terrain/cam
+options:
+  include_dat_content: false
+  include_storage: true
+type: cameraCOMP
+parameters:
+  ty: 6.2
+  tz: 16
+  rx: -13
+flags:
+- display
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: file1
+  type: fileinPOP
+  parameters:
+    file: =app.samplesFolder + '/Geo/defcam.tog'
+  flags:
+  - display
+  - viewer
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]

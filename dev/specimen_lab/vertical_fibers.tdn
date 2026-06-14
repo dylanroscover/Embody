@@ -1,0 +1,318 @@
+format: tdn
+version: '2.0'
+build: null
+generator: Embody/6.0.28
+td_build: 099.2025.32820
+source_file: Embody-6.29.toe
+exported_at: '2026-06-14T05:20:42Z'
+network_path: /specimen_lab/vertical_fibers
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  glslTOP:
+    parameters:
+      format: rgba16float
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+type: baseCOMP
+custom_pars:
+  Controls:
+  - name: Strands
+    style: Int
+    default: 56
+    min: 4.0
+    max: 320.0
+    clampMin: true
+    clampMax: true
+    normMin: 4.0
+    normMax: 320.0
+    help: number of fiber strands in the curtain. Because of the column-fold this costs NOTHING per pixel (no strand loop), so a dense premium bundle is free; raise it freely for a fuller curtain.
+  - name: Converge
+    style: Float
+    clampMin: true
+    clampMax: true
+    help: how strongly the bundle narrows toward the top. 0 = parallel strands (a flat curtain); higher = strong upward perspective into the haze.
+  - name: Bow
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: amount of gentle per-strand bow so the strands read as relaxed cable, not laser-straight. 0 = dead-straight fibers.
+  - name: Glassglow
+    style: Float
+    default: 1.15
+    max: 6.0
+    clampMin: true
+    clampMax: true
+    normMax: 6.0
+    help: strength of the internal-reflection shimmer gradient along each glass tube. The light-bouncing-in-glass look.
+  - name: Pulsespeed
+    style: Float
+    default: 0.6
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: how fast the light pulses race UP the strands. 0 freezes them (and drops that time-dependence); higher = near-light-speed streaks.
+  - name: Pulsedensity
+    style: Int
+    default: 4
+    min: 1.0
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 4.0
+    help: how many light pulses travel up each strand at once (1-4, the constant loop bound). More = a busier data stream.
+  - name: Pulselength
+    style: Float
+    default: 0.32
+    min: 0.02
+    max: 0.5
+    clampMin: true
+    clampMax: true
+    normMin: 0.02
+    normMax: 0.5
+    help: length of each Gaussian light dash (in vertical UV). Short = crisp countable packets; long = streaking light trails.
+  - name: Haze
+    style: Float
+    default: 2.6
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMax: 4.0
+    help: volumetric haze building toward the top of the frame so distant strands dim into fog. Adds vertical depth.
+  - name: Linewidth
+    style: Float
+    default: 0.0045
+    min: 0.0012
+    max: 0.02
+    clampMin: true
+    clampMax: true
+    normMin: 0.0012
+    normMax: 0.02
+    help: base thickness of the glass tube core. Thin = crisp hairline fibers; thicker = heavier glowing tubes. Crisp at any resolution via fwidth().
+  - name: Ptprate
+    style: Float
+    default: 0.5
+    min: 0.1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMin: 0.1
+    normMax: 2.0
+    help: frequency of the PTP sync pulse all light pulses breathe brighter to in lockstep.
+  - name: Bloom
+    style: Float
+    default: 0.55
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: intensity of the downsampled bloom glow added back over the pulses. The booth-scale wow knob.
+  - name: Bloomwidth
+    style: Float
+    default: 2.6
+    min: 1.0
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 4.0
+    help: the blur step in the 1/4-res bloom pass. Wider = a softer, more atmospheric glow halo (still cheap, since it runs at low res).
+  - name: Grain
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: film-grain amount in the finish pass. Kills banding on the dark gradient at large scale.
+  - name: Vignette
+    style: Float
+    default: 0.95
+    max: 1.5
+    clampMin: true
+    clampMax: true
+    normMax: 1.5
+    help: edge darkening so the curtain sits on a premium dark stage.
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+color: [0.67, 0.67, 0.67]
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - viewer
+  position: [1500, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_finish
+- name: res_down
+  type: resolutionTOP
+  parameters:
+    outputresolution: custom
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+    format: rgba16float
+  position: [300, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_fibers
+- name: comp_bloom
+  type: compositeTOP
+  parameters:
+    operand: add
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+    format: rgba16float
+  position: [900, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_fibers
+  - glsl_bloomblur
+- name: glsl_fibers
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_fibers_pixel
+    computedat: glsl_fibers_compute
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uFiber
+      valuex: =parent().par.Strands.eval()
+      valuey: =parent().par.Converge.eval()
+      valuez: =parent().par.Bow.eval()
+      valuew: =parent().par.Glassglow.eval()
+    - name: uPulse
+      valuex: =parent().par.Pulsespeed.eval()
+      valuey: =parent().par.Pulsedensity.eval()
+      valuez: =parent().par.Pulselength.eval()
+      valuew: =absTime.seconds*parent().par.Pulsespeed.eval()
+    - name: uLook
+      valuex: =parent().par.Haze.eval()
+      valuey: =parent().par.Linewidth.eval()
+      valuez: =parent().par.Ptprate.eval()
+      valuew: =absTime.seconds
+- name: glsl_finish
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_finish_pixel
+    computedat: glsl_finish_compute
+  sequences:
+    vec:
+    - name: uFin
+      valuex: =parent().par.Grain.eval()
+      valuey: =parent().par.Vignette.eval()
+      valuez: =parent().par.Strands.eval()
+      valuew: =absTime.seconds
+  position: [1200, 0]
+  inputs:
+  - comp_bloom
+- name: glsl_bloomblur
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_bloomblur_pixel
+    computedat: glsl_bloomblur_compute
+    outputresolution: custom
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+  sequences:
+    vec:
+    - name: uBloom
+      valuex: =parent().par.Bloom.eval()
+      valuey: 0.55
+      valuez: =parent().par.Bloomwidth.eval()
+  position: [600, -400]
+  inputs:
+  - res_down
+- name: glsl_fibers_info
+  type: infoDAT
+  parameters:
+    op: glsl_streams
+  position: [0, -120]
+  dock: glsl_fibers
+- name: glsl_finish_info
+  type: infoDAT
+  parameters:
+    op: glsl_finish
+  position: [1200, -120]
+  dock: glsl_finish
+- name: glsl_fibers_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [150, -120]
+  dock: glsl_fibers
+- name: glsl_finish_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [1350, -120]
+  dock: glsl_finish
+- name: glsl_bloomblur_info
+  type: infoDAT
+  parameters:
+    op: glsl_bloomblur
+  position: [600, -520]
+  dock: glsl_bloomblur
+- name: glsl_fibers_compute
+  type: textDAT
+  position: [-150, -120]
+  dock: glsl_fibers
+- name: glsl_finish_compute
+  type: textDAT
+  position: [1050, -120]
+  dock: glsl_finish
+- name: glsl_bloomblur_pixel
+  type: textDAT
+  parameters:
+    extension: frag
+  position: [750, -520]
+  dock: glsl_bloomblur
+- name: glsl_bloomblur_compute
+  type: textDAT
+  position: [450, -520]
+  dock: glsl_bloomblur
