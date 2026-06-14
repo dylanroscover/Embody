@@ -15,6 +15,11 @@ interface CloudflareEnv {
   BETTER_AUTH_URL?: string;
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  // Transactional email (Resend). Optional -- when unset, email verification
+  // and password-reset emails are skipped and verification is not required, so
+  // signup keeps working without a provider. See src/server/email.ts.
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 }
 
 declare namespace App {

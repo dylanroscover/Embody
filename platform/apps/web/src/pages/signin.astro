@@ -60,6 +60,10 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
         </button>
       </form>
 
+      <p class="auth-forgot" data-forgot>
+        <a href="/forgot-password">Forgot password?</a>
+      </p>
+
       {githubEnabled && (
         <>
           <div class="auth-divider"><span>or</span></div>
@@ -84,6 +88,7 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
   const errorBox = document.querySelector<HTMLParagraphElement>("[data-auth-error]");
   const submitBtn = document.querySelector<HTMLButtonElement>("[data-auth-submit]");
   const nameField = document.querySelector<HTMLLabelElement>('[data-field="name"]');
+  const forgotLink = document.querySelector("[data-forgot]") as HTMLParagraphElement | null;
   const passwordInput = form?.querySelector<HTMLInputElement>('input[name="password"]');
   const toggles = Array.from(document.querySelectorAll<HTMLButtonElement>(".auth-toggle__btn"));
   const githubBtn = document.querySelector<HTMLButtonElement>("[data-github]");
@@ -120,6 +125,7 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
       btn.setAttribute("aria-selected", active ? "true" : "false");
     }
     if (nameField) nameField.hidden = next !== "register";
+    if (forgotLink) forgotLink.hidden = next === "register";
     if (submitBtn) submitBtn.textContent = next === "register" ? "create account" : "sign in";
     if (passwordInput) {
       passwordInput.autocomplete = next === "register" ? "new-password" : "current-password";
@@ -285,6 +291,21 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
   .auth-github {
     width: 100%;
     justify-content: center;
+  }
+
+  .auth-forgot {
+    margin-top: 0.85rem;
+    text-align: center;
+    font-size: 0.85rem;
+  }
+
+  .auth-forgot a {
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .auth-forgot a:hover {
+    color: var(--accent);
   }
 
   .auth-divider {

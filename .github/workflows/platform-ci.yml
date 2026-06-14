@@ -1,0 +1,81 @@
+name: Platform CI
+
+on:
+  push:
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+  pull_request:
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: platform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # Cache npm downloads keyed off the platform-root lockfile.
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+
+      # Installs every workspace (apps/web + packages/*) from the root lockfile.
+      - name: Install dependencies
+        run: npm ci
+
+      # Typecheck the Astro app (astro check). Runs against the web workspace.
+      - name: Typecheck (astro check)
+        run: npm run typecheck --workspace=@embody/web
+
+      # Production build of the Astro + Cloudflare worker app.
+      - name: Build (astro build)
+        run: npm run build --workspace=@embody/web
+
+      # Scanner unit tests (vitest run).
+      - name: Test scanner-ts
+        run: npm run test --workspace=@embody/scanner-ts
+
+  # ---------------------------------------------------------------------------
+  # Future Cloudflare deploy job (intentionally disabled).
+  #
+  # No deploy runs today: it would require secrets that are not configured
+  # (CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID). When the platform is ready
+  # to ship, uncomment and supply those secrets via the repo/environment.
+  #
+  # deploy:
+  #   needs: build-and-test
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: platform
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #         cache: npm
+  #         cache-dependency-path: platform/package-lock.json
+  #     - run: npm ci
+  #     - run: npm run build --workspace=@embody/web
+  #     - name: Deploy to Cloudflare
+  #       uses: cloudflare/wrangler-action@v3
+  #       with:
+  #         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  #         accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  #         workingDirectory: platform/apps/web

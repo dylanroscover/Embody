@@ -19,6 +19,11 @@ const {
 const path = Astro.url.pathname.replace(/\/+$/, "") || "/";
 const isActive = (href: string) =>
   href !== "/" && (path === href || path.startsWith(href + "/"));
+
+// Cloudflare Web Analytics: cookieless, privacy-first page-traffic beacon.
+// The beacon is rendered ONLY when PUBLIC_CF_BEACON_TOKEN is set, so dev and
+// build stay clean when the token is absent. See README / docs for the var.
+const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefined;
 ---
 
 <!doctype html>
@@ -44,6 +49,14 @@ const isActive = (href: string) =>
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     {ogImage && <meta name="twitter:image" content={ogImage} />}
+    {cfBeaconToken && (
+      <script
+        is:inline
+        defer
+        src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon={JSON.stringify({ token: cfBeaconToken })}
+      />
+    )}
     <slot name="head" />
   </head>
   <body>
@@ -154,6 +167,8 @@ const isActive = (href: string) =>
             <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
             <li><a href="/manifesto">manifesto</a></li>
             <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
+            <li><a href="/privacy">privacy</a></li>
+            <li><a href="/terms">terms</a></li>
           </ul>
         </nav>
       </div>
@@ -264,7 +279,7 @@ const isActive = (href: string) =>
             headers: { Accept: "application/vnd.github+json" },
           });
           if (!r.ok) return;
-          const d = await r.json();
+          const d = (await r.json()) as { stargazers_count?: number };
           if (typeof d.stargazers_count === "number") {
             show(d.stargazers_count);
             try {

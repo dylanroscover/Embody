@@ -52,11 +52,45 @@ export interface SearchResponse {
   mode: "keyword" | "semantic";
 }
 
+// Submit-form metadata vocabularies. These are the whitelists the submit API
+// validates against; the submit form renders pickers from the same sets so the
+// client and server agree. ASCII only.
+export const SUBMIT_DIFFICULTIES: readonly Difficulty[] = [
+  "starter",
+  "intermediate",
+  "advanced"
+] as const;
+
+// Known category facets (mirrors the first-party fixture set the collection
+// facets are seeded from). Free-form categories are NOT accepted on submit; a
+// value outside this set is rejected server-side.
+export const SUBMIT_CATEGORIES: readonly string[] = [
+  "generative",
+  "compositing",
+  "3d",
+  "simulation",
+  "raymarching-sdf"
+] as const;
+
+// Hardware / capability requirement facet. "none" = runs on stock TouchDesigner.
+export const SUBMIT_REQUIRES: readonly string[] = [
+  "none",
+  "MediaPipe",
+  "Kinect Azure",
+  "Audio"
+] as const;
+
 export interface SubmitRequest {
   title: string;
   description: string;
   tags: string[];
   license: string;
+  /** One of SUBMIT_DIFFICULTIES. */
+  difficulty: Difficulty;
+  /** One of SUBMIT_CATEGORIES. */
+  category: string;
+  /** One of SUBMIT_REQUIRES ("none" = stock TouchDesigner). */
+  requires: string;
   /** JSON string of the TDN dict (the raw network). */
   tdn: string;
   /** Optional data-URL thumbnail; otherwise generated server-side. */

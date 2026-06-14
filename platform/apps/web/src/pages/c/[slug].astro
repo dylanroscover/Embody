@@ -14,6 +14,7 @@ import { sampleTdn } from "../../fixtures/sample-tdn";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
 import { getSpecimenBySlug } from "../../server/db";
 import { getParsedTdnForSlug } from "../../server/tdn";
+import { getSpecimenIdBySlug, hasLiked, REPORT_REASONS } from "../../server/engagement";
 
 export const prerender = false;
 
@@ -28,6 +29,7 @@ type DisplaySpecimen = {
   key_ops: string[];
   prompt: string;
   current_version?: number;
+  likes_count: number;
 };
 
 const fallback = firstFixtureSpecimen();
@@ -43,6 +45,29 @@ try {
 } catch {
   specimen = specimenFromFixture(fixtureSpecimen);
 }
+
+// Engagement SSR state. The signed-in user (populated by middleware on locals)
+// determines whether the Like button starts active and whether interactions hit
+// the API or bounce to sign-in. Anonymous visitors get a sign-in link instead.
+// D1 lookups are best-effort: in dev with an empty/unreachable D1 they fail
+// silently and the button renders in its anonymous default state.
+const sessionUser = Astro.locals.user;
+const isSignedIn = Boolean(sessionUser);
+const signInHref = `/signin?next=${encodeURIComponent(`/c/${specimen.slug}`)}`;
+
+let initiallyLiked = false;
+if (sessionUser) {
+  try {
+    const specimenId = await getSpecimenIdBySlug(env.DB, specimen.slug);
+    if (specimenId) {
+      initiallyLiked = await hasLiked(env.DB, specimenId, sessionUser.id);
+    }
+  } catch {
+    initiallyLiked = false;
+  }
+}
+
+const reportReasons = REPORT_REASONS;
 
 // Resolve the real specimen network for the viewer + copy + raw view.
 // Fallback chain: parsed R2 .tdn YAML -> bundled stripped graph -> sampleTdn.
@@ -77,7 +102,8 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     requires: fixture.requires,
     operator_count: fixture.operator_count,
     key_ops: fixture.key_ops,
-    prompt: fixture.prompt
+    prompt: fixture.prompt,
+    likes_count: 0
   };
 }
 
@@ -95,7 +121,8 @@ function specimenFromLive(
     operator_count: live.op_count,
     key_ops: fixture?.key_ops ?? [],
     prompt: fixture?.prompt ?? `Embody the ${live.slug} specimen into my project.`,
-    current_version: live.current_version
+    current_version: live.current_version,
+    likes_count: live.likes_count
   };
 }
 
@@ -259,7 +286,143 @@ function emitKey(key: string): string {
       </span>
       <span class="badge">{specimen.operator_count} operators</span>
     </div>
+
+    <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
+      {isSignedIn ? (
+        <button
+          type="button"
+          class:list={["like-button", { "is-liked": initiallyLiked }]}
+          data-like
+          aria-pressed={initiallyLiked}
+          aria-label={initiallyLiked ? "Unlike this specimen" : "Like this specimen"}
+        >
+          <svg class="like-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
+          </svg>
+          <span class="like-count" data-like-count>{specimen.likes_count}</span>
+        </button>
+      ) : (
+        <a
+          class="like-button like-button--anon"
+          href={signInHref}
+          aria-label="Sign in to like this specimen"
+        >
+          <svg class="like-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
+          </svg>
+          <span class="like-count" data-like-count>{specimen.likes_count}</span>
+        </a>
+      )}
+
+      {isSignedIn ? (
+        <button type="button" class="report-link" data-report>Report</button>
+      ) : (
+        <a class="report-link" href={signInHref}>Report</a>
+      )}
+      <span class="engagement-status" data-engagement-status role="status" aria-live="polite"></span>
+    </div>
   </section>
+
+  <script
+    type="application/json"
+    id="report-reasons"
+    set:html={JSON.stringify(reportReasons)}
+  />
+  <script>
+    type LikeResult = { liked: boolean; likes_count: number };
+
+    const root = document.querySelector(".engagement") as HTMLElement | null;
+    if (root) {
+      const slug = root.dataset.slug ?? "";
+      const statusEl = root.querySelector("[data-engagement-status]") as HTMLElement | null;
+      const reasonsScript = document.getElementById("report-reasons");
+      let reasons: string[] = [];
+      try {
+        reasons = JSON.parse(reasonsScript?.textContent ?? "[]") as string[];
+      } catch {
+        reasons = [];
+      }
+
+      const setStatus = (message: string) => {
+        if (statusEl) statusEl.textContent = message;
+      };
+
+      const likeButton = root.querySelector("[data-like]") as HTMLButtonElement | null;
+      const countEl = root.querySelector("[data-like-count]") as HTMLElement | null;
+
+      if (likeButton && countEl) {
+        likeButton.addEventListener("click", async () => {
+          if (likeButton.disabled) return;
+          likeButton.disabled = true;
+          setStatus("");
+          try {
+            const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}/like`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" }
+            });
+            if (res.status === 401) {
+              window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
+              return;
+            }
+            if (!res.ok) {
+              setStatus("Could not update your like. Please try again.");
+              return;
+            }
+            const data = (await res.json()) as LikeResult;
+            countEl.textContent = String(data.likes_count);
+            likeButton.classList.toggle("is-liked", data.liked);
+            likeButton.setAttribute("aria-pressed", String(data.liked));
+            likeButton.setAttribute(
+              "aria-label",
+              data.liked ? "Unlike this specimen" : "Like this specimen"
+            );
+          } catch {
+            setStatus("Could not update your like. Please try again.");
+          } finally {
+            likeButton.disabled = false;
+          }
+        });
+      }
+
+      const reportButton = root.querySelector("[data-report]") as HTMLButtonElement | null;
+      if (reportButton) {
+        reportButton.addEventListener("click", async () => {
+          if (reportButton.disabled) return;
+          const hint = reasons.length ? ` (${reasons.join(", ")})` : "";
+          const input = window.prompt(`Why are you reporting this specimen?${hint}`, "other");
+          if (input === null) return;
+          const reason = input.trim().toLowerCase();
+          if (reasons.length && !reasons.includes(reason)) {
+            setStatus(`Reason must be one of: ${reasons.join(", ")}.`);
+            return;
+          }
+
+          reportButton.disabled = true;
+          setStatus("");
+          try {
+            const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}/report`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ reason })
+            });
+            if (res.status === 401) {
+              window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
+              return;
+            }
+            if (res.status === 201) {
+              setStatus("Thanks -- this specimen has been reported for review.");
+              return;
+            }
+            setStatus("Could not submit your report. Please try again.");
+          } catch {
+            setStatus("Could not submit your report. Please try again.");
+          } finally {
+            reportButton.disabled = false;
+          }
+        });
+      }
+    }
+  </script>
 
   <section class="page-section tight specimen-layout">
     <div class="viewer-panel pillar">
@@ -319,6 +482,78 @@ function emitKey(key: string): string {
 <style>
   .detail-hero {
     padding-bottom: 48px;
+  }
+
+  .engagement {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 22px;
+  }
+
+  .like-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    padding: 8px 14px;
+    color: var(--text);
+    font: 600 13px/1 var(--font-mono);
+    cursor: pointer;
+    text-decoration: none;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+
+  .like-button:hover {
+    border-color: var(--border);
+  }
+
+  .like-button:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .like-button.is-liked {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .like-button.is-liked .like-icon {
+    fill: currentColor;
+  }
+
+  .like-icon {
+    flex: 0 0 auto;
+  }
+
+  .report-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--text-faint);
+    font: 600 12px/1 var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .report-link:hover {
+    color: var(--text-muted);
+  }
+
+  .report-link:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .engagement-status {
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
   }
 
   .specimen-layout {

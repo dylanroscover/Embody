@@ -1,5 +1,10 @@
 ---
 import { env } from "cloudflare:workers";
+import {
+  SUBMIT_CATEGORIES,
+  SUBMIT_DIFFICULTIES,
+  SUBMIT_REQUIRES
+} from "@embody/contracts";
 import Base from "../layouts/Base.astro";
 
 export const prerender = false;
@@ -11,6 +16,21 @@ if (!user) {
 }
 
 const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
+
+// PUBLIC_TURNSTILE_SITE_KEY is the Cloudflare Turnstile *site* key (safe to ship
+// to the browser; the matching TURNSTILE_SECRET stays server-side). When it is
+// absent -- or we are in dev -- we skip mounting the real widget and fall back
+// to the dev-bypass token so the form keeps working without a configured key.
+// The server verifier (verifyTurnstile) still fails closed in production, so an
+// unset key there means submissions are rejected rather than silently waved in.
+const turnstileSiteKey = String(
+  import.meta.env.PUBLIC_TURNSTILE_SITE_KEY ?? ""
+).trim();
+const useTurnstileWidget = !isDev && Boolean(turnstileSiteKey);
+
+const difficultyOptions = SUBMIT_DIFFICULTIES;
+const categoryOptions = SUBMIT_CATEGORIES;
+const requiresOptions = SUBMIT_REQUIRES;
 ---
 
 <Base
@@ -48,6 +68,30 @@ const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
         <input type="text" name="tags" placeholder="feedback, generative, TOP" />
       </label>
       <label class="submit-field">
+        <span>difficulty</span>
+        <select name="difficulty" class="submit-select">
+          {difficultyOptions.map((value) => (
+            <option value={value} selected={value === "intermediate"}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <label class="submit-field">
+        <span>category</span>
+        <select name="category" class="submit-select">
+          {categoryOptions.map((value) => (
+            <option value={value} selected={value === "generative"}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <label class="submit-field">
+        <span>requires</span>
+        <select name="requires" class="submit-select">
+          {requiresOptions.map((value) => (
+            <option value={value} selected={value === "none"}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <label class="submit-field">
         <span>license</span>
         <input type="text" name="license" value="CC-BY-4.0" maxlength="80" />
       </label>
@@ -55,6 +99,12 @@ const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
         <span>TDN (JSON)</span>
         <textarea name="tdn" rows="10" required placeholder={'{\n  "name": "my_network",\n  "type": "baseCOMP",\n  "children": []\n}'} class="submit-tdn"></textarea>
       </label>
+      {useTurnstileWidget && (
+        <div class="submit-field submit-turnstile">
+          <span>verification</span>
+          <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-turnstile></div>
+        </div>
+      )}
       <button type="submit" class="btn btn--primary submit-go" data-submit-go>
         submit specimen
       </button>
@@ -66,11 +116,28 @@ const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
   </section>
 </Base>
 
-<script define:vars={{ isDev }}>
+{useTurnstileWidget && (
+  <script
+    is:inline
+    src="https://challenges.cloudflare.com/turnstile/v0/api.js"
+    async
+    defer
+  ></script>
+)}
+
+<script define:vars={{ isDev, useTurnstileWidget }}>
   const form = document.querySelector("[data-submit-form]");
   const statusBox = document.querySelector("[data-submit-status]");
   const goBtn = document.querySelector("[data-submit-go]");
   const signoutBtn = document.querySelector("[data-signout]");
+
+  // The Cloudflare Turnstile API object is injected onto window by the api.js
+  // loader (only rendered when the widget is mounted). This is a define:vars
+  // (inline, untransformed) script, so it must be plain JS -- no TS casts; read
+  // the global via bracket access. It may be undefined before the loader runs.
+  function getTurnstile() {
+    return window["turnstile"];
+  }
 
   function setStatus(message, kind) {
     if (!statusBox) return;
@@ -112,22 +179,33 @@ const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
       .map((t) => t.trim())
       .filter(Boolean);
 
-    // In dev (ENVIRONMENT=development) Turnstile is bypassed with this token.
-    // Production must mount a real Turnstile widget and send its token here.
-    const turnstileToken = isDev ? "dev-bypass" : "";
-    if (!turnstileToken) {
-      setStatus(
-        "Turnstile is not wired for production yet. See owner_todo.",
-        "error"
-      );
-      return;
+    // Resolve the Turnstile token. When the real widget is mounted
+    // (useTurnstileWidget: production with a PUBLIC_TURNSTILE_SITE_KEY), read its
+    // response token; the server then verifies it with siteverify. Otherwise
+    // (dev, or no site key configured) fall back to the dev-bypass token so the
+    // form keeps working -- the server verifier only honors that token outside
+    // production and fails closed in prod, so this never weakens the live gate.
+    let turnstileToken = "dev-bypass";
+    if (useTurnstileWidget) {
+      const ts = getTurnstile();
+      const fromApi = ts && typeof ts.getResponse === "function" ? ts.getResponse() : "";
+      const fromField = String(data.get("cf-turnstile-response") || "");
+      turnstileToken = String(fromApi || fromField || "");
+      if (!turnstileToken) {
+        setStatus("Please complete the verification challenge.", "error");
+        return;
+      }
     }
+
 
     const payload = {
       title,
       description: String(data.get("description") || "").trim(),
       tags,
       license: String(data.get("license") || "CC-BY-4.0").trim() || "CC-BY-4.0",
+      difficulty: String(data.get("difficulty") || "intermediate"),
+      category: String(data.get("category") || ""),
+      requires: String(data.get("requires") || "none"),
       tdn: tdnRaw,
       turnstileToken
     };
@@ -161,6 +239,12 @@ const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
     } finally {
       goBtn.disabled = false;
       goBtn.textContent = original;
+      // Turnstile tokens are single-use; reset the widget so a retry gets a
+      // fresh challenge token instead of replaying a now-spent one.
+      if (useTurnstileWidget) {
+        const ts = getTurnstile();
+        if (ts && typeof ts.reset === "function") ts.reset();
+      }
     }
   });
 </script>
@@ -234,7 +318,8 @@ const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
   }
 
   .submit-field input,
-  .submit-field textarea {
+  .submit-field textarea,
+  .submit-field select {
     padding: 0.65rem 0.75rem;
     background: var(--bg);
     border: 1px solid var(--border);
@@ -243,13 +328,18 @@ const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
     font-size: 1rem;
   }
 
+  .submit-turnstile .cf-turnstile {
+    margin-top: 0.25rem;
+  }
+
   .submit-tdn {
     font-family: var(--font-mono);
     font-size: 0.85rem;
   }
 
   .submit-field input:focus,
-  .submit-field textarea:focus {
+  .submit-field textarea:focus,
+  .submit-field select:focus {
     outline: 2px solid var(--accent);
     outline-offset: 1px;
     border-color: var(--accent);

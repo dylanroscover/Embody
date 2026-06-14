@@ -64,6 +64,12 @@ export interface InsertSpecimenInput {
   description: string;
   tags: string[];
   license: string;
+  /** Submit-form metadata; whitelist-validated upstream in the API route. */
+  difficulty?: Difficulty;
+  /** Known category facet; empty falls back to the first tag (legacy behavior). */
+  category?: string;
+  /** Hardware/capability requirement ("none" = stock TD). */
+  requires?: string;
   tdnR2Key: string;
   tdnSha256: string;
   sizeBytes: number;
@@ -103,10 +109,6 @@ interface SpecimenDetailRow extends SpecimenSummaryRow {
 // Collection rows carry created_at too (the keyset key for the "newest" sort).
 interface CollectionRow extends SpecimenSummaryRow {
   created_at: string;
-}
-
-interface TagRow {
-  name: string;
 }
 
 const DEFAULT_PAGE_SIZE = 24;
@@ -364,13 +366,27 @@ export async function getSpecimenBySlug(
   db: D1Database,
   slug: string
 ): Promise<SpecimenDetail | null> {
+  // Tags are folded into the detail row via a correlated GROUP_CONCAT subquery
+  // (delimited by char(31), the ASCII unit separator, so a comma inside a tag
+  // name can't corrupt the split), collapsing the prior 2-query N+1 into one
+  // round trip. The inner ORDER BY in the derived table feeds GROUP_CONCAT its
+  // rows in case-insensitive name order, matching the old separate query.
   const row = await db
     .prepare(
       `SELECT ${SUMMARY_COLUMNS},
               s.capability_json,
               v.version_num AS current_version,
               s.created_at,
-              s.updated_at
+              s.updated_at,
+              (SELECT GROUP_CONCAT(t.name, char(31))
+                 FROM (
+                   SELECT t.name
+                   FROM tags t
+                   JOIN specimen_tags st ON st.tag_id = t.id
+                   WHERE st.specimen_id = s.id
+                   ORDER BY t.name COLLATE NOCASE ASC
+                 ) AS t
+              ) AS tag_names
        FROM specimens s
        JOIN users_profile u ON u.id = s.author_id
        LEFT JOIN specimen_versions v ON v.id = s.current_version_id
@@ -378,27 +394,23 @@ export async function getSpecimenBySlug(
        LIMIT 1`
     )
     .bind(slug)
-    .first<SpecimenDetailRow>();
+    .first<SpecimenDetailRow & { tag_names: string | null }>();
 
   if (!row) return null;
 
-  const tagRows = await db
-    .prepare(
-      `SELECT t.name
-       FROM tags t
-       JOIN specimen_tags st ON st.tag_id = t.id
-       JOIN specimens s ON s.id = st.specimen_id
-       WHERE s.slug = ?
-       ORDER BY t.name COLLATE NOCASE ASC`
-    )
-    .bind(slug)
-    .all<TagRow>();
+  // GROUP_CONCAT joined the tag names on char(31) (the ASCII unit separator, a
+  // byte that cannot appear in a tag name); split on the same. Built from
+  // fromCharCode so the source file stays printable ASCII, no raw control byte.
+  const TAG_SEP = String.fromCharCode(31);
+  const tags = row.tag_names
+    ? row.tag_names.split(TAG_SEP).filter(Boolean)
+    : [];
 
   return {
     ...rowToSummary(row),
     capability: parseCapability(row.capability_json),
     current_version: Number(row.current_version ?? 1),
-    tags: (tagRows.results ?? []).map((tag: TagRow) => tag.name),
+    tags,
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -528,7 +540,11 @@ export async function insertSpecimenWithVersion(
   const description = input.description.trim();
   const capabilityJson = JSON.stringify(input.scan);
   const opCount = countTdnOperators(input.parsedTdn);
-  const category = tags[0]?.slug ?? "community";
+  // Prefer the submit-form category (whitelist-validated upstream); fall back to
+  // the first tag's slug, then "community", to preserve pre-metadata behavior.
+  const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
+  const difficulty = normalizeDifficulty(input.difficulty ?? "intermediate");
+  const requires = (input.requires ?? "").trim() || "none";
   const scanStatus = input.scan.verdict;
   const license = input.license.trim() || "CC-BY-4.0";
 
@@ -546,7 +562,7 @@ export async function insertSpecimenWithVersion(
            op_count, family_summary, current_version_id, thumbnail_key, license,
            visibility, tier, scan_status, capability_json
          )
-         VALUES (?, ?, ?, ?, ?, ?, 'intermediate', 'none', ?, NULL, ?, ?, ?, 'public',
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'public',
                  'community', ?, ?)`
       )
       .bind(
@@ -556,6 +572,8 @@ export async function insertSpecimenWithVersion(
         title,
         description,
         category,
+        difficulty,
+        requires,
         opCount,
         versionId,
         input.thumbnailKey ?? "",
@@ -652,6 +670,19 @@ export async function searchSpecimensFts(
   };
 }
 
+// App-side FTS upsert. specimens_fts has content='' (external-content FTS5), so
+// its rows are NOT auto-maintained from the specimens table; we mirror the
+// searchable text (title, description, tags, author_handle, dat_text) here. tags
+// and dat_text live OUTSIDE the specimens row (specimen_tags / the R2 TDN blob),
+// so a pure SQL trigger cannot repopulate them on UPDATE -- this app-side upsert
+// is the only place that has them. It is idempotent: INSERT OR REPLACE keyed by
+// rowid means re-running it (re-submit, or a future EDIT) overwrites the row in
+// place rather than double-inserting. Deletes are handled by the AFTER DELETE ON
+// specimens trigger in migration 0005 (which removes the matching FTS row).
+//
+// FUTURE: a specimen-EDIT path (new version, retitled, retagged) MUST call this
+// again with the updated fields so the FTS mirror does not go stale. The DELETE
+// trigger covers removal; UPDATE has no SQL trigger and relies on this re-run.
 export async function syncSpecimensFts(
   db: D1Database,
   input: {

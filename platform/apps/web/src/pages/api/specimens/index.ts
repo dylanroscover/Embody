@@ -1,6 +1,13 @@
 import { env } from "cloudflare:workers";
 import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
-import type { SubmitRequest, SubmitResponse } from "@embody/contracts";
+import {
+  SUBMIT_CATEGORIES,
+  SUBMIT_DIFFICULTIES,
+  SUBMIT_REQUIRES,
+  type Difficulty,
+  type SubmitRequest,
+  type SubmitResponse
+} from "@embody/contracts";
 import type { APIRoute } from "astro";
 import {
   insertSpecimenWithVersion,
@@ -10,7 +17,12 @@ import {
 import { requireUser } from "../../../server/auth";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
 import { byteLength, putTdn, putThumbnail } from "../../../server/r2";
+import { checkRateLimit } from "../../../server/rateLimit";
 import { verifyTurnstile } from "../../../server/turnstile";
+
+// Submit abuse cap: 10 submissions per 10 minutes per client IP. Enforced via
+// KV; with no KV (dev) the limiter allows everything (see rateLimit.ts).
+const SUBMIT_RATE_LIMIT = { limit: 10, windowSec: 600 } as const;
 
 export const prerender = false;
 
@@ -49,6 +61,20 @@ export const GET: APIRoute = async ({ url }) => {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    // Per-IP fixed-window cap before any expensive work (parse/scan/R2/D1). The
+    // CF-Connecting-IP header is set by Cloudflare's edge; "unknown" buckets
+    // callers we can't identify together. No KV (dev) -> always allowed.
+    const clientIp = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const rate = await checkRateLimit(env.KV, `submit:${clientIp}`, SUBMIT_RATE_LIMIT);
+    if (!rate.ok) {
+      return errorResponse(
+        429,
+        "rate_limited",
+        "Too many submissions. Please slow down and try again shortly.",
+        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+      );
+    }
+
     const body = await readSubmitRequest(request);
     if (!body.ok) {
       return errorResponse(400, "invalid_request", body.detail);
@@ -110,6 +136,9 @@ export const POST: APIRoute = async ({ request }) => {
       description: body.request.description,
       tags: body.request.tags,
       license: body.request.license,
+      difficulty: body.request.difficulty,
+      category: body.request.category,
+      requires: body.request.requires,
       tdnR2Key: blob.key,
       tdnSha256: blob.sha256,
       sizeBytes: byteLength(body.request.tdn),
@@ -171,6 +200,33 @@ async function readSubmitRequest(
   if (!tdn) return { ok: false, detail: "tdn is required." };
   if (!turnstileToken) return { ok: false, detail: "turnstileToken is required." };
 
+  // Submit metadata: whitelist-validate against the frozen vocabularies. Each
+  // defaults to a safe value when absent (back-compat with older callers), but
+  // a PRESENT value outside its set is a hard 400 rather than a silent coerce.
+  const difficulty = readString(raw.difficulty).trim() || "intermediate";
+  if (!SUBMIT_DIFFICULTIES.includes(difficulty as Difficulty)) {
+    return {
+      ok: false,
+      detail: `difficulty must be one of: ${SUBMIT_DIFFICULTIES.join(", ")}.`
+    };
+  }
+
+  const category = readString(raw.category).trim();
+  if (category && !SUBMIT_CATEGORIES.includes(category)) {
+    return {
+      ok: false,
+      detail: `category must be one of: ${SUBMIT_CATEGORIES.join(", ")}.`
+    };
+  }
+
+  const requires = readString(raw.requires).trim() || "none";
+  if (!SUBMIT_REQUIRES.includes(requires)) {
+    return {
+      ok: false,
+      detail: `requires must be one of: ${SUBMIT_REQUIRES.join(", ")}.`
+    };
+  }
+
   const thumbnail = typeof raw.thumbnail === "string" ? raw.thumbnail : undefined;
 
   return {
@@ -180,6 +236,9 @@ async function readSubmitRequest(
       description: description.slice(0, 4000),
       tags,
       license: license.slice(0, 80),
+      difficulty: difficulty as Difficulty,
+      category,
+      requires,
       tdn,
       thumbnail,
       turnstileToken

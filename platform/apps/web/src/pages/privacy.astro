@@ -1,0 +1,198 @@
+---
+import Base from "../layouts/Base.astro";
+
+const updated = "June 14, 2026";
+---
+
+<Base
+  title="Privacy Policy - embody.tools"
+  description="What embody.tools collects, why, and how it is handled. A plain-language privacy policy for a small open-source project."
+>
+  <section class="page-section legal-hero">
+    <p class="eyebrow">Privacy</p>
+    <h1>Privacy Policy</h1>
+    <p class="lede">
+      embody.tools is a small, open-source project. We collect as little as we can
+      get away with, we don&rsquo;t sell anything, and there are no advertising
+      trackers anywhere on this site. This page explains exactly what we keep and why.
+    </p>
+    <p class="legal-updated mono">Last updated: {updated}</p>
+  </section>
+
+  <article class="page-section tight legal-body">
+    <h2>Who we are</h2>
+    <p>
+      embody.tools is operated by TEC for the Embody &amp; Envoy open-source project.
+      The site hosts the Collection &mdash; a gallery of transparent TouchDesigner
+      networks (TDN) that anyone can inspect, copy, and remix. Questions about this
+      policy can go to <a href="mailto:dylan@roscover.com">dylan@roscover.com</a>.
+    </p>
+
+    <h2>What we collect</h2>
+
+    <h3>Account information</h3>
+    <p>
+      If you create an account, we store your email address, a display handle, and a
+      <strong>salted hash</strong> of your password &mdash; never the password itself.
+      Authentication is handled by <a href="https://www.better-auth.com/">Better Auth</a>.
+      If you instead sign in with GitHub, we receive only the basic profile fields
+      GitHub returns (your account id and the tokens needed to keep the session valid);
+      we do not request access to your repositories or private data.
+    </p>
+
+    <h3>Sessions and cookies</h3>
+    <p>
+      When you sign in we set a session cookie so the site can recognize you on the
+      next request. We record the session token, its expiry, and the IP address and
+      user-agent string of the request that created it &mdash; standard fields used to
+      keep sessions secure and let you sign out. These cookies are strictly functional;
+      we set <strong>no</strong> advertising or cross-site tracking cookies. If you
+      never sign in, no account or session data is created.
+    </p>
+
+    <h3>Content you submit</h3>
+    <p>
+      When you publish a specimen, we store the TDN network you upload, a generated
+      thumbnail, and the metadata you provide (title, description, category, license,
+      and changelog notes). Submitted networks are scanned for capabilities and unsafe
+      operators before they go live. Your handle is shown publicly as the
+      <strong>attribution</strong> for anything you publish, and each version is kept
+      as an immutable record so the history of a specimen stays diffable. Don&rsquo;t
+      upload anything you wouldn&rsquo;t want public.
+    </p>
+
+    <h3>Anti-abuse (Cloudflare Turnstile)</h3>
+    <p>
+      Some forms &mdash; sign-up, sign-in, and submission &mdash; are protected by
+      <a href="https://www.cloudflare.com/products/turnstile/">Cloudflare Turnstile</a>,
+      a privacy-respecting CAPTCHA alternative that confirms you&rsquo;re a human
+      without the puzzle grids. Turnstile runs a challenge in your browser and returns
+      a token we verify server-side. Per Cloudflare, it is designed not to profile
+      users or track them across sites.
+    </p>
+
+    <h3>Analytics</h3>
+    <p>
+      We keep two kinds of aggregate, non-identifying counts. First, each specimen has
+      a <strong>copy count</strong> and a view count that increment when anyone copies
+      or opens it &mdash; these are totals attached to the specimen, not to you. Second,
+      this site uses
+      <a href="https://www.cloudflare.com/web-analytics/">Cloudflare Web Analytics</a>,
+      a cookieless, privacy-first analytics tool that reports page-level traffic in
+      aggregate. It does not fingerprint visitors, does not use client-side state, and
+      collects no personal data. If the analytics token isn&rsquo;t configured for a
+      given deployment, the beacon simply isn&rsquo;t loaded.
+    </p>
+
+    <h2>Where your data lives</h2>
+    <p>
+      The site runs on <a href="https://www.cloudflare.com/">Cloudflare</a>. Account
+      and specimen metadata live in Cloudflare D1; uploaded TDN files and thumbnails
+      live in Cloudflare R2. Cloudflare acts as our infrastructure processor and may
+      process request data (such as IP addresses) to deliver and protect the service.
+    </p>
+
+    <h2>How we use it</h2>
+    <p>
+      We use the data above only to operate the service: to sign you in, to attribute
+      and display the work you publish, to keep the site secure and free of spam and
+      abuse, and to understand aggregate traffic so we can improve the project. We do
+      <strong>not</strong> sell your data, and we don&rsquo;t share it with third
+      parties except the infrastructure providers named here who process it on our
+      behalf.
+    </p>
+
+    <h2>Your choices</h2>
+    <p>
+      You can browse the entire Collection without an account. You can sign out at any
+      time to end a session. To delete your account, or to request a copy or removal of
+      your data, email <a href="mailto:dylan@roscover.com">dylan@roscover.com</a> and
+      we&rsquo;ll handle it. Note that published specimens may carry an open license
+      (for example CC-BY-4.0) &mdash; copies others have already made under that license
+      remain theirs to keep, but we will remove your authored entries on request.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+      This site is not directed at children under 13, and we don&rsquo;t knowingly
+      collect their data. If you believe a child has created an account, contact us and
+      we&rsquo;ll remove it.
+    </p>
+
+    <h2>Changes</h2>
+    <p>
+      We may update this policy as the project evolves. When we do, we&rsquo;ll change
+      the &ldquo;last updated&rdquo; date above. Material changes will be noted in the
+      project changelog.
+    </p>
+
+    <p class="legal-sign mono">
+      See also the <a href="/terms">Terms of Service</a>.
+    </p>
+  </article>
+</Base>
+
+<style>
+  .legal-hero .lede {
+    max-width: 70ch;
+    margin-bottom: 1rem;
+  }
+
+  .legal-updated {
+    margin: 0;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+  }
+
+  .legal-body {
+    max-width: 70ch;
+    padding-top: clamp(1.75rem, 3vw, 2.5rem);
+  }
+
+  .legal-body p {
+    margin: 0 0 1.35rem;
+    color: var(--text);
+    font-size: 1.05rem;
+    line-height: 1.7;
+  }
+
+  .legal-body h2 {
+    margin: 2.5rem 0 1rem;
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+  }
+
+  .legal-body h3 {
+    margin: 1.9rem 0 0.6rem;
+    color: var(--text);
+    font-size: 1.15rem;
+  }
+
+  .legal-body strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .legal-body a {
+    color: var(--accent);
+  }
+
+  .legal-body a:hover {
+    color: var(--accent-hover);
+  }
+
+  .legal-sign {
+    margin-top: 2.4rem;
+    color: var(--text-faint);
+    font-size: 0.9rem;
+    letter-spacing: 0.02em;
+  }
+
+  .legal-sign a {
+    color: var(--accent);
+  }
+</style>

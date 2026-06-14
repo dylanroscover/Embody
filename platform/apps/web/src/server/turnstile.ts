@@ -7,10 +7,14 @@ export async function verifyTurnstile(
   secret: string,
   environment = "production"
 ): Promise<boolean> {
-  if (environment !== "production" || token === "dev-bypass") {
-    return true;
-  }
-
+  // Fail closed: the gate only relaxes when we KNOW we are not in production.
+  // An unknown / unset environment is treated as production (verify a real
+  // token). The "dev-bypass" magic token is honored ONLY outside production --
+  // in production it is just another token that must pass siteverify, so an
+  // authenticated user can no longer POST turnstileToken:"dev-bypass" to skip
+  // the gate.
+  const isProd = environment === "production";
+  if (!isProd) return true;
   if (!token || !secret) return false;
 
   const body = new FormData();
