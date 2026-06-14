@@ -14,6 +14,11 @@ const {
   ogImage,
   ogUrl
 } = Astro.props;
+
+// Active-nav highlight: mark the item whose href matches the current path.
+const path = Astro.url.pathname.replace(/\/+$/, "") || "/";
+const isActive = (href: string) =>
+  href !== "/" && (path === href || path.startsWith(href + "/"));
 ---
 
 <!doctype html>
@@ -25,7 +30,7 @@ const {
     <meta name="theme-color" content="#181e1e" />
     <meta name="color-scheme" content="dark" />
     <title>{title}</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23181e1e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%236ee668'/%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23181e1e'/%3E%3Ccircle cx='45' cy='45' r='5' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 36 L 47.5 36'/%3E%3C/g%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
@@ -43,50 +48,83 @@ const {
   </head>
   <body>
     <a class="skip-link" href="#content">Skip to content</a>
+    <!-- Forest liquid-glass filter for the nav bar. feTurbulence builds a soft
+         fractal noise field, a light blur smooths it, and feDisplacementMap uses
+         it to BEND the pixels the bar lets through (the magnifying-lens look).
+         Visually hidden but referenced by backdrop-filter: url(#nav-glass). -->
+    <svg class="nav-glass-defs" aria-hidden="true" focusable="false" width="0" height="0">
+      <defs>
+        <filter id="nav-glass" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+          <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="7" stitchTiles="stitch" result="noise" />
+          <feGaussianBlur in="noise" stdDeviation="2" result="softNoise" />
+          <feDisplacementMap in="SourceGraphic" in2="softNoise" scale="18" xChannelSelector="R" yChannelSelector="G" />
+        </filter>
+      </defs>
+    </svg>
     <header class="site-header" aria-label="embody.tools" data-site-header>
-      <nav class="site-nav site-nav--left" aria-label="Primary">
-        <a class="mark__link" href="/" aria-label="embody.tools home">
+      <nav class="navbar" aria-label="Primary">
+        <a class="navbar__mark" href="/" aria-label="embody.tools home">
           <span class="mark__dot" aria-hidden="true"></span>
-          <span class="mark__word">embody.tools</span>
+          <span class="navbar__word">embody.tools</span>
         </a>
-        <div class="nav-collapse" data-nav-collapse>
-          <div class="nav-auth">
-            <a class="nav-auth__btn nav-auth__btn--register" href="/signin">register</a>
-            <a class="nav-auth__btn nav-auth__btn--signin" href="/signin">sign in</a>
-          </div>
-          <a href="/collection">
-            <span class="nav-item__title">collection</span>
+        <div class="navbar__items" data-nav-collapse>
+          <a class="navbar__item navbar__item--register" href="/signin">sign in</a>
+          <a
+            class:list={["navbar__item", { "is-active": isActive("/collection") }]}
+            href="/collection"
+            aria-current={isActive("/collection") ? "page" : undefined}
+          >
+            <span class="navbar__label">collection</span>
             <span class="nav-item__desc">Transparent TDN networks to inspect, copy, and remix.</span>
           </a>
-          <a href="/field-guide">
-            <span class="nav-item__title">field guide</span>
+          <a
+            class:list={["navbar__item", { "is-active": isActive("/field-guide") }]}
+            href="/field-guide"
+            aria-current={isActive("/field-guide") ? "page" : undefined}
+          >
+            <span class="navbar__label">field guide</span>
             <span class="nav-item__desc">How to read, run, and adapt a specimen.</span>
           </a>
-          <a href="/submit">
-            <span class="nav-item__title">submit</span>
+          <a
+            class:list={["navbar__item", { "is-active": isActive("/submit") }]}
+            href="/submit"
+            aria-current={isActive("/submit") ? "page" : undefined}
+          >
+            <span class="navbar__label">submit</span>
             <span class="nav-item__desc">Share a TDN network with the community.</span>
           </a>
-          <a href="https://dylanroscover.github.io/Embody/manifesto/">
-            <span class="nav-item__title">manifesto</span>
+          <a
+            class:list={["navbar__item", { "is-active": isActive("/manifesto") }]}
+            href="/manifesto"
+            aria-current={isActive("/manifesto") ? "page" : undefined}
+          >
+            <span class="navbar__label">manifesto</span>
             <span class="nav-item__desc">Why TouchDesigner should be transparent and diffable.</span>
           </a>
-          <a class="nav-github" href="https://github.com/dylanroscover/Embody" aria-label="GitHub repository" data-nav-github>
-            <span class="nav-github__row">
-              <svg class="nav-github__icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+          <a class="navbar__item navbar__item--github" href="https://github.com/dylanroscover/Embody" aria-label="GitHub repository">
+            <span class="navbar__github-row">
+              <svg class="navbar__github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
                 <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.66 7.66 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
               </svg>
-              <span class="nav-github__label">github</span>
-              <span class="nav-github__stars" data-nav-github-stars hidden></span>
+              <span class="navbar__stars" data-gh-stars hidden></span>
             </span>
-            <span class="nav-item__desc">Star the repo and read the source.</span>
           </a>
+          <!-- Desktop overflow control. Hidden by default; the measure script
+               shows it only when items must collapse into it (in-between widths,
+               above the 860px hamburger breakpoint). Items move in/out live. -->
+          <div class="navbar__more" data-nav-more hidden>
+            <button class="navbar__item navbar__more-btn" type="button" data-nav-more-toggle aria-haspopup="true" aria-expanded="false" aria-label="More navigation items">
+              <span class="navbar__more-dots" aria-hidden="true"><b></b><b></b><b></b></span>
+            </button>
+            <div class="navbar__more-menu" data-nav-more-menu role="menu" aria-label="More navigation items" hidden></div>
+          </div>
         </div>
+        <button class="nav-toggle" type="button" data-nav-toggle aria-label="Toggle navigation" aria-expanded="false">
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+        </button>
       </nav>
-      <button class="nav-toggle" type="button" data-nav-toggle aria-label="Toggle navigation" aria-expanded="false">
-        <span class="nav-toggle__bar" aria-hidden="true"></span>
-        <span class="nav-toggle__bar" aria-hidden="true"></span>
-        <span class="nav-toggle__bar" aria-hidden="true"></span>
-      </button>
     </header>
     <main id="content">
       <slot />
@@ -114,7 +152,7 @@ const {
           <ul>
             <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
             <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
-            <li><a href="https://dylanroscover.github.io/Embody/manifesto/">manifesto</a></li>
+            <li><a href="/manifesto">manifesto</a></li>
             <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
           </ul>
         </nav>
@@ -196,30 +234,191 @@ const {
       }
     </script>
     <script>
-      // Brand-native GitHub star count. Per-visitor client-side fetch only --
-      // never an SSR/per-request fetch (GitHub's 60/hr unauthenticated limit
-      // would break the live origin). On any failure the pill stays as just
-      // the mark + label, never a broken/empty count.
-      const starsEl = document.querySelector("[data-nav-github-stars]");
-      if (starsEl instanceof HTMLElement) {
-        fetch("https://api.github.com/repos/dylanroscover/Embody")
-          .then((res) => (res.ok ? res.json() : Promise.reject(res.status)))
-          .then((data: unknown) => {
-            const raw =
-              data && typeof data === "object"
-                ? (data as { stargazers_count?: unknown }).stargazers_count
-                : null;
-            const count = typeof raw === "number" ? raw : null;
-            if (count === null) return;
-            const label =
-              count >= 1000 ? (count / 1000).toFixed(count >= 10000 ? 0 : 1) + "k" : String(count);
-            starsEl.textContent = label;
-            starsEl.hidden = false;
-          })
-          .catch(() => {
-            /* leave the pill as mark + label only */
+      // GitHub star count: fetch once, cache in localStorage for 6h, and fill
+      // the pill beside the GitHub icon. On any failure the pill stays hidden,
+      // so the item degrades to the icon alone (see .navbar__stars[hidden]).
+      (async () => {
+        const el = document.querySelector("[data-gh-stars]");
+        if (!(el instanceof HTMLElement)) return;
+        const link = el.closest("a");
+        const REPO = "dylanroscover/Embody";
+        const KEY = "gh-stars:" + REPO;
+        const fmt = (n: number) =>
+          n >= 1000
+            ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "") + "k"
+            : String(n);
+        const show = (n: number) => {
+          el.textContent = fmt(n);
+          el.hidden = false;
+          if (link) link.setAttribute("aria-label", `GitHub repository, ${fmt(n)} stars`);
+        };
+        try {
+          const c = JSON.parse(localStorage.getItem(KEY) || "null");
+          if (c && Date.now() - c.t < 6 * 3600 * 1000) {
+            show(c.n);
+            return;
+          }
+        } catch {}
+        try {
+          const r = await fetch("https://api.github.com/repos/" + REPO, {
+            headers: { Accept: "application/vnd.github+json" },
           });
+          if (!r.ok) return;
+          const d = await r.json();
+          if (typeof d.stargazers_count === "number") {
+            show(d.stargazers_count);
+            try {
+              localStorage.setItem(KEY, JSON.stringify({ n: d.stargazers_count, t: Date.now() }));
+            } catch {}
+          }
+        } catch {}
+      })();
+    </script>
+    <script>
+      // Desktop overflow ("...") for the inline nav bar. When the viewport is
+      // too narrow to fit every item at full size -- but still wide enough that
+      // the hamburger has not taken over -- the lowest-priority items collapse
+      // into a "..." button at the end of the bar that opens a small blurred
+      // menu. register + sign in (and the wordmark) are never overflowed; the
+      // rightmost items (github, then manifesto, then submit, ...) go first.
+      const moreNav = document.querySelector("[data-nav-more]");
+      const moreBtn = document.querySelector("[data-nav-more-toggle]");
+      const moreMenu = document.querySelector("[data-nav-more-menu]");
+      const itemsRow = document.querySelector("[data-nav-collapse]");
+      const navEl = document.querySelector(".navbar");
+
+      if (
+        moreNav instanceof HTMLElement &&
+        moreBtn instanceof HTMLButtonElement &&
+        moreMenu instanceof HTMLElement &&
+        itemsRow instanceof HTMLElement &&
+        navEl instanceof HTMLElement
+      ) {
+        // Items eligible to overflow, captured in DOM order. The register and
+        // sign-in buttons are deliberately excluded so they always stay inline.
+        // Reverse priority = last-to-first removal order (github first).
+        const overflowable: HTMLElement[] = Array.from(
+          itemsRow.querySelectorAll(
+            ".navbar__item:not(.navbar__item--register):not(.navbar__item--signin):not(.navbar__more-btn)"
+          )
+        ).filter((el): el is HTMLElement => el instanceof HTMLElement);
+
+        const closeMore = () => {
+          moreNav.classList.remove("is-open");
+          moreBtn.setAttribute("aria-expanded", "false");
+          moreMenu.hidden = true;
+        };
+        const openMore = () => {
+          moreNav.classList.add("is-open");
+          moreBtn.setAttribute("aria-expanded", "true");
+          moreMenu.hidden = false;
+        };
+
+        // Whether the inline overflow layer is active at all. Below the
+        // hamburger breakpoint the dropdown takes over, so everything lives in
+        // the items row and the "..." stays hidden.
+        const inlineActive = () =>
+          window.matchMedia("(min-width: 861px)").matches;
+
+        let measuring = false;
+        const layout = () => {
+          if (measuring) return;
+          measuring = true;
+
+          // Start from a clean slate: pull every overflowed item back inline
+          // (just before the "..." control) so widths measure at full size.
+          overflowable.forEach((el) => {
+            if (el.parentElement === moreMenu) {
+              el.classList.remove("navbar__more-item");
+              el.removeAttribute("role");
+              itemsRow.insertBefore(el, moreNav);
+            }
+          });
+
+          if (!inlineActive()) {
+            // Hamburger regime owns layout below the breakpoint.
+            moreNav.hidden = true;
+            closeMore();
+            measuring = false;
+            return;
+          }
+
+          // Does the full bar fit? The navbar is a flex row capped at
+          // max-width: calc(100vw - ...); when its content (wordmark + items +
+          // toggle) exceeds that cap the bar's own content overflows its
+          // clientWidth. Measuring the navbar -- not just the items row --
+          // catches the real overflow no matter which flex child grows.
+          const overflows = () => navEl.scrollWidth > navEl.clientWidth + 1;
+
+          if (!overflows()) {
+            // Everything fits -- no "..." needed.
+            moreNav.hidden = true;
+            closeMore();
+            measuring = false;
+            return;
+          }
+
+          // Reveal "..." first so its width is reserved while we measure, then
+          // move items into it from the end until the bar no longer overflows.
+          moreNav.hidden = false;
+          const hidden: HTMLElement[] = [];
+
+          // Move from the end of the overflowable list (github, manifesto,
+          // submit, ...) into the menu until it fits or we run out.
+          for (let i = overflowable.length - 1; i >= 0 && overflows(); i--) {
+            const el = overflowable[i];
+            if (!el || el.parentElement === moreMenu) continue;
+            el.classList.add("navbar__more-item");
+            el.setAttribute("role", "menuitem");
+            // Prepend so menu order mirrors the bar's left-to-right order.
+            moreMenu.insertBefore(el, moreMenu.firstChild);
+            hidden.push(el);
+          }
+
+          if (hidden.length === 0) {
+            moreNav.hidden = true;
+            closeMore();
+          }
+          measuring = false;
+        };
+
+        moreBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (moreNav.classList.contains("is-open")) {
+            closeMore();
+          } else {
+            openMore();
+          }
+        });
+
+        // Keyboard: Escape closes; closing menu via a click on an item too.
+        moreMenu.addEventListener("click", (event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest("a")) closeMore();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeMore();
+        });
+        document.addEventListener("click", (event) => {
+          const target = event.target;
+          if (
+            moreNav.classList.contains("is-open") &&
+            (target === null || !(target instanceof Node) || !moreNav.contains(target))
+          ) {
+            closeMore();
+          }
+        });
+
+        // Re-measure on load, on resize, and whenever the bar's box changes.
+        const ro = new ResizeObserver(() => layout());
+        ro.observe(navEl);
+        ro.observe(itemsRow);
+        window.addEventListener("resize", layout);
+        window.addEventListener("load", layout);
+        layout();
       }
+    </script>
+    <script>
     </script>
   </body>
 </html>

@@ -142,163 +142,227 @@ pre {
   z-index: 100;
 }
 
-.mark {
-  position: fixed;
-  top: clamp(1rem, 2vw, 1.6rem);
-  left: clamp(1.25rem, 3vw, 2rem);
-  z-index: 100;
+/* --- Consolidated nav bar -----------------------------------------------
+   ONE super-wide pill floating over the page. The wordmark AND every nav
+   item (register, sign in, collection, field guide, submit, manifesto,
+   github) live inside this single container. A translucent dark fill plus a
+   backdrop blur keep the bar legible over ANY content behind it, including
+   the page H1. Every inner item shares one height rule (--nav-item-h) so no
+   item is ever taller, circular, or wrapped. */
+:root {
+  /* The single source of truth for inner-item height. The wordmark, the
+     auth buttons, every link, and the GitHub pill all resolve to this exact
+     box height (min-height + matching vertical padding + line-height: 1). */
+  --nav-item-h: 36px;
+  --nav-item-pad-y: 0.5rem;
 }
 
-.mark__link {
+/* The inline SVG that holds the refraction filter is visually hidden but must
+   remain in the layout/render tree for backdrop-filter: url(#nav-glass) to
+   resolve. position:fixed + zero size keeps it out of flow without display:none
+   (which would drop the filter on some engines). */
+.nav-glass-defs {
+  position: fixed;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.navbar {
+  position: fixed;
+  top: clamp(0.85rem, 2vw, 1.4rem);
+  left: 50%;
+  z-index: 100;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: calc(100vw - clamp(1.5rem, 6vw, 3rem));
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  /* Forest liquid glass. A faint green-tinted translucent fill sits over the
+     refracted backdrop; the inset shadows add a bright specular hairline along
+     the TOP inner edge plus a faint darker chromatic-ish edge below. */
+  background:
+    linear-gradient(180deg, rgba(110, 230, 104, 0.05), rgba(40, 60, 48, 0.02) 38%),
+    rgba(20, 26, 24, 0.6);
+  box-shadow:
+    0 18px 44px -22px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(220, 255, 220, 0.22),
+    inset 0 -1px 0 rgba(110, 230, 104, 0.08),
+    inset 0 0 0 1px rgba(110, 230, 104, 0.04);
+  /* Forest frosted glass: a strong backdrop blur + saturation + a slight
+     brightness lift reads as premium "liquid glass" and renders identically in
+     every browser. (True SVG pixel-bending refraction via backdrop-filter:
+     url() is NOT reliably supported -- Chromium accepts the @supports test but
+     renders no filter, which was downgrading the bar to a weak 4px blur and is
+     exactly why the glass looked gone. A JS/canvas refraction can be added
+     later if real lensing is wanted.) */
+  -webkit-backdrop-filter: blur(22px) saturate(170%) brightness(1.07);
+  backdrop-filter: blur(22px) saturate(170%) brightness(1.07);
+}
+
+/* (Removed the SVG-displacement refraction tier. backdrop-filter: url() is not
+   reliably supported -- Chromium passed the @supports test yet rendered no
+   filter, downgrading the bar to a weak 4px blur. The frosted glass above is
+   the dependable, cross-browser result. The #nav-glass <svg> defs in Base.astro
+   are now unused and can be removed in a later cleanup.) */
+
+/* Shared height + centering for every inner item. ONE rule guarantees
+   uniform height: same min-height, same vertical padding, line-height 1,
+   vertically centered, never wrapping. */
+.navbar__mark,
+.navbar__item {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  border: 1.5px solid var(--border);
-  border-radius: 999px;
-  background: rgba(24, 30, 30, 0.92);
-  padding: 0.5rem 1rem 0.5rem 0.75rem;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 0.95rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  box-sizing: border-box;
+  min-height: var(--nav-item-h);
+  padding-top: var(--nav-item-pad-y);
+  padding-bottom: var(--nav-item-pad-y);
   line-height: 1;
-  text-transform: lowercase;
-  transition: border-color 180ms ease, color 180ms ease, background 180ms ease;
+  white-space: nowrap;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
-.mark__link:hover {
+/* Wordmark: the brand anchor, same height as every other item. */
+.navbar__mark {
+  gap: 0.5rem;
+  padding-left: 0.85rem;
+  padding-right: 0.95rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+}
+
+.navbar__mark:hover {
   border-color: var(--accent);
-  background: rgba(30, 40, 30, 0.95);
+  background: rgba(30, 40, 30, 0.6);
   color: var(--accent);
 }
 
+.navbar__word {
+  line-height: 1;
+}
+
+/* Brand glyph: the lowercase 'e' (an OK-hand pinch grasping a glowing orb).
+   Single SVG data-uri so it renders identically in the navbar, footer, and
+   any other .mark__dot host. Keeps the legacy class name. */
 .mark__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--accent);
+  width: 26px;
+  height: 26px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='45' cy='45' r='5' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 36 L 47.5 36'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
   flex-shrink: 0;
 }
 
-.site-nav {
-  position: fixed;
-  top: clamp(1rem, 2vw, 1.6rem);
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.site-nav--left { left: clamp(1.25rem, 3vw, 2rem); }
-
-/* Single collapsible link cluster beside the mark: a top auth section
-   (register / sign in), then collection, field guide, submit, manifesto, and
-   the GitHub star pill. */
-.nav-collapse {
+/* The inner item row -- a centered flex group with consistent gaps. */
+.navbar__items {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.3rem;
 }
 
-/* Top auth section: REGISTER (filled accent) on the left, SIGN IN (outline) on
-   the right, as a split full-width row. It reads as a real button pair only in
-   the stacked dropdown panel below the breakpoint; on the compact desktop pill
-   bar it collapses to two inline pills that sit flush with the other links so
-   the inline bar still reads sensibly. */
-.nav-auth {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-/* Scoped under .nav-collapse so these win over the generic `.nav-collapse a`
-   pill styling (which has higher specificity than a bare `.nav-auth__btn`). */
-.nav-collapse .nav-auth__btn {
-  display: inline-flex;
-  align-items: center;
+/* Generic nav link/button: identical height to the wordmark and to each
+   other; uppercase mono labels in brand tokens. */
+.navbar__item {
   justify-content: center;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: 999px;
-  padding: 0.5rem 0.95rem;
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+  color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
-.nav-collapse .nav-auth__btn--register {
+.navbar__item:hover {
+  border-color: var(--border);
+  background: rgba(30, 40, 30, 0.6);
+  color: var(--accent);
+}
+
+/* Active page: a soft accent-tinted chip -- clearly "you are here" without
+   competing with the single filled auth CTA (the one loudest element). */
+.navbar__item.is-active {
+  border-color: transparent;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.navbar__item.is-active:hover {
+  border-color: transparent;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* REGISTER -- filled accent emphasis, SAME height as the rest. */
+.navbar__item--register {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--bg);
 }
 
-.nav-collapse .nav-auth__btn--register:hover {
-  background: var(--accent-hover);
+.navbar__item--register:hover {
   border-color: var(--accent-hover);
+  background: var(--accent-hover);
   color: var(--bg);
 }
 
-.nav-collapse .nav-auth__btn--signin {
+/* SIGN IN -- outline emphasis, SAME height as the rest; never a circle, never
+   wrapped (white-space: nowrap is inherited from the shared rule). */
+.navbar__item--signin {
   border-color: var(--accent);
   background: transparent;
   color: var(--accent);
 }
 
-.nav-collapse .nav-auth__btn--signin:hover {
+.navbar__item--signin:hover {
   border-color: var(--accent);
   background: var(--accent-dim);
   color: var(--accent);
 }
 
-/* Link pills -- scoped to nav-collapse so .mark__link keeps its own distinct
-   pill styling. */
-.nav-collapse a {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: rgba(24, 30, 30, 0.72);
-  padding: 0.5rem 0.85rem;
+/* Brand-native GitHub item: the GitHub mark + label + an optional live star
+   count, in dark-green brand tokens. The count is injected client-side and
+   stays [hidden] until a successful fetch, so a failed/blocked request
+   degrades to mark + label only -- without changing the item's height. */
+.navbar__item--github {
+  justify-content: center;
+  padding-left: var(--nav-item-pad-y);
+  padding-right: var(--nav-item-pad-y);
+  border-color: var(--border);
+  background: var(--bg-elevated);
   color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
 }
 
-.nav-collapse a:hover {
-  border-color: var(--border);
-  background: rgba(30, 40, 30, 0.95);
+.navbar__item--github:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated-2);
   color: var(--accent);
 }
 
-/* Brand-native GitHub pill: the GitHub mark + label + an optional live star
-   count, rendered in the dark-green brand tokens. The count is injected
-   client-side; the .nav-github__stars span stays [hidden] until a successful
-   fetch, so a failed/blocked request degrades to mark + label only. */
-.nav-github {
+.navbar__github-row {
+  display: inline-flex;
+  align-items: center;
   gap: 0.4rem;
-  border-color: var(--border) !important;
-  background: var(--bg-elevated) !important;
 }
 
-.nav-github:hover {
-  border-color: var(--accent) !important;
-  background: var(--bg-elevated-2) !important;
-}
-
-.nav-github__icon {
+.navbar__github-icon {
   flex: none;
 }
 
-.nav-github__stars {
+.navbar__stars {
   display: inline-flex;
   align-items: center;
-  margin-left: 0.1rem;
   padding: 0.05rem 0.4rem;
   border-radius: 999px;
   background: var(--accent-dim);
@@ -307,43 +371,134 @@ pre {
   letter-spacing: 0.04em;
 }
 
-.nav-github__stars[hidden] {
+.navbar__stars[hidden] {
   display: none;
 }
 
-/* GitHub pill inner row (icon + label + star count) stays horizontal even when
-   the item becomes a stacked title + description in the dropdown panel. */
-.nav-github__row {
+/* --- Desktop overflow "..." control --------------------------------------
+   Lives at the right end of the inline bar. The button matches every other
+   item's height/style; its menu is a small blurred panel echoing the mobile
+   dropdown. Hidden until the measure script reveals it (and via [hidden]). */
+.navbar__more {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
 }
 
-/* Per-item description: hidden in the compact desktop pill bar, revealed in the
+.navbar__more[hidden] {
+  display: none;
+}
+
+/* The "..." button: same shared item box (height, radius, font), centered
+   dots, a touch wider on the horizontal so the glyph breathes. */
+.navbar__more-btn {
+  gap: 0;
+  justify-content: center;
+  letter-spacing: 0;
+  padding-left: var(--nav-item-pad-y);
+  padding-right: var(--nav-item-pad-y);
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.navbar__more-btn:hover,
+.navbar__more.is-open .navbar__more-btn {
+  border-color: var(--accent);
+  background: var(--bg-elevated-2);
+  color: var(--accent);
+}
+
+.navbar__more-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.navbar__more-dots b {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* The overflow menu: a small blurred panel dropping from the "..." button,
+   styled like the mobile dropdown so the bar reads as one glass system. */
+.navbar__more-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  min-width: 220px;
+  max-width: 300px;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(20, 26, 24, 0.82);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+}
+
+.navbar__more-menu[hidden] {
+  display: none;
+}
+
+/* Items moved into the overflow menu: full-width left-aligned rows (overriding
+   the inline centered pill layout) while keeping the brand item look. */
+.navbar__more-item.navbar__item {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.navbar__more-item.navbar__item--github {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Per-item description: hidden in the desktop pill bar, revealed in the
    dropdown panel (below the breakpoint) where there is room to orient new
    visitors on what each destination is. */
 .nav-item__desc {
   display: none;
+  /* Override the .navbar__item nowrap so multi-word descriptions wrap inside
+     the dropdown panel instead of overflowing its right edge. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-/* Hamburger -- hidden on desktop, shown below the nav breakpoint. */
+/* Hamburger -- hidden on desktop, shown below the nav breakpoint. It rides
+   inside the pill so the consolidated container stays a single element. */
 .nav-toggle {
   display: none;
-  position: fixed;
-  top: clamp(1rem, 2vw, 1.6rem);
-  right: clamp(1.25rem, 3vw, 2rem);
-  z-index: 101;
-  width: 44px;
-  height: 38px;
+  width: 38px;
+  height: var(--nav-item-h);
+  flex: none;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 5px;
   padding: 0;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: rgba(24, 30, 30, 0.92);
+  background: transparent;
   cursor: pointer;
+}
+
+.nav-toggle:hover {
+  border-color: var(--border);
+  background: rgba(30, 40, 30, 0.6);
 }
 
 .nav-toggle__bar {
@@ -353,76 +508,85 @@ pre {
   transition: transform 180ms ease, opacity 180ms ease;
 }
 
-/* Below this width the link cluster would collide with the mark; collapse it
-   into the hamburger dropdown instead of wrapping to a second row. */
+/* Below this width the inline item row would overflow the pill; collapse it
+   into a dropdown panel that drops from the (still single) pill. The panel
+   keeps the same one-pill discipline: rounded, blurred, uniform-height rows. */
 @media (max-width: 860px) {
+  .navbar {
+    gap: 0.3rem;
+  }
+
   .nav-toggle { display: inline-flex; }
 
-  .nav-collapse {
+  /* Hamburger regime owns layout here; the desktop "..." control never shows.
+     (The measure script also force-hides it, but this guards the CSS layer.) */
+  .navbar__more { display: none; }
+
+  .navbar__items {
     display: none;
-    position: fixed;
-    top: calc(clamp(1rem, 2vw, 1.6rem) + 3.4rem);
-    right: clamp(1.25rem, 3vw, 2rem);
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
     flex-direction: column;
     align-items: stretch;
-    gap: 0.15rem;
+    gap: 0.2rem;
     min-width: 300px;
     max-width: 340px;
     padding: 0.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: rgba(20, 26, 24, 0.97);
-    box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+    background: rgba(16, 21, 19, 0.95);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    backdrop-filter: blur(26px) saturate(150%);
+    box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.9);
   }
 
-  .site-header.is-open .nav-collapse { display: flex; }
+  .site-header.is-open .navbar__items { display: flex; }
 
-  /* Auth section, dropdown form: a full-width split row -- REGISTER and SIGN IN
-     each take half -- pinned to the top with a divider below it, so it reads as
-     a prominent button pair to perform first, ahead of the plain link list. */
-  .nav-collapse .nav-auth {
-    display: flex;
-    gap: 0.5rem;
-    padding: 0.4rem 0.25rem 0.65rem;
-    margin-bottom: 0.3rem;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .nav-collapse .nav-auth__btn {
-    flex: 1 1 0;
-    justify-content: center;
-    padding: 0.65rem 0.85rem;
-    border-radius: 12px;
-  }
-
-  .nav-collapse a:not(.nav-auth__btn) {
-    flex-direction: column;
-    align-items: flex-start;
+  /* Dropdown rows: still uniform-height, full-width, left-aligned with an
+     optional description below the label. REGISTER + SIGN IN keep their
+     emphasis but match the row height of the links. */
+  .navbar__items .navbar__item {
     justify-content: flex-start;
-    gap: 0.2rem;
-    background: transparent;
-    border-color: transparent;
-    padding: 0.7rem 0.85rem;
+    min-height: 0;
+    padding: 0.6rem 0.7rem;
     border-radius: 12px;
+    text-align: left;
   }
 
-  .nav-collapse a:hover {
-    background: rgba(30, 40, 30, 0.7);
+  .navbar__items .navbar__item--register,
+  .navbar__items .navbar__item--signin {
+    justify-content: center;
   }
 
-  .nav-collapse .nav-item__desc {
+  .navbar__item .navbar__label {
+    line-height: 1;
+  }
+
+  .navbar__item .nav-item__desc {
     display: block;
+    margin-top: 0.25rem;
     max-width: 32ch;
     text-transform: none;
     letter-spacing: 0;
     font-size: 0.68rem;
+    font-weight: 400;
     line-height: 1.45;
     color: var(--text-faint);
   }
 
-  .nav-collapse .nav-github {
-    background: transparent !important;
-    border-color: transparent !important;
+  /* In the dropdown, items that show a description stack label + desc, so let
+     them grow past the single-row height. Auth + github stay single-row. */
+  .navbar__items .navbar__item:not(.navbar__item--register):not(.navbar__item--signin):not(.navbar__item--github) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .navbar__items .navbar__item--github {
+    flex-direction: column;
+    align-items: flex-start;
+    border-color: transparent;
+    background: transparent;
   }
 
   .site-header.is-open .nav-toggle__bar:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
@@ -432,6 +596,21 @@ pre {
 
 main {
   min-height: calc(100vh - 150px);
+  /* Reserve clear space below the floating consolidated bar so it never sits
+     on top of the page H1 / hero text. This is the SINGLE owner of top
+     clearance: the first section of every page drops its own large top
+     padding (below) so the totals stay tasteful instead of double-stacking. */
+  padding-top: clamp(5.5rem, 8vw, 6.5rem);
+}
+
+/* The first block in <main> no longer needs its own big top padding -- main's
+   padding-top already clears the floating bar. Neutralize the top padding of
+   whichever section type leads the page so nothing double-stacks, while the
+   inter-section rhythm (.page-section + .page-section) is left untouched. */
+main > .page-section:first-child,
+main > .hero:first-child,
+main > .collection-hero:first-child {
+  padding-top: 0;
 }
 
 .container,
@@ -1121,7 +1300,7 @@ pre {
 .footer__col a { color: var(--text-muted); font-size: 0.95rem; }
 .footer__col a:hover { color: var(--accent); }
 .footer__mark { display: inline-flex; align-items: center; gap: 0.55rem; color: var(--text); margin-bottom: 1rem; }
-.footer__mark .mark__dot { width: 9px; height: 9px; }
+.footer__mark .mark__dot { width: 22px; height: 22px; }
 .footer__word {
   font-family: var(--font-display);
   font-weight: 600;
