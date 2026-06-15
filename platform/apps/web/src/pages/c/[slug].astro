@@ -2,7 +2,6 @@
 import { env } from "cloudflare:workers";
 import type { SpecimenDetail } from "@embody/contracts";
 import { TdnViewer } from "@embody/tdn-viewer";
-import CopyButton from "../../components/CopyButton.astro";
 import CopyTdnEnvelopeButton from "../../components/CopyTdnEnvelopeButton";
 import Base from "../../layouts/Base.astro";
 import {
@@ -10,11 +9,12 @@ import {
   firstFixtureSpecimen,
   type FixtureSpecimen
 } from "../../lib/specimenFallback";
+import { reactionsClusterHtml } from "../../lib/reactions";
 import { sampleTdn } from "../../fixtures/sample-tdn";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
 import { getSpecimenBySlug } from "../../server/db";
 import { getParsedTdnForSlug } from "../../server/tdn";
-import { getSpecimenIdBySlug, hasLiked, REPORT_REASONS } from "../../server/engagement";
+import { getSpecimenIdBySlug, getUserReactions, REPORT_REASONS } from "../../server/engagement";
 
 export const prerender = false;
 
@@ -27,9 +27,8 @@ type DisplaySpecimen = {
   requires: string;
   operator_count: number;
   key_ops: string[];
-  prompt: string;
   current_version?: number;
-  likes_count: number;
+  reactions: Record<string, number>;
 };
 
 const fallback = firstFixtureSpecimen();
@@ -55,15 +54,15 @@ const sessionUser = Astro.locals.user;
 const isSignedIn = Boolean(sessionUser);
 const signInHref = `/signin?next=${encodeURIComponent(`/c/${specimen.slug}`)}`;
 
-let initiallyLiked = false;
+let myReactions: string[] = [];
 if (sessionUser) {
   try {
     const specimenId = await getSpecimenIdBySlug(env.DB, specimen.slug);
     if (specimenId) {
-      initiallyLiked = await hasLiked(env.DB, specimenId, sessionUser.id);
+      myReactions = await getUserReactions(env.DB, specimenId, sessionUser.id);
     }
   } catch {
-    initiallyLiked = false;
+    myReactions = [];
   }
 }
 
@@ -90,7 +89,6 @@ try {
 }
 
 const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorTypes(tdn);
-const embodyPrompt = `embody the ${specimen.slug} specimen into my project`;
 
 function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
   return {
@@ -102,8 +100,7 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     requires: fixture.requires,
     operator_count: fixture.operator_count,
     key_ops: fixture.key_ops,
-    prompt: fixture.prompt,
-    likes_count: 0
+    reactions: {}
   };
 }
 
@@ -111,6 +108,11 @@ function specimenFromLive(
   live: SpecimenDetail,
   fixture: FixtureSpecimen | undefined
 ): DisplaySpecimen {
+  // Only borrow fixture-authored copy (key_ops) when the fixture actually IS this
+  // specimen. The caller falls back to the first fixture for any unknown slug, so
+  // an unguarded read would bleed that fixture's text onto every community
+  // specimen. No match -> empty key_ops (derived from the TDN graph below).
+  const authored = fixture?.slug === live.slug ? fixture : undefined;
   return {
     slug: live.slug,
     name: live.name,
@@ -119,10 +121,9 @@ function specimenFromLive(
     description: live.description,
     requires: live.requires,
     operator_count: live.op_count,
-    key_ops: fixture?.key_ops ?? [],
-    prompt: fixture?.prompt ?? `Embody the ${live.slug} specimen into my project.`,
+    key_ops: authored?.key_ops ?? [],
     current_version: live.current_version,
-    likes_count: live.likes_count
+    reactions: live.reactions ?? {}
   };
 }
 
@@ -288,31 +289,16 @@ function emitKey(key: string): string {
     </div>
 
     <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
-      {isSignedIn ? (
-        <button
-          type="button"
-          class:list={["like-button", { "is-liked": initiallyLiked }]}
-          data-like
-          aria-pressed={initiallyLiked}
-          aria-label={initiallyLiked ? "Unlike this specimen" : "Like this specimen"}
-        >
-          <svg class="like-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
-          </svg>
-          <span class="like-count" data-like-count>{specimen.likes_count}</span>
-        </button>
-      ) : (
-        <a
-          class="like-button like-button--anon"
-          href={signInHref}
-          aria-label="Sign in to like this specimen"
-        >
-          <svg class="like-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z" />
-          </svg>
-          <span class="like-count" data-like-count>{specimen.likes_count}</span>
-        </a>
-      )}
+      <CopyTdnEnvelopeButton
+        tdn={tdn}
+        slug={specimen.slug}
+        version={specimen.current_version}
+        label="embody it"
+        className="copy-button--cta"
+        client:load
+      />
+
+      <Fragment set:html={reactionsClusterHtml({ slug: specimen.slug, reactions: specimen.reactions, mine: myReactions })} />
 
       {isSignedIn ? (
         <button type="button" class="report-link" data-report>Report</button>
@@ -329,7 +315,7 @@ function emitKey(key: string): string {
     set:html={JSON.stringify(reportReasons)}
   />
   <script>
-    type LikeResult = { liked: boolean; likes_count: number };
+    import { initReactions } from "../../lib/reactionsClient";
 
     const root = document.querySelector(".engagement") as HTMLElement | null;
     if (root) {
@@ -347,42 +333,9 @@ function emitKey(key: string): string {
         if (statusEl) statusEl.textContent = message;
       };
 
-      const likeButton = root.querySelector("[data-like]") as HTMLButtonElement | null;
-      const countEl = root.querySelector("[data-like-count]") as HTMLElement | null;
-
-      if (likeButton && countEl) {
-        likeButton.addEventListener("click", async () => {
-          if (likeButton.disabled) return;
-          likeButton.disabled = true;
-          setStatus("");
-          try {
-            const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}/like`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" }
-            });
-            if (res.status === 401) {
-              window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
-              return;
-            }
-            if (!res.ok) {
-              setStatus("Could not update your like. Please try again.");
-              return;
-            }
-            const data = (await res.json()) as LikeResult;
-            countEl.textContent = String(data.likes_count);
-            likeButton.classList.toggle("is-liked", data.liked);
-            likeButton.setAttribute("aria-pressed", String(data.liked));
-            likeButton.setAttribute(
-              "aria-label",
-              data.liked ? "Unlike this specimen" : "Like this specimen"
-            );
-          } catch {
-            setStatus("Could not update your like. Please try again.");
-          } finally {
-            likeButton.disabled = false;
-          }
-        });
-      }
+      // Emoji reactions: the picker popover + chip toggling live in the shared
+      // client. Anonymous visitors who react are bounced to /signin.
+      initReactions({ scope: root, signedIn: root.dataset.signedIn === "true" });
 
       const reportButton = root.querySelector("[data-report]") as HTMLButtonElement | null;
       if (reportButton) {
@@ -443,23 +396,6 @@ function emitKey(key: string): string {
           {keyOps.map((opName) => <span>{opName}</span>)}
         </div>
       </section>
-
-      <section class="side-block pillar">
-        <p class="eyebrow">Example prompt</p>
-        <div class="copy-shell">
-          <p class="copy-shell__text">{specimen.prompt}</p>
-          <CopyButton text={specimen.prompt} ariaLabel={`Copy ${specimen.name} example prompt`} />
-        </div>
-      </section>
-
-      <section class="side-block embody-block pillar">
-        <p class="eyebrow">How to embody it</p>
-        <div class="copy-shell">
-          <p>Tell your agent:</p>
-          <p class="copy-shell__text">{embodyPrompt}</p>
-          <CopyButton text={embodyPrompt} ariaLabel={`Copy embody command for ${specimen.name}`} />
-        </div>
-      </section>
     </aside>
   </section>
 
@@ -490,43 +426,6 @@ function emitKey(key: string): string {
     align-items: center;
     gap: 14px;
     margin-top: 22px;
-  }
-
-  .like-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid var(--border-faint);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    padding: 8px 14px;
-    color: var(--text);
-    font: 600 13px/1 var(--font-mono);
-    cursor: pointer;
-    text-decoration: none;
-    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-  }
-
-  .like-button:hover {
-    border-color: var(--border);
-  }
-
-  .like-button:disabled {
-    cursor: default;
-    opacity: 0.6;
-  }
-
-  .like-button.is-liked {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .like-button.is-liked .like-icon {
-    fill: currentColor;
-  }
-
-  .like-icon {
-    flex: 0 0 auto;
   }
 
   .report-link {
@@ -615,10 +514,6 @@ function emitKey(key: string): string {
     padding: 8px 10px;
     color: var(--text);
     font: 600 12px/1 var(--font-mono);
-  }
-
-  .embody-block {
-    border-color: var(--border);
   }
 
   details {

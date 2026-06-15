@@ -4,6 +4,7 @@ import type { ListResponse, SpecimenSummary } from "@embody/contracts";
 import Base from "../../layouts/Base.astro";
 import SpecimenCover from "../../components/SpecimenCover.astro";
 import { fixtureSummaries } from "../../lib/specimenFallback";
+import { reactionsClusterHtml } from "../../lib/reactions";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
 import { sampleTdn } from "../../fixtures/sample-tdn";
 import {
@@ -11,6 +12,11 @@ import {
   listSpecimensForCollection,
   type CollectionFacets
 } from "../../server/db";
+
+// Cards show the top few reaction tallies + a picker trigger; the detail page
+// shows them all. Anonymous visitors who try to react are bounced to /signin.
+const CARD_REACTION_MAX = 3;
+const isSignedIn = Boolean(Astro.locals.user);
 
 export const prerender = false;
 
@@ -56,9 +62,9 @@ try {
   };
 }
 
-const countLabel = usingFixtures
-  ? `${totalCount} fixture specimens`
-  : `${totalCount} specimen${totalCount === 1 ? "" : "s"}`;
+// Same user-facing wording whether the rows came from D1 or the embedded
+// fallback set -- "fixture" is internal jargon and should never reach visitors.
+const countLabel = `${totalCount} specimen${totalCount === 1 ? "" : "s"}`;
 
 const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
 ---
@@ -69,7 +75,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
 >
   <section class="page-section collection-hero">
     <p class="eyebrow">The Collection</p>
-    <h1>TouchDesigner networks you can see through</h1>
+    <h1>see it. embody it.</h1>
     <p class="lede">
       Copy any specimen's TDN to your clipboard and paste it straight into a TouchDesigner .toe running Embody.
     </p>
@@ -132,11 +138,13 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
             <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-sort" hidden>
               <li class="dd__opt" role="option" data-value="az" aria-selected="true">A-Z</li>
               <li class="dd__opt" role="option" data-value="newest" aria-selected="false">Newest</li>
+              <li class="dd__opt" role="option" data-value="liked" aria-selected="false">Most liked 👍</li>
               <li class="dd__opt" role="option" data-value="copied" aria-selected="false">Most copied</li>
             </ul>
             <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-sort>
               <option value="az" selected>A-Z</option>
               <option value="newest">Newest</option>
+              <option value="liked">Most liked 👍</option>
               <option value="copied">Most copied</option>
             </select>
           </div>
@@ -194,6 +202,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     data-next-cursor={nextCursor ?? ""}
     data-base-count={countLabel}
     data-fixtures={usingFixtures ? "1" : "0"}
+    data-signed-in={isSignedIn ? "1" : "0"}
   >
     <section class="page-section tight collection-results">
       <div class="card-grid" data-card-grid>
@@ -222,18 +231,14 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
                 <span class="badge">{specimen.difficulty}</span>
                 <span class="badge specimen-category">{specimen.category}</span>
                 <span class="badge license">CC-BY</span>
-              </div>
-
-              <div class="specimen-card__name-row">
-                <h3 class="specimen-card__name">{specimen.name}</h3>
 
                 <button
                   type="button"
                   class="card-copy"
                   data-card-copy
                   data-slug={specimen.slug}
-                  aria-label={`Copy TDN envelope for ${specimen.name}`}
-                  title="Copy TDN for TouchDesigner"
+                  aria-label={`Embody it -- copy ${specimen.name}'s TDN for TouchDesigner`}
+                  title="Embody it -- copy this specimen's TDN for your agent"
                 >
                   <svg
                     class="card-copy__icon card-copy__icon--copy"
@@ -268,22 +273,23 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
                 </button>
               </div>
 
-              <a
-                class="specimen-card__author mono"
-                href={`/u/${specimen.author_handle}`}
-                aria-label={`View ${specimen.author_handle}'s profile`}
-              >
-                <span class="specimen-card__author-avatar" aria-hidden="true">{specimen.author_handle.charAt(0).toUpperCase()}</span>
-                <span class="specimen-card__author-handle">by @{specimen.author_handle}</span>
-              </a>
+              <div class="specimen-card__name-row">
+                <h3 class="specimen-card__name">{specimen.name}</h3>
+
+                <a
+                  class="specimen-card__author mono"
+                  href={`/u/${specimen.author_handle}`}
+                  aria-label={`View ${specimen.author_handle}'s profile`}
+                >
+                  <span class="specimen-card__author-by">by</span>
+                  <span class="specimen-card__author-avatar" aria-hidden="true">{specimen.author_handle.charAt(0).toUpperCase()}</span>
+                  <span class="specimen-card__author-handle">@{specimen.author_handle}</span>
+                </a>
+              </div>
 
               <p class="specimen-card__desc">{specimen.description}</p>
 
-              <div class="card-actions">
-                <a class="card-link mono" href={`/c/${specimen.slug}`}>
-                  inspect /c/{specimen.slug}
-                </a>
-              </div>
+              <Fragment set:html={reactionsClusterHtml({ slug: specimen.slug, reactions: specimen.reactions ?? {}, max: CARD_REACTION_MAX })} />
             </div>
           </article>
         ))}
@@ -316,6 +322,8 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     import type { ListResponse, SpecimenSummary } from "@embody/contracts";
     import SpecimenCoverGraph from "../../components/SpecimenCoverGraph";
     import { specimenThumbnail } from "../../lib/specimenThumb";
+    import { reactionsClusterHtml } from "../../lib/reactions";
+    import { initReactions } from "../../lib/reactionsClient";
 
     interface CopyResponse {
       envelope: unknown;
@@ -325,9 +333,16 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     const STORAGE_KEY = "embody:collection:view";
     const DEBOUNCE_MS = 220;
     const COPY_RESET_MS = 1500;
+    // Mirror of CARD_REACTION_MAX in the frontmatter -- cap the tally chips shown
+    // on a card so a heavily-reacted specimen does not overflow the badge row.
+    const CARD_REACTION_MAX = 3;
 
     const shell = document.querySelector<HTMLElement>("[data-view]");
     const grid = document.querySelector<HTMLElement>("[data-card-grid]");
+
+    // Emoji reactions: one delegated listener over the whole document covers SSR
+    // cards AND client-appended ones. Anonymous visitors are bounced to /signin.
+    initReactions({ signedIn: shell?.getAttribute("data-signed-in") === "1" });
     const viewButtons = Array.from(
       document.querySelectorAll<HTMLElement>("[data-view-option]")
     );
@@ -482,16 +497,48 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     }
 
     // ---- Card markup for APPENDED (client-fetched) cards ----
-    // Mirrors the SSR article in collection/index.astro: badges (difficulty /
-    // stock-TD-or-needs / category / CC-BY), the cover shell (network skeleton +
-    // result placeholder + flip), the name row + per-card copy counter, the
-    // prominent author chip linking to /u/<handle>, the description, and the
-    // inspect link. The cover network layer is an empty mount node the React
-    // root fills in (lazy-fetched graph).
+    // Mirrors the SSR article in collection/index.astro: the badge row
+    // (difficulty / category / CC-BY, plus the "embody it" button floated to the
+    // far right), the cover shell (network skeleton + result placeholder + flip),
+    // the name row (title + prominent author chip linking to /u/<handle>), the
+    // description, and the emoji reaction cluster as the card's footer row.
+    // The cover network layer is an empty mount node the React root fills in
+    // (lazy-fetched graph). reactionsClusterHtml is shared with the SSR card so
+    // both emit identical reaction markup.
     function esc(value: string): string {
       const el = document.createElement("div");
       el.textContent = value;
       return el.innerHTML;
+    }
+
+    // Astro scopes the page's (and SpecimenCover's) <style> by stamping a
+    // data-astro-cid-* attribute on every element it renders and rewriting each
+    // selector to require it. JS-built cards don't get those attributes, so the
+    // scoped .specimen-card / .badge / .cover rules never match them -> garbled
+    // layout. Collect EVERY scope attr present anywhere in a painted SSR card
+    // (collection scope + the SpecimenCover component scope) and stamp them on
+    // each JS-built element. Over-stamping a scope a selector never uses is inert.
+    const SSR_SCOPES: string[] = (() => {
+      const ssr = document.querySelector("main .specimen-card");
+      if (!ssr) return [];
+      const set = new Set<string>();
+      const collect = (el: Element) => {
+        for (const a of Array.from(el.attributes)) {
+          if (a.name.startsWith("data-astro-cid-")) set.add(a.name);
+        }
+      };
+      collect(ssr);
+      ssr.querySelectorAll("*").forEach(collect);
+      return Array.from(set);
+    })();
+
+    function applyScope(root: HTMLElement): void {
+      if (!SSR_SCOPES.length) return;
+      const stamp = (el: Element) => {
+        for (const s of SSR_SCOPES) el.setAttribute(s, "");
+      };
+      stamp(root);
+      root.querySelectorAll("*").forEach(stamp);
     }
 
     function buildCard(s: SpecimenSummary): HTMLElement {
@@ -530,25 +577,26 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
             <span class="badge">${esc(s.difficulty)}</span>
             <span class="badge specimen-category">${esc(s.category)}</span>
             <span class="badge license">CC-BY</span>
-          </div>
-          <div class="specimen-card__name-row">
-            <h3 class="specimen-card__name">${esc(s.name)}</h3>
-            <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Copy TDN envelope for ${esc(s.name)}" title="Copy TDN for TouchDesigner">
+            <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Embody it -- copy ${esc(s.name)}'s TDN for TouchDesigner" title="Embody it -- copy this specimen's TDN for your agent">
               <svg class="card-copy__icon card-copy__icon--copy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
               <svg class="card-copy__icon card-copy__icon--check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
               <span class="card-copy__count mono" data-copy-count>${esc(String(s.copies_count ?? 0))}</span>
             </button>
           </div>
-          <a class="specimen-card__author mono" href="/u/${esc(s.author_handle)}" aria-label="View ${esc(s.author_handle)}'s profile">
-            <span class="specimen-card__author-avatar" aria-hidden="true">${esc(initial)}</span>
-            <span class="specimen-card__author-handle">by @${esc(s.author_handle)}</span>
-          </a>
-          <p class="specimen-card__desc">${esc(s.description)}</p>
-          <div class="card-actions">
-            <a class="card-link mono" href="/c/${esc(s.slug)}">inspect /c/${esc(s.slug)}</a>
+          <div class="specimen-card__name-row">
+            <h3 class="specimen-card__name">${esc(s.name)}</h3>
+            <a class="specimen-card__author mono" href="/u/${esc(s.author_handle)}" aria-label="View ${esc(s.author_handle)}'s profile">
+              <span class="specimen-card__author-by">by</span>
+              <span class="specimen-card__author-avatar" aria-hidden="true">${esc(initial)}</span>
+              <span class="specimen-card__author-handle">@${esc(s.author_handle)}</span>
+            </a>
           </div>
+          <p class="specimen-card__desc">${esc(s.description)}</p>
+          ${reactionsClusterHtml({ slug: s.slug, reactions: s.reactions ?? {}, max: CARD_REACTION_MAX })}
         </div>
       `;
+
+      applyScope(article);
 
       const mount = article.querySelector<HTMLElement>("[data-cover-mount]");
       if (mount) observeCover(mount);
@@ -782,6 +830,11 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     flex-wrap: nowrap;
     align-items: center;
     width: 100%;
+    /* Lock the resting row height (set by the taller dropdowns/toggle). Below
+       1000px, focusing the search HIDES those siblings; without this the row
+       would shrink to the shorter input's height and the whole page would jump
+       a few px. Pinning it keeps the layout perfectly still on focus/blur. */
+    min-height: 38px;
     gap: 0.65rem 1rem;
   }
 
@@ -808,14 +861,19 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
        other controls step aside for the duration. Blur collapses it back to
        the icon. :has(... :focus) targets ONLY a focused search -- so clicking
        a dropdown or the view toggle never triggers the expand. */
-    .toolbar-controls:has(.collection-search:focus) .collection-total,
-    .toolbar-controls:has(.collection-search:focus) .sort-control,
-    .toolbar-controls:has(.collection-search:focus) .view-toggle {
+    .toolbar-controls:has(.collection-search:focus) :is(.collection-total, .sort-control, .view-toggle),
+    .toolbar-controls:has(.collection-search:not(:placeholder-shown)) :is(.collection-total, .sort-control, .view-toggle) {
       display: none;
     }
-    .collection-search:focus {
+    /* Expand on focus OR whenever a query is typed (:not(:placeholder-shown)),
+       with a min-width so the entered text is always legible -- blurring a field
+       that still has text no longer collapses it back to the icon and hides what
+       you typed. An empty field collapses back to the magnifier on blur. */
+    .collection-search:focus,
+    .collection-search:not(:placeholder-shown) {
       width: auto;
       flex: 1 1 auto;
+      min-width: 160px;
       padding: 0.4rem 0.9rem;
       background-image: none;
     }
@@ -1064,16 +1122,26 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     padding: 0.95rem 1rem 1rem;
   }
 
-  /* Name on the left, copy icon floated to the right, on one row. */
+  /* Title + author share one flexible row (the copy button lives in the badge
+     row above). In gallery the author wraps to its own line under the title
+     (flex-basis 100%); list view keeps it inline beside the title (override
+     below). */
   .specimen-card__name-row {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.3rem 0.55rem;
+  }
+
+  .specimen-card__name-row .specimen-card__author {
+    order: 2;
+    flex: 1 1 100%;
   }
 
   .specimen-card__name {
     margin: 0;
+    flex: 1 1 auto;
+    order: 0;
     font-size: 1.02rem;
     line-height: 1.25;
     min-width: 0;
@@ -1088,11 +1156,15 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    align-self: start;
+    align-self: baseline;
     color: var(--text);
     font-size: 0.82rem;
     font-weight: 600;
     letter-spacing: 0.01em;
+  }
+
+  .specimen-card__author-by {
+    color: var(--accent);
   }
 
   .specimen-card__author-avatar {
@@ -1127,8 +1199,22 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     line-height: 1.5;
   }
 
+  /* Badges share the top row with the "embody it" button, which floats to the far
+     right to draw the eye; the row is vertically centered so the pill-shaped
+     button lines up with the badge pills. Emoji reactions sit on their own row
+     below the title (not here). */
   .badge-row {
+    align-items: center;
     gap: 0.35rem;
+  }
+
+  .badge-row .card-copy {
+    margin-left: auto;
+  }
+
+  /* Reactions are their own row below the title -- left-aligned, never stretched. */
+  .specimen-card__body > .reactions {
+    justify-self: start;
   }
 
   /* Compact badges -- denser than the global default. */
@@ -1144,32 +1230,18 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     color: #b291b0;
   }
 
-  /* ---- Card actions: inspect link + per-card copy icon ---- */
-  .card-actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .card-link {
-    color: var(--accent);
-    font-size: 0.72rem;
-    letter-spacing: 0.02em;
-  }
-
-  .card-link:hover {
-    color: var(--accent-hover);
-  }
-
+  /* ---- Per-card "embody it" button ---- */
+  /* Sized to match the badge pills (min-height 22px) so the whole top row reads
+     as one consistent family. The reaction pills below use the same height. */
   .card-copy {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: 0.3rem;
+    min-height: 22px;
     border: 1px solid var(--border);
     border-radius: 999px;
     background: rgba(24, 30, 30, 0.72);
-    padding: 0.22rem 0.55rem;
+    padding: 0 0.55rem;
     color: var(--text-muted);
     cursor: pointer;
     transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
@@ -1218,6 +1290,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     line-height: 1;
     min-width: 0.8ch;
     text-align: right;
+    opacity: 0.7;
   }
 
   /* ---- GALLERY: dense grid, small min card width ---- */
@@ -1269,9 +1342,25 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     display: none;
   }
 
+  /* List rows: tighter rhythm now that the inspect line is gone, and the author
+     sits INLINE beside the title instead of on its own line -- one fewer line
+     per row (the copy button lives in the badge row above). */
   .collection-shell[data-view="list"] .specimen-card__body {
     align-content: center;
-    padding: 0.85rem 1.1rem;
+    gap: 0.4rem;
+    padding: 0.8rem 1.15rem;
+  }
+
+  /* List rows have room -- enlarge the title so it's the clear visual anchor. */
+  .collection-shell[data-view="list"] .specimen-card__name {
+    flex: 0 1 auto;
+    font-size: 1.4rem;
+    line-height: 1.2;
+  }
+
+  .collection-shell[data-view="list"] .specimen-card__name-row .specimen-card__author {
+    order: 1;
+    flex: 0 1 auto;
   }
 
   @media (max-width: 640px) {

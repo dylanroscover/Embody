@@ -18,7 +18,13 @@ export interface SpecimenSummary {
   thumbnail_key: string;
   author_handle: string;
   tier: Tier;
+  /** Total reactions across all emojis (denormalized; drives the "popular" sort). */
   likes_count: number;
+  /**
+   * Per-emoji reaction tallies keyed by emoji, e.g. {"thumbsup": 5, "fire": 2}
+   * (keys are the literal emoji characters). Omitted/empty when there are none.
+   */
+  reactions?: Record<string, number>;
   views_count: number;
   /** How many times this specimen's TDN envelope has been copied from the website. */
   copies_count: number;

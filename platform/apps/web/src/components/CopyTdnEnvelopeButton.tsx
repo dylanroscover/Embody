@@ -9,13 +9,16 @@ interface Props {
   slug?: string;
   version?: number;
   className?: string;
+  /** Visible button text (e.g. "Embody"). Omit for an icon-only button. */
+  label?: string;
 }
 
 export default function CopyTdnEnvelopeButton({
   tdn,
   slug,
   version,
-  className = ""
+  className = "",
+  label
 }: Props) {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   const timer = useRef<number | undefined>(undefined);
@@ -37,7 +40,8 @@ export default function CopyTdnEnvelopeButton({
   }
 
   const statusClass = state === "copied" ? "is-copied" : state === "failed" ? "is-failed" : "";
-  const ariaLabel = state === "copied" ? "Copied to clipboard" : LABEL;
+  const ariaLabel = state === "copied" ? "Copied to clipboard" : label ? `${label} - ${LABEL}` : LABEL;
+  const labelText = state === "copied" ? "Copied" : label;
 
   return (
     <button
@@ -76,7 +80,11 @@ export default function CopyTdnEnvelopeButton({
       >
         <path d="M20 6 9 17l-5-5" />
       </svg>
-      <span className="sr-only">{LABEL}</span>
+      {labelText ? (
+        <span className="copy-button__label">{labelText}</span>
+      ) : (
+        <span className="sr-only">{LABEL}</span>
+      )}
     </button>
   );
 }

@@ -865,39 +865,6 @@ h3 {
   letter-spacing: 0.02em;
 }
 
-.copy-shell,
-.copy-line {
-  position: relative;
-}
-
-.copy-shell {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  border: 1px solid var(--border-faint);
-  border-radius: var(--radius-sm);
-  background: var(--bg-code);
-  padding: 0.8rem 0.85rem;
-}
-
-.copy-shell .copy-shell__text {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.copy-shell p,
-.copy-line p {
-  margin: 0;
-}
-
-.copy-shell__text,
-.copy-line__text {
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 0.86rem;
-  line-height: 1.55;
-}
-
 .copy-button {
   display: inline-flex;
   align-items: center;
@@ -972,6 +939,154 @@ h3 {
   top: 0.75rem;
   right: 0.75rem;
   z-index: 1;
+}
+
+/* Branded "Embody" call-to-action -- the copy button, labelled and prominent so
+   the action teaches itself (copy this specimen's TDN for your agent). */
+.copy-button--cta {
+  gap: 8px;
+  padding: 8px 14px;
+  line-height: 1;
+  border-color: var(--accent);
+  background: rgba(110, 230, 104, 0.12);
+  color: var(--accent);
+}
+
+.copy-button--cta:hover {
+  background: var(--accent);
+  color: #0e1612;
+}
+
+.copy-button__label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---- Emoji reactions (shared by collection cards + specimen detail) ---- */
+/* Reaction tally chips and the smiley picker trigger share one pill style. */
+.reactions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.reaction-chip,
+.reaction-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border-faint);
+  border-radius: 999px;
+  background: rgba(24, 30, 30, 0.72);
+  padding: 2px 8px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.reaction-chip:hover,
+.reaction-add:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.reaction-chip:focus-visible,
+.reaction-add:focus-visible,
+.reaction-popover__emoji:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* On cards, match the "embody it" button + badge pill height (22px) for a
+   consistent family. (Card reaction markup is injected via set:html, so this must
+   be a global rule -- a scoped one would miss the SSR cluster.) */
+.specimen-card .reaction-chip,
+.specimen-card .reaction-add {
+  min-height: 22px;
+  padding: 0 0.5rem;
+}
+
+.reaction-chip__emoji {
+  font-size: 0.82rem;
+}
+
+.reaction-chip__count {
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+}
+
+/* The signed-in viewer's own reactions read as active. */
+.reaction-chip.is-mine {
+  border-color: var(--accent);
+  background: rgba(110, 230, 104, 0.14);
+  color: var(--accent);
+}
+
+.reaction-add__face {
+  font-size: 0.9rem;
+}
+
+.reaction-add__plus {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.reactions.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.reactions.is-failed .reaction-add {
+  border-color: #c46b6b;
+  color: #c46b6b;
+}
+
+/* ---- Themed emoji picker popover (anchored to the trigger, app-styled) ---- */
+.reaction-popover {
+  position: fixed;
+  z-index: 60;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated-2);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  padding: 8px;
+}
+
+.reaction-popover[hidden] {
+  display: none;
+}
+
+.reaction-popover__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.reaction-popover__emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.reaction-popover__emoji:hover {
+  background: var(--bg-elevated);
+  transform: scale(1.12);
 }
 
 .code,

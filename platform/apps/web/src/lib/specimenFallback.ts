@@ -181,6 +181,7 @@ export function toFixtureSummary(specimen: FixtureSpecimen): SpecimenSummary {
     author_handle: "embody.tools",
     tier: "featured",
     likes_count: 0,
+    reactions: {},
     views_count: 0,
     copies_count: 0
   };

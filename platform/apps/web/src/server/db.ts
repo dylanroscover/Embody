@@ -10,13 +10,14 @@ import {
 } from "@embody/contracts";
 import type { RequestUser } from "./auth";
 import { fixtureSummaries } from "../lib/specimenFallback";
+import { parseReactions } from "../lib/reactions";
 
 export type SpecimenSort = "recent" | "updated" | "popular" | "views" | "name";
 
 // Collection-page sort vocabulary (newest | copied | az). Maps onto the
 // keyset-paginated query in listSpecimens. Kept distinct from the legacy
 // SpecimenSort union so existing callers (and their query string) are unchanged.
-export type CollectionSort = "newest" | "copied" | "az";
+export type CollectionSort = "newest" | "copied" | "liked" | "az";
 
 export type TrustLevel = "anon" | "verified" | "curator" | "admin";
 
@@ -95,6 +96,7 @@ interface SpecimenSummaryRow {
   author_handle: string;
   tier: string;
   likes_count: number;
+  reactions_summary: string | null;
   views_count: number;
   copies_count: number;
 }
@@ -125,6 +127,7 @@ const SUMMARY_COLUMNS = [
   "u.handle AS author_handle",
   "s.tier",
   "s.likes_count",
+  "s.reactions_summary",
   "s.views_count",
   "s.copies_count"
 ].join(", ");
@@ -169,6 +172,12 @@ const COLLECTION_SORT_PLAN: Record<CollectionSort, CollectionSortPlan> = {
     orderBy: "s.copies_count DESC, s.slug ASC",
     keyset: "(s.copies_count < ? OR (s.copies_count = ? AND s.slug > ?))",
     keyOf: (row) => Number(row.copies_count ?? 0)
+  },
+  // Most liked first: likes_count (denormalized total reactions) DESC, slug ASC.
+  liked: {
+    orderBy: "s.likes_count DESC, s.slug ASC",
+    keyset: "(s.likes_count < ? OR (s.likes_count = ? AND s.slug > ?))",
+    keyOf: (row) => Number(row.likes_count ?? 0)
   },
   // A-Z: title (case-insensitive) ASC, slug ASC.
   az: {
@@ -735,7 +744,7 @@ export function normalizeSpecimenSort(value: string | null): SpecimenSort {
 }
 
 export function normalizeCollectionSort(value: string | null | undefined): CollectionSort {
-  if (value === "newest" || value === "copied") return value;
+  if (value === "newest" || value === "copied" || value === "liked") return value;
   return "az";
 }
 
@@ -829,6 +838,7 @@ function rowToSummary(row: SpecimenSummaryRow): SpecimenSummary {
     author_handle: row.author_handle,
     tier: normalizeTier(row.tier),
     likes_count: Number(row.likes_count ?? 0),
+    reactions: parseReactions(row.reactions_summary),
     views_count: Number(row.views_count ?? 0),
     copies_count: Number(row.copies_count ?? 0)
   };
