@@ -144,7 +144,7 @@ pre {
 
 /* --- Consolidated nav bar -----------------------------------------------
    ONE super-wide pill floating over the page. The wordmark AND every nav
-   item (register, sign in, collection, field guide, submit, manifesto,
+   item (register, sign in, collection, submit, manifesto,
    github) live inside this single container. A translucent dark fill plus a
    backdrop blur keep the bar legible over ANY content behind it, including
    the page H1. Every inner item shares one height rule (--nav-item-h) so no
@@ -155,18 +155,6 @@ pre {
      box height (min-height + matching vertical padding + line-height: 1). */
   --nav-item-h: 36px;
   --nav-item-pad-y: 0.5rem;
-}
-
-/* The inline SVG that holds the refraction filter is visually hidden but must
-   remain in the layout/render tree for backdrop-filter: url(#nav-glass) to
-   resolve. position:fixed + zero size keeps it out of flow without display:none
-   (which would drop the filter on some engines). */
-.nav-glass-defs {
-  position: fixed;
-  width: 0;
-  height: 0;
-  overflow: hidden;
-  pointer-events: none;
 }
 
 .navbar {
@@ -182,33 +170,55 @@ pre {
   padding: 0.4rem;
   border: 1px solid var(--border);
   border-radius: 999px;
-  /* Forest liquid glass. A faint green-tinted translucent fill sits over the
-     refracted backdrop; the inset shadows add a bright specular hairline along
-     the TOP inner edge plus a faint darker chromatic-ish edge below. */
+  /* Forest liquid glass. A LIGHT green-tinted translucent fill sits over the
+     refracted backdrop -- kept low-opacity so the lens (below) shows through;
+     the inset shadows add a bright specular hairline along the TOP inner edge
+     plus a faint darker chromatic-ish edge below. */
   background:
     linear-gradient(180deg, rgba(110, 230, 104, 0.05), rgba(40, 60, 48, 0.02) 38%),
-    rgba(20, 26, 24, 0.6);
+    rgba(20, 26, 24, 0.32);
   box-shadow:
     0 18px 44px -22px rgba(0, 0, 0, 0.85),
     inset 0 1px 0 rgba(220, 255, 220, 0.22),
     inset 0 -1px 0 rgba(110, 230, 104, 0.08),
     inset 0 0 0 1px rgba(110, 230, 104, 0.04);
-  /* Forest frosted glass: a strong backdrop blur + saturation + a slight
-     brightness lift reads as premium "liquid glass" and renders identically in
-     every browser. (True SVG pixel-bending refraction via backdrop-filter:
-     url() is NOT reliably supported -- Chromium accepts the @supports test but
-     renders no filter, which was downgrading the bar to a weak 4px blur and is
-     exactly why the glass looked gone. A JS/canvas refraction can be added
-     later if real lensing is wanted.) */
-  -webkit-backdrop-filter: blur(22px) saturate(170%) brightness(1.07);
-  backdrop-filter: blur(22px) saturate(170%) brightness(1.07);
+  /* Clear glass that ACTUALLY renders in GPU browsers. NOTE: a real refraction
+     lens (backdrop-filter: url(#svg-feDisplacementMap)) does NOT work in the GPU
+     compositor path of Chromium/WebKit -- it only renders in the CPU/software
+     filter path (headless SwiftShader), so it looks bent in software captures
+     but flat in real Brave/Chrome/Safari (WebKit bug 245510). Until that's
+     done via WebGL, this is a supported clear-glass: a light backdrop blur +
+     saturate/brightness/contrast for optical pop, with the specular border and
+     translucent fill above selling the glass. */
+  -webkit-backdrop-filter: blur(3px) saturate(180%) brightness(1.05) contrast(1.04);
+  backdrop-filter: blur(3px) saturate(180%) brightness(1.05) contrast(1.04);
 }
 
-/* (Removed the SVG-displacement refraction tier. backdrop-filter: url() is not
-   reliably supported -- Chromium passed the @supports test yet rendered no
-   filter, downgrading the bar to a weak 4px blur. The frosted glass above is
-   the dependable, cross-browser result. The #nav-glass <svg> defs in Base.astro
-   are now unused and can be removed in a later cleanup.) */
+/* WebGL refraction canvas (Base.astro [data-nav-gl]). Fixed, behind the pill,
+   geometry set inline by the controller to track the pill's box. Hidden until
+   the controller confirms WebGL + a page snapshot succeed and adds
+   .has-gl-glass to the header; otherwise the CSS clear-glass above stands. */
+.nav-gl-glass {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99;
+  display: none;
+  pointer-events: none;
+}
+
+.has-gl-glass .nav-gl-glass {
+  display: block;
+}
+
+/* When the GL lens is live it provides the glass body, so drop the CSS
+   backdrop-filter (no double treatment) and let the canvas show through. The
+   border + inset specular shadows stay and layer on top of the canvas. */
+.has-gl-glass .navbar {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 
 /* Shared height + centering for every inner item. ONE rule guarantees
    uniform height: same min-height, same vertical padding, line-height 1,
@@ -257,7 +267,7 @@ pre {
 .mark__dot {
   width: 26px;
   height: 26px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='45' cy='45' r='5' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 36 L 47.5 36'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='45' cy='45' r='4.7' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='8.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 33 L 47.5 33'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
   flex-shrink: 0;
 }
 
@@ -339,6 +349,11 @@ pre {
   justify-content: center;
   padding-left: var(--nav-item-pad-y);
   padding-right: var(--nav-item-pad-y);
+  /* This pill renders shorter than the nav row (the wordmark sets the row
+     height), so it centers with ~4px extra above and below. Nothing adds that
+     on the right, where it's just the nav's 0.4rem padding -- so mirror the 4px
+     here, making the right gap to the nav edge match the top/bottom gap exactly. */
+  margin-right: 4px;
   border-color: var(--border);
   background: var(--bg-elevated);
   color: var(--text-muted);
@@ -441,7 +456,12 @@ pre {
   padding: 0.4rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: rgba(20, 26, 24, 0.82);
+  /* Near-opaque frosted panel. The nav pill's own lens (backdrop-filter on
+     .navbar) makes it a "backdrop root", so this nested panel's own
+     backdrop-filter can't sample the page behind it -- readability has to come
+     from the fill, not the blur. Keep it high-opacity so menu text stays
+     legible over any hero/content behind it. */
+  background: rgba(18, 23, 21, 0.95);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   backdrop-filter: blur(18px) saturate(140%);
   box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
@@ -535,7 +555,10 @@ pre {
     padding: 0.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    background: rgba(16, 21, 19, 0.95);
+    /* Near-opaque: the parent pill's lens makes .navbar a backdrop root, so
+       this dropdown's backdrop blur can't see the page -- the solid fill is
+       what guarantees the menu text is readable over content behind it. */
+    background: rgba(16, 21, 19, 0.98);
     -webkit-backdrop-filter: blur(26px) saturate(150%);
     backdrop-filter: blur(26px) saturate(150%);
     box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.9);
@@ -599,8 +622,16 @@ main {
   /* Reserve clear space below the floating consolidated bar so it never sits
      on top of the page H1 / hero text. This is the SINGLE owner of top
      clearance: the first section of every page drops its own large top
-     padding (below) so the totals stay tasteful instead of double-stacking. */
-  padding-top: clamp(5.5rem, 8vw, 6.5rem);
+     padding (below) so the totals stay tasteful instead of double-stacking.
+     Paired with the smaller .eyebrow bottom margin below: more breathing room
+     between the nav and the eyebrow, less between the eyebrow and its heading,
+     so the heading itself stays put. The value TRACKS the nav's own vertical
+     position -- the first clamp is a mirror of .navbar's `top` offset, +59px is
+     the nav's fixed rendered height, + the eyebrow gap -- so the nav->eyebrow
+     gap stays EXACTLY equal to the eyebrow->heading gap at every viewport width,
+     not just where the clamps happen to bottom out. Keep the first clamp in sync
+     with .navbar `top` and 1.95rem in sync with .eyebrow `margin-bottom`. */
+  padding-top: calc(clamp(0.85rem, 2vw, 1.4rem) + 59px + 1.95rem);
 }
 
 /* The first block in <main> no longer needs its own big top padding -- main's
@@ -636,14 +667,19 @@ main > .collection-hero:first-child {
 }
 
 .eyebrow {
-  margin: 0 0 2.5rem;
+  /* An eyebrow is a kicker label FOR its heading, so it sits close to it. The
+     nav->eyebrow breathing room is owned by main's padding-top (above), not a
+     big gap here. Global: applies to every page (the landing hero overrides
+     this to margin:0 and uses its own flex gap, so it is unaffected). Matches
+     the nav->eyebrow gap above (main padding-top) for a balanced rhythm. */
+  margin: 0 0 1.95rem;
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: 0.72rem;
   font-weight: 500;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.12em;
   line-height: 1.2;
-  text-transform: uppercase;
+  text-transform: lowercase;
 }
 
 h1,

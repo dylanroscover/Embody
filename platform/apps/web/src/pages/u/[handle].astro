@@ -271,6 +271,12 @@ function pluralize(count: number, singular: string): string {
     padding-bottom: clamp(3rem, 6vw, 5rem);
   }
 
+  /* Generic 404 heading -> lowercase. Scoped to .profile-missing so it never
+     touches the .profile-meta h1, which renders the user's handle (proper noun). */
+  .profile-missing h1 {
+    text-transform: lowercase;
+  }
+
   @media (max-width: 640px) {
     .profile-id {
       flex-direction: column;

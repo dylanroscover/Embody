@@ -61,7 +61,7 @@ const updated = "June 14, 2026";
       upload anything you wouldn&rsquo;t want public.
     </p>
 
-    <h3>Anti-abuse (Cloudflare Turnstile)</h3>
+    <h3 class="keep-case">Anti-abuse (Cloudflare Turnstile)</h3>
     <p>
       Some forms &mdash; sign-up, sign-in, and submission &mdash; are protected by
       <a href="https://www.cloudflare.com/products/turnstile/">Cloudflare Turnstile</a>,
@@ -164,12 +164,25 @@ const updated = "June 14, 2026";
     font-size: clamp(1.4rem, 2.4vw, 1.85rem);
     line-height: 1.15;
     letter-spacing: -0.02em;
+    text-transform: lowercase;
   }
 
   .legal-body h3 {
     margin: 1.9rem 0 0.6rem;
     color: var(--text);
     font-size: 1.15rem;
+    text-transform: lowercase;
+  }
+
+  /* The page title + section headings render lowercase to match the site's
+     lowercase voice. The one heading that names a brand ("Cloudflare Turnstile")
+     opts out via .keep-case so the proper noun keeps its casing. */
+  .legal-hero h1 {
+    text-transform: lowercase;
+  }
+
+  .legal-body h3.keep-case {
+    text-transform: none;
   }
 
   .legal-body strong {

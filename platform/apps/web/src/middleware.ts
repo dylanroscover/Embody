@@ -9,7 +9,7 @@ import type { AuthEnv } from "./lib/auth";
 // where _redirects is not applied. Most specific patterns first.
 const REDIRECTS: Array<[RegExp, (m: RegExpMatchArray) => string]> = [
   [/^\/specimens\/search\/?$/, () => "/collection"],
-  [/^\/specimens\/field-guide\/?$/, () => "/field-guide"],
+  [/^\/(?:specimens\/)?field-guide\/?$/, () => "/collection"],
   [/^\/specimens\/?$/, () => "/collection"],
   [/^\/s\/([^/]+)\/?$/, (m) => `/c/${m[1]}`]
 ];

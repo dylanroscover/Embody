@@ -145,6 +145,13 @@ const updated = "June 14, 2026";
     line-height: 1.7;
   }
 
+  /* Lowercase the page title + section headings to match the site's lowercase
+     voice. Every terms heading is generic (no proper nouns), so no exceptions. */
+  .legal-hero h1,
+  .legal-body h2 {
+    text-transform: lowercase;
+  }
+
   .legal-body h2 {
     margin: 2.5rem 0 1rem;
     color: var(--accent);

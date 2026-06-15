@@ -12,9 +12,10 @@ import {
   type Edge,
   type Node,
   type NodeProps,
-  type NodeTypes
+  type NodeTypes,
+  type ReactFlowInstance
 } from "@xyflow/react";
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import type { CSSProperties } from "react";
 import type { GraphAnnotation, NormalizedGraph, RGB } from "@embody/contracts";
 import { parseTDN } from "./parseTDN";
@@ -74,12 +75,27 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
     [height]
   );
 
+  // Double-click anywhere fits the WHOLE graph into view (a reset), instead of
+  // React Flow's default zoom-IN -- zoomOnDoubleClick is disabled below so the
+  // two don't conflict.
+  const rfRef = useRef<ReactFlowInstance<TdnFlowNode, Edge> | null>(null);
+  const handleDoubleClick = useCallback(() => {
+    rfRef.current?.fitView({ padding: 0.24, duration: 320 });
+  }, []);
+
   return (
-    <div className={["tdn-viewer", className].filter(Boolean).join(" ")} style={style}>
+    <div
+      className={["tdn-viewer", className].filter(Boolean).join(" ")}
+      style={style}
+      onDoubleClick={handleDoubleClick}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
+        onInit={(instance) => {
+          rfRef.current = instance;
+        }}
         fitView
         fitViewOptions={{ padding: 0.24 }}
         minZoom={0.12}
@@ -92,6 +108,7 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
         panOnScroll
         zoomOnScroll
         zoomOnPinch
+        zoomOnDoubleClick={false}
         onlyRenderVisibleElements
         preventScrolling
       >

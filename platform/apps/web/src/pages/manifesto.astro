@@ -4,11 +4,11 @@ import Base from "../layouts/Base.astro";
 
 <Base
   title="Manifesto - embody.tools"
-  description="Create at the speed of thought. Why TouchDesigner should be transparent, diffable, and built alongside your AI agent."
+  description="Why TouchDesigner should be transparent, diffable, and built faster alongside your AI agent."
 >
   <section class="page-section manifesto-hero">
     <p class="eyebrow">Manifesto</p>
-    <h1>Create at the speed of thought</h1>
+    <h1>Build faster, in the open</h1>
     <p class="lede">
       Everything is moving faster now. Everyone is shipping. We&rsquo;re entering the golden
       age of digital media, and TouchDesigner is positioned to become one of the leading
@@ -102,6 +102,13 @@ import Base from "../layouts/Base.astro";
     margin-bottom: 0;
   }
 
+  /* Headings stay lowercase to match the kicker and the site's lowercase voice
+     ("see it. embody it."). Scoped to the manifesto's own headings so the body
+     prose (TouchDesigner, Envoy, MCP, ...) keeps its proper casing. */
+  .manifesto-hero h1 {
+    text-transform: lowercase;
+  }
+
   /* Single-column essay capped at a comfortable reading measure (~70ch). The
      body sits directly under the hero, so neutralize the section's own top
      padding and rely on paragraph rhythm instead. */
@@ -126,6 +133,7 @@ import Base from "../layouts/Base.astro";
     font-size: clamp(1.4rem, 2.4vw, 1.85rem);
     line-height: 1.15;
     letter-spacing: -0.02em;
+    text-transform: lowercase;
   }
 
   .manifesto-body strong {

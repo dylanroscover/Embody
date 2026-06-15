@@ -12,6 +12,7 @@
     "@embody/tdn-viewer": "*",
     "astro": "^6.4.4",
     "better-auth": "^1.6.18",
+    "html2canvas-pro": "^2.0.4",
     "kysely": "^0.29.2",
     "kysely-d1": "^0.4.0",
     "react": "^19.2.0",

@@ -82,10 +82,18 @@ const thumb = specimenThumbnail({ slug, name, category });
     inset: 0;
   }
 
-  /* The TdnViewer renders its own full-bleed flow canvas; pin it to the box. */
+  /* The TdnViewer renders its own full-bleed flow canvas; pin it to the box.
+     Inside a card cover it is flush against the card's clipped corners and the
+     body, so it must NOT carry its standalone border + 14px radius (those belong
+     to the card frame). Dropping them removes the rounded inner corner sitting
+     against the neighbouring body and the green border-stroke that trailed off
+     into the background along the bottom edge. The detail page / hero viewers,
+     which are NOT inside a cover, keep their frame. */
   .cover__layer--network :global(.tdn-viewer) {
     height: 100% !important;
     width: 100%;
+    border: 0;
+    border-radius: 0;
   }
 
   /* Light skeleton shown while the cover island lazy-fetches its graph (and the
