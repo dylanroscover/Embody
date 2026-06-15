@@ -99,6 +99,18 @@ p {
   text-wrap: pretty;
 }
 
+/* No orphans, anywhere. Headings balance so a short last line is never a lone
+   word; all body/text elements pretty-wrap so paragraphs never strand the final
+   word on its own line. */
+h1, h2, h3, h4, h5, h6,
+.section__title, .eyebrow, .lede {
+  text-wrap: balance;
+}
+
+p, li, dd, dt, blockquote, figcaption, summary, label, th, td {
+  text-wrap: pretty;
+}
+
 ul,
 ol {
   margin: 0;
@@ -284,6 +296,11 @@ pre {
   justify-content: center;
   border: 1px solid transparent;
   border-radius: 999px;
+  /* Solid page-colored pill behind each link so the label stays readable over
+     the refracted glass (the bent content shows in the gaps around the pills).
+     The auth CTA (--register), github, active, and hover states all set their
+     own background in later/more-specific rules, so they override this. */
+  background: var(--bg);
   padding-left: 0.85rem;
   padding-right: 0.85rem;
   color: var(--text-muted);

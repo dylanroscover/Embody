@@ -72,7 +72,13 @@ function pluralize(count: number, singular: string): string {
             <h1>@{profile.handle}</h1>
             {profile.bio && <p class="lede">{profile.bio}</p>}
             <div class="badge-row">
-              <span class:list={["badge", `trust-${profile.trust_level}`]}>{profile.trust_level}</span>
+              {/* Only show the trust badge for EARNED roles. Every signed-up
+                  account is 'verified' (it just means "a real account, not
+                  anon"), so badging it reads as if some authority vouched for
+                  the user -- misleading and redundant with "member since". */}
+              {(profile.trust_level === "curator" || profile.trust_level === "admin") && (
+                <span class:list={["badge", `trust-${profile.trust_level}`]}>{profile.trust_level}</span>
+              )}
               {memberSince && <span class="badge">member since {memberSince}</span>}
             </div>
             <p class="stat-line">
@@ -96,9 +102,9 @@ function pluralize(count: number, singular: string): string {
                 </a>
                 <div class="badge-row specimen-row__badges">
                   <span class="badge">{item.difficulty}</span>
-                  <span class:list={["badge", item.requires === "none" ? "stock" : "needs"]}>
-                    {item.requires === "none" ? "stock TD" : `needs ${item.requires}`}
-                  </span>
+                  {item.requires !== "none" && (
+                    <span class="badge needs">needs {item.requires}</span>
+                  )}
                   <span class="badge specimen-row__copies">{pluralize(item.copies_count, "copy")}</span>
                 </div>
               </li>

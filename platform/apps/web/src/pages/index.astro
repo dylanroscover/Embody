@@ -112,9 +112,9 @@ const jsonLd = {
             <div class="specimen-card__body">
               <div class="badge-row">
                 <span class="badge">{specimen.category}</span>
-                <span class:list={["badge", specimen.requires === "none" ? "stock" : "needs"]}>
-                  {specimen.requires === "none" ? "stock TD" : `needs ${specimen.requires}`}
-                </span>
+                {specimen.requires !== "none" && (
+                  <span class="badge needs">needs {specimen.requires}</span>
+                )}
               </div>
               <h3>{specimen.name}</h3>
               <p>{specimen.description}</p>
@@ -143,9 +143,12 @@ const jsonLd = {
 
   .hero-graph {
     position: absolute;
-    inset: -80px -130px -40px 22%;
+    /* Raised up (and a touch wider) so the network reads in the upper-right
+       rather than sinking into the bottom fade; opacity lifted for visibility,
+       blur kept light so it stays a soft backdrop. */
+    inset: -150px -130px 38% 18%;
     z-index: 0;
-    opacity: 0.22;
+    opacity: 0.3;
     filter: blur(2px);
     pointer-events: none;
   }

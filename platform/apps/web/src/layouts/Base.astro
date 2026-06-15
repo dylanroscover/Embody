@@ -20,6 +20,10 @@ const path = Astro.url.pathname.replace(/\/+$/, "") || "/";
 const isActive = (href: string) =>
   href !== "/" && (path === href || path.startsWith(href + "/"));
 
+// Signed-in user (or null). When present the auth button becomes "account"
+// (-> their profile) instead of the redundant "sign in".
+const user = Astro.locals.user;
+
 // Cloudflare Web Analytics: cookieless, privacy-first page-traffic beacon.
 // The beacon is rendered ONLY when PUBLIC_CF_BEACON_TOKEN is set, so dev and
 // build stay clean when the token is absent. See README / docs for the var.
@@ -61,26 +65,32 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
   </head>
   <body>
     <a class="skip-link" href="#content">Skip to content</a>
-    <!-- WebGL refraction layer. CSS backdrop-filter: url(#svg-displacement)
-         does NOT render in the GPU compositor path of Chromium/WebKit (WebKit
-         bug 245510) -- only in the software path -- so it cannot bend the live
-         page on real hardware. Instead, a WebGL canvas snapshots the page
-         (html2canvas-pro, untainted -> usable as a GL texture) and BENDS it
-         through a convex-dome lens in a fragment shader. WebGL runs the same in
-         hardware and software GL, so this actually renders for users. The
-         controller is the [data-nav-gl] script near </body>; the canvas sits
-         behind the pill and is shown only once WebGL + the snapshot succeed
-         (header gets .has-gl-glass), else the CSS clear-glass in .navbar
-         stands. -->
-    <canvas class="nav-gl-glass" data-nav-gl aria-hidden="true"></canvas>
     <header class="site-header" aria-label="embody.tools" data-site-header>
+      <!-- WebGL refraction layer. CSS backdrop-filter: url(#svg-displacement)
+           does NOT render in the GPU compositor path of Chromium/WebKit (WebKit
+           bug 245510) -- only in the software path -- so it cannot bend the live
+           page on real hardware. Instead, a WebGL canvas snapshots the page
+           (html2canvas-pro, untainted -> usable as a GL texture) and BENDS it
+           through a beveled-edge lens in a fragment shader. WebGL runs the same in
+           hardware and software GL, so this actually renders for users. The
+           controller is the [data-nav-gl] script near </body>. MUST be a child
+           of the header: the reveal rule is `.has-gl-glass .nav-gl-glass` and
+           .has-gl-glass goes on this header -- a sibling canvas stays
+           display:none (the bug that made it perfectly see-through). It sits
+           behind the pill, shown only once WebGL + the snapshot succeed; else
+           the CSS clear-glass in .navbar stands. -->
+      <canvas class="nav-gl-glass" data-nav-gl aria-hidden="true"></canvas>
       <nav class="navbar" aria-label="Primary">
         <a class="navbar__mark" href="/" aria-label="embody.tools home">
           <span class="mark__dot" aria-hidden="true"></span>
           <span class="navbar__word">embody.tools</span>
         </a>
         <div class="navbar__items" data-nav-collapse>
-          <a class="navbar__item navbar__item--register" href="/signin">sign in</a>
+          {user ? (
+            <a class="navbar__item navbar__item--register" href={`/u/${user.handle}`}>account</a>
+          ) : (
+            <a class="navbar__item navbar__item--register" href="/signin">sign in</a>
+          )}
           <a
             class:list={["navbar__item", { "is-active": isActive("/collection") }]}
             href="/collection"
@@ -440,10 +450,13 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
         const header = document.querySelector("[data-site-header]");
         if (!(canvas instanceof HTMLCanvasElement) || !(navEl instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
 
+        // preserveDrawingBuffer keeps the last frame between composites (belt to
+        // the rAF loop's suspenders; cheap insurance against transparent flashes).
+        const glOpts = { alpha: true, premultipliedAlpha: false, antialias: true, preserveDrawingBuffer: true };
         const gl =
-          canvas.getContext("webgl", { alpha: true, premultipliedAlpha: false, antialias: true }) ||
-          canvas.getContext("experimental-webgl", { alpha: true, premultipliedAlpha: false });
-        if (!(gl instanceof WebGLRenderingContext)) return; // -> CSS clear-glass
+          canvas.getContext("webgl", glOpts) ||
+          canvas.getContext("experimental-webgl", glOpts);
+        if (!(gl instanceof WebGLRenderingContext)) return; // -> CSS clear-glass fallback
 
         const VERT = `attribute vec2 aPos; varying vec2 vUv;
           void main(){ vUv = vec2(aPos.x*0.5+0.5, 0.5 - aPos.y*0.5); gl_Position = vec4(aPos,0.0,1.0); }`;
@@ -457,6 +470,7 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
           uniform float uScroll, uRadius, uScale, uGy;
           uniform sampler2D uSnap;
           #define PI 3.14159265
+          #define BEVEL 18.0   // px band at the rim where the bend lives (bigger = wider edge zone, flatter center)
           float sdRR(vec2 p, vec2 b, float r){ vec2 q = abs(p)-b+r; return min(max(q.x,q.y),0.0)+length(max(q,0.0))-r; }
           void main(){
             vec2 px = vUv * uCanvasPx;
@@ -466,26 +480,27 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             float d = sdRR(rel, hb, uRadius);
             float mask = 1.0 - smoothstep(0.0, 1.5, d);
             if (mask <= 0.001) discard;
-            // convex dome (raised-cosine, elliptical) -> radial displacement
+            // Bevel lens: the bend is concentrated within BEVEL px of the rim,
+            // so the readable CENTER stays flat and the refraction lives at the
+            // edges (top/bottom + the rounded ends) -- a glass slab with a
+            // curved bevel, not a whole dome. -d is depth inside the pill (0 at
+            // the rim); edge ramps from 1 at the rim to 0 once BEVEL deep.
             vec2 pn = rel / hb;
             float L = length(pn);
-            float r = min(L, 1.0);
-            float dHdr = -0.5 * PI * sin(r * PI);          // dome slope
-            vec2 dir = L > 1e-3 ? pn / L : vec2(0.0);
-            vec2 grad = dHdr * dir;
-            grad.y *= uGy;                                  // soften vertical
+            vec2 dir = L > 1e-3 ? pn / L : vec2(0.0);      // outward (~= edge normal)
+            float edge = 1.0 - smoothstep(0.0, BEVEL, -d);
+            edge *= edge;                                  // ease the onset so the
+                                                           // flat center blends in
+            vec2 grad = (-0.5 * PI) * edge * dir;
+            grad.y *= uGy;                                  // soften vertical (thin bar)
             vec2 offset = -uScale * grad;                   // magnify = sample inward
             vec2 screen = uOffset + px;
             vec2 docPos = vec2(screen.x + offset.x, screen.y + offset.y + uScroll);
             vec2 uv = docPos / uDocSize;
             vec3 col = texture2D(uSnap, uv).rgb;
-            // light glass tint + specular hairline + rim (kept subtle so the
-            // refraction reads, not the frost)
+            // light glass tint + a whisper of rim (no top specular hairline --
+            // it read as a baked highlight; left out per design)
             col = mix(col, vec3(0.078,0.102,0.094), 0.16);
-            float topness = clamp((c.y - px.y)/hb.y, 0.0, 1.0);
-            float bp = -d;
-            float hair = smoothstep(2.0,4.0,bp)*(1.0-smoothstep(4.0,7.0,bp));
-            col += vec3(0.86,1.0,0.86)*hair*topness*0.35;
             col += vec3(0.42,0.85,0.46)*(1.0-smoothstep(0.0,2.5,abs(d)))*0.08;
             gl_FragColor = vec4(col, mask);
           }`;
@@ -527,7 +542,7 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
 
         const PAD = 12;
         const MAXTEX = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096;
-        const SCALE = 32, GY = 0.6;         // lens knobs (magnify px, vertical softening)
+        const SCALE = 44, GY = 0.6;         // lens knobs (magnify px, vertical softening)
         let docSize = { w: 1, h: 1 }, ready = false, snapping = false;
 
         const measure = () => {
@@ -539,8 +554,11 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
           canvas.style.top = `${r.top - PAD}px`;
           canvas.style.width = `${cw}px`;
           canvas.style.height = `${ch}px`;
-          canvas.width = Math.round(cw*dpr);
-          canvas.height = Math.round(ch*dpr);
+          // Resize the backing store ONLY when it changes -- setting canvas.width
+          // every frame clears the drawing buffer (the "renders then reverts"
+          // bug). The continuous render loop redraws each frame regardless.
+          const bw = Math.round(cw*dpr), bh = Math.round(ch*dpr);
+          if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
           gl.viewport(0, 0, canvas.width, canvas.height);
           gl.uniform2f(u.canvasPx, cw, ch);
           gl.uniform2f(u.offset, r.left - PAD, r.top - PAD);
@@ -565,13 +583,17 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
           if (snapping) return;
           snapping = true;
           try {
-            const scale = Math.min(window.devicePixelRatio || 1, 2);
+            // CSS-resolution snapshot (scale 1), NOT devicePixelRatio. The
+            // refraction is a small displaced strip behind a thin bar, so retina
+            // detail is wasted -- and a retina snapshot of a tall page produced a
+            // ~15000px / ~200MB texture near the GPU's 16384 limit (eviction =
+            // blank). Scale 1 keeps it ~4x smaller and safe.
             const docW = document.documentElement.clientWidth;
             const fullH = document.documentElement.scrollHeight;
-            const capH = Math.min(fullH, Math.floor(MAXTEX / scale));
-            const capW = Math.min(docW, Math.floor(MAXTEX / scale));
+            const capH = Math.min(fullH, MAXTEX);
+            const capW = Math.min(docW, MAXTEX);
             const snap = await html2canvas(document.body, {
-              backgroundColor: "#181e1e", scale, logging: false, removeContainer: true,
+              backgroundColor: "#181e1e", scale: 1, logging: false, removeContainer: true,
               x: 0, y: 0, width: capW, height: capH,
               windowWidth: docW, windowHeight: fullH, scrollX: 0, scrollY: 0,
               ignoreElements: (el) =>
@@ -585,25 +607,30 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             ready = true;
             header.classList.add("has-gl-glass");
             measure();
-            render();
-          } catch (e) {
-            console.warn("nav-gl snapshot failed", e);
+          } catch {
+            // Snapshot/upload failed -> leave the CSS clear-glass in place.
           } finally {
             snapping = false;
           }
         };
 
-        let pending = false;
-        const scheduleRender = () => { if (pending) return; pending = true;
-          requestAnimationFrame(() => { pending = false; measure(); render(); }); };
+        // Render in a continuous rAF loop. An on-demand WebGL overlay blanks the
+        // instant the compositor reclaims the buffer, so it "renders then
+        // reverts". One quad per frame is negligible and keeps the lens
+        // permanently on screen; render() reads window.scrollY each frame, so
+        // scrolling updates for free. The pill is position:fixed, so its on-
+        // screen box only changes on resize -- handled below.
+        const loop = () => { render(); requestAnimationFrame(loop); };
+        requestAnimationFrame(loop);
 
         let resizeT = 0;
-        const onResize = () => { window.clearTimeout(resizeT);
+        const onResize = () => { measure(); window.clearTimeout(resizeT);
           resizeT = window.setTimeout(() => { snapshot(); }, 250); };
-
-        window.addEventListener("scroll", scheduleRender, { passive: true });
-        window.addEventListener("resize", onResize);
+        window.addEventListener("resize", onResize, { passive: true });
+        new ResizeObserver(() => measure()).observe(navEl);
+        // GPU context dropped -> fall back to CSS glass; re-snapshot on restore.
         canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); header.classList.remove("has-gl-glass"); ready = false; }, false);
+        canvas.addEventListener("webglcontextrestored", () => { ready = false; snapshot(); }, false);
 
         // First snapshot after the page is painted and fonts are settled.
         const start = () => { measure(); snapshot(); };

@@ -89,8 +89,6 @@ import Base from "../layouts/Base.astro";
       Cursor, Windsurf, or any MCP-compatible client. Try it on a real idea you&rsquo;ve been
       putting off. See how far you get in an hour.
     </p>
-
-    <p class="manifesto-sign">&mdash; Dylan Roscover</p>
   </article>
 </Base>
 
@@ -100,6 +98,13 @@ import Base from "../layouts/Base.astro";
   .manifesto-hero .lede {
     max-width: 70ch;
     margin-bottom: 0;
+  }
+
+  /* The body neutralizes its own top padding, but the hero still carried a full
+     section padding-bottom -- a huge lede->body gap. Drop it so the essay flows
+     as one column (the body's tight top padding supplies the breathing room). */
+  .manifesto-hero {
+    padding-bottom: 0;
   }
 
   /* Headings stay lowercase to match the kicker and the site's lowercase voice
@@ -176,14 +181,5 @@ import Base from "../layouts/Base.astro";
     font-size: clamp(1.3rem, 2.4vw, 1.85rem);
     line-height: 1.45;
     letter-spacing: -0.015em;
-  }
-
-  /* Signature: mono, faint, set apart from the closing paragraph. */
-  .manifesto-sign {
-    margin-top: 2.4rem;
-    color: var(--text-faint);
-    font-family: var(--font-mono);
-    font-size: 0.9rem;
-    letter-spacing: 0.02em;
   }
 </style>

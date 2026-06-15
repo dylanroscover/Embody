@@ -282,9 +282,9 @@ function emitKey(key: string): string {
     <p class="lede">{specimen.description}</p>
     <div class="badge-row">
       <span class="badge">{specimen.difficulty}</span>
-      <span class:list={["badge", specimen.requires === "none" ? "stock" : "needs"]}>
-        {specimen.requires === "none" ? "stock TD" : `needs ${specimen.requires}`}
-      </span>
+      {specimen.requires !== "none" && (
+        <span class="badge needs">needs {specimen.requires}</span>
+      )}
       <span class="badge">{specimen.operator_count} operators</span>
     </div>
 

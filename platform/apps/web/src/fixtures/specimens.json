@@ -5,7 +5,7 @@
     "category": "generative-abstract",
     "difficulty": "starter",
     "description": "Multi-octave noise that drifts like pigment suspended in glass.",
-    "tags": ["noise", "texture", "ambient", "stock-td"],
+    "tags": ["noise", "texture", "ambient"],
     "requires": "none",
     "operator_count": 8,
     "key_ops": ["Noise TOP", "Level TOP", "Composite TOP", "Null TOP"],

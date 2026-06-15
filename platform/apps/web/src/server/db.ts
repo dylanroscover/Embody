@@ -69,7 +69,7 @@ export interface InsertSpecimenInput {
   difficulty?: Difficulty;
   /** Known category facet; empty falls back to the first tag (legacy behavior). */
   category?: string;
-  /** Hardware/capability requirement ("none" = stock TD). */
+  /** Hardware/capability requirement; "none" runs on a clean TouchDesigner install. */
   requires?: string;
   tdnR2Key: string;
   tdnSha256: string;
