@@ -1,42 +1,36 @@
-{
-	"format": "tdn",
-	"version": "1.4",
-	"build": 15,
-	"generator": "Embody/5.0.429",
-	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:24Z",
-	"network_path": "/embody/Embody/help",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "opviewerCOMP",
-	"parameters": {
-		"opviewer": "./text_help",
-		"w": 500,
-		"h": 600,
-		"display": false,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"topsmoothness": "mipmap",
-		"borderover": false,
-		"reloadbuiltin": false
-	},
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": [
-		{
-			"name": "text_help",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/help/text_help.py",
-				"syncfile": true,
-				"language": "python"
-			},
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
-		}
-	]
-}
+format: tdn
+version: '2.0'
+build: 15
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:38Z'
+network_path: /embody/Embody/help
+options:
+  include_dat_content: false
+  include_storage: true
+type: opviewerCOMP
+parameters:
+  opviewer: ./text_help
+  w: 500
+  h: 600
+  display: false
+  resizecomp: =me
+  repocomp: =me
+  topsmoothness: mipmap
+  borderover: false
+  reloadbuiltin: false
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: text_help
+  type: textDAT
+  parameters:
+    file: embody/Embody/help/text_help.py
+    syncfile: true
+    language: python
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py

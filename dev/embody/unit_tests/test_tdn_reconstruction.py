@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: TDN reconstruction - comprehensive round-trip fidelity,
 reconstruction simulation, and resilience testing.
 

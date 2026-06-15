@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: TDN crash safety - atomic writes, backup rotation, validation,
 and import rollback.
 

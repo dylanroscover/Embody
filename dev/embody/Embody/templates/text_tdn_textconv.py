@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Git textconv driver for Embody .tdn files.
 
 Makes `git diff`, `git log -p`, and `git show` on .tdn files show only

@@ -1,4 +1,4 @@
-﻿"""
+"""
 CatalogManager - background scanner and cross-build default patching.
 
 On every startup, checks if a creation-values catalog exists for the

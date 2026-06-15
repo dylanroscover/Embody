@@ -1,4 +1,4 @@
-﻿# me - this DAT
+# me - this DAT
 # 
 # frame - the current frame
 # state - True if the timeline is paused

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: TDN palette catalog detection + animationCOMP DAT preservation.
 
 Covers:

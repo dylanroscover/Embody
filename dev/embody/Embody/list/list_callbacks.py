@@ -1,4 +1,4 @@
-﻿"""
+"""
 List COMP callbacks for Embody Manager UI.
 
 Renders the externalization tree with expand/collapse, rollover

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.28
+generator: Embody/6.0.29
 td_build: 099.2025.32820
-source_file: Embody-6.29.toe
-exported_at: '2026-06-14T05:20:41Z'
+source_file: Embody-6.30.toe
+exported_at: '2026-06-14T06:24:30Z'
 network_path: /specimen_lab/murmuration
 options:
   include_dat_content: false

@@ -1,41 +1,37 @@
-{
-	"format": "tdn",
-	"version": "1.4",
-	"build": 1,
-	"generator": "Embody/5.0.429",
-	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:19Z",
-	"network_path": "/embody/Embody/windowHeader/button_close",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "textCOMP",
-	"parameters": {
-		"text": "󰖭",
-		"callbacks": "button_close_callbacks",
-		"font": "Material Design Icons",
-		"fontsize": 10,
-		"fontsizeunits": "points",
-		"fontcolorr": "=parent.Embody.par.Textcolorr",
-		"fontcolorg": "=parent.Embody.par.Textcolorg",
-		"fontcolorb": "=parent.Embody.par.Textcolorb",
-		"w": 32,
-		"vmode": "fill",
-		"alignorder": 3,
-		"clickthrough": true,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"bgcolorr": "=1.0",
-		"bgcolorg": "=1.0",
-		"bgcolorb": "=1.0",
-		"bgalpha": "=0.1 if me.fetch('hover', False) else 0"
-	},
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"storage": {
-		"pressed": false
-	},
-	"operators": []
-}
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:34Z'
+network_path: /embody/Embody/windowHeader/button_close
+options:
+  include_dat_content: false
+  include_storage: true
+type: textCOMP
+parameters:
+  text: "\U000F05AD"
+  callbacks: button_close_callbacks
+  font: Material Design Icons
+  fontsize: 10
+  fontsizeunits: points
+  fontcolorr: =parent.Embody.par.Textcolorr
+  fontcolorg: =parent.Embody.par.Textcolorg
+  fontcolorb: =parent.Embody.par.Textcolorb
+  w: 32
+  vmode: fill
+  alignorder: 3
+  clickthrough: true
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: =1.0
+  bgcolorg: =1.0
+  bgcolorb: =1.0
+  bgalpha: =0.1 if me.fetch('hover', False) else 0
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+storage:
+  pressed: false
+operators: []

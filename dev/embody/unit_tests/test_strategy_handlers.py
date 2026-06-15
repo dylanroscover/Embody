@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: Strategy handlers - _removeExternalization, HandleStrategySwitch,
 _dispatchTaggerButton, and manage-mode button dispatch logic.
 

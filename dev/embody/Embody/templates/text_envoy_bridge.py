@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Envoy Bridge -- STDIO-to-HTTP proxy and TD launcher for the Envoy MCP server.
 

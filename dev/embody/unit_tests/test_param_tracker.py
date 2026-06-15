@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: ParameterTracker class in EmbodyExt.
 
 Tests captureParameters, compareParameters, updateParamStore, removeComp.

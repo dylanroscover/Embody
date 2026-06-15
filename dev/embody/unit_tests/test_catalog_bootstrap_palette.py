@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: CatalogManager bootstrap palette TSV.
 
 Covers the shipped palette_catalog tableDAT that ships with Embody so new

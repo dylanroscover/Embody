@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: MCP annotation tools in EnvoyExt.
 
 Tests _create_annotation, _get_annotations, _set_annotation, _get_enclosed_ops.

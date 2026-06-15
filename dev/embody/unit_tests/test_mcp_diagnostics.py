@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: MCP diagnostics and introspection handlers in EnvoyExt.
 
 Tests _get_td_info, _get_op_errors, _exec_op_method,

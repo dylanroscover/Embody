@@ -1,199 +1,178 @@
-{
-	"format": "tdn",
-	"version": "1.4",
-	"build": 10,
-	"generator": "Embody/5.0.429",
-	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:23Z",
-	"network_path": "/embody/Embody/tagger/header",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type_defaults": {
-		"textCOMP": {
-			"parameters": {
-				"legacyfontselection": true,
-				"fontsize": 12,
-				"hmode": "fill",
-				"resizecomp": "=me",
-				"repocomp": "=me",
-				"reloadbuiltin": false
-			},
-			"flags": ["viewer"]
-		}
-	},
-	"type": "containerCOMP",
-	"parameters": {
-		"h": 28,
-		"hmode": "fill",
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"bgcolorr": "=parent.Embody.par.Listheadercolorr",
-		"bgcolorg": "=parent.Embody.par.Listheadercolorg",
-		"bgcolorb": "=parent.Embody.par.Listheadercolorb",
-		"bgalpha": "=parent.Embody.par.Listheadercolora",
-		"borderover": false,
-		"reloadbuiltin": false
-	},
-	"flags": ["viewer"],
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": [
-		{
-			"name": "text1",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "Actions",
-				"callbacks": "text1_callbacks",
-				"fontcolorr": "=parent.Embody.par.Textcolorr",
-				"fontcolorg": "=parent.Embody.par.Textcolorg",
-				"fontcolorb": "=parent.Embody.par.Textcolorb",
-				"fontalpha": "=parent.Embody.par.Textcolora",
-				"h": 30,
-				"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-				"bgalpha": "=parent.Embody.par.Backgroundcolora",
-				"borderover": false
-			},
-			"position": [-200, 0],
-			"size": [160, 129],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/tagger/header/text1.tdn"
-		},
-		{
-			"name": "button_close",
-			"type": "buttonCOMP",
-			"parameters": {
-				"label": "×",
-				"buttontype": "momentary",
-				"scaletofit": "onlyshrink",
-				"fontsize": 12,
-				"colorr": "=parent.Embody.par.Textcolorr",
-				"colorg": "=parent.Embody.par.Textcolorg",
-				"colorb": "=parent.Embody.par.Textcolorb",
-				"w": 28,
-				"h": 28,
-				"layer": 1,
-				"leftanchor": 1,
-				"horigin": 1,
-				"resizecomp": "=me",
-				"repocomp": "=me",
-				"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-				"bgalpha": "=parent.Embody.par.Backgroundcolora",
-				"topsmoothness": "mipmap",
-				"clone": "=op.TDTox.op('defaultCOMPs/button')",
-				"reloadbuiltin": false,
-				"relpath": "inherit"
-			},
-			"flags": ["viewer"],
-			"position": [50, 0],
-			"size": [160, 134],
-			"children": [
-				{
-					"name": "out1",
-					"type": "outCHOP",
-					"parameters": {
-						"label": "=me.name",
-						"autoexportroot": "=parent()"
-					},
-					"flags": ["viewer"],
-					"position": [275, 175],
-					"size": [130, 90],
-					"inputs": ["par1"]
-				},
-				{
-					"name": "par1",
-					"type": "parameterCHOP",
-					"parameters": {
-						"parameters": "value0",
-						"custom": false,
-						"builtin": true,
-						"renameto": "v1",
-						"autoexportroot": "=parent()"
-					},
-					"flags": ["viewer"],
-					"position": [65, 175],
-					"size": [130, 90]
-				},
-				{
-					"name": "text",
-					"type": "textCOMP",
-					"parameters": {
-						"text": "=parent().par.label",
-						"type": "multiline",
-						"scaletofit": "onlyshrink",
-						"fontcolorr": "=[c/.5 for c in [.1, .3]][parent().panel.state] * parent().par.colorr + .5",
-						"fontcolorg": "=[c/.5 for c in [.1, .3]][parent().panel.state] * parent().par.colorg + .5",
-						"fontcolorb": "=[c/.5 for c in [.1, .3]][parent().panel.state] * parent().par.colorb + .5",
-						"textpaddingl": 3,
-						"textpaddingr": 3,
-						"textpaddingb": 3,
-						"textpaddingt": 3,
-						"vmode": "fill",
-						"clickthrough": true,
-						"bgcolorr": "=parent.Embody.par.Listheadercolorr",
-						"bgcolorg": "=parent.Embody.par.Listheadercolorg",
-						"bgcolorb": "=parent.Embody.par.Listheadercolorb",
-						"bgalpha": 1,
-						"borderar": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2",
-						"borderag": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2",
-						"borderab": "=[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2",
-						"borderaalpha": 0
-					},
-					"position": [74, 26],
-					"size": [113, 108]
-				},
-				{
-					"name": "parexec1",
-					"type": "parameterexecuteDAT",
-					"parameters": {
-						"fromop": "=parent()",
-						"op": "..",
-						"pars": "value0",
-						"onpulse": false,
-						"defaultreadencoding": "cp1252"
-					},
-					"flags": ["viewer"],
-					"position": [66, -83],
-					"size": [128, 66]
-				},
-				{
-					"name": "panelexec1",
-					"type": "panelexecuteDAT",
-					"parameters": {
-						"fromop": "=parent()",
-						"panels": "=parent()",
-						"panelvalue": "state",
-						"offtoon": false,
-						"valuechange": true,
-						"defaultreadencoding": "cp1252"
-					},
-					"flags": ["viewer"],
-					"position": [247, -81],
-					"size": [126, 62]
-				}
-			]
-		},
-		{
-			"name": "text1_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/tagger/header/text1_callbacks.py",
-				"syncfile": true,
-				"language": "python"
-			},
-			"flags": ["viewer"],
-			"position": [-200, -160],
-			"size": [160, 130],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "text1"
-		}
-	]
-}
+format: tdn
+version: '2.0'
+build: 10
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:37Z'
+network_path: /embody/Embody/tagger/header
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textCOMP:
+    parameters:
+      legacyfontselection: true
+      fontsize: 12
+      hmode: fill
+      resizecomp: =me
+      repocomp: =me
+      reloadbuiltin: false
+    flags:
+    - viewer
+type: containerCOMP
+parameters:
+  h: 28
+  hmode: fill
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: =parent.Embody.par.Listheadercolorr
+  bgcolorg: =parent.Embody.par.Listheadercolorg
+  bgcolorb: =parent.Embody.par.Listheadercolorb
+  bgalpha: =parent.Embody.par.Listheadercolora
+  borderover: false
+  reloadbuiltin: false
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: text1
+  type: textCOMP
+  parameters:
+    text: Actions
+    callbacks: text1_callbacks
+    fontcolorr: =parent.Embody.par.Textcolorr
+    fontcolorg: =parent.Embody.par.Textcolorg
+    fontcolorb: =parent.Embody.par.Textcolorb
+    fontalpha: =parent.Embody.par.Textcolora
+    h: 30
+    bgcolorr: =parent.Embody.par.Backgroundcolorr
+    bgcolorg: =parent.Embody.par.Backgroundcolorg
+    bgcolorb: =parent.Embody.par.Backgroundcolorb
+    bgalpha: =parent.Embody.par.Backgroundcolora
+    borderover: false
+  position: [-200, 0]
+  size: [160, 129]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/tagger/header/text1.tdn
+- name: button_close
+  type: buttonCOMP
+  parameters:
+    label: ×
+    buttontype: momentary
+    scaletofit: onlyshrink
+    fontsize: 12
+    colorr: =parent.Embody.par.Textcolorr
+    colorg: =parent.Embody.par.Textcolorg
+    colorb: =parent.Embody.par.Textcolorb
+    w: 28
+    h: 28
+    layer: 1
+    leftanchor: 1
+    horigin: 1
+    resizecomp: =me
+    repocomp: =me
+    bgcolorr: =parent.Embody.par.Backgroundcolorr
+    bgcolorg: =parent.Embody.par.Backgroundcolorg
+    bgcolorb: =parent.Embody.par.Backgroundcolorb
+    bgalpha: =parent.Embody.par.Backgroundcolora
+    topsmoothness: mipmap
+    clone: =op.TDTox.op('defaultCOMPs/button')
+    reloadbuiltin: false
+    relpath: inherit
+  flags:
+  - viewer
+  position: [50, 0]
+  size: [160, 134]
+  children:
+  - name: out1
+    type: outCHOP
+    parameters:
+      label: =me.name
+      autoexportroot: =parent()
+    flags:
+    - viewer
+    position: [275, 175]
+    size: [130, 90]
+    inputs:
+    - par1
+  - name: par1
+    type: parameterCHOP
+    parameters:
+      parameters: value0
+      custom: false
+      builtin: true
+      renameto: v1
+      autoexportroot: =parent()
+    flags:
+    - viewer
+    position: [65, 175]
+    size: [130, 90]
+  - name: text
+    type: textCOMP
+    parameters:
+      text: =parent().par.label
+      type: multiline
+      scaletofit: onlyshrink
+      fontcolorr: =[c/.5 for c in [.1, .3]][parent().panel.state] * parent().par.colorr + .5
+      fontcolorg: =[c/.5 for c in [.1, .3]][parent().panel.state] * parent().par.colorg + .5
+      fontcolorb: =[c/.5 for c in [.1, .3]][parent().panel.state] * parent().par.colorb + .5
+      textpaddingl: 3
+      textpaddingr: 3
+      textpaddingb: 3
+      textpaddingt: 3
+      vmode: fill
+      clickthrough: true
+      bgcolorr: =parent.Embody.par.Listheadercolorr
+      bgcolorg: =parent.Embody.par.Listheadercolorg
+      bgcolorb: =parent.Embody.par.Listheadercolorb
+      bgalpha: 1
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().panel.state + 2*parent().panel.rollover] * parent().par.colorb + .2
+      borderaalpha: 0
+    position: [74, 26]
+    size: [113, 108]
+  - name: parexec1
+    type: parameterexecuteDAT
+    parameters:
+      fromop: =parent()
+      op: ..
+      pars: value0
+      onpulse: false
+      defaultreadencoding: cp1252
+    flags:
+    - viewer
+    position: [66, -83]
+    size: [128, 66]
+  - name: panelexec1
+    type: panelexecuteDAT
+    parameters:
+      fromop: =parent()
+      panels: =parent()
+      panelvalue: state
+      offtoon: false
+      valuechange: true
+      defaultreadencoding: cp1252
+    flags:
+    - viewer
+    position: [247, -81]
+    size: [126, 62]
+- name: text1_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/tagger/header/text1_callbacks.py
+    syncfile: true
+    language: python
+  flags:
+  - viewer
+  position: [-200, -160]
+  size: [160, 130]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+  dock: text1

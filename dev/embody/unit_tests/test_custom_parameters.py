@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: Custom parameter behavior.
 
 Tests the high-value, failure-prone custom parameters on the Embody COMP:

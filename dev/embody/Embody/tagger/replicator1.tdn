@@ -1,29 +1,27 @@
-{
-	"format": "tdn",
-	"version": "1.4",
-	"build": 1,
-	"generator": "Embody/5.0.429",
-	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:22Z",
-	"network_path": "/embody/Embody/tagger/replicator1",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "replicatorCOMP",
-	"parameters": {
-		"template": "tags",
-		"opprefix": "button",
-		"master": "button0",
-		"destination": "=parent()",
-		"callbacks": "replicator1_callbacks",
-		"layoutorigin1": "=me.nodeX",
-		"layoutorigin2": "=me.nodeY - 200",
-		"reloadbuiltin": false
-	},
-	"flags": ["viewer"],
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": []
-}
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:37Z'
+network_path: /embody/Embody/tagger/replicator1
+options:
+  include_dat_content: false
+  include_storage: true
+type: replicatorCOMP
+parameters:
+  template: tags
+  opprefix: button
+  master: button0
+  destination: =parent()
+  callbacks: replicator1_callbacks
+  layoutorigin1: =me.nodeX
+  layoutorigin2: =me.nodeY - 200
+  reloadbuiltin: false
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

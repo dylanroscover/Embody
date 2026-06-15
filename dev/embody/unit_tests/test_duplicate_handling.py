@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: Duplicate path handling in EmbodyExt.
 
 Tests cleanupDuplicateRows, cleanupAllDuplicateRows, checkForDuplicates,

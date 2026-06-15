@@ -1,0 +1,2712 @@
+format: tdn
+version: '2.0'
+build: 4
+generator: Embody/6.0.29
+td_build: 099.2025.32820
+source_file: Embody-6.30.toe
+exported_at: '2026-06-14T06:24:27Z'
+network_path: /specimen_lab
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  baseCOMP:
+    size: [160, 130]
+  outTOP:
+    parameters:
+      label: =me.name
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  resolutionTOP:
+    parameters:
+      outputresolution: custom
+      format: rgba16float
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  glslTOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  compositeTOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  glslPOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  annotateCOMP:
+    parameters:
+      order: =me.digits or 0
+      layerzone: =0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1
+    flags:
+    - display
+    color: [0.45, 0.45, 0.45]
+par_templates:
+  output:
+  - clampMax: true
+    clampMin: true
+    default: 3840
+    help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+    max: 7680.0
+    min: 256.0
+    name: Resw
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+  - clampMax: true
+    clampMin: true
+    default: 2160
+    help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+    max: 7680.0
+    min: 256.0
+    name: Resh
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+  output_2:
+  - clampMax: true
+    clampMin: true
+    default: 3840
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+    max: 7680.0
+    min: 256.0
+    name: Resw
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+  - clampMax: true
+    clampMin: true
+    default: 2160
+    help: Render height (px). 4K landscape = 2160.
+    max: 7680.0
+    min: 256.0
+    name: Resh
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+  about:
+  - default: '1.0'
+    help: Annotate COMP default setup version.
+    name: Version
+    readOnly: true
+    startSection: true
+    style: Str
+  - help: Click to open help page.
+    name: Help
+    style: Pulse
+  text:
+  - default: Annotate
+    help: Text in the title bar.
+    label: Title Text
+    name: Titletext
+    startSection: true
+    style: Str
+  - clampMin: true
+    default: 30
+    help: Height of the title bar. Title font height adjusts automatically to fill.
+    label: Title Height
+    name: Titleheight
+    normMax: 100.0
+    normMin: 5.0
+    style: Int
+  - default: left
+    help: Alignment of title text.
+    label: Title Align
+    menuLabels:
+    - Left
+    - Center
+    - Right
+    menuNames:
+    - left
+    - center
+    - right
+    name: Titlealign
+    style: Menu
+  - help: Text in the body area. Use an expression for newlines etc.
+    label: Body Text
+    name: Bodytext
+    startSection: true
+    style: Str
+  - clampMin: true
+    default: 10
+    help: Size of text in the body area.
+    label: Body Font Size
+    name: Bodyfontsize
+    normMax: 100.0
+    normMin: 8.0
+    style: Int
+  - help: Limit the width of the text area.
+    label: Limit Body Text Width
+    name: Bodylimitwidth
+    style: Toggle
+  - clampMin: true
+    default: 1000
+    help: Width limit that will cause wraparound or cut-off. Measured in Panel units.
+    label: Max Body Text Width
+    name: Bodymaxwidth
+    normMax: 2000.0
+    normMin: 100.0
+    style: Int
+  settings:
+  - default: comment
+    help: 'Switch between Comment, Network Box, and Annotate Modes. '
+    menuLabels:
+    - Comment
+    - Network Box
+    - Annotate
+    menuNames:
+    - comment
+    - networkbox
+    - annotate
+    name: Mode
+    style: Menu
+  - help: Converts quotes, ellipsis, and dashes to more typographically nice unicode versions.
+    label: Smart Quote
+    name: Smartquote
+    startSection: true
+    style: Toggle
+  - default: true
+    help: Wrap body text when it extends past right bound.
+    label: Body Word Wrap
+    name: Bodywordwrap
+    style: Toggle
+  - default: 1
+    help: Background color base.
+    label: Back Color
+    name: Backcolorr
+    startSection: true
+    style: RGBA
+  - clampMax: true
+    clampMin: true
+    default: 1
+    help: Back color alpha.
+    label: Back Color Alpha
+    name: Backcoloralpha
+    style: Float
+  - clampMax: true
+    clampMin: true
+    default: 1
+    help: Opacity of the entire Annotate.
+    label: Annotate Opacity
+    name: Opacity
+    style: Float
+  op_viewer:
+  - help: Turn the visibility of the viewer specified in the OP parameter below on or off.
+    label: Viewer Display
+    name: Opviewerdisplay
+    style: Toggle
+  - help: The operator whose viewer is displayed in the Annotate.
+    label: OP
+    name: Opviewer
+    style: OP
+  - help: Allow interaction with the OP viewer.
+    label: OP Viewer Interactive
+    name: Opviewerinteractive
+    style: Toggle
+  - default: 'False'
+    help: Use the Size/Aspect Override to control viewer's size in the background.
+    label: Size/Aspect Override
+    menuLabels:
+    - Natural
+    - Specify
+    - Auto-Fit
+    menuNames:
+    - natural
+    - specify
+    - autofit
+    name: Opvieweroversize
+    startSection: true
+    style: Menu
+  - clampMin: true
+    default: 800
+    help: Diplay viewer as-if it were being displayed at this resolution. This is particularly useful for zooming into operators that don't have a built-in resolution, like CHOPs, SOPs, and DATs.
+    label: Size/Aspect
+    name: Opviewersize
+    normMax: 1000.0
+    normMin: 1.0
+    style: WH
+  - default: 1
+    help: Scale the viewer by this factor.
+    label: Scale
+    name: Opviewerscale
+    normMax: 2.0
+    startSection: true
+    style: Float
+  - help: Move the border of the viewer towards left edge of Annotate when negative or towards right edge when positive.
+    label: Justify X
+    name: Opviewerjustifyx
+    normMin: -1.0
+    style: Float
+  - label: Justify Y
+    name: Opviewerjustifyy
+    normMin: -1.0
+    style: Float
+  - help: When True, allow viewer to display in the Annotate title area as well as body.
+    label: Cover Body and Title
+    name: Opviewerfillbodytitle
+    style: Toggle
+  - clampMin: true
+    default: 1
+    help: Zoom the viewer by this scale factor without increasing the size of its display area in the Annotate.
+    label: OP Viewer Zoom
+    min: 0.001
+    name: Opviewerzoom
+    normMax: 5.0
+    normMin: 1.0
+    startSection: true
+    style: Float
+  - help: Offsets the displayed area within the viewer. Combined with OP Viewer Zoom, this lets you display a specific area of a viewer, such as a CHOP channel or table cell.
+    label: OP Viewer Offset
+    name: Opvieweroffsetx
+    style: XYZW
+  - clampMax: true
+    clampMin: true
+    default: 1
+    help: Alpha value of the background area in the OP Viewer.
+    label: Fill Alpha
+    name: Opviewerfillalpha
+    startSection: true
+    style: Float
+type: baseCOMP
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: hyper_ntsc
+  type: baseCOMP
+  custom_pars:
+    Output:
+      $t: output
+    Controls:
+    - name: Bandcount
+      style: Int
+      default: 10
+      min: 2.0
+      max: 40.0
+      clampMin: true
+      clampMax: true
+      normMin: 2.0
+      normMax: 40.0
+    - name: Hue
+      style: Float
+      clampMin: true
+      clampMax: true
+    - name: Speed
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Bleed
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Dotcrawl
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Jitter
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Noise
+      style: Float
+      default: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Scanlines
+      style: Float
+      default: 0.6
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+    - name: Bloom
+      style: Float
+      default: 1.6
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Bloomwidth
+      style: Float
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+    - name: Grain
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Vignette
+      style: Float
+      default: 0.7
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+  position: [1200, 0]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    flags:
+    - viewer
+    position: [1500, 0]
+    inputs:
+    - glsl_finish
+  - name: res_down
+    type: resolutionTOP
+    parameters:
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+    position: [300, -400]
+    inputs:
+    - glsl_ntsc
+  - name: glsl_ntsc
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_ntsc_pixel
+      computedat: glsl_ntsc_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uNtsc
+        valuex: =parent().par.Bleed.eval()
+        valuey: =parent().par.Dotcrawl.eval()
+        valuez: =parent().par.Noise.eval()
+        valuew: =parent().par.Jitter.eval()
+      - name: uScan
+        valuex: =parent().par.Scanlines.eval()
+        valuey: =parent().par.Bandcount.eval()
+        valuez: =parent().par.Hue.eval()
+        valuew: =parent().par.Speed.eval()
+      - name: uTime
+        valuex: =absTime.seconds
+        valuey: 0
+        valuez: 0
+        valuew: 0
+  - name: comp_bloom
+    type: compositeTOP
+    parameters:
+      operand: add
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [900, 0]
+    inputs:
+    - glsl_ntsc
+    - glsl_bloomblur
+  - name: glsl_finish
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_finish_pixel
+      computedat: glsl_finish_compute
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uFin
+        valuex: =parent().par.Grain.eval()
+        valuey: =parent().par.Vignette.eval()
+        valuew: =absTime.seconds
+    position: [1200, 0]
+    inputs:
+    - comp_bloom
+  - name: glsl_bloomblur
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_bloomblur_pixel
+      computedat: glsl_bloomblur_compute
+      outputresolution: custom
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uBloom
+        valuex: =parent().par.Bloom.eval()
+        valuey: 0.55
+        valuez: =parent().par.Bloomwidth.eval()
+    position: [600, -400]
+    inputs:
+    - res_down
+  - name: glsl_ntsc_info
+    type: infoDAT
+    parameters:
+      op: glsl_streams
+    position: [0, -120]
+    dock: glsl_ntsc
+  - name: glsl_ntsc_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [150, -120]
+    dock: glsl_ntsc
+  - name: glsl_finish_info
+    type: infoDAT
+    parameters:
+      op: glsl_finish
+    position: [1200, -120]
+    dock: glsl_finish
+  - name: glsl_finish_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [1350, -120]
+    dock: glsl_finish
+  - name: glsl_ntsc_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [-150, -120]
+    dock: glsl_ntsc
+  - name: glsl_bloomblur_info
+    type: infoDAT
+    parameters:
+      op: glsl_bloomblur
+    position: [600, -520]
+    dock: glsl_bloomblur
+  - name: glsl_finish_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [1050, -120]
+    dock: glsl_finish
+  - name: glsl_bloomblur_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [750, -520]
+    dock: glsl_bloomblur
+  - name: glsl_bloomblur_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [450, -520]
+    dock: glsl_bloomblur
+- name: murmuration
+  type: baseCOMP
+  custom_pars:
+    Murmuration:
+    - name: Cohesion
+      style: Float
+      startSection: true
+      default: 0.04
+      max: 2.0
+      clampMin: true
+      normMax: 0.5
+      help: Steer toward the local flock centroid (Reynolds cohesion).
+    - name: Alignment
+      style: Float
+      default: 0.55
+      max: 3.0
+      clampMin: true
+      normMax: 2.0
+      help: Match the mean heading of neighbors (Reynolds alignment).
+    - name: Separation
+      style: Float
+      default: 0.9
+      max: 5.0
+      clampMin: true
+      normMax: 3.0
+      help: Inverse-square repulsion from close neighbors. Prevents collapse - the anti-blob force.
+    - name: Attractor
+      style: Float
+      default: 0.15
+      max: 2.0
+      clampMin: true
+      help: Pull toward the slow wandering roost attractor.
+    - name: Spiral
+      style: Float
+      default: 0.55
+      max: 3.0
+      clampMin: true
+      normMax: 2.0
+      help: Tangential swirl around the attractor (vortex shear / split-reform).
+    - name: Curl
+      style: Float
+      default: 0.4
+      max: 3.0
+      clampMin: true
+      normMax: 2.0
+      help: Curl-noise wander for organic break-up.
+    - name: Bodyradius
+      style: Float
+      label: Body Radius
+      startSection: true
+      default: 2.4
+      min: 0.5
+      max: 6.0
+      clampMin: true
+      normMin: 1.0
+      normMax: 4.0
+      help: Soft containment radius - the size of the coherent body.
+    - name: Morphspeed
+      style: Float
+      label: Morph Speed
+      default: 1
+      max: 4.0
+      clampMin: true
+      normMax: 3.0
+      help: Overall evolution rate (attractor drift + curl). 0 freezes the motion.
+    - name: Maxparticles
+      style: Int
+      label: Max Particles
+      startSection: true
+      default: 5000
+      min: 100.0
+      clampMin: true
+      normMin: 1000.0
+      normMax: 40000.0
+      help: Maximum live particle pool.
+    - name: Birthrate
+      style: Float
+      label: Birth Rate
+      default: 2000
+      clampMin: true
+      normMax: 8000.0
+      help: Particles born per second.
+    Output:
+      $t: output_2
+  position: [0, -800]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: specimen_lab/murmuration.tdn
+- name: kaleidoscope
+  type: baseCOMP
+  custom_pars:
+    Kaleidoscope:
+    - name: Segments
+      style: Int
+      startSection: true
+      default: 8
+      min: 2.0
+      max: 24.0
+      clampMin: true
+      normMin: 2.0
+      normMax: 16.0
+      help: Number of mirror wedges around the center. Higher = more intricate symmetry.
+    - name: Rotation
+      style: Float
+      normMin: -3.1416
+      normMax: 3.1416
+      help: Base rotation of the mirror, in radians. The animation rotates on top of this.
+    - name: Zoom
+      style: Float
+      default: 1
+      min: 0.1
+      clampMin: true
+      normMin: 0.3
+      normMax: 3.0
+      help: How much of the source each wedge samples. Higher = more facets packed in.
+    - name: Flowspeed
+      style: Float
+      label: Flow Speed
+      default: 1
+      clampMin: true
+      normMax: 3.0
+      help: Speed of the tumble / twist / rotation animation. 0 freezes it.
+    - name: Palette
+      style: Float
+      label: Palette Hue
+      clampMin: true
+      clampMax: true
+      help: Rotates the color palette through the full hue range. 0 = fiery.
+    - name: Source
+      style: Menu
+      startSection: true
+      default: demo
+      menuNames:
+      - demo
+      - external
+      menuLabels:
+      - Demo (built-in)
+      - External input
+      help: Demo = built-in animated source. External = kaleidoscope whatever TOP is wired into this COMP.
+    Output:
+      $t: output
+  position: [800, -400]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: specimen_lab/kaleidoscope.tdn
+- name: noise_terrain
+  type: baseCOMP
+  custom_pars:
+    Terrain:
+    - name: Height
+      style: Float
+      startSection: true
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Overall vertical scale of the terrain. Master multiplier on all three noise displacement amplitudes, preserving their 2.9 / 1.0 / 0.25 ratio so peaks and fine relief grow in proportion. 1.0 = the shipped look; 0 = a flat plane; 2 = double-height alpine peaks.
+    - name: Ridge
+      style: Float
+      default: 1.6
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      normMin: 1.0
+      normMax: 3.0
+      help: Ridge sharpness of the mountains. Higher values carve sharper, more knife-edged ridgelines and deeper valleys; lower values give rounder, more eroded hills. 1.6 = the shipped look.
+    - name: Warp
+      style: Float
+      default: 1.2
+      max: 2.5
+      clampMin: true
+      normMax: 2.5
+      help: Domain warp amount. Bends the noise domain so ridgelines flow organically instead of aligning to a grid. 0 = regular and repetitive; 1.2 = the shipped look; higher = more chaotic, swirling ridges.
+    - name: Detail
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Surface micro-detail and ruggedness, applied cheaply in the shader as normal-map bump strength (no mesh change, so no triangulation cost or facet artifacts). Scales the shipped bump strength of 0.17. 1.0 = the shipped look; 0 = smooth shading; 2 = heavily rugged rock.
+    - name: Snowline
+      style: Float
+      label: Snow Line
+      startSection: true
+      default: 1.6
+      max: 4.0
+      clampMin: true
+      normMax: 4.0
+      help: World-Y elevation where snow begins to cover the rock. Peaks reach roughly 0 to 4 at Height 1.0, so 1.6 sits mid-slope (the shipped look). Lower the value to blanket the terrain in snow; the slider covers 0 to 4, but you can type higher to clear taller peaks at high Height, leaving only bare rock.
+    - name: Sundiraz
+      style: Float
+      label: Sun Azimuth
+      startSection: true
+      default: -41.6335
+      min: -180.0
+      max: 180.0
+      normMin: -180.0
+      normMax: 180.0
+      help: Compass direction of the sunlight, in degrees in the horizontal plane. 0 points toward +Z (into the scene), +90 toward +X (right), -90 toward -X (left). Combined with Sun Elevation it is converted to a guaranteed unit light direction, so it can never produce a zero-length (NaN) vector. Controls which side of the ridges is lit.
+    - name: Sundirel
+      style: Float
+      label: Sun Elevation
+      default: 49.3007
+      max: 90.0
+      clampMin: true
+      clampMax: true
+      normMax: 90.0
+      help: Height of the sun above the horizon, in degrees. 0 = sun on the horizon (long raking shadows, warm grazing light); 90 = directly overhead (flat, even light). Controls shadow length and contrast. The default matches the shipped sun direction.
+    - name: Haze
+      style: Float
+      startSection: true
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Atmospheric haze amount, a multiplier on the computed distance fog and valley mist. 0 = perfectly clear air; 1.0 = the shipped atmosphere; up to 2 = thick, hazy depth that washes out distant peaks. The blend is re-clamped in the shader so it can never fully erase the scene.
+    - name: Morphspeed
+      style: Float
+      label: Morph Speed
+      startSection: true
+      default: 1
+      max: 3.0
+      clampMin: true
+      normMax: 3.0
+      help: Rate at which the terrain shape evolves over time, driving the 4D-noise time coordinate of all three layers while preserving their 0.04 / 0.085 / 0.15 speed ratio. 0 = frozen on a fixed, deterministic frame; 1.0 = the shipped pace; 3 = rapid morphing.
+    - name: Seed
+      style: Int
+      startSection: true
+      default: 1
+      max: 9999.0
+      clampMin: true
+      normMax: 100.0
+      help: Random seed for the terrain shape. Each value produces a completely different but equally plausible mountain. The three noise layers receive this value plus a fixed per-layer offset (+0, +1, +2) so they stay decorrelated. Default 1 reproduces the shipped seeds 1 / 2 / 3.
+    Output:
+      $t: output_2
+  position: [400, -800]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: specimen_lab/noise_terrain.tdn
+- name: packet_fabric
+  type: baseCOMP
+  custom_pars:
+    Controls:
+    - name: Maxpackets
+      style: Int
+      default: 5000
+      min: 200.0
+      max: 16000.0
+      clampMin: true
+      clampMax: true
+      normMin: 200.0
+      normMax: 16000.0
+      help: how many packets cascade down the fabric. Cost scales with this (GPU), NOT with output resolution, so it is independent of the 4K story. Watch GPU headroom; cap 16000.
+    - name: Flowspeed
+      style: Float
+      default: 0.45
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: how fast packets descend each link per second. 0 freezes the cascade (drops time-dependence); higher = near-light-speed rain.
+    - name: Linkcount
+      style: Int
+      default: 26
+      min: 4.0
+      max: 64.0
+      clampMin: true
+      clampMax: true
+      normMin: 4.0
+      normMax: 64.0
+      help: number of distinct sender->receiver vertical links. More = a busier topology.
+    - name: Curveamount
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: how much each vertical link bows horizontally (fiber slack). 0 = straight drops; higher = graceful arcs.
+    - name: Streams
+      style: Int
+      default: 3
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 3.0
+      help: number of separated ST2110 essence classes (1=video, 2=+audio, 3=+ancillary). Colors packets cyan/green/amber by PartId class.
+    - name: Ptprate
+      style: Float
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: frequency of the PTP grandmaster sync pulse all packets flash to in lockstep. The rhythmic heartbeat.
+    - name: Pulsestrength
+      style: Float
+      default: 1.4
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: how brightly packets flash on each PTP beat. 0 = steady cascade; higher = a dramatic synchronized strobe.
+    - name: Fieldscale
+      style: Float
+      default: 1.35
+      min: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.5
+      normMax: 2.0
+      help: spread of node anchors across the tall field. Higher = a wider, more sprawling fabric.
+    - name: Jitter
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: tiny per-packet phase stagger so the cascade looks like real quantized traffic, not a marching grid. 0 = perfectly synced ranks.
+    - name: Bloom
+      style: Float
+      default: 1.3
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: intensity of the bright-pass glow added back. The booth-scale wow knob.
+    - name: Bloomwidth
+      style: Float
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res).
+    Output:
+    - name: Resw
+      style: Int
+      default: 3840
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+    - name: Resh
+      style: Int
+      default: 2160
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+  position: [400, -400]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    position: [6000, 0]
+    inputs:
+    - comp_bloom
+  - name: geo_seed
+    type: gridPOP
+    parameters:
+      rows: 64
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: null_sim
+    type: nullPOP
+    position: [1800, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - glsl_advect
+  - name: res_down
+    type: resolutionTOP
+    parameters:
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+    position: [4200, 0]
+    inputs:
+    - comp_over
+  - name: comp_over
+    type: compositeTOP
+    parameters:
+      operand: add
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [3600, 0]
+    inputs:
+    - render_swarm
+    - glsl_fabric
+  - name: comp_bloom
+    type: compositeTOP
+    parameters:
+      operand: add
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [5400, 0]
+    inputs:
+    - comp_over
+    - glsl_bloomblur
+  - name: glsl_color
+    type: glslPOP
+    parameters:
+      computedat: glsl_color_compute
+      outputattrs: '*'
+    sequences:
+      attr:
+      - customname: Color
+        numcomps: '4'
+      - customname: PointScale
+      vec:
+      - name: uClock
+        type: vec4
+        valuex: =parent().par.Ptprate.eval()
+        valuey: =absTime.seconds
+        valuez: =parent().par.Streams.eval()
+        valuew: =parent().par.Pulsestrength.eval()
+    position: [2400, 0]
+    inputs:
+    - null_sim
+  - name: mat_sprite
+    type: pointspriteMAT
+    parameters:
+      colormap: sprite_dot
+      pointsize: 7
+      skelrootpath: =parent()
+      blending: true
+      destblend: one
+      depthtest: false
+      depthwriting: false
+    position: [600, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: sprite_dot
+    type: glslTOP
+    parameters:
+      pixeldat: sprite_dot_pixel
+      computedat: sprite_dot_compute
+      outputresolution: custom
+      resolutionw: 64
+      resolutionh: 64
+    position: [0, -640]
+  - name: glsl_advect
+    type: glslPOP
+    parameters:
+      computedat: glsl_advect_compute
+      outputattrs: P
+    sequences:
+      vec:
+      - name: uFlow
+        type: vec4
+        valuex: =parent().par.Flowspeed.eval()
+        valuey: =parent().par.Linkcount.eval()
+        valuez: =parent().par.Curveamount.eval()
+        valuew: =absTime.seconds*parent().par.Flowspeed.eval()
+      - name: uClock
+        type: vec4
+        valuex: 0
+        valuey: =parent().par.Fieldscale.eval()
+        valuew: =parent().par.Jitter.eval()
+    position: [1200, 0]
+    inputs:
+    - particle_pop
+  - name: glsl_fabric
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_fabric_pixel
+      computedat: glsl_fabric_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+    sequences:
+      vec:
+      - name: uFab
+        valuex: =parent().par.Linkcount.eval()
+        valuey: =parent().par.Fieldscale.eval()
+        valuez: =absTime.seconds
+        valuew: =parent().par.Streams.eval()
+    position: [0, -320]
+  - name: particle_pop
+    type: particlePOP
+    parameters:
+      targetpop: null_sim
+      maxparticles: =parent().par.Maxpackets.eval()
+      birthrate: =parent().par.Maxpackets.eval()
+      life: 1000
+      timeintegration: false
+    position: [600, -320]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - geo_seed
+  - name: render_swarm
+    type: rendersimpleTOP
+    parameters:
+      camdistance: 8
+      bgcolorr: 0.02
+      bgcolorg: 0.025
+      bgcolorb: 0.035
+      bgcolora: 1
+      pop: glsl_color
+      materialsource: matnode
+      mat: mat_sprite
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [3000, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: glsl_bloomblur
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_bloomblur_pixel
+      computedat: glsl_bloomblur_compute
+      outputresolution: custom
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+    sequences:
+      vec:
+      - name: uBloom
+        valuex: =parent().par.Bloom.eval()
+        valuey: 0.45
+        valuez: =parent().par.Bloomwidth.eval()
+    position: [4800, 0]
+    inputs:
+    - res_down
+  - name: glsl_color_info
+    type: infoDAT
+    parameters:
+      op: glsl_color
+    position: [2550, -120]
+    dock: glsl_color
+  - name: sprite_dot_info
+    type: infoDAT
+    parameters:
+      op: sprite_dot
+    position: [300, -760]
+    dock: sprite_dot
+  - name: glsl_advect_info
+    type: infoDAT
+    parameters:
+      op: glsl_advect
+    position: [1350, -120]
+    dock: glsl_advect
+  - name: glsl_fabric_info
+    type: infoDAT
+    parameters:
+      op: glsl_fabric
+    position: [300, -440]
+    dock: glsl_fabric
+  - name: sprite_dot_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [150, -760]
+    dock: sprite_dot
+  - name: glsl_fabric_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [150, -440]
+    dock: glsl_fabric
+  - name: glsl_color_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [2400, -120]
+    dock: glsl_color
+  - name: sprite_dot_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [0, -760]
+    dock: sprite_dot
+  - name: glsl_advect_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [1200, -120]
+    dock: glsl_advect
+  - name: glsl_bloomblur_info
+    type: infoDAT
+    parameters:
+      op: glsl_bloomblur
+    position: [5100, -120]
+    dock: glsl_bloomblur
+  - name: glsl_fabric_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [0, -440]
+    dock: glsl_fabric
+  - name: glsl_bloomblur_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [4950, -120]
+    dock: glsl_bloomblur
+  - name: glsl_bloomblur_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [4800, -120]
+    dock: glsl_bloomblur
+- name: waveform_stack
+  type: baseCOMP
+  custom_pars:
+    Output:
+    - name: Resw
+      style: Int
+      default: 3840
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Render width (px), 4K landscape.
+    - name: Resh
+      style: Int
+      default: 2160
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Render height (px), 4K landscape.
+    Controls:
+    - name: Lanes
+      style: Int
+      default: 96
+      min: 1.0
+      max: 512.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 512.0
+      help: number of vertically-stacked scope lanes (1=green audio only; more add cyan video, magenta chroma, amber...). The ST2110 separated essences, one lane each. The row-fold costs nothing per pixel regardl
+    - name: Frequency
+      style: Float
+      default: 8
+      min: 1.0
+      max: 30.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 30.0
+      help: base spatial frequency of the waveforms. Low = slow rolling signal; high = dense rapid oscillation across the lane.
+    - name: Amplitude
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: vertical swing of each trace within its lane. 0 = flat baselines; higher = tall dramatic waveforms (clamped to stay in-lane).
+    - name: Speed
+      style: Float
+      default: 1
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMax: 4.0
+      help: how fast the waveform content evolves. 0 freezes the shape (the sweep still moves).
+    - name: Sweeprate
+      style: Float
+      default: 0.4
+      min: 0.05
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.05
+      normMax: 2.0
+      help: how fast the white-hot playhead sweeps left-to-right across all lanes (Hz). The scope refresh feel.
+    - name: Afterglow
+      style: Float
+      default: 0.85
+      min: 0.5
+      max: 0.97
+      clampMin: true
+      clampMax: true
+      normMin: 0.5
+      normMax: 0.97
+      help: uSweep.y (in-shader persistence) AND level_decay.opacity (the low-res Feedback TOP decay). Higher = a longer CRT phosphor tail. Below 1 keeps the feedback bounded.
+    - name: Linewidth
+      style: Float
+      default: 0.006
+      min: 0.002
+      max: 0.02
+      clampMin: true
+      clampMax: true
+      normMin: 0.002
+      normMax: 0.02
+      help: thickness of the trace core (within-lane UV). Thin = a crisp precise scope line; thicker = a heavier glowing beam. Crisp at any res via fwidth().
+    - name: Graticule
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: brightness of the gold graticule grid + lane dividers. 0 hides the grid; higher makes the engineering scope frame prominent.
+    - name: Harmonics
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: amount of high harmonic detail in the signal. 0 = a clean fundamental sine; higher = a rich complex broadcast waveform.
+    - name: Glow
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: width of the soft halo around each trace before bloom. The signature scope-beam glow.
+    - name: Ptprate
+      style: Float
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: frequency of the PTP sync pulse the whole stack breathes to.
+    - name: Bloom
+      style: Float
+      default: 1.2
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: intensity of the bloom added back. The booth-scale glow knob.
+    - name: Bloomwidth
+      style: Float
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res).
+    - name: Scanlines
+      style: Float
+      default: 0.6
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: strength of the CRT scanline overlay in the finish pass. 0 = clean digital; higher = a heavier broadcast-CRT texture.
+    - name: Rgbsplit
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick.
+  position: [0, -400]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    flags:
+    - display
+    position: [4800, 0]
+    inputs:
+    - glsl_finish
+  - name: res_fb
+    type: resolutionTOP
+    parameters:
+      resolutionw: 640
+      resolutionh: 360
+    position: [600, -320]
+    inputs:
+    - glsl_scope
+  - name: res_down
+    type: resolutionTOP
+    parameters:
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+    position: [3000, 0]
+    inputs:
+    - comp_scope
+  - name: comp_scope
+    type: compositeTOP
+    parameters:
+      operand: over
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [2400, 0]
+    inputs:
+    - glsl_scope
+    - comp_trail
+  - name: comp_trail
+    type: compositeTOP
+    parameters:
+      operand: maximum
+    position: [1800, 0]
+    inputs:
+    - res_fb
+    - level_decay
+  - name: glsl_scope
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_scope_pixel
+      computedat: glsl_scope_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uWave
+        valuex: =parent().par.Lanes.eval()
+        valuey: =parent().par.Frequency.eval()
+        valuez: =parent().par.Amplitude.eval()
+        valuew: =absTime.seconds*parent().par.Speed.eval()
+      - name: uSweep
+        valuex: =parent().par.Sweeprate.eval()
+        valuey: =parent().par.Afterglow.eval()
+        valuez: =parent().par.Ptprate.eval()
+        valuew: =parent().par.Linewidth.eval()
+      - name: uLook
+        valuex: =parent().par.Graticule.eval()
+        valuey: =parent().par.Harmonics.eval()
+        valuez: =parent().par.Glow.eval()
+        valuew: =absTime.seconds
+  - name: glsl_finish
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_finish_pixel
+      computedat: glsl_finish_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uFin
+        valuex: =parent().par.Scanlines.eval()
+        valuey: =parent().par.Rgbsplit.eval()
+        valuez: =absTime.seconds
+        valuew: =parent().par.Ptprate.eval()
+    position: [4200, 0]
+    inputs:
+    - comp_scope
+    - glsl_bloomblur
+  - name: level_decay
+    type: levelTOP
+    parameters:
+      opacity: =parent().par.Afterglow.eval()
+    position: [1200, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - feedback_glow
+  - name: feedback_glow
+    type: feedbackTOP
+    parameters:
+      top: comp_trail
+      format: rgba16float
+    position: [600, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - comp_trail
+  - name: glsl_bloomblur
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_bloomblur_pixel
+      computedat: glsl_bloomblur_compute
+      outputresolution: custom
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uBloom
+        valuex: =parent().par.Bloom.eval()
+        valuey: 0.45
+        valuez: =parent().par.Bloomwidth.eval()
+    position: [3600, 0]
+    inputs:
+    - res_down
+  - name: glsl_scope_info
+    type: infoDAT
+    parameters:
+      op: glsl_scope
+    position: [300, -120]
+    dock: glsl_scope
+  - name: glsl_finish_info
+    type: infoDAT
+    parameters:
+      op: glsl_finish
+    position: [4500, -120]
+    dock: glsl_finish
+  - name: glsl_scope_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [150, -120]
+    dock: glsl_scope
+  - name: glsl_finish_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [4350, -120]
+    dock: glsl_finish
+  - name: glsl_scope_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [0, -120]
+    dock: glsl_scope
+  - name: glsl_bloomblur_info
+    type: infoDAT
+    parameters:
+      op: glsl_bloomblur
+    position: [3900, -120]
+    dock: glsl_bloomblur
+  - name: glsl_finish_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [4200, -120]
+    dock: glsl_finish
+  - name: glsl_bloomblur_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [3750, -120]
+    dock: glsl_bloomblur
+  - name: glsl_bloomblur_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [3600, -120]
+    dock: glsl_bloomblur
+- name: essence_streams
+  type: baseCOMP
+  custom_pars:
+    Streams:
+    - name: Streams
+      style: Int
+      label: Essence Streams
+      startSection: true
+      default: 3
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 3.0
+    - name: Gutter
+      style: Float
+      label: Channel Gutter
+      default: 0.06
+      max: 0.2
+      clampMin: true
+      clampMax: true
+      normMax: 0.2
+    - name: Edgeglow
+      style: Float
+      label: Edge Glow
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Celldensity
+      style: Float
+      label: Cell Density
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Flowspeed
+      style: Float
+      label: Flow Speed
+      startSection: true
+      default: 0.4
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Filaments
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Shimmer
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Ptprate
+      style: Float
+      label: PTP Beat Rate
+      startSection: true
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+    - name: Syncline
+      style: Float
+      label: Sync Line
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Brightness
+      style: Float
+      default: 1
+      min: 0.3
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.3
+      normMax: 2.0
+    - name: Bloom
+      style: Float
+      startSection: true
+      default: 1.3
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Bloomwidth
+      style: Float
+      label: Bloom Width
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+    - name: Grain
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Vignette
+      style: Float
+      default: 0.6
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+    Output:
+      $t: output
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    flags:
+    - viewer
+    position: [1500, 0]
+    inputs:
+    - glsl_finish
+  - name: res_down
+    type: resolutionTOP
+    parameters:
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+    position: [300, -400]
+    inputs:
+    - glsl_streams
+  - name: comp_bloom
+    type: compositeTOP
+    parameters:
+      operand: add
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [900, 0]
+    inputs:
+    - glsl_streams
+    - glsl_bloomblur
+  - name: glsl_finish
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_finish_pixel
+      computedat: glsl_finish_compute
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uFin
+        valuex: =parent().par.Grain.eval()
+        valuey: =parent().par.Vignette.eval()
+        valuez: =parent().par.Streams.eval()
+        valuew: =absTime.seconds
+    position: [1200, 0]
+    inputs:
+    - comp_bloom
+  - name: glsl_streams
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_streams_pixel
+      computedat: glsl_streams_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uChan
+        valuex: =parent().par.Streams.eval()
+        valuey: =parent().par.Gutter.eval()
+        valuez: =parent().par.Edgeglow.eval()
+        valuew: =parent().par.Celldensity.eval()
+      - name: uFlow
+        valuex: =parent().par.Flowspeed.eval()
+        valuey: =parent().par.Filaments.eval()
+        valuez: =parent().par.Shimmer.eval()
+        valuew: =absTime.seconds*parent().par.Flowspeed.eval()
+      - name: uLook
+        valuex: =parent().par.Ptprate.eval()
+        valuey: =parent().par.Syncline.eval()
+        valuez: =parent().par.Brightness.eval()
+        valuew: =absTime.seconds
+  - name: glsl_bloomblur
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_bloomblur_pixel
+      computedat: glsl_bloomblur_compute
+      outputresolution: custom
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uBloom
+        valuex: =parent().par.Bloom.eval()
+        valuey: 0.55
+        valuez: =parent().par.Bloomwidth.eval()
+    position: [600, -400]
+    inputs:
+    - res_down
+  - name: glsl_finish_info
+    type: infoDAT
+    parameters:
+      op: glsl_finish
+    position: [1200, -120]
+    dock: glsl_finish
+  - name: glsl_finish_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [1350, -120]
+    dock: glsl_finish
+  - name: glsl_streams_info
+    type: infoDAT
+    parameters:
+      op: glsl_streams
+    position: [0, -120]
+    dock: glsl_streams
+  - name: glsl_streams_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [150, -120]
+    dock: glsl_streams
+  - name: glsl_bloomblur_info
+    type: infoDAT
+    parameters:
+      op: glsl_bloomblur
+    position: [600, -520]
+    dock: glsl_bloomblur
+  - name: glsl_finish_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [1050, -120]
+    dock: glsl_finish
+  - name: glsl_bloomblur_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [750, -520]
+    dock: glsl_bloomblur
+  - name: glsl_streams_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [-150, -120]
+    dock: glsl_streams
+  - name: glsl_bloomblur_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [450, -520]
+    dock: glsl_bloomblur
+- name: vertical_fibers
+  type: baseCOMP
+  custom_pars:
+    Controls:
+    - name: Strands
+      style: Int
+      default: 56
+      min: 4.0
+      max: 320.0
+      clampMin: true
+      clampMax: true
+      normMin: 4.0
+      normMax: 320.0
+      help: number of fiber strands in the curtain. Because of the column-fold this costs NOTHING per pixel (no strand loop), so a dense premium bundle is free; raise it freely for a fuller curtain.
+    - name: Converge
+      style: Float
+      clampMin: true
+      clampMax: true
+      help: how strongly the bundle narrows toward the top. 0 = parallel strands (a flat curtain); higher = strong upward perspective into the haze.
+    - name: Bow
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: amount of gentle per-strand bow so the strands read as relaxed cable, not laser-straight. 0 = dead-straight fibers.
+    - name: Glassglow
+      style: Float
+      default: 1.15
+      max: 6.0
+      clampMin: true
+      clampMax: true
+      normMax: 6.0
+      help: strength of the internal-reflection shimmer gradient along each glass tube. The light-bouncing-in-glass look.
+    - name: Pulsespeed
+      style: Float
+      default: 0.6
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: how fast the light pulses race UP the strands. 0 freezes them (and drops that time-dependence); higher = near-light-speed streaks.
+    - name: Pulsedensity
+      style: Int
+      default: 4
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: how many light pulses travel up each strand at once (1-4, the constant loop bound). More = a busier data stream.
+    - name: Pulselength
+      style: Float
+      default: 0.32
+      min: 0.02
+      max: 0.5
+      clampMin: true
+      clampMax: true
+      normMin: 0.02
+      normMax: 0.5
+      help: length of each Gaussian light dash (in vertical UV). Short = crisp countable packets; long = streaking light trails.
+    - name: Haze
+      style: Float
+      default: 2.6
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMax: 4.0
+      help: volumetric haze building toward the top of the frame so distant strands dim into fog. Adds vertical depth.
+    - name: Linewidth
+      style: Float
+      default: 0.0045
+      min: 0.0012
+      max: 0.02
+      clampMin: true
+      clampMax: true
+      normMin: 0.0012
+      normMax: 0.02
+      help: base thickness of the glass tube core. Thin = crisp hairline fibers; thicker = heavier glowing tubes. Crisp at any resolution via fwidth().
+    - name: Ptprate
+      style: Float
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: frequency of the PTP sync pulse all light pulses breathe brighter to in lockstep.
+    - name: Bloom
+      style: Float
+      default: 0.55
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: intensity of the downsampled bloom glow added back over the pulses. The booth-scale wow knob.
+    - name: Bloomwidth
+      style: Float
+      default: 2.6
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: the blur step in the 1/4-res bloom pass. Wider = a softer, more atmospheric glow halo (still cheap, since it runs at low res).
+    - name: Grain
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: film-grain amount in the finish pass. Kills banding on the dark gradient at large scale.
+    - name: Vignette
+      style: Float
+      default: 0.95
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: edge darkening so the curtain sits on a premium dark stage.
+    Output:
+      $t: output
+  position: [400, 0]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    flags:
+    - viewer
+    position: [1500, 0]
+    inputs:
+    - glsl_finish
+  - name: res_down
+    type: resolutionTOP
+    parameters:
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+    position: [300, -400]
+    inputs:
+    - glsl_fibers
+  - name: comp_bloom
+    type: compositeTOP
+    parameters:
+      operand: add
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [900, 0]
+    inputs:
+    - glsl_fibers
+    - glsl_bloomblur
+  - name: glsl_fibers
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_fibers_pixel
+      computedat: glsl_fibers_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uFiber
+        valuex: =parent().par.Strands.eval()
+        valuey: =parent().par.Converge.eval()
+        valuez: =parent().par.Bow.eval()
+        valuew: =parent().par.Glassglow.eval()
+      - name: uPulse
+        valuex: =parent().par.Pulsespeed.eval()
+        valuey: =parent().par.Pulsedensity.eval()
+        valuez: =parent().par.Pulselength.eval()
+        valuew: =absTime.seconds*parent().par.Pulsespeed.eval()
+      - name: uLook
+        valuex: =parent().par.Haze.eval()
+        valuey: =parent().par.Linewidth.eval()
+        valuez: =parent().par.Ptprate.eval()
+        valuew: =absTime.seconds
+  - name: glsl_finish
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_finish_pixel
+      computedat: glsl_finish_compute
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uFin
+        valuex: =parent().par.Grain.eval()
+        valuey: =parent().par.Vignette.eval()
+        valuez: =parent().par.Strands.eval()
+        valuew: =absTime.seconds
+    position: [1200, 0]
+    inputs:
+    - comp_bloom
+  - name: glsl_bloomblur
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_bloomblur_pixel
+      computedat: glsl_bloomblur_compute
+      outputresolution: custom
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uBloom
+        valuex: =parent().par.Bloom.eval()
+        valuey: 0.55
+        valuez: =parent().par.Bloomwidth.eval()
+    position: [600, -400]
+    inputs:
+    - res_down
+  - name: glsl_fibers_info
+    type: infoDAT
+    parameters:
+      op: glsl_streams
+    position: [0, -120]
+    dock: glsl_fibers
+  - name: glsl_finish_info
+    type: infoDAT
+    parameters:
+      op: glsl_finish
+    position: [1200, -120]
+    dock: glsl_finish
+  - name: glsl_fibers_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [150, -120]
+    dock: glsl_fibers
+  - name: glsl_finish_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [1350, -120]
+    dock: glsl_finish
+  - name: glsl_bloomblur_info
+    type: infoDAT
+    parameters:
+      op: glsl_bloomblur
+    position: [600, -520]
+    dock: glsl_bloomblur
+  - name: glsl_fibers_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [-150, -120]
+    dock: glsl_fibers
+  - name: glsl_finish_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [1050, -120]
+    dock: glsl_finish
+  - name: glsl_bloomblur_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [750, -520]
+    dock: glsl_bloomblur
+  - name: glsl_bloomblur_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [450, -520]
+    dock: glsl_bloomblur
+- name: mandelbulb_march
+  type: baseCOMP
+  custom_pars:
+    Mandelbulb:
+    - name: Power
+      style: Float
+      startSection: true
+      default: 8
+      min: 2.0
+      max: 12.0
+      clampMin: true
+      clampMax: true
+      normMin: 2.0
+      normMax: 12.0
+      help: Mandelbulb exponent in z=z^Power+c. 8 is the classic bulb; 2-4 = blobby organic forms; 10-12 = more lobes and finer detail.
+    - name: Detail
+      style: Float
+      label: Surface Detail
+      default: 0.6
+      clampMin: true
+      clampMax: true
+      help: Raymarch hit threshold, remapped to a 0.0015->0.0004 epsilon. Higher resolves finer fractal crenellation at more cost near grazing rays.
+    - name: Glow
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Proximity/iteration glow added along every ray. Close-but-miss rays accumulate an exponential halo. 0 = matte; 3 = ethereal bloom.
+    - name: Orbitspeed
+      style: Float
+      label: Orbit Speed
+      startSection: true
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Multiplies absTime.seconds into the camera orbit. 0 freezes a still; 1 is a slow cinematic orbit. Only the camera moves -- the fractal math is identical each frame.
+    - name: Hue
+      style: Float
+      default: 0.55
+      clampMin: true
+      clampMax: true
+      help: Base hue offset of the orbit-trap cosine palette. Rotates the whole color identity (surface, glow, rim, background sun) through the spectrum.
+    - name: Sunazim
+      style: Float
+      label: Sun Azimuth
+      startSection: true
+      default: 35
+      min: -180.0
+      max: 180.0
+      clampMin: true
+      clampMax: true
+      normMin: -180.0
+      normMax: 180.0
+      help: Azimuth (degrees) of the key light, converted with elevation into a unit direction so normalize() never sees a zero vector. Rotates where the soft key light and shadow fall.
+    - name: Sunelev
+      style: Float
+      label: Sun Elevation
+      default: 45
+      min: -10.0
+      max: 90.0
+      clampMin: true
+      clampMax: true
+      normMin: -10.0
+      normMax: 90.0
+      help: Elevation (degrees) of the key light. High = top-down soft light with short shadows; low = dramatic raking light with long soft shadows.
+    Output:
+      $t: output_2
+  position: [800, -800]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    flags:
+    - display
+    position: [800, 0]
+    inputs:
+    - glsl_mandelbulb
+  - name: annotate1
+    type: annotateCOMP
+    sequences:
+      ext:
+      - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
+        promote: true
+    custom_pars:
+      Text:
+        $t: text
+        Titletext: Mandelbulb Raymarcher
+        Bodytext: 'One GLSL TOP raymarches the Mandelbulb SDF. The distance estimator iterates z = z^Power + c in spherical form, tracking the running derivative (dr) for a true distance bound and the closest approach to the axes (an orbit trap) for color. An orbiting camera marches rays toward the surface; soft shadows, a fresnel rim, and a proximity glow finish it. Every loop is bounded by a constant (DE_ITER / MARCH_STEPS / SHADOW_STEPS) so the GPU stays safe. No input, no feedback. Params: Power, Surface Detail, Glow, Orbit Speed, Hue, Sun Azimuth, Sun Elevation.'
+      Settings:
+        $t: settings
+        Mode: annotate
+        Backcolorr: [0.16, 0.13, 0.22]
+        Opacity: 0.3
+      OP Viewer:
+        $t: op_viewer
+        Opvieweroversize: natural
+      About:
+        $t: about
+    position: [180, -190]
+    size: [820, 450]
+    palette_clone: true
+  - name: glsl_mandelbulb
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_mandelbulb_pixel
+      computedat: glsl_mandelbulb_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uParams
+        valuex: =parent().par.Power.eval()
+        valuey: =parent().par.Detail.eval()
+        valuez: =parent().par.Glow.eval()
+        valuew: =absTime.seconds*parent().par.Orbitspeed.eval()
+      - name: uLight
+        valuex: =math.cos(math.radians(parent().par.Sunelev.eval()))*math.sin(math.radians(parent().par.Sunazim.eval()))
+        valuey: =math.sin(math.radians(parent().par.Sunelev.eval()))
+        valuez: =math.cos(math.radians(parent().par.Sunelev.eval()))*math.cos(math.radians(parent().par.Sunazim.eval()))
+        valuew: =parent().par.Hue.eval()
+    position: [400, 0]
+  - name: glsl_mandelbulb_info
+    type: infoDAT
+    parameters:
+      op: glsl_mandelbulb
+    position: [400, -120]
+    dock: glsl_mandelbulb
+  - name: glsl_mandelbulb_pixel
+    type: textDAT
+    parameters:
+      extension: frag
+    position: [550, -120]
+    dock: glsl_mandelbulb
+  - name: glsl_mandelbulb_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [250, -120]
+    dock: glsl_mandelbulb
+  annotations:
+  - name: annotate1
+    mode: annotate
+    title: Mandelbulb Raymarcher
+    text: 'One GLSL TOP raymarches the Mandelbulb SDF. The distance estimator iterates z = z^Power + c in spherical form, tracking the running derivative (dr) for a true distance bound and the closest approach to the axes (an orbit trap) for color. An orbiting camera marches rays toward the surface; soft shadows, a fresnel rim, and a proximity glow finish it. Every loop is bounded by a constant (DE_ITER / MARCH_STEPS / SHADOW_STEPS) so the GPU stays safe. No input, no feedback. Params: Power, Surface Detail, Glow, Orbit Speed, Hue, Sun Azimuth, Sun Elevation.'
+    position: [180, -190]
+    size: [820, 450]
+    color: [0.16, 0.13, 0.22]
+    opacity: 0.3
+- name: crosspoint_matrix
+  type: baseCOMP
+  custom_pars:
+    Matrix:
+    - name: Gridsize
+      style: Int
+      label: Matrix Size (N)
+      startSection: true
+      default: 20
+      min: 4.0
+      max: 40.0
+      clampMin: true
+      clampMax: true
+      normMin: 4.0
+      normMax: 40.0
+      help: NxN crosspoint matrix dimension.
+    - name: Activeroutes
+      style: Int
+      label: Active Routes
+      default: 16
+      min: 1.0
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 20.0
+      help: Routes lit simultaneously.
+    - name: Latticeglow
+      style: Float
+      label: Lattice Glow
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Brightness of the dim unlit grid.
+    - name: Crosspointglow
+      style: Float
+      label: Crosspoint Glow
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Brightness of lit crosspoints + paths.
+    - name: Packetspeed
+      style: Float
+      label: Packet Speed
+      startSection: true
+      default: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Speed packets race the L-path. 0 freezes.
+    - name: Packetdensity
+      style: Int
+      label: Packet Density
+      default: 8
+      min: 1.0
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 10.0
+      help: Packets per active route.
+    - name: Streams
+      style: Int
+      label: Essence Streams
+      default: 3
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 3.0
+      help: Separated essence colors (cyan/green/amber).
+    - name: Ptprate
+      style: Float
+      label: PTP Beat Rate
+      startSection: true
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: PTP sync pulse frequency.
+    - name: Reconfigrate
+      style: Float
+      label: Reconfigure Rate
+      default: 0.25
+      min: 0.05
+      clampMin: true
+      clampMax: true
+      normMin: 0.05
+      help: How often active routes reconfigure.
+    - name: Lockindicators
+      style: Float
+      label: Lock Indicators
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Corner PTP-lock dot brightness.
+    - name: Bloom
+      style: Float
+      startSection: true
+      default: 1.1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Bloom over lit crosspoints + packets.
+    - name: Glitch
+      style: Float
+      default: 0.8
+      max: 2.0
+      clampMin: true
+      normMax: 2.0
+      help: 'VHS glitch amount: chroma split, tape jitter/tear, rolling scanlines, grain.'
+    Output:
+      $t: output
+  position: [800, 0]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    flags:
+    - viewer
+    position: [3000, 0]
+    inputs:
+    - glsl_bloom
+  - name: res_down
+    type: resolutionTOP
+    parameters:
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+    position: [600, 0]
+    inputs:
+    - glsl_matrix
+  - name: comp_bloom
+    type: compositeTOP
+    parameters:
+      operand: add
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    position: [1800, 0]
+    inputs:
+    - glsl_matrix
+    - glsl_bloomblur
+  - name: glsl_bloom
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_bloom_pixel
+      computedat: glsl_bloom_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uBloom
+        valuex: =parent().par.Bloom.eval()
+        valuey: 0.5
+        valuez: =parent().par.Glitch.eval()
+        valuew: =absTime.seconds
+    position: [2400, 0]
+    inputs:
+    - comp_bloom
+  - name: glsl_matrix
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_matrix_pixel
+      computedat: glsl_matrix_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uGrid
+        valuex: =parent().par.Gridsize.eval()
+        valuey: =parent().par.Activeroutes.eval()
+        valuez: =parent().par.Latticeglow.eval()
+        valuew: =parent().par.Crosspointglow.eval()
+      - name: uPacket
+        valuex: =parent().par.Packetspeed.eval()
+        valuey: =parent().par.Packetdensity.eval()
+        valuez: =parent().par.Streams.eval()
+        valuew: =absTime.seconds*parent().par.Packetspeed.eval()
+      - name: uClock
+        valuex: =parent().par.Ptprate.eval()
+        valuey: =parent().par.Reconfigrate.eval()
+        valuez: =parent().par.Lockindicators.eval()
+        valuew: =absTime.seconds
+  - name: glsl_bloomblur
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_bloomblur_pixel
+      computedat: glsl_bloomblur_compute
+      outputresolution: custom
+      resolutionw: =int(parent().par.Resw.eval()/4)
+      resolutionh: =int(parent().par.Resh.eval()/4)
+      format: rgba16float
+    sequences:
+      vec:
+      - name: uBloom
+        valuex: =parent().par.Bloom.eval()
+        valuey: 0.45
+        valuez: 2.2
+    position: [1200, 0]
+    inputs:
+    - res_down
+  - name: glsl_bloom_info
+    type: infoDAT
+    parameters:
+      op: glsl_bloom
+    position: [2700, -120]
+    dock: glsl_bloom
+  - name: glsl_bloom_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [2550, -120]
+    dock: glsl_bloom
+  - name: glsl_matrix_info
+    type: infoDAT
+    parameters:
+      op: glsl_matrix
+    position: [300, -120]
+    dock: glsl_matrix
+  - name: glsl_matrix_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [150, -120]
+    dock: glsl_matrix
+  - name: glsl_bloom_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [2400, -120]
+    dock: glsl_bloom
+  - name: glsl_bloomblur_info
+    type: infoDAT
+    parameters:
+      op: glsl_bloomblur
+    position: [1500, -120]
+    dock: glsl_bloomblur
+  - name: glsl_matrix_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [0, -120]
+    dock: glsl_matrix
+  - name: glsl_bloomblur_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [1350, -120]
+    dock: glsl_bloomblur
+  - name: glsl_bloomblur_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [1200, -120]
+    dock: glsl_bloomblur
+- name: reaction_diffusion
+  type: baseCOMP
+  custom_pars:
+    Output:
+    - name: Resw
+      style: Int
+      default: 3840
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Output width (px), 4K. The reaction sim stays bounded 16:9; out1 upscales to this.
+    - name: Resh
+      style: Int
+      default: 2160
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Output height (px), 4K.
+  position: [1200, -400]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: specimen_lab/reaction_diffusion.tdn
+- name: plasma_interference
+  type: baseCOMP
+  custom_pars:
+    Plasma:
+    - name: Scale
+      style: Float
+      startSection: true
+      default: 6
+      min: 1.0
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 20.0
+      help: Spatial frequency of the sine fields. Low = broad lava-lamp blobs; high = dense fine plasma.
+    - name: Speed
+      style: Float
+      default: 1
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMax: 4.0
+      help: Animation speed. 1 = gentle flow; 0 freezes a still (the TOP keeps cooking, frame is identical).
+    - name: Warp
+      style: Float
+      default: 1.2
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Domain-warp amount. 0 = flat sliding stripes; higher bends the coords into a flowing liquid swirl.
+    - name: Complexity
+      style: Float
+      label: Interference
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Detune between the two sine fields. 0 = one clean plasma; higher beats them into shimmering moire.
+    - name: Palette
+      style: Float
+      label: Palette Hue
+      startSection: true
+      clampMin: true
+      clampMax: true
+      help: Rotates the cyclic cosine palette through the full hue ring. Loops seamlessly 1.0 -> 0.0.
+    - name: Contrast
+      style: Float
+      default: 0.4
+      clampMin: true
+      clampMax: true
+      help: Palette saturation/contrast (onto a 0.6 base in the shader). Low = pastel; high = punchy neon.
+    Output:
+      $t: output_2
+  position: [1200, -800]
+  color: [0.67, 0.67, 0.67]
+  children:
+  - name: out1
+    type: outTOP
+    flags:
+    - display
+    position: [800, 0]
+    inputs:
+    - glsl_plasma
+  - name: annotate1
+    type: annotateCOMP
+    sequences:
+      ext:
+      - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
+        promote: true
+    custom_pars:
+      Text:
+        $t: text
+        Titletext: Plasma - interfering sine fields + domain warp
+        Bodytext: 'Two sine-wave fields at slightly detuned scales BEAT against each other -> moire fringes (the shimmer). A slow rotating domain warp bends the sample coords -> liquid flow. The summed field is folded cyclically into 0..1 and mapped through an Inigo-Quilez cosine palette (smooth hue cycling, never bands); a vignette frames it as a loop. All on the GPU in one glslTOP -- no input, no feedback, stateless and cheap. Params: Scale, Speed, Warp, Complexity (detune), Palette (hue), Contrast.'
+      Settings:
+        $t: settings
+        Mode: annotate
+        Backcolorr: [0.13, 0.28, 0.32]
+        Opacity: 0.25
+      OP Viewer:
+        $t: op_viewer
+        Opvieweroversize: natural
+      About:
+        $t: about
+    position: [180, -220]
+    size: [820, 480]
+    palette_clone: true
+  - name: glsl_plasma
+    type: glslTOP
+    parameters:
+      pixeldat: glsl_plasma_pixel
+      computedat: glsl_plasma_compute
+      outputresolution: custom
+      resolutionw: =parent().par.Resw.eval()
+      resolutionh: =parent().par.Resh.eval()
+    sequences:
+      vec:
+      - name: uParams
+        valuex: =parent().par.Scale.eval()
+        valuey: =parent().par.Warp.eval()
+        valuez: =parent().par.Complexity.eval()
+        valuew: =absTime.seconds*parent().par.Speed.eval()
+      - name: uPalette
+        valuex: =parent().par.Palette.eval()
+        valuey: =parent().par.Contrast.eval()
+        valuez: 0
+        valuew: 0
+    position: [400, 0]
+  - name: glsl_plasma_info
+    type: infoDAT
+    parameters:
+      op: glsl_plasma
+    position: [550, -150]
+    dock: glsl_plasma
+  - name: glsl_plasma_pixel
+    type: textDAT
+    parameters:
+      language: glsl
+      extension: frag
+    flags:
+    - viewer
+    position: [400, -150]
+    dock: glsl_plasma
+  - name: glsl_plasma_compute
+    type: textDAT
+    parameters:
+      language: glsl
+    flags:
+    - viewer
+    position: [250, -150]
+    dock: glsl_plasma
+  annotations:
+  - name: annotate1
+    mode: annotate
+    title: Plasma - interfering sine fields + domain warp
+    text: 'Two sine-wave fields at slightly detuned scales BEAT against each other -> moire fringes (the shimmer). A slow rotating domain warp bends the sample coords -> liquid flow. The summed field is folded cyclically into 0..1 and mapped through an Inigo-Quilez cosine palette (smooth hue cycling, never bands); a vignette frames it as a loop. All on the GPU in one glslTOP -- no input, no feedback, stateless and cheap. Params: Scale, Speed, Warp, Complexity (detune), Palette (hue), Contrast.'
+    position: [180, -220]
+    size: [820, 480]
+    color: [0.13, 0.28, 0.32]
+    opacity: 0.25

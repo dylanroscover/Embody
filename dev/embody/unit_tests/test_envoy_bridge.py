@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: Envoy STDIO bridge (envoy_bridge.py).
 
 Comprehensive tests for the STDIO-to-HTTP proxy including:

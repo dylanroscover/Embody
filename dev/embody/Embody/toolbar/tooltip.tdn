@@ -1,71 +1,64 @@
-{
-	"format": "tdn",
-	"version": "1.4",
-	"build": 31,
-	"generator": "Embody/5.0.429",
-	"td_build": "099.2025.32820",
-	"source_file": "Embody-5.429.toe",
-	"exported_at": "2026-05-31T06:21:19Z",
-	"network_path": "/embody/Embody/toolbar/tooltip",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "containerCOMP",
-	"parameters": {
-		"x": 356,
-		"y": 40,
-		"w": 169,
-		"h": 22,
-		"layer": 10,
-		"alignallow": "ignore",
-		"display": false,
-		"clickthrough": true,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"bgcolorr": 0.13,
-		"bgcolorg": 0.13,
-		"bgcolorb": 0.13,
-		"bgalpha": 0.95
-	},
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": [
-		{
-			"name": "text",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "Toggle Envoy MCP server",
-				"callbacks": "text_callbacks",
-				"font": "Open Sans",
-				"fontsize": 10,
-				"fontcolorr": 0.8,
-				"fontcolorg": 0.8,
-				"fontcolorb": 0.8,
-				"hmode": "fill",
-				"vmode": "fill",
-				"resizecomp": "=me",
-				"repocomp": "=me"
-			},
-			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/tooltip/text.tdn"
-		},
-		{
-			"name": "text_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/tooltip/text_callbacks.py",
-				"syncfile": true,
-				"language": "python"
-			},
-			"flags": ["viewer"],
-			"position": [0, -160],
-			"size": [160, 130],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "text"
-		}
-	]
-}
+format: tdn
+version: '2.0'
+build: 38
+generator: Embody/6.0.26
+td_build: 099.2025.32820
+source_file: Embody-6.27.toe
+exported_at: '2026-06-14T02:07:12Z'
+network_path: /embody/Embody/toolbar/tooltip
+options:
+  include_dat_content: false
+  include_storage: true
+type: containerCOMP
+parameters:
+  x: 998
+  y: 40
+  w: 80
+  h: 22
+  layer: 10
+  alignallow: ignore
+  display: false
+  clickthrough: true
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: 0.13
+  bgcolorg: 0.13
+  bgcolorb: 0.13
+  bgalpha: 0.95
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: text
+  type: textCOMP
+  parameters:
+    text: Clear filter
+    callbacks: text_callbacks
+    font: Open Sans
+    fontsize: 10
+    fontcolorr: 0.8
+    fontcolorg: 0.8
+    fontcolorb: 0.8
+    hmode: fill
+    vmode: fill
+    resizecomp: =me
+    repocomp: =me
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/toolbar/tooltip/text.tdn
+- name: text_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/tooltip/text_callbacks.py
+    syncfile: true
+    language: python
+  flags:
+  - viewer
+  position: [0, -160]
+  size: [160, 130]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+  dock: text
