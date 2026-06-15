@@ -5,6 +5,15 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
+	// Custom domain: binds the worker to embody.tools (the zone is already in the
+	// CF account; CF auto-manages the DNS record + TLS cert). The *.workers.dev
+	// URL keeps working too.
+	"routes": [
+		{
+			"pattern": "embody.tools",
+			"custom_domain": true
+		}
+	],
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -36,6 +45,9 @@
 	// ENVIRONMENT is "production" here (the deployed default); .dev.vars overrides
 	// it to "development" for local dev so the Turnstile gate bypasses locally.
 	"vars": {
-		"ENVIRONMENT": "production"
+		"ENVIRONMENT": "production",
+		// Canonical origin for Better Auth (OAuth callbacks, cookies, redirects).
+		// Without it Better Auth derives the origin per-request and warns.
+		"BETTER_AUTH_URL": "https://embody.tools"
 	}
 }

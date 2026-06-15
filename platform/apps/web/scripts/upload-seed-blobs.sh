@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Upload each first-party Specimen .tdn into the LOCAL R2 bucket under key=sha256
-# (content-addressed). Targets the same miniflare persist path the astro dev
-# server uses (.wrangler/state/v3/r2), so the running dev server serves them.
+# Upload each first-party Specimen .tdn into the R2 bucket under key=sha256
+# (content-addressed). Reads scripts/.seed-blobs.manifest.json (produced by
+# build-specimen-data.py).
 #
-# Run from apps/web:  bash scripts/upload-seed-blobs.sh
-#
-# Reads scripts/.seed-blobs.manifest.json (produced by build-specimen-data.py).
-# For the DEPLOYED (remote) bucket, re-run each line with --remote instead of
-# --local once R2 is provisioned:
-#   npx wrangler r2 object put embody-blobs/<sha256> --file=<path> --remote
+# Run from apps/web:
+#   bash scripts/upload-seed-blobs.sh            # --local (miniflare; the dev server serves them)
+#   bash scripts/upload-seed-blobs.sh --remote   # the deployed R2 bucket (production)
 set -euo pipefail
+
+TARGET="${1:---local}"   # --local (default) or --remote
+case "$TARGET" in --local|--remote) ;; *) echo "usage: $0 [--local|--remote]" >&2; exit 2;; esac
 
 cd "$(dirname "$0")/.."   # -> apps/web
 MANIFEST="scripts/.seed-blobs.manifest.json"
@@ -25,8 +25,8 @@ import json, sys
 for e in json.load(open(sys.argv[1])):
     print(f"{e['sha256']}\t{e['tdn_path']}")
 PY
-  echo "Uploading embody-blobs/$SHA  <-  $PATH_"
-  npx wrangler r2 object put "embody-blobs/$SHA" --file="$PATH_" --local
+  echo "Uploading embody-blobs/$SHA  <-  $PATH_  ($TARGET)"
+  npx wrangler r2 object put "embody-blobs/$SHA" --file="$PATH_" "$TARGET"
 done
 
-echo "Done. Local R2 bucket 'embody-blobs' now holds the six .tdn blobs."
+echo "Done. R2 bucket 'embody-blobs' ($TARGET) now holds the six .tdn blobs."

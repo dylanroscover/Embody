@@ -23,20 +23,29 @@ The fixture pages remain standalone for design review. API routes require local 
 
 ## Local API data
 
-From `platform/apps/web/`, apply the D1 schema and seed the local database:
+The Collection is the six first-party Specimens under the repo's top-level
+`specimens/` (real `.tdn` networks + `manifest.json`). `seed.sql`,
+`src/fixtures/specimens.json`, `specimen-graphs.ts`, and the blob manifest are
+all GENERATED from those by `scripts/build-specimen-data.py` -- never hand-edit
+them. From `platform/apps/web/`:
 
 ```sh
+python3 scripts/build-specimen-data.py          # regenerate seed.sql + fixtures + blob manifest
 wrangler d1 migrations apply embody --local
 wrangler d1 execute embody --local --file ./src/server/seed.sql
+bash scripts/upload-seed-blobs.sh               # real .tdn blobs -> local R2, keyed by sha256
 ```
 
-The seed references small placeholder TDN blobs under `seed/`. To make
-`/api/specimens/:slug/tdn` return those placeholders locally, upload the files to the local R2 bucket:
+The blobs are content-addressed: the R2 key IS the sha256 of the `.tdn` bytes
+(it equals `tdn_r2_key` in `seed.sql`), so `/api/specimens/:slug/tdn` resolves.
+
+To seed **production** (deployed D1 + R2), run the generator, then target the
+remote resources:
 
 ```sh
-for file in ./src/server/seed-blobs/*.tdn; do
-  wrangler r2 object put "embody-blobs/seed/$(basename "$file")" --file "$file" --local
-done
+python3 scripts/build-specimen-data.py
+bash scripts/upload-seed-blobs.sh --remote
+wrangler d1 execute embody --remote --file ./src/server/seed.sql
 ```
 
 In non-production environments, the submit endpoint accepts `turnstileToken: "dev-bypass"`. In
