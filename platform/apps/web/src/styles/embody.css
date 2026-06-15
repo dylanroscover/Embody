@@ -317,17 +317,19 @@ pre {
   color: var(--accent);
 }
 
-/* Active page: a soft accent-tinted chip -- clearly "you are here" without
-   competing with the single filled auth CTA (the one loudest element). */
+/* Active page: an accent-tinted chip -- clearly "you are here". OPAQUE like the
+   other link pills (accent-dim layered over the solid page bg); accent-dim alone
+   was ~0.2 alpha, so the refracted glass showed straight through it and it read
+   as far more transparent than its neighbors. */
 .navbar__item.is-active {
   border-color: transparent;
-  background: var(--accent-dim);
+  background: linear-gradient(var(--accent-dim), var(--accent-dim)), var(--bg);
   color: var(--accent);
 }
 
 .navbar__item.is-active:hover {
   border-color: transparent;
-  background: var(--accent-dim);
+  background: linear-gradient(var(--accent-dim), var(--accent-dim)), var(--bg);
   color: var(--accent);
 }
 

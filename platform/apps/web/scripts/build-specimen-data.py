@@ -38,6 +38,12 @@ MANIFEST_PATH = SPECIMENS_DIR / "manifest.json"
 SEED_SQL_PATH = WEB_DIR / "src" / "server" / "seed.sql"
 GRAPHS_TS_PATH = WEB_DIR / "src" / "fixtures" / "specimen-graphs.ts"
 BLOB_MANIFEST_PATH = WEB_DIR / "scripts" / ".seed-blobs.manifest.json"
+FIXTURES_PATH = WEB_DIR / "src" / "fixtures" / "specimens.json"
+
+# First-party author. The handle is 'embody.tools' (NOT 'embody') so the public
+# page resolves at /u/embody.tools and matches the fallback author_handle in
+# src/lib/specimenFallback.ts. Used in users_profile and the FTS mirror.
+AUTHOR_HANDLE = "embody.tools"
 
 # Fictional placeholder + stray test rows to purge from local D1 so the page
 # shows only the six real first-party specimens.
@@ -195,6 +201,7 @@ def main() -> int:
     write_seed_sql(rows)
     write_graphs_ts(rows, graphs)
     write_blob_manifest(rows)
+    write_fixtures(rows)
 
     print(f"Generated seed for {len(rows)} specimens:")
     for r in rows:
@@ -215,8 +222,10 @@ def write_seed_sql(rows: list[dict]) -> None:
     a("-- ASCII only.")
     a("")
     a("-- Dev auth-stub user (kept; specimens reference it as author_id).")
+    a("-- Handle is 'embody.tools' so the public user page resolves at /u/embody.tools and")
+    a("-- matches the fallback author_handle in src/lib/specimenFallback.ts.")
     a("INSERT OR REPLACE INTO users_profile (id, handle, avatar_url, bio, trust_level)")
-    a("VALUES ('dev-user', 'embody', NULL, 'First-party Embody specimen author.', 'curator');")
+    a(f"VALUES ('dev-user', '{AUTHOR_HANDLE}', NULL, 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');")
     a("")
 
     # specimens_fts is a contentless FTS5 table (content=''), which does NOT
@@ -283,7 +292,7 @@ def write_seed_sql(rows: list[dict]) -> None:
         "INSERT OR REPLACE INTO specimens (\n"
         "  id, slug, author_id, title, description, category, difficulty, requires, op_count,\n"
         "  family_summary, current_version_id, thumbnail_key, license, visibility, tier, scan_status,\n"
-        "  capability_json, likes_count, views_count\n"
+        "  capability_json, likes_count, views_count, copies_count\n"
         ") VALUES"
     )
     sp_values = []
@@ -307,6 +316,7 @@ def write_seed_sql(rows: list[dict]) -> None:
             f"    'featured',\n"
             f"    'clean',\n"
             f"    {sql_str(cap_json)},\n"
+            f"    0,\n"
             f"    0,\n"
             f"    0\n"
             "  )"
@@ -370,7 +380,7 @@ def write_seed_sql(rows: list[dict]) -> None:
         )
         a(
             f"SELECT rowid, {sql_str(r['slug'])}, {sql_str(r['name'])}, "
-            f"{sql_str(r['description'])}, {sql_str(tags_joined)}, 'embody', {sql_str(dat_text)}"
+            f"{sql_str(r['description'])}, {sql_str(tags_joined)}, '{AUTHOR_HANDLE}', {sql_str(dat_text)}"
         )
         a(f"FROM specimens WHERE id = {sql_str('sp-' + r['slug'])};")
         a("")
@@ -389,6 +399,16 @@ def write_graphs_ts(rows: list[dict], graphs: dict) -> None:
         "// so the interactive covers stay light and need no runtime YAML parse and\n"
         "// no per-card API call. Shape matches src/fixtures/sample-tdn.ts and what\n"
         "// the TdnViewer `tdn` prop expects.\n"
+        "//\n"
+        "// SCALING ROLE (post server-side collection): this bundle is now ONLY the\n"
+        "// fast-path for the SSR-rendered FIRST page of the collection -- those cards\n"
+        "// paint their cover with no fetch. Every card appended client-side (infinite\n"
+        "// scroll) instead LAZY-FETCHES its graph from\n"
+        "// /api/specimens/<slug>/tdn?format=graph (parsed + trimmed server-side), so the\n"
+        "// page NEVER bundles thousands of graphs at build time. Because the generator\n"
+        "// only emits the handful of first-party specimens, this file stays small even\n"
+        "// as the live Collection grows to thousands. It is intentionally retained, not\n"
+        "// retired; the per-slug endpoint is the path that scales.\n"
     )
     body_parts = [header, ""]
     body_parts.append(
@@ -450,6 +470,34 @@ def write_blob_manifest(rows: list[dict]) -> None:
         for r in rows
     ]
     BLOB_MANIFEST_PATH.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
+    )
+
+
+def write_fixtures(rows: list[dict]) -> None:
+    """Homepage featured-card fixtures (src/fixtures/specimens.json).
+
+    Consumed only by index.astro for the static landing-page cards, which render
+    slug/name/category/requires/description (+ a procedural thumbnail keyed off
+    slug+category). Generated from the SAME manifest as the seed so the landing
+    page can never drift from the real Collection again (the prior stale set was
+    abandoned placeholder data).
+    """
+    payload = [
+        {
+            "slug": r["slug"],
+            "name": r["name"],
+            "category": r["category"],
+            "difficulty": r["difficulty"],
+            "description": r["description"],
+            "tags": r["tags"],
+            "requires": r["requires"],
+            "operator_count": r["op_count"],
+            "key_ops": r["key_ops"],
+        }
+        for r in rows
+    ]
+    FIXTURES_PATH.write_text(
         json.dumps(payload, indent=2, ensure_ascii=True) + "\n", encoding="utf-8"
     )
 

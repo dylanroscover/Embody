@@ -29,6 +29,8 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "typecheck": "astro check"
+    "typecheck": "astro check",
+    "deploy": "astro build && wrangler deploy",
+    "migrate:prod": "wrangler d1 migrations apply embody --remote"
   }
 }
