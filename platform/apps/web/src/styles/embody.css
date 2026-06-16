@@ -360,10 +360,8 @@ pre {
   color: var(--accent);
 }
 
-/* Brand-native GitHub item: the GitHub mark + label + an optional live star
-   count, in dark-green brand tokens. The count is injected client-side and
-   stays [hidden] until a successful fetch, so a failed/blocked request
-   degrades to mark + label only -- without changing the item's height. */
+/* Brand-native GitHub item: just the GitHub mark, in dark-green brand tokens.
+   A square icon button -- no label, no star count. */
 .navbar__item--github {
   justify-content: center;
   padding-left: var(--nav-item-pad-y);
@@ -384,29 +382,8 @@ pre {
   color: var(--accent);
 }
 
-.navbar__github-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
 .navbar__github-icon {
   flex: none;
-}
-
-.navbar__stars {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.05rem 0.4rem;
-  border-radius: 999px;
-  background: var(--accent-dim);
-  color: var(--accent);
-  font-size: 0.68rem;
-  letter-spacing: 0.04em;
-}
-
-.navbar__stars[hidden] {
-  display: none;
 }
 
 /* --- Desktop overflow "..." control --------------------------------------

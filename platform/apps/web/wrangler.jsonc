@@ -45,9 +45,12 @@
 	// ENVIRONMENT is "production" here (the deployed default); .dev.vars overrides
 	// it to "development" for local dev so the Turnstile gate bypasses locally.
 	"vars": {
-		"ENVIRONMENT": "production",
-		// Canonical origin for Better Auth (OAuth callbacks, cookies, redirects).
-		// Without it Better Auth derives the origin per-request and warns.
-		"BETTER_AUTH_URL": "https://embody.tools"
+		"ENVIRONMENT": "production"
 	}
+	// NOTE: do NOT set BETTER_AUTH_URL here. wrangler `vars` apply to local dev
+	// too (miniflare), so pinning it to https://embody.tools makes Better Auth
+	// reject localhost requests with "Invalid origin". Leaving it unset lets
+	// Better Auth derive the origin per-request -- correct for both embody.tools
+	// (prod) and localhost (dev). If GitHub OAuth is added later, set it as a
+	// PROD-ONLY Worker secret (`wrangler secret put BETTER_AUTH_URL`), never a var.
 }

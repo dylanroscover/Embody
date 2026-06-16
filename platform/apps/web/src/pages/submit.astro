@@ -146,11 +146,10 @@ const requiresOptions = SUBMIT_REQUIRES;
     statusBox.hidden = false;
   }
 
-  signoutBtn?.addEventListener("click", async () => {
-    const { authClient } = await import("../lib/authClient");
-    await authClient.signOut();
-    window.location.assign("/");
-  });
+  // NOTE: sign-out lives in a SEPARATE bundled <script> below. A `define:vars`
+  // script is emitted inline and untransformed, so `import("../lib/authClient")`
+  // here would not be bundled -- the browser would fetch the literal path and
+  // 404, silently breaking sign-out. The bundled script gets a real asset URL.
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -245,6 +244,22 @@ const requiresOptions = SUBMIT_REQUIRES;
         const ts = getTurnstile();
         if (ts && typeof ts.reset === "function") ts.reset();
       }
+    }
+  });
+</script>
+
+<!-- Sign-out: a plain (non-define:vars) script so Astro/Vite bundles the
+     authClient import into a real asset URL. Inlining it above would 404. -->
+<script>
+  import { authClient } from "../lib/authClient";
+
+  document.querySelector("[data-signout]")?.addEventListener("click", async () => {
+    try {
+      await authClient.signOut();
+    } finally {
+      // Navigate home regardless -- a failed sign-out call must not strand the
+      // user on a page whose nav still says "account".
+      window.location.assign("/");
     }
   });
 </script>

@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.9",
+    "@playwright/test": "^1.61.0",
     "@types/react": "^19.2.6",
     "@types/react-dom": "^19.2.3",
     "typescript": "^6.0.2"
@@ -30,6 +31,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "typecheck": "astro check",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "deploy": "astro build && wrangler deploy",
     "migrate:prod": "wrangler d1 migrations apply embody --remote"
   }

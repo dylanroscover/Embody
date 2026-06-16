@@ -116,12 +116,9 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             <span class="nav-item__desc">Why TouchDesigner should be transparent and diffable.</span>
           </a>
           <a class="navbar__item navbar__item--github" href="https://github.com/dylanroscover/Embody" aria-label="GitHub repository">
-            <span class="navbar__github-row">
-              <svg class="navbar__github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.66 7.66 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-              </svg>
-              <span class="navbar__stars" data-gh-stars hidden></span>
-            </span>
+            <svg class="navbar__github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.66 7.66 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
           </a>
           <!-- Desktop overflow control. Hidden by default; the measure script
                shows it only when items must collapse into it (in-between widths,
@@ -248,47 +245,6 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
           }
         });
       }
-    </script>
-    <script>
-      // GitHub star count: fetch once, cache in localStorage for 6h, and fill
-      // the pill beside the GitHub icon. On any failure the pill stays hidden,
-      // so the item degrades to the icon alone (see .navbar__stars[hidden]).
-      (async () => {
-        const el = document.querySelector("[data-gh-stars]");
-        if (!(el instanceof HTMLElement)) return;
-        const link = el.closest("a");
-        const REPO = "dylanroscover/Embody";
-        const KEY = "gh-stars:" + REPO;
-        const fmt = (n: number) =>
-          n >= 1000
-            ? (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, "") + "k"
-            : String(n);
-        const show = (n: number) => {
-          el.textContent = fmt(n);
-          el.hidden = false;
-          if (link) link.setAttribute("aria-label", `GitHub repository, ${fmt(n)} stars`);
-        };
-        try {
-          const c = JSON.parse(localStorage.getItem(KEY) || "null");
-          if (c && Date.now() - c.t < 6 * 3600 * 1000) {
-            show(c.n);
-            return;
-          }
-        } catch {}
-        try {
-          const r = await fetch("https://api.github.com/repos/" + REPO, {
-            headers: { Accept: "application/vnd.github+json" },
-          });
-          if (!r.ok) return;
-          const d = (await r.json()) as { stargazers_count?: number };
-          if (typeof d.stargazers_count === "number") {
-            show(d.stargazers_count);
-            try {
-              localStorage.setItem(KEY, JSON.stringify({ n: d.stargazers_count, t: Date.now() }));
-            } catch {}
-          }
-        } catch {}
-      })();
     </script>
     <script>
       // Desktop overflow ("...") for the inline nav bar. When the viewport is

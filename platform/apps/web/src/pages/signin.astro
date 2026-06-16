@@ -24,14 +24,20 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
 >
   <section class="page-section auth">
     <p class="eyebrow">Account</p>
-    <h1 id="auth-heading">sign in</h1>
-    <p class="lede">
-      Create an account or sign in to submit Specimens and react to the networks
-      you love. It's completely free, and the Collection stays fully browsable
-      without an account.
-    </p>
+    <div class="auth-layout">
+      <div class="auth-intro">
+        <h1 id="auth-heading">sign in</h1>
+        <p class="lede">
+          Create an account or sign in to submit Specimens and react to the
+          networks you love. It's completely free, and the Collection stays
+          fully browsable without an account.
+        </p>
+        <p class="auth-back">
+          <a href="/collection">Browse the Collection instead</a>
+        </p>
+      </div>
 
-    <div class="auth-card" data-next={nextPath}>
+      <div class="auth-card" data-next={nextPath}>
       <div class="auth-toggle" role="tablist" aria-label="Sign in or register">
         <button type="button" class="auth-toggle__btn is-active" data-mode="signin" role="tab" aria-selected="true">
           sign in
@@ -54,7 +60,7 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
         </label>
         <label class="auth-field">
           <span>password</span>
-          <input type="password" name="password" autocomplete="current-password" required minlength="8" placeholder="At least 8 characters" />
+          <input type="password" name="password" autocomplete="current-password" required minlength="8" placeholder="" />
         </label>
         <button type="submit" class="btn btn--primary auth-submit" data-auth-submit>
           sign in
@@ -73,11 +79,8 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
           </button>
         </>
       )}
+      </div>
     </div>
-
-    <p class="auth-back">
-      <a href="/collection">Browse the Collection instead</a>
-    </p>
   </section>
 </Base>
 
@@ -130,6 +133,9 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
     if (submitBtn) submitBtn.textContent = next === "register" ? "create account" : "sign in";
     if (passwordInput) {
       passwordInput.autocomplete = next === "register" ? "new-password" : "current-password";
+      // "At least 8 characters" is a new-password hint -- only show it when
+      // registering. Signing in, the field is blank (you know your password).
+      passwordInput.placeholder = next === "register" ? "At least 8 characters" : "";
     }
   }
 
@@ -210,9 +216,31 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
     padding-bottom: 56px;
   }
 
+  /* Two-column: intro copy on the left, form panel on the right. Fills the
+     empty right half so the page reads as a balanced, intentional composition.
+     The eyebrow lives ABOVE this grid (at section-top, matching every other
+     page); the grid's first rows -- the h1 and the panel -- top-align, so the
+     panel anchors to the "sign in" heading. Collapses to one column below 860px. */
+  .auth-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    align-items: start;
+  }
+
+  .auth-intro {
+    max-width: 32rem;
+  }
+
+  @media (min-width: 860px) {
+    .auth-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 27rem);
+      gap: clamp(3rem, 7vw, 6rem);
+    }
+  }
+
   .auth-card {
-    margin-top: 2rem;
-    max-width: 30rem;
+    width: 100%;
     padding: 1.75rem;
     background: var(--bg-elevated);
     border: 1px solid var(--border);
@@ -258,6 +286,13 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
+  }
+
+  /* `.auth-field { display: flex }` outranks the UA `[hidden] { display: none }`
+     (equal specificity, author wins), so the name field leaked into sign-in mode
+     despite its `hidden` attribute. Restore the intended hide. */
+  .auth-field[hidden] {
+    display: none;
   }
 
   .auth-field > span {
@@ -340,7 +375,7 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
   }
 
   .auth-back {
-    margin-top: 2rem;
+    margin-top: 1.5rem;
   }
 
   .auth-back a {
