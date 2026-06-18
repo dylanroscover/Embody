@@ -650,6 +650,165 @@ export async function insertSpecimenWithVersion(
   return { slug };
 }
 
+// Editable fields + ownership keys for a specimen, by slug. Backs BOTH the
+// owner-only edit form (prefill) and the edit/delete API ownership check
+// (authorId vs the signed-in user's id). license is included here because the
+// shared SUMMARY_COLUMNS set omits it.
+export interface SpecimenEditData {
+  id: string;
+  authorId: string;
+  authorHandle: string;
+  slug: string;
+  title: string;
+  description: string;
+  tags: string[];
+  license: string;
+  difficulty: string;
+  category: string;
+  requires: string;
+}
+
+export async function getSpecimenForEdit(
+  db: D1Database,
+  slug: string
+): Promise<SpecimenEditData | null> {
+  const row = await db
+    .prepare(
+      `SELECT s.id, s.author_id, u.handle AS author_handle, s.slug, s.title,
+              s.description, s.license, s.difficulty, s.category, s.requires,
+              (SELECT GROUP_CONCAT(t.name, char(31))
+                 FROM specimen_tags st
+                 JOIN tags t ON t.id = st.tag_id
+                WHERE st.specimen_id = s.id) AS tag_names
+         FROM specimens s
+         JOIN users_profile u ON u.id = s.author_id
+        WHERE s.slug = ? AND s.visibility = 'public'
+        LIMIT 1`
+    )
+    .bind(slug)
+    .first<{
+      id: string;
+      author_id: string;
+      author_handle: string;
+      slug: string;
+      title: string;
+      description: string | null;
+      license: string;
+      difficulty: string;
+      category: string;
+      requires: string;
+      tag_names: string | null;
+    }>();
+
+  if (!row) return null;
+
+  const TAG_SEP = String.fromCharCode(31);
+  return {
+    id: row.id,
+    authorId: row.author_id,
+    authorHandle: row.author_handle,
+    slug: row.slug,
+    title: row.title,
+    description: row.description ?? "",
+    license: row.license,
+    difficulty: row.difficulty,
+    category: row.category,
+    requires: row.requires,
+    tags: row.tag_names ? row.tag_names.split(TAG_SEP).filter(Boolean) : []
+  };
+}
+
+// Owner edit of a specimen's METADATA (title/description/tags/license/
+// difficulty/category/requires). The TDN body is NOT touched here -- changing
+// the network would require a re-scan + a new specimen_versions row, which is a
+// separate "new version" path. parsedTdn (the unchanged current network) is
+// passed only so the FTS mirror's dat_text is preserved on re-sync: syncSpecimensFts
+// does INSERT OR REPLACE on the whole row, so omitting dat_text would wipe it.
+export async function updateSpecimenMetadata(
+  db: D1Database,
+  input: {
+    specimenId: string;
+    slug: string;
+    authorHandle: string;
+    title: string;
+    description: string;
+    tags: string[];
+    license: string;
+    difficulty?: string;
+    category?: string;
+    requires?: string;
+    parsedTdn?: Record<string, unknown> | null;
+  }
+): Promise<void> {
+  const tags = normalizeTags(input.tags);
+  const title = input.title.trim();
+  const description = input.description.trim();
+  const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
+  const difficulty = normalizeDifficulty(input.difficulty ?? "intermediate");
+  const requires = (input.requires ?? "").trim() || "none";
+  const license = input.license.trim() || "CC-BY-4.0";
+
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare(
+        `UPDATE specimens
+            SET title = ?, description = ?, category = ?, difficulty = ?,
+                requires = ?, license = ?, updated_at = datetime('now')
+          WHERE id = ?`
+      )
+      .bind(title, description, category, difficulty, requires, license, input.specimenId),
+    // Tags are a full replace: drop the existing links, re-add the new set.
+    db.prepare("DELETE FROM specimen_tags WHERE specimen_id = ?").bind(input.specimenId)
+  ];
+
+  for (const tag of tags) {
+    statements.push(
+      db
+        .prepare("INSERT OR IGNORE INTO tags (id, name, slug) VALUES (?, ?, ?)")
+        .bind(`tag-${tag.slug}`, tag.name, tag.slug),
+      db
+        .prepare("INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES (?, ?)")
+        .bind(input.specimenId, `tag-${tag.slug}`)
+    );
+  }
+
+  await db.batch(statements);
+
+  // Re-sync the FTS mirror with the new metadata (see db.ts:692 TODO note).
+  await syncSpecimensFts(db, {
+    specimenId: input.specimenId,
+    slug: input.slug,
+    title,
+    description,
+    tags: tags.map((tag) => tag.name),
+    authorHandle: input.authorHandle,
+    datText: input.parsedTdn ? extractDatText(input.parsedTdn) : ""
+  });
+}
+
+// Hard-delete a specimen and every row that references it. FK order matters:
+// scans -> specimen_versions -> (tags/likes/comments/reports/reactions) -> the
+// specimen itself. The final delete fires the AFTER DELETE trigger from
+// migration 0005, which removes the contentless-delete FTS mirror row by rowid.
+// Runs as a single D1 batch (atomic transaction).
+export async function deleteSpecimenById(db: D1Database, specimenId: string): Promise<void> {
+  await db.batch([
+    db
+      .prepare(
+        `DELETE FROM scans
+          WHERE version_id IN (SELECT id FROM specimen_versions WHERE specimen_id = ?)`
+      )
+      .bind(specimenId),
+    db.prepare("DELETE FROM specimen_versions WHERE specimen_id = ?").bind(specimenId),
+    db.prepare("DELETE FROM specimen_tags WHERE specimen_id = ?").bind(specimenId),
+    db.prepare("DELETE FROM likes WHERE specimen_id = ?").bind(specimenId),
+    db.prepare("DELETE FROM comments WHERE specimen_id = ?").bind(specimenId),
+    db.prepare("DELETE FROM reports WHERE specimen_id = ?").bind(specimenId),
+    db.prepare("DELETE FROM reactions WHERE specimen_id = ?").bind(specimenId),
+    db.prepare("DELETE FROM specimens WHERE id = ?").bind(specimenId)
+  ]);
+}
+
 export async function searchSpecimensFts(
   db: D1Database,
   q: string,

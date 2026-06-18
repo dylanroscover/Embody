@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: null
-generator: Embody/6.0.15
+build: 3
+generator: Embody/6.0.34
 td_build: 099.2025.32820
-source_file: Embody-6.15.toe
-exported_at: '2026-06-11T03:24:04Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:34Z'
 network_path: /specimen_lab/noise_terrain
 options:
   include_dat_content: true
@@ -17,11 +17,14 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
   mergePOP:
     flags:
     - viewer
@@ -295,7 +298,7 @@ custom_pars:
     style: Float
     label: Sun Azimuth
     startSection: true
-    default: -41.6335393366
+    default: -41.6335
     min: -180.0
     max: 180.0
     normMin: -180.0
@@ -304,7 +307,7 @@ custom_pars:
   - name: Sundirel
     style: Float
     label: Sun Elevation
-    default: 49.3007177907
+    default: 49.3007
     max: 90.0
     clampMin: true
     clampMax: true
@@ -336,9 +339,30 @@ custom_pars:
     clampMin: true
     normMax: 100.0
     help: Random seed for the terrain shape. Each value produces a completely different but equally plausible mountain. The three noise layers receive this value plus a fixed per-layer offset (+0, +1, +2) so they stay decorrelated. Default 1 reproduces the shipped seeds 1 / 2 / 3.
-flags:
-- viewer
-color: [0.67, 0.67, 0.67]
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
 operators:
 - name: cam
   type: cameraCOMP
@@ -350,7 +374,9 @@ operators:
   - display
   position: [500, -330]
   size: [160, 130]
-  color: [0.67, 0.67, 0.67]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   children:
   - name: file1
     type: fileinPOP
@@ -369,7 +395,9 @@ operators:
   - display
   - render
   size: [160, 130]
-  color: [0.67, 0.67, 0.67]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   children:
   - name: null_geo
     type: nullPOP
@@ -430,6 +458,8 @@ operators:
     dat_read_only: true
   - name: glsl_terrain_compute
     type: textDAT
+    parameters:
+      file: specimen_lab/noise_terrain/geo/glsl_terrain_compute.glsl
     position: [335, -120]
     dock: glsl_terrain
     dat_content: |-
@@ -477,7 +507,6 @@ operators:
     label: =me.name
   flags:
   - display
-  - viewer
   position: [1700, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
@@ -495,7 +524,9 @@ operators:
   - display
   position: [500, -580]
   size: [160, 130]
-  color: [0.67, 0.67, 0.67]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   children:
   - name: copy1
     type: copyPOP
@@ -795,8 +826,8 @@ operators:
     pixeldat: glsl_sky_pixel
     computedat: glsl_sky_compute
     outputresolution: custom
-    resolutionw: 1024
-    resolutionh: 439
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
   flags:
   - viewer
   position: [900, -330]
@@ -911,8 +942,8 @@ operators:
     geometry: geo
     lights: light
     antialias: aa2
-    resolutionw: 1024
-    resolutionh: 439
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
   flags:
   - viewer
   position: [500, 0]
@@ -928,6 +959,7 @@ operators:
 - name: glsl_sky_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/noise_terrain/glsl_sky_pixel.glsl
     extension: frag
   position: [1050, -450]
   dock: glsl_sky
@@ -956,6 +988,7 @@ operators:
 - name: glsl_snow_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/noise_terrain/glsl_snow_pixel.glsl
     extension: frag
   position: [0, -450]
   dock: glsl_snow
@@ -1008,11 +1041,14 @@ operators:
   dat_content_format: text
 - name: glsl_sky_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_sky_compute.glsl
   position: [750, -450]
   dock: glsl_sky
 - name: glsl_snow_vertex
   type: textDAT
   parameters:
+    file: specimen_lab/noise_terrain/glsl_snow_vertex.glsl
     extension: vert
   position: [150, -450]
   dock: glsl_snow

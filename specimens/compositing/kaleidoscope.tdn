@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: null
-generator: Embody/6.0.15
+build: 3
+generator: Embody/6.0.34
 td_build: 099.2025.32820
-source_file: Embody-6.15.toe
-exported_at: '2026-06-11T03:24:06Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:34Z'
 network_path: /specimen_lab/kaleidoscope
 options:
   include_dat_content: true
@@ -29,11 +29,14 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 par_templates:
   about:
   - default: '1.0'
@@ -268,7 +271,30 @@ custom_pars:
     - Demo (built-in)
     - External input
     help: Demo = built-in animated source. External = kaleidoscope whatever TOP is wired into this COMP.
-color: [0.67, 0.67, 0.67]
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
 operators:
 - name: in1
   type: inTOP
@@ -280,8 +306,6 @@ operators:
   type: outTOP
   parameters:
     label: =me.name
-  flags:
-  - viewer
   position: [1700, -150]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
@@ -341,8 +365,8 @@ operators:
     pixeldat: glsl_source_pixel
     computedat: glsl_source_compute
     outputresolution: custom
-    resolutionw: 1280
-    resolutionh: 1280
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
   sequences:
     vec:
     - name: uPal
@@ -390,6 +414,7 @@ operators:
 - name: glsl_source_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/kaleidoscope/glsl_source_pixel.glsl
     extension: frag
   position: [150, -420]
   dock: glsl_source
@@ -412,6 +437,7 @@ operators:
 - name: glsl_kaleido_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/kaleidoscope/glsl_kaleido_pixel.glsl
     extension: frag
   position: [1450, -270]
   dock: glsl_kaleido
@@ -421,7 +447,9 @@ operators:
     const float PI=3.14159265;
     void main(){
         float t = uParams.w;
+        float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;   // width/height
         vec2 uv = vUV.st - 0.5;
+        uv.x *= aspect;                                             // square the polar space -> no skew at any aspect ratio
         float segs = max(2.0, uParams.x);
         float rot  = uParams.y + t*0.06;
         float zoom = max(0.1, uParams.z) * (1.0 + 0.10*sin(t*0.20));
@@ -440,10 +468,14 @@ operators:
   dat_content_format: text
 - name: glsl_source_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/kaleidoscope/glsl_source_compute.glsl
   position: [-150, -420]
   dock: glsl_source
 - name: glsl_kaleido_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/kaleidoscope/glsl_kaleido_compute.glsl
   position: [1150, -270]
   dock: glsl_kaleido
 annotations:

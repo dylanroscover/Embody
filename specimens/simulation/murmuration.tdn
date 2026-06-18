@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: null
-generator: Embody/6.0.16
+build: 3
+generator: Embody/6.0.34
 td_build: 099.2025.32820
-source_file: Embody-6.16.toe
-exported_at: '2026-06-12T00:27:58Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:34Z'
 network_path: /specimen_lab/murmuration
 options:
   include_dat_content: true
@@ -29,11 +29,14 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 par_templates:
   about:
   - default: '1.0'
@@ -299,15 +302,36 @@ custom_pars:
     clampMin: true
     normMax: 8000.0
     help: Particles born per second.
-color: [0.67, 0.67, 0.67]
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
 operators:
 - name: out1
   type: outTOP
   parameters:
     label: =me.name
-  flags:
-  - viewer
-  position: [2900, 0]
+  position: [4800, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   inputs:
@@ -317,7 +341,7 @@ operators:
   flags:
   - display
   - render
-  position: [1400, 0]
+  position: [2400, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   inputs:
@@ -396,7 +420,7 @@ operators:
   palette_clone: true
 - name: bloom_glow
   type: bloomTOP
-  position: [2600, 0]
+  position: [4200, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   inputs:
@@ -414,7 +438,7 @@ operators:
       value2: 1
     - customname: PointScale
       value0: 1
-  position: [2000, 0]
+  position: [3000, 0]
   inputs:
   - null_sim
 - name: glsl_flock
@@ -441,7 +465,7 @@ operators:
       valuey: =0.3 + math.sin(absTime.seconds*0.09*parent().par.Morphspeed.eval())*1.1
       valuez: =math.cos(absTime.seconds*0.13*parent().par.Morphspeed.eval())*1.8 + math.cos(absTime.seconds*0.051*parent().par.Morphspeed.eval())*0.9
       valuew: =parent().par.Spiral.eval()
-  position: [1100, 0]
+  position: [1800, 0]
   inputs:
   - neighbor_analysis
 - name: mat_sprite
@@ -454,7 +478,7 @@ operators:
     destblend: one
     depthtest: false
     depthwriting: false
-  position: [2300, -230]
+  position: [600, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
 - name: sprite_dot
@@ -465,7 +489,7 @@ operators:
     outputresolution: custom
     resolutionw: 64
     resolutionh: 64
-  position: [2140, -230]
+  position: [0, -320]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
 - name: particle_pop
@@ -475,7 +499,7 @@ operators:
     maxparticles: =parent().par.Maxparticles.eval()
     birthrate: =parent().par.Birthrate.eval()
     life: 8
-  position: [300, 0]
+  position: [600, -320]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   inputs:
@@ -491,7 +515,9 @@ operators:
     pop: glsl_color
     materialsource: matnode
     mat: mat_sprite
-  position: [2300, 0]
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  position: [3600, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
 - name: source_points
@@ -502,28 +528,29 @@ operators:
   type: infoDAT
   parameters:
     op: glsl_color
-  position: [2110, -170]
+  position: [3000, -120]
   dock: glsl_color
   dat_read_only: true
 - name: glsl_flock_info
   type: infoDAT
   parameters:
     op: glsl_flock
-  position: [1210, -170]
+  position: [1800, -120]
   dock: glsl_flock
   dat_read_only: true
 - name: sprite_dot_info
   type: infoDAT
   parameters:
     op: sprite_dot
-  position: [2260, -400]
+  position: [0, -440]
   dock: sprite_dot
   dat_read_only: true
 - name: sprite_dot_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/murmuration/sprite_dot_pixel.glsl
     extension: frag
-  position: [2130, -400]
+  position: [150, -440]
   dock: sprite_dot
   dat_content: |-
     out vec4 fragColor;
@@ -543,14 +570,16 @@ operators:
     maxnebrsavg: 16
     incquerypt: false
     addprefix: true
-  position: [800, 0]
+  position: [1200, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   inputs:
   - particle_pop
 - name: glsl_color_compute
   type: textDAT
-  position: [1940, -170]
+  parameters:
+    file: specimen_lab/murmuration/glsl_color_compute.glsl
+  position: [3150, -120]
   dock: glsl_color
   dat_content: |
     // Murmuration - speed -> dusk color ramp + point size (render side branch)
@@ -572,7 +601,9 @@ operators:
   dat_content_format: text
 - name: glsl_flock_compute
   type: textDAT
-  position: [1040, -170]
+  parameters:
+    file: specimen_lab/murmuration/glsl_flock_compute.glsl
+  position: [1950, -120]
   dock: glsl_flock
   dat_content: |
     // Murmuration - GPU flocking compute (GLSL POP), TRUE per-neighbor Reynolds.
@@ -666,7 +697,9 @@ operators:
   dat_content_format: text
 - name: sprite_dot_compute
   type: textDAT
-  position: [2000, -400]
+  parameters:
+    file: specimen_lab/murmuration/sprite_dot_compute.glsl
+  position: [300, -440]
   dock: sprite_dot
 annotations:
 - name: annotate1

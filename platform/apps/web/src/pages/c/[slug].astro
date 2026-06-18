@@ -29,6 +29,7 @@ type DisplaySpecimen = {
   key_ops: string[];
   current_version?: number;
   reactions: Record<string, number>;
+  author_handle: string;
 };
 
 const fallback = firstFixtureSpecimen();
@@ -52,6 +53,9 @@ try {
 // silently and the button renders in its anonymous default state.
 const sessionUser = Astro.locals.user;
 const isSignedIn = Boolean(sessionUser);
+// Owner-only controls (edit/delete). Gated by handle for the UI; the API
+// re-checks by author_id, so this is presentation only, never the auth boundary.
+const isOwner = isSignedIn && sessionUser?.handle === specimen.author_handle;
 const signInHref = `/signin?next=${encodeURIComponent(`/c/${specimen.slug}`)}`;
 
 let myReactions: string[] = [];
@@ -100,7 +104,8 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     requires: fixture.requires,
     operator_count: fixture.operator_count,
     key_ops: fixture.key_ops,
-    reactions: {}
+    reactions: {},
+    author_handle: fixture.author_handle
   };
 }
 
@@ -123,7 +128,8 @@ function specimenFromLive(
     operator_count: live.op_count,
     key_ops: authored?.key_ops ?? [],
     current_version: live.current_version,
-    reactions: live.reactions ?? {}
+    reactions: live.reactions ?? {},
+    author_handle: live.author_handle
   };
 }
 
@@ -307,6 +313,17 @@ function emitKey(key: string): string {
       )}
       <span class="engagement-status" data-engagement-status role="status" aria-live="polite"></span>
     </div>
+
+    {isOwner && (
+      <div class="owner-actions" data-owner-actions data-slug={specimen.slug} data-owner-handle={specimen.author_handle}>
+        <span class="owner-actions__label">you own this specimen</span>
+        <a class="owner-actions__btn" href={`/c/${specimen.slug}/edit`}>edit</a>
+        <button type="button" class="owner-actions__btn owner-actions__btn--danger" data-delete-specimen>
+          delete
+        </button>
+        <span class="owner-actions__status" data-delete-status role="status" aria-live="polite"></span>
+      </div>
+    )}
   </section>
 
   <script
@@ -377,6 +394,50 @@ function emitKey(key: string): string {
     }
   </script>
 
+  <script>
+    // Owner-only delete. Confirms, calls DELETE /api/specimens/:slug, then sends
+    // the owner to their profile. The API re-checks ownership by author_id.
+    const ownerActions = document.querySelector("[data-owner-actions]") as HTMLElement | null;
+    const deleteBtn = ownerActions?.querySelector("[data-delete-specimen]") as HTMLButtonElement | null;
+    if (ownerActions && deleteBtn) {
+      const slug = ownerActions.dataset.slug ?? "";
+      const handle = ownerActions.dataset.ownerHandle ?? "";
+      const statusEl = ownerActions.querySelector("[data-delete-status]") as HTMLElement | null;
+      const setStatus = (message: string) => {
+        if (statusEl) statusEl.textContent = message;
+      };
+
+      deleteBtn.addEventListener("click", async () => {
+        if (deleteBtn.disabled) return;
+        const ok = window.confirm(
+          "Delete this specimen permanently? This removes it from the Collection and cannot be undone."
+        );
+        if (!ok) return;
+
+        deleteBtn.disabled = true;
+        setStatus("Deleting...");
+        try {
+          const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}`, {
+            method: "DELETE"
+          });
+          if (res.status === 401) {
+            window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
+            return;
+          }
+          if (!res.ok) {
+            setStatus("Could not delete this specimen. Please try again.");
+            deleteBtn.disabled = false;
+            return;
+          }
+          window.location.assign(handle ? `/u/${handle}` : "/collection");
+        } catch {
+          setStatus("Could not delete this specimen. Please try again.");
+          deleteBtn.disabled = false;
+        }
+      });
+    }
+  </script>
+
   <section class="page-section tight specimen-layout">
     <div class="viewer-panel pillar">
       <div class="panel-head">
@@ -426,6 +487,53 @@ function emitKey(key: string): string {
     align-items: center;
     gap: 14px;
     margin-top: 22px;
+  }
+
+  .owner-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-faint);
+  }
+
+  .owner-actions__label {
+    color: var(--text-faint);
+    font: 600 12px/1 var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .owner-actions__btn {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    padding: 0.4rem 0.85rem;
+    color: var(--text);
+    font: 600 12px/1 var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+
+  .owner-actions__btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .owner-actions__btn--danger:hover {
+    border-color: #d65555;
+    color: #ff9b9b;
+    background: rgba(220, 80, 80, 0.12);
+  }
+
+  .owner-actions__status {
+    color: var(--text-faint);
+    font: 500 12px/1 var(--font-mono);
   }
 
   .report-link {

@@ -1,0 +1,171 @@
+---
+import { env } from "cloudflare:workers";
+import { SUBMIT_CATEGORIES, SUBMIT_DIFFICULTIES, SUBMIT_REQUIRES } from "@embody/contracts";
+import Base from "../../../layouts/Base.astro";
+import { getSpecimenForEdit } from "../../../server/db";
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? "";
+
+// Real session gate: unauthenticated visitors go to sign-in and bounce back.
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect(`/signin?next=${encodeURIComponent(`/c/${slug}/edit`)}`);
+}
+
+const specimen = await getSpecimenForEdit(env.DB, slug);
+if (!specimen) {
+  return Astro.redirect("/collection");
+}
+
+// Ownership is by author_id (the authoritative key). Non-owners are bounced to
+// the read-only specimen page. The API enforces this again on PUT.
+if (specimen.authorId !== user.id) {
+  return Astro.redirect(`/c/${slug}`);
+}
+
+const difficultyOptions = SUBMIT_DIFFICULTIES;
+const categoryOptions = SUBMIT_CATEGORIES;
+const requiresOptions = SUBMIT_REQUIRES;
+const tagsValue = specimen.tags.join(", ");
+---
+
+<Base
+  title={`Edit ${specimen.title} - embody.tools`}
+  description={`Edit your specimen "${specimen.title}".`}
+>
+  <section class="page-section submit">
+    <p class="eyebrow">Edit specimen</p>
+    <h1>edit {specimen.title}</h1>
+    <p class="lede">
+      Update your specimen's details. The network itself (the TDN) is not editable
+      here -- to change the network, submit a new specimen.
+    </p>
+
+    <p class="submit-status" data-edit-status hidden role="status"></p>
+
+    <form class="submit-form" data-edit-form data-slug={specimen.slug} novalidate>
+      <label class="submit-field">
+        <span>title</span>
+        <input type="text" name="title" required maxlength="160" value={specimen.title} />
+      </label>
+      <label class="submit-field">
+        <span>description</span>
+        <textarea name="description" rows="3" maxlength="4000">{specimen.description}</textarea>
+      </label>
+      <label class="submit-field">
+        <span>tags <em>(comma separated)</em></span>
+        <input type="text" name="tags" value={tagsValue} placeholder="feedback, generative, TOP" />
+      </label>
+      <label class="submit-field">
+        <span>difficulty</span>
+        <select name="difficulty" class="submit-select">
+          {difficultyOptions.map((value) => (
+            <option value={value} selected={value === specimen.difficulty}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <label class="submit-field">
+        <span>category</span>
+        <select name="category" class="submit-select">
+          {categoryOptions.map((value) => (
+            <option value={value} selected={value === specimen.category}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <label class="submit-field">
+        <span>requires</span>
+        <select name="requires" class="submit-select">
+          {requiresOptions.map((value) => (
+            <option value={value} selected={value === specimen.requires}>{value}</option>
+          ))}
+        </select>
+      </label>
+      <label class="submit-field">
+        <span>license</span>
+        <input type="text" name="license" value={specimen.license} maxlength="80" />
+      </label>
+      <button type="submit" class="btn btn--primary submit-go" data-edit-go>
+        save changes
+      </button>
+    </form>
+
+    <p class="submit-back">
+      <a href={`/c/${specimen.slug}`}>Cancel and return to the specimen</a>
+    </p>
+  </section>
+</Base>
+
+<script>
+  // Owner metadata edit. PUTs the form to /api/specimens/:slug; on success
+  // returns to the specimen page. The TDN body is not part of this form.
+  const form = document.querySelector("[data-edit-form]") as HTMLFormElement | null;
+  const statusBox = document.querySelector("[data-edit-status]") as HTMLElement | null;
+  const goBtn = document.querySelector("[data-edit-go]") as HTMLButtonElement | null;
+
+  function setStatus(message: string, kind: "pending" | "ok" | "error") {
+    if (!statusBox) return;
+    statusBox.textContent = message;
+    statusBox.dataset.kind = kind;
+    statusBox.hidden = false;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!goBtn || !form) return;
+    const slug = form.dataset.slug ?? "";
+    const data = new FormData(form);
+
+    const title = String(data.get("title") || "").trim();
+    if (!title) {
+      setStatus("A title is required.", "error");
+      return;
+    }
+
+    const tags = String(data.get("tags") || "")
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+
+    const payload = {
+      title,
+      description: String(data.get("description") || "").trim(),
+      tags,
+      license: String(data.get("license") || "CC-BY-4.0").trim() || "CC-BY-4.0",
+      difficulty: String(data.get("difficulty") || "intermediate"),
+      category: String(data.get("category") || ""),
+      requires: String(data.get("requires") || "none")
+    };
+
+    goBtn.disabled = true;
+    const original = goBtn.textContent;
+    goBtn.textContent = "saving...";
+    setStatus("Saving changes...", "pending");
+
+    try {
+      const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const body = (await res.json().catch(() => ({}))) as { detail?: string; error?: string };
+      if (res.status === 401) {
+        window.location.assign(`/signin?next=${encodeURIComponent(`/c/${slug}/edit`)}`);
+        return;
+      }
+      if (!res.ok) {
+        setStatus(body.detail || body.error || `Update failed (${res.status}).`, "error");
+        goBtn.disabled = false;
+        goBtn.textContent = original;
+        return;
+      }
+      setStatus("Saved. Returning to your specimen...", "ok");
+      window.location.assign(`/c/${slug}`);
+    } catch {
+      setStatus("Something went wrong. Please try again.", "error");
+      goBtn.disabled = false;
+      goBtn.textContent = original;
+    }
+  });
+</script>

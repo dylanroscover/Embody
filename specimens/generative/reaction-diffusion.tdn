@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: null
-generator: Embody/6.0.15
+build: 3
+generator: Embody/6.0.34
 td_build: 099.2025.32820
-source_file: Embody-6.15.toe
-exported_at: '2026-06-11T03:24:07Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:34Z'
 network_path: /specimen_lab/reaction_diffusion
 options:
   include_dat_content: true
@@ -29,11 +29,14 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 par_templates:
   about:
   - default: '1.0'
@@ -219,13 +222,50 @@ par_templates:
     startSection: true
     style: Float
 type: baseCOMP
-color: [0.67, 0.67, 0.67]
+custom_pars:
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Output width (px), 4K. The reaction sim stays bounded 16:9; out1 upscales to this.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Output height (px), 4K.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
 operators:
 - name: out1
   type: outTOP
   parameters:
     label: =me.name
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
   position: [2750, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - res_up
+- name: res_up
+  type: resolutionTOP
+  parameters:
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  position: [2500, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   inputs:
@@ -308,8 +348,8 @@ operators:
     pixeldat: glsl_seed_pixel
     computedat: seed_compute
     outputresolution: custom
-    resolutionw: 512
-    resolutionh: 512
+    resolutionw: 1280
+    resolutionh: 720
     format: rgba32float
 - name: glsl_rd_step
   type: glslTOP
@@ -317,8 +357,8 @@ operators:
     pixeldat: glsl_rd_step_pixel
     computedat: rd_step_compute
     outputresolution: custom
-    resolutionw: 512
-    resolutionh: 512
+    resolutionw: 1280
+    resolutionh: 720
     format: rgba32float
   position: [1200, 0]
   inputs:
@@ -353,6 +393,7 @@ operators:
 - name: glsl_seed_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/reaction_diffusion/glsl_seed_pixel.glsl
     extension: frag
   position: [150, -120]
   dock: glsl_seed
@@ -379,6 +420,8 @@ operators:
   dat_read_only: true
 - name: glsl_seed_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_seed_compute.glsl
   position: [-150, -120]
   dock: glsl_seed
 - name: glsl_colorize_info
@@ -391,6 +434,7 @@ operators:
 - name: glsl_rd_step_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/reaction_diffusion/glsl_rd_step_pixel.glsl
     extension: frag
   position: [1350, -120]
   dock: glsl_rd_step
@@ -424,6 +468,7 @@ operators:
 - name: glsl_colorize_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/reaction_diffusion/glsl_colorize_pixel.glsl
     extension: frag
   position: [2400, -120]
   dock: glsl_colorize
@@ -445,10 +490,14 @@ operators:
   dat_content_format: text
 - name: glsl_rd_step_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_rd_step_compute.glsl
   position: [1050, -120]
   dock: glsl_rd_step
 - name: glsl_colorize_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_colorize_compute.glsl
   position: [2100, -120]
   dock: glsl_colorize
 annotations:

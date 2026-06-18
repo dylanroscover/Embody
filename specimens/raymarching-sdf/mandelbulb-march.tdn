@@ -1,18 +1,23 @@
 format: tdn
 version: '2.0'
 build: null
-generator: Embody/6.0.26
+generator: Embody/6.0.34
 td_build: 099.2025.32820
-source_file: Embody-6.26.toe
-exported_at: '2026-06-13T16:55:40Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:34Z'
 network_path: /specimen_lab/mandelbulb_march
 options:
   include_dat_content: true
   include_storage: true
 type_defaults:
   textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 type: baseCOMP
 custom_pars:
   Mandelbulb:
@@ -81,6 +86,27 @@ custom_pars:
     normMin: -10.0
     normMax: 90.0
     help: Elevation (degrees) of the key light. High = top-down soft light with short shadows; low = dramatic raking light with long soft shadows.
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
 color: [0.67, 0.67, 0.67]
 operators:
 - name: out1
@@ -88,7 +114,7 @@ operators:
   parameters:
     label: =me.name
   flags:
-  - viewer
+  - display
   position: [800, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
@@ -305,8 +331,8 @@ operators:
     pixeldat: glsl_mandelbulb_pixel
     computedat: glsl_mandelbulb_compute
     outputresolution: custom
-    resolutionw: 768
-    resolutionh: 768
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
     format: rgba16float
   sequences:
     vec:
@@ -337,6 +363,7 @@ operators:
 - name: glsl_mandelbulb_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/mandelbulb_march/glsl_mandelbulb_pixel.glsl
     extension: frag
   position: [550, -120]
   dock: glsl_mandelbulb
@@ -477,7 +504,7 @@ operators:
 - name: glsl_mandelbulb_compute
   type: textDAT
   parameters:
-    language: glsl
+    file: specimen_lab/mandelbulb_march/glsl_mandelbulb_compute.glsl
   flags:
   - viewer
   position: [250, -120]

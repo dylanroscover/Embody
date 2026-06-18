@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: null
-generator: Embody/6.0.26
+generator: Embody/6.0.34
 td_build: 099.2025.32820
-source_file: Embody-6.26.toe
-exported_at: '2026-06-13T15:59:04Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:34Z'
 network_path: /specimen_lab/plasma_interference
 options:
   include_dat_content: true
@@ -12,11 +12,14 @@ options:
 type_defaults:
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 type: baseCOMP
 custom_pars:
   Plasma:
@@ -69,6 +72,27 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: Palette saturation/contrast (onto a 0.6 base in the shader). Low = pastel; high = punchy neon.
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
 color: [0.67, 0.67, 0.67]
 operators:
 - name: out1
@@ -76,7 +100,7 @@ operators:
   parameters:
     label: =me.name
   flags:
-  - viewer
+  - display
   position: [800, 0]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
@@ -293,8 +317,8 @@ operators:
     pixeldat: glsl_plasma_pixel
     computedat: glsl_plasma_compute
     outputresolution: custom
-    resolutionw: 1280
-    resolutionh: 720
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
   sequences:
     vec:
     - name: uParams
@@ -324,6 +348,7 @@ operators:
 - name: glsl_plasma_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/plasma_interference/glsl_plasma_pixel.glsl
     extension: frag
   position: [400, -150]
   dock: glsl_plasma
@@ -392,6 +417,8 @@ operators:
   dat_content_format: text
 - name: glsl_plasma_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/plasma_interference/glsl_plasma_compute.glsl
   position: [250, -150]
   dock: glsl_plasma
 annotations:

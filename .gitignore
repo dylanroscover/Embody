@@ -46,3 +46,6 @@ dev/TDPyEnvManagerContext.yaml
 
 # One-off diagnostic dumps from users -- don't commit other people's project data
 tmp/
+
+# Cloudflare Wrangler local state (web platform dev/deploy)
+.wrangler/
