@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 613
-generator: Embody/6.0.26
+build: 615
+generator: Embody/6.0.33
 td_build: 099.2025.32820
-source_file: Embody-6.27.toe
-exported_at: '2026-06-14T02:07:13Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:30Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -731,7 +731,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.26
+    value: 6.0.33
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -748,7 +748,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 613
+    value: 615
   - name: Github
     style: Pulse
     label: GitHub
@@ -759,7 +759,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-06-14 02:07:13 UTC
+    value: 2026-06-18 06:09:30 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -911,8 +911,8 @@ storage:
     /embody/Embody/CatalogManagerExt: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
-  _watchdog_gen: 112
-  _last_revive_frame: 3222797
+  _watchdog_gen: 129
+  _last_revive_frame: 14477801
 operators:
 - name: help
   type: opviewerCOMP

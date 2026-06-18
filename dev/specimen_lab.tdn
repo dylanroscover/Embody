@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 4
-generator: Embody/6.0.29
+build: 6
+generator: Embody/6.0.33
 td_build: 099.2025.32820
-source_file: Embody-6.30.toe
-exported_at: '2026-06-14T06:24:27Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:31Z'
 network_path: /specimen_lab
 options:
   include_dat_content: false
@@ -35,8 +35,13 @@ type_defaults:
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
   textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
   glslPOP:
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
@@ -467,7 +472,7 @@ operators:
   - name: glsl_ntsc_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/hyper_ntsc/glsl_ntsc_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -482,7 +487,7 @@ operators:
   - name: glsl_finish_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/hyper_ntsc/glsl_finish_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -491,7 +496,7 @@ operators:
   - name: glsl_ntsc_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/hyper_ntsc/glsl_ntsc_compute.glsl
     flags:
     - viewer
     position: [-150, -120]
@@ -505,7 +510,7 @@ operators:
   - name: glsl_finish_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/hyper_ntsc/glsl_finish_compute.glsl
     flags:
     - viewer
     position: [1050, -120]
@@ -513,7 +518,7 @@ operators:
   - name: glsl_bloomblur_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/hyper_ntsc/glsl_bloomblur_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -522,7 +527,7 @@ operators:
   - name: glsl_bloomblur_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/hyper_ntsc/glsl_bloomblur_compute.glsl
     flags:
     - viewer
     position: [450, -520]
@@ -1101,7 +1106,7 @@ operators:
   - name: sprite_dot_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/sprite_dot_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1110,7 +1115,7 @@ operators:
   - name: glsl_fabric_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/glsl_fabric_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1119,7 +1124,7 @@ operators:
   - name: glsl_color_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/glsl_color_compute.glsl
     flags:
     - viewer
     position: [2400, -120]
@@ -1127,7 +1132,7 @@ operators:
   - name: sprite_dot_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/sprite_dot_compute.glsl
     flags:
     - viewer
     position: [0, -760]
@@ -1135,7 +1140,7 @@ operators:
   - name: glsl_advect_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/glsl_advect_compute.glsl
     flags:
     - viewer
     position: [1200, -120]
@@ -1149,7 +1154,7 @@ operators:
   - name: glsl_fabric_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/glsl_fabric_compute.glsl
     flags:
     - viewer
     position: [0, -440]
@@ -1157,7 +1162,7 @@ operators:
   - name: glsl_bloomblur_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/glsl_bloomblur_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1166,7 +1171,7 @@ operators:
   - name: glsl_bloomblur_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/packet_fabric/glsl_bloomblur_compute.glsl
     flags:
     - viewer
     position: [4800, -120]
@@ -1440,7 +1445,7 @@ operators:
     size: [130, 90]
     color: [0.67, 0.67, 0.67]
     inputs:
-    - comp_trail
+    - res_fb
   - name: glsl_bloomblur
     type: glslTOP
     parameters:
@@ -1474,7 +1479,7 @@ operators:
   - name: glsl_scope_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/waveform_stack/glsl_scope_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1483,7 +1488,7 @@ operators:
   - name: glsl_finish_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/waveform_stack/glsl_finish_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1492,7 +1497,7 @@ operators:
   - name: glsl_scope_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/waveform_stack/glsl_scope_compute.glsl
     flags:
     - viewer
     position: [0, -120]
@@ -1506,7 +1511,7 @@ operators:
   - name: glsl_finish_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/waveform_stack/glsl_finish_compute.glsl
     flags:
     - viewer
     position: [4200, -120]
@@ -1514,7 +1519,7 @@ operators:
   - name: glsl_bloomblur_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/waveform_stack/glsl_bloomblur_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1523,7 +1528,7 @@ operators:
   - name: glsl_bloomblur_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/waveform_stack/glsl_bloomblur_compute.glsl
     flags:
     - viewer
     position: [3600, -120]
@@ -1750,7 +1755,7 @@ operators:
   - name: glsl_finish_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/essence_streams/glsl_finish_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1765,7 +1770,7 @@ operators:
   - name: glsl_streams_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/essence_streams/glsl_streams_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1780,7 +1785,7 @@ operators:
   - name: glsl_finish_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/essence_streams/glsl_finish_compute.glsl
     flags:
     - viewer
     position: [1050, -120]
@@ -1788,7 +1793,7 @@ operators:
   - name: glsl_bloomblur_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/essence_streams/glsl_bloomblur_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -1797,7 +1802,7 @@ operators:
   - name: glsl_streams_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/essence_streams/glsl_streams_compute.glsl
     flags:
     - viewer
     position: [-150, -120]
@@ -1805,7 +1810,7 @@ operators:
   - name: glsl_bloomblur_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/essence_streams/glsl_bloomblur_compute.glsl
     flags:
     - viewer
     position: [450, -520]
@@ -2042,7 +2047,7 @@ operators:
   - name: glsl_fibers_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/vertical_fibers/glsl_fibers_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -2051,7 +2056,7 @@ operators:
   - name: glsl_finish_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/vertical_fibers/glsl_finish_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -2066,7 +2071,7 @@ operators:
   - name: glsl_fibers_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/vertical_fibers/glsl_fibers_compute.glsl
     flags:
     - viewer
     position: [-150, -120]
@@ -2074,7 +2079,7 @@ operators:
   - name: glsl_finish_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/vertical_fibers/glsl_finish_compute.glsl
     flags:
     - viewer
     position: [1050, -120]
@@ -2082,7 +2087,7 @@ operators:
   - name: glsl_bloomblur_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/vertical_fibers/glsl_bloomblur_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -2091,7 +2096,7 @@ operators:
   - name: glsl_bloomblur_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/vertical_fibers/glsl_bloomblur_compute.glsl
     flags:
     - viewer
     position: [450, -520]
@@ -2232,13 +2237,14 @@ operators:
   - name: glsl_mandelbulb_pixel
     type: textDAT
     parameters:
+      file: specimen_lab/mandelbulb_march/glsl_mandelbulb_pixel.glsl
       extension: frag
     position: [550, -120]
     dock: glsl_mandelbulb
   - name: glsl_mandelbulb_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/mandelbulb_march/glsl_mandelbulb_compute.glsl
     flags:
     - viewer
     position: [250, -120]
@@ -2479,7 +2485,7 @@ operators:
   - name: glsl_bloom_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/crosspoint_matrix/glsl_bloom_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -2494,7 +2500,7 @@ operators:
   - name: glsl_matrix_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/crosspoint_matrix/glsl_matrix_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -2503,7 +2509,7 @@ operators:
   - name: glsl_bloom_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/crosspoint_matrix/glsl_bloom_compute.glsl
     flags:
     - viewer
     position: [2400, -120]
@@ -2517,7 +2523,7 @@ operators:
   - name: glsl_matrix_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/crosspoint_matrix/glsl_matrix_compute.glsl
     flags:
     - viewer
     position: [0, -120]
@@ -2525,7 +2531,7 @@ operators:
   - name: glsl_bloomblur_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/crosspoint_matrix/glsl_bloomblur_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -2534,7 +2540,7 @@ operators:
   - name: glsl_bloomblur_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/crosspoint_matrix/glsl_bloomblur_compute.glsl
     flags:
     - viewer
     position: [1200, -120]
@@ -2687,7 +2693,7 @@ operators:
   - name: glsl_plasma_pixel
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/plasma_interference/glsl_plasma_pixel.glsl
       extension: frag
     flags:
     - viewer
@@ -2696,7 +2702,7 @@ operators:
   - name: glsl_plasma_compute
     type: textDAT
     parameters:
-      language: glsl
+      file: specimen_lab/plasma_interference/glsl_plasma_compute.glsl
     flags:
     - viewer
     position: [250, -150]

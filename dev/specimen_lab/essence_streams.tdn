@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: null
-generator: Embody/6.0.29
+generator: Embody/6.0.33
 td_build: 099.2025.32820
-source_file: Embody-6.30.toe
-exported_at: '2026-06-14T06:24:30Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:31Z'
 network_path: /specimen_lab/essence_streams
 options:
   include_dat_content: false
@@ -22,11 +22,14 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 type: baseCOMP
 custom_pars:
   Streams:
@@ -274,6 +277,7 @@ operators:
 - name: glsl_finish_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/essence_streams/glsl_finish_pixel.glsl
     extension: frag
   position: [1350, -120]
   dock: glsl_finish
@@ -286,6 +290,7 @@ operators:
 - name: glsl_streams_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/essence_streams/glsl_streams_pixel.glsl
     extension: frag
   position: [150, -120]
   dock: glsl_streams
@@ -297,19 +302,26 @@ operators:
   dock: glsl_bloomblur
 - name: glsl_finish_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/essence_streams/glsl_finish_compute.glsl
   position: [1050, -120]
   dock: glsl_finish
 - name: glsl_bloomblur_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/essence_streams/glsl_bloomblur_pixel.glsl
     extension: frag
   position: [750, -520]
   dock: glsl_bloomblur
 - name: glsl_streams_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/essence_streams/glsl_streams_compute.glsl
   position: [-150, -120]
   dock: glsl_streams
 - name: glsl_bloomblur_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/essence_streams/glsl_bloomblur_compute.glsl
   position: [450, -520]
   dock: glsl_bloomblur

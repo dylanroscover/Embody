@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: null
-generator: Embody/6.0.29
+generator: Embody/6.0.33
 td_build: 099.2025.32820
-source_file: Embody-6.30.toe
-exported_at: '2026-06-14T06:24:30Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:31Z'
 network_path: /specimen_lab/waveform_stack
 options:
   include_dat_content: false
@@ -32,11 +32,14 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 type: baseCOMP
 custom_pars:
   Output:
@@ -304,7 +307,7 @@ operators:
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
   inputs:
-  - comp_trail
+  - res_fb
 - name: glsl_bloomblur
   type: glslTOP
   parameters:
@@ -336,17 +339,21 @@ operators:
 - name: glsl_scope_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/waveform_stack/glsl_scope_pixel.glsl
     extension: frag
   position: [150, -120]
   dock: glsl_scope
 - name: glsl_finish_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/waveform_stack/glsl_finish_pixel.glsl
     extension: frag
   position: [4350, -120]
   dock: glsl_finish
 - name: glsl_scope_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_scope_compute.glsl
   position: [0, -120]
   dock: glsl_scope
 - name: glsl_bloomblur_info
@@ -357,15 +364,20 @@ operators:
   dock: glsl_bloomblur
 - name: glsl_finish_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_finish_compute.glsl
   position: [4200, -120]
   dock: glsl_finish
 - name: glsl_bloomblur_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/waveform_stack/glsl_bloomblur_pixel.glsl
     extension: frag
   position: [3750, -120]
   dock: glsl_bloomblur
 - name: glsl_bloomblur_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_bloomblur_compute.glsl
   position: [3600, -120]
   dock: glsl_bloomblur

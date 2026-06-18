@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.29
+generator: Embody/6.0.33
 td_build: 099.2025.32820
-source_file: Embody-6.30.toe
-exported_at: '2026-06-14T06:24:31Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:33Z'
 network_path: /specimen_lab/noise_terrain/light
 options:
   include_dat_content: false

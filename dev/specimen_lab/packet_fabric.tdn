@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: null
-generator: Embody/6.0.29
+generator: Embody/6.0.33
 td_build: 099.2025.32820
-source_file: Embody-6.30.toe
-exported_at: '2026-06-14T06:24:31Z'
+source_file: Embody-6.34.toe
+exported_at: '2026-06-18T06:09:31Z'
 network_path: /specimen_lab/packet_fabric
 options:
   include_dat_content: false
@@ -34,11 +34,14 @@ type_defaults:
     color: [0.67, 0.67, 0.67]
   textDAT:
     parameters:
+      syncfile: true
       language: glsl
     flags:
     - viewer
     size: [130, 90]
-    color: [0.67, 0.67, 0.67]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
 type: baseCOMP
 custom_pars:
   Controls:
@@ -359,25 +362,33 @@ operators:
 - name: sprite_dot_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/packet_fabric/sprite_dot_pixel.glsl
     extension: frag
   position: [150, -760]
   dock: sprite_dot
 - name: glsl_fabric_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/packet_fabric/glsl_fabric_pixel.glsl
     extension: frag
   position: [150, -440]
   dock: glsl_fabric
 - name: glsl_color_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/packet_fabric/glsl_color_compute.glsl
   position: [2400, -120]
   dock: glsl_color
 - name: sprite_dot_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/packet_fabric/sprite_dot_compute.glsl
   position: [0, -760]
   dock: sprite_dot
 - name: glsl_advect_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/packet_fabric/glsl_advect_compute.glsl
   position: [1200, -120]
   dock: glsl_advect
 - name: glsl_bloomblur_info
@@ -388,15 +399,20 @@ operators:
   dock: glsl_bloomblur
 - name: glsl_fabric_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/packet_fabric/glsl_fabric_compute.glsl
   position: [0, -440]
   dock: glsl_fabric
 - name: glsl_bloomblur_pixel
   type: textDAT
   parameters:
+    file: specimen_lab/packet_fabric/glsl_bloomblur_pixel.glsl
     extension: frag
   position: [4950, -120]
   dock: glsl_bloomblur
 - name: glsl_bloomblur_compute
   type: textDAT
+  parameters:
+    file: specimen_lab/packet_fabric/glsl_bloomblur_compute.glsl
   position: [4800, -120]
   dock: glsl_bloomblur

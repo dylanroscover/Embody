@@ -6674,11 +6674,12 @@ class EmbodyExt:
         count = 0
         for dat in dats:
             try:
-                # Infer tag from DAT type
-                tag_par_name = self.dat_type_to_tag.get(dat.type)
-                if not tag_par_name:
-                    continue
-                tag_value = getattr(self.my.par, tag_par_name).val
+                # Resolve the tag from the DAT's CONTENT type, not a bare
+                # type->tag map. _inferDATTagValue reads a text DAT's
+                # language/extension, so a GLSL shader (type 'text',
+                # language 'glsl') externalizes as .glsl -- the old
+                # dat_type_to_tag['text']='Pytag' wrongly wrote shaders as .py.
+                tag_value = self._inferDATTagValue(dat)
                 if not tag_value:
                     continue
 
