@@ -1,5 +1,28 @@
 # Changelog
 
+## v6.0.34
+
+Everything since v6.0.26 in one release: a GLSL-shader externalization fix so shaders write as `.glsl` instead of `.py`, the recurring `execute_python` "(0,0) pileup" now caught by a layout lint at the Envoy tool layer, a self-contained Specimen publish hook for the embody.tools "embody it" copy-paste, and a waveform-stack feedback cook-loop fix — plus six landscape transmission specimens.
+
+### Externalization
+
+- **GLSL shader DATs now externalize as `.glsl`, not `.py`.** `EmbodyExt._externalizeDATs` inferred each DAT's externalization tag from a bare `dat_type_to_tag` map where `['text'] = 'Pytag'` — so every text DAT, GLSL shaders included (type `text`, language `glsl`), was written out as `.py`. It now resolves the tag from the DAT's *content* via `_inferDATTagValue` (which reads the text DAT's language/extension), so a shader externalizes with the correct `.glsl` extension. This was the bug behind the content-safety "Externalize DATs" path mis-tagging shaders as Python. The 8 newer Specimens' 42 shaders were re-externalized to `.glsl` to match the 4 older ones.
+
+### Envoy: layout lint at the tool layer
+
+- **`execute_python` now warns when it leaves operators at (0,0), overlapping, or with docked DATs scattered.** `create_op` auto-positions; `execute_python` (raw `comp.create()` / `.copy()`) did not — the recurring source of new operators piled at the origin. Envoy now snapshots the op tree before running your code and lints only the operators the call creates: a new `_lintLayout` flags ops stacked at (0,0), overlapping op pairs, and docked DATs more than 500 units from their host, and `_lintNewOps` emits a `LAYOUT WARNING` on the response (via the notable-logs piggyback). `network-layout.md` and its shipped template were DRY'd to state the trap once around the new enforcement and collapse the duplicate anti-pattern bullets.
+
+### embody.tools: Specimen publish
+
+- **`specimen_publish.py` — a project `onProjectPostSave` hook** that exports each manifest Specimen self-contained (DAT scripts embedded) to `specimens/<tdn_path>`, the form the embody.tools "embody it" copy-paste consumes. Unchanged files are skipped, so a save only rewrites the specimens that actually changed.
+
+### Specimens
+
+- **Waveform-stack feedback fix.** `specimen_lab/waveform_stack` had a cook-dependency loop — the Feedback TOP's output wired back into its own input. Broken by seeding the Feedback TOP from outside the loop (`res_fb`) and grabbing the frame-delayed state from its Target TOP, the correct bounded-feedback pattern.
+- **Six landscape transmission specimens** added to `dev/specimen_lab` (4K `Resw`/`Resh` control, shaders embedded): essence-streams, vertical-fibers, crosspoint (VHS glitch), waveform-stack (bounded feedback, up to 512 lanes), packet-fabric (GPU POP sim), and hyper_ntsc (NTSC chroma-bleed / dot-crawl); reaction-diffusion was landscaped with a bounded sim.
+
+Test suite **58 suites / 1,439 tests**, no regressions.
+
 ## v6.0.26
 
 A correctness + efficiency release that also finishes the TDN clipboard Copy/Paste loop: a critical TDN round-trip fix, the pre-save "TDN Content at Risk" dialog no longer firing on annotated specimens, the Envoy save-time watchdog log storm fixed for real, a four-part MCP token-efficiency pass, a fourth Specimen (a GPU flocking "Murmuration"), the Copy half of the clipboard wired to Cmd-Shift-C, raw-`.tdn` paste, and a POP point-sequence import fix.
