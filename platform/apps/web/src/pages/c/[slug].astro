@@ -105,7 +105,9 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     operator_count: fixture.operator_count,
     key_ops: fixture.key_ops,
     reactions: {},
-    author_handle: fixture.author_handle
+    // Fixtures are all first-party; mirror the hardcode in toFixtureSummary
+    // (FixtureSpecimen carries no author_handle field).
+    author_handle: "embody.tools"
   };
 }
 
