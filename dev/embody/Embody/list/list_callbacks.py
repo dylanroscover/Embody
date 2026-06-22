@@ -98,6 +98,15 @@ def _load_theme():
 	par_change_raw = _par4('Dirtyparcolor')
 	par_change = _composite(par_change_raw, row) if par_change_raw[3] < 1.0 else par_change_raw
 
+	# Git-uncommitted (saved to disk but not committed) -- a distinct orange,
+	# kept apart from par-change amber. Guarded so the list stays robust on
+	# older .toes where the Uncommittedcolor par doesn't exist yet.
+	try:
+		uncommitted_raw = _par4('Uncommittedcolor')
+		uncommitted = _composite(uncommitted_raw, row) if uncommitted_raw[3] < 1.0 else uncommitted_raw
+	except Exception:
+		uncommitted = (0.60, 0.30, 0.03, 1.0)
+
 	tdn_saved_raw = _par4('Tdnsavedcolor')
 	tdn_saved = _composite(tdn_saved_raw, row) if tdn_saved_raw[3] < 1.0 else tdn_saved_raw
 
@@ -125,6 +134,8 @@ def _load_theme():
 		'dirty_roll': _brighten(dirty, 0.08),
 		'par_change': par_change,
 		'par_change_roll': _brighten(par_change, 0.08),
+		'uncommitted': uncommitted,
+		'uncommitted_roll': _brighten(uncommitted, 0.08),
 		'tdn_saved': tdn_saved,
 		'tdn_saved_roll': _brighten(tdn_saved, 0.08),
 		'tdn_amber': tdn_amber,
@@ -217,6 +228,8 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 	elif col == COL_STRATEGY:
 		st = data[row, 'strategy_state'].val
 		strategy = data[row, 'strategy'].val
+		# Second status axis: saved-to-disk but not committed to git.
+		git_changed = data[row, 'git_state'].val == 'Changed'
 		text, st_bg, st_text = _strategy_style(st)
 
 		if _active_strategy_row == row and st not in ('DAT_Saved', 'TDN_Exporting', ''):
@@ -226,6 +239,8 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 				attribs.bgColor = _t['dirty_roll']
 			elif st in ('TOX_ParChange', 'TDN_ParChange'):
 				attribs.bgColor = _t['par_change_roll']
+			elif git_changed and st in ('TOX_Saved', 'TDN_Saved'):
+				attribs.bgColor = _t['uncommitted_roll']
 			elif st == 'TOX_Saved':
 				attribs.bgColor = _t['saved_roll']
 			elif st == 'TDN_Saved':
@@ -233,12 +248,18 @@ def _apply_cell(attribs, row, col, data, highlight=False):
 			elif st == 'Comp':
 				attribs.bgColor = _t['comp_roll']
 		elif st == 'DAT_Saved':
-			# Show the file extension as the strategy label
+			# Show the file extension as the strategy label; orange when on disk
+			# but uncommitted (DATs are always saved via syncfile).
 			attribs.text = strategy
-			attribs.bgColor = bg
+			attribs.bgColor = _t['uncommitted'] if git_changed else bg
 		elif st_bg:
 			attribs.text = text
-			attribs.bgColor = st_bg
+			# Saved TOX/TDN that's uncommitted reads orange; unsaved (red) and
+			# par-change (amber) keep their color.
+			if git_changed and st in ('TOX_Saved', 'TDN_Saved'):
+				attribs.bgColor = _t['uncommitted']
+			else:
+				attribs.bgColor = st_bg
 			if st_text:
 				attribs.textColor = st_text
 		else:

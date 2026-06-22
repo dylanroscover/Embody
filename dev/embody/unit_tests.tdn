@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 38
-generator: Embody/6.0.39
+build: 39
+generator: Embody/6.0.40
 td_build: 099.2025.32820
 source_file: Embody-6.40.toe
-exported_at: '2026-06-22T22:14:04Z'
+exported_at: '2026-06-22T23:29:59Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -1961,6 +1961,11 @@ operators:
   flags:
   - viewer
   position: [800, -1600]
+- name: test_git_status
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_git_status.py
+  position: [400, -3200]
 - name: test_path_utils
   type: textDAT
   parameters:

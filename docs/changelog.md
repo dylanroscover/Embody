@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.41
+
+The git-uncommitted status axis: the manager gains a second status axis, completing the v5.0.437 feature set on the v6 line (after diff_tdn in 6.40). Externalized files saved to disk but not yet committed to git now show a distinct orange Strategy badge, kept separate from the red "unsaved" axis.
+
+- **Second status axis -- git-uncommitted.** Externalized DAT scripts use TD's bidirectional syncfile, so they are always in sync with disk -- their only meaningful "changed" state is git-relative (on disk but not committed). A `git status --porcelain` scan runs ASYNC on a worker thread (no refresh-frame drop; `--no-optional-locks` so it never contends with a concurrent commit), maps the changed files to operator paths via pure string math, and stores the result at runtime (never written to `externalizations.tsv`, which would churn). The manager renders a distinct orange `Uncommittedcolor` badge for TOX/TDN/DAT alike, overriding only the SAVED states (red unsaved + amber par-change keep precedence). Self-disables outside a git repo. The engine (`_findGitRootSync`, `_parseGitPorcelain`, `_mapChangedToOps`, `_rowHasChanges`, `_updateGitStatus`) is generation-guarded so a stale worker cannot clobber a newer scan.
+- **A `changed` filter keyword + a refresh-after-commit rule.** Typing "changed" in the manager filter shows only rows with pending changes on EITHER axis -- unsaved (dirty/Par) OR git-uncommitted -- via the single-source-of-truth `_rowHasChanges`. A shipped `refresh-after-commit.md` rule reminds agents to refresh the manager after a git commit so the orange badges clear.
+- **Adapted to v6 + verified.** The async scan uses `op.TDResources.ThreadManager`; the `Uncommittedcolor` param (already present in v6 from a partial attempt) is now fully wired. Backend logic is covered by `test_git_status` (20 tests), and the full data path was verified live (scan -> git_status storage -> lister git_state column -> orange badge). Test suite **70 suites / 1,673 tests**, all green.
+
 ## v6.0.40
 
 The diff_tdn release: re-integrates the `diff_tdn` MCP tool and its companion `.tdn` git diff driver -- shipped on v5.0.437 but never present on the v6 line -- into v6's YAML v2.0 world, with a PyYAML-in-venv fix the YAML textconv needed and a 4-lens adversarial review that caught two real regressions before merge.

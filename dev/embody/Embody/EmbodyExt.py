@@ -3272,6 +3272,191 @@ class EmbodyExt:
         else:
             self.Save(op_path)
 
+    # ==========================================================================
+    # GIT STATUS (uncommitted detection for the manager UI)
+    # ==========================================================================
+    # A SECOND status axis, distinct from "unsaved" (live-vs-disk). Externalized
+    # DAT scripts use TD's bidirectional syncfile, so they are always in sync with
+    # disk -- their only meaningful "changed" state is git-relative (on disk but
+    # not committed). Computed once per refresh sweep and stored at runtime (never
+    # written to externalizations.tsv, which would churn). Powers the orange badge
+    # for TOX/TDN/DAT alike. Self-disables outside a git repo.
+
+    def _findGitRootSync(self):
+        """Walk up from project.folder for a .git dir. Returns Path or 'no-git'.
+
+        No subprocess and no prompt -- safe to call on the main-thread refresh
+        sweep. Mirrors EnvoyExt._findGitRoot so the two never disagree.
+        """
+        project_dir = Path(project.folder).resolve()
+        try:
+            home_dir = Path.home().resolve()
+        except Exception:
+            home_dir = None
+        home_is_ancestor = bool(
+            home_dir and (home_dir == project_dir or home_dir in project_dir.parents))
+        for parent in [project_dir] + list(project_dir.parents):
+            if home_is_ancestor and parent == home_dir:
+                break
+            if (parent / '.git').exists():
+                return parent
+        return 'no-git'
+
+    @staticmethod
+    def _parseGitPorcelain(output: str) -> dict:
+        """Parse `git status --porcelain -z` output into {repo_rel_posix: code}.
+
+        `-z` means NUL-separated records and NO path quoting, so paths with
+        spaces/unicode are handled cleanly. A rename/copy record (X or Y in
+        R/C) is followed by an extra NUL-separated origin path; both the new and
+        origin paths are recorded (membership tests only ever hit the one that
+        currently exists on disk). Untracked entries (`??`) count as changed.
+        """
+        result = {}
+        tokens = output.split('\0')
+        i, n = 0, len(tokens)
+        while i < n:
+            tok = tokens[i]
+            if not tok or len(tok) < 3 or tok[2] != ' ':
+                i += 1
+                continue
+            code, path = tok[:2], tok[3:]
+            if path:
+                result[path] = code
+            if code[0] in ('R', 'C'):
+                i += 1
+                if i < n and tokens[i]:
+                    result[tokens[i]] = code
+            i += 1
+        return result
+
+    @staticmethod
+    def _mapChangedToOps(changed, project_prefix, rows):
+        """Map a git {repo_rel_posix: code} set to {op_path: code} for externalized
+        rows.
+
+        `project_prefix` is project.folder relative to the git root as a posix
+        prefix ('' or e.g. 'dev/'); `rows` is an iterable of
+        (op_path, rel_file_path). Pure string math -- no filesystem and no TD
+        access -- so it is both fast (no per-row Path.resolve) and unit-testable.
+        """
+        out = {}
+        if not changed:
+            return out
+        for path, rel in rows:
+            if not path or not rel or path == '/':
+                continue
+            code = changed.get(project_prefix + rel.replace('\\', '/'))
+            if code:
+                out[path] = code
+        return out
+
+    @staticmethod
+    def _rowHasChanges(dirty_val, uncommitted) -> bool:
+        """Whether a manager row has pending changes on EITHER axis: unsaved
+        (`dirty`/`Par`) or git-uncommitted. Single source of truth for the
+        manager's "changed" filter keyword (used by inject_parents)."""
+        is_unsaved = str(dirty_val) in ('True', 'true', '1', 'Par')
+        return is_unsaved or bool(uncommitted)
+
+    def _updateGitStatus(self) -> None:
+        """Kick off an ASYNC git-uncommitted scan on a worker thread; never blocks
+        the refresh frame.
+
+        The `git status` subprocess (tens of ms) and parsing run off the main
+        thread; the cheap, string-based mapping + store happen back on the main
+        thread in the SuccessHook closure, which then refreshes the manager
+        badges. Runtime-only via store('git_status', ...) (never touches
+        externalizations.tsv). No git repo, thread-pool exhaustion, or any failure
+        -> empty/unchanged map; the orange indicator simply does not show.
+
+        Each scan carries a generation id captured in its hooks, and its result
+        state is task-local (closure, not a shared attribute). Only the LATEST
+        generation publishes or clears the in-flight flag -- so a stale task that
+        finally fires after a re-arm is a no-op and cannot clobber a newer scan.
+        """
+        import time
+        now = time.monotonic()
+        # Coalesce: one scan in flight at a time. Re-arm only if a prior scan has
+        # been "running" implausibly long (worker died without a hook firing).
+        if getattr(self, '_git_check_running', False) and \
+                (now - getattr(self, '_git_check_started', 0)) < 10:
+            return
+        # Bump the generation: this supersedes any still-pending stale task.
+        gen = getattr(self, '_git_gen', 0) + 1
+        self._git_gen = gen
+        git_root = self._findGitRootSync()
+        if git_root == 'no-git':
+            self._git_check_running = False
+            self.my.store('git_status', {})
+            return
+        proj = str(Path(project.folder).resolve())
+        git_root_s = str(git_root)
+        clean_env = {
+            k: v for k, v in os.environ.items()
+            if k not in ('GIT_DIR', 'GIT_WORK_TREE',
+                         'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES')}
+        # Never take the optional index lock -- a background status must not
+        # contend with the user's (or an agent's) concurrent git add/commit.
+        clean_env['GIT_OPTIONAL_LOCKS'] = '0'
+        state = {'changed': None}
+        self._git_check_running = True
+        self._git_check_started = now
+
+        # Worker runs on a pool thread -- captures only locals + a pure static, so
+        # it touches NO TD objects (the one sanctioned main->worker handoff).
+        parse = EmbodyExt._parseGitPorcelain
+
+        def worker():
+            try:
+                # --no-optional-locks: never write .git/index (no lock contention).
+                # --untracked-files=all: enumerate files inside new dirs (not `?? dir/`).
+                r = subprocess.run(
+                    ['git', '--no-optional-locks', 'status', '--porcelain', '-z',
+                     '--untracked-files=all', '--', proj],
+                    cwd=git_root_s, capture_output=True, text=True,
+                    env=clean_env, stdin=subprocess.DEVNULL, timeout=5, check=False)
+                state['changed'] = parse(r.stdout or '') if r.returncode == 0 else {}
+            except Exception:
+                state['changed'] = {}
+
+        def done():
+            # Only the latest generation publishes / clears the flag.
+            if gen != getattr(self, '_git_gen', None):
+                return
+            self._git_check_running = False
+            try:
+                prefix = Path(proj).relative_to(Path(git_root_s)).as_posix()
+                prefix = (prefix + '/') if prefix and prefix != '.' else ''
+            except Exception:
+                prefix = ''
+            rows = []
+            table = self.Externalizations
+            if table is not None:
+                for r in range(1, table.numRows):
+                    rows.append((self._cellVal(r, 'path'),
+                                 self._cellVal(r, 'rel_file_path')))
+            self.my.store('git_status',
+                          self._mapChangedToOps(state['changed'] or {}, prefix, rows))
+            # Refresh the manager so the orange badges reflect the new git state.
+            try:
+                self.my.op('list/inject_parents').cook(force=True)
+                self.lister.reset()
+            except Exception:
+                pass
+
+        def failed(e):
+            if gen != getattr(self, '_git_gen', None):
+                return
+            self._git_check_running = False
+            self.Log(f"Git status worker failed: {e}", "DEBUG")
+
+        tm = op.TDResources.ThreadManager
+        task = tm.TDTask(target=worker, SuccessHook=done, ExceptHook=failed)
+        if tm.EnqueueTask(task, standalone=True) is None:
+            # Thread pool at capacity -- abandon; the next refresh retries.
+            self._git_check_running = False
+
     def dirtyHandler(self, update: bool) -> list[str]:
         """Check and optionally update dirty COMPs (both TOX and TDN)."""
         updates = []
@@ -3328,6 +3513,9 @@ class EmbodyExt:
     def updateDirtyStates(self, externalizationsFolder: str) -> None:
         """Update dirty states and check for path/parameter changes."""
         dirties = self.dirtyHandler(False)
+        # Second status axis: git-uncommitted files (orange badge). Read-only,
+        # folder-scoped, self-disabling outside a repo -- see _updateGitStatus.
+        self._updateGitStatus()
         param_changes = []
 
         for oper in self.getExternalizedOps(COMP) + self.getExternalizedOps(DAT):
