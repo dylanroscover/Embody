@@ -52,19 +52,41 @@ jobs:
         run: npm run test --workspace=@embody/scanner-ts
 
   # ---------------------------------------------------------------------------
-  # Cloudflare deploy. Runs ONLY on push to main, AFTER build-and-test passes
-  # (needs:) -- a red typecheck/build never ships. wrangler deploy reads
-  # platform/apps/web/wrangler.jsonc (name: embody-web), so it always targets the
-  # correct Worker and its embody.tools custom domain.
+  # Gate the Cloudflare deploy on its secret actually being configured, so a repo
+  # that has NOT set CLOUDFLARE_API_TOKEN yet gets a GREEN run (deploy skipped +
+  # a warning annotation) instead of a red one. Secrets cannot be read in a
+  # job-level `if:`, so this tiny job exposes "is the token set?" as an output
+  # the deploy job gates on. Once the secret is added, deploy runs automatically.
+  check-deploy-secrets:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CF_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Cloudflare deploy skipped::Set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID repo secrets to enable auto-deploy of embody-web to embody.tools."
+          fi
+
+  # Cloudflare deploy. Runs ONLY on push to main, after build-and-test passes
+  # (a red typecheck/build never ships) AND the deploy secret is set. wrangler
+  # deploy reads platform/apps/web/wrangler.jsonc (name: embody-web), so it always
+  # targets the correct Worker and its embody.tools custom domain.
   #
   # Requires two repo secrets (Settings -> Secrets and variables -> Actions):
   #   CLOUDFLARE_API_TOKEN   - token with the "Edit Cloudflare Workers" template
   #                            (Workers Scripts:Edit + the embody.tools zone).
   #   CLOUDFLARE_ACCOUNT_ID  - the account that owns the embody-web Worker.
-  # Until both are set, this job fails fast on main; build-and-test is unaffected.
   deploy:
-    needs: build-and-test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [build-and-test, check-deploy-secrets]
+    if: needs.check-deploy-secrets.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
