@@ -13,8 +13,9 @@
 //     mount, so the page NEVER bundles thousands of graphs at build time. An
 //     optional SSR `tdn` prop is a fast path for the first page (no fetch).
 //
-//   RESULT: a tasteful placeholder (specimenThumbnail SVG) because rendered
-//     thumbnails are not baked yet (thumbnail_path is null). Never a broken img.
+//   RESULT: the baked render at /public/specimens/<slug>.jpg for slugs in
+//     BAKED_THUMBS (captured from the live networks); otherwise a tasteful
+//     placeholder (specimenThumbnail SVG). Never a broken img.
 //
 // All styles are scoped to this component.
 import SpecimenCoverGraph from "./SpecimenCoverGraph";
@@ -33,7 +34,15 @@ interface Props {
 }
 
 const { slug, name, category, tdn } = Astro.props;
-const thumb = specimenThumbnail({ slug, name, category });
+// Slugs with a baked RESULT render at /public/specimens/<slug>.jpg (captured
+// from the live specimen networks). Anything not listed falls back to the
+// procedural placeholder SVG -- never a broken img.
+const BAKED_THUMBS = new Set([
+  "kaleidoscope", "mandelbulb-march", "murmuration",
+  "noise-terrain", "plasma-interference", "reaction-diffusion",
+]);
+const hasBaked = BAKED_THUMBS.has(slug);
+const thumb = hasBaked ? `/specimens/${slug}.jpg` : specimenThumbnail({ slug, name, category });
 ---
 
 <!--
@@ -47,8 +56,8 @@ const thumb = specimenThumbnail({ slug, name, category });
     <SpecimenCoverGraph slug={slug} tdn={tdn} client:visible />
   </div>
   <div class="cover__layer cover__layer--result" aria-hidden="true">
-    <img src={thumb} loading="lazy" alt={`${name} preview placeholder`} />
-    <span class="cover__soon mono">preview coming soon</span>
+    <img src={thumb} loading="lazy" alt={hasBaked ? `${name} rendered result` : `${name} preview placeholder`} />
+    {!hasBaked && <span class="cover__soon mono">preview coming soon</span>}
   </div>
 
   <div class="cover__flip" role="group" aria-label={`${name} cover view`}>
