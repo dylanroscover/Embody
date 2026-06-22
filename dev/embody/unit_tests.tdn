@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 38
-generator: Embody/6.0.38
+generator: Embody/6.0.39
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:39Z'
+source_file: Embody-6.40.toe
+exported_at: '2026-06-22T22:14:04Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -1949,6 +1949,11 @@ operators:
   flags:
   - viewer
   position: [200, 0]
+- name: test_tdn_diff
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdn_diff.py
+  position: [0, -3200]
 - name: test_mcp_batch
   type: textDAT
   parameters:
@@ -2119,6 +2124,11 @@ operators:
   flags:
   - viewer
   position: [800, -1800]
+- name: test_tdn_diff_engine
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_tdn_diff_engine.py
+  position: [200, -3200]
 - name: test_operator_queries
   type: textDAT
   parameters:

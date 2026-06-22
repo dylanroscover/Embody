@@ -128,6 +128,7 @@ class TestVenvPaths(EmbodyTestCase):
 		self.assertTrue(any(d.startswith('mcp>=') for d in spec['deps']),
 			'deps must pin a minimum mcp version')
 		self.assertIn('attrs<25', spec['deps'])
+		self.assertIn('pyyaml', spec['deps'])
 
 	def test_min_version_matches_class_constant(self):
 		spec = self.ext._venvPaths()
@@ -168,6 +169,7 @@ class TestEnvironmentNeedsInstall(EmbodyTestCase):
 
 	def test_current_version_no_install(self):
 		self._make_dist('mcp', '1.26.0')
+		self._make_dist('yaml', '6.0.1')
 		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
 
 	def test_old_version_needs_install(self):
@@ -176,6 +178,7 @@ class TestEnvironmentNeedsInstall(EmbodyTestCase):
 
 	def test_newer_version_no_install(self):
 		self._make_dist('mcp', '2.5.0')
+		self._make_dist('yaml', '6.0.1')
 		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
 
 	def test_attrs_25_forces_install(self):
@@ -187,12 +190,20 @@ class TestEnvironmentNeedsInstall(EmbodyTestCase):
 	def test_attrs_24_is_fine(self):
 		self._make_dist('mcp', '1.26.0')
 		self._make_dist('attrs', '24.2.0')
+		self._make_dist('yaml', '6.0.1')
 		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
+
+	def test_missing_yaml_needs_install(self):
+		# PyYAML powers the .tdn git textconv driver, invoked via the venv
+		# python -- an mcp-complete venv that still lacks yaml needs install.
+		self._make_dist('mcp', '1.26.0')
+		self.assertTrue(self.ext._environmentNeedsInstall(self._spec()))
 
 	def test_mcp_present_without_metadata_accepts(self):
 		# Package dir but no dist-info: the original fast path accepted this and
 		# proceeded to the import check, so no install is required.
 		os.makedirs(os.path.join(self.tmp, 'mcp'), exist_ok=True)
+		self._make_dist('yaml', '6.0.1')
 		self.assertFalse(self.ext._environmentNeedsInstall(self._spec()))
 
 

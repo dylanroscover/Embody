@@ -188,7 +188,11 @@ class EmbodyExt:
         project_dir = project.folder
         venv_dir = os.path.join(project_dir, '.venv')
         python_exe = sys.executable  # current interpreter (cross-platform)
-        deps = [f'mcp>={self.MCP_MIN_VERSION}', 'attrs<25']
+        # pyyaml: powers the .tdn git textconv driver (the committed-diff
+        # counterpart to diff_tdn). git invokes that driver via THIS venv
+        # python, and v6 .tdn files are YAML, so the venv must carry yaml even
+        # though the Envoy bridge itself never imports it.
+        deps = [f'mcp>={self.MCP_MIN_VERSION}', 'attrs<25', 'pyyaml']
         if sys.platform.startswith('win'):
             site_packages = os.path.join(venv_dir, 'Lib', 'site-packages')
             venv_python = os.path.join(venv_dir, 'Scripts', 'python.exe')
@@ -220,6 +224,11 @@ class EmbodyExt:
         spec = spec or self._venvPaths()
         site_packages = spec['site_packages']
         if not os.path.isdir(os.path.join(site_packages, 'mcp')):
+            return True
+        # PyYAML powers the .tdn git textconv driver, which git runs via this
+        # venv python. An older venv built before that dependency lacks it, so
+        # treat its absence as "needs install" to upgrade existing venvs.
+        if not os.path.isdir(os.path.join(site_packages, 'yaml')):
             return True
         try:
             infos = glob(os.path.join(site_packages, 'mcp-*.dist-info'))

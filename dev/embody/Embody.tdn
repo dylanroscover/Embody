@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 657
-generator: Embody/6.0.35
+build: 658
+generator: Embody/6.0.39
 td_build: 099.2025.32820
-source_file: Embody-6.35.toe
-exported_at: '2026-06-21T04:00:18Z'
+source_file: Embody-6.40.toe
+exported_at: '2026-06-22T22:13:58Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -594,7 +594,7 @@ custom_pars:
     label: Envoy Status
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Starting...
+    value: Running on port 9870
   Logs:
   - name: Verbose
     style: Toggle
@@ -731,7 +731,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.35
+    value: 6.0.39
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -748,7 +748,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 657
+    value: 658
   - name: Github
     style: Pulse
     label: GitHub
@@ -759,7 +759,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-06-21 04:00:18 UTC
+    value: 2026-06-22 22:13:58 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -910,8 +910,7 @@ storage:
     /embody/Embody/CatalogManagerExt: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
-  _watchdog_gen: 202
-  _last_revive_frame: 14477801
+  _watchdog_gen: 232
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -980,7 +979,6 @@ storage:
     - test_update_sync
     - test_v6_hardening
     done: []
-  _init_complete: true
   _suite_proof_result:
     agg:
       total: 1576
@@ -1038,6 +1036,23 @@ storage:
       pass: 32
       tot: 33
     pending_prompt_right_after_run: absent
+  _final_noseed_test:
+    seed_was_clear: true
+    results:
+      test_envoy_setup_environment:
+        pass: 17
+        tot: 17
+        fail: 0
+      test_envoy_lifecycle_hardening:
+        pass: 4
+        tot: 4
+        fail: 0
+      test_smoke_release:
+        pass: 32
+        tot: 33
+        fail: 1
+    pending_after: absent
+  _suppress_dialogs: true
 operators:
 - name: help
   type: opviewerCOMP

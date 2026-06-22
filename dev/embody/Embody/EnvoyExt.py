@@ -1141,6 +1141,54 @@ class EnvoyMCPServer:
                 'max_depth': max_depth,
                 'embed_all': embed_all,
             })
+        @self.mcp.tool()
+        def diff_tdn(target: str = "",
+                     max_changed_ops: int = 200,
+                     max_bytes: int = 60000) -> dict:
+            """Show what is UNSAVED in TouchDesigner's TDN networks: the live
+            in-memory network(s) vs the on-disk .tdn file(s).
+
+            THIS is the tool to answer "what changed in <X>.tdn?", "what changed
+            in this COMP?", "what have I/you not saved yet?", or "what's changed
+            across the project?" for TDN-externalized COMPs. It sees what git
+            cannot: git only reads files on disk; this reads TD's live state.
+            (For committed/history diffs, use git -- the .tdn diff driver Embody
+            installs keeps those clean too.)
+
+            Scope by `target`:
+              - omit it (or pass ""/"/"/"project") -> PROJECT-WIDE: every live
+                TDN COMP, summarized (which ones changed + counts). Use this for
+                "what's changed in the project / what haven't I saved."
+              - a COMP path ("/project1/scene") OR a .tdn file path / bare
+                filename ("tooltip.tdn", resolved to its COMP) -> that one COMP
+                in full per-field detail.
+
+            Read-only, non-interactive, pull-only: never prompts, never mutates
+            TD, not auto-run.
+
+            Args:
+                target: empty = whole project; else a COMP path or .tdn file.
+                max_changed_ops: Cap on reported changed operators; an honest
+                    'truncated' flag is set when exceeded.
+                max_bytes: Soft cap on envelope size; past it, per-field change
+                    bodies are dropped (changed_keys retained).
+
+            Returns:
+                Single COMP: a diff envelope -- schema_version, baseline
+                ('disk'), comp_path, file, file_exists, changed,
+                counts{added,removed,modified}, added[], removed[],
+                modified[{path,name,type,kind,changed_keys,changes}] where each
+                change is {old,new} (old=disk, new=live), truncated, warnings.
+                Project-wide: {scope:'project', changed_count, clean_count,
+                skipped_count, changed:[<envelope per changed COMP>], skipped,
+                truncated}. On failure: {'error': ...}.
+            """
+            return self._execute_in_td('diff_tdn', {
+                'target': target,
+                'max_changed_ops': max_changed_ops,
+                'max_bytes': max_bytes,
+            })
+
 
         # === TOP Capture ===
 
@@ -2627,6 +2675,7 @@ class EnvoyExt:
             'export_network': self._export_network,
             'import_network': self._import_network,
             'read_tdn': self._read_tdn,
+            'diff_tdn': self._diff_tdn,
             # Annotations
             'create_annotation': self._create_annotation,
             'get_annotations': self._get_annotations,
@@ -4507,15 +4556,30 @@ class EnvoyExt:
             if not table:
                 return {'error': 'Externalizations table not found'}
 
+            headers = [table[0, c].val for c in range(table.numCols)]
+            has_strategy = 'strategy' in headers
             externalizations = []
             for row in range(1, table.numRows):
+                rel = table[row, 'rel_file_path'].val
+                strategy = (table[row, 'strategy'].val if has_strategy
+                            else table[row, 'type'].val) or 'tox'
+                try:
+                    abs_path = str(op.Embody.ext.Embody.buildAbsolutePath(
+                        op.Embody.ext.Embody.normalizePath(rel)))
+                except Exception:
+                    abs_path = rel
                 externalizations.append({
                     'path': table[row, 'path'].val,
                     'type': table[row, 'type'].val,
-                    'file_path': table[row, 'rel_file_path'].val,
+                    'strategy': strategy,
+                    'file_path': rel,
+                    'absolute_path': abs_path,
                     'timestamp': table[row, 'timestamp'].val,
                     'dirty': table[row, 'dirty'].val,
                     'build': table[row, 'build'].val,
+                    # Hint so an agent seeing a dirty TDN row knows the tool
+                    # that explains exactly what changed (live vs on-disk).
+                    'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
                 })
 
             return {
@@ -4566,17 +4630,32 @@ class EnvoyExt:
                 return {'error': 'Externalizations table not found'}
 
             # Find the row for this operator
+            headers = [table[0, c].val for c in range(table.numCols)]
+            has_strategy = 'strategy' in headers
             for row in range(1, table.numRows):
                 if table[row, 'path'].val == op_path:
+                    rel = table[row, 'rel_file_path'].val
+                    strategy = (table[row, 'strategy'].val if has_strategy
+                                else table[row, 'type'].val) or 'tox'
+                    try:
+                        abs_path = str(op.Embody.ext.Embody.buildAbsolutePath(
+                            op.Embody.ext.Embody.normalizePath(rel)))
+                    except Exception:
+                        abs_path = rel
                     return {
                         'path': op_path,
                         'externalized': True,
                         'type': table[row, 'type'].val,
-                        'file_path': table[row, 'rel_file_path'].val,
+                        'strategy': strategy,
+                        'file_path': rel,
+                        'absolute_path': abs_path,
                         'timestamp': table[row, 'timestamp'].val,
                         'dirty': table[row, 'dirty'].val,
                         'build': table[row, 'build'].val,
                         'touch_build': table[row, 'touch_build'].val,
+                        # Hint so an agent seeing a dirty TDN row knows the
+                        # tool that explains what changed (live vs on-disk).
+                        'recommended_tool': 'diff_tdn' if strategy == 'tdn' else None,
                     }
 
             return {
@@ -4775,6 +4854,81 @@ class EnvoyExt:
             max_depth=max_depth,
             embed_all=embed_all,
         )
+    def _resolve_diff_target(self, target):
+        """Resolve a diff_tdn target to a TDN COMP path.
+
+        Accepts either a COMP path directly, or a .tdn file reference (absolute
+        path, repo-relative path, or bare filename like "tooltip.tdn"), which is
+        reverse-resolved through the externalizations table. Returns
+        (comp_path, None) on success or (None, error_message)."""
+        # A live COMP path wins outright.
+        if op(target) is not None:
+            return target, None
+        # Otherwise treat it as a .tdn file reference.
+        try:
+            table = op.Embody.ext.Embody.Externalizations
+        except Exception:
+            table = None
+        if not table:
+            return None, ('Operator not found and externalizations table '
+                          'unavailable: %s' % target)
+        norm = str(target).replace('\\', '/')
+        base = norm.rsplit('/', 1)[-1]
+        headers = [table[0, c].val for c in range(table.numCols)]
+        has_strategy = 'strategy' in headers
+        matches = []
+        for row in range(1, table.numRows):
+            rel = (table[row, 'rel_file_path'].val or '').replace('\\', '/')
+            try:
+                abs_p = str(op.Embody.ext.Embody.buildAbsolutePath(
+                    op.Embody.ext.Embody.normalizePath(rel))).replace('\\', '/')
+            except Exception:
+                abs_p = rel
+            strat = (table[row, 'strategy'].val if has_strategy
+                     else table[row, 'type'].val) or 'tox'
+            if norm in (abs_p, rel) or base == rel.rsplit('/', 1)[-1]:
+                matches.append((table[row, 'path'].val, strat))
+        if not matches:
+            return None, ('No externalized COMP found for %r (not a COMP path '
+                          'or a tracked .tdn file)' % target)
+        if len(matches) > 1:
+            comps = ', '.join(m[0] for m in matches)
+            return None, ('Ambiguous: %r matches multiple externalized files '
+                          '(%s). Pass the COMP path instead.' % (target, comps))
+        comp_path, strat = matches[0]
+        if strat != 'tdn':
+            return None, ('%s is externalized as %s, not tdn -- diff_tdn only '
+                          'applies to TDN-strategy COMPs.' % (comp_path, strat))
+        return comp_path, None
+
+    def _diff_tdn(self, target='', max_changed_ops=200, max_bytes=60000):
+        """Show what is UNSAVED in TDN-externalized COMPs: live network(s) vs
+        the on-disk .tdn(s) -- the view git cannot provide.
+
+        `target` empty (or '/', 'project', '.', '*') -> PROJECT-WIDE: every live
+        TDN COMP, summarized (which changed + counts). Otherwise `target` is a
+        COMP path OR a .tdn file path/bare filename (resolved via the
+        externalizations table) -> that one COMP in full detail.
+
+        For committed/history diffs use git (the .tdn git diff driver keeps
+        those clean). Thin delegate to TDN.DiffLiveVsDisk / DiffAllLiveVsDisk.
+        Read-only, non-interactive, pull-only.
+        """
+        if not getattr(self.ownerComp.ext, 'TDN', None):
+            return {'error': 'TDN extension not loaded on Embody COMP'}
+        # Empty / whole-project target -> project-wide summary. Per-COMP detail
+        # uses DiffAllLiveVsDisk's own (smaller) caps; the handler's
+        # max_changed_ops governs the single-COMP path below.
+        if not target or str(target).strip() in ('', '/', 'project', '.', '*'):
+            return self.ownerComp.ext.TDN.DiffAllLiveVsDisk(max_bytes=max_bytes)
+        comp_path, err = self._resolve_diff_target(target)
+        if err:
+            return {'error': err}
+        return self.ownerComp.ext.TDN.DiffLiveVsDisk(
+            comp_path=comp_path,
+            max_changed_ops=max_changed_ops, max_bytes=max_bytes)
+
+
 
     # === Utility Methods ===
 
@@ -4940,6 +5094,9 @@ class EnvoyExt:
                                       else 'python3')
             else:
                 python_cmd = 'python' if sys.platform == 'win32' else 'python3'
+
+            # --- Deploy the .tdn git diff driver (semantic git diffs) ---
+            self._configureTdnDiffDriver(target_dir, python_cmd)
 
             # --- Write envoy.json project config ---
             self._writeEnvoyConfig(target_dir / '.embody', port)
@@ -5637,15 +5794,20 @@ class EnvoyExt:
             self._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
 
     def _configureGitattributes(self, git_root):
-        """Ensure .gitattributes normalizes line endings for TD-exported files.
-        TouchDesigner writes CRLF on all platforms; this forces LF in git
-        so externalized files don't show as dirty after every TD save.
-        Idempotent -- only writes if the managed block is missing."""
+        """Ensure .gitattributes normalizes line endings for TD-exported files
+        and enables semantic diffs for .tdn. TouchDesigner writes CRLF on all
+        platforms; this forces LF in git so externalized files don't show as
+        dirty after every TD save. The `diff=tdn` attribute pairs with the git
+        diff driver registered by _configureTdnDiffDriver, so `git diff` on a
+        .tdn shows only real network changes -- the volatile export header
+        (build/timestamp/version/source .toe) is stripped before diffing.
+        Idempotent -- migrates an existing managed block that predates the
+        diff driver."""
         MANAGED_BLOCK = (
             '\n# Embody / Envoy -- normalize TD line endings (auto-managed)\n'
             '*.py text eol=lf\n'
             '*.md text eol=lf\n'
-            '*.tdn text eol=lf\n'
+            '*.tdn text eol=lf diff=tdn\n'
             '*.json text eol=lf\n'
             '*.tsv text eol=lf\n'
             '*.xml text eol=lf\n'
@@ -5661,7 +5823,16 @@ class EnvoyExt:
                 existing = gitattr.read_text(encoding='utf-8')
 
             if MARKER in existing:
-                self._log('.gitattributes already configured', 'DEBUG')
+                # Migrate a managed block that predates the .tdn diff driver.
+                if ('*.tdn text eol=lf diff=tdn' not in existing
+                        and '*.tdn text eol=lf' in existing):
+                    existing = existing.replace(
+                        '*.tdn text eol=lf', '*.tdn text eol=lf diff=tdn')
+                    gitattr.write_text(existing, encoding='utf-8')
+                    self._log(
+                        'Migrated .gitattributes: enabled .tdn semantic diff')
+                else:
+                    self._log('.gitattributes already configured', 'DEBUG')
                 return
 
             if existing and not existing.endswith('\n'):
@@ -5672,6 +5843,70 @@ class EnvoyExt:
 
         except Exception as e:
             self._log(f'Could not auto-configure .gitattributes: {e}', 'WARNING')
+
+    def _configureTdnDiffDriver(self, target_dir, python_cmd):
+        """Deploy the .tdn git textconv script and register it as a git diff
+        driver in the repo. With the `*.tdn diff=tdn` attribute (set by
+        _configureGitattributes), this makes `git diff` / `git log -p` /
+        `git show` on .tdn files show only semantic network changes -- the
+        volatile export header is stripped before diffing, so re-exporting an
+        unchanged network produces an empty diff. This is the committed/on-disk
+        counterpart to the live `diff_tdn` MCP tool. The driver definition must
+        live in the repo's git config (git refuses to run textconv commands
+        defined by a cloned repo), so Embody configures it the same way it
+        manages .gitignore/.gitattributes/.mcp.json. Idempotent."""
+        from pathlib import Path
+        try:
+            target_dir = Path(target_dir)
+            embody_dir = target_dir / '.embody'
+            embody_dir.mkdir(parents=True, exist_ok=True)
+            script_path = embody_dir / 'tdn_textconv.py'
+
+            # Source from the templates textDAT, else the dev/embody fallback.
+            content = None
+            try:
+                templates = self.ownerComp.op('templates')
+                dat = templates.op('text_tdn_textconv') if templates else None
+                if dat:
+                    content = dat.text
+            except Exception:
+                pass
+            if not content:
+                source = Path(project.folder) / 'embody' / 'tdn_textconv.py'
+                if source.exists():
+                    content = source.read_text(encoding='utf-8')
+            if not content:
+                self._log(
+                    'tdn_textconv source not found -- skipping .tdn diff driver',
+                    'DEBUG')
+                return
+
+            # Write only if changed, to avoid touching mtime needlessly.
+            if not (script_path.exists()
+                    and script_path.read_text(encoding='utf-8') == content):
+                script_path.write_text(content, encoding='utf-8')
+
+            # Register the driver in the repo's git config (idempotent).
+            script_str = str(script_path).replace('\\', '/')
+            driver = '"%s" "%s"' % (python_cmd, script_str)
+            git_kwargs = dict(cwd=str(target_dir), capture_output=True,
+                              text=True, timeout=10,
+                              stdin=subprocess.DEVNULL)
+            current = subprocess.run(
+                ['git', 'config', '--get', 'diff.tdn.textconv'], **git_kwargs)
+            if (current.stdout or '').strip() != driver:
+                subprocess.run(
+                    ['git', 'config', 'diff.tdn.textconv', driver],
+                    check=True, **git_kwargs)
+                subprocess.run(
+                    ['git', 'config', 'diff.tdn.cachetextconv', 'false'],
+                    check=True, **git_kwargs)
+                self._log('Configured git diff driver for .tdn (semantic diffs)')
+
+        except (subprocess.SubprocessError, OSError) as e:
+            self._log(f'Could not configure .tdn git diff driver: {e}', 'DEBUG')
+        except Exception as e:
+            self._log(f'Could not deploy tdn_textconv: {e}', 'WARNING')
 
     def _cleanupTempFiles(self):
         """Remove stale Envoy temp files (captures, offloaded responses) from /tmp.

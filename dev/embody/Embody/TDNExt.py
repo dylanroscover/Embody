@@ -480,6 +480,10 @@ class TDNExt:
 
 	_TDN_VOLATILE_KEYS = frozenset({
 		'build', 'generator', 'td_build', 'exported_at',
+		# source_file is project.name, rewritten on every export but not
+		# content. Dropping it keeps pre-save equality and diff_tdn aligned
+		# (_normalize_tdn_for_compare reuses this set for diffing).
+		'source_file',
 	})
 
 	@staticmethod
@@ -519,6 +523,427 @@ class TDNExt:
 			return result if isinstance(result, dict) else None
 		except Exception:
 			return None
+
+	# =====================================================================
+	# SEMANTIC DIFF (live network vs on-disk .tdn) -- powers Envoy's diff_tdn
+	# =====================================================================
+	# Single source of truth for "what counts as a change": reuses
+	# _TDN_VOLATILE_KEYS and the import-side expanders (_resolve_par_templates,
+	# _merge_type_defaults) so the diff can never drift from import/pre-save.
+
+	_DIFF_SCHEMA_VERSION = '1.0'
+	# Root-document keys that are the externalized COMP's OWN content (the rest
+	# of the top level is metadata, container, or diffed separately).
+	_DIFF_ROOT_CONTENT_KEYS = (
+		'type', 'parameters', 'custom_pars', 'sequences',
+		'flags', 'color', 'tags', 'comment', 'storage',
+	)
+	# Operator keys NOT compared as own-fields (identity / diffed separately so
+	# a deep child edit never marks an ancestor modified).
+	_DIFF_OP_SKIP_KEYS = frozenset({'name', 'children', 'annotations'})
+
+	@staticmethod
+	def _normalize_dat_content(node):
+		"""Convert legacy v1.5 array-of-lines dat_content to the v2.0 joined
+		string in place, so an unchanged DAT does not diff across the v1.5->v2.0
+		format bump. Mirrors tdn_textconv._normalize_dat_content."""
+		if isinstance(node, dict):
+			if (node.get('dat_content_format') == 'text'
+					and isinstance(node.get('dat_content'), list)):
+				node['dat_content'] = '\n'.join(node['dat_content'])
+			for value in node.values():
+				TDNExt._normalize_dat_content(value)
+		elif isinstance(node, list):
+			for item in node:
+				TDNExt._normalize_dat_content(item)
+
+	@staticmethod
+	def _normalize_tdn_for_compare(tdn):
+		"""Return a NEW normalized copy of a TDN dict (input untouched).
+
+		Drops volatile header keys (_TDN_VOLATILE_KEYS), expands par_templates
+		and type_defaults into the operators via the same import-side expanders,
+		then drops the now-redundant compression blocks. After this two
+		semantically-equal exports compare equal regardless of compression.
+		"""
+		import copy
+		if not isinstance(tdn, dict):
+			return {}
+		out = copy.deepcopy(tdn)
+		for key in TDNExt._TDN_VOLATILE_KEYS:
+			out.pop(key, None)
+		# Reconcile a legacy v1.5 (array-of-lines) on-disk dat_content with the
+		# v2.0 (joined string) live form so an unchanged DAT does not false-diff.
+		TDNExt._normalize_dat_content(out)
+		ops = out.get('operators', [])
+		if isinstance(ops, list):
+			TDNExt._resolve_par_templates(ops, out.get('par_templates', {}) or {})
+			TDNExt._merge_type_defaults(ops, out.get('type_defaults', {}) or {})
+		out.pop('par_templates', None)
+		out.pop('type_defaults', None)
+		return out
+
+	@staticmethod
+	def _diff_index_by_name(items, warnings, parent_path, side):
+		"""Index op/annotation dicts by name; warn on duplicate siblings."""
+		idx = {}
+		for item in items or []:
+			if not isinstance(item, dict):
+				continue
+			name = item.get('name')
+			if name in idx:
+				warnings.append(
+					'Duplicate sibling name %r under %r (%s); diff may be '
+					'ambiguous' % (name, parent_path or '/', side))
+			idx[name] = item
+		return idx
+
+	@staticmethod
+	def _diff_field_change(key, old, new):
+		"""Structured change for one differing field.
+
+		parameters -> list of {name, old, new}; everything else -> {old, new}.
+		"""
+		if key == 'parameters' and (isinstance(old, dict) or isinstance(new, dict)):
+			old = old or {}
+			new = new or {}
+			items = []
+			for pname in sorted(set(old) | set(new)):
+				ov = old.get(pname)
+				nv = new.get(pname)
+				if ov != nv:
+					items.append({'name': pname, 'old': ov, 'new': nv})
+			return items
+		return {'old': old, 'new': new}
+
+	@staticmethod
+	def _diff_own_fields(live_op, disk_op, keys=None):
+		"""Return {key: change} for differing own-fields, or {} if identical."""
+		if keys is None:
+			keys = (set(live_op) | set(disk_op)) - TDNExt._DIFF_OP_SKIP_KEYS
+		changes = {}
+		for key in keys:
+			# old = disk (saved baseline), new = live (unsaved current)
+			ov = disk_op.get(key)
+			nv = live_op.get(key)
+			# tags/flags are set-like; compare order-insensitively
+			if key in ('tags', 'flags') and isinstance(ov, list) and isinstance(nv, list):
+				if sorted(ov) == sorted(nv):
+					continue
+				ov, nv = sorted(ov), sorted(nv)
+			if ov != nv:
+				changes[key] = TDNExt._diff_field_change(key, ov, nv)
+		return changes
+
+	@staticmethod
+	def _diff_join(parent_path, name):
+		if not parent_path:
+			return str(name)
+		return parent_path.rstrip('/') + '/' + str(name)
+
+	@staticmethod
+	def _diff_annotations(live_anns, disk_anns, parent_path, added, removed,
+						  modified, warnings):
+		live_idx = TDNExt._diff_index_by_name(
+			live_anns, warnings, parent_path, 'live-annotation')
+		disk_idx = TDNExt._diff_index_by_name(
+			disk_anns, warnings, parent_path, 'disk-annotation')
+		for name in live_idx:
+			if name not in disk_idx:
+				a = live_idx[name]
+				added.append({'path': parent_path, 'name': name,
+							  'type': a.get('mode'), 'kind': 'annotation'})
+		for name in disk_idx:
+			if name not in live_idx:
+				a = disk_idx[name]
+				removed.append({'path': parent_path, 'name': name,
+								'type': a.get('mode'), 'kind': 'annotation'})
+		for name in live_idx:
+			if name not in disk_idx:
+				continue
+			keys = (set(live_idx[name]) | set(disk_idx[name])) - {'name'}
+			changes = TDNExt._diff_own_fields(
+				live_idx[name], disk_idx[name], keys=keys)
+			if changes:
+				modified.append({
+					'path': parent_path, 'name': name,
+					'type': live_idx[name].get('mode'), 'kind': 'annotation',
+					'changed_keys': sorted(changes.keys()), 'changes': changes})
+
+	@staticmethod
+	def _diff_level(live_ops, disk_ops, parent_path, added, removed, modified,
+					warnings):
+		live_idx = TDNExt._diff_index_by_name(
+			live_ops, warnings, parent_path, 'live')
+		disk_idx = TDNExt._diff_index_by_name(
+			disk_ops, warnings, parent_path, 'disk')
+
+		def _entry(path, op_def, kind):
+			return {'path': path, 'name': op_def.get('name'),
+					'type': op_def.get('type'), 'kind': kind}
+
+		for name in live_idx:
+			if name not in disk_idx:
+				added.append(_entry(TDNExt._diff_join(parent_path, name),
+									live_idx[name], 'op'))
+		for name in disk_idx:
+			if name not in live_idx:
+				removed.append(_entry(TDNExt._diff_join(parent_path, name),
+									  disk_idx[name], 'op'))
+		for name in live_idx:
+			if name not in disk_idx:
+				continue
+			lo = live_idx[name]
+			do = disk_idx[name]
+			path = TDNExt._diff_join(parent_path, name)
+			changes = TDNExt._diff_own_fields(lo, do)
+			if changes:
+				entry = _entry(path, lo, 'op')
+				entry['changed_keys'] = sorted(changes.keys())
+				entry['changes'] = changes
+				modified.append(entry)
+			TDNExt._diff_level(lo.get('children', []) or [],
+							   do.get('children', []) or [],
+							   path, added, removed, modified, warnings)
+			TDNExt._diff_annotations(lo.get('annotations', []) or [],
+									 do.get('annotations', []) or [],
+									 path, added, removed, modified, warnings)
+
+	@staticmethod
+	def _diff_header_warnings(live_raw, disk_raw):
+		warnings = []
+		lb = live_raw.get('td_build')
+		db = disk_raw.get('td_build')
+		if lb and db and lb != db:
+			warnings.append(
+				'TD build differs (disk %s vs live %s); round-trip may shift '
+				'parameter defaults' % (db, lb))
+		lv = live_raw.get('version')
+		dv = disk_raw.get('version')
+		if lv and dv and lv != dv:
+			warnings.append('TDN format version differs (disk %s vs live %s)'
+							% (dv, lv))
+		return warnings
+
+	@staticmethod
+	def _diff_normalized(live_raw, disk_raw, comp_path='', file=None,
+						 file_exists=True, baseline='disk',
+						 max_changed_ops=200, max_bytes=60000):
+		"""Semantic diff of two raw TDN documents.
+
+		The first argument is the NEW side, the second is the OLD side, so
+		per-field changes report old=<2nd>, new=<1st>. `baseline` labels what
+		the OLD side is ('disk' = on-disk .tdn for live-vs-disk; 'head' = git
+		HEAD for committed-vs-working). Normalizes both internally, compares the
+		root COMP (as a pseudo-op), every operator (matched by name per level),
+		and annotations. Returns the diff envelope. Pure -- no TD access;
+		unit-testable with dicts.
+		"""
+		warnings = TDNExt._diff_header_warnings(
+			live_raw if isinstance(live_raw, dict) else {},
+			disk_raw if isinstance(disk_raw, dict) else {})
+		live = TDNExt._normalize_tdn_for_compare(live_raw)
+		disk = TDNExt._normalize_tdn_for_compare(disk_raw)
+
+		added, removed, modified = [], [], []
+
+		root_changes = TDNExt._diff_own_fields(
+			live, disk, keys=TDNExt._DIFF_ROOT_CONTENT_KEYS)
+		if root_changes:
+			modified.append({
+				'path': comp_path,
+				'name': (comp_path.rstrip('/').rsplit('/', 1)[-1]
+						 if comp_path else live.get('network_path', '')),
+				'type': live.get('type') or disk.get('type'),
+				'kind': 'root',
+				'changed_keys': sorted(root_changes.keys()),
+				'changes': root_changes})
+
+		TDNExt._diff_annotations(live.get('annotations', []) or [],
+								 disk.get('annotations', []) or [],
+								 comp_path, added, removed, modified, warnings)
+		TDNExt._diff_level(live.get('operators', []) or [],
+						   disk.get('operators', []) or [],
+						   comp_path, added, removed, modified, warnings)
+
+		counts = {'added': len(added), 'removed': len(removed),
+				  'modified': len(modified)}
+		changed = bool(added or removed or modified)
+
+		dropped = 0
+		if max_changed_ops is not None:
+			total = len(added) + len(removed) + len(modified)
+			if total > max_changed_ops:
+				budget = max_changed_ops
+				modified = modified[:budget]
+				budget -= len(modified)
+				added = added[:budget]
+				budget -= len(added)
+				removed = removed[:budget]
+				dropped = total - (len(added) + len(removed) + len(modified))
+
+		envelope = {
+			'schema_version': TDNExt._DIFF_SCHEMA_VERSION,
+			'baseline': baseline,
+			'comp_path': comp_path,
+			'file': file,
+			'file_exists': file_exists,
+			'changed': changed,
+			'counts': counts,
+			'added': added,
+			'removed': removed,
+			'modified': modified,
+			'truncated': {'ops': dropped > 0, 'dropped': dropped,
+						  'bytes': 0, 'max_bytes': max_bytes},
+			'warnings': warnings}
+
+		body_stripped = False
+		try:
+			size = len(json.dumps(envelope, ensure_ascii=False))
+		except (TypeError, ValueError):
+			size = 0
+		if max_bytes and size > max_bytes:
+			for entry in envelope['modified']:
+				if 'changes' in entry:
+					del entry['changes']
+					body_stripped = True
+			try:
+				size = len(json.dumps(envelope, ensure_ascii=False))
+			except (TypeError, ValueError):
+				pass
+			if body_stripped:
+				envelope['warnings'].append(
+					'Output exceeded max_bytes; per-field change bodies omitted '
+					'(changed_keys retained). Raise max_bytes or scope '
+					'comp_path for full detail.')
+		envelope['truncated']['ops'] = envelope['truncated']['ops'] or body_stripped
+		envelope['truncated']['bytes'] = size
+		return envelope
+
+	def DiffLiveVsDisk(self, comp_path='/', max_changed_ops=200, max_bytes=60000):
+		"""Diff a single TDN-externalized COMP: its live network vs the on-disk
+		.tdn -- i.e. what is UNSAVED.
+
+		This is the view git cannot provide: git only sees files on disk, never
+		TouchDesigner's live in-memory network. A save rewrites the .tdn, so the
+		result is empty right after saving. For committed/history diffs use git
+		(the .tdn git diff driver keeps those clean); for every TDN COMP at once,
+		use DiffAllLiveVsDisk.
+
+		Read-only and non-interactive: the live export suppresses
+		palette-handling prompts and never mutates TD state. Returns the diff
+		envelope, or {'error': ...}.
+		"""
+		import os
+		target = op(comp_path)
+		if not target:
+			return {'error': 'Operator not found: %s' % comp_path}
+		try:
+			rel = self.ownerComp.ext.Embody._getStrategyFilePath(comp_path, 'tdn')
+		except Exception as e:
+			return {'error': 'Failed to resolve .tdn path: %s' % e}
+		if not rel:
+			return {'error': '%s is not TDN-externalized (no .tdn file is '
+							 'tracked for it)' % comp_path}
+		try:
+			abs_path = str(self.ownerComp.ext.Embody.buildAbsolutePath(
+				self.ownerComp.ext.Embody.normalizePath(rel)))
+		except Exception:
+			abs_path = rel
+
+		# Live export, non-interactive (no palette prompt, no par mutation),
+		# vs the on-disk .tdn.
+		prev = getattr(self, '_tdn_suppress_palette_prompt', False)
+		self._tdn_suppress_palette_prompt = True
+		try:
+			live_res = self.ExportNetwork(root_path=comp_path, output_file=None)
+		except Exception as e:
+			self._tdn_suppress_palette_prompt = prev
+			return {'error': 'Live export failed: %s' % e}
+		self._tdn_suppress_palette_prompt = prev
+		if not isinstance(live_res, dict) or 'tdn' not in live_res:
+			return {'error': 'Live export failed: %s' % live_res}
+		live_tdn = live_res['tdn']
+
+		if not os.path.isfile(abs_path):
+			return {'error': 'On-disk .tdn not found: %s' % abs_path,
+					'comp_path': comp_path, 'file': abs_path,
+					'file_exists': False}
+		disk_tdn = self._read_existing_tdn(abs_path)
+		if disk_tdn is None:
+			return {'error': 'On-disk .tdn is missing or corrupt: %s' % abs_path,
+					'comp_path': comp_path, 'file': abs_path,
+					'file_exists': True}
+
+		return TDNExt._diff_normalized(
+			live_tdn, disk_tdn, comp_path=comp_path, file=abs_path,
+			file_exists=True, baseline='disk',
+			max_changed_ops=max_changed_ops, max_bytes=max_bytes)
+
+	def DiffAllLiveVsDisk(self, max_comps=200, max_changed_ops=50,
+						  max_bytes=60000):
+		"""Project-wide unsaved diff: every live TDN-externalized COMP vs its
+		on-disk .tdn. Answers "what has changed across the whole project that
+		isn't saved yet."
+
+		Returns a summary listing the CHANGED COMPs (each with its per-COMP diff
+		envelope, capped by max_changed_ops/max_bytes), plus counts of clean and
+		skipped COMPs. Rows whose COMP no longer exists live (e.g. stale table
+		entries) are skipped without an export. For full detail on one COMP,
+		call DiffLiveVsDisk(comp_path).
+
+		Read-only and non-interactive. Returns {'error': ...} only on a
+		top-level failure; per-COMP errors are collected under 'skipped'.
+		"""
+		try:
+			table = self.ownerComp.ext.Embody.Externalizations
+			if not table:
+				return {'error': 'Externalizations table not found'}
+			headers = [table[0, c].val for c in range(table.numCols)]
+			has_strategy = 'strategy' in headers
+			tdn_paths = []
+			for row in range(1, table.numRows):
+				strat = (table[row, 'strategy'].val if has_strategy
+						 else table[row, 'type'].val) or 'tox'
+				if strat == 'tdn':
+					tdn_paths.append(table[row, 'path'].val)
+		except Exception as e:
+			return {'error': 'Failed to read externalizations: %s' % e}
+
+		changed, skipped = [], []
+		clean_count = 0
+		examined = 0
+		truncated = False
+		for comp_path in tdn_paths:
+			# Skip rows whose COMP is not live -- can't diff (no live network).
+			if op(comp_path) is None:
+				skipped.append({'comp_path': comp_path, 'reason': 'not live'})
+				continue
+			if examined >= max_comps:
+				truncated = True
+				break
+			examined += 1
+			env = self.DiffLiveVsDisk(
+				comp_path, max_changed_ops=max_changed_ops, max_bytes=max_bytes)
+			if isinstance(env, dict) and env.get('error'):
+				skipped.append({'comp_path': comp_path, 'reason': env['error']})
+			elif env.get('changed'):
+				changed.append(env)
+			else:
+				clean_count += 1
+
+		return {
+			'schema_version': TDNExt._DIFF_SCHEMA_VERSION,
+			'baseline': 'disk',
+			'scope': 'project',
+			'changed_count': len(changed),
+			'clean_count': clean_count,
+			'skipped_count': len(skipped),
+			'examined': examined,
+			'changed': changed,
+			'skipped': skipped,
+			'truncated': {'comps': truncated, 'max_comps': max_comps},
+		}
 
 	# =========================================================================
 	# PROMOTED METHODS (uppercase -- callable directly on op.Embody)
@@ -4237,7 +4662,22 @@ class TDNExt:
 		if par_val in self._PALETTE_HANDLING_VALUES:
 			return par_val
 
-		# par_val == 'ask' (or unexpected)
+		# par_val == 'ask' (or unexpected).
+		# Read-only / non-interactive callers (e.g. diff_tdn's gather) set
+		# _tdn_suppress_palette_prompt so export never blocks on a modal dialog
+		# and never mutates the Tdnpalettehandling par. Fall back to the safe
+		# 'blackbox' handling and warn instead of prompting.
+		if getattr(self, '_tdn_suppress_palette_prompt', False):
+			try:
+				self._log(
+					f'Palette handling is "ask" but export is non-interactive '
+					f'for {target.path}; using "blackbox" (palette internals '
+					f'export as references). Set Tdnpalettehandling explicitly '
+					f'to silence this.', 'WARNING')
+			except Exception:
+				pass
+			return 'blackbox'
+
 		return self._promptPaletteHandling(target)
 
 	def _promptPaletteHandling(self, target):
