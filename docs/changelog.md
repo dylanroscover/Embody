@@ -1,5 +1,24 @@
 # Changelog
 
+## v6.0.39
+
+The save-resilience release: a `project.save()` no longer freezes TouchDesigner with onboarding modals, and a long-standing watchdog bug that let the Envoy MCP server stay wedged after a save is fixed at the root -- the server now self-heals in about a second. Plus comprehensive v6 test coverage (169 new tests across 9 suites).
+
+### Envoy: the liveness watchdog now actually self-heals a save-time wedge
+
+- **Root cause: the watchdog's revive cooldown compared a per-launch frame counter against a value saved across launches.** `_reviveDeadServer` measured its ~2s anti-spam cooldown in `absTime.frame` (frames since the app launched -- resets to 0 every launch) but stored that value in COMP storage, which persists into the `.toe`/`.tdn`. A high frame value baked from a prior session made every revive compute a negative `now - stored` delta -- always "less than 2s ago" -- so the guard returned **before scheduling the restart, every single time**, permanently. The watchdog detected the wedge forever but was structurally forbidden from fixing it. The cooldown now uses `time.monotonic()` on an instance attribute (never `absTime.frame`, never storage); `__init__` scrubs the obsolete `_last_revive_frame` key. A fresh launch always starts un-wedged. A regression test stores a high frame and asserts the revive still fires.
+- **The watchdog now trusts the socket, not internal flags.** It keyed off `_init_complete` and `_starting`, both of which a `project.save()` resets -- so the tick went idle and never revived a genuinely dead server. It now keys off the visible `Envoystatus` plus a real socket probe: a dead socket while enabled revives regardless of those flags. `Installing deps...` is the one grace state it will not interrupt.
+- **`Start()` no longer trusts a stale "Running" status.** It bailed if the status merely *said* "Running"; a worker that died without updating the status short-circuited the restart. It now probes the socket first and restarts on a dead one.
+
+### Envoy: the onboarding dialog never fires during a save or a test
+
+- **`project.save()` used to surface the "Enable Envoy?" modal (sometimes many times), freezing TD.** A single predicate `EmbodyExt._suppressDialogs()` -- true while a test run is active OR a save is in progress -- now gates the queue site in `Verify()`, the deferred `_promptEnvoy`, and `_messageBox` itself, so the prompt can neither show nor queue mid-save. `onProjectPreSave` sets a `_suppress_dialogs` flag for the save window, scrubbed on next open so it never bakes a permanent suppression into the `.toe`. The file-cleanup and deprecated-externaltox prompts are gated the same way; `_promptEnvoy` treats a suppressed (`-1`) return as a no-op so a seeded test answer is still honored.
+
+### Tests: comprehensive v6 coverage
+
+- **169 new tests across 9 suites** (67 suites / 1,616 tests total): clipboard copy/paste (42), collection scanner (22) + safe-import (18), v6 hardening (20), specimen publish (19), the Envoy liveness watchdog (21), GLSL externalize (11), layout lint (10), and dialog suppression (6), plus `test_smoke_release` additions.
+- **Layout lint `maxDepth` fix.** The v6.0.34 `execute_python` layout lint called `findChildren(depth=12)` (exactly depth 12 -- matched nothing); it now uses `maxDepth=12`, so the lint actually fires.
+
 ## v6.0.34
 
 Everything since v6.0.26 in one release: a GLSL-shader externalization fix so shaders write as `.glsl` instead of `.py`, the recurring `execute_python` "(0,0) pileup" now caught by a layout lint at the Envoy tool layer, a self-contained Specimen publish hook for the embody.tools "embody it" copy-paste, and a waveform-stack feedback cook-loop fix — plus six landscape transmission specimens.

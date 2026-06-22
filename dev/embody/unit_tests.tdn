@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 38
-generator: Embody/6.0.33
+generator: Embody/6.0.38
 td_build: 099.2025.32820
-source_file: Embody-6.34.toe
-exported_at: '2026-06-18T06:09:32Z'
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:39Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -1744,13 +1744,180 @@ storage:
       status: PASS
       message: ''
       duration_ms: 0.38
+  cp_summary:
+    total: 32
+    passed: 30
+    failed: 1
+    errors: 0
+    skipped: 1
+    results:
+    - suite: test_custom_parameters
+      test: test_detectduplicatepaths_toggle
+      status: PASS
+      message: ''
+      duration_ms: 0.15
+    - suite: test_custom_parameters
+      test: test_disable_directly_with_keep_tags
+      status: PASS
+      message: ''
+      duration_ms: 346276.02
+    - suite: test_custom_parameters
+      test: test_disable_directly_with_remove_tags
+      status: PASS
+      message: ''
+      duration_ms: 176.69
+    - suite: test_custom_parameters
+      test: test_disable_z01_restore_tox
+      status: PASS
+      message: ''
+      duration_ms: 1001.2
+    - suite: test_custom_parameters
+      test: test_disable_z02_disable_again
+      status: PASS
+      message: ''
+      duration_ms: 29.11
+    - suite: test_custom_parameters
+      test: test_disable_z03_restore_tdn
+      status: PASS
+      message: ''
+      duration_ms: 3122.71
+    - suite: test_custom_parameters
+      test: test_disable_z04_verify_complete
+      status: FAIL
+      message: Should have at least one TDN file
+      duration_ms: 1.34
+    - suite: test_custom_parameters
+      test: test_embeddatsintdns_toggle_triggers_reexport
+      status: PASS
+      message: ''
+      duration_ms: 0.15
+    - suite: test_custom_parameters
+      test: test_enablekeyboardshortcuts_toggle
+      status: PASS
+      message: ''
+      duration_ms: 0.22
+    - suite: test_custom_parameters
+      test: test_envoyenable_reflects_server_state
+      status: SKIP
+      message: 'Server in transitional state: Restarting after reinit...'
+      duration_ms: 0.01
+    - suite: test_custom_parameters
+      test: test_envoyport_is_valid_range
+      status: PASS
+      message: ''
+      duration_ms: 0
+    - suite: test_custom_parameters
+      test: test_externalizations_par_points_to_valid_table
+      status: PASS
+      message: ''
+      duration_ms: 0.01
+    - suite: test_custom_parameters
+      test: test_folder_is_string_and_getProjectFolder_works
+      status: PASS
+      message: ''
+      duration_ms: 0.02
+    - suite: test_custom_parameters
+      test: test_importtdn_with_invalid_file_logs_error
+      status: PASS
+      message: ''
+      duration_ms: 3.26
+    - suite: test_custom_parameters
+      test: test_logfolder_change_affects_log_path
+      status: PASS
+      message: ''
+      duration_ms: 0.15
+    - suite: test_custom_parameters
+      test: test_logfolder_default
+      status: PASS
+      message: ''
+      duration_ms: 0
+    - suite: test_custom_parameters
+      test: test_logtofile_toggle
+      status: PASS
+      message: ''
+      duration_ms: 0.02
+    - suite: test_custom_parameters
+      test: test_networkpath_accepts_path
+      status: PASS
+      message: ''
+      duration_ms: 0.01
+    - suite: test_custom_parameters
+      test: test_print_toggle
+      status: PASS
+      message: ''
+      duration_ms: 0.01
+    - suite: test_custom_parameters
+      test: test_refresh_cleans_and_updates
+      status: PASS
+      message: ''
+      duration_ms: 86.24
+    - suite: test_custom_parameters
+      test: test_tdncreateonstart_toggle
+      status: PASS
+      message: ''
+      duration_ms: 0.01
+    - suite: test_custom_parameters
+      test: test_tdnfile_accepts_path
+      status: PASS
+      message: ''
+      duration_ms: 0.01
+    - suite: test_custom_parameters
+      test: test_update_creates_externalization_folder
+      status: PASS
+      message: ''
+      duration_ms: 1.57
+    - suite: test_custom_parameters
+      test: test_update_pulse_sets_status_enabled
+      status: PASS
+      message: ''
+      duration_ms: 1.57
+    - suite: test_custom_parameters
+      test: test_verbose_toggle_affects_debug_output
+      status: PASS
+      message: ''
+      duration_ms: 0.25
+    - suite: test_custom_parameters
+      test: test_zz_folder_01_change_to_temp
+      status: PASS
+      message: ''
+      duration_ms: 20.69
+    - suite: test_custom_parameters
+      test: test_zz_folder_02_reenable_new
+      status: PASS
+      message: ''
+      duration_ms: 59.67
+    - suite: test_custom_parameters
+      test: test_zz_folder_03_update_new_folder
+      status: PASS
+      message: ''
+      duration_ms: 3814.81
+    - suite: test_custom_parameters
+      test: test_zz_folder_04_restore_original
+      status: PASS
+      message: ''
+      duration_ms: 26.25
+    - suite: test_custom_parameters
+      test: test_zz_folder_05_reenable_original
+      status: PASS
+      message: ''
+      duration_ms: 3707.48
+    - suite: test_custom_parameters
+      test: test_zz_folder_10_empty_dir_survives_disable
+      status: PASS
+      message: ''
+      duration_ms: 3214.27
+    - suite: test_custom_parameters
+      test: test_zz_folder_11_disable_empty_prev_skips_project_folder
+      status: PASS
+      message: ''
+      duration_ms: 3146.21
 operators:
 - name: results
   type: tableDAT
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 155
+    rows: 55
     cols: 5
   flags:
   - viewer

@@ -665,6 +665,36 @@ class EmbodyExt:
     # ENVOY ONBOARDING
     # ==========================================================================
 
+    def _testRunnerActive(self):
+        """True iff the Embody test runner is mid-run. Decoupled from
+        _smoke_test_responses (which tests replace/unstore freely), so the
+        onboarding modal stays suppressed for the WHOLE run -- not just while
+        seeded answers remain. Mirrors the continuity-dialog guard that already
+        suppresses the OTHER modal during tests (see checkOpsForContinuity)."""
+        try:
+            runner = getattr(op, 'unit_tests', None)
+            ext = getattr(getattr(runner, 'ext', None), 'TestRunnerExt', None)
+            return bool(getattr(ext, '_running', False)) if ext else False
+        except Exception:
+            return False
+
+    def _suppressDialogs(self):
+        """Single source of truth for 'do not show interactive modals now'.
+
+        True when a test run is active OR a project save is in progress
+        (onProjectPreSave sets _suppress_dialogs; it is cleared after the
+        post-save restore + Envoy-restart window, and again on next open via
+        init()). Every _messageBox, the Verify() queue site, and _promptEnvoy
+        consult this, so a save's strip/restore reinit burst can never show --
+        or even queue -- the onboarding modal. Timing-independent: it is checked
+        at the moment a dialog would display/queue, not via deferred scheduling."""
+        if self._testRunnerActive():
+            return True
+        try:
+            return bool(self.my.fetch('_suppress_dialogs', False, search=False))
+        except Exception:
+            return False
+
     def _messageBox(self, title, message, buttons):
         """ui.messageBox with auto-response support for headless testing.
 
@@ -681,8 +711,13 @@ class EmbodyExt:
         keys remain.
         """
         responses = self.my.fetch('_smoke_test_responses', None, search=False)
-        test_mode = responses is not None
-        if test_mode and title in responses:
+        # test_mode is True if a test seeded responses OR dialogs are suppressed
+        # (_suppressDialogs: a test run is active, or a project save is in
+        # progress). Suppression is decoupled from _smoke_test_responses so the
+        # modal stays gated even after a test drains the dict, AND it covers the
+        # save window, where a post-save Refresh could otherwise reach a modal.
+        test_mode = (responses is not None) or self._suppressDialogs()
+        if responses is not None and title in responses:
             value = responses[title]
             if isinstance(value, list):
                 choice = value.pop(0) if value else None
@@ -736,6 +771,13 @@ class EmbodyExt:
             'dependencies are installed.',
             buttons=['Skip', 'Enable Envoy'])
 
+        # choice == -1 means _messageBox suppressed the dialog (a test run OR a
+        # save in progress -- _suppressDialogs) with no seeded answer. Do nothing:
+        # returning here is what stops a deferred fire from flipping Envoyenable
+        # off mid-save. A genuinely seeded test answer returns 0/1 (the seeded
+        # path runs before suppression in _messageBox) and is still honored below.
+        if choice == -1:
+            return
         if choice == 1:
             self._enableEnvoy()
         else:
@@ -2014,13 +2056,15 @@ class EmbodyExt:
             # config.json from a previous install in the same folder was
             # restored, the user must explicitly opt in for this new project.
             # Reset Envoyenable so the prompt is the gate, not old settings.
-            # Idempotent: do NOT re-queue if a prompt is already pending.
-            # Tests that run multiple Verify() cycles in succession (e.g.
-            # test_custom_parameters' Disable/Enable suite) would otherwise
-            # stack N prompts, each one consuming one seeded auto-response
-            # and the rest hitting ui.messageBox for real -- freezing TD
-            # with modal dialogs the moment the test finishes.
-            if not getattr(self, '_pending_envoy_prompt', False):
+            # Never queue (or flip Envoy off) while dialogs are suppressed --
+            # a test run OR a project save in progress (_suppressDialogs). One of
+            # three display-time gates (here, _promptEnvoy, _messageBox) that
+            # together guarantee the onboarding modal can neither queue nor show
+            # during a save/test, regardless of how/when Verify is reached.
+            # Without it, queuing here also reset Envoyenable=False, silently
+            # disabling Envoy. Idempotent: don't re-queue if one is already pending.
+            if (not self._suppressDialogs()
+                    and not getattr(self, '_pending_envoy_prompt', False)):
                 self.my.par.Envoyenable = False
                 self._pending_envoy_prompt = True
 
@@ -3812,7 +3856,10 @@ class EmbodyExt:
         for comp in internal:
             _reset(comp)
 
-        if external:
+        # Skip this prompt while dialogs are suppressed (test run or save in
+        # progress) -- a modal mid-save freezes TD. The deprecated-path reset is
+        # advisory and is re-offered on the next continuity check.
+        if external and not self._suppressDialogs():
             message = "Found COMPs using deprecated 'me.parent().fileFolder':\n\n"
             message += "\n".join([f"- {comp.path}" for comp in external])
             message += "\n\nReset these paths?"
@@ -4310,25 +4357,24 @@ class EmbodyExt:
             missing_ops: List of (op_path, rel_file_path, reason) tuples where
                 reason is 'tdn', 'replaced', or 'missing'.
         """
-        # Suppress dialog during test runs to prevent modal spam --
-        # rapid operator create/destroy cycles can trigger continuity
-        # checks that find transient sandbox ops as "missing".
-        # Two-layer protection: runtime flag AND path-based filtering.
+        # Never open the file-cleanup modal while dialogs are suppressed -- a
+        # test run OR a project save in progress (_suppressDialogs). A save's
+        # post-save Refresh reaches checkOpsForContinuity while _suppress_dialogs
+        # is still set; a modal mid-save freezes TD, and ops that are only
+        # transiently "missing" (mid strip/restore) get re-evaluated by the next
+        # continuity check once suppression lifts. Reads the save flag from
+        # storage, so it protects user .tox projects too (no test runner needed).
+        if self._suppressDialogs():
+            self.Debug('File-cleanup continuity dialog suppressed (test/save '
+                       f'active, {len(missing_ops)} missing ops)')
+            return
+
+        # Even when not suppressed, filter out transient test-sandbox ops that a
+        # between-suite reinit can surface as "missing" (covers the standard
+        # sandbox COMP and root-level test sandboxes like /_test_dat_restore).
         try:
             runner = getattr(op, 'unit_tests', None)
             if runner:
-                # Layer 1: If test runner is actively running, suppress entirely
-                runner_ext = getattr(
-                    getattr(runner, 'ext', None), 'TestRunnerExt', None)
-                if runner_ext and getattr(runner_ext, '_running', False):
-                    self.Debug(
-                        f'Continuity dialog suppressed: test runner active '
-                        f'({len(missing_ops)} missing ops)')
-                    return
-                # Layer 2: Filter out sandbox paths even when runner isn't
-                # active (handles reinit, between-suite gaps, post-failure).
-                # Covers both the standard sandbox COMP and root-level
-                # test sandboxes (e.g. /_test_dat_restore).
                 sandbox_comp = getattr(runner, 'op', lambda x: None)(
                     'test_sandbox')
                 sandbox_prefixes = []

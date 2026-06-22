@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 443
-generator: Embody/6.0.33
+build: 503
+generator: Embody/6.0.38
 td_build: 099.2025.32820
-source_file: Embody-6.34.toe
-exported_at: '2026-06-18T06:09:33Z'
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:40Z'
 network_path: /embody/unit_tests/test_sandbox
 options:
   include_dat_content: false
@@ -39,50 +39,6 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdn
 operators:
-- name: geo_debug
-  type: geometryCOMP
-  flags:
-  - display
-  - render
-  size: [160, 130]
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
-  tdn_ref: embody/unit_tests/test_sandbox/geo_debug.tdn
-- name: compwire_test
-  type: baseCOMP
-  tdn_ref: embody/unit_tests/test_sandbox/compwire_test.tdn
-- name: compwire_test1
-  type: baseCOMP
-  tdn_ref: embody/unit_tests/test_sandbox/compwire_test1.tdn
-- name: custom_seq_test
-  type: baseCOMP
-  sequences:
-    Items: []
-  custom_pars:
-    Test:
-    - name: Items
-      style: Sequence
-    - name: Label
-      style: Str
-    - name: Weight
-      style: Float
-  tdn_ref: embody/unit_tests/test_sandbox/custom_seq_test.tdn
-- name: custom_seq_test1
-  type: baseCOMP
-  sequences:
-    Items: []
-  custom_pars:
-    Test:
-    - name: Items
-      style: Sequence
-    - name: Itemlabel
-      style: Str
-      label: Item Label
-    - name: Itemweight
-      style: Float
-      label: Item Weight
-  tdn_ref: embody/unit_tests/test_sandbox/custom_seq_test1.tdn
 - name: sandbox_test_custom_parameters
   type: baseCOMP
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn

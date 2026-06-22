@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.34
+generator: Embody/6.0.38
 td_build: 099.2025.32820
-source_file: Embody-6.34.toe
-exported_at: '2026-06-20T20:36:16Z'
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:38Z'
 network_path: /specimen_lab/mandelbulb_march
 options:
   include_dat_content: false

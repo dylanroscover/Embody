@@ -25,6 +25,10 @@ def init():
 	parent.Embody.par.Envoyenable = False
 	parent.Embody.par.Envoystatus = 'Disabled'
 	parent.Embody.par.Performmode = False
+	# Clear any save-time dialog suppression that baked into the .toe/.tox.
+	# _suppress_dialogs is a save-window-only flag; a fresh open must start with
+	# dialogs enabled so genuine first-run onboarding can prompt.
+	parent.Embody.unstore('_suppress_dialogs')
 
 
 def onStart():
@@ -107,6 +111,18 @@ def onProjectPreSave():
 		parent.Embody.unstore('_tdn_stripped_paths')
 		parent.Embody.unstore('_tdn_pane_restore')
 		parent.Embody.unstore('_perform_state')
+
+		# Suppress interactive modals (the Envoy onboarding prompt AND the
+		# file-cleanup / continuity prompts) for the whole save window. The
+		# post-save Refresh + Envoy restart can reach a _messageBox/ui.messageBox
+		# while the save is mid-flight; a modal then freezes TD. _suppressDialogs()
+		# reads this flag, so every gated dialog returns its safe default instead.
+		# Cleared after the save settles (onProjectPostSave, delayFrames=120) and
+		# again on next open (init). NOTE: unlike the session keys unstored above,
+		# this is set BEFORE the .toe write / release .tox export, so it DOES bake
+		# into both -- intentionally. init()'s unstore scrubs it on open before any
+		# dialog could read it (same baked-value-scrub pattern as Envoyenable).
+		parent.Embody.store('_suppress_dialogs', True)
 
 		# Skip all pre-save processing in Perform Mode.
 		# The .toe still saves normally via TD -- Embody's externalization pipeline is bypassed.
@@ -270,6 +286,12 @@ def _runPreSaveExternalization():
 	return
 
 def onProjectPostSave():
+	# Lift the save-time dialog suppression once the post-save restore AND the
+	# deferred Envoy restart (delayFrames=30 below) + its reinit/Verify/deferred
+	# prompt window have all elapsed. Generous delay so no late reinit re-queues a
+	# modal; scheduled up-front via run() so every return path still clears it and
+	# a stuck flag can never outlive the save.
+	run(f"op('{parent.Embody}').unstore('_suppress_dialogs')", delayFrames=120)
 	# Restore children that were stripped during pre-save.
 	# Re-import from the just-exported .tdn files to keep the session intact.
 	# In Export/Off modes no strip runs, so stripped is empty -- but we still

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: null
-generator: Embody/6.0.33
+build: 1
+generator: Embody/6.0.38
 td_build: 099.2025.32820
-source_file: Embody-6.34.toe
-exported_at: '2026-06-18T06:09:31Z'
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:37Z'
 network_path: /specimen_lab/waveform_stack
 options:
   include_dat_content: false
@@ -198,7 +198,9 @@ custom_pars:
     clampMax: true
     normMax: 2.0
     help: strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick.
-color: [0.67, 0.67, 0.67]
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
 operators:
 - name: out1
   type: outTOP

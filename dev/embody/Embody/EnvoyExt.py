@@ -1512,6 +1512,11 @@ class EnvoyExt:
         self._restart_count: int = 0
         self._deadTicks: int = 0  # consecutive watchdog ticks seeing a dead/refused socket
         self._last_start_time: float = 0.0  # time.time() when Start() was called
+        # Watchdog revive cooldown, kept as time.monotonic() on an INSTANCE
+        # attribute -- never absTime.frame, never COMP storage. absTime.frame
+        # resets to 0 each launch while storage persists, so a stored frame from a
+        # prior session compared negative and permanently no-op'd recovery.
+        self._last_revive_time: float = 0.0
         self._MAX_RESTARTS: int = 3
         self._RESTART_RESET_SECONDS: float = 120.0  # Reset counter after 2 min uptime
         # H1 startup-readiness state: 'Running' is declared only after the
@@ -1576,6 +1581,13 @@ class EnvoyExt:
         # prompt and resolves to one loop per instance across reinits.
         self._deadTicks = 0
         self._startingTicks = 0
+        # Drop the legacy persisted revive-cooldown frame. It was an absTime.frame
+        # (session-local, resets to 0 each launch) wrongly saved to COMP storage;
+        # a high value baked from a prior session made every revive's cooldown go
+        # negative and permanently no-op the watchdog restart (the wedge this
+        # fixes). The cooldown now lives in self._last_revive_time (monotonic,
+        # instance-only); this unstore just scrubs the obsolete key from old .toes.
+        self.ownerComp.unstore('_last_revive_frame')
         # Tag this armed chain with a monotonic generation (stored on the COMP
         # so it survives the reinit storm). Only the newest generation's tick
         # proceeds; the rest exit as stale -- one live loop per save, not ~N.
@@ -1844,9 +1856,35 @@ class EnvoyExt:
         # 'Starting...' is just a UI hint -- not proof of an active thread.
         status = str(self.ownerComp.par.Envoystatus.eval())
         if status.startswith('Running'):
-            self._log(f'Server already active (status: {status})', 'WARNING')
-            self.ownerComp.store('envoy_running', True)
-            return
+            # Trust a 'Running' status ONLY if the socket actually answers. A
+            # stale 'Running on port N' left behind when a worker died (the save
+            # wedge -- status never updated) must NOT short-circuit the restart,
+            # or Start bails, re-asserts envoy_running=True, and the server stays
+            # down forever. _runtime_port is reset on reinit, so recover the port
+            # from the status string (or the configured par) before probing.
+            import re as _re, socket as _socket
+            _m = _re.search(r'port (\d+)', status)
+            _probe_port = (getattr(self, '_runtime_port', None)
+                           or (int(_m.group(1)) if _m else None)
+                           or int(self.ownerComp.par.Envoyport.eval()))
+            _alive = False
+            try:
+                _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                _s.settimeout(0.25)
+                try:
+                    _s.connect(('127.0.0.1', int(_probe_port)))
+                    _alive = True
+                finally:
+                    _s.close()
+            except Exception:
+                _alive = False
+            if _alive:
+                self._log(f'Server already active (status: {status})', 'WARNING')
+                self.ownerComp.store('envoy_running', True)
+                return
+            self._log(f'Stale {status!r} but socket is dead -- restarting fresh',
+                      'WARNING')
+            # fall through to start a new worker
 
         # A background dependency install from a prior Start() is still running;
         # _pollBootstrap will finish the start when it completes. Don't stack a
@@ -2206,22 +2244,39 @@ class EnvoyExt:
 
         try:
             enabled = bool(self.ownerComp.par.Envoyenable.eval())
-            init_done = bool(self.ownerComp.fetch('_init_complete', False, search=False))
-            if not (enabled and init_done):
+            status = str(self.ownerComp.par.Envoystatus.eval())
+            # The SOCKET is the source of truth, never the internal _starting /
+            # _init_complete flags. A project.save() clears _init_complete and a
+            # reinit resets _starting, and keying off them is exactly what wedged a
+            # dead server forever -- the watchdog went idle and never revived.
+            # Only two idle cases: disabled, or a one-time deps install (legit
+            # long, never interrupt). An explicit Start 'Error' is also left alone
+            # so a hard failure (e.g. broken venv) is not hammered every tick.
+            installing = status.startswith('Installing')
+            transitional = status.startswith(('Starting', 'Restarting', 'Reviving'))
+            if not enabled or installing or status.startswith('Error'):
                 self._deadTicks = 0
-                self._startingTicks = 0          # disabled or pre-init -> idle
-            elif self._starting:
-                # _pollStartup normally clears _starting within the startup
-                # window. If its loop died (stale generation), _starting would
-                # stick True forever and block recovery -- so force a revive
-                # after ~24s stuck in 'starting'.
+                self._startingTicks = 0
+            elif transitional:
+                # Startup grace: a transitional status must resolve quickly. Force
+                # a restart if it sticks ~24s (stale poll generation, raced reinit
+                # Start, a worker that never bound), then retry every ~24s until
+                # the socket answers. Status-par driven, so it fires even after a
+                # save reset _starting / _init_complete.
                 self._deadTicks = 0
                 self._startingTicks = getattr(self, '_startingTicks', 0) + 1
-                if self._startingTicks >= 6:
+                if self._startingTicks >= 6:     # 6 * 4s = ~24s stuck -> restart
                     self._startingTicks = 0
+                    self._log(
+                        f'Watchdog: status stuck at {status!r} ~24s while '
+                        f'enabled -- forcing restart', 'WARNING')
                     self._reviveDeadServer(
                         self.ownerComp.fetch('envoy_running', False))
             else:
+                # Settled + enabled, INCLUDING a stale 'Running on port N' left
+                # after a save killed the worker without updating the status (the
+                # exact 6.36/6.37 wedge): probe the real socket. Dead for ~8s ->
+                # revive. _init_complete is intentionally NOT consulted here.
                 self._startingTicks = 0
                 running = self.ownerComp.fetch('envoy_running', False)
                 if running and self._probeAlive():
@@ -2230,8 +2285,10 @@ class EnvoyExt:
                     self._deadTicks += 1
                     if self._deadTicks >= 2:     # ~8s enabled-but-down -> revive
                         self._deadTicks = 0
+                        self._log(
+                            f'Watchdog: enabled but socket dead (status '
+                            f'{status!r}) -- reviving', 'WARNING')
                         self._reviveDeadServer(running)
-                        # keep monitoring the revived server; do not stop the loop
         except Exception as e:
             try:
                 self._log(f'Watchdog tick error (continuing): {e}', 'DEBUG')
@@ -2285,10 +2342,17 @@ class EnvoyExt:
         even though the per-reinit generation counter armed during the storm is
         not -- which is why the dedup lives here and not only on the tick.
         """
-        now = absTime.frame
-        if now - self.ownerComp.fetch('_last_revive_frame', -100000) < 120:
+        # Cooldown: collapse a same-frame storm of revive calls (multiple armed
+        # watchdog ticks coming due together) into one. Uses time.monotonic() on
+        # an INSTANCE attribute -- never absTime.frame, never COMP storage --
+        # because absTime.frame resets to 0 each launch while storage persists, so
+        # a stored frame from a prior session went negative here and PERMANENTLY
+        # blocked recovery (detection kept firing, restart never ran). A fresh
+        # instance always starts un-wedged; the genuine ~8s revive cadence still
+        # clears the 2s window.
+        if time.monotonic() - self._last_revive_time < 2.0:
             return  # already revived for this death event -- drop the duplicate
-        self.ownerComp.store('_last_revive_frame', now)
+        self._last_revive_time = time.monotonic()
         port = getattr(self, '_runtime_port', None)
         self._log(
             f'Watchdog: MCP socket on port {port} unreachable while enabled '
@@ -3156,7 +3220,7 @@ class EnvoyExt:
             return
         try:
             new_parents = {}
-            for o in root.findChildren(depth=12):
+            for o in root.findChildren(maxDepth=12):
                 if o.path in pre_paths:
                     continue
                 par = o.parent()
@@ -3183,7 +3247,7 @@ class EnvoyExt:
             # the exact path that keeps dropping ops at (0,0); _lintNewOps below
             # turns that into a WARNING on the response.
             try:
-                pre_paths = set(o.path for o in root.findChildren(depth=12))
+                pre_paths = set(o.path for o in root.findChildren(maxDepth=12))
             except Exception:
                 pre_paths = None
 
