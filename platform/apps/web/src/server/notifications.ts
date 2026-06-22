@@ -22,7 +22,7 @@ export interface NotifyEnv extends EmailEnv {
 }
 
 // Project owner. Override per-deploy with OWNER_NOTIFY_EMAIL.
-const DEFAULT_OWNER = "dylan@roscover.com";
+const DEFAULT_OWNER = "rosco@tec.design";
 // Public site origin, used only to build links inside notification bodies.
 const DEFAULT_BASE_URL = "https://embody.tools";
 
