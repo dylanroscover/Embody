@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { D1Dialect } from "kysely-d1";
 import { emailEnabled, sendEmail } from "../server/email";
+import { notifyOwnerNewSignup } from "../server/notifications";
 
 // Better Auth server config for the Cloudflare Worker (Astro server output).
 //
@@ -25,6 +26,9 @@ export interface AuthEnv {
   // signup keeps working without an email provider. See src/server/email.ts.
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  // Owner inbox for operational notifications (new signup). Optional; defaults
+  // to the project owner. See src/server/notifications.ts.
+  OWNER_NOTIFY_EMAIL?: string;
 }
 
 // True when GitHub OAuth has been wired by the owner (see owner_todo).
@@ -95,11 +99,14 @@ function buildAuth(env: AuthEnv, secret: string) {
       user: {
         create: {
           after: async (user: { id: string; email?: string | null; name?: string | null }) => {
-            await ensureUserProfile(env.DB, {
+            const handle = await ensureUserProfile(env.DB, {
               id: user.id,
               email: user.email,
               name: user.name
             });
+            // Operational notice to the owner. Safe-by-default + self-swallowing,
+            // so it never blocks or breaks account creation (see notifications.ts).
+            await notifyOwnerNewSignup(env, { email: user.email ?? null, handle });
           }
         }
       }

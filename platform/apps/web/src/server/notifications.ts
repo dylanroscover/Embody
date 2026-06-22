@@ -1,0 +1,156 @@
+// Owner-facing operational notifications: the platform tells its operator when
+// something worth knowing happens -- a new signup, a new specimen published to
+// the public gallery, or an abuse report filed against content.
+//
+// Built on the SAME safe-by-default Resend layer as user email (src/server/email.ts):
+// every send no-ops when RESEND_API_KEY is unset and NEVER throws. On top of that,
+// the helpers here swallow their own errors and resolve to a result object, so a
+// missing or failing owner-notification can never break the signup, publish, or
+// report flow it rides on. Call sites can `await` them without a try/catch.
+//
+// Delivery requires RESEND_API_KEY (Worker secret); the destination is
+// OWNER_NOTIFY_EMAIL (defaults to the project owner). See the README env table.
+
+import { sendEmail, type EmailEnv, type SendEmailResult } from "./email";
+
+export interface NotifyEnv extends EmailEnv {
+  // Owner inbox for operational notifications. Falls back to DEFAULT_OWNER.
+  OWNER_NOTIFY_EMAIL?: string;
+  // Public base URL, used to build absolute links in the notifications. Falls
+  // back to DEFAULT_BASE_URL when unset (same value used for OAuth callbacks).
+  BETTER_AUTH_URL?: string;
+}
+
+// Project owner. Override per-deploy with OWNER_NOTIFY_EMAIL.
+const DEFAULT_OWNER = "dylan@roscover.com";
+// Public site origin, used only to build links inside notification bodies.
+const DEFAULT_BASE_URL = "https://embody.tools";
+
+function ownerAddress(env: NotifyEnv): string {
+  return env.OWNER_NOTIFY_EMAIL?.trim() || DEFAULT_OWNER;
+}
+
+function baseUrl(env: NotifyEnv): string {
+  return (env.BETTER_AUTH_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
+}
+
+// Minimal HTML escaping for the untrusted values (emails, handles, titles,
+// reasons) interpolated into the notification bodies below.
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// A single owner-notice email: a heading, a labelled detail list, and an
+// optional "view" link. Plain, scannable, dark-themed to match the user emails.
+function ownerNoticeHtml(
+  heading: string,
+  rows: Array<[label: string, value: string]>,
+  link?: { href: string; label: string }
+): string {
+  const detail = rows
+    .map(
+      ([label, value]) =>
+        `<tr>
+          <td style="padding:4px 12px 4px 0;color:#8a8a93;font-size:13px;white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
+          <td style="padding:4px 0;color:#e8e8ec;font-size:13px;word-break:break-word;">${escapeHtml(value)}</td>
+        </tr>`
+    )
+    .join("");
+
+  const cta = link
+    ? `<p style="margin:20px 0 0;">
+        <a href="${escapeHtml(link.href)}" style="display:inline-block;padding:10px 18px;background:#6c5ce7;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">${escapeHtml(link.label)}</a>
+      </p>`
+    : "";
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#0e0e12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e8e8ec;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:480px;margin:0 auto;">
+      <tr><td>
+        <h1 style="font-size:18px;margin:0 0 16px;color:#ffffff;">${escapeHtml(heading)}</h1>
+        <table role="presentation" cellpadding="0" cellspacing="0">${detail}</table>
+        ${cta}
+        <p style="font-size:12px;line-height:1.5;margin:24px 0 0;color:#6a6a73;">embody.tools operational notification. Set OWNER_NOTIFY_EMAIL to change where these go.</p>
+      </td></tr>
+    </table>
+  </body>
+</html>`;
+}
+
+// Send one owner notice. Defensive: never throws, returns the send result (or a
+// skipped/error result) so a notification failure cannot break the caller.
+async function notifyOwner(
+  env: NotifyEnv,
+  subject: string,
+  heading: string,
+  rows: Array<[label: string, value: string]>,
+  link?: { href: string; label: string }
+): Promise<SendEmailResult> {
+  try {
+    return await sendEmail(env, {
+      to: ownerAddress(env),
+      subject,
+      html: ownerNoticeHtml(heading, rows, link)
+    });
+  } catch (error) {
+    // sendEmail already never throws; this guards the HTML build / address
+    // resolution so the calling flow (signup/publish/report) is never broken.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("notifyOwner failed", subject, message);
+    return { sent: false, error: message };
+  }
+}
+
+// A new account was created (email+password or GitHub). Fired from the Better
+// Auth user.create.after hook; handle is the freshly-derived profile handle.
+export async function notifyOwnerNewSignup(
+  env: NotifyEnv,
+  args: { email: string | null; handle: string | null }
+): Promise<SendEmailResult> {
+  const handle = args.handle ?? "(pending)";
+  const rows: Array<[string, string]> = [
+    ["Email", args.email || "(none)"],
+    ["Handle", handle]
+  ];
+  const link = args.handle
+    ? { href: `${baseUrl(env)}/u/${encodeURIComponent(args.handle)}`, label: "View profile" }
+    : undefined;
+  return notifyOwner(env, "New embody.tools signup", "New signup", rows, link);
+}
+
+// A specimen was published to the public gallery. Fired after the D1 insert in
+// the submit endpoint. scanVerdict surfaces flagged-but-accepted content (worth
+// an owner glance); blocked/malware submissions are rejected before this point.
+export async function notifyOwnerNewSpecimen(
+  env: NotifyEnv,
+  args: { title: string; slug: string; handle: string; scanVerdict?: string }
+): Promise<SendEmailResult> {
+  const rows: Array<[string, string]> = [
+    ["Title", args.title],
+    ["By", args.handle],
+    ["Scan", args.scanVerdict || "allowed"]
+  ];
+  const link = { href: `${baseUrl(env)}/c/${encodeURIComponent(args.slug)}`, label: "View specimen" };
+  return notifyOwner(env, `New specimen: ${args.title}`, "New specimen published", rows, link);
+}
+
+// An abuse report was filed against a specimen. Fired after the report row is
+// written. This is the moderation signal -- it links straight to the content.
+export async function notifyOwnerNewReport(
+  env: NotifyEnv,
+  args: { slug: string; reason: string; reporterHandle: string }
+): Promise<SendEmailResult> {
+  const rows: Array<[string, string]> = [
+    ["Specimen", args.slug],
+    ["Reason", args.reason],
+    ["Reported by", args.reporterHandle]
+  ];
+  const link = { href: `${baseUrl(env)}/c/${encodeURIComponent(args.slug)}`, label: "Review specimen" };
+  return notifyOwner(env, `Specimen reported: ${args.slug}`, "Specimen reported", rows, link);
+}

@@ -15,6 +15,7 @@ import {
   normalizeCollectionSort
 } from "../../../server/db";
 import { requireUser } from "../../../server/auth";
+import { notifyOwnerNewSpecimen } from "../../../server/notifications";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
 import { byteLength, putTdn, putThumbnail } from "../../../server/r2";
 import { checkRateLimit } from "../../../server/rateLimit";
@@ -145,6 +146,16 @@ export const POST: APIRoute = async ({ request }) => {
       scan,
       thumbnailKey: thumbnail?.key,
       parsedTdn: parsedTdn.tdn
+    });
+
+    // Operational notice to the owner that public content went live. Self-
+    // swallowing + safe-by-default (notifications.ts), so it never affects the
+    // 201 the submitter receives.
+    await notifyOwnerNewSpecimen(env as CloudflareEnv, {
+      title: body.request.title,
+      slug: inserted.slug,
+      handle: user.handle,
+      scanVerdict: scan.verdict
     });
 
     const response: SubmitResponse = {

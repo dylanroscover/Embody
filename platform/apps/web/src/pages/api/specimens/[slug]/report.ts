@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { requireUser } from "../../../../server/auth";
+import { notifyOwnerNewReport } from "../../../../server/notifications";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 import {
   createReport,
@@ -45,6 +46,11 @@ export const POST: APIRoute = async ({ params, request }) => {
     }
 
     const result = await createReport(env.DB, specimenId, user.id, reason);
+
+    // Moderation signal to the owner. Self-swallowing + safe-by-default
+    // (notifications.ts), so a notification failure never affects the 201.
+    await notifyOwnerNewReport(env as CloudflareEnv, { slug, reason, reporterHandle: user.handle });
+
     return jsonResponse(result, {
       status: 201,
       headers: {

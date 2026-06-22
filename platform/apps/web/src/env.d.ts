@@ -20,6 +20,9 @@ interface CloudflareEnv {
   // signup keeps working without a provider. See src/server/email.ts.
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  // Owner inbox for operational notifications (new signup, new specimen, abuse
+  // report). Optional; defaults to the project owner. See src/server/notifications.ts.
+  OWNER_NOTIFY_EMAIL?: string;
 }
 
 declare namespace App {

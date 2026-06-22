@@ -64,6 +64,7 @@ Set these on the Worker before going live (locally they live in `.dev.vars`):
 | `PUBLIC_TURNSTILE_SITE_KEY` | yes (prod) | Cloudflare Turnstile **site** key. Build-time/browser var (`import.meta.env`). When unset, the real widget is not mounted and the form uses the dev-bypass path; in production the server gate then rejects submissions, so set it. |
 | `RESEND_API_KEY` | optional | Resend API key. When set, email verification is required and password-reset emails are sent. When unset, all email is skipped and signup/sign-in/reset still work (no provider). |
 | `EMAIL_FROM` | optional | Sender address for transactional email, e.g. `embody.tools <noreply@embody.tools>` (Resend-verified domain). Defaults to that value. |
+| `OWNER_NOTIFY_EMAIL` | optional | Inbox for owner operational notifications (new signup, new specimen published, abuse report). Defaults to the project owner. Delivery still requires `RESEND_API_KEY`; when that is unset the notifications no-op. See `src/server/notifications.ts`. |
 | `ENVIRONMENT` | yes (prod) | Set to `production` to enable the real Turnstile gate. Any other/unset value is treated as production by the server gate (fail-closed). |
 
 Apply migrations (including `0005_fts_triggers.sql`, which adds the FTS delete-orphan trigger) before
