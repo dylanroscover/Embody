@@ -541,9 +541,16 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
       root.querySelectorAll("*").forEach(stamp);
     }
 
+    // Slugs with a baked RESULT render -- keep in sync with SpecimenCover.astro.
+    const BAKED_THUMBS = new Set([
+      "kaleidoscope", "mandelbulb-march", "murmuration",
+      "noise-terrain", "plasma-interference", "reaction-diffusion",
+    ]);
+
     function buildCard(s: SpecimenSummary): HTMLElement {
       const search = `${s.name} ${s.description} ${s.category} ${s.difficulty} ${s.requires}`.toLowerCase();
-      const thumb = specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
+      const baked = BAKED_THUMBS.has(s.slug);
+      const thumb = baked ? `/specimens/${s.slug}.jpg` : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
       const initial = (s.author_handle || "?").charAt(0).toUpperCase();
 
       const article = document.createElement("article");
@@ -558,17 +565,17 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
 
       article.innerHTML = `
         <div class="specimen-card__cover">
-          <div class="cover" data-cover="network" data-cover-shell data-cover-interactive>
-            <div class="cover__layer cover__layer--network" aria-hidden="false">
+          <div class="cover" data-cover="result" data-cover-shell data-cover-interactive>
+            <div class="cover__layer cover__layer--network" aria-hidden="true">
               <div class="cover-mount" data-cover-mount="${esc(s.slug)}"></div>
             </div>
-            <div class="cover__layer cover__layer--result" aria-hidden="true">
-              <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} preview placeholder" />
-              <span class="cover__soon mono">preview coming soon</span>
+            <div class="cover__layer cover__layer--result" aria-hidden="false">
+              <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} ${baked ? 'rendered result' : 'preview placeholder'}" />
+              ${baked ? "" : '<span class="cover__soon mono">preview coming soon</span>'}
             </div>
             <div class="cover__flip" role="group" aria-label="${esc(s.name)} cover view">
-              <button type="button" class="cover__flip-btn is-active" data-cover-option="network" aria-pressed="true" title="Show network graph">network</button>
-              <button type="button" class="cover__flip-btn" data-cover-option="result" aria-pressed="false" title="Show rendered result">result</button>
+              <button type="button" class="cover__flip-btn" data-cover-option="network" aria-pressed="false" title="Show network graph">network</button>
+              <button type="button" class="cover__flip-btn is-active" data-cover-option="result" aria-pressed="true" title="Show rendered result">result</button>
             </div>
           </div>
         </div>

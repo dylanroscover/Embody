@@ -5,7 +5,7 @@
 // toggle (no extra JS island here for the flip -- the collection page's inline
 // script flips the data-cover attribute, and CSS swaps which layer is visible):
 //
-//   NETWORK (default): the interactive TdnViewer node-graph for this specimen,
+//   NETWORK: the interactive TdnViewer node-graph for this specimen,
 //     mounted as the SpecimenCoverGraph island. Lazy-mounted with client:visible
 //     so the React/ReactFlow island only hydrates when the card scrolls into
 //     view -- many cards never spawn many live viewers at once. The island
@@ -13,7 +13,7 @@
 //     mount, so the page NEVER bundles thousands of graphs at build time. An
 //     optional SSR `tdn` prop is a fast path for the first page (no fetch).
 //
-//   RESULT: the baked render at /public/specimens/<slug>.jpg for slugs in
+//   RESULT (default): the baked render at /public/specimens/<slug>.jpg for slugs in
 //     BAKED_THUMBS (captured from the live networks); otherwise a tasteful
 //     placeholder (specimenThumbnail SVG). Never a broken img.
 //
@@ -51,11 +51,11 @@ const thumb = hasBaked ? `/specimens/${slug}.jpg` : specimenThumbnail({ slug, na
   so dragging/panning the TdnViewer canvas or tapping the flip buttons never
   fires the card's navigation to /c/<slug>.
 -->
-<div class="cover" data-cover="network" data-cover-shell data-cover-interactive>
-  <div class="cover__layer cover__layer--network" aria-hidden="false">
+<div class="cover" data-cover="result" data-cover-shell data-cover-interactive>
+  <div class="cover__layer cover__layer--network" aria-hidden="true">
     <SpecimenCoverGraph slug={slug} tdn={tdn} client:visible />
   </div>
-  <div class="cover__layer cover__layer--result" aria-hidden="true">
+  <div class="cover__layer cover__layer--result" aria-hidden="false">
     <img src={thumb} loading="lazy" alt={hasBaked ? `${name} rendered result` : `${name} preview placeholder`} />
     {!hasBaked && <span class="cover__soon mono">preview coming soon</span>}
   </div>
@@ -63,16 +63,16 @@ const thumb = hasBaked ? `/specimens/${slug}.jpg` : specimenThumbnail({ slug, na
   <div class="cover__flip" role="group" aria-label={`${name} cover view`}>
     <button
       type="button"
-      class="cover__flip-btn is-active"
+      class="cover__flip-btn"
       data-cover-option="network"
-      aria-pressed="true"
+      aria-pressed="false"
       title="Show network graph"
     >network</button>
     <button
       type="button"
-      class="cover__flip-btn"
+      class="cover__flip-btn is-active"
       data-cover-option="result"
-      aria-pressed="false"
+      aria-pressed="true"
       title="Show rendered result"
     >result</button>
   </div>
@@ -169,7 +169,7 @@ const thumb = hasBaked ? `/specimens/${slug}.jpg` : specimenThumbnail({ slug, na
     pointer-events: none;
   }
 
-  /* Default state: network visible, result hidden. */
+  /* Result is the default view; hide whichever layer is not selected. */
   .cover[data-cover="network"] .cover__layer--result {
     opacity: 0;
     visibility: hidden;
