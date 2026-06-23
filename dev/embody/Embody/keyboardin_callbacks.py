@@ -63,14 +63,12 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 				root_path=pane.owner.path, output_file='auto')
 
 	# Copy the selected COMP's network to the clipboard as portable TDN
-	# (copy special; pairs with the Ctrl+Shift+V paste below)
+	# (copy special; PASTE is now an automatic clipboard prompt -- no shortcut,
+	# since TD's native Cmd/Ctrl+V paste can't be suppressed. See TDNExt
+	# _clipboardWatchPoll.)
 	elif state and key == 'c' and ctrl_or_cmd and lShift:
 		parent.Embody.ext.TDN.CopySelectedToClipboard()
 
-	# Paste TDN from clipboard as a new COMP at the current network
-	# (paste special; native Ctrl+V cannot be intercepted/suppressed in TD)
-	elif state and key == 'v' and ctrl_or_cmd and lShift:
-		parent.Embody.ext.TDN.PasteNetworkAsNewComp()
 
 	return
 

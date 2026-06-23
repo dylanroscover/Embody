@@ -304,6 +304,19 @@ class TDNExt:
 		# TD's live default compute-shader text, captured lazily once for
 		# boilerplate omission (see _defaultComputeShaderText).
 		self._default_compute_text: Optional[str] = None
+		# Clipboard auto-paste watcher: prompt ONCE when a new _embody_tdn
+		# envelope appears on the OS clipboard. No keyboard shortcut -- TD's
+		# native Cmd/Ctrl+V paste cannot be suppressed, so a paste key always
+		# double-fires TD's own operator-clipboard paste. Generation-guarded
+		# run()-loop, re-armed on every reinit (stale loops self-terminate).
+		self._clip_last_sig = None
+		try:
+			_clip_gen = self.ownerComp.fetch('_clip_watch_gen', 0) + 1
+			self.ownerComp.store('_clip_watch_gen', _clip_gen)
+			run(f"op({self.ownerComp.path!r}).ext.TDN._clipboardWatchTick({_clip_gen})",
+				fromOP=self.ownerComp, delayMilliSeconds=2500)
+		except Exception:
+			pass
 
 	# =========================================================================
 	# TDN SERIALIZATION (YAML v2.0) -- exposed for cross-extension access via
@@ -5936,3 +5949,48 @@ class TDNExt:
 			return unwrap_clipboard(ui.clipboard or '') is not None
 		except Exception:
 			return False
+
+	def _clipboardWatchTick(self, gen: int = 0) -> None:
+		"""Self-rescheduling clipboard watcher (the no-shortcut paste trigger).
+		Generation-guarded: a reinit bumps the stored gen, so a prior instance's
+		loop ends on its next tick. Never raises out (self-healing loop)."""
+		if gen and gen != self.ownerComp.fetch('_clip_watch_gen', 0):
+			return
+		try:
+			self._clipboardWatchPoll()
+		except Exception:
+			pass
+		run(f"op({self.ownerComp.path!r}).ext.TDN._clipboardWatchTick({gen})",
+			fromOP=self.ownerComp, delayMilliSeconds=1500)
+
+	def _clipboardWatchPoll(self) -> None:
+		"""One poll: when the OS clipboard changes to a NEW Embody envelope,
+		offer (via the Embody message box, which self-suppresses during saves and
+		tests) to paste it as a new COMP in the current network."""
+		me = self.ownerComp
+		par = getattr(me.par, 'Clipboardautopaste', None)
+		if par is None or not par.eval():
+			return
+		if me.par.Performmode.eval():
+			return
+		raw = ui.clipboard or ''
+		sig = (len(raw), hash(raw))
+		if sig == self._clip_last_sig:
+			return
+		# Record before prompting so a dismissed envelope never re-nags.
+		self._clip_last_sig = sig
+		env = unwrap_clipboard(raw)
+		if env is None:
+			return
+		pane = ui.panes.current
+		owner = pane.owner if pane else None
+		if owner is None or not owner.isCOMP:
+			return
+		name = resolve_tdn_name(env.get('tdn'), env.get('slug')) or 'network'
+		choice = self.ownerComp.ext.Embody._messageBox(
+			'Embody TDN from clipboard',
+			'A TDN named "%s" is on your clipboard.\n\n'
+			'Embody it into %s as a new COMP?' % (name, owner.path),
+			buttons=['Embody it', 'Dismiss'])
+		if choice == 0:
+			self.PasteNetworkAsNewComp()

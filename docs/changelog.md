@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.42
+
+Clipboard auto-paste: bring a TDN into your network with no keyboard shortcut. Embody now watches the OS clipboard and, when a TDN network appears (copied from the web "embody it" button, or Cmd-Shift-C on a COMP in TD), prompts to "Embody it" into the current network as a new COMP.
+
+- **No-shortcut paste via a clipboard watcher.** The old Cmd-Shift-V paste binding is gone -- TD's native operator-clipboard paste fires on the same keystroke and cannot be intercepted or suppressed, so it pasted leftover TD nodes alongside the TDN. In its place, a generation-guarded `run()`-loop polls `ui.clipboard` (~1.5s) and, when a NEW `_embody_tdn` envelope appears, offers (via the Embody message box) to **Embody it** into the current network. It is debounced (one prompt per copy; a dismissed envelope never re-nags), gated on a new **Clipboard Auto-Paste** toggle (default on), skipped in Perform Mode, and the prompt self-suppresses during saves and tests. Copy (Cmd-Shift-C) is unchanged. New `test_clipboard_watch` (5 tests); `test_clipboard_paste` (42) green, no regression. Test suite **71 suites / 1,678 tests**.
+
 ## v6.0.41
 
 The git-uncommitted status axis: the manager gains a second status axis, completing the v5.0.437 feature set on the v6 line (after diff_tdn in 6.40). Externalized files saved to disk but not yet committed to git now show a distinct orange Strategy badge, kept separate from the red "unsaved" axis.
