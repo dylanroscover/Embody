@@ -23,6 +23,11 @@ interface CloudflareEnv {
   // Owner inbox for operational notifications (new signup, new specimen, abuse
   // report). Optional; defaults to the project owner. See src/server/notifications.ts.
   OWNER_NOTIFY_EMAIL?: string;
+  // Comma-separated allowlist of admin emails that may reach /admin. Optional --
+  // always includes the project owner as a bootstrap floor, so the panel works
+  // with zero config. Promote others via trust_level='admin' from the panel.
+  // See src/server/admin.ts.
+  ADMIN_EMAILS?: string;
 }
 
 declare namespace App {

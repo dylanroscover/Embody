@@ -1,0 +1,100 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../components/AdminLayout.astro";
+import { isAdmin, TRUST_LEVELS } from "../../server/admin";
+import { listUsersForAdmin } from "../../server/db";
+
+export const prerender = false;
+
+if (!isAdmin(Astro.locals.user, env)) return Astro.redirect("/");
+
+const q = (Astro.url.searchParams.get("q") ?? "").trim();
+const users = await listUsersForAdmin(env.DB, { q });
+const meId = Astro.locals.user?.id ?? "";
+---
+
+<AdminLayout title="users" active="users">
+  <form class="admin-filter" method="get">
+    <input
+      type="search"
+      name="q"
+      value={q}
+      placeholder="search handle / email"
+      class="admin-input"
+      aria-label="Search users"
+    />
+    <button type="submit" class="admin-btn">search</button>
+  </form>
+
+  <p class="admin-status" data-status hidden role="status"></p>
+
+  {users.length === 0 ? (
+    <p class="admin-empty">No users{q ? ` matching "${q}"` : ""}.</p>
+  ) : (
+    <table class="admin-table">
+      <thead>
+        <tr><th>handle</th><th>email</th><th>verified</th><th>joined</th><th>trust</th><th>action</th></tr>
+      </thead>
+      <tbody>
+        {users.map((u) => (
+          <tr data-row data-id={u.id} data-self={u.id === meId ? "1" : undefined}>
+            <td><a href={`/u/${u.handle}`}>{u.handle}</a></td>
+            <td>{u.email ?? "-"}</td>
+            <td>{u.email_verified ? "yes" : "no"}</td>
+            <td>{u.created_at}</td>
+            <td>
+              <select class="admin-select" data-trust aria-label="Trust level">
+                {TRUST_LEVELS.map((t) => (<option value={t} selected={t === u.trust_level}>{t}</option>))}
+              </select>
+              {u.id === meId && <span class="admin-pill">you</span>}
+            </td>
+            <td><button type="button" class="admin-btn" data-save>save</button></td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+</AdminLayout>
+
+<script>
+  const statusBox = document.querySelector<HTMLParagraphElement>("[data-status]");
+
+  function setStatus(message: string, kind: "ok" | "error") {
+    if (!statusBox) return;
+    statusBox.textContent = message;
+    statusBox.dataset.kind = kind;
+    statusBox.hidden = false;
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("[data-save]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("[data-row]") as HTMLElement | null;
+      const id = row?.dataset.id;
+      const trustLevel = (row?.querySelector("[data-trust]") as HTMLSelectElement | null)?.value;
+      if (!id || !trustLevel) return;
+      // Mirror the server-side self-demotion lockout for a friendlier message.
+      if (row?.dataset.self === "1" && trustLevel !== "admin") {
+        setStatus("You cannot remove your own admin access.", "error");
+        return;
+      }
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/users/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ trustLevel })
+        });
+        const body: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(body.detail || body.error || `Failed (${res.status}).`, "error");
+          return;
+        }
+        setStatus(`Set ${row?.querySelector("a")?.textContent ?? "user"} to "${trustLevel}".`, "ok");
+      } catch {
+        setStatus("Something went wrong. Please try again.", "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>

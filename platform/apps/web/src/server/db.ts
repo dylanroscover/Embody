@@ -1167,3 +1167,191 @@ function toFtsQuery(value: string): string {
   if (!terms?.length) return "";
   return terms.map((term) => `${term}*`).join(" AND ");
 }
+
+// ---------------------------------------------------------------------------
+// Admin panel queries. Read/write helpers for the moderation panel. Admin reads
+// intentionally do NOT filter visibility = 'public' -- an admin sees everything.
+// Every mutating helper returns whether a row actually changed. Enum inputs
+// (status/visibility/tier/trust_level) are validated by the API route before
+// these run (src/server/admin.ts); values are always bound, never interpolated.
+// ---------------------------------------------------------------------------
+
+export interface DashboardCounts {
+  openReports: number;
+  totalSpecimens: number;
+  totalUsers: number;
+  recentSignups: number; // users_profile rows created in the last 7 days
+}
+
+export async function dashboardCounts(db: D1Database): Promise<DashboardCounts> {
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM reports WHERE status = 'open') AS openReports,
+         (SELECT COUNT(*) FROM specimens) AS totalSpecimens,
+         (SELECT COUNT(*) FROM users_profile) AS totalUsers,
+         (SELECT COUNT(*) FROM users_profile WHERE created_at >= datetime('now','-7 days')) AS recentSignups`
+    )
+    .first<{ openReports: number; totalSpecimens: number; totalUsers: number; recentSignups: number }>();
+  return {
+    openReports: Number(row?.openReports ?? 0),
+    totalSpecimens: Number(row?.totalSpecimens ?? 0),
+    totalUsers: Number(row?.totalUsers ?? 0),
+    recentSignups: Number(row?.recentSignups ?? 0)
+  };
+}
+
+export interface AdminReportRow {
+  id: string;
+  status: string;
+  reason: string;
+  created_at: string;
+  specimen_slug: string | null;
+  specimen_title: string | null;
+  reporter_handle: string | null;
+}
+
+// Moderation queue. LEFT JOINs so an orphaned report (specimen/reporter deleted)
+// still lists. Newest first. Optional status filter.
+export async function listReports(
+  db: D1Database,
+  opts: { status?: string; limit?: number } = {}
+): Promise<AdminReportRow[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
+  const where = opts.status ? "WHERE r.status = ?" : "";
+  const stmt = db.prepare(
+    `SELECT r.id, r.status, r.reason, r.created_at,
+            s.slug AS specimen_slug, s.title AS specimen_title,
+            u.handle AS reporter_handle
+       FROM reports r
+       LEFT JOIN specimens s ON s.id = r.specimen_id
+       LEFT JOIN users_profile u ON u.id = r.reporter_id
+       ${where}
+      ORDER BY r.created_at DESC
+      LIMIT ?`
+  );
+  const bound = opts.status ? stmt.bind(opts.status, limit) : stmt.bind(limit);
+  const rows = await bound.all<AdminReportRow>();
+  return rows.results ?? [];
+}
+
+export async function updateReportStatus(
+  db: D1Database,
+  reportId: string,
+  status: string
+): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE reports SET status = ? WHERE id = ?")
+    .bind(status, reportId)
+    .run();
+  return Number(res.meta?.changes ?? 0) > 0;
+}
+
+export interface AdminSpecimenRow {
+  id: string;
+  slug: string;
+  title: string;
+  author_handle: string | null;
+  visibility: string;
+  tier: string;
+  scan_status: string;
+  likes_count: number;
+  views_count: number;
+  created_at: string;
+}
+
+// Specimen list for the admin table -- ALL visibilities. Optional title/slug
+// substring filter.
+export async function listSpecimensForAdmin(
+  db: D1Database,
+  opts: { q?: string; limit?: number } = {}
+): Promise<AdminSpecimenRow[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
+  const q = (opts.q ?? "").trim();
+  const where = q ? "WHERE s.title LIKE ? OR s.slug LIKE ?" : "";
+  const stmt = db.prepare(
+    `SELECT s.id, s.slug, s.title, u.handle AS author_handle,
+            s.visibility, s.tier, s.scan_status, s.likes_count, s.views_count, s.created_at
+       FROM specimens s
+       LEFT JOIN users_profile u ON u.id = s.author_id
+       ${where}
+      ORDER BY s.created_at DESC
+      LIMIT ?`
+  );
+  const like = `%${q}%`;
+  const bound = q ? stmt.bind(like, like, limit) : stmt.bind(limit);
+  const rows = await bound.all<AdminSpecimenRow>();
+  return rows.results ?? [];
+}
+
+// Dynamic SET of only the provided moderation fields (+ updated_at). Returns
+// false when nothing was provided or no row matched.
+export async function updateSpecimenModeration(
+  db: D1Database,
+  specimenId: string,
+  patch: { visibility?: string; tier?: string }
+): Promise<boolean> {
+  const sets: string[] = [];
+  const vals: string[] = [];
+  if (patch.visibility !== undefined) {
+    sets.push("visibility = ?");
+    vals.push(patch.visibility);
+  }
+  if (patch.tier !== undefined) {
+    sets.push("tier = ?");
+    vals.push(patch.tier);
+  }
+  if (!sets.length) return false;
+  sets.push("updated_at = datetime('now')");
+  const res = await db
+    .prepare(`UPDATE specimens SET ${sets.join(", ")} WHERE id = ?`)
+    .bind(...vals, specimenId)
+    .run();
+  return Number(res.meta?.changes ?? 0) > 0;
+}
+
+export interface AdminUserRow {
+  id: string;
+  handle: string;
+  email: string | null;
+  email_verified: number | null;
+  trust_level: string;
+  created_at: string;
+}
+
+// User list for the admin table. Joins the app profile to the Better Auth `user`
+// table for email + verification status ("user" is quoted -- it's a Better Auth
+// table name, created by its own migration). Optional handle/email filter.
+export async function listUsersForAdmin(
+  db: D1Database,
+  opts: { q?: string; limit?: number } = {}
+): Promise<AdminUserRow[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
+  const q = (opts.q ?? "").trim();
+  const where = q ? "WHERE p.handle LIKE ? OR u.email LIKE ?" : "";
+  const stmt = db.prepare(
+    `SELECT p.id, p.handle, u.email AS email, u.emailVerified AS email_verified,
+            p.trust_level, p.created_at
+       FROM users_profile p
+       LEFT JOIN "user" u ON u.id = p.id
+       ${where}
+      ORDER BY p.created_at DESC
+      LIMIT ?`
+  );
+  const like = `%${q}%`;
+  const bound = q ? stmt.bind(like, like, limit) : stmt.bind(limit);
+  const rows = await bound.all<AdminUserRow>();
+  return rows.results ?? [];
+}
+
+export async function setUserTrustLevel(
+  db: D1Database,
+  userId: string,
+  trustLevel: string
+): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE users_profile SET trust_level = ? WHERE id = ?")
+    .bind(trustLevel, userId)
+    .run();
+  return Number(res.meta?.changes ?? 0) > 0;
+}

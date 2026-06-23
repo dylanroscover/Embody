@@ -12,6 +12,7 @@
 // OWNER_NOTIFY_EMAIL (defaults to the project owner). See the README env table.
 
 import { sendEmail, type EmailEnv, type SendEmailResult } from "./email";
+import { detailRows, renderEmail } from "./emailTemplate";
 
 export interface NotifyEnv extends EmailEnv {
   // Owner inbox for operational notifications. Falls back to DEFAULT_OWNER.
@@ -34,57 +35,10 @@ function baseUrl(env: NotifyEnv): string {
   return (env.BETTER_AUTH_URL?.trim() || DEFAULT_BASE_URL).replace(/\/+$/, "");
 }
 
-// Minimal HTML escaping for the untrusted values (emails, handles, titles,
-// reasons) interpolated into the notification bodies below.
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-// A single owner-notice email: a heading, a labelled detail list, and an
-// optional "view" link. Plain, scannable, dark-themed to match the user emails.
-function ownerNoticeHtml(
-  heading: string,
-  rows: Array<[label: string, value: string]>,
-  link?: { href: string; label: string }
-): string {
-  const detail = rows
-    .map(
-      ([label, value]) =>
-        `<tr>
-          <td style="padding:4px 12px 4px 0;color:#8a8a93;font-size:13px;white-space:nowrap;vertical-align:top;">${escapeHtml(label)}</td>
-          <td style="padding:4px 0;color:#e8e8ec;font-size:13px;word-break:break-word;">${escapeHtml(value)}</td>
-        </tr>`
-    )
-    .join("");
-
-  const cta = link
-    ? `<p style="margin:20px 0 0;">
-        <a href="${escapeHtml(link.href)}" style="display:inline-block;padding:10px 18px;background:#6c5ce7;color:#ffffff;text-decoration:none;border-radius:8px;font-weight:600;font-size:14px;">${escapeHtml(link.label)}</a>
-      </p>`
-    : "";
-
-  return `<!doctype html>
-<html>
-  <body style="margin:0;padding:24px;background:#0e0e12;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#e8e8ec;">
-    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:480px;margin:0 auto;">
-      <tr><td>
-        <h1 style="font-size:18px;margin:0 0 16px;color:#ffffff;">${escapeHtml(heading)}</h1>
-        <table role="presentation" cellpadding="0" cellspacing="0">${detail}</table>
-        ${cta}
-        <p style="font-size:12px;line-height:1.5;margin:24px 0 0;color:#6a6a73;">embody.tools operational notification. Set OWNER_NOTIFY_EMAIL to change where these go.</p>
-      </td></tr>
-    </table>
-  </body>
-</html>`;
-}
-
 // Send one owner notice. Defensive: never throws, returns the send result (or a
-// skipped/error result) so a notification failure cannot break the caller.
+// skipped/error result) so a notification failure cannot break the caller. The
+// HTML is the SHARED branded shell (renderEmail) used by the user emails too, so
+// the owner notices carry the same logo/green theme.
 async function notifyOwner(
   env: NotifyEnv,
   subject: string,
@@ -96,7 +50,13 @@ async function notifyOwner(
     return await sendEmail(env, {
       to: ownerAddress(env),
       subject,
-      html: ownerNoticeHtml(heading, rows, link)
+      html: renderEmail({
+        heading,
+        bodyHtml: detailRows(rows),
+        cta: link ? { href: link.href, label: link.label } : undefined,
+        footerNote:
+          "embody.tools operational notification. Set OWNER_NOTIFY_EMAIL to change where these go."
+      })
     });
   } catch (error) {
     // sendEmail already never throws; this guards the HTML build / address

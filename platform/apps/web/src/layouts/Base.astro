@@ -1,5 +1,7 @@
 ---
 import "../styles/embody.css";
+import { env } from "cloudflare:workers";
+import { isAdmin } from "../server/admin";
 
 interface Props {
   title?: string;
@@ -23,6 +25,11 @@ const isActive = (href: string) =>
 // Signed-in user (or null). When present the auth button becomes "account"
 // (-> their profile) instead of the redundant "sign in".
 const user = Astro.locals.user;
+
+// Admin link: rendered only for admins (trust_level='admin' OR ADMIN_EMAILS).
+// isAdmin short-circuits to false for a null user, so it never dereferences env
+// on anonymous requests. Keeps /admin invisible to non-admins.
+const showAdmin = isAdmin(user, env);
 
 // Cloudflare Web Analytics: cookieless, privacy-first page-traffic beacon.
 // The beacon is rendered ONLY when PUBLIC_CF_BEACON_TOKEN is set, so dev and
@@ -90,6 +97,12 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             <a class="navbar__item navbar__item--register" href={`/u/${user.handle}`}>account</a>
           ) : (
             <a class="navbar__item navbar__item--register" href="/signin">sign in</a>
+          )}
+          {showAdmin && (
+            <a
+              class:list={["navbar__item", { "is-active": isActive("/admin") }]}
+              href="/admin"
+            >admin</a>
           )}
           <a
             class:list={["navbar__item", { "is-active": isActive("/collection") }]}

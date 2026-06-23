@@ -1,0 +1,100 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../components/AdminLayout.astro";
+import { isAdmin, isReportStatus, REPORT_STATUSES } from "../../server/admin";
+import { listReports } from "../../server/db";
+
+export const prerender = false;
+
+if (!isAdmin(Astro.locals.user, env)) return Astro.redirect("/");
+
+const rawStatus = Astro.url.searchParams.get("status") ?? "";
+const statusFilter = isReportStatus(rawStatus) ? rawStatus : "";
+const reports = await listReports(env.DB, { status: statusFilter || undefined });
+---
+
+<AdminLayout title="reports" active="reports">
+  <nav class="admin-subfilter" aria-label="Filter by status">
+    <a href="/admin/reports" class:list={[{ "is-active": !statusFilter }]}>all</a>
+    {REPORT_STATUSES.map((s) => (
+      <a href={`/admin/reports?status=${s}`} class:list={[{ "is-active": statusFilter === s }]}>{s}</a>
+    ))}
+  </nav>
+
+  <p class="admin-status" data-status hidden role="status"></p>
+
+  {reports.length === 0 ? (
+    <p class="admin-empty">No reports{statusFilter ? ` with status "${statusFilter}"` : ""}.</p>
+  ) : (
+    <table class="admin-table">
+      <thead>
+        <tr><th>when</th><th>specimen</th><th>reason</th><th>by</th><th>status</th><th>action</th></tr>
+      </thead>
+      <tbody>
+        {reports.map((r) => (
+          <tr data-row data-id={r.id}>
+            <td>{r.created_at}</td>
+            <td>
+              {r.specimen_slug ? (
+                <a href={`/c/${r.specimen_slug}`}>{r.specimen_title ?? r.specimen_slug}</a>
+              ) : (
+                <span class="admin-pill">deleted</span>
+              )}
+            </td>
+            <td>{r.reason}</td>
+            <td>{r.reporter_handle ?? "-"}</td>
+            <td><span class="admin-pill" data-status-cell>{r.status}</span></td>
+            <td>
+              <select class="admin-select" data-status-select aria-label="New status">
+                {REPORT_STATUSES.map((s) => (
+                  <option value={s} selected={s === r.status}>{s}</option>
+                ))}
+              </select>
+              <button type="button" class="admin-btn" data-apply>save</button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+</AdminLayout>
+
+<script>
+  const statusBox = document.querySelector<HTMLParagraphElement>("[data-status]");
+
+  function setStatus(message: string, kind: "ok" | "error") {
+    if (!statusBox) return;
+    statusBox.textContent = message;
+    statusBox.dataset.kind = kind;
+    statusBox.hidden = false;
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("[data-apply]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("[data-row]") as HTMLElement | null;
+      const id = row?.dataset.id;
+      const select = row?.querySelector("[data-status-select]") as HTMLSelectElement | null;
+      if (!id || !select) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/reports/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: select.value })
+        });
+        const body: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(body.detail || body.error || `Failed (${res.status}).`, "error");
+          return;
+        }
+        const cell = row?.querySelector("[data-status-cell]");
+        if (cell) cell.textContent = select.value;
+        setStatus(`Report updated to "${select.value}".`, "ok");
+      } catch {
+        setStatus("Something went wrong. Please try again.", "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>

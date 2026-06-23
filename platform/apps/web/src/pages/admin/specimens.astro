@@ -1,0 +1,127 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../components/AdminLayout.astro";
+import { isAdmin, TIERS, VISIBILITIES } from "../../server/admin";
+import { listSpecimensForAdmin } from "../../server/db";
+
+export const prerender = false;
+
+if (!isAdmin(Astro.locals.user, env)) return Astro.redirect("/");
+
+const q = (Astro.url.searchParams.get("q") ?? "").trim();
+const specimens = await listSpecimensForAdmin(env.DB, { q });
+---
+
+<AdminLayout title="specimens" active="specimens">
+  <form class="admin-filter" method="get">
+    <input
+      type="search"
+      name="q"
+      value={q}
+      placeholder="search title / slug"
+      class="admin-input"
+      aria-label="Search specimens"
+    />
+    <button type="submit" class="admin-btn">search</button>
+  </form>
+
+  <p class="admin-status" data-status hidden role="status"></p>
+
+  {specimens.length === 0 ? (
+    <p class="admin-empty">No specimens{q ? ` matching "${q}"` : ""}.</p>
+  ) : (
+    <table class="admin-table">
+      <thead>
+        <tr><th>title</th><th>by</th><th>scan</th><th>visibility</th><th>tier</th><th>likes</th><th>action</th></tr>
+      </thead>
+      <tbody>
+        {specimens.map((s) => (
+          <tr data-row data-id={s.id} data-slug={s.slug}>
+            <td><a href={`/c/${s.slug}`}>{s.title}</a></td>
+            <td>{s.author_handle ?? "-"}</td>
+            <td><span class="admin-pill">{s.scan_status}</span></td>
+            <td>
+              <select class="admin-select" data-visibility aria-label="Visibility">
+                {VISIBILITIES.map((v) => (<option value={v} selected={v === s.visibility}>{v}</option>))}
+              </select>
+            </td>
+            <td>
+              <select class="admin-select" data-tier aria-label="Tier">
+                {TIERS.map((t) => (<option value={t} selected={t === s.tier}>{t}</option>))}
+              </select>
+            </td>
+            <td>{s.likes_count}</td>
+            <td>
+              <button type="button" class="admin-btn" data-save>save</button>
+              <button type="button" class="admin-btn admin-btn--danger" data-delete>delete</button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )}
+</AdminLayout>
+
+<script>
+  const statusBox = document.querySelector<HTMLParagraphElement>("[data-status]");
+
+  function setStatus(message: string, kind: "ok" | "error") {
+    if (!statusBox) return;
+    statusBox.textContent = message;
+    statusBox.dataset.kind = kind;
+    statusBox.hidden = false;
+  }
+
+  document.querySelectorAll<HTMLButtonElement>("[data-save]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("[data-row]") as HTMLElement | null;
+      const id = row?.dataset.id;
+      const visibility = (row?.querySelector("[data-visibility]") as HTMLSelectElement | null)?.value;
+      const tier = (row?.querySelector("[data-tier]") as HTMLSelectElement | null)?.value;
+      if (!id) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/specimens/${id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visibility, tier })
+        });
+        const body: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(body.detail || body.error || `Failed (${res.status}).`, "error");
+          return;
+        }
+        setStatus(`Updated "${row?.dataset.slug}".`, "ok");
+      } catch {
+        setStatus("Something went wrong. Please try again.", "error");
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll<HTMLButtonElement>("[data-delete]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("[data-row]") as HTMLElement | null;
+      const id = row?.dataset.id;
+      const slug = row?.dataset.slug;
+      if (!id) return;
+      if (!confirm(`Delete "${slug}" permanently? This cannot be undone.`)) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/specimens/${id}`, { method: "DELETE" });
+        const body: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(body.detail || body.error || `Failed (${res.status}).`, "error");
+          btn.disabled = false;
+          return;
+        }
+        row?.remove();
+        setStatus(`Deleted "${slug}".`, "ok");
+      } catch {
+        setStatus("Something went wrong. Please try again.", "error");
+        btn.disabled = false;
+      }
+    });
+  });
+</script>

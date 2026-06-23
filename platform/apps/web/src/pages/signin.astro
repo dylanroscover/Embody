@@ -16,6 +16,11 @@ const githubEnabled = githubOAuthEnabled(env as unknown as AuthEnv);
 // `next` lets a gated page (e.g. /submit) bounce the user back after sign-in.
 const rawNext = Astro.url.searchParams.get("next") ?? "";
 const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
+
+// After clicking the verification link, Better Auth redirects back here with
+// ?verified=1 (the callbackURL we pass at sign-up / resend). Show a one-time
+// confirmation so the user knows their email is confirmed and to sign in now.
+const justVerified = Astro.url.searchParams.get("verified") === "1";
 ---
 
 <Base
@@ -38,6 +43,9 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
       </div>
 
       <div class="auth-card" data-next={nextPath}>
+      {justVerified && (
+        <p class="auth-verified-banner" role="status">Email verified -- you can sign in below.</p>
+      )}
       <div class="auth-toggle" role="tablist" aria-label="Sign in or register">
         <button type="button" class="auth-toggle__btn is-active" data-mode="signin" role="tab" aria-selected="true">
           sign in
@@ -48,6 +56,10 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
       </div>
 
       <p class="auth-error" data-auth-error hidden role="alert"></p>
+      <p class="auth-notice" data-auth-notice hidden role="status"></p>
+      <p class="auth-resend" data-resend hidden>
+        <button type="button" class="auth-resend__btn" data-resend-btn>Resend verification email</button>
+      </p>
 
       <form class="auth-form" data-auth-form novalidate>
         <label class="auth-field" data-field="name" hidden>
@@ -96,6 +108,13 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
   const passwordInput = form?.querySelector<HTMLInputElement>('input[name="password"]');
   const toggles = Array.from(document.querySelectorAll<HTMLButtonElement>(".auth-toggle__btn"));
   const githubBtn = document.querySelector<HTMLButtonElement>("[data-github]");
+  const noticeBox = document.querySelector<HTMLParagraphElement>("[data-auth-notice]");
+  const resendWrap = document.querySelector<HTMLParagraphElement>("[data-resend]");
+  const resendBtn = document.querySelector<HTMLButtonElement>("[data-resend-btn]");
+
+  // Email of the account awaiting verification -- set after a verify-required
+  // register, or after a blocked unverified sign-in. Drives the resend button.
+  let pendingEmail: string | null = null;
 
   let mode: "signin" | "register" = "signin";
 
@@ -120,9 +139,45 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
     errorBox.hidden = true;
   }
 
+  function showNotice(message: string) {
+    clearError();
+    if (!noticeBox) return;
+    noticeBox.textContent = message;
+    noticeBox.hidden = false;
+  }
+
+  function clearNotice() {
+    if (!noticeBox) return;
+    noticeBox.textContent = "";
+    noticeBox.hidden = true;
+  }
+
+  function showResend() {
+    if (resendWrap) resendWrap.hidden = false;
+  }
+
+  function hideResend() {
+    if (resendWrap) resendWrap.hidden = true;
+  }
+
+  // Verify-first: the account exists but has NO session until the email link is
+  // clicked. Hide the form, explain what to do, and offer a resend -- instead of
+  // silently redirecting into a signed-out page that just says "sign in".
+  function showVerifyPending(email: string) {
+    pendingEmail = email;
+    if (form) form.hidden = true;
+    if (forgotLink) forgotLink.hidden = true;
+    showNotice(`We sent a verification link to ${email}. Click it to finish, then sign in.`);
+    showResend();
+  }
+
   function setMode(next: "signin" | "register") {
     mode = next;
     clearError();
+    clearNotice();
+    hideResend();
+    pendingEmail = null;
+    if (form) form.hidden = false;
     for (const btn of toggles) {
       const active = btn.dataset.mode === next;
       btn.classList.toggle("is-active", active);
@@ -171,16 +226,35 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
         const res = await authClient.signUp.email({
           email,
           password,
-          name: name || email.split("@")[0] || email
+          name: name || email.split("@")[0] || email,
+          callbackURL: "/signin?verified=1"
         });
         if (res.error) {
           showError(res.error.message || "Could not create the account.");
           return;
         }
+        // When email verification is required, sign-up creates the account but
+        // returns NO session (token is null). Don't redirect into a signed-out
+        // page that just says "sign in" -- tell the user to verify first. When
+        // email is unconfigured (e.g. dev) a real token comes back and we fall
+        // through to the normal redirect below.
+        if (!res.data?.token) {
+          showVerifyPending(email);
+          return;
+        }
       } else {
         const res = await authClient.signIn.email({ email, password });
         if (res.error) {
-          showError(res.error.message || "Invalid email or password.");
+          // An unverified account is hard-blocked by Better Auth with
+          // EMAIL_NOT_VERIFIED (403). Surface a helpful message + a resend, not
+          // the generic "invalid password".
+          if (res.error.code === "EMAIL_NOT_VERIFIED" || res.error.status === 403) {
+            pendingEmail = email;
+            showError("Your email isn't verified yet -- check your inbox for the link.");
+            showResend();
+          } else {
+            showError(res.error.message || "Invalid email or password.");
+          }
           return;
         }
       }
@@ -208,7 +282,37 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
     }
   });
 
+  resendBtn?.addEventListener("click", async () => {
+    if (!pendingEmail) return;
+    resendBtn.disabled = true;
+    const original = resendBtn.textContent;
+    resendBtn.textContent = "sending...";
+    try {
+      await authClient.sendVerificationEmail({
+        email: pendingEmail,
+        callbackURL: `${window.location.origin}/signin?verified=1`
+      });
+      showNotice(`Verification link re-sent to ${pendingEmail}. Check your inbox.`);
+      showResend();
+    } catch (err) {
+      console.error("resend verification failed", err);
+      showError("Could not resend right now. Please try again.");
+    } finally {
+      resendBtn.disabled = false;
+      resendBtn.textContent = original;
+    }
+  });
+
   setMode("signin");
+
+  // Clear the one-time ?verified=1 from the URL so a refresh/back (or switching
+  // to register) doesn't re-show the "Email verified" banner. The banner itself
+  // is server-rendered for the first paint; this just tidies the address bar.
+  if (new URLSearchParams(window.location.search).has("verified")) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("verified");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }
 </script>
 
 <style>
@@ -372,6 +476,49 @@ const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext 
     border-radius: var(--radius-sm);
     color: #ff9b9b;
     font-size: 0.9rem;
+  }
+
+  /* Verify-first success state + the post-verify banner: brand green, not the
+     error red. */
+  .auth-notice,
+  .auth-verified-banner {
+    margin-bottom: 1rem;
+    padding: 0.65rem 0.75rem;
+    background: rgba(110, 230, 104, 0.12);
+    border: 1px solid rgba(110, 230, 104, 0.4);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    font-size: 0.9rem;
+  }
+
+  .auth-verified-banner {
+    margin-bottom: 1.25rem;
+  }
+
+  .auth-resend {
+    margin: 0 0 1rem;
+    text-align: center;
+  }
+
+  .auth-resend__btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 0.4rem 0.85rem;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .auth-resend__btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+
+  .auth-resend__btn:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .auth-back {
