@@ -94,9 +94,18 @@ const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thum
      to the card frame). Dropping them removes the rounded inner corner sitting
      against the neighbouring body and the green border-stroke that trailed off
      into the background along the bottom edge. The detail page / hero viewers,
-     which are NOT inside a cover, keep their frame. */
+     which are NOT inside a cover, keep their frame.
+
+     min-height: 0 is LOAD-BEARING: the standalone .tdn-viewer carries
+     min-height: 320px (right for the hero), but `height: 100%` does NOT override
+     a larger min-height. A cover is only ~132-164px tall, so without this the
+     ReactFlow pane stays 320px, fitView centers the graph in that 320px box, and
+     the cover clips to its top ~half -- pushing the "centered" content below the
+     visible area (big empty top, nodes crammed at the bottom). Clearing the
+     min-height lets the pane match the cover so fitView centers in what's seen. */
   .cover__layer--network :global(.tdn-viewer) {
     height: 100% !important;
+    min-height: 0;
     width: 100%;
     border: 0;
     border-radius: 0;

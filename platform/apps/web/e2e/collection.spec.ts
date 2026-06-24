@@ -32,6 +32,30 @@ test("collection lists the seeded specimens", async ({ page }) => {
   }
 });
 
+test("cover network graph fits the cover (no min-height clipping)", async ({ page }) => {
+  // Regression: the standalone .tdn-viewer carries min-height: 320px, which
+  // `height: 100%` does NOT override. Inside a card cover (~132-164px tall) that
+  // left the ReactFlow pane stuck at 320px, so fitView centered the graph in a
+  // box twice the cover's height and the cover clipped the bottom away -- the
+  // graph looked shoved to the bottom with a big empty top. The cover rule now
+  // clears min-height; assert the pane tracks the cover instead of 320px.
+  await page.goto("/collection");
+  const card = page.locator('[data-specimen][data-slug="murmuration"]');
+  await card.scrollIntoViewIfNeeded();
+  await card.locator('[data-cover-option="network"]').click();
+
+  const pane = card.locator(".react-flow").first();
+  await expect(pane.locator(".react-flow__node").first()).toBeVisible();
+
+  const { coverH, paneH } = await card.evaluate((el) => ({
+    coverH: el.querySelector("[data-cover-shell]")!.getBoundingClientRect().height,
+    paneH: el.querySelector(".react-flow")!.getBoundingClientRect().height
+  }));
+  // The pane must match the (short) cover, not escape to the 320px min-height.
+  expect(paneH).toBeLessThan(260);
+  expect(Math.abs(paneH - coverH)).toBeLessThanOrEqual(2);
+});
+
 test("specimen page renders + TDN blob downloads", async ({ page, request }) => {
   await page.goto("/c/murmuration");
   await expect(page.getByRole("heading", { level: 1, name: /murmuration/i })).toBeVisible();
