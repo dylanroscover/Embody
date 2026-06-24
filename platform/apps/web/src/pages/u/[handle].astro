@@ -39,6 +39,10 @@ const totalCopies = specimens.reduce((sum, item) => sum + item.copies_count, 0);
 const memberSince = profile ? memberYear(profile.created_at) : "";
 const avatarInitial = profile ? initialFor(profile.handle) : "?";
 
+// The viewer can edit the avatar only on their OWN profile.
+const viewer = Astro.locals.user;
+const isOwn = Boolean(viewer && profile && viewer.handle === profile.handle);
+
 function initialFor(value: string): string {
   const cleaned = value.replace(/[^a-z0-9]/gi, "");
   return (cleaned[0] ?? value[0] ?? "?").toUpperCase();
@@ -62,11 +66,31 @@ function pluralize(count: number, singular: string): string {
     >
       <section class="page-section profile-header">
         <div class="profile-id">
-          {profile.avatar_url ? (
-            <img class="avatar avatar--img" src={profile.avatar_url} alt={`@${profile.handle}`} />
-          ) : (
-            <span class="avatar avatar--initial" aria-hidden="true">{avatarInitial}</span>
-          )}
+          <div class="profile-avatar" data-avatar-shell={isOwn ? "" : undefined} data-avatar-initial={avatarInitial}>
+            {profile.avatar_url ? (
+              <img class="avatar avatar--img" src={profile.avatar_url} alt={`@${profile.handle}`} data-avatar-img />
+            ) : (
+              <span class="avatar avatar--initial" aria-hidden="true" data-avatar-img>{avatarInitial}</span>
+            )}
+            {isOwn && (
+              <div class="avatar-edit">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  data-avatar-input
+                />
+                <button type="button" class="avatar-edit__btn" data-avatar-pick>change</button>
+                <button
+                  type="button"
+                  class="avatar-edit__btn avatar-edit__btn--remove"
+                  data-avatar-remove
+                  hidden={!profile.avatar_url}
+                >remove</button>
+                <span class="avatar-edit__status mono" data-avatar-status aria-live="polite"></span>
+              </div>
+            )}
+          </div>
           <div class="profile-meta">
             <p class="eyebrow">Contributor</p>
             <h1>@{profile.handle}</h1>
@@ -163,6 +187,68 @@ function pluralize(count: number, singular: string): string {
     background: var(--accent-dim);
     color: var(--accent);
     font: 600 clamp(2.25rem, 5vw, 3.25rem)/1 var(--font-display);
+  }
+
+  /* Avatar column: the image/initial plus the owner-only edit controls below. */
+  .profile-avatar {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .avatar-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+
+  .avatar-edit__btn {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 0.22rem 0.62rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+
+  .avatar-edit__btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .avatar-edit__btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .avatar-edit__btn--remove {
+    color: var(--text-faint);
+  }
+
+  .avatar-edit__btn--remove:hover {
+    border-color: #c46b6b;
+    color: #c46b6b;
+  }
+
+  .avatar-edit__status {
+    flex-basis: 100%;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+  }
+
+  .avatar-edit__status.is-error {
+    color: #c46b6b;
   }
 
   .profile-meta {
@@ -295,3 +381,86 @@ function pluralize(count: number, singular: string): string {
     }
   }
 </style>
+
+<script>
+  // Owner-only avatar upload/remove. The shell only renders on your OWN profile,
+  // so a missing shell makes this a no-op everywhere else. The picked image is
+  // squared + downscaled to 256px on a canvas (so we never ship a huge file or a
+  // non-square crop), POSTed as a WebP data URL, then the page reloads to show the
+  // canonical state (upload, or the re-seeded GitHub default / letter chip).
+  const shell = document.querySelector<HTMLElement>("[data-avatar-shell]");
+  if (shell) {
+    const input = shell.querySelector<HTMLInputElement>("[data-avatar-input]");
+    const pick = shell.querySelector<HTMLButtonElement>("[data-avatar-pick]");
+    const remove = shell.querySelector<HTMLButtonElement>("[data-avatar-remove]");
+    const status = shell.querySelector<HTMLElement>("[data-avatar-status]");
+    const MAX_INPUT_BYTES = 8 * 1024 * 1024; // reject absurd sources before decoding
+
+    const setStatus = (msg: string, isError = false): void => {
+      if (!status) return;
+      status.textContent = msg;
+      status.classList.toggle("is-error", isError);
+    };
+    const setBusy = (busy: boolean): void => {
+      for (const el of [pick, remove]) if (el) el.disabled = busy;
+    };
+
+    async function squareDataUrl(file: File): Promise<string> {
+      const bitmap = await createImageBitmap(file);
+      const SIZE = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas unavailable");
+      const min = Math.min(bitmap.width, bitmap.height);
+      const sx = (bitmap.width - min) / 2;
+      const sy = (bitmap.height - min) / 2;
+      ctx.drawImage(bitmap, sx, sy, min, min, 0, 0, SIZE, SIZE);
+      bitmap.close();
+      return canvas.toDataURL("image/webp", 0.85);
+    }
+
+    pick?.addEventListener("click", () => input?.click());
+
+    input?.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > MAX_INPUT_BYTES) {
+        setStatus("image too large", true);
+        input.value = "";
+        return;
+      }
+      setBusy(true);
+      setStatus("uploading...");
+      try {
+        const avatar = await squareDataUrl(file);
+        const res = await fetch("/api/account/avatar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatar })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        window.location.reload();
+      } catch {
+        setStatus("upload failed -- try a PNG/JPEG/WebP under 0.5 MB", true);
+        setBusy(false);
+      } finally {
+        input.value = "";
+      }
+    });
+
+    remove?.addEventListener("click", async () => {
+      setBusy(true);
+      setStatus("removing...");
+      try {
+        const res = await fetch("/api/account/avatar", { method: "DELETE" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        window.location.reload();
+      } catch {
+        setStatus("remove failed", true);
+        setBusy(false);
+      }
+    });
+  }
+</script>

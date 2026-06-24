@@ -11,6 +11,9 @@ export interface SessionUser {
   name: string;
   image: string | null;
   trustLevel: string;
+  // Effective avatar to render (users_profile.avatar_url): a GitHub avatar seeded
+  // at sign-up / backfilled here, or an uploaded one, or null -> letter chip.
+  avatarUrl: string | null;
 }
 
 // Resolve the current session (if any) into a SessionUser, backfilling the
@@ -34,30 +37,51 @@ export async function getSessionUser(
 
   let handle: string | null = null;
   let trustLevel = "verified";
+  let avatarUrl: string | null = null;
   try {
     const row = await env.DB.prepare(
-      "SELECT handle, trust_level FROM users_profile WHERE id = ? LIMIT 1"
+      "SELECT handle, trust_level, avatar_url FROM users_profile WHERE id = ? LIMIT 1"
     )
       .bind(user.id)
-      .first<{ handle: string; trust_level: string }>();
+      .first<{ handle: string; trust_level: string; avatar_url: string | null }>();
     if (row?.handle) {
       handle = row.handle;
       trustLevel = row.trust_level ?? "verified";
+      avatarUrl = row.avatar_url;
     }
   } catch (error) {
     console.error("getSessionUser: profile lookup failed", error);
   }
 
-  // Backfill if the profile row is missing.
+  // Backfill if the profile row is missing (created before the hook, or a failed
+  // hook insert). ensureUserProfile seeds the GitHub avatar too.
   if (!handle) {
     handle = await ensureUserProfile(env.DB, {
       id: user.id,
       email: user.email,
-      name: user.name
+      name: user.name,
+      image: user.image
     });
+    avatarUrl = user.image ?? null;
   }
 
   if (!handle) return null;
+
+  // Lazy GitHub-avatar backfill: an account that predates avatars (or signed up
+  // before user.image resolved) gets its avatar_url seeded on first authed
+  // request. Only fills a NULL -- never clobbers an explicit upload. Best-effort.
+  if (!avatarUrl && user.image) {
+    avatarUrl = user.image;
+    try {
+      await env.DB.prepare(
+        "UPDATE users_profile SET avatar_url = ? WHERE id = ? AND avatar_url IS NULL"
+      )
+        .bind(user.image, user.id)
+        .run();
+    } catch (error) {
+      console.error("getSessionUser: avatar backfill failed", error);
+    }
+  }
 
   return {
     id: user.id,
@@ -65,6 +89,7 @@ export async function getSessionUser(
     email: user.email ?? "",
     name: user.name ?? "",
     image: user.image ?? null,
-    trustLevel
+    trustLevel,
+    avatarUrl
   };
 }

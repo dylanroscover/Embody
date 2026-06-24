@@ -99,11 +99,19 @@ function buildAuth(env: AuthEnv, secret: string) {
     databaseHooks: {
       user: {
         create: {
-          after: async (user: { id: string; email?: string | null; name?: string | null }) => {
+          after: async (user: {
+            id: string;
+            email?: string | null;
+            name?: string | null;
+            image?: string | null;
+          }) => {
             const handle = await ensureUserProfile(env.DB, {
               id: user.id,
               email: user.email,
-              name: user.name
+              name: user.name,
+              // GitHub OAuth populates user.image with the avatar URL; seed it so
+              // social sign-ups get a real avatar immediately. Null for email/pw.
+              image: user.image
             });
             // Operational notice to the owner. Safe-by-default + self-swallowing,
             // so it never blocks or breaks account creation (see notifications.ts).
@@ -147,7 +155,7 @@ export function getAuth(env: AuthEnv): AuthInstance {
 // backfilled lazily by ensureProfileForSession() on first authed request.
 export async function ensureUserProfile(
   db: D1Database,
-  user: { id: string; email?: string | null; name?: string | null }
+  user: { id: string; email?: string | null; name?: string | null; image?: string | null }
 ): Promise<string | null> {
   try {
     const existing = await db
@@ -160,10 +168,10 @@ export async function ensureUserProfile(
 
     await db
       .prepare(
-        `INSERT OR IGNORE INTO users_profile (id, handle, trust_level)
-         VALUES (?, ?, 'verified')`
+        `INSERT OR IGNORE INTO users_profile (id, handle, trust_level, avatar_url)
+         VALUES (?, ?, 'verified', ?)`
       )
-      .bind(user.id, handle)
+      .bind(user.id, handle, user.image ?? null)
       .run();
 
     // If the INSERT was ignored due to a race, read back the live handle.
