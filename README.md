@@ -4,7 +4,7 @@
 
 ![Version](https://img.shields.io/badge/version-6.0.42-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
-![MCP Tools](https://img.shields.io/badge/MCP_tools-48-purple)
+![MCP Tools](https://img.shields.io/badge/MCP_tools-49-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody)
 

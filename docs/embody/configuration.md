@@ -13,6 +13,8 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Detect Duplicate Paths** — Enable/disable duplicate path detection prompts
 - **Template Master Name** — When a duplicate-path group has exactly one operator whose path contains this name, that operator is auto-selected as the master (default `__template__`). Clear it to always choose the master manually, or set your own convention (e.g. `_master`). See [Duplicate Path Handling](externalization.md#duplicate-path-handling).
 - **Open Manager** / **Close Manager** — Toggle the Manager UI
+- **Clipboard Auto-Paste** — When ON (default), Embody watches the OS clipboard (~1.5s poll) for a copied TDN network — from the web "embody it" button, or ++ctrl+shift+c++ on a COMP — and prompts to paste it as a new COMP in the current network. Disabled in Perform Mode and self-suppressed during saves and tests. Turn OFF to ignore the clipboard. See [Keyboard Shortcuts](keyboard-shortcuts.md).
+- **Uncommitted Color** — RGB color of the manager's **orange** git-uncommitted badge (an externalized file saved to disk but not yet committed to git). Defaults to a warm orange. See [Manager UI — Status Indicators](manager-ui.md#status-indicators).
 
 ### Envoy
 

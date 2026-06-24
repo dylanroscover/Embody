@@ -23,6 +23,16 @@ Envoy uses a two-thread architecture to bridge the MCP protocol with TouchDesign
 └──────────────┘          └──────────────┘         └──────────────┘               └──────────────┘
 ```
 
+## Liveness Watchdog
+
+A self-healing watchdog keeps Envoy reachable across the events that would otherwise drop the connection — a `project.save()` (which reinitializes the extension) or an extension reload. It is a pure `run()`-loop, armed once per `EnvoyExt` instance (in `__init__`, not `Start()`), so it survives those reinits.
+
+- **Probes the socket** every ~4 seconds.
+- **Revives when enabled-but-down** — a dead listener while TD keeps running, or a save/reinit that took the server down. It force-frees port 9870 if it is still held and rebinds within ~1 second, with no operator, no timer, and no manual toggle.
+- **Self-limited** — a generation token collapses leftover ticks on the next reinit, and a short cooldown prevents revive storms during the save strip/restore burst.
+
+This is independent of the bridge's own reconciler: the watchdog revives the TD-side server, the bridge reconnects the STDIO bridge to it. Between the two layers, a dropped connection almost never needs manual recovery.
+
 ## STDIO Bridge
 
 Claude Code communicates with MCP servers via STDIO (stdin/stdout JSON-RPC). Since Envoy runs as an HTTP server inside TouchDesigner, the bridge script (`.embody/envoy-bridge.py`) translates between these transports.

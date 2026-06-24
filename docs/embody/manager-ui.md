@@ -5,8 +5,28 @@ Press ++ctrl+shift+o++ to open the Embody Manager window.
 ## Features
 
 - **Tree View**: Hierarchical view of all externalized operators organized by path
-- **Status Indicators**: Shows dirty state for each operator (network changes or parameter changes marked as "Par")
+- **Status Indicators**: Two independent status axes per operator (see [Status Indicators](#status-indicators) below) -- unsaved-vs-disk (red/amber) and git-uncommitted (orange)
 - **Build Information**: Displays build number, TouchDesigner build, and timestamp for each externalized COMP
+
+## Status Indicators
+
+The manager shows **two independent status axes** for each externalized operator.
+
+### Unsaved changes (red / amber)
+
+- **Red** -- the operator was modified in memory but not yet written to disk. Press ++ctrl+shift+u++ (Update All) or ++ctrl+alt+u++ (Update Current) to externalize it.
+- **Amber ("Par")** -- only parameter *values* changed (no network-structure edit). Marked distinctly so a pure parameter tweak is easy to spot.
+
+### Git-uncommitted (orange)
+
+- **Orange** -- the externalized file is saved to disk but **not yet committed to git**. This is a separate axis from the red "unsaved" state: a file can be clean-on-disk yet still show orange because the change has not been committed.
+- Computed by an async `git status --porcelain` scan (it runs off the refresh thread, so there is no frame drop) that maps changed files back to operator paths. Self-disables outside a git repository.
+- The badge color is the `Uncommittedcolor` parameter (see [Configuration](configuration.md)).
+- After a `git commit`, trigger a manager **Refresh** (++ctrl+shift+r++) so the orange badges clear.
+
+### Filter by changes
+
+Type **`changed`** in the filter box to show only rows with pending changes on *either* axis -- unsaved (red/amber) **or** git-uncommitted (orange).
 
 ## Toolbar
 

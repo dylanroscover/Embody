@@ -79,13 +79,14 @@ Use the `import_network` MCP tool:
 
 ### Import Phases
 
-The import process runs in a pre-phase plus seven sequential phases. This ordering ensures dependencies are satisfied:
+The import process runs in a pre-phase plus the ordered phases below. This ordering ensures dependencies are satisfied:
 
 | Phase | Action | Details |
 |-------|--------|---------|
 | Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators |
 | 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
 | 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
+| 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
 | 3 | **Set parameter values** | Both built-in and custom. `=` prefix → expression, `~` prefix → bind. |
 | 4 | **Set flags** | Array entries without `-` → `true`; with `-` → `false`. |
 | 5 | **Wire connections** | Resolve sources (sibling name first, then full path). |
@@ -102,6 +103,24 @@ The importer checks metadata for compatibility:
 - **`build`**: Logged for informational purposes
 
 These checks are non-blocking — import always proceeds.
+
+---
+
+## Diffing a Network
+
+`diff_tdn` answers the question git cannot: **what have I changed but not saved?** It compares the **live in-memory network** against its on-disk `.tdn` — the unsaved window, which git never sees (git only reads files on disk, not TouchDesigner's live state).
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `target` | (optional) | A COMP path, or a `.tdn` file path / bare filename (e.g. `"mixer.tdn"`). **Omit it for a whole-project summary** across every live TDN COMP. |
+| `max_changed_ops` | `200` | Cap on the number of changed operators reported. |
+| `max_bytes` | `60000` | Cap on the output size. |
+
+The comparison is **semantic, not byte-level**: both sides normalize through the same `type_defaults` / `par_templates` expansion, and the volatile export header (`build`, `generator`, `td_build`, `exported_at`, `source_file`) is ignored — so a no-op re-export shows nothing. Each change is `{old, new}` (old = disk, new = live), tagged `root`, `op`, or `annotation`.
+
+### Git integration: the `.tdn` textconv driver
+
+`diff_tdn` covers the *unsaved* window; for the *committed* view, Embody installs a git **textconv** driver so `git diff` / `git log -p` / `git show` on a `.tdn` show only real network changes, not export-header churn. It is auto-configured on Envoy startup (`.gitattributes` `*.tdn diff=tdn`, `.embody/tdn_textconv.py`, and `git config diff.tdn.textconv`). Use `diff_tdn` for what you have not saved; use `git diff` for what you have committed.
 
 ---
 

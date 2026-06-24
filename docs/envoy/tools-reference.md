@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 48 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 
@@ -75,7 +75,7 @@ Envoy exposes 48 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `execute_python` | `code` | Execute Python code in TD. Set `result` variable to return values |
+| `execute_python` | `code` | Execute Python in TD; set the `result` variable to return values. Auto-lints newly-created ops and emits a **LAYOUT WARNING** when they are left at (0,0) or overlapping (unlike `create_op`, raw `comp.create()` does not auto-position) |
 
 ## Introspection & Diagnostics
 

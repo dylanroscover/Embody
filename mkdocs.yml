@@ -87,6 +87,7 @@ nav:
     - Claude Code Integration: envoy/claude-code.md
     - Tools Reference: envoy/tools-reference.md
     - Architecture: envoy/architecture.md
+    - Security: envoy/security.md
     - Troubleshooting: envoy/troubleshooting.md
   - TDN:
     - tdn/index.md
@@ -94,6 +95,11 @@ nav:
     - JSON Schema: tdn/schema.md
     - Import & Export: tdn/import-export.md
     - Examples: tdn/examples.md
+  - embody.tools:
+    - platform/index.md
+    - The Collection: platform/collection.md
+    - Submitting a Specimen: platform/submit.md
+    - Accounts: platform/accounts.md
   - TD Development:
     - td-development/index.md
     - Extensions: td-development/extensions.md

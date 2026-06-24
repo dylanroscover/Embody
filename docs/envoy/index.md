@@ -6,7 +6,7 @@
 
 TouchDesigner has no external API. A `.toe` file has no access surface — nothing outside TD can read it, write to it, or interact with what's running inside it. AI assistants hitting this wall have two options: describe what a network *might* look like and hope you can implement it, or stop. Neither is useful when you're mid-session with a half-built network in front of you.
 
-Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 48 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
+Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 49 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
 
 ## Key Design Principles
 
@@ -16,7 +16,7 @@ TD's Python runtime is single-threaded — all TD objects must be accessed from 
 
 ### Embedded, Not External
 
-Envoy lives inside your `.toe` as a COMP extension. It starts with your project, stops when you stop it, and automatically restarts on port change or crash (exponential backoff, up to 3 attempts). There's no sidecar process to manage, no daemon to install, no separate server to launch. Enable it once in your Embody settings and it runs with your project from that point on.
+Envoy lives inside your `.toe` as a COMP extension. It starts with your project, stops when you stop it, and automatically restarts on port change or crash (exponential backoff, up to 3 attempts). A **liveness watchdog** tied to the extension also keeps it alive across project saves and extension reloads — if the server socket dies, it force-frees the port and rebinds within seconds, with no manual toggle. There's no sidecar process to manage, no daemon to install, no separate server to launch. Enable it once in your Embody settings and it runs with your project from that point on.
 
 ### Coarse, Composable Tools
 
@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **48 MCP tools** across 15 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
+Envoy exposes **49 MCP tools** across 15 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
 
 ### Operator Management
 
@@ -138,7 +138,7 @@ Wire operators together and inspect the full connection graph. Works for all sta
 
 | Tool | Description |
 |---|---|
-| `execute_python` | Execute Python in TD's main thread; return values via `result` variable |
+| `execute_python` | Execute Python in TD's main thread; return values via the `result` variable. Auto-lints newly-created ops for (0,0)/overlap and emits a **LAYOUT WARNING** when they need positioning |
 
 ### Introspection & Diagnostics
 
@@ -174,6 +174,7 @@ Read any COMP's live network as `.tdn` (no disk I/O), export it to disk, or impo
 | `read_tdn` | Read a live network as a TDN dict (in-memory, no disk write). Preferred for AI exploration of networks ≥3 operators |
 | `export_network` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus stale-file cleanup |
 | `import_network` | Recreate a network from `.tdn` |
+| `diff_tdn` | Diff a live network against its on-disk `.tdn` — the *unsaved* changes git cannot see. One COMP, or a whole-project summary |
 
 ### TOP Capture
 
