@@ -188,7 +188,7 @@ If you want a different mono webfont, add it to the `<link>` at the top of
 - All interactive elements have `aria-hidden` set on decorative SVGs
 - Color contrast on body text vs. background passes WCAG AA at 17px
 
-The single accessibility gap I'd flag: the JSON code block in the TDN section
+The single accessibility gap I'd flag: the YAML code block in the TDN section
 uses hand-rolled `<span>` colors for syntax highlighting. Screen readers will
 read the entire block as one long string of punctuation — fine for sighted
 users, suboptimal for SR users. If you want to fix that, add

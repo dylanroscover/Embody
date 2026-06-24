@@ -3,7 +3,7 @@
 > Open-source TouchDesigner toolkit. Envoy is an MCP server (48 tools) that lets AI
 > assistants build, wire, parameterize, and debug a LIVE TouchDesigner session; Embody
 > externalizes the network to version-control-friendly text on disk; TDN is the diffable
-> JSON network format that makes both possible. Free, MIT, runs entirely on the user's
+> YAML network format that makes both possible. Free, MIT, runs entirely on the user's
 > machine. Requires TouchDesigner 2025.32280+ (Windows/macOS).
 
 This file inlines the essential documentation in one place so an agent can read it in a
@@ -501,7 +501,7 @@ Envoy exposes 48 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading >=3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90x fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
+| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdn` document |
 
 ## TOP Capture
 
@@ -577,7 +577,7 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 
 TDN is the substrate that makes "create at the speed of thought" possible. It's the format your AI agent reads to understand what's on the screen, the format that lets you compare two attempts side by side, and the format a network rebuilds itself from on the next project open. Without it, AI-driven TouchDesigner work is one-directional - you generate, and you're stuck with what you got. With it, every step of the loop - generate, compare, revert, branch - runs at the speed of typing.
 
-TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
+TDN (TouchDesigner Network) is a YAML-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
 - File extension: `.tdn`
 - MIME type: `application/json`
@@ -588,7 +588,7 @@ TDN (TouchDesigner Network) is a JSON-based file format for representing TouchDe
 
 ## Document Structure
 
-A `.tdn` file is a JSON object with the following top-level fields:
+A `.tdn` file is a YAML document (top-level mapping) with the following fields:
 
 ```json
 {
@@ -1532,7 +1532,7 @@ The same ownership principle applies when a child COMP is externalized as `.tox`
 **TOX vs TDN, when to use which**:
 
 - **TOX**: opaque binary encapsulation. The `.tox` is a single self-contained file, fast to load, but not git-diffable. Suitable for palette widgets, third-party COMPs, and anything where you don't need text-level review of internals.
-- **TDN**: text/JSON snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
+- **TDN**: text/YAML snapshot of the network. Fully git-diffable. Use this when you want pull requests to show changes to the COMP's internals.
 
 Both strategies receive the same ownership treatment in parent `.tdn` files - neither embeds children into the parent. The strategy choice is about the **child file format**, not whether the parent embeds.
 
@@ -2046,7 +2046,7 @@ Use the `import_network` MCP tool:
 | Parameter | Description |
 |-----------|-------------|
 | `target_path` | Destination COMP path |
-| `tdn` | The `.tdn` JSON document (full document or operators array) |
+| `tdn` | The `.tdn` document (full document or operators array) |
 | `clear_first` | Delete existing children before importing |
 
 ### Import Phases
@@ -2117,7 +2117,7 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 
 ## Critical Rules
 
-1. **Prefer `.tdn` files for reading TDN-externalized COMPs** - `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
+1. **Prefer `.tdn` files for reading TDN-externalized COMPs** - `.tdn` files are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
 2. **Use Envoy MCP tools for live TD state and non-TDN operators** - never say "I can't access that binary file." For operators not externalized as TDN, use MCP tools to inspect and modify them.
 3. **Do NOT assume network paths** - use `query_network` on `/` to discover the actual root structure.
 4. **Default to the current network** - use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.

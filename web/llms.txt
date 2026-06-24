@@ -1,8 +1,8 @@
 # Embody
 
-> Embody is an open-source TouchDesigner toolkit - "create at the speed of thought." Envoy is an embedded MCP server that connects AI coding tools to a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable JSON network format that makes both possible.
+> Embody is an open-source TouchDesigner toolkit - "create at the speed of thought." Envoy is an embedded MCP server that connects AI coding tools to a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable YAML network format that makes both possible.
 
-Three tools, one idea: **Envoy** (an MCP server giving AI agents eyes and hands inside a live session), **Embody** (externalizes operators to text files on disk), and **TDN** (a TouchDesigner network as human-readable JSON). MIT-licensed, runs entirely on the user's own machine, no account required.
+Three tools, one idea: **Envoy** (an MCP server giving AI agents eyes and hands inside a live session), **Embody** (externalizes operators to text files on disk), and **TDN** (a TouchDesigner network as human-readable YAML). MIT-licensed, runs entirely on the user's own machine, no account required.
 
 **Full text bundle:** the essential docs (Quickstart, Envoy setup + tools reference, TDN specification, agent rules) inlined as one file - [https://embody.tools/llms-full.txt](https://embody.tools/llms-full.txt). Start there if you want the core reference in a single fetch.
 
@@ -45,13 +45,13 @@ The server is local-only - it binds to `127.0.0.1` (never the network), default 
 
 ## TDN format
 
-- [TDN index](https://dylanroscover.github.io/Embody/tdn/): overview of the TouchDesigner Network JSON format.
+- [TDN index](https://dylanroscover.github.io/Embody/tdn/): overview of the TouchDesigner Network YAML format.
 - [Specification](https://dylanroscover.github.io/Embody/tdn/specification/): the full format spec - operators, parameters, connections, positions, flags, DAT content, annotations.
 - [Schema (page)](https://dylanroscover.github.io/Embody/tdn/schema/): JSON Schema reference for validating `.tdn` files.
 - [Import & export](https://dylanroscover.github.io/Embody/tdn/import-export/): round-trip safe - export, edit, import yields the same network.
 - [Examples](https://dylanroscover.github.io/Embody/tdn/examples/): worked TDN examples.
 
-`read_tdn` returns a whole live network as TDN JSON in one call - ~20-90x fewer tokens than walking it operator-by-operator with `get_op`.
+`read_tdn` returns a whole live network as TDN YAML in one call - ~20-90x fewer tokens than walking it operator-by-operator with `get_op`.
 
 ## Embody (externalization)
 
