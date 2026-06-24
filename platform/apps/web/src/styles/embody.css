@@ -467,6 +467,95 @@ pre {
   display: none;
 }
 
+/* Signed-in account menu: a green name pill (keeping the --register highlight)
+   with an initials avatar, toggling a dropdown (profile / admin / sign out) that
+   mirrors the overflow menu panel. */
+.navbar__user {
+  position: relative;
+  display: inline-flex;
+}
+
+.navbar__user-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.navbar__user-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: rgba(14, 22, 18, 0.85);
+  color: var(--accent);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.navbar__user-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 200px;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(18, 23, 21, 0.97);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+}
+
+.navbar__user-menu[hidden] {
+  display: none;
+}
+
+.navbar__user-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navbar__user-link:hover {
+  border-color: var(--border);
+  background: rgba(30, 40, 30, 0.6);
+  color: var(--accent);
+}
+
+.navbar__user-link-sub {
+  margin-top: 0.15rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-faint);
+}
+
+.navbar__user-signout:hover {
+  border-color: rgba(220, 80, 80, 0.4);
+  background: rgba(220, 80, 80, 0.1);
+  color: #ff9b9b;
+}
+
 /* Items moved into the overflow menu: full-width left-aligned rows (overriding
    the inline centered pill layout) while keeping the brand item look. */
 .navbar__more-item.navbar__item {

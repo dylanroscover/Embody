@@ -31,6 +31,16 @@ const user = Astro.locals.user;
 // on anonymous requests. Keeps /admin invisible to non-admins.
 const showAdmin = isAdmin(user, env);
 
+// Display name + initials for the signed-in account menu (name, else handle).
+const displayName = user ? (user.name.trim() || user.handle) : "";
+const userInitials =
+  displayName
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "?";
+
 // Cloudflare Web Analytics: cookieless, privacy-first page-traffic beacon.
 // The beacon is rendered ONLY when PUBLIC_CF_BEACON_TOKEN is set, so dev and
 // build stay clean when the token is absent. See README / docs for the var.
@@ -94,15 +104,36 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
         </a>
         <div class="navbar__items" data-nav-collapse>
           {user ? (
-            <a class="navbar__item navbar__item--register" href={`/u/${user.handle}`}>account</a>
+            <div class="navbar__user" data-user-menu>
+              <button
+                type="button"
+                class="navbar__item navbar__item--register navbar__user-trigger"
+                data-user-menu-toggle
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-label={`Account menu for ${displayName}`}
+              >
+                <span class="navbar__user-avatar" aria-hidden="true">{userInitials}</span>
+                <span class="navbar__user-name">{displayName}</span>
+              </button>
+              <div class="navbar__user-menu" data-user-menu-list role="menu" hidden>
+                <a class="navbar__user-link" role="menuitem" href={`/u/${user.handle}`}>
+                  <span class="navbar__user-link-label">profile</span>
+                  <span class="navbar__user-link-sub">@{user.handle}</span>
+                </a>
+                {showAdmin && (
+                  <a class="navbar__user-link" role="menuitem" href="/admin">admin</a>
+                )}
+                <button
+                  type="button"
+                  class="navbar__user-link navbar__user-signout"
+                  role="menuitem"
+                  data-user-signout
+                >sign out</button>
+              </div>
+            </div>
           ) : (
             <a class="navbar__item navbar__item--register" href="/signin">sign in</a>
-          )}
-          {showAdmin && (
-            <a
-              class:list={["navbar__item", { "is-active": isActive("/admin") }]}
-              href="/admin"
-            >admin</a>
           )}
           <a
             class:list={["navbar__item", { "is-active": isActive("/collection") }]}
@@ -255,6 +286,44 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             (target === null || !siteHeader.contains(target))
           ) {
             closeNav();
+          }
+        });
+      }
+    </script>
+    <script>
+      // Account menu: toggle the signed-in user's dropdown + wire sign-out.
+      import { authClient } from "../lib/authClient";
+
+      const userMenu = document.querySelector("[data-user-menu]");
+      if (userMenu) {
+        const toggle = userMenu.querySelector("[data-user-menu-toggle]") as HTMLElement | null;
+        const list = userMenu.querySelector("[data-user-menu-list]") as HTMLElement | null;
+        const closeMenu = () => {
+          toggle?.setAttribute("aria-expanded", "false");
+          if (list) list.hidden = true;
+        };
+        const openMenu = () => {
+          toggle?.setAttribute("aria-expanded", "true");
+          if (list) list.hidden = false;
+        };
+        toggle?.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (list?.hidden) openMenu();
+          else closeMenu();
+        });
+        document.addEventListener("click", (event) => {
+          const target = event.target as Node | null;
+          if (target && !userMenu.contains(target)) closeMenu();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeMenu();
+        });
+        const signout = userMenu.querySelector("[data-user-signout]") as HTMLElement | null;
+        signout?.addEventListener("click", async () => {
+          try {
+            await authClient.signOut();
+          } finally {
+            window.location.assign("/");
           }
         });
       }

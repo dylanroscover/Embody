@@ -38,13 +38,7 @@ const requiresOptions = SUBMIT_REQUIRES;
   description="Share a transparent TouchDesigner Specimen with the Collection."
 >
   <section class="page-section submit">
-    <div class="submit-head">
-      <p class="eyebrow">Submit</p>
-      <p class="submit-who">
-        signed in as <a href={`/u/${user.handle}`}>{user.handle}</a>
-        <button type="button" class="submit-signout" data-signout>sign out</button>
-      </p>
-    </div>
+    <p class="eyebrow">Submit</p>
     <h1>share a specimen</h1>
     <p class="lede">
       Paste a TDN network to share it with the Collection. Every submission is
@@ -96,6 +90,10 @@ const requiresOptions = SUBMIT_REQUIRES;
         <input type="text" name="license" value="CC-BY-4.0" maxlength="80" />
       </label>
       <label class="submit-field">
+        <span>thumbnail <em>(optional image, max 2 MB)</em></span>
+        <input type="file" name="thumbnail" accept="image/png,image/jpeg,image/webp" class="submit-file" />
+      </label>
+      <label class="submit-field">
         <span>TDN (YAML)</span>
         <textarea name="tdn" rows="10" required placeholder={'format: tdn\nversion: \'2.0\'\nname: my_network\ntype: baseCOMP\noperators: []'} class="submit-tdn"></textarea>
       </label>
@@ -125,7 +123,6 @@ const requiresOptions = SUBMIT_REQUIRES;
   const form = document.querySelector("[data-submit-form]");
   const statusBox = document.querySelector("[data-submit-status]");
   const goBtn = document.querySelector("[data-submit-go]");
-  const signoutBtn = document.querySelector("[data-signout]");
 
   // The Cloudflare Turnstile API object is injected onto window by the api.js
   // loader (only rendered when the widget is mounted). This is a define:vars
@@ -190,6 +187,29 @@ const requiresOptions = SUBMIT_REQUIRES;
     }
 
 
+    // Optional thumbnail: read the chosen image to a data URL the API stores in
+    // R2 (putThumbnail). Skipped when no file is chosen.
+    let thumbnail;
+    const thumbFile = data.get("thumbnail");
+    if (thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0) {
+      if (thumbFile.size > 2_000_000) {
+        setStatus("Thumbnail must be under 2 MB.", "error");
+        return;
+      }
+      try {
+        thumbnail = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(thumbFile);
+        });
+      } catch (err) {
+        console.error("thumbnail read failed", err);
+        setStatus("Could not read the thumbnail image.", "error");
+        return;
+      }
+    }
+
     const payload = {
       title,
       description: String(data.get("description") || "").trim(),
@@ -199,6 +219,7 @@ const requiresOptions = SUBMIT_REQUIRES;
       category: String(data.get("category") || ""),
       requires: String(data.get("requires") || "none"),
       tdn: tdnRaw,
+      thumbnail,
       turnstileToken
     };
 
@@ -237,22 +258,6 @@ const requiresOptions = SUBMIT_REQUIRES;
         const ts = getTurnstile();
         if (ts && typeof ts.reset === "function") ts.reset();
       }
-    }
-  });
-</script>
-
-<!-- Sign-out: a plain (non-define:vars) script so Astro/Vite bundles the
-     authClient import into a real asset URL. Inlining it above would 404. -->
-<script>
-  import { authClient } from "../lib/authClient";
-
-  document.querySelector("[data-signout]")?.addEventListener("click", async () => {
-    try {
-      await authClient.signOut();
-    } finally {
-      // Navigate home regardless -- a failed sign-out call must not strand the
-      // user on a page whose nav still says "account".
-      window.location.assign("/");
     }
   });
 </script>
