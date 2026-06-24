@@ -1,8 +1,8 @@
-# Submitting a Specimen
+# Contributing a Specimen
 
-Anyone with a free [account](accounts.md) can share a network with the [Collection](collection.md) at [embody.tools/submit](https://embody.tools/submit).
+Anyone with a free [account](accounts.md) can share a network with the [Collection](collection.md) at [embody.tools/contribute](https://embody.tools/contribute).
 
-## What you submit
+## What you contribute
 
 - **TDN (YAML)** — paste your network as TDN. Export it from Embody with ++ctrl+shift+e++ (whole project) or ++ctrl+alt+e++ (current COMP), or copy a COMP with ++ctrl+shift+c++. Both YAML and legacy JSON are accepted.
 - **Title, description, tags.**

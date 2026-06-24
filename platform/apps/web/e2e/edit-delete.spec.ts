@@ -15,7 +15,7 @@ async function registerAndSubmit(page: Page): Promise<{ slug: string; stamp: num
 
   const stamp = Date.now();
   const tdn = JSON.stringify({ name: "e2e_owned", type: "baseCOMP", children: [] }, null, 2);
-  await page.goto("/submit");
+  await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(`E2E Owned ${stamp}`);
   await page.locator('textarea[name="tdn"]').fill(tdn);
   await page.locator("[data-submit-go]").click();
@@ -70,7 +70,7 @@ test("non-owner is redirected away from the edit page", async ({ page }) => {
   const { slug } = await registerAndSubmit(page);
 
   // Sign out, then register a different user (B).
-  await page.goto("/submit");
+  await page.goto("/contribute");
   await Promise.all([
     page.waitForURL((u) => new URL(u).pathname === "/", { timeout: 15_000 }),
     page.locator("[data-signout]").click()

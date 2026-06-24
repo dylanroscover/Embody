@@ -336,6 +336,30 @@ function emitKey(key: string): string {
     )}
   </section>
 
+  {isSignedIn && (
+    <dialog class="report-dialog" data-report-dialog aria-labelledby="report-dialog-title">
+      <form class="report-dialog__form" data-report-form>
+        <h2 class="report-dialog__title" id="report-dialog-title">Report specimen</h2>
+        <p class="report-dialog__lede">
+          Tell us why. Your report goes to the moderators for review.
+        </p>
+        <div class="report-dialog__reasons" role="radiogroup" aria-labelledby="report-dialog-title">
+          {reportReasons.map((reason, i) => (
+            <label class="report-reason">
+              <input type="radio" name="report-reason" value={reason} checked={i === 0} />
+              <span>{reason}</span>
+            </label>
+          ))}
+        </div>
+        <p class="report-dialog__status" data-report-status role="status" aria-live="polite"></p>
+        <div class="report-dialog__actions">
+          <button type="button" class="btn btn--ghost" data-report-cancel>cancel</button>
+          <button type="submit" class="btn btn--primary" data-report-submit>submit report</button>
+        </div>
+      </form>
+    </dialog>
+  )}
+
   <script
     type="application/json"
     id="report-reasons"
@@ -364,21 +388,40 @@ function emitKey(key: string): string {
       // client. Anonymous visitors who react are bounced to /signin.
       initReactions({ scope: root, signedIn: root.dataset.signedIn === "true" });
 
+      // Report: an app-native <dialog> reason picker replaces the OS prompt().
+      // The dialog renders only for signed-in users (same gate as the button).
       const reportButton = root.querySelector("[data-report]") as HTMLButtonElement | null;
-      if (reportButton) {
-        reportButton.addEventListener("click", async () => {
+      const dialog = document.querySelector("[data-report-dialog]") as HTMLDialogElement | null;
+      if (reportButton && dialog) {
+        const form = dialog.querySelector("[data-report-form]") as HTMLFormElement | null;
+        const cancelBtn = dialog.querySelector("[data-report-cancel]") as HTMLButtonElement | null;
+        const submitBtn = dialog.querySelector("[data-report-submit]") as HTMLButtonElement | null;
+        const dialogStatus = dialog.querySelector("[data-report-status]") as HTMLElement | null;
+        const setDialogStatus = (message: string) => {
+          if (dialogStatus) dialogStatus.textContent = message;
+        };
+
+        reportButton.addEventListener("click", () => {
           if (reportButton.disabled) return;
-          const hint = reasons.length ? ` (${reasons.join(", ")})` : "";
-          const input = window.prompt(`Why are you reporting this specimen?${hint}`, "other");
-          if (input === null) return;
-          const reason = input.trim().toLowerCase();
-          if (reasons.length && !reasons.includes(reason)) {
-            setStatus(`Reason must be one of: ${reasons.join(", ")}.`);
+          setDialogStatus("");
+          dialog.showModal();
+        });
+
+        cancelBtn?.addEventListener("click", () => dialog.close());
+
+        form?.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const checked = form.querySelector(
+            'input[name="report-reason"]:checked'
+          ) as HTMLInputElement | null;
+          const reason = checked?.value ?? "";
+          if (!reason || (reasons.length && !reasons.includes(reason))) {
+            setDialogStatus("Pick a reason to continue.");
             return;
           }
 
-          reportButton.disabled = true;
-          setStatus("");
+          if (submitBtn) submitBtn.disabled = true;
+          setDialogStatus("Submitting...");
           try {
             const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}/report`, {
               method: "POST",
@@ -390,14 +433,15 @@ function emitKey(key: string): string {
               return;
             }
             if (res.status === 201) {
+              dialog.close();
               setStatus("Thanks -- this specimen has been reported for review.");
               return;
             }
-            setStatus("Could not submit your report. Please try again.");
+            setDialogStatus("Could not submit your report. Please try again.");
           } catch {
-            setStatus("Could not submit your report. Please try again.");
+            setDialogStatus("Could not submit your report. Please try again.");
           } finally {
-            reportButton.disabled = false;
+            if (submitBtn) submitBtn.disabled = false;
           }
         });
       }
@@ -450,13 +494,7 @@ function emitKey(key: string): string {
 
   <section class="page-section tight specimen-layout">
     <div class="viewer-panel pillar">
-      <div class="panel-head">
-        <div>
-          <p class="eyebrow">Node graph preview</p>
-          <h2>{specimen.name} graph</h2>
-        </div>
-        <span class="badge stock">inert preview</span>
-      </div>
+      <p class="eyebrow">Network preview</p>
       <TdnViewer tdn={tdn} client:load />
     </div>
 
@@ -587,6 +625,94 @@ function emitKey(key: string): string {
     font: 12px/1.4 var(--font-mono);
   }
 
+  /* App-native report dialog -- replaces the browser prompt(). Tokens and the
+     shared .btn classes keep it of a piece with the rest of the app. */
+  .report-dialog {
+    width: min(420px, calc(100vw - 2rem));
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text);
+    padding: 0;
+  }
+
+  .report-dialog::backdrop {
+    background: rgba(10, 14, 12, 0.62);
+  }
+
+  .report-dialog__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+
+  .report-dialog__title {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  .report-dialog__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .report-dialog__reasons {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .report-reason {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    text-transform: capitalize;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .report-reason:hover {
+    border-color: var(--border);
+  }
+
+  .report-reason:has(input:checked) {
+    border-color: var(--accent);
+    background: rgba(110, 230, 104, 0.08);
+  }
+
+  .report-reason input {
+    accent-color: var(--accent);
+  }
+
+  .report-dialog__status {
+    margin: 0;
+    min-height: 1.05rem;
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
+  }
+
+  .report-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+
+  .report-dialog__actions .btn {
+    min-height: 40px;
+    padding: 0.55rem 1.1rem;
+    font-size: 0.9rem;
+  }
+
   .specimen-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 330px;
@@ -604,19 +730,6 @@ function emitKey(key: string): string {
 
   .viewer-panel {
     padding: 18px;
-  }
-
-  .panel-head {
-    display: flex;
-    align-items: start;
-    justify-content: space-between;
-    gap: 18px;
-    margin-bottom: 18px;
-  }
-
-  .panel-head h2 {
-    margin-bottom: 0;
-    font-size: clamp(24px, 3vw, 38px);
   }
 
   .specimen-sidebar {

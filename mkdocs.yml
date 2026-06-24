@@ -98,7 +98,7 @@ nav:
   - embody.tools:
     - platform/index.md
     - The Collection: platform/collection.md
-    - Submitting a Specimen: platform/submit.md
+    - Contributing a Specimen: platform/contribute.md
     - Accounts: platform/accounts.md
   - TD Development:
     - td-development/index.md

@@ -13,7 +13,7 @@ if (user) {
 
 const githubEnabled = githubOAuthEnabled(env as unknown as AuthEnv);
 
-// `next` lets a gated page (e.g. /submit) bounce the user back after sign-in.
+// `next` lets a gated page (e.g. /contribute) bounce the user back after sign-in.
 const rawNext = Astro.url.searchParams.get("next") ?? "";
 const nextPath = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
 

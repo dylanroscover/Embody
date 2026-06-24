@@ -15,8 +15,8 @@ async function register(page: import("@playwright/test").Page) {
   await expect(page).not.toHaveURL(/\/signin/, { timeout: 15_000 });
 }
 
-test("anonymous user is gated from /submit", async ({ page }) => {
-  await page.goto("/submit");
+test("anonymous user is gated from /contribute", async ({ page }) => {
+  await page.goto("/contribute");
   await expect(page).toHaveURL(/\/signin/, { timeout: 15_000 });
 });
 
@@ -27,7 +27,7 @@ test("signed-in user submits a specimen and lands on its page", async ({ page })
   const title = `E2E Net ${stamp}`;
   const tdn = JSON.stringify({ name: "e2e_net", type: "baseCOMP", children: [] }, null, 2);
 
-  await page.goto("/submit");
+  await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(title);
   await page.locator('textarea[name="description"]').fill("An e2e-submitted test network.");
   await page.locator('textarea[name="tdn"]').fill(tdn);
@@ -40,10 +40,10 @@ test("signed-in user submits a specimen and lands on its page", async ({ page })
 
 test("invalid TDN is rejected", async ({ page }) => {
   await register(page);
-  await page.goto("/submit");
+  await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(`Bad TDN ${Date.now()}`);
   await page.locator('textarea[name="tdn"]').fill("{ not valid json");
   await page.locator("[data-submit-go]").click();
   await expect(page.locator("[data-submit-status]")).toBeVisible({ timeout: 10_000 });
-  await expect(page).toHaveURL(/\/submit/); // stayed put
+  await expect(page).toHaveURL(/\/contribute/); // stayed put
 });

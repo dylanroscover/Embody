@@ -7,7 +7,7 @@ The site is built on Astro + Cloudflare Workers and is **fully browsable without
 ## What's here
 
 - **[The Collection](collection.md)** — browse Specimens, inspect their node graph in the browser, and copy a Specimen's TDN to your clipboard ("embody it").
-- **[Submitting a Specimen](submit.md)** — share your own network. Every submission is capability-scanned before it goes live.
+- **[Contributing a Specimen](contribute.md)** — share your own network. Every contribution is capability-scanned before it goes live.
 - **[Accounts](accounts.md)** — a free account (email + password, or GitHub) lets you submit and react. Browsing needs no account.
 
 ## How "embody it" works

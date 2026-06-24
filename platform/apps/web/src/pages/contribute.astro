@@ -12,7 +12,7 @@ export const prerender = false;
 // Real session gate: unauthenticated visitors go to sign-in and bounce back.
 const user = Astro.locals.user;
 if (!user) {
-  return Astro.redirect("/signin?next=/submit");
+  return Astro.redirect("/signin?next=/contribute");
 }
 
 const isDev = String(env.ENVIRONMENT ?? "production") !== "production";
@@ -237,7 +237,7 @@ const requiresOptions = SUBMIT_REQUIRES;
       const body = await res.json().catch(() => ({}));
       if (res.status === 401) {
         setStatus("Your session expired. Redirecting to sign in...", "error");
-        window.location.assign("/signin?next=/submit");
+        window.location.assign("/signin?next=/contribute");
         return;
       }
       if (!res.ok) {
@@ -263,7 +263,12 @@ const requiresOptions = SUBMIT_REQUIRES;
 </script>
 
 <style>
+  /* Centered reading column, same treatment as the manifesto body: a narrow
+     max-width with auto inline margins so the whole form sits centered on the
+     page instead of pinned to the left gutter. */
   .submit {
+    max-width: 46rem;
+    margin-inline: auto;
     padding-bottom: 56px;
   }
 
@@ -303,7 +308,7 @@ const requiresOptions = SUBMIT_REQUIRES;
 
   .submit-form {
     margin-top: 2rem;
-    max-width: 42rem;
+    max-width: 100%;
     display: flex;
     flex-direction: column;
     gap: 1.1rem;
@@ -334,11 +339,35 @@ const requiresOptions = SUBMIT_REQUIRES;
   .submit-field textarea,
   .submit-field select {
     padding: 0.65rem 0.75rem;
-    background: var(--bg);
+    background-color: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text);
     font-size: 1rem;
+  }
+
+  /* App-native select: strip the OS chrome, draw our own chevron, and give it
+     room so the arrow no longer crowds the right edge. The option list itself is
+     OS-drawn, but we color it to match where browsers honor it. */
+  .submit-field select.submit-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2397a098' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+    background-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  .submit-field select.submit-select:hover {
+    border-color: var(--accent);
+  }
+
+  .submit-field select.submit-select option {
+    background: var(--bg-elevated);
+    color: var(--text);
   }
 
   .submit-turnstile .cf-turnstile {

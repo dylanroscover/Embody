@@ -33,14 +33,14 @@ test("sign out, then sign back in", async ({ page }) => {
   await page.locator("[data-auth-submit]").click();
   await expect(page).not.toHaveURL(/\/signin/, { timeout: 15_000 });
 
-  // sign out (the control lives on /submit) -> awaits signOut() then assigns "/"
-  await page.goto("/submit");
+  // sign out (the control lives on /contribute) -> awaits signOut() then assigns "/"
+  await page.goto("/contribute");
   await Promise.all([
     page.waitForURL((u) => new URL(u).pathname === "/", { timeout: 15_000 }),
     page.locator("[data-signout]").click(),
   ]);
-  // signed out: the gated /submit now bounces anonymous users to /signin
-  await page.goto("/submit");
+  // signed out: the gated /contribute now bounces anonymous users to /signin
+  await page.goto("/contribute");
   await expect(page).toHaveURL(/\/signin/, { timeout: 15_000 });
 
   // sign back in
