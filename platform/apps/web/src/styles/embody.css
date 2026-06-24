@@ -317,36 +317,18 @@ pre {
   color: var(--accent);
 }
 
-/* Active page: an accent-tinted chip -- clearly "you are here". OPAQUE like the
-   other link pills (accent-dim layered over the solid page bg); accent-dim alone
-   was ~0.2 alpha, so the refracted glass showed straight through it and it read
-   as far more transparent than its neighbors. */
-.navbar__item.is-active {
-  border-color: transparent;
-  background: linear-gradient(var(--accent-dim), var(--accent-dim)), var(--bg);
-  color: var(--accent);
-}
-
+/* Active page -- the SINGLE selection style for the whole nav, on desktop and in
+   the mobile dropdown: an accent border + a green tint + a bright accent label.
+   This is the ONLY green-highlighted item; every other item (brand, nav links,
+   contribute, account, github) stays neutral and only lights up on hover. One
+   green = "the page you're on", so selection is never confused with a callout.
+   OPAQUE (tint layered over the page bg) so the refracted glass doesn't show
+   through and make it read more transparent than its neighbors. */
+.navbar__item.is-active,
 .navbar__item.is-active:hover {
-  border-color: transparent;
-  background: linear-gradient(var(--accent-dim), var(--accent-dim)), var(--bg);
-  color: var(--accent);
-}
-
-/* PRIMARY CTA (contribute) -- filled accent emphasis, SAME height as the rest.
-   This is the ONE filled-accent element in the bar; everything else (brand,
-   nav links, account, github) stays neutral and only lights up on hover, so
-   the eye lands on the call to action, not on a name. */
-.navbar__item--register {
   border-color: var(--accent);
-  background: var(--accent);
-  color: var(--bg);
-}
-
-.navbar__item--register:hover {
-  border-color: var(--accent-hover);
-  background: var(--accent-hover);
-  color: var(--bg);
+  background: linear-gradient(rgba(110, 230, 104, 0.13), rgba(110, 230, 104, 0.13)), var(--bg);
+  color: var(--accent);
 }
 
 /* SIGN IN -- outline emphasis, SAME height as the rest; never a circle, never
@@ -646,7 +628,10 @@ pre {
     position: absolute;
     top: calc(100% + 0.5rem);
     right: 0;
-    flex-direction: column;
+    /* Row-wrap so the last two items can share a row: the description items are
+       forced full-width (own rows), while the sign-in button and the github icon
+       wrap onto one line together (github beside sign-in, like the desktop bar). */
+    flex-flow: row wrap;
     align-items: stretch;
     gap: 0.2rem;
     min-width: 300px;
@@ -697,25 +682,42 @@ pre {
     color: var(--text-faint);
   }
 
-  /* The filled-green CTA stacks label + desc like the other rows, but the muted
-     gray would wash out over the accent fill -- use a soft dark tone so the
-     description stays legible (the label above it is full-dark var(--bg)). */
-  .navbar__items .navbar__item--register .nav-item__desc {
-    color: rgba(24, 30, 30, 0.74);
-  }
-
   /* In the dropdown, items that show a description stack label + desc, so let
      them grow past the single-row height. Auth + github stay single-row. */
   .navbar__items .navbar__item:not(.navbar__item--signin):not(.navbar__item--github):not(.navbar__user-trigger) {
     flex-direction: column;
     align-items: flex-start;
+    width: 100%;
   }
 
+  /* Final row: the auth element (sign-in link or account wrapper) grows to fill
+     while the github icon stays a compact button beside it. */
+  .navbar__items .navbar__item--signin,
+  .navbar__items .navbar__user {
+    flex: 1 1 auto;
+  }
+
+  /* Signed in: let the account chip fill its grown wrapper. */
+  .navbar__items .navbar__user-trigger {
+    width: 100%;
+  }
+
+  /* Group gap: set the auth + github row apart from the nav items above. Both
+     carry the SAME margin-top so the row sits lower AND the two stay vertically
+     aligned with each other on the shared line. */
+  .navbar__items .navbar__item--signin,
+  .navbar__items .navbar__user,
   .navbar__items .navbar__item--github {
-    flex-direction: column;
-    align-items: flex-start;
-    border-color: transparent;
-    background: transparent;
+    margin-top: 0.45rem;
+  }
+
+  /* Github: a compact icon button on the right end of the final row (neutral
+     fill + border, matching the desktop github pill), not a full-width stub. */
+  .navbar__items .navbar__item--github {
+    flex: 0 0 auto;
+    justify-content: center;
+    border-color: var(--border);
+    background: var(--bg-elevated);
   }
 
   .site-header.is-open .nav-toggle__bar:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }

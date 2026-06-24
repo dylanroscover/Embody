@@ -120,7 +120,7 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             <span class="nav-item__desc">Why TouchDesigner should be transparent and diffable.</span>
           </a>
           <a
-            class:list={["navbar__item", "navbar__item--register", { "is-active": isActive("/submit") }]}
+            class:list={["navbar__item", { "is-active": isActive("/submit") }]}
             href="/submit"
             aria-current={isActive("/submit") ? "page" : undefined}
           >
@@ -333,9 +333,9 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
       // too narrow to fit every item at full size -- but still wide enough that
       // the hamburger has not taken over -- the lowest-priority items collapse
       // into a "..." button at the end of the bar that opens a small blurred
-      // menu. The CTA (contribute), the account chip, and sign in -- plus the
-      // wordmark -- are never overflowed; the rightmost low-priority items go
-      // first (github, then manifesto, then collection).
+      // menu. The account chip and sign in (plus the wordmark) are never
+      // overflowed; the rightmost low-priority items go first (github, then
+      // contribute, then manifesto, then collection).
       const moreNav = document.querySelector("[data-nav-more]");
       const moreBtn = document.querySelector("[data-nav-more-toggle]");
       const moreMenu = document.querySelector("[data-nav-more-menu]");
@@ -349,13 +349,13 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
         itemsRow instanceof HTMLElement &&
         navEl instanceof HTMLElement
       ) {
-        // Items eligible to overflow, captured in DOM order. The CTA
-        // (--register), the account chip (--user-trigger), and the sign-in
-        // button are excluded so they always stay inline.
+        // Items eligible to overflow, captured in DOM order. The account chip
+        // (--user-trigger) and the sign-in button are excluded so they always
+        // stay inline.
         // Reverse priority = last-to-first removal order (github first).
         const overflowable: HTMLElement[] = Array.from(
           itemsRow.querySelectorAll(
-            ".navbar__item:not(.navbar__item--register):not(.navbar__item--signin):not(.navbar__more-btn):not(.navbar__user-trigger)"
+            ".navbar__item:not(.navbar__item--signin):not(.navbar__more-btn):not(.navbar__user-trigger)"
           )
         ).filter((el): el is HTMLElement => el instanceof HTMLElement);
 
