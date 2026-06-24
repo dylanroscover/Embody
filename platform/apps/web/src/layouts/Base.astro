@@ -137,7 +137,11 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
                 aria-expanded="false"
                 aria-label={`Account menu for ${displayName}`}
               >
-                <span class="navbar__user-avatar" aria-hidden="true">{userInitials}</span>
+                {user.avatarUrl ? (
+                  <img class="navbar__user-avatar navbar__user-avatar--img" src={user.avatarUrl} alt="" aria-hidden="true" />
+                ) : (
+                  <span class="navbar__user-avatar" aria-hidden="true">{userInitials}</span>
+                )}
                 <span class="navbar__user-name">{displayName}</span>
               </button>
               <div class="navbar__user-menu" data-user-menu-list role="menu" hidden>

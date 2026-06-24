@@ -491,6 +491,12 @@ pre {
   letter-spacing: 0;
 }
 
+/* Uploaded / GitHub avatar image variant: fill the same circular chip. */
+.navbar__user-avatar--img {
+  object-fit: cover;
+  background: var(--bg-code);
+}
+
 .navbar__user-menu {
   position: absolute;
   top: calc(100% + 0.5rem);

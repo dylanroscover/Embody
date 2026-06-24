@@ -465,6 +465,19 @@ export async function getUserByHandle(
   return fallbackUserProfile(trimmed);
 }
 
+// Set (or clear with null) a user's effective avatar_url. Used by the avatar
+// upload/remove routes; clearing reverts every avatar site to the letter chip.
+export async function setProfileAvatarUrl(
+  db: D1Database,
+  userId: string,
+  avatarUrl: string | null
+): Promise<void> {
+  await db
+    .prepare("UPDATE users_profile SET avatar_url = ? WHERE id = ?")
+    .bind(avatarUrl, userId)
+    .run();
+}
+
 export async function listSpecimensByAuthor(
   db: D1Database,
   handle: string

@@ -62,6 +62,42 @@ export async function putThumbnail(
   return { key, sha256 };
 }
 
+// Avatars: content-addressed under avatars/<sha256>, uploaded as a data URL just
+// like thumbnails. Content addressing means a re-upload gets a NEW key, so the
+// serve URL changes and no cache-busting is needed. Returns null on a non-image,
+// oversized, or unparseable payload so the route can answer 400 cleanly.
+const AVATAR_MAX_BYTES = 512 * 1024; // 0.5 MB -- avatars are downscaled client-side
+const AVATAR_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+
+export async function putAvatar(
+  blobs: R2Bucket,
+  dataUrl: string | undefined
+): Promise<BlobWrite | null> {
+  if (!dataUrl) return null;
+
+  const parsed = parseDataUrl(dataUrl);
+  if (!parsed) return null;
+  if (!AVATAR_CONTENT_TYPES.has(parsed.contentType)) return null;
+  if (parsed.bytes.byteLength === 0 || parsed.bytes.byteLength > AVATAR_MAX_BYTES) return null;
+
+  const sha256 = await sha256Hex(parsed.bytes);
+  const key = `avatars/${sha256}`;
+
+  await blobs.put(key, parsed.bytes, {
+    httpMetadata: { contentType: parsed.contentType },
+    customMetadata: { sha256 }
+  });
+
+  return { key, sha256 };
+}
+
+// Fetch a stored avatar blob for streaming. `sha256` is the bare hash from the
+// serve URL; null when empty or missing.
+export async function getAvatar(blobs: R2Bucket, sha256: string): Promise<R2ObjectBody | null> {
+  if (!sha256) return null;
+  return blobs.get(`avatars/${sha256}`);
+}
+
 export function byteLength(value: string): number {
   return encoder.encode(value).byteLength;
 }
