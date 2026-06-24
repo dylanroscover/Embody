@@ -22,13 +22,13 @@ export interface NotifyEnv extends EmailEnv {
   BETTER_AUTH_URL?: string;
 }
 
-// Project owner. Override per-deploy with OWNER_NOTIFY_EMAIL.
-const DEFAULT_OWNER = "rosco@tec.design";
 // Public site origin, used only to build links inside notification bodies.
 const DEFAULT_BASE_URL = "https://embody.tools";
 
+// Where owner notifications go. Sourced ONLY from OWNER_NOTIFY_EMAIL -- no email
+// is hardcoded. Unset means owner notices are skipped (see notifyOwner).
 function ownerAddress(env: NotifyEnv): string {
-  return env.OWNER_NOTIFY_EMAIL?.trim() || DEFAULT_OWNER;
+  return env.OWNER_NOTIFY_EMAIL?.trim() || "";
 }
 
 function baseUrl(env: NotifyEnv): string {
@@ -47,8 +47,11 @@ async function notifyOwner(
   link?: { href: string; label: string }
 ): Promise<SendEmailResult> {
   try {
+    const to = ownerAddress(env);
+    // No owner inbox configured (OWNER_NOTIFY_EMAIL unset) -> skip, never error.
+    if (!to) return { sent: false, skipped: true };
     return await sendEmail(env, {
-      to: ownerAddress(env),
+      to,
       subject,
       html: renderEmail({
         heading,

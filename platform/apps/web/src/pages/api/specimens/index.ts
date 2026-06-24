@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
+import { parse as parseYaml } from "yaml";
 import {
   SUBMIT_CATEGORIES,
   SUBMIT_DIFFICULTIES,
@@ -97,7 +98,7 @@ export const POST: APIRoute = async ({ request }) => {
       return errorResponse(403, "turnstile_failed", "Turnstile verification failed.");
     }
 
-    const parsedTdn = parseTdnJson(body.request.tdn);
+    const parsedTdn = parseTdn(body.request.tdn);
     if (!parsedTdn.ok) {
       return errorResponse(400, "invalid_tdn", parsedTdn.detail);
     }
@@ -257,18 +258,20 @@ async function readSubmitRequest(
   };
 }
 
-function parseTdnJson(
+// TDN is YAML v2.0 (a strict JSON superset, so legacy JSON still parses).
+function parseTdn(
   value: string
 ): { ok: true; tdn: Record<string, unknown> } | { ok: false; detail: string } {
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!isRecord(parsed)) {
-      return { ok: false, detail: "tdn must parse to a JSON object." };
-    }
-    return { ok: true, tdn: parsed };
+    parsed = parseYaml(value) as unknown;
   } catch {
-    return { ok: false, detail: "tdn must be valid JSON." };
+    return { ok: false, detail: "tdn must be valid YAML or JSON." };
   }
+  if (!isRecord(parsed)) {
+    return { ok: false, detail: "tdn must parse to a mapping (object)." };
+  }
+  return { ok: true, tdn: parsed };
 }
 
 function readString(value: unknown): string {

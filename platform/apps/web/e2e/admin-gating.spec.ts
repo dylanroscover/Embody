@@ -33,7 +33,8 @@ test("a normal signed-in user cannot reach the panel or its API", async ({ page 
 });
 
 test("the bootstrap admin reaches the dashboard and sees the admin nav link", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
 
   await page.goto("/admin");
   expect(new URL(page.url()).pathname).toBe("/admin");

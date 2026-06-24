@@ -5,7 +5,8 @@ import { ensureAdminSignedIn } from "./admin-helpers";
 // raw send result (skipped in dev/CI where RESEND_API_KEY is unset).
 
 test("admin email test-send validates the template and reports the result", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
 
   // Valid template -> 200. In dev with no RESEND_API_KEY the send is skipped.
   const ok = await page.request.post("/api/admin/email/test", {

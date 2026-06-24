@@ -2,9 +2,10 @@
 // the small validation/CSRF helpers every /admin page and /api/admin route uses.
 //
 // Hybrid model: a user is an admin when their trust_level is 'admin' OR their
-// email is in the ADMIN_EMAILS allowlist. The allowlist always includes the
-// project owner as a bootstrap floor, so the panel is reachable with zero DB
-// surgery; trust_level lets an admin promote others from inside the panel.
+// email is in the ADMIN_EMAILS allowlist (a comma-separated Worker var/secret).
+// NO email is hardcoded -- ADMIN_EMAILS is the only allowlist source. Bootstrap
+// the first admin by setting ADMIN_EMAILS (or by giving a user trust_level
+// 'admin' directly); from there an admin promotes others inside the panel.
 //
 // IMPORTANT: src/server/auth.ts requireUser/getRequestUser return only
 // { id, handle } -- they DROP email + trustLevel. So API gating MUST resolve the
@@ -16,21 +17,20 @@ import { getSessionUser, type SessionUser } from "../lib/authSession";
 import type { AuthEnv } from "../lib/auth";
 import { errorResponse } from "./http";
 
-// Project owner -- the bootstrap admin. Mirrors DEFAULT_OWNER in notifications.ts.
-const DEFAULT_ADMIN_EMAIL = "rosco@tec.design";
-
 // isAdmin / getAdminUser take the full CloudflareEnv. The generated runtime
 // `env` from cloudflare:workers is assignable to it (as src/server/auth.ts's
 // requireUser already relies on), and only ADMIN_EMAILS is read here.
 
-// ADMIN_EMAILS -> a lowercased Set, always including the owner so the panel is
-// reachable out of the box.
+// ADMIN_EMAILS (comma-separated) -> a lowercased Set. This is the ONLY allowlist
+// source -- no email is hardcoded. Empty/unset means the allowlist is empty, so
+// admin access then depends solely on a user's trust_level being 'admin'.
 function adminAllowlist(env: CloudflareEnv): Set<string> {
-  const extra = (env.ADMIN_EMAILS ?? "")
-    .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
-  return new Set([DEFAULT_ADMIN_EMAIL.toLowerCase(), ...extra]);
+  return new Set(
+    (env.ADMIN_EMAILS ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean)
+  );
 }
 
 // Pure predicate over an already-resolved user (page side: Astro.locals.user).

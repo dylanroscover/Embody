@@ -67,15 +67,27 @@ export const SUBMIT_DIFFICULTIES: readonly Difficulty[] = [
   "advanced"
 ] as const;
 
-// Known category facets (mirrors the first-party fixture set the collection
-// facets are seeded from). Free-form categories are NOT accepted on submit; a
-// value outside this set is rejected server-side.
+// Category taxonomy shared by the submit form and the collection facets,
+// spanning the major domains of TouchDesigner work. Free-form categories are NOT
+// accepted on submit; a value outside this set is rejected server-side.
 export const SUBMIT_CATEGORIES: readonly string[] = [
   "generative",
   "compositing",
   "3d",
   "simulation",
-  "raymarching-sdf"
+  "raymarching-sdf",
+  "audio-reactive",
+  "particles",
+  "shaders",
+  "feedback",
+  "data-visualization",
+  "interactive",
+  "projection-mapping",
+  "video",
+  "machine-learning",
+  "glitch",
+  "fractal",
+  "typography"
 ] as const;
 
 // Hardware / capability requirement facet. "none" = runs on stock TouchDesigner.
@@ -97,7 +109,7 @@ export interface SubmitRequest {
   category: string;
   /** One of SUBMIT_REQUIRES ("none" = stock TouchDesigner). */
   requires: string;
-  /** JSON string of the TDN dict (the raw network). */
+  /** YAML (or legacy JSON) string of the TDN dict (the raw network). */
   tdn: string;
   /** Optional data-URL thumbnail; otherwise generated server-side. */
   thumbnail?: string;

@@ -5,7 +5,8 @@ import { ensureAdminSignedIn } from "./admin-helpers";
 // seed state (and the public Collection) is left intact. Requires a seeded DB.
 
 test("admin can change a specimen's visibility (and revert)", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
 
   await page.goto("/admin/specimens?q=murmuration");
   const row = page.locator("[data-row]").first();
@@ -22,7 +23,8 @@ test("admin can change a specimen's visibility (and revert)", async ({ page }) =
 });
 
 test("an out-of-vocabulary visibility is rejected with 400", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
   const res = await page.request.post("/api/admin/specimens/whatever", {
     data: { visibility: "bogus" }
   });

@@ -5,7 +5,8 @@ import { ensureAdminSignedIn } from "./admin-helpers";
 // through the admin UI. Requires the local DB to be seeded (murmuration).
 
 test("admin can see a report and move it through its status workflow", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
 
   // File a report (the admin is also a signed-in user).
   const filed = await page.request.post("/api/specimens/murmuration/report", {
@@ -24,7 +25,8 @@ test("admin can see a report and move it through its status workflow", async ({ 
 });
 
 test("an out-of-vocabulary report status is rejected with 400", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
   const res = await page.request.post("/api/admin/reports/whatever", {
     data: { status: "bogus" }
   });

@@ -1,8 +1,9 @@
 """
 TDN -- TouchDesigner Network open format (.tdn)
 
-Exports and imports TouchDesigner networks as human-readable JSON files.
-Only non-default properties are stored, keeping the output minimal.
+Exports and imports TouchDesigner networks as human-readable YAML files
+(a strict JSON superset, so legacy JSON .tdn still load). Only non-default
+properties are stored, keeping the output minimal.
 
 This extension lives on the Embody COMP and is callable via:
   - MCP tools (export_network / import_network) through Envoy

@@ -96,8 +96,8 @@ const requiresOptions = SUBMIT_REQUIRES;
         <input type="text" name="license" value="CC-BY-4.0" maxlength="80" />
       </label>
       <label class="submit-field">
-        <span>TDN (JSON)</span>
-        <textarea name="tdn" rows="10" required placeholder={'{\n  "name": "my_network",\n  "type": "baseCOMP",\n  "children": []\n}'} class="submit-tdn"></textarea>
+        <span>TDN (YAML)</span>
+        <textarea name="tdn" rows="10" required placeholder={'format: tdn\nversion: \'2.0\'\nname: my_network\ntype: baseCOMP\noperators: []'} class="submit-tdn"></textarea>
       </label>
       {useTurnstileWidget && (
         <div class="submit-field submit-turnstile">
@@ -109,10 +109,6 @@ const requiresOptions = SUBMIT_REQUIRES;
         submit specimen
       </button>
     </form>
-
-    <p class="submit-back">
-      <a href="/collection">Back to the Collection</a>
-    </p>
   </section>
 </Base>
 
@@ -163,15 +159,12 @@ const requiresOptions = SUBMIT_REQUIRES;
       return;
     }
     if (!tdnRaw) {
-      setStatus("Paste a TDN JSON network.", "error");
+      setStatus("Paste a TDN network.", "error");
       return;
     }
-    try {
-      JSON.parse(tdnRaw);
-    } catch {
-      setStatus("TDN must be valid JSON.", "error");
-      return;
-    }
+    // TDN is YAML (a JSON superset). This inline define:vars script can't bundle
+    // the yaml parser, so format validation happens server-side (it returns a
+    // clear error); the client only checks that something was pasted.
 
     const tags = String(data.get("tags") || "")
       .split(",")

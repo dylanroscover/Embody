@@ -7,7 +7,8 @@ import { ensureAdminSignedIn, registerNormalUser } from "./admin-helpers";
 test("admin can change another user's trust level", async ({ page }) => {
   // Create the target first (this signs THEM in), then switch to the admin.
   const email = await registerNormalUser(page);
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
 
   await page.goto(`/admin/users?q=${encodeURIComponent(email)}`);
   const row = page.locator("[data-row]").first();
@@ -19,7 +20,8 @@ test("admin can change another user's trust level", async ({ page }) => {
 });
 
 test("admin cannot demote their own admin access (self-demote -> 409)", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
 
   // Resolve the admin's own id from the live session (cookies shared via page.request).
   const session = await page.request.get("/api/auth/get-session").then((r) => r.json());
@@ -33,7 +35,8 @@ test("admin cannot demote their own admin access (self-demote -> 409)", async ({
 });
 
 test("an out-of-vocabulary trust level is rejected with 400", async ({ page }) => {
-  await ensureAdminSignedIn(page);
+  const admin = await ensureAdminSignedIn(page);
+  test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
   const res = await page.request.post("/api/admin/users/whatever", {
     data: { trustLevel: "wizard" }
   });

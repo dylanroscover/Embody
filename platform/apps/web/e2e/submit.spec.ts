@@ -38,7 +38,7 @@ test("signed-in user submits a specimen and lands on its page", async ({ page })
   await expect(page.getByRole("heading", { level: 1, name: new RegExp(`E2E Net ${stamp}`, "i") })).toBeVisible();
 });
 
-test("invalid TDN JSON is rejected client-side", async ({ page }) => {
+test("invalid TDN is rejected", async ({ page }) => {
   await register(page);
   await page.goto("/submit");
   await page.locator('input[name="title"]').fill(`Bad TDN ${Date.now()}`);

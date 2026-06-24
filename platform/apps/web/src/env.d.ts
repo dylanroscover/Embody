@@ -21,12 +21,13 @@ interface CloudflareEnv {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   // Owner inbox for operational notifications (new signup, new specimen, abuse
-  // report). Optional; defaults to the project owner. See src/server/notifications.ts.
+  // report). No address is hardcoded -- unset means these notices are skipped.
+  // Delivery also requires RESEND_API_KEY. See src/server/notifications.ts.
   OWNER_NOTIFY_EMAIL?: string;
-  // Comma-separated allowlist of admin emails that may reach /admin. Optional --
-  // always includes the project owner as a bootstrap floor, so the panel works
-  // with zero config. Promote others via trust_level='admin' from the panel.
-  // See src/server/admin.ts.
+  // Comma-separated allowlist of admin emails that may reach /admin. This is the
+  // ONLY admin allowlist source (no email is hardcoded). Set it to bootstrap the
+  // first admin; from there promote others via trust_level='admin' in the panel.
+  // Unset -> admin access depends solely on a user's trust_level. See src/server/admin.ts.
   ADMIN_EMAILS?: string;
 }
 
