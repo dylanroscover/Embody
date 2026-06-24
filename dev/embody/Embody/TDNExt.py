@@ -5899,6 +5899,22 @@ class TDNExt:
 					 'capability': inert.get('capability'), 'summary': inert.get('summary')})
 		return plan
 
+	def _importPlanned(self, target: 'OP', plan: dict):
+		"""Import plan['tdn'] into target. For an UNTRUSTED plan (community/file --
+		anything but a trusted own 'embody' envelope) the import runs with the
+		target's cooking suspended: ImportNetwork sets parameters before flags, so a
+		bypassed IO/Script op would briefly carry attacker-set file/url params before
+		its bypass flag lands. Suspending cooking closes that window (and is harmless
+		for the clean 'live' case, which cooks normally once restored)."""
+		if plan.get('source') == 'embody':
+			return self.ImportNetwork(target.path, plan['tdn'])
+		prev = target.allowCooking
+		target.allowCooking = False
+		try:
+			return self.ImportNetwork(target.path, plan['tdn'])
+		finally:
+			target.allowCooking = prev
+
 	def PasteNetworkFromClipboard(self, target: 'OP') -> dict:
 		"""Import a clipboard _embody_tdn envelope INTO the target COMP."""
 		target = op(target) if isinstance(target, str) else target
@@ -5907,13 +5923,46 @@ class TDNExt:
 		plan = self._planPasteFromClipboard()
 		if not plan.get('ok'):
 			return plan
-		res = self.ImportNetwork(target.path, plan['tdn'])
+		res = self._importPlanned(target, plan)
 		verdict = (plan.get('capability') or {}).get('verdict')
 		self._log("Pasted TDN into %s (mode=%s, source=%s, verdict=%s)"
 				  % (target.name, plan['mode'], plan.get('source'), verdict), 'SUCCESS')
 		return {'ok': True, 'target': target.path, 'mode': plan['mode'],
 				'source': plan.get('source'), 'verdict': verdict,
 				'summary': plan.get('summary'), 'import': res}
+
+	def _placeAndSelectPasted(self, pane, owner, base) -> None:
+		"""Place the pasted COMP at a clear spot beside the existing network, select it on
+		its own + make it the current op, then PAN the view to centre it so the user sees
+		it immediately.
+
+		Why pan rather than place-at-view-centre: TD's network-view rectangle
+		(pane.bottomLeft/topRight) reports stale coordinates from script and does not match
+		the visible area, and pane.home()/homeSelected() are no-ops unless the pane is
+		focused. But pane.x / pane.y -- the network coordinate at the pane centre -- IS
+		writable, so assigning it reliably re-centres the view on the new COMP regardless of
+		split-pane / toolbar / multi-monitor layout."""
+		kids = [c for c in owner.children if c is not base]
+		try:
+			if kids:
+				base.nodeX = max(c.nodeX + c.nodeWidth for c in kids) + 200
+				base.nodeY = sum(c.nodeY for c in kids) / float(len(kids))
+			else:
+				base.nodeX = 0.0
+				base.nodeY = 0.0
+		except Exception:
+			pass
+		try:
+			for c in owner.children:
+				c.selected = (c is base)
+			base.current = True
+		except Exception:
+			pass
+		try:
+			pane.x = base.nodeX + base.nodeWidth / 2.0
+			pane.y = base.nodeY + base.nodeHeight / 2.0
+		except Exception:
+			pass
 
 	def PasteNetworkAsNewComp(self) -> dict:
 		"""Ctrl+Shift+V handler: create a new COMP at the current network and
@@ -5929,18 +5978,13 @@ class TDNExt:
 		if not plan.get('ok'):
 			self._log('Paste TDN: clipboard holds no Embody envelope or .tdn document', 'INFO')
 			return plan
+
 		# Name the new COMP after the TDN (network_path basename, else envelope
 		# slug), sanitized; TD uniquifies collisions.
 		comp_name = tdu.validName(resolve_tdn_name(plan.get('tdn'), plan.get('slug')) or 'pasted_tdn') or 'pasted_tdn'
 		base = owner.create(baseCOMP, comp_name)
-		# Drop it at a clear spot rather than piling up at the origin.
-		try:
-			kids = [c for c in owner.children if c is not base]
-			base.nodeX = max((c.nodeX + c.nodeWidth for c in kids), default=0) + 200
-			base.nodeY = 0
-		except Exception:
-			pass
-		res = self.ImportNetwork(base.path, plan['tdn'])
+		self._placeAndSelectPasted(pane, owner, base)
+		res = self._importPlanned(base, plan)
 		verdict = (plan.get('capability') or {}).get('verdict')
 		self._log("Pasted new COMP '%s' from clipboard TDN (mode=%s, source=%s, verdict=%s)"
 				  % (base.name, plan['mode'], plan.get('source'), verdict), 'SUCCESS')
@@ -5968,6 +6012,70 @@ class TDNExt:
 		run(f"op({self.ownerComp.path!r}).ext.TDN._clipboardWatchTick({gen})",
 			fromOP=self.ownerComp, delayMilliSeconds=1500)
 
+	def _tdWindowActive(self) -> bool:
+		"""Is the TD window the active (frontmost) application the user is working in?
+
+		TD exposes no focus getter (only windowCOMP.setForeground(), a setter), so we
+		compare the OS frontmost-application PID to TD's own PID (app.processId) via a
+		fast, no-subprocess platform call -- NSWorkspace on macOS, GetForegroundWindow
+		on Windows. (Cursor-rollover was tried first but only updates on a mouse-move
+		over TD, so switching back with the cursor parked left the prompt stuck.)
+		Fail-open (True) on any error / unknown platform, so the watcher is never
+		permanently muted -- worst case it reverts to prompting whenever content
+		appears."""
+		try:
+			pid = self._osFrontmostPid()
+			return True if pid is None else (pid == app.processId)
+		except Exception:
+			return True
+
+	def _osFrontmostPid(self):
+		"""PID of the OS frontmost application, or None if it cannot be determined."""
+		import sys
+		plat = sys.platform
+		try:
+			if plat == 'darwin':
+				return self._macFrontmostPid()
+			if plat.startswith('win'):
+				return self._winFrontmostPid()
+		except Exception:
+			return None
+		return None
+
+	def _macFrontmostPid(self):
+		import ctypes
+		import ctypes.util
+		ctypes.cdll.LoadLibrary('/System/Library/Frameworks/AppKit.framework/AppKit')
+		objc = ctypes.cdll.LoadLibrary(ctypes.util.find_library('objc'))
+		objc.objc_getClass.restype = ctypes.c_void_p
+		objc.objc_getClass.argtypes = [ctypes.c_char_p]
+		objc.sel_registerName.restype = ctypes.c_void_p
+		objc.sel_registerName.argtypes = [ctypes.c_char_p]
+		msg = objc.objc_msgSend
+		msg.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+		msg.restype = ctypes.c_void_p
+		ws = objc.objc_getClass(b'NSWorkspace')
+		shared = msg(ws, objc.sel_registerName(b'sharedWorkspace'))
+		front = msg(shared, objc.sel_registerName(b'frontmostApplication'))
+		if not front:
+			return None
+		msg.restype = ctypes.c_int32
+		return int(msg(front, objc.sel_registerName(b'processIdentifier')))
+
+	def _winFrontmostPid(self):
+		import ctypes
+		user32 = ctypes.windll.user32
+		# Explicit handle types -- a 64-bit HWND would be truncated under the default
+		# c_int restype, yielding a wrong/zero handle on 64-bit Windows.
+		user32.GetForegroundWindow.restype = ctypes.c_void_p
+		user32.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+		hwnd = user32.GetForegroundWindow()
+		if not hwnd:
+			return None
+		pid = ctypes.c_ulong(0)
+		user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+		return int(pid.value) or None
+
 	def _clipboardWatchPoll(self) -> None:
 		"""One poll: when the OS clipboard changes to a NEW Embody envelope,
 		offer (via the Embody message box, which self-suppresses during saves and
@@ -5982,6 +6090,13 @@ class TDNExt:
 		sig = (len(raw), hash(raw))
 		if sig == self._clip_last_sig:
 			return
+		# Only surface the prompt while the user is actually in the TD window. If TD is
+		# not the window they are working in (e.g. they copied a specimen in the browser),
+		# do NOT record the sig -- a later poll re-checks the CURRENT clipboard once they
+		# are back in TD, so if they changed their mind and copied a different specimen
+		# meanwhile, that newer one wins.
+		if not self._tdWindowActive():
+			return
 		# Record before prompting so a dismissed envelope never re-nags.
 		self._clip_last_sig = sig
 		env = unwrap_clipboard(raw)
@@ -5992,10 +6107,50 @@ class TDNExt:
 		if owner is None or not owner.isCOMP:
 			return
 		name = resolve_tdn_name(env.get('tdn'), env.get('slug')) or 'network'
+		note = self._clipboardSafetyNote(env)
 		choice = self.ownerComp.ext.Embody._messageBox(
 			'Embody TDN from clipboard',
-			'A TDN named "%s" is on your clipboard.\n\n'
-			'Embody it into %s as a new COMP?' % (name, owner.path),
+			'A TDN named "%s" is on your clipboard.%s\n\n'
+			'Embody it into %s as a new COMP?' % (name, note, owner.path),
 			buttons=['Embody it', 'Dismiss'])
 		if choice == 0:
 			self.PasteNetworkAsNewComp()
+
+	def _clipboardSafetyNote(self, env: dict) -> str:
+		"""One-line provenance/safety note for the paste prompt.
+
+		Empty for a trusted own 'embody' envelope. For community ('embody.tools')
+		content the inner TDN is scanned: a 'clean' specimen pastes live and working;
+		anything flagged lists the risky surfaces that will be disabled on paste,
+		and reassures that pure value expressions are KEPT (so the network still
+		renders). Best-effort -- any scan error degrades to no note."""
+		if env.get('source') == 'embody':
+			return ''
+		try:
+			collection = self.ownerComp.op('Collection')
+			if collection is None:
+				return ''
+			cap = collection.ext.Collection.ScanTdn(env.get('tdn')) or {}
+		except Exception:
+			return ''
+		verdict = cap.get('verdict')
+		if verdict == 'clean':
+			return '\n\nScanned clean -- pastes in live and ready to render.'
+		if verdict == 'blocked':
+			return ('\n\nImported in safe mode (could not be fully scanned) -- a few surfaces '
+					'stay inactive; all parameters and expressions are live.')
+		counts = cap.get('counts') or {}
+		parts = []
+		if counts.get('extensions'):
+			parts.append('%d extension(s)' % counts['extensions'])
+		if counts.get('execute_dats'):
+			parts.append('%d script/callback surface(s)' % counts['execute_dats'])
+		if counts.get('web_ops') or counts.get('denylisted_types'):
+			parts.append('IO/network op(s)')
+		if counts.get('storage_payloads'):
+			parts.append('stored data')
+		if counts.get('external_refs'):
+			parts.append('external reference(s)')
+		detail = ', '.join(parts) if parts else 'a few surfaces'
+		return ('\n\nFrom embody.tools -- %s imported inactive for safety; all parameters '
+				'and expressions stay live, so it renders.' % detail)

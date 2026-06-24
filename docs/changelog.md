@@ -1,5 +1,26 @@
 # Changelog
 
+## v6.0.44
+
+Specimens from embody.tools now paste in LIVE and working, plus paste-placement and active-window fixes. The community safe-import was zeroing EVERY parameter expression -- a published specimen's GLSL uniform bindings, resolution, and animation drivers all collapsed to 0, so every pasted specimen rendered a dead frame. It now preserves provably-pure value expressions and disarms only genuinely side-effecting surfaces.
+
+### Community paste: specimens paste in working
+
+- **safe_import preserves pure value expressions.** `make_inert` no longer collapses every `=expr` / `~bind` to a constant. A new AST pure-value-expression allowlist (`scanner.is_pure_value_expression`) classifies an expression as safe iff it is provably side-effect-free -- par reads, `absTime`, `math.*`, `Par.eval()`, arithmetic, ternaries, `hasattr` -- and `make_inert` neutralizes ONLY expressions that are not (any side-effecting call, dynamic-attribute / dunder / lambda / comprehension / f-string escape, import, mutator method). Verified against a 70-case corpus: 29 benign idioms preserved, 41 attack patterns neutralized, including `op('x').destroy()`, `__import__`, walrus/lambda aliasing, and `__globals__`/mro escapes.
+- **Scanner false positives fixed.** The denylist scanner flagged the standard TD idioms `parent().par.X.eval()`, `.store()`, and `tdu.*` as the Python builtins of the same name, and mis-scanned GLSL shader DATs as Python (a parse error counted as an execute surface). Parameter-expression danger now gates on the pure-value allowlist, and shader / data DATs (detected by `language` or file `extension`) are no longer AST-scanned as Python. The DoS bounds (AST depth / node-count / source-length) still block.
+- **Live-if-scanned-clean routing.** `CollectionExt.PlanCommunityPaste` imports a `clean` specimen LIVE (no neutralization), and a `flagged` one inert-but-preserve-pure -- so a clean specimen pastes fully working with no warning.
+- **TD palette extensions trusted, with hijack defense.** An extension resolving through a TD built-in palette shortcut (`op.TD<Name>` -- e.g. the standard Annotate COMP) is trusted (not disabled). Community `opshortcut` (global op-shortcut) registration is stripped on import so a malicious TDN cannot hijack a palette shortcut (e.g. register its own `op.TDAnnotate`) to repoint a trusted reference at attacker code; scoped `parentshortcut` is kept.
+- **Adjacent surfaces closed.** Script DAT/CHOP/TOP/SOPs are bypassed (they run Python on cook), `tox_ref` / `tdn_ref` shells are stripped, the untrusted import runs with the target COMP's cooking suspended (closing the param-set-before-bypass-flag window), and `is_inert` is purity-aware.
+
+### Paste UX
+
+- **Pasted COMP auto-selects and the view pans to centre it.** It was landing off-screen / far-right. TD's network-view rectangle (`pane.bottomLeft`/`topRight`) reports stale coordinates from a script and `pane.home()`/`homeSelected()` are no-ops unless the pane is focused, but `pane.x`/`pane.y` (the network coordinate at the pane centre) IS writable -- so the new COMP is placed beside the network, selected on its own + made current, and the view is panned onto it.
+- **The auto-paste prompt fires only while the TD window is active.** It was popping up while you were in the browser, and switching back left it stuck (the cursor-rollover signal only updates on a mouse-move). It now compares the OS frontmost-application PID to TD's own PID -- cross-platform (NSWorkspace on macOS, GetForegroundWindow on Windows, fail-open) -- and the latest clipboard wins when you return to TD.
+
+### Tests
+
+New `test_collection_pure` (14, in-TD: the validator, preserve-pure neutralization, scanner verdict, GLSL/script/tox_ref/opshortcut handling, and live-if-clean routing) and standalone `Collection/tests/test_safe_import_pure` (25); `test_clipboard_watch` gains an active-window-gate test. Affected suites verified green: collection safe-import (18), scanner (22), collection-pure (14), clipboard paste (42) + watch (6), plus the standalone 70-case validator corpus. Test suite **72 suites / 1,693 tests**.
+
 ## v6.0.42
 
 Clipboard auto-paste: bring a TDN into your network with no keyboard shortcut. Embody now watches the OS clipboard and, when a TDN network appears (copied from the web "embody it" button, or Cmd-Shift-C on a COMP in TD), prompts to "Embody it" into the current network as a new COMP.

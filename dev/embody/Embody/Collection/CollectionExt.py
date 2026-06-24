@@ -19,14 +19,28 @@ class CollectionExt:
         return self.ownerComp.op('scanner').module.scan_tdn(tdn if isinstance(tdn, dict) else {})
 
     def PlanCommunityPaste(self, tdn):
-        """Scan + default-inert a community TDN dict; return the import plan.
+        """Scan a community TDN dict and return the import plan (live or inert).
 
         Reached only for source == "embody.tools" -- TDNExt unwraps the envelope
-        and hands over the inner tdn. Nothing here executes; it returns the inert
-        payload for TDNExt to import.
+        and hands over the inner tdn. Nothing here executes.
+
+        Live-if-scanned-clean: a specimen whose only expressions are PROVABLY PURE
+        value reads (par reads, absTime, math.*, Par.eval(), arithmetic) and which
+        has no execute-DAT / extension / IO / storage / denylisted surface scans
+        'clean' and imports LIVE -- fully working, the whole point of the gallery.
+        Anything 'flagged'/'blocked' is disarmed by make_inert, which now PRESERVES
+        the pure expressions (so the specimen still renders) and neutralizes only
+        the genuinely side-effecting surfaces. The purity predicate is the scanner's
+        own is_pure_value_expression, so the verdict and the neutralization agree.
         """
         tdn = tdn if isinstance(tdn, dict) else {}
-        capability = self.ownerComp.op('scanner').module.scan_tdn(tdn)
-        inert_tdn, summary = self.ownerComp.op('safe_import').module.make_inert(tdn)
+        scanner = self.ownerComp.op('scanner').module
+        safe_import = self.ownerComp.op('safe_import').module
+        capability = scanner.scan_tdn(tdn)
+        if capability.get('verdict') == 'clean':
+            return {'mode': 'live', 'tdn': tdn,
+                    'capability': capability, 'summary': safe_import._empty_summary()}
+        inert_tdn, summary = safe_import.make_inert(
+            tdn, is_pure_expr=scanner.is_pure_value_expression)
         return {'mode': 'inert', 'tdn': inert_tdn,
                 'capability': capability, 'summary': summary}

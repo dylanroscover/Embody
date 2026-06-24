@@ -73,6 +73,13 @@ _DENYLIST_NORMALIZED = frozenset(
     re.sub(r"[^a-z0-9]", "", t.lower()) for t in DENYLIST_SEED_TYPES if not t.endswith("*")
 )
 
+# Script OPs run an attacker-authored Python callback on every cook. They are not
+# IO/network ops, so they are tracked separately and counted as an execute surface
+# (safe_import bypasses them).
+_SCRIPT_OP_TYPES = frozenset((
+    "scriptdat", "scriptchop", "scripttop", "scriptsop",
+))
+
 _BAD_NAMES = frozenset(
     (
         "eval",
@@ -115,6 +122,13 @@ _PATH_PARAM_NAMES = frozenset(
 )
 _PATH_STYLES = frozenset(("File", "FileSave", "Folder"))
 _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[/\\]")
+
+# TD's built-in palette/system components are reached through global op shortcuts
+# named op.TD<Name> (TDAnnotate, TDResources, TDFunctions, TDJSON, ...). An extension
+# that resolves through one of these is TD's own trusted code, NOT a stranger's --
+# safe_import strips community opshortcut registration so these shortcuts cannot be
+# hijacked to point at attacker code.
+_TD_PALETTE_REF = re.compile(r"\bop\.TD[A-Z]\w*")
 
 
 class _ScanState:
@@ -255,8 +269,17 @@ def _scan_operator_like(op_data, op_path, type_defaults, state):
             op_type,
         )
 
+    if _is_script_op_type(op_type):
+        _add_count(
+            state,
+            op_path,
+            "execute_dats",
+            "Script OP runs an authored Python callback on cook",
+            op_type,
+        )
+
     _scan_execute_dat(op_data, op_path, op_type, state)
-    _scan_dat_content_ast(op_data, op_path, op_type, state)
+    _scan_dat_content_ast(op_data, op_path, op_type, params, state)
     _scan_parameters(params, op_path, state)
     _scan_custom_parameters(op_data.get("custom_pars"), op_path, state)
     _scan_sequences(op_data.get("sequences"), op_path, op_type, state)
@@ -294,9 +317,44 @@ def _scan_execute_dat(op_data, op_path, op_type, state):
     )
 
 
-def _scan_dat_content_ast(op_data, op_path, op_type, state):
+# DAT file extensions whose content is NOT Python (shaders, markup, data). A GLSL
+# pixel DAT often carries `extension: 'frag'` with no `language` param, so extension
+# is a second signal beyond `language`.
+_NON_PYTHON_DAT_EXTENSIONS = frozenset((
+    "frag", "vert", "glsl", "comp", "geom", "tesc", "tese", "hlsl", "cg",
+    "txt", "json", "xml", "csv", "tsv", "md", "html", "htm", "css", "js", "yaml", "yml",
+))
+
+
+def _dat_content_is_python(op_type, params):
+    """True iff a DAT's content is Python that TD can execute.
+
+    Execute-family DATs are always Python callbacks. Text DATs hold source whose
+    language is Python (the textDAT default) unless an explicit non-Python language
+    (e.g. 'glsl') OR a non-Python file extension (e.g. 'frag') is set -- a GLSL shader
+    DAT is specimen content, not a Python execution surface, so AST-scanning it as
+    Python wrongly flags every shader. Data DATs (table, etc.) are never Python.
+    """
+    if _is_execute_dat_type(op_type):
+        return True
+    key = _type_key(op_type)
+    if key != "textdat":
+        return False
+    lang = params.get("language") if isinstance(params, dict) else None
+    if isinstance(lang, str) and lang.strip():
+        return lang.strip().lower() in ("python", "py")
+    ext = params.get("extension") if isinstance(params, dict) else None
+    if isinstance(ext, str) and ext.strip().lstrip(".").lower() in _NON_PYTHON_DAT_EXTENSIONS:
+        return False
+    return True  # textDAT default language is Python
+
+
+def _scan_dat_content_ast(op_data, op_path, op_type, params, state):
     content = op_data.get("dat_content")
     if not isinstance(content, str) or not content.strip():
+        return
+
+    if not _dat_content_is_python(op_type, params):
         return
 
     result = _scan_python_source(content)
@@ -335,18 +393,38 @@ def _scan_parameter_value(par_name, value, op_path, state):
     if expr is None:
         return
 
-    result = _scan_python_source(expr)
-    if not result.flagged:
+    # DoS bounds FIRST: a maliciously huge / deeply-nested expression must BLOCK
+    # regardless of purity (the unbounded parse/walk is itself the attack). Reuse
+    # the bounded AST walker only for its `blocked` signal; its denylist `flagged`
+    # result is deliberately ignored in favor of the pure-value allowlist below.
+    bounded = _scan_python_source(expr)
+    if bounded.blocked:
+        state.blocked = True
+        state.findings.append(
+            _finding(
+                op_path,
+                "file_read_exprs",
+                "Expression parameter %s %s" % (_safe_str(par_name), bounded.detail),
+                expr,
+            )
+        )
+        return
+
+    # A parameter expression is safe iff it is a PROVABLY PURE value expression
+    # (par reads, absTime, math.*, Par.eval(), arithmetic). Anything that is not
+    # provably pure -- a side-effecting call, dynamic attribute access, import,
+    # lambda/comprehension/dunder escape -- counts as a danger surface. This
+    # replaces the old denylist (which both false-flagged Par.eval()/.store()/tdu
+    # AND waved through op('x').destroy(), getattr tricks, etc.).
+    if is_pure_value_expression(expr):
         return
 
     state.counts["file_read_exprs"] += 1
-    if result.blocked:
-        state.blocked = True
     state.findings.append(
         _finding(
             op_path,
             "file_read_exprs",
-            "Expression parameter %s %s" % (_safe_str(par_name), result.detail),
+            "Expression parameter %s is not a pure value expression" % _safe_str(par_name),
             expr,
         )
     )
@@ -407,6 +485,12 @@ def _scan_custom_parameter_def(par_def, op_path, state):
             if style in _PATH_STYLES or _is_path_param_name(name):
                 _scan_path_parameter(name, value, op_path, state)
 
+    # default / menuSource can also carry expressions -- safe_import neutralizes
+    # them, so the scanner must see them too (verdict/neutralization parity).
+    for extra in ("default", "menuSource"):
+        if extra in par_def:
+            _scan_parameter_value(name, par_def.get(extra), op_path, state)
+
 
 def _scan_sequences(sequences, op_path, op_type, state):
     if not isinstance(sequences, dict):
@@ -454,6 +538,122 @@ def _effective_parameters(op_data, type_defaults, op_type):
     if isinstance(op_params, dict):
         params.update(op_params)
     return params
+
+
+# ---- Pure-value expression policy (allowlist) ----------------------------------------------
+# A TD parameter expression is Python evaluated for its VALUE on cook. The threat
+# is never the math -- it is a side effect (op mutation, .run/.store, import, open,
+# file/network). is_pure_value_expression is an ALLOWLIST: it returns True only for
+# a closed grammar of provably side-effect-free value reads/computation, and FAILS
+# CLOSED on anything it does not recognize (-> the caller neutralizes it). "Safe"
+# means "pure value math", never "did not mention a denylisted token" -- a denylist
+# is trivially defeated (lambda/walrus/dunder/subscript/getattr/f-string escapes).
+# Shared as the single source of truth: scanner uses it for the verdict; safe_import
+# is handed it (by CollectionExt) to decide which expressions to neutralize.
+
+_PURE_ROOT_NAMES = frozenset((
+    "parent", "me", "op", "absTime", "math", "tdu", "ipar", "iop",
+))
+# Bare-name builtins that are pure and never invoke a passed callable. Excludes
+# higher-order builtins (map/filter/sorted) that could invoke a smuggled callable.
+_PURE_BUILTINS = frozenset((
+    "abs", "round", "int", "float", "str", "bool", "len", "pow", "sum",
+    "divmod", "complex", "ord", "chr", "hex", "bin", "min", "max",
+    # hasattr returns a bool (read-only introspection, cannot leak a callable the
+    # way getattr can), so it is safe; getattr/setattr stay rejected.
+    "hasattr",
+))
+# tdu helpers that are pure value math. Conservative; extend deliberately.
+_TDU_VALUE_HELPERS = frozenset((
+    "remap", "clamp", "Color", "Vector", "Position", "Quaternion", "Matrix",
+    "rgbToHsv", "hsvToRgb", "legalName",
+))
+# Attribute names that open an execution / mutation surface -> never a pure read.
+_FORBIDDEN_PURE_ATTRS = frozenset(("module", "mod", "storage"))
+
+
+def is_pure_value_expression(source):
+    """True iff source is a provably side-effect-free TD value expression.
+
+    Allowlist + fail-closed: anything not recognized as a pure value read/compute
+    returns False. Fixes the .eval()/.store()/tdu false positives (they are pure)
+    AND blocks every code-execution bypass (they are not).
+    """
+    if not isinstance(source, str) or not source.strip():
+        return False
+    try:
+        tree = ast.parse(source, mode="eval")
+    except Exception:
+        return False
+    try:
+        return _expr_is_pure(tree.body)
+    except Exception:
+        return False
+
+
+def _expr_is_pure(node):
+    t = type(node)
+    if t is ast.Constant:
+        return True
+    if t is ast.BinOp:
+        return _expr_is_pure(node.left) and _expr_is_pure(node.right)
+    if t is ast.UnaryOp:
+        return _expr_is_pure(node.operand)
+    if t is ast.BoolOp:
+        return all(_expr_is_pure(v) for v in node.values)
+    if t is ast.Compare:
+        return _expr_is_pure(node.left) and all(_expr_is_pure(c) for c in node.comparators)
+    if t is ast.IfExp:
+        return _expr_is_pure(node.test) and _expr_is_pure(node.body) and _expr_is_pure(node.orelse)
+    if t in (ast.Tuple, ast.List, ast.Set):
+        return all(_expr_is_pure(e) for e in node.elts)
+    if t is ast.Dict:
+        return (all(k is None or _expr_is_pure(k) for k in node.keys)
+                and all(_expr_is_pure(v) for v in node.values))
+    if t is ast.Subscript:
+        return _expr_is_pure(node.value) and _expr_slice_is_pure(node.slice)
+    if t is ast.Name:
+        return node.id in _PURE_ROOT_NAMES
+    if t is ast.Attribute:
+        if node.attr.startswith("__") or node.attr in _FORBIDDEN_PURE_ATTRS:
+            return False
+        return _expr_is_pure(node.value)
+    if t is ast.Call:
+        return _expr_call_is_pure(node)
+    # Lambda, NamedExpr (walrus), comprehensions, JoinedStr/FormattedValue (f-string),
+    # Starred, Await/Yield, ... -> not provably pure.
+    return False
+
+
+def _expr_slice_is_pure(node):
+    t = type(node)
+    if t is ast.Slice:
+        return all(x is None or _expr_is_pure(x) for x in (node.lower, node.upper, node.step))
+    if hasattr(ast, "Index") and t is ast.Index:  # py<3.9
+        return _expr_is_pure(node.value)
+    return _expr_is_pure(node)
+
+
+def _expr_call_is_pure(node):
+    # No smuggling a callable via keyword (min(x, key=evil)) or *args/**kwargs.
+    if node.keywords or any(isinstance(a, ast.Starred) for a in node.args):
+        return False
+    if not all(_expr_is_pure(a) for a in node.args):
+        return False
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id in _PURE_BUILTINS or func.id in ("parent", "op")
+    if isinstance(func, ast.Attribute):
+        recv = func.value
+        if func.attr == "eval":           # Par.eval() / value-eval on a pure receiver
+            return _expr_is_pure(recv)
+        if isinstance(recv, ast.Name) and recv.id == "math":   # math.* is all pure
+            return True
+        if isinstance(recv, ast.Name) and recv.id == "tdu" and func.attr in _TDU_VALUE_HELPERS:
+            return True
+        return False
+    # func is a Subscript / Call / Lambda result -> reject.
+    return False
 
 
 def _scan_python_source(source):
@@ -606,17 +806,29 @@ def _is_path_param_name(name):
     return key.endswith("file") or key.endswith("path") or key.endswith("folder")
 
 
+def _is_td_palette_ref(text):
+    return isinstance(text, str) and bool(_TD_PALETTE_REF.search(text))
+
+
 def _sequence_has_extension(ext_sequence):
+    """True iff a FOREIGN (non-TD-palette) extension is declared.
+
+    An extension whose object resolves through a TD palette/system shortcut
+    (op.TD<Name>) is TD's own trusted code -- not a danger surface. A declaration
+    with no recognizable trusted object (or only a name) is treated as foreign.
+    """
     if not isinstance(ext_sequence, list):
         return False
 
     for block in ext_sequence:
         if not isinstance(block, dict):
             continue
-        for key in ("object", "name"):
-            value = block.get(key)
-            if isinstance(value, str) and value.strip():
+        obj = block.get("object")
+        if isinstance(obj, str) and obj.strip():
+            if not _is_td_palette_ref(obj):
                 return True
+        elif isinstance(block.get("name"), str) and block.get("name").strip():
+            return True  # a name with no verifiable trusted object -> foreign
     return False
 
 
@@ -738,6 +950,10 @@ def _is_denylisted_type(op_type):
 def _is_execute_dat_type(op_type):
     key = _type_key(op_type)
     return key == "executedat" or key.endswith("executedat")
+
+
+def _is_script_op_type(op_type):
+    return _type_key(op_type) in _SCRIPT_OP_TYPES
 
 
 def _is_comp_type(op_type):

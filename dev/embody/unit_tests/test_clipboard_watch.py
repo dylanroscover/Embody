@@ -21,6 +21,9 @@ class TestClipboardWatch(EmbodyTestCase):
         self._orig_clip = ui.clipboard
         self._orig_param = int(op.Embody.par.Clipboardautopaste.eval())
         op.Embody.par.Clipboardautopaste = 0          # quiet the live loop
+        # The watcher only prompts while TD is the active window; headless tests have
+        # no rollover, so force the gate open. The gate test overrides this.
+        op.Embody.ext.TDN._tdWindowActive = lambda: True
 
     def tearDown(self):
         ui.clipboard = self._orig_clip
@@ -29,6 +32,10 @@ class TestClipboardWatch(EmbodyTestCase):
                                             hash(self._orig_clip or ''))
         try:
             del op.Embody.ext.Embody._messageBox
+        except Exception:
+            pass
+        try:
+            del op.Embody.ext.TDN._tdWindowActive
         except Exception:
             pass
         if self.sandbox.op('cw_probe'):
@@ -77,3 +84,20 @@ class TestClipboardWatch(EmbodyTestCase):
         op.Embody.ext.TDN._clip_last_sig = None
         op.Embody.ext.TDN._clipboardWatchPoll()
         self.assertEqual(len(calls), 0, 'non-envelope clipboard -> no prompt')
+
+    def test_inactive_window_suppresses_then_prompts_on_return(self):
+        # While TD is not the active window the prompt is withheld AND the clipboard
+        # signature is left unrecorded, so when the user returns to TD the CURRENT
+        # clipboard prompts (if they copied a different specimen, the newer one wins).
+        self._put_envelope()
+        calls = []
+        op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(1), 1)[1]
+        op.Embody.par.Clipboardautopaste = 1
+        op.Embody.ext.TDN._clip_last_sig = None
+        op.Embody.ext.TDN._tdWindowActive = lambda: False      # TD in the background
+        op.Embody.ext.TDN._clipboardWatchPoll()
+        self.assertEqual(len(calls), 0, 'inactive window -> no prompt')
+        self.assertIsNone(op.Embody.ext.TDN._clip_last_sig, 'inactive -> sig left unrecorded')
+        op.Embody.ext.TDN._tdWindowActive = lambda: True       # user returns to TD
+        op.Embody.ext.TDN._clipboardWatchPoll()
+        self.assertEqual(len(calls), 1, 'back in TD -> prompts the current clipboard')

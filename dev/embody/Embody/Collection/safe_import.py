@@ -6,6 +6,17 @@ operates only on parsed TDN dictionaries.
 from __future__ import annotations
 
 import copy
+import re
+
+# TD built-in palette/system components reached via op.TD<Name> global shortcuts are
+# trusted code. An extension resolving through one is NOT disabled -- but only because
+# community opshortcut registration is stripped below, so these shortcuts cannot be
+# hijacked to point at attacker code.
+_TD_PALETTE_REF = re.compile(r"\bop\.TD[A-Z]\w*")
+
+
+def _is_td_palette_ref(text):
+    return isinstance(text, str) and bool(_TD_PALETTE_REF.search(text))
 
 
 EXECUTE_DAT_TYPES = {
@@ -65,15 +76,71 @@ IO_DENYLIST_PREFIXES = (
     "syphonspout",
 )
 
+# Script OPs run an attacker-authored Python callback on every cook -- a code-
+# execution surface distinct from Execute DATs and IO. Bypassed so they never cook.
+SCRIPT_OP_TYPES = {
+    "scriptdat",
+    "scriptchop",
+    "scripttop",
+    "scriptsop",
+}
+
+# Out-of-band references the importer would otherwise restore (TOX/TDN shells).
+# Their content cannot be scanned inline, so for community paste they are removed.
+EXTERNAL_REF_KEYS = ("tox_ref", "tdn_ref")
+
 SUMMARY_KEYS = (
     "execute_dats_disabled",
     "exprs_neutralized",
     "extensions_disabled",
+    "global_shortcuts_stripped",
     "io_ops_bypassed",
+    "script_ops_bypassed",
+    "external_refs_stripped",
     "storage_removed",
 )
 
 _MISSING = object()
+
+# The pure-value-expression predicate (scanner.is_pure_value_expression), injected
+# per make_inert() call by CollectionExt. Set only inside make_inert's try/finally
+# and read by _neutralized_value -- TD runs this on a single thread, so a module
+# slot is safe and avoids threading the predicate through 9 functions. None ->
+# fail closed (neutralize EVERY expression), the original disarm-everything behavior.
+_PRESERVE_PURE = None
+
+
+def _expr_source(value):
+    """Python source of an =expr / ~bind value (or {expr|bind} dict), else None."""
+    if isinstance(value, str):
+        if value.startswith("==") or value.startswith("~~"):
+            return None
+        if value.startswith("=") or value.startswith("~"):
+            return value[1:]
+        return None
+    if isinstance(value, dict):
+        e = value.get("expr")
+        if isinstance(e, str):
+            return e
+        b = value.get("bind")
+        if isinstance(b, str):
+            return b
+    return None
+
+
+def _is_dangerous_expression(value):
+    """True iff value is an expression/bind that is NOT provably pure.
+
+    With no purity predicate set, every expression counts as dangerous (the
+    original conservative meaning). With one (is_inert/make_inert injected it),
+    a provably-pure value expression is NOT dangerous.
+    """
+    if not _is_expression_or_bind(value):
+        return False
+    if _PRESERVE_PURE is None:
+        return True
+    src = _expr_source(value)
+    return src is None or not _PRESERVE_PURE(src)
 
 NUMERIC_STYLES = {
     "Float",
@@ -166,60 +233,82 @@ STRING_PARAM_PARTS = (
 )
 
 
-def make_inert(tdn: dict) -> tuple[dict, dict]:
-    """Return a deep-copied TDN dict with auto-executable surfaces disabled."""
+def make_inert(tdn: dict, is_pure_expr=None) -> tuple[dict, dict]:
+    """Return a deep-copied TDN dict with auto-executable surfaces disabled.
+
+    is_pure_expr: optional predicate(source)->bool. When given (CollectionExt injects
+    scanner.is_pure_value_expression), a parameter expression that is a PROVABLY PURE
+    value expression (par reads, absTime, math.*, Par.eval(), arithmetic) is PRESERVED
+    -- only side-effecting / non-pure expressions are neutralized. When None, every
+    expression is neutralized (fail-closed, the original behavior).
+    """
+    global _PRESERVE_PURE
     inert_tdn = copy.deepcopy(tdn)
     summary = _empty_summary()
 
     if not isinstance(inert_tdn, dict):
         return inert_tdn, summary
 
-    type_defaults = _type_defaults(inert_tdn)
-    original_type_defaults = copy.deepcopy(type_defaults)
-    _neutralize_type_defaults(inert_tdn, summary)
-    _neutralize_par_templates(inert_tdn, summary)
-    _neutralize_node(
-        inert_tdn,
-        _root_path(inert_tdn),
-        type_defaults,
-        original_type_defaults,
-        summary,
-    )
+    _PRESERVE_PURE = is_pure_expr
+    try:
+        type_defaults = _type_defaults(inert_tdn)
+        original_type_defaults = copy.deepcopy(type_defaults)
+        _neutralize_type_defaults(inert_tdn, summary)
+        _neutralize_par_templates(inert_tdn, summary)
+        _neutralize_node(
+            inert_tdn,
+            _root_path(inert_tdn),
+            type_defaults,
+            original_type_defaults,
+            summary,
+        )
 
-    operators = inert_tdn.get("operators")
-    if isinstance(operators, list):
-        for op_def in operators:
-            _walk_operator(
-                op_def,
-                _root_path(inert_tdn),
-                type_defaults,
-                original_type_defaults,
-                summary,
-            )
+        operators = inert_tdn.get("operators")
+        if isinstance(operators, list):
+            for op_def in operators:
+                _walk_operator(
+                    op_def,
+                    _root_path(inert_tdn),
+                    type_defaults,
+                    original_type_defaults,
+                    summary,
+                )
+    finally:
+        _PRESERVE_PURE = None
 
     return inert_tdn, summary
 
 
-def is_inert(tdn: dict) -> bool:
-    """Return True iff the TDN contains no known live executable surface."""
+def is_inert(tdn: dict, is_pure_expr=None) -> bool:
+    """Return True iff the TDN contains no known live executable surface.
+
+    is_pure_expr: same predicate make_inert takes. When given, provably-pure value
+    expressions do NOT count as a live surface (they are preserved by make_inert),
+    so a network whose only expressions are pure value reads is inert. When None,
+    any expression counts as live (the original strict meaning).
+    """
+    global _PRESERVE_PURE
     try:
         if not isinstance(tdn, dict):
             return False
+        _PRESERVE_PURE = is_pure_expr
+        try:
+            type_defaults = _type_defaults(tdn)
+            if _has_type_default_expression(tdn):
+                return False
+            if _has_par_template_expression(tdn):
+                return False
+            if _node_has_live_surface(tdn, type_defaults, is_root=True):
+                return False
 
-        type_defaults = _type_defaults(tdn)
-        if _has_type_default_expression(tdn):
-            return False
-        if _has_par_template_expression(tdn):
-            return False
-        if _node_has_live_surface(tdn, type_defaults, is_root=True):
-            return False
-
-        operators = tdn.get("operators")
-        if isinstance(operators, list):
-            for op_def in operators:
-                if _operator_tree_has_live_surface(op_def, type_defaults):
-                    return False
-        return True
+            operators = tdn.get("operators")
+            if isinstance(operators, list):
+                for op_def in operators:
+                    if _operator_tree_has_live_surface(op_def, type_defaults):
+                        return False
+            return True
+        finally:
+            _PRESERVE_PURE = None
     except Exception:
         return False
 
@@ -272,6 +361,8 @@ def _neutralize_node(
 
     _remove_storage(node, op_path, summary)
     _disable_extensions(node, op_path, summary)
+    _strip_external_refs(node, op_path, summary)
+    _strip_global_shortcuts(node, op_path, summary)
     _neutralize_parameter_mapping(
         node.get("parameters"),
         op_path,
@@ -306,6 +397,46 @@ def _neutralize_node(
         action = "io_op_bypassed"
         summary["io_ops_bypassed"] += 1
         _detail(summary, op_path, action, original=op_type)
+
+    if _is_script_op_type(op_type) and not was_disabled:
+        if not _is_operator_disabled(node, type_defaults):
+            _ensure_bypass(node)
+        summary["script_ops_bypassed"] += 1
+        _detail(summary, op_path, "script_op_bypassed", original=op_type)
+
+
+def _is_script_op_type(op_type) -> bool:
+    return _normal_type(op_type) in SCRIPT_OP_TYPES
+
+
+def _strip_external_refs(node: dict, op_path: str, summary: dict) -> None:
+    for key in EXTERNAL_REF_KEYS:
+        if key in node:
+            original = node.pop(key)
+            summary["external_refs_stripped"] += 1
+            _detail(
+                summary,
+                op_path,
+                "external_ref_stripped",
+                original={key: original},
+            )
+
+
+def _strip_global_shortcuts(node: dict, op_path: str, summary: dict) -> None:
+    """Remove a global op-shortcut registration (opshortcut). Untrusted content must
+    not register project-wide op.X names: it is namespace pollution, and -- with the
+    TD-palette extension allowlist -- a hijack vector (registering op.TDAnnotate to
+    repoint a trusted ref at attacker code). Scoped parentshortcut is left intact."""
+    params = node.get("parameters")
+    if isinstance(params, dict) and params.get("opshortcut"):
+        original = params.pop("opshortcut")
+        summary["global_shortcuts_stripped"] += 1
+        _detail(
+            summary,
+            op_path,
+            "global_shortcut_stripped",
+            original={"opshortcut": original},
+        )
 
 
 def _remove_storage(node: dict, op_path: str, summary: dict) -> None:
@@ -575,6 +706,14 @@ def _neutralized_value(
     existing_default,
 ) -> _Replacement:
     if _is_expression_or_bind(value):
+        # Preserve a provably PURE value expression (par reads, absTime, math.*,
+        # Par.eval(), arithmetic) when a purity predicate was injected. Everything
+        # not provably pure -- side-effecting calls, imports, dynamic-attr escapes
+        # -- is neutralized. With no predicate, every expression is neutralized.
+        if _PRESERVE_PURE is not None:
+            src = _expr_source(value)
+            if src is not None and _PRESERVE_PURE(src):
+                return _Replacement(False)
         return _Replacement(
             True,
             _safe_constant(par_name, style, existing_default),
@@ -739,10 +878,18 @@ def _ensure_bypass(node: dict) -> bool:
 
 
 def _is_enabled_extension_block(block) -> bool:
+    """True for a FOREIGN enabled extension (one safe_import must disable).
+
+    An extension whose object resolves through a TD palette/system shortcut
+    (op.TD<Name>) is trusted -- not disabled, not counted as a live surface. This
+    is safe only because community opshortcut registration is stripped, so the
+    shortcut cannot be repointed at attacker code."""
     if not isinstance(block, dict):
         return False
     value = block.get("object")
-    return isinstance(value, str) and bool(value.strip())
+    if not isinstance(value, str) or not value.strip():
+        return False
+    return not _is_td_palette_ref(value)
 
 
 def _has_type_default_expression(tdn: dict) -> bool:
@@ -783,6 +930,11 @@ def _node_has_live_surface(node: dict, type_defaults: dict, is_root: bool) -> bo
         return True
     if _has_enabled_extension(node):
         return True
+    if any(node.get(key) for key in EXTERNAL_REF_KEYS):
+        return True
+    params = node.get("parameters")
+    if isinstance(params, dict) and params.get("opshortcut"):
+        return True
     if _mapping_has_expression(node.get("parameters")):
         return True
     if _custom_pars_have_expression(node.get("custom_pars")):
@@ -795,6 +947,9 @@ def _node_has_live_surface(node: dict, type_defaults: dict, is_root: bool) -> bo
         if not _is_off_constant(_effective_param(node, type_defaults, "active")):
             return True
     if not is_root and _is_io_type(op_type):
+        if not _is_operator_disabled(node, type_defaults):
+            return True
+    if not is_root and _is_script_op_type(op_type):
         if not _is_operator_disabled(node, type_defaults):
             return True
     return False
@@ -818,7 +973,7 @@ def _has_enabled_extension(node: dict) -> bool:
 def _mapping_has_expression(params) -> bool:
     if not isinstance(params, dict):
         return False
-    return any(_is_expression_or_bind(value) for value in params.values())
+    return any(_is_dangerous_expression(value) for value in params.values())
 
 
 def _custom_pars_have_expression(custom_pars) -> bool:
@@ -833,7 +988,7 @@ def _custom_pars_have_expression(custom_pars) -> bool:
         elif isinstance(page, dict):
             if "$t" in page:
                 for key, value in page.items():
-                    if key != "$t" and _is_expression_or_bind(value):
+                    if key != "$t" and _is_dangerous_expression(value):
                         return True
             elif _custom_defs_have_expression(list(page.values())):
                 return True
@@ -846,16 +1001,16 @@ def _custom_defs_have_expression(defs) -> bool:
     for par_def in defs:
         if not isinstance(par_def, dict):
             continue
-        if _is_expression_or_bind(par_def.get("value")):
+        if _is_dangerous_expression(par_def.get("value")):
             return True
-        if _is_expression_or_bind(par_def.get("default")):
+        if _is_dangerous_expression(par_def.get("default")):
             return True
-        if _is_expression_or_bind(par_def.get("menuSource")):
+        if _is_dangerous_expression(par_def.get("menuSource")):
             return True
         values = par_def.get("values")
         if isinstance(values, list):
             for value in values:
-                if _is_expression_or_bind(value):
+                if _is_dangerous_expression(value):
                     return True
     return False
 
