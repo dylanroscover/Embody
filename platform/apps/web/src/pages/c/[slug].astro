@@ -26,6 +26,7 @@ type DisplaySpecimen = {
   difficulty: string;
   description: string;
   requires: string;
+  thumbnail_key: string;
   operator_count: number;
   key_ops: string[];
   current_version?: number;
@@ -97,7 +98,7 @@ const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorT
 
 // Rendered RESULT cover for the sidebar thumbnail: baked render when available,
 // otherwise the procedural placeholder (shared with the collection card covers).
-const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: specimen.category });
+const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: specimen.category, thumbnailKey: specimen.thumbnail_key });
 
 function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
   return {
@@ -107,6 +108,7 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     difficulty: fixture.difficulty,
     description: fixture.description,
     requires: fixture.requires,
+    thumbnail_key: "",
     operator_count: fixture.operator_count,
     key_ops: fixture.key_ops,
     reactions: {},
@@ -132,6 +134,7 @@ function specimenFromLive(
     difficulty: live.difficulty,
     description: live.description,
     requires: live.requires,
+    thumbnail_key: live.thumbnail_key,
     operator_count: live.op_count,
     key_ops: authored?.key_ops ?? [],
     current_version: live.current_version,

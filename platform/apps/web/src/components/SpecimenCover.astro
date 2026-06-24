@@ -26,6 +26,8 @@ interface Props {
   slug: string;
   name: string;
   category: string;
+  /** R2 thumbnail key (non-empty when the author uploaded one). */
+  thumbnailKey?: string;
   /**
    * Optional SSR graph (specimen-graphs fixture) for the first, server-rendered
    * page -- a fast paint with no fetch. Omit it and the island lazy-fetches the
@@ -34,10 +36,10 @@ interface Props {
   tdn?: Record<string, unknown>;
 }
 
-const { slug, name, category, tdn } = Astro.props;
-// RESULT layer image: baked render for known slugs, else procedural placeholder.
-// Source of truth lives in lib/specimenThumb (shared with the detail page).
-const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category });
+const { slug, name, category, thumbnailKey, tdn } = Astro.props;
+// RESULT layer image: uploaded thumbnail (if any) > baked render for known slugs
+// > procedural placeholder. Source of truth lives in lib/specimenThumb.
+const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thumbnailKey });
 ---
 
 <!--

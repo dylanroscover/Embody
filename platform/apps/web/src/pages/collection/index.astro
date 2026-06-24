@@ -222,6 +222,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
                 slug={specimen.slug}
                 name={specimen.name}
                 category={specimen.category}
+                thumbnailKey={specimen.thumbnail_key}
                 tdn={specimenGraph(specimen.slug) ?? sampleTdn}
               />
             </div>
@@ -549,8 +550,13 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
 
     function buildCard(s: SpecimenSummary): HTMLElement {
       const search = `${s.name} ${s.description} ${s.category} ${s.difficulty} ${s.requires}`.toLowerCase();
-      const baked = BAKED_THUMBS.has(s.slug);
-      const thumb = baked ? `/specimens/${s.slug}.jpg` : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
+      const uploaded = Boolean(s.thumbnail_key);
+      const baked = uploaded || BAKED_THUMBS.has(s.slug);
+      const thumb = uploaded
+        ? `/api/specimens/${encodeURIComponent(s.slug)}/thumbnail`
+        : BAKED_THUMBS.has(s.slug)
+          ? `/specimens/${s.slug}.jpg`
+          : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
       const initial = (s.author_handle || "?").charAt(0).toUpperCase();
 
       const article = document.createElement("article");

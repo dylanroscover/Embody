@@ -71,7 +71,15 @@ export const BAKED_RESULTS = new Set([
  * BAKED_RESULTS, otherwise the procedural placeholder. `baked` lets callers
  * label the image (real result vs. "preview coming soon").
  */
-export function resultImage(specimen: SpecimenThumbInput): { src: string; baked: boolean } {
+export function resultImage(
+  specimen: SpecimenThumbInput & { thumbnailKey?: string | null }
+): { src: string; baked: boolean } {
+  // An author-uploaded thumbnail (stored in R2 under thumbnail_key) wins — serve
+  // it through the thumbnail route. It's a real rendered result, so baked: true
+  // (no "preview coming soon" label).
+  if (specimen.thumbnailKey) {
+    return { src: `/api/specimens/${encodeURIComponent(specimen.slug)}/thumbnail`, baked: true };
+  }
   const baked = BAKED_RESULTS.has(specimen.slug);
   return {
     src: baked ? `/specimens/${specimen.slug}.jpg` : specimenThumbnail(specimen),

@@ -31,6 +31,13 @@ export async function getTdn(blobs: R2Bucket, key: string): Promise<string | nul
   return object.text();
 }
 
+// Fetch a stored thumbnail blob for streaming (its body + content type). Null
+// when the key is empty or the object is missing.
+export async function getThumbnail(blobs: R2Bucket, key: string): Promise<R2ObjectBody | null> {
+  if (!key) return null;
+  return blobs.get(key);
+}
+
 export async function putThumbnail(
   blobs: R2Bucket,
   thumbnail: string | undefined

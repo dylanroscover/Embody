@@ -1355,3 +1355,17 @@ export async function setUserTrustLevel(
     .run();
   return Number(res.meta?.changes ?? 0) > 0;
 }
+
+// The R2 key of a public specimen's author-uploaded thumbnail, or null when it
+// has none. Backs GET /api/specimens/:slug/thumbnail.
+export async function getThumbnailKeyForSlug(
+  db: D1Database,
+  slug: string
+): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT thumbnail_key FROM specimens WHERE slug = ? AND visibility = 'public' LIMIT 1")
+    .bind(slug)
+    .first<{ thumbnail_key: string | null }>();
+  const key = row?.thumbnail_key ?? "";
+  return key ? key : null;
+}
