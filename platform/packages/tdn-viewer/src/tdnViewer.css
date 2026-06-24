@@ -138,3 +138,19 @@
   color: color-mix(in srgb, var(--tdn-text) 52%, transparent);
   line-height: 1.35;
 }
+
+/* Keep edge strokes a constant on-screen width regardless of zoom. fitView on a
+   wide network zooms out far enough (~0.23x on the kaleidoscope graph) that a
+   1.5px stroke would render sub-pixel and the wires vanish; non-scaling-stroke
+   pins the rendered width so they stay visible at any zoom. */
+.tdn-viewer .react-flow__edge-path {
+  vector-effect: non-scaling-stroke;
+}
+
+/* The host site's global `img, svg { max-width: 100% }` reset collapses React
+   Flow's edge SVGs to 0 width (their wrapper is 0-wide), so the path overflows a
+   0-width root and Chromium never paints it -- the wires vanish. Opt every React
+   Flow SVG in the viewer out of that reset. */
+.tdn-viewer .react-flow svg {
+  max-width: none;
+}
