@@ -34,16 +34,16 @@ const requiresOptions = SUBMIT_REQUIRES;
 ---
 
 <Base
-  title="Submit a Specimen - embody.tools"
+  title="Contribute a Specimen - embody.tools"
   description="Share a transparent TouchDesigner Specimen with the Collection."
 >
   <section class="page-section submit">
-    <p class="eyebrow">Submit</p>
-    <h1>share a specimen</h1>
+    <p class="eyebrow">Contribute</p>
+    <h1>contribute a specimen</h1>
     <p class="lede">
-      Paste a TDN network to share it with the Collection. Every submission is
+      Paste a TDN network to share it with the Collection. Every contribution is
       scanned for capability surfaces before it goes live. This form is a working
-      scaffold of the submission pipeline.
+      scaffold of the contribution pipeline.
     </p>
 
     <p class="submit-status" data-submit-status hidden role="status"></p>
@@ -104,7 +104,7 @@ const requiresOptions = SUBMIT_REQUIRES;
         </div>
       )}
       <button type="submit" class="btn btn--primary submit-go" data-submit-go>
-        submit specimen
+        contribute specimen
       </button>
     </form>
   </section>
@@ -225,8 +225,8 @@ const requiresOptions = SUBMIT_REQUIRES;
 
     goBtn.disabled = true;
     const original = goBtn.textContent;
-    goBtn.textContent = "submitting...";
-    setStatus("Scanning and submitting...", "pending");
+    goBtn.textContent = "contributing...";
+    setStatus("Scanning and contributing...", "pending");
 
     try {
       const res = await fetch("/api/specimens", {
@@ -241,10 +241,10 @@ const requiresOptions = SUBMIT_REQUIRES;
         return;
       }
       if (!res.ok) {
-        setStatus(body.detail || body.error || `Submission failed (${res.status}).`, "error");
+        setStatus(body.detail || body.error || `Contribution failed (${res.status}).`, "error");
         return;
       }
-      setStatus("Submitted. Redirecting to your specimen...", "ok");
+      setStatus("Contributed. Redirecting to your specimen...", "ok");
       window.location.assign(`/c/${body.slug}`);
     } catch (err) {
       console.error("submit failed", err);
