@@ -10,6 +10,7 @@ import {
   type FixtureSpecimen
 } from "../../lib/specimenFallback";
 import { reactionsClusterHtml } from "../../lib/reactions";
+import { resultImage } from "../../lib/specimenThumb";
 import { sampleTdn } from "../../fixtures/sample-tdn";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
 import { getSpecimenBySlug } from "../../server/db";
@@ -93,6 +94,10 @@ try {
 }
 
 const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorTypes(tdn);
+
+// Rendered RESULT cover for the sidebar thumbnail: baked render when available,
+// otherwise the procedural placeholder (shared with the collection card covers).
+const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: specimen.category });
 
 function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
   return {
@@ -454,6 +459,20 @@ function emitKey(key: string): string {
 
     <aside class="specimen-sidebar">
       <section class="side-block pillar">
+        <p class="eyebrow">Rendered result</p>
+        <figure class="cover-thumb">
+          <img
+            src={cover.src}
+            alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
+            width="640"
+            height="440"
+            loading="lazy"
+          />
+          {!cover.baked && <figcaption class="cover-thumb__soon mono">preview coming soon</figcaption>}
+        </figure>
+      </section>
+
+      <section class="side-block pillar">
         <p class="eyebrow">Key ops</p>
         <div class="op-list">
           {keyOps.map((opName) => <span>{opName}</span>)}
@@ -609,6 +628,36 @@ function emitKey(key: string): string {
   .side-block p {
     color: var(--text-muted);
     line-height: 1.45;
+  }
+
+  .cover-thumb {
+    position: relative;
+    margin: 14px 0 0;
+    aspect-ratio: 16 / 11;
+    overflow: hidden;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    background: var(--bg-code);
+  }
+
+  .cover-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .cover-thumb__soon {
+    position: absolute;
+    left: 50%;
+    bottom: 0.6rem;
+    transform: translateX(-50%);
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    pointer-events: none;
   }
 
   .op-list {

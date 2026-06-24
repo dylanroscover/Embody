@@ -55,6 +55,30 @@ export function specimenThumbnail(specimen: SpecimenThumbInput): string {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+// Slugs with a baked RESULT render at /public/specimens/<slug>.jpg, captured from
+// the live specimen networks. Anything not listed falls back to the procedural
+// placeholder SVG above -- never a broken img.
+//
+// NOTE: the collection page's appended-card browser script keeps its own inline
+// copy of this set (it runs in the client bundle); keep the two in sync.
+export const BAKED_RESULTS = new Set([
+  "kaleidoscope", "mandelbulb-march", "murmuration",
+  "noise-terrain", "plasma-interference", "reaction-diffusion",
+]);
+
+/**
+ * Resolve a specimen's RESULT cover image: the baked render for slugs in
+ * BAKED_RESULTS, otherwise the procedural placeholder. `baked` lets callers
+ * label the image (real result vs. "preview coming soon").
+ */
+export function resultImage(specimen: SpecimenThumbInput): { src: string; baked: boolean } {
+  const baked = BAKED_RESULTS.has(specimen.slug);
+  return {
+    src: baked ? `/specimens/${specimen.slug}.jpg` : specimenThumbnail(specimen),
+    baked,
+  };
+}
+
 function motifFor(category: string, seed: number): string {
   switch (category) {
     case "generative-abstract":
