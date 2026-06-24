@@ -228,7 +228,11 @@ def tdn_sha256(tdn: dict) -> str:
 def wrap_tdn(tdn: dict, source: str, slug=None, version=None) -> dict:
 	if source not in ENVELOPE_SOURCES:
 		raise ValueError("Invalid envelope source: %s" % source)
+	# copy_id: a fresh per-copy nonce (NOT part of the sha256, ignored by every
+	# validator) so each Copy is a distinct clipboard payload -- this is what lets
+	# the clipboard watcher re-prompt on a re-copy. Mirrors the web side.
 	env = {EMBODY_TDN_MARKER: EMBODY_TDN_VERSION, "source": source,
+		   "copy_id": os.urandom(8).hex(),
 		   "sha256": tdn_sha256(tdn), "tdn": tdn}
 	if slug is not None:
 		env["slug"] = slug

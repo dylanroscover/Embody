@@ -23,6 +23,14 @@ export interface EmbodyTdnEnvelope {
   version?: number;
   /** sha256 of the canonical-serialized `tdn` payload (integrity + content addressing). */
   sha256: string;
+  /**
+   * Per-copy nonce (random per Copy action). NOT part of the sha256 / integrity
+   * check and ignored by every validator -- it only makes each copy a distinct
+   * clipboard payload so the Embody TD-side clipboard watcher re-prompts when a
+   * user re-copies the same network (otherwise an identical envelope reads as
+   * "same content still on the clipboard" and is debounced).
+   */
+  copy_id?: string;
   /** The full TDN network dict. Schema: docs/tdn/specification.md (contract C7). */
   tdn: Record<string, unknown>;
 }

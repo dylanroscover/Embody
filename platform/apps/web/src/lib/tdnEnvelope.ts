@@ -26,6 +26,9 @@ export async function buildEmbodyEnvelope(
   const envelope: EmbodyTdnEnvelope = {
     [EMBODY_TDN_MARKER]: EMBODY_TDN_VERSION,
     source: "embody.tools",
+    // Fresh per copy so each Copy is a distinct clipboard payload -- this is what
+    // lets the TD-side watcher re-prompt on a re-copy. Not part of the sha256.
+    copy_id: crypto.randomUUID(),
     sha256: await canonicalTdnSha256(tdn),
     tdn
   };
