@@ -473,7 +473,8 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
         const flip = target.closest<HTMLElement>("[data-cover-option]");
         if (flip) {
           event.preventDefault();
-          flipCover(flip);
+          // Locked covers (no rendered result) disable both buttons; never flip.
+          if (!(flip as HTMLButtonElement).disabled) flipCover(flip);
           return;
         }
 
@@ -569,19 +570,22 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
       article.setAttribute("data-copies", String(s.copies_count ?? 0));
       article.setAttribute("data-search", search);
 
+      // No rendered result -> open on the network graph and lock the toggle
+      // (nothing to flip to). Mirrors SpecimenCover.astro's defaultView logic.
+      const dis = baked ? "" : " disabled";
       article.innerHTML = `
         <div class="specimen-card__cover">
-          <div class="cover" data-cover="result" data-cover-shell data-cover-interactive>
-            <div class="cover__layer cover__layer--network" aria-hidden="true">
+          <div class="cover" data-cover="${baked ? 'result' : 'network'}" data-cover-shell data-cover-interactive>
+            <div class="cover__layer cover__layer--network" aria-hidden="${baked ? 'true' : 'false'}">
               <div class="cover-mount" data-cover-mount="${esc(s.slug)}"></div>
             </div>
-            <div class="cover__layer cover__layer--result" aria-hidden="false">
+            <div class="cover__layer cover__layer--result" aria-hidden="${baked ? 'false' : 'true'}">
               <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} ${baked ? 'rendered result' : 'preview placeholder'}" />
               ${baked ? "" : '<span class="cover__soon mono">preview coming soon</span>'}
             </div>
             <div class="cover__flip" role="group" aria-label="${esc(s.name)} cover view">
-              <button type="button" class="cover__flip-btn" data-cover-option="network" aria-pressed="false" title="Show network graph">network</button>
-              <button type="button" class="cover__flip-btn is-active" data-cover-option="result" aria-pressed="true" title="Show rendered result">result</button>
+              <button type="button" class="cover__flip-btn${baked ? '' : ' is-active'}" data-cover-option="network" aria-pressed="${baked ? 'false' : 'true'}"${dis} title="Show network graph">network</button>
+              <button type="button" class="cover__flip-btn${baked ? ' is-active' : ''}" data-cover-option="result" aria-pressed="${baked ? 'true' : 'false'}"${dis} title="${baked ? 'Show rendered result' : 'Rendered result coming soon'}">result</button>
             </div>
           </div>
         </div>

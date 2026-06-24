@@ -40,6 +40,11 @@ const { slug, name, category, thumbnailKey, tdn } = Astro.props;
 // RESULT layer image: uploaded thumbnail (if any) > baked render for known slugs
 // > procedural placeholder. Source of truth lives in lib/specimenThumb.
 const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thumbnailKey });
+// No rendered result yet -> the network graph IS the preview: open on it and lock
+// the toggle (there's nothing to flip to). A real/baked thumbnail keeps the normal
+// result-default with a working flip. Keep this in sync with the appended-card
+// template in collection/index.astro.
+const defaultView = hasBaked ? "result" : "network";
 ---
 
 <!--
@@ -48,11 +53,11 @@ const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thum
   so dragging/panning the TdnViewer canvas or tapping the flip buttons never
   fires the card's navigation to /c/<slug>.
 -->
-<div class="cover" data-cover="result" data-cover-shell data-cover-interactive>
-  <div class="cover__layer cover__layer--network" aria-hidden="true">
+<div class="cover" data-cover={defaultView} data-cover-shell data-cover-interactive>
+  <div class="cover__layer cover__layer--network" aria-hidden={hasBaked ? "true" : "false"}>
     <SpecimenCoverGraph slug={slug} tdn={tdn} client:visible />
   </div>
-  <div class="cover__layer cover__layer--result" aria-hidden="false">
+  <div class="cover__layer cover__layer--result" aria-hidden={hasBaked ? "false" : "true"}>
     <img src={thumb} loading="lazy" alt={hasBaked ? `${name} rendered result` : `${name} preview placeholder`} />
     {!hasBaked && <span class="cover__soon mono">preview coming soon</span>}
   </div>
@@ -60,17 +65,19 @@ const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thum
   <div class="cover__flip" role="group" aria-label={`${name} cover view`}>
     <button
       type="button"
-      class="cover__flip-btn"
+      class={`cover__flip-btn${hasBaked ? "" : " is-active"}`}
       data-cover-option="network"
-      aria-pressed="false"
+      aria-pressed={hasBaked ? "false" : "true"}
+      disabled={!hasBaked}
       title="Show network graph"
     >network</button>
     <button
       type="button"
-      class="cover__flip-btn is-active"
+      class={`cover__flip-btn${hasBaked ? " is-active" : ""}`}
       data-cover-option="result"
-      aria-pressed="true"
-      title="Show rendered result"
+      aria-pressed={hasBaked ? "true" : "false"}
+      disabled={!hasBaked}
+      title={hasBaked ? "Show rendered result" : "Rendered result coming soon"}
     >result</button>
   </div>
 </div>
@@ -230,5 +237,20 @@ const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thum
   .cover__flip-btn.is-active {
     background: var(--accent);
     color: #0e1612;
+  }
+
+  /* Locked toggle (no rendered result yet): the network view is the only option,
+     so both buttons are disabled. The active "network" pill keeps its normal look;
+     the unavailable "result" side dims to read as "coming soon", not broken. */
+  .cover__flip-btn:disabled {
+    cursor: default;
+  }
+
+  .cover__flip-btn:disabled:hover {
+    color: var(--text-faint);
+  }
+
+  .cover__flip-btn:disabled:not(.is-active) {
+    opacity: 0.45;
   }
 </style>
