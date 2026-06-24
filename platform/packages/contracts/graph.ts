@@ -22,6 +22,12 @@ export interface GraphNode {
   /** Tile size if known (TDN may omit; renderer may use a default). */
   w?: number;
   h?: number;
+  /**
+   * If this op is DOCKED to a host op (callback/info/shader DATs etc.), the host
+   * op's id. The renderer tucks docked ops in a tidy row under their host and
+   * draws a dock tether instead of a data-flow wire. Undefined for normal ops.
+   */
+  dock?: string;
 }
 
 export interface GraphEdge {

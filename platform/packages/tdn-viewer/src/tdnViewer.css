@@ -82,16 +82,11 @@
 .tdn-operator__meta {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
   color: var(--tdn-muted);
   font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0;
   text-transform: uppercase;
-}
-
-.tdn-operator__family {
-  color: var(--family-color);
 }
 
 .tdn-handle {
@@ -111,6 +106,14 @@
 
 .tdn-handle--comp {
   bottom: -5px;
+}
+
+/* Dock connector: smaller and muted vs the accent data-flow handles, so a docked
+   op reads as "attached to" its host, not wired into the signal chain. */
+.tdn-handle.tdn-handle--dock {
+  width: 7px;
+  height: 7px;
+  background: rgba(150, 162, 154, 0.7);
 }
 
 .tdn-annotation {

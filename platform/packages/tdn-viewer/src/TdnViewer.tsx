@@ -17,7 +17,7 @@ import {
 } from "@xyflow/react";
 import { memo, useCallback, useMemo, useRef } from "react";
 import type { CSSProperties } from "react";
-import type { GraphAnnotation, NormalizedGraph, RGB } from "@embody/contracts";
+import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/contracts";
 import { parseTDN } from "./parseTDN";
 
 export interface TdnViewerProps {
@@ -33,7 +33,17 @@ type OperatorNodeData = {
   familyColor: string;
   inputCount: number;
   compInputCount: number;
+  /** True when this op hosts docked ops (shows a dock-out connector). */
+  isDockHost: boolean;
+  /** True when this op is docked to a host (shows a dock-in connector). */
+  isDocked: boolean;
 };
+
+// Tile footprint used for the docked-row layout (matches tdnViewer.css).
+const TILE_W = 168;
+const TILE_H = 84;
+const DOCK_VGAP = 46; // gap below the host to the docked row
+const DOCK_HGAP = 36; // gap between docked tiles in the row
 
 type OperatorNode = Node<OperatorNodeData, "operator">;
 
@@ -156,14 +166,33 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
         position={Position.Right}
         type="source"
       />
+      {data.isDockHost && (
+        <Handle
+          className="tdn-handle tdn-handle--dock"
+          id="dock-out"
+          position={Position.Bottom}
+          style={{ left: "50%" }}
+          type="source"
+        />
+      )}
+      {data.isDocked && (
+        <Handle
+          className="tdn-handle tdn-handle--dock"
+          id="dock-in"
+          position={Position.Top}
+          style={{ left: "50%" }}
+          type="target"
+        />
+      )}
       <div className="tdn-operator__head" />
       <div className="tdn-operator__body">
         <div className="tdn-operator__name" title={data.name}>
           {data.name}
         </div>
         <div className="tdn-operator__meta">
+          {/* Family is conveyed by the head-bar colour, so the type alone is
+              enough here -- no redundant family chip. */}
           <span>{data.type}</span>
-          <span className="tdn-operator__family">{data.family}</span>
         </div>
       </div>
     </div>
@@ -197,10 +226,42 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
     counts.set(edge.to, Math.max(counts.get(edge.to) ?? 0, edge.inputIndex + 1));
   }
 
+  // Dock relationships: group docked ops under a host that actually exists in the
+  // graph. Their raw TD coords pack them tight enough to overlap at tile size, so
+  // we re-lay them in a tidy, evenly-spaced row centred under the host -- which
+  // both removes the overlap and reads as "these belong to that host".
+  const byId = new Map<string, GraphNode>(graph.nodes.map((n) => [n.id, n]));
+  const dockedByHost = new Map<string, GraphNode[]>();
+  for (const node of graph.nodes) {
+    if (node.dock && byId.has(node.dock) && node.dock !== node.id) {
+      const list = dockedByHost.get(node.dock) ?? [];
+      list.push(node);
+      dockedByHost.set(node.dock, list);
+    }
+  }
+
+  const dockedPos = new Map<string, { x: number; y: number }>();
+  const dockedIds = new Set<string>();
+  for (const [hostId, list] of dockedByHost) {
+    const host = byId.get(hostId)!;
+    const ordered = [...list].sort((a, b) => a.x - b.x || a.id.localeCompare(b.id));
+    const step = TILE_W + DOCK_HGAP;
+    const rowWidth = (ordered.length - 1) * step;
+    const hostCenter = host.x + TILE_W / 2;
+    const rowTop = -host.y + TILE_H + DOCK_VGAP;
+    ordered.forEach((node, i) => {
+      dockedIds.add(node.id);
+      dockedPos.set(node.id, {
+        x: hostCenter - rowWidth / 2 - TILE_W / 2 + i * step,
+        y: rowTop
+      });
+    });
+  }
+
   const nodes: TdnFlowNode[] = graph.nodes.map((node) => ({
     id: node.id,
     type: "operator",
-    position: {
+    position: dockedPos.get(node.id) ?? {
       x: node.x,
       y: -node.y
     },
@@ -210,7 +271,9 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
       family: node.family,
       familyColor: FAMILY_COLORS[node.family] ?? FAMILY_COLORS.OBJECT,
       inputCount: inputCounts.get(node.id) ?? 0,
-      compInputCount: compInputCounts.get(node.id) ?? 0
+      compInputCount: compInputCounts.get(node.id) ?? 0,
+      isDockHost: dockedByHost.has(node.id),
+      isDocked: dockedIds.has(node.id)
     },
     draggable: false,
     selectable: false
@@ -237,6 +300,29 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
       strokeWidth: edge.comp ? 1.8 : 1.5
     }
   }));
+
+  // Dock tethers: a muted, dashed link from the host's bottom to each docked op,
+  // visually distinct from data-flow wires (no arrowhead, no animation) so it
+  // reads as "attached to", not "feeds into".
+  for (const [hostId, list] of dockedByHost) {
+    for (const node of list) {
+      edges.push({
+        id: `dock:${hostId}->${node.id}`,
+        source: hostId,
+        target: node.id,
+        sourceHandle: "dock-out",
+        targetHandle: "dock-in",
+        type: "smoothstep",
+        focusable: false,
+        selectable: false,
+        style: {
+          stroke: "rgba(150, 162, 154, 0.5)",
+          strokeWidth: 1.2,
+          strokeDasharray: "4 4"
+        }
+      });
+    }
+  }
 
   for (const annotation of graph.annotations) {
     nodes.push(annotationToNode(annotation, nodes.length));

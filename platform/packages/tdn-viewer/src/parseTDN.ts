@@ -27,6 +27,13 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
 
       const id = joinPath(parentPath, name);
       const type = readString(op.type) || "unknown";
+
+      // An annotateCOMP IS the annotation -- its title/body are also emitted in
+      // the top-level `annotations` array, which renders as the text box. Drawing
+      // the COMP as its own node tile is pure redundancy, so skip it here. (Its
+      // annotation still appears via collectAnnotations on the array.)
+      if (type.toLowerCase() === "annotatecomp") continue;
+
       const position = readPair(op.position);
       const size = readOptionalPair(op.size);
       const color = readRGB(op.color);
@@ -44,6 +51,15 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
       if (size) {
         node.w = size[0];
         node.h = size[1];
+      }
+
+      // Docked op (callback/info/shader DATs etc.): `dock` names the host op,
+      // relative to this op's network. Resolve it to the host's id so the
+      // renderer can tuck it under the host and draw a tether.
+      const dockName = readString(op.dock);
+      if (dockName) {
+        const hostId = resolveInputPath(parentPath, dockName);
+        if (hostId) node.dock = hostId;
       }
 
       nodes.push(node);

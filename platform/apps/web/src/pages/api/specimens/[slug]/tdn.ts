@@ -77,7 +77,8 @@ const OPERATOR_KEYS = [
   "size",
   "color",
   "inputs",
-  "comp_inputs"
+  "comp_inputs",
+  "dock"
 ] as const;
 
 function trimTdnForCover(tdn: Record<string, unknown>): Record<string, unknown> {
