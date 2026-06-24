@@ -14,10 +14,12 @@ test("register creates an account and signs in", async ({ page }) => {
   await page.locator('input[name="password"]').fill(pw);
   await page.locator("[data-auth-submit]").click();
 
-  // Success redirects away from /signin and the nav shows the "account" pill
-  // (the auth button becomes "account" when signed in).
+  // Success redirects away from /signin and the nav shows the signed-in account
+  // chip -- the avatar + name button that opens the account menu. The filled
+  // --register class now belongs to the "contribute" CTA, so assert the chip by
+  // its accessible name (aria-label "Account menu for ...") instead.
   await expect(page).not.toHaveURL(/\/signin/, { timeout: 15_000 });
-  await expect(page.locator(".navbar__item--register")).toHaveText(/account/i);
+  await expect(page.getByRole("button", { name: /account menu/i })).toBeVisible();
 });
 
 test("sign out, then sign back in", async ({ page }) => {
@@ -46,7 +48,7 @@ test("sign out, then sign back in", async ({ page }) => {
   await page.locator('input[name="password"]').fill(pw);
   await page.locator("[data-auth-submit]").click();
   await expect(page).not.toHaveURL(/\/signin/, { timeout: 15_000 });
-  await expect(page.locator(".navbar__item--register")).toHaveText(/account/i);
+  await expect(page.getByRole("button", { name: /account menu/i })).toBeVisible();
 });
 
 test("wrong password is rejected", async ({ page }) => {

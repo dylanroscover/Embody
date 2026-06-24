@@ -156,7 +156,7 @@ pre {
 
 /* --- Consolidated nav bar -----------------------------------------------
    ONE super-wide pill floating over the page. The wordmark AND every nav
-   item (register, sign in, collection, submit, manifesto,
+   item (collection, manifesto, contribute, account / sign in,
    github) live inside this single container. A translucent dark fill plus a
    backdrop blur keep the bar legible over ANY content behind it, including
    the page H1. Every inner item shares one height rule (--nav-item-h) so no
@@ -333,7 +333,10 @@ pre {
   color: var(--accent);
 }
 
-/* REGISTER -- filled accent emphasis, SAME height as the rest. */
+/* PRIMARY CTA (contribute) -- filled accent emphasis, SAME height as the rest.
+   This is the ONE filled-accent element in the bar; everything else (brand,
+   nav links, account, github) stays neutral and only lights up on hover, so
+   the eye lands on the call to action, not on a name. */
 .navbar__item--register {
   border-color: var(--accent);
   background: var(--accent);
@@ -467,28 +470,39 @@ pre {
   display: none;
 }
 
-/* Signed-in account menu: a green name pill (keeping the --register highlight)
-   with an initials avatar, toggling a dropdown (profile / admin / sign out) that
-   mirrors the overflow menu panel. */
+/* Signed-in account chip: a QUIET neutral utility pill (matching the github
+   item), NOT a CTA. Identity belongs in the right-hand utility cluster and only
+   lights up (accent) on hover -- the filled-accent emphasis is reserved for the
+   primary CTA (--register / contribute). Toggles a dropdown (profile / admin /
+   sign out) that mirrors the overflow menu panel. */
 .navbar__user {
   position: relative;
   display: inline-flex;
 }
 
 .navbar__user-trigger {
-  display: inline-flex;
-  align-items: center;
   gap: 0.4rem;
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
   cursor: pointer;
 }
 
+.navbar__user-trigger:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated-2);
+  color: var(--accent);
+}
+
+/* A small contained dot of identity -- accent initials on an accent-dim disc --
+   so the chip still reads as "you" without the whole pill shouting. */
 .navbar__user-avatar {
   display: inline-grid;
   place-items: center;
   width: 1.15rem;
   height: 1.15rem;
   border-radius: 50%;
-  background: rgba(14, 22, 18, 0.85);
+  background: var(--accent-dim);
   color: var(--accent);
   font-size: 0.6rem;
   font-weight: 700;
@@ -651,9 +665,9 @@ pre {
 
   .site-header.is-open .navbar__items { display: flex; }
 
-  /* Dropdown rows: still uniform-height, full-width, left-aligned with an
-     optional description below the label. REGISTER + SIGN IN keep their
-     emphasis but match the row height of the links. */
+  /* Dropdown rows: full-width, left-aligned, with an optional description
+     stacked below the label (collection, manifesto, contribute). SIGN IN and
+     the account chip carry no description, so they stay centered single rows. */
   .navbar__items .navbar__item {
     justify-content: flex-start;
     min-height: 0;
@@ -662,8 +676,8 @@ pre {
     text-align: left;
   }
 
-  .navbar__items .navbar__item--register,
-  .navbar__items .navbar__item--signin {
+  .navbar__items .navbar__item--signin,
+  .navbar__items .navbar__user-trigger {
     justify-content: center;
   }
 
@@ -683,9 +697,16 @@ pre {
     color: var(--text-faint);
   }
 
+  /* The filled-green CTA stacks label + desc like the other rows, but the muted
+     gray would wash out over the accent fill -- use a soft dark tone so the
+     description stays legible (the label above it is full-dark var(--bg)). */
+  .navbar__items .navbar__item--register .nav-item__desc {
+    color: rgba(24, 30, 30, 0.74);
+  }
+
   /* In the dropdown, items that show a description stack label + desc, so let
      them grow past the single-row height. Auth + github stay single-row. */
-  .navbar__items .navbar__item:not(.navbar__item--register):not(.navbar__item--signin):not(.navbar__item--github) {
+  .navbar__items .navbar__item:not(.navbar__item--signin):not(.navbar__item--github):not(.navbar__user-trigger) {
     flex-direction: column;
     align-items: flex-start;
   }
@@ -700,6 +721,53 @@ pre {
   .site-header.is-open .nav-toggle__bar:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
   .site-header.is-open .nav-toggle__bar:nth-child(2) { opacity: 0; }
   .site-header.is-open .nav-toggle__bar:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+}
+
+/* Desktop nav tooltips: the inline pill bar has no room for descriptions, so
+   surface the SAME orientation copy from the mobile dropdown as a small glass
+   panel below each item on hover/focus. Only items that carry a .nav-item__desc
+   (collection, manifesto, contribute) get one; sign in / account / github have
+   none, so nothing shows. The panel echoes the overflow + account menus so the
+   bar reads as one glass system. */
+@media (min-width: 861px) {
+  /* Positioning context for the absolutely-placed tooltip. (The account and
+     "..." dropdowns anchor to their own wrappers, so this is inert for them.) */
+  .navbar__item {
+    position: relative;
+  }
+
+  /* The desc stays display:none (base rule) while idle -- so it never enters
+     the bar's width measurement and trips the "..." overflow collapse -- and is
+     promoted to a floating panel ONLY while its item is hovered or focused. */
+  .navbar__item:hover .nav-item__desc,
+  .navbar__item:focus-visible .nav-item__desc {
+    display: block;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 130;
+    width: max-content;
+    max-width: 230px;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(18, 23, 21, 0.97);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    /* The tooltip never captures the cursor; it just rides the item's hover. */
+    pointer-events: none;
+  }
 }
 
 main {
