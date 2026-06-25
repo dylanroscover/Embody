@@ -220,9 +220,36 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
       </div>
       <div class="container footer__bottom">
         <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
-        <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+        <p class="footer__sig">made with <span class="footer__emoji" data-emoji role="img" aria-label="made with love" title="roll again">&#10084;&#65039;</span> in <span class="footer__city">idyllwild california</span></p>
       </div>
     </footer>
+    <script>
+      // Footer signature: a random emoji each visit, re-rolls on click. Emojis
+      // are stored as code points (ASCII source per the repo's ASCII rule) and
+      // rendered at runtime; the markup's entity heart is the no-JS fallback.
+      (() => {
+        const el = document.querySelector("[data-emoji]");
+        if (!el) return;
+        const EMOJI: [number[], string][] = [
+          [[0x2764, 0xfe0f], "love"], [[0x1f49a], "love"], [[0x1f49c], "love"],
+          [[0x2728], "sparkle"], [[0x1f31f], "a spark"], [[0x1f525], "fire"],
+          [[0x2615], "caffeine"], [[0x1f375], "tea"], [[0x26a1], "a jolt"],
+          [[0x1f308], "a rainbow"], [[0x1f680], "liftoff"], [[0x1f3a8], "paint"],
+          [[0x1f300], "a swirl"], [[0x1fa84], "magic"], [[0x1f9e0], "brains"],
+          [[0x1f4a1], "an idea"], [[0x1f389], "joy"], [[0x1f6e0, 0xfe0f], "tools"],
+          [[0x1f39b, 0xfe0f], "knobs"], [[0x1f579, 0xfe0f], "a joystick"],
+          [[0x1f319], "moonlight"], [[0x1f33f], "fresh air"],
+          [[0x1f3d4, 0xfe0f], "mountain air"], [[0x1f332], "pine"],
+        ];
+        const roll = () => {
+          const pick = EMOJI[Math.floor(Math.random() * EMOJI.length)]!;
+          el.textContent = String.fromCodePoint(...pick[0]);
+          el.setAttribute("aria-label", "made with " + pick[1]);
+        };
+        roll();
+        el.addEventListener("click", roll);
+      })();
+    </script>
     <script>
       const COPY_RESET_MS = 1500;
 
