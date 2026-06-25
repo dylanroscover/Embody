@@ -13,5 +13,5 @@ The site is built on Astro + Cloudflare Workers and is **fully browsable without
 ## How "embody it" works
 
 1. On a Specimen, hit **embody it** — its TDN is copied to your clipboard.
-2. In a TouchDesigner project running Embody, the **clipboard watcher** sees it and prompts to drop it in as a new COMP — no keyboard shortcut needed. See [Clipboard Auto-Paste](../embody/keyboard-shortcuts.md).
-3. Community Specimens are imported **inert by default** — Execute DATs disarmed, expressions neutralized, IO bypassed — so a pasted network can't run anything until you choose to enable it.
+2. In a TouchDesigner project running Embody, the **clipboard watcher** sees it and prompts to drop it in as a new COMP — no keyboard shortcut needed. See [Clipboard Auto-Paste](../embody/configuration.md).
+3. Community Specimens (from embody.tools) are **capability-scanned on import**. A **clean** Specimen — the common case — pastes in live and fully working, with no neutralization. A **flagged** Specimen pastes disarmed: side-effecting surfaces are disabled (Execute/Script DATs bypassed, dangerous expressions neutralized, IO bypassed, storage stripped, external `tox_ref`/`tdn_ref` shells removed) — but provably pure value expressions (parameter reads, `absTime`, math, arithmetic) are **kept**, so the network still renders. A **blocked** Specimen is rejected on the server and never reaches you. A Specimen you copied from your own project always pastes live and trusted.

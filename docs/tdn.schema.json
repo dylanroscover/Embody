@@ -21,7 +21,7 @@
     },
     "generator": {
       "type": "string",
-      "description": "Tool that produced the file (e.g., \"Embody/5.0.93\")."
+      "description": "Tool that produced the file (e.g., \"Embody/6.0.4\")."
     },
     "td_build": {
       "type": "string",

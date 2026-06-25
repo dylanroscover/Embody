@@ -38,7 +38,7 @@ Embody auto-generates this config for you when the user enables Envoy. The minim
 ## Envoy (MCP server)
 
 - [Envoy setup](https://dylanroscover.github.io/Embody/envoy/setup/): enable Envoy, install deps, start the local server.
-- [Tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/): full catalog of the 48 MCP tools plus 4 bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`).
+- [Tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/): full catalog of the 49 MCP tools plus 4 bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`).
 - [Claude Code integration](https://dylanroscover.github.io/Embody/envoy/claude-code/): Claude Code is recommended and auto-configured; Cursor, Windsurf, or any MCP-compatible client also work.
 
 The server is local-only - it binds to `127.0.0.1` (never the network), default port 9870, MCP endpoint at `http://localhost:9870/mcp`.

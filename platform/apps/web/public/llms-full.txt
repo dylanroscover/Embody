@@ -1,6 +1,6 @@
 # Embody + Envoy + TDN - full text for AI agents
 
-> Open-source TouchDesigner toolkit. Envoy is an MCP server (48 tools) that lets AI
+> Open-source TouchDesigner toolkit. Envoy is an MCP server (49 tools) that lets AI
 > assistants build, wire, parameterize, and debug a LIVE TouchDesigner session; Embody
 > externalizes the network to version-control-friendly text on disk; TDN is the diffable
 > YAML network format that makes both possible. Free, MIT, runs entirely on the user's
@@ -14,7 +14,7 @@ Sections below, in order:
   1. Quickstart
   2. Envoy - Setup
   3. Envoy - Claude Code Integration
-  4. Envoy - Tools Reference (the 48 MCP tools + 4 bridge meta-tools)
+  4. Envoy - Tools Reference (the 49 MCP tools + 4 bridge meta-tools)
   5. TDN - Specification
   6. TDN - Import & Export
   7. AI Instructions (AGENTS.md - critical rules for operating in a TD project)
@@ -314,7 +314,7 @@ Slash commands are shortcuts you can type directly in Claude Code to trigger com
 Runs the Embody test suite via MCP and reports results.
 
 ```
-/run-tests                              # Run all 30 test suites
+/run-tests                              # Run all 72 test suites
 /run-tests test_path_utils              # Run a specific suite
 /run-tests test_path_utils test_name    # Run a specific test
 ```
@@ -397,7 +397,7 @@ You can extend the generated configuration:
 
 # Tools Reference
 
-Envoy exposes 48 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 
@@ -580,7 +580,7 @@ TDN is the substrate that makes "create at the speed of thought" possible. It's 
 TDN (TouchDesigner Network) is a YAML-based file format for representing TouchDesigner operator networks as human-readable, diffable text. It stores only non-default properties, keeping files minimal.
 
 - File extension: `.tdn`
-- MIME type: `application/json`
+- MIME type: `application/yaml`
 - Encoding: UTF-8
 - JSON Schema: [`tdn.schema.json`](../tdn.schema.json)
 

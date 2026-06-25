@@ -237,7 +237,6 @@ When Envoy starts for the first time, it generates a complete AI client configur
 | `.claude/CLAUDE.md` | Project context for Claude Code — what Embody is, how the network is structured, what tools to use |
 | `.claude/rules/` | Always-loaded coding conventions — TD Python patterns, parameter rules, network layout, MCP safety |
 | `.claude/skills/` | On-demand reference — full MCP tool catalog, TD API reference, operator creation workflow, and more |
-| `.claude/commands/` | Slash commands — `/run-tests`, `/status`, `/explore-network` |
 | `.gitignore` / `.gitattributes` | Git entries for `.toe`/`.tox` binary handling and externalized file tracking |
 
 Regenerate at any time:

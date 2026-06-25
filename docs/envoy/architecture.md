@@ -40,7 +40,7 @@ Claude Code communicates with MCP servers via STDIO (stdin/stdout JSON-RPC). Sin
 The bridge provides several features beyond simple proxying:
 
 - **Local MCP handshake**: Handles `initialize`, `notifications/initialized`, and `tools/list` locally when TD is not running, so Claude Code can always complete the MCP setup and discover bridge meta-tools
-- **Meta-tools**: `get_td_status`, `launch_td`, and `restart_td` run entirely on the bridge — no Envoy connection required
+- **Meta-tools**: `get_td_status`, `launch_td`, `restart_td`, and `switch_instance` run entirely on the bridge — no Envoy connection required
 - **Automatic retry**: Transient connection failures are retried with exponential backoff before reporting an error
 - **Crash detection**: Tracks the TD process PID and detects when it exits unexpectedly
 - **Crash-loop protection**: Limits launches to 3 within a 5-minute window to prevent infinite restart loops

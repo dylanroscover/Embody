@@ -13,7 +13,13 @@ Open a Specimen to see its full node graph, metadata, the capability **scan verd
 
 ## "Embody it" — copy into your project
 
-The **embody it** button copies the Specimen's TDN to your clipboard. In a TouchDesigner project running [Embody](../embody/index.md), the clipboard watcher detects it and offers to paste it as a new COMP — see [Clipboard Auto-Paste](../embody/configuration.md).
+The **embody it** button copies the Specimen's TDN to your clipboard. In a TouchDesigner project running [Embody](../embody/index.md), the clipboard watcher detects it and offers to paste it as a new COMP — see [Clipboard Auto-Paste](../embody/configuration.md). How it pastes (live, disarmed, or rejected) depends on the capability-scan verdict described below.
 
-!!! warning "Community networks paste inert"
-    A Specimen copied from the Collection is imported **inert by default**: Execute DATs are disarmed, expressions neutralized, IO bypassed, and storage stripped — the structure and content are preserved, but nothing runs until you deliberately enable it. This is the safe default for running someone else's network.
+!!! info "How community networks are imported"
+    A Specimen copied from the Collection is run through a capability scanner on import, and the verdict decides how it pastes:
+
+    - **Clean** — pastes in live and fully working, with no neutralization and no warning. This is the common case.
+    - **Flagged** (notable capability surfaces) — pastes disarmed: Execute/Script DATs are bypassed, dangerous expressions are neutralized, `tox_ref`/`tdn_ref` shells and global op shortcuts are stripped, IO is bypassed, and storage is stripped. Provably *pure* value expressions — parameter reads, `absTime`, `math.*`, `Par.eval()`, arithmetic, ternaries — are **preserved**, so the network keeps its non-dangerous logic and still renders. Trusted TouchDesigner palette extensions (`op.TD<Name>`) are kept.
+    - **Blocked** — rejected on the server and never imported.
+
+    A TDN you copied from your own project (not from the Collection) always pastes live and trusted — it is not scanned.

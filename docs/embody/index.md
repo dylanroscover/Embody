@@ -64,19 +64,21 @@ For DATs, the format is determined by the DAT's content type — a Python DAT ex
 
     - ++lctrl++ ++lctrl++ — Tag/untag an operator for externalization
     - ++ctrl+shift+u++ — Update (write all dirty operators to disk)
-    - ++ctrl+shift+e++ — Open the Embody manager window
+    - ++ctrl+shift+o++ — Open the Embody manager window
+    - ++ctrl+shift+e++ — Export the entire project network to a `.tdn` file
 
 === "Python API"
 
     ```python
-    # Tag an operator for externalization
-    op.Embody.ext.Embody.tagOp(op('/project1/myComp'))
+    # Tag an operator for externalization ('tox' or 'tdn' for a COMP, 'py' for a DAT)
+    op.Embody.ext.Embody.applyTagToOperator(op('myComp'), 'tox')
 
     # Write all dirty operators to disk
     op.Embody.Update()
 
-    # Query all externalized operators and their status
-    ops = op.Embody.ext.Embody.getExternalizedOps()
+    # Query externalized operators of a family and their status
+    comps = op.Embody.ext.Embody.getExternalizedOps(COMP)
+    dats = op.Embody.ext.Embody.getExternalizedOps(DAT)
 
     # Reinitialize MCP + AI config files
     op.Embody.InitEnvoy()

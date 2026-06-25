@@ -50,7 +50,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
 | `version` | string | Yes | Format version. Currently `2.0`. Files `<2.0` are JSON; `>=2.0` are YAML. |
 | `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
-| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/5.0.237"`). |
+| `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
 | `source_file` | string | No | Basename of the `.toe` project file the COMP was exported from (e.g., `"MyProject.toe"`). Informational provenance only; not used on import. |
 | `exported_at` | string | Yes | ISO 8601 UTC timestamp of export (e.g., `"2025-02-19T12:34:56Z"`). |
@@ -62,7 +62,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 | `type_defaults` | object | No | Per-type shared properties (parameters, flags, size, color, tags). See [Type Defaults](#type-defaults). |
 | `par_templates` | object | No | Reusable custom parameter page definitions. See [Parameter Templates](#parameter-templates). |
 | `custom_pars` | object | No | Target COMP's own custom parameter definitions and values. Same format as operator-level [`custom_pars`](#custom-parameters). Only present if the target COMP has custom parameters. |
-| `parameters` | object | No | Target COMP's own non-default built-in parameter values. Same format as operator-level [`parameters`](#parameters). Only present if the target COMP has non-default built-in parameters. |
+| `parameters` | object | No | Target COMP's own non-default built-in parameter values. Same format as operator-level [`parameters`](#built-in-parameters). Only present if the target COMP has non-default built-in parameters. |
 | `flags` | array | No | Target COMP's own non-default [flags](#flags). Same format as operator-level flags. Added in v1.1. |
 | `color` | `[r, g, b]` | No | Target COMP's node color, if different from default gray. RGB floats 0.0–1.0, rounded to 4 decimal places. Added in v1.1. |
 | `tags` | array of strings | No | Target COMP's tags, if any. Added in v1.1. |

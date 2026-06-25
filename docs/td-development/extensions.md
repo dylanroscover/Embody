@@ -111,7 +111,7 @@ op.Embody.Update()
 op.Embody.Save()
 
 # Non-promoted methods (lowercase) — through ext:
-op.Embody.ext.Embody.getExternalizedOps()
+op.Embody.ext.Embody.getExternalizedOps(COMP)
 
 # Check if extension exists:
 if hasattr(op.myComp.ext, 'MyExtension'):

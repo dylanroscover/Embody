@@ -87,7 +87,6 @@ When Envoy starts, it generates a full Claude Code configuration in your project
 - **`CLAUDE.md`** — project context and critical rules
 - **`.claude/rules/`** — always-loaded conventions (TD Python, network layout, MCP safety)
 - **`.claude/skills/`** — on-demand workflow guides (operator creation, debugging, externalization)
-- **`.claude/commands/`** — slash commands (`/run-tests`, `/status`, `/explore-network`)
 
 These files are regenerated each time Envoy starts to stay up to date. See [Claude Code Integration](claude-code.md) for the full reference.
 
