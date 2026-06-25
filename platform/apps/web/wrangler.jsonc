@@ -1,6 +1,10 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "embody-web",
+	// Pin the Cloudflare account so deploys ALWAYS target the embody.tools
+	// account, never whichever account `wrangler login` last used. The deploy
+	// token (.cloudflare.env, gitignored) must have access to this account.
+	"account_id": "6a37e9b97eb8cf7ac208714658168a8c",
 	"compatibility_date": "2026-06-01",
 	"compatibility_flags": [
 		"nodejs_compat"
