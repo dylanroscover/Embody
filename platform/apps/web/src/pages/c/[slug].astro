@@ -506,7 +506,7 @@ function emitKey(key: string): string {
             src={cover.src}
             alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
             width="640"
-            height="440"
+            height="360"
             loading="lazy"
           />
           {!cover.baked && <figcaption class="cover-thumb__soon mono">preview coming soon</figcaption>}
@@ -749,7 +749,7 @@ function emitKey(key: string): string {
   .cover-thumb {
     position: relative;
     margin: 14px 0 0;
-    aspect-ratio: 16 / 11;
+    aspect-ratio: 16 / 9;
     overflow: hidden;
     border: 1px solid var(--border-faint);
     border-radius: var(--radius-sm);
@@ -824,9 +824,42 @@ function emitKey(key: string): string {
     font: 12px/1.55 var(--font-mono);
   }
 
+  /* Touch devices: the engagement-row controls are mouse-sized (12px text,
+     near-zero padding). Pad them out to a >=44px hit target. Keyed on
+     pointer:coarse, not viewport width, so a touch laptop also benefits. The
+     report dialog .btn overrides the global .btn down to 40px, so bump it back.
+     The reaction chips/add and the CTA copy-button are already covered by the
+     global pointer:coarse block in styles/embody.css (their markup is injected
+     via set:html / lives in a component, so scoped selectors here would not
+     reach it anyway) -- not duplicated here. */
+  @media (pointer: coarse) {
+    .report-link,
+    .owner-actions__btn {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding-inline: 0.6rem;
+    }
+
+    .report-dialog__actions .btn {
+      min-height: 44px;
+    }
+
+    .report-reason {
+      min-height: 44px;
+    }
+  }
+
   @media (max-width: 920px) {
     .specimen-layout {
       grid-template-columns: 1fr;
+    }
+
+    /* One-column stack: let the rendered-result image span the full column
+       width instead of sitting small with dead space beside it. */
+    .cover-thumb {
+      width: 100%;
+      max-width: none;
     }
   }
 </style>

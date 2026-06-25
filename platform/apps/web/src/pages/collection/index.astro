@@ -747,6 +747,9 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
       const b = dd.querySelector(".dd__btn");
       if (b) b.setAttribute("aria-expanded", "false");
     };
+    // Unique id seed so each option across the three dropdowns gets a stable id
+    // for aria-activedescendant (the listbox points at the active option's id).
+    let ddOptSeq = 0;
     const dropdowns = Array.from(document.querySelectorAll(".dd[data-dd]"));
     dropdowns.forEach((dd) => {
       const btn = dd.querySelector(".dd__btn") as HTMLButtonElement | null;
@@ -755,30 +758,103 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
       const native = dd.querySelector(".dd__native") as HTMLSelectElement | null;
       const opts = Array.from(dd.querySelectorAll(".dd__opt")) as HTMLElement[];
       if (!btn || !menu || !valEl || !native) return;
-      const open = () => {
+
+      // Give every option a stable id so the listbox can name the ACTIVE option
+      // via aria-activedescendant (the focus stays on the button; this is how a
+      // screen reader announces which option is highlighted without moving DOM
+      // focus into the list).
+      opts.forEach((opt) => {
+        if (!opt.id) opt.id = `dd-opt-${ddOptSeq++}`;
+      });
+
+      // The active (keyboard-highlighted) option index. -1 == none highlighted.
+      let active = -1;
+      const setActive = (index: number) => {
+        const next = Math.max(0, Math.min(index, opts.length - 1));
+        const opt = opts[next];
+        if (!opt) return;
+        opts.forEach((o, i) => o.classList.toggle("is-active", i === next));
+        active = next;
+        menu.setAttribute("aria-activedescendant", opt.id);
+        opt.scrollIntoView({ block: "nearest" });
+      };
+      const clearActive = () => {
+        active = -1;
+        opts.forEach((o) => o.classList.remove("is-active"));
+        menu.removeAttribute("aria-activedescendant");
+      };
+
+      const open = (highlightSelected = true) => {
         dropdowns.forEach((other) => { if (other !== dd) closeDropdown(other); });
         dd.setAttribute("data-open", "");
         menu.hidden = false;
         btn.setAttribute("aria-expanded", "true");
+        if (highlightSelected) {
+          // Open with the currently-selected option highlighted (or the first).
+          const sel = opts.findIndex((o) => o.getAttribute("aria-selected") === "true");
+          setActive(sel >= 0 ? sel : 0);
+        }
+      };
+      const close = () => {
+        clearActive();
+        closeDropdown(dd);
       };
       const choose = (opt: HTMLElement) => {
         native.value = opt.getAttribute("data-value") || "";
         native.dispatchEvent(new Event("change", { bubbles: true }));
         valEl.textContent = opt.textContent;
         opts.forEach((o) => o.setAttribute("aria-selected", String(o === opt)));
-        closeDropdown(dd);
+        close();
         btn.focus();
       };
+
       btn.addEventListener("click", () => {
-        if (dd.hasAttribute("data-open")) closeDropdown(dd); else open();
+        if (dd.hasAttribute("data-open")) close(); else open();
       });
       btn.addEventListener("keydown", (e) => {
-        if (e.key === "Escape") { closeDropdown(dd); return; }
-        if ((e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") && !dd.hasAttribute("data-open")) {
-          e.preventDefault(); open();
+        const isOpen = dd.hasAttribute("data-open");
+        switch (e.key) {
+          case "Escape":
+            if (isOpen) { e.preventDefault(); close(); btn.focus(); }
+            return;
+          case "Tab":
+            // Tab moves focus away -- close without swallowing the Tab.
+            if (isOpen) close();
+            return;
+          case "Enter":
+          case " ": {
+            e.preventDefault();
+            if (!isOpen) { open(); return; }
+            const activeOpt = active >= 0 ? opts[active] : undefined;
+            if (activeOpt) choose(activeOpt);
+            return;
+          }
+          case "ArrowDown":
+            e.preventDefault();
+            if (!isOpen) { open(); return; }
+            setActive(active < 0 ? 0 : active + 1);
+            return;
+          case "ArrowUp":
+            e.preventDefault();
+            if (!isOpen) { open(); return; }
+            setActive(active < 0 ? opts.length - 1 : active - 1);
+            return;
+          case "Home":
+            if (isOpen) { e.preventDefault(); setActive(0); }
+            return;
+          case "End":
+            if (isOpen) { e.preventDefault(); setActive(opts.length - 1); }
+            return;
+          default:
+            return;
         }
       });
-      opts.forEach((opt) => opt.addEventListener("click", () => choose(opt)));
+
+      // Pointer: hover syncs the active highlight so mouse + keyboard agree.
+      opts.forEach((opt, i) => {
+        opt.addEventListener("click", () => choose(opt));
+        opt.addEventListener("mousemove", () => setActive(i));
+      });
     });
     document.addEventListener("click", (e) => {
       const target = e.target as Node | null;
@@ -905,7 +981,12 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
   @media (max-width: 480px) {
     .sort-control__label { display: none; }
     .sort-control { gap: 0; }
-    .toolbar-controls { gap: 0.4rem 0.45rem; }
+    /* Allow wrapping as a last resort on very narrow phones. flex-wrap only
+       wraps when the row genuinely overflows, so 390-480px still stays on one
+       line; below ~360px (where the row was forcing +54px of page scroll) the
+       view toggle / a dropdown drops to a second line instead of overflowing.
+       min-height unset so a wrapped second row isn't clipped. */
+    .toolbar-controls { gap: 0.4rem 0.45rem; flex-wrap: wrap; min-height: 0; }
   }
 
   .collection-total {
@@ -1027,7 +1108,8 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     cursor: pointer;
   }
 
-  .dd__opt:hover {
+  .dd__opt:hover,
+  .dd__opt.is-active {
     background: var(--accent-dim, rgba(120, 200, 150, 0.14));
     color: var(--accent);
   }
@@ -1067,6 +1149,31 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
   .view-toggle__button.is-active {
     background: var(--accent);
     color: #0e1612;
+  }
+
+  /* ---- Touch targets (coarse pointer only) ---- */
+  /* On touch devices the toolbar triggers, the collapsed search icon, the view
+     toggle, and the listbox options are below the 44x44 minimum. Enlarge them
+     for coarse pointers ONLY so fine-pointer desktop density is unchanged. */
+  @media (pointer: coarse) {
+    .dd__btn,
+    .collection-search,
+    .view-toggle__button {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .dd__opt {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+
+    /* The per-card copy button shares the badge row -- give it a real touch
+       target on touch devices without changing the desktop badge rhythm. */
+    .card-copy {
+      min-height: 44px;
+    }
   }
 
   /* ---- Results ---- */
@@ -1174,6 +1281,9 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
     align-items: center;
     gap: 0.45rem;
     align-self: baseline;
+    /* Let the flex item shrink so a long handle can ellipsize instead of
+       blowing out the row width. */
+    min-width: 0;
     color: var(--text);
     font-size: 0.82rem;
     font-weight: 600;
@@ -1200,6 +1310,11 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
   }
 
   .specimen-card__author-handle {
+    /* Long handles ellipsize rather than overflow the card. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     color: var(--accent);
   }
 
@@ -1238,7 +1353,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
   .specimen-card .badge {
     min-height: 22px;
     padding: 0 0.5rem;
-    font-size: 0.64rem;
+    font-size: 0.72rem;
     letter-spacing: 0.04em;
   }
 
@@ -1302,7 +1417,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
   }
 
   .card-copy__count {
-    font-size: 0.66rem;
+    font-size: 0.72rem;
     letter-spacing: 0.02em;
     line-height: 1;
     min-width: 0.8ch;
@@ -1312,7 +1427,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
 
   /* ---- GALLERY: dense grid, small min card width ---- */
   .collection-shell[data-view="gallery"] .card-grid {
-    grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 232px), 1fr));
     gap: 0.9rem;
   }
 

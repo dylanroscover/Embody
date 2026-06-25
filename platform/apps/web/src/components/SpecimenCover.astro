@@ -85,7 +85,7 @@ const defaultView = hasBaked ? "result" : "network";
 <style>
   .cover {
     position: relative;
-    aspect-ratio: 16 / 11;
+    aspect-ratio: 16 / 9;
     overflow: hidden;
     background: var(--bg-code);
   }
@@ -176,8 +176,8 @@ const defaultView = hasBaked ? "result" : "network";
     bottom: 0.7rem;
     transform: translateX(-50%);
     color: var(--text-faint);
-    font-size: 0.62rem;
-    letter-spacing: 0.14em;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
     pointer-events: none;
   }
@@ -223,9 +223,9 @@ const defaultView = hasBaked ? "result" : "network";
     color: var(--text-faint);
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
     line-height: 1.4;
   }
@@ -252,5 +252,23 @@ const defaultView = hasBaked ? "result" : "network";
 
   .cover__flip-btn:disabled:not(.is-active) {
     opacity: 0.45;
+  }
+
+  /* Touch devices have no hover, so the hover-reveal flip controls are
+     unreachable. On a coarse pointer, keep the controls always visible and
+     enlarge the buttons to a >=44px touch target. Fine pointers (mouse) keep
+     the hover-reveal behavior above. */
+  @media (pointer: coarse) {
+    .cover__flip {
+      opacity: 1;
+    }
+
+    .cover__flip-btn {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0 0.75rem;
+      font-size: 0.75rem;
+    }
   }
 </style>

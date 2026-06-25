@@ -66,10 +66,12 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
     <meta property="og:site_name" content="embody.tools" />
     {ogUrl && <meta property="og:url" content={ogUrl} />}
     {ogImage && <meta property="og:image" content={ogImage} />}
+    {ogImage && <meta property="og:image:alt" content={description} />}
     <meta name="twitter:card" content={ogImage ? "summary_large_image" : "summary"} />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     {ogImage && <meta name="twitter:image" content={ogImage} />}
+    {ogImage && <meta name="twitter:image:alt" content={description} />}
     {cfBeaconToken && (
       <script
         is:inline
@@ -102,7 +104,7 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
           <span class="mark__dot" aria-hidden="true"></span>
           <span class="navbar__word">embody.tools</span>
         </a>
-        <div class="navbar__items" data-nav-collapse>
+        <div class="navbar__items" id="primary-nav" data-nav-collapse>
           <a
             class:list={["navbar__item", { "is-active": isActive("/collection") }]}
             href="/collection"
@@ -178,7 +180,7 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             <div class="navbar__more-menu" data-nav-more-menu role="menu" aria-label="More navigation items" hidden></div>
           </div>
         </div>
-        <button class="nav-toggle" type="button" data-nav-toggle aria-label="Toggle navigation" aria-expanded="false">
+        <button class="nav-toggle" type="button" data-nav-toggle aria-controls="primary-nav" aria-label="Toggle navigation" aria-expanded="false">
           <span class="nav-toggle__bar" aria-hidden="true"></span>
           <span class="nav-toggle__bar" aria-hidden="true"></span>
           <span class="nav-toggle__bar" aria-hidden="true"></span>
@@ -220,7 +222,7 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
       </div>
       <div class="container footer__bottom">
         <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
-        <p class="footer__sig">made with <span class="footer__emoji" data-emoji role="img" aria-label="made with love" title="roll again">&#10084;&#65039;</span> in <span class="footer__city">idyllwild california</span></p>
+        <p class="footer__sig">made with <button type="button" class="footer__emoji" data-emoji aria-label="made with love (roll the emoji again)" title="roll again">&#10084;&#65039;</button> in <span class="footer__city">idyllwild california</span></p>
       </div>
     </footer>
     <script>
@@ -300,6 +302,15 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
         navToggle.addEventListener("click", () => {
           const open = siteHeader.classList.toggle("is-open");
           navToggle.setAttribute("aria-expanded", String(open));
+          // On mobile the collapsed menu precedes the toggle in DOM order, so
+          // move focus into it on open for keyboard users (Escape/outside-click
+          // close handlers below restore the flow).
+          if (open && window.matchMedia("(max-width: 860px)").matches) {
+            const first = siteHeader.querySelector(
+              "[data-nav-collapse] a, [data-nav-collapse] button"
+            );
+            (first as HTMLElement | null)?.focus();
+          }
         });
 
         siteHeader.querySelectorAll("[data-nav-collapse] a").forEach((link) => {
@@ -520,6 +531,15 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
         const navEl = document.querySelector(".navbar");
         const header = document.querySelector("[data-site-header]");
         if (!(canvas instanceof HTMLCanvasElement) || !(navEl instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
+
+        // Respect reduced-motion and Data Saver: skip the continuous-rAF WebGL
+        // lens entirely (never add .has-gl-glass) so the CSS clear-glass stands.
+        // Avoids a perpetual GPU loop for users who opted out of motion or are
+        // conserving data/battery.
+        if (
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+          (navigator as { connection?: { saveData?: boolean } }).connection?.saveData === true
+        ) return;
 
         // preserveDrawingBuffer keeps the last frame between composites (belt to
         // the rAF loop's suspenders; cheap insurance against transparent flashes).

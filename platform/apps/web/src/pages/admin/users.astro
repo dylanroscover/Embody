@@ -31,6 +31,7 @@ const meId = Astro.locals.user?.id ?? "";
   {users.length === 0 ? (
     <p class="admin-empty">No users{q ? ` matching "${q}"` : ""}.</p>
   ) : (
+    <div class="admin-table-wrap" role="region" aria-label="Users table" tabindex="0">
     <table class="admin-table">
       <thead>
         <tr><th>handle</th><th>email</th><th>verified</th><th>joined</th><th>trust</th><th>action</th></tr>
@@ -53,6 +54,7 @@ const meId = Astro.locals.user?.id ?? "";
         ))}
       </tbody>
     </table>
+    </div>
   )}
 </AdminLayout>
 

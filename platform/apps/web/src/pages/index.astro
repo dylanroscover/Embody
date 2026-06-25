@@ -76,7 +76,10 @@ const jsonLd = {
         <img
           src="/assets/embody-screenshot.png"
           alt="Embody running inside TouchDesigner - the extension panel docked beside a live network."
+          width="2252"
+          height="972"
           loading="eager"
+          fetchpriority="high"
           decoding="async"
         />
         <figcaption class="hero__shot__caption">The Embody manager panel, docked beside a live network &mdash; every operator externalized to readable text.</figcaption>
@@ -105,7 +108,10 @@ const jsonLd = {
             <div class="thumb">
               <img
                 src={specimenThumbnail(specimen)}
+                width="640"
+                height="360"
                 loading="lazy"
+                decoding="async"
                 alt={`${specimen.name} node preview placeholder`}
               />
             </div>
@@ -143,10 +149,11 @@ const jsonLd = {
 
   .hero-graph {
     position: absolute;
-    /* Raised up (and a touch wider) so the network reads in the upper-right
-       rather than sinking into the bottom fade; opacity lifted for visibility,
+    /* Spans the full hero width (symmetric overhang left and right) so the
+       network reads edge to edge rather than only in the upper-right; raised up
+       so it sits in the upper band rather than sinking into the bottom fade;
        blur kept light so it stays a soft backdrop. */
-    inset: -150px -130px 38% 18%;
+    inset: -150px -130px 38% -130px;
     z-index: 0;
     opacity: 0.3;
     filter: blur(2px);
@@ -165,7 +172,11 @@ const jsonLd = {
     inset: 0;
     z-index: 1;
     content: "";
-    background: linear-gradient(102deg, var(--bg) 30%, rgba(24, 30, 30, 0.55) 56%, transparent 82%);
+    /* A gentle left-to-right veil: enough to keep the headline legible over the
+       network on the left, easing to fully transparent on the right so the graph
+       reads at full strength there. No longer paints opaque --bg over the left,
+       which is what used to erase the network on that side. */
+    background: linear-gradient(102deg, rgba(24, 30, 30, 0.48) 0%, rgba(24, 30, 30, 0.22) 50%, transparent 84%);
     pointer-events: none;
   }
 
@@ -197,6 +208,15 @@ const jsonLd = {
 
   .section--collection .card-grid {
     margin-top: 2.25rem;
+  }
+
+  /* The 3-card teaser uses the global auto-fit grid, which lands a lone third
+     card on its own half-row at tablet widths (the 2+1 orphan). Force a single
+     column at/below the nav breakpoint so the teaser stacks cleanly instead. */
+  @media (max-width: 860px) {
+    .section--collection .card-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 760px) {

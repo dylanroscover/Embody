@@ -26,6 +26,7 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
   {reports.length === 0 ? (
     <p class="admin-empty">No reports{statusFilter ? ` with status "${statusFilter}"` : ""}.</p>
   ) : (
+    <div class="admin-table-wrap" role="region" aria-label="Reports table" tabindex="0">
     <table class="admin-table">
       <thead>
         <tr><th>when</th><th>specimen</th><th>reason</th><th>by</th><th>status</th><th>action</th></tr>
@@ -56,6 +57,7 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
         ))}
       </tbody>
     </table>
+    </div>
   )}
 </AdminLayout>
 

@@ -5,7 +5,11 @@
   --bg-code:#161e1a;
   --text:#c8d0c9;
   --text-muted:#97a098;
-  --text-faint:#6b756c;
+  /* Raised from #6b756c (3.53:1 on --bg, failed WCAG AA) to #909990 (5.75:1)
+     so the small text that uses it -- nav descriptions, footer copy, collection
+     labels/placeholders -- meets AA. Reserve even fainter tones for non-text
+     decoration only. */
+  --text-faint:#909990;
   --accent:#6ee668;
   --accent-hover:#a0f09c;
   --accent-dim:#6ee66833;
@@ -28,7 +32,10 @@
 }
 
 html {
-  min-width: 320px;
+  /* No hard min-width: a 320px floor hides any sub-320 overflow instead of
+     letting us catch it. overflow-x:clip on body contains stray children
+     without disabling programmatic scroll the way overflow:hidden does. */
+  min-width: 0;
   background: var(--bg);
   color-scheme: dark;
   -webkit-text-size-adjust: 100%;
@@ -37,8 +44,12 @@ html {
 
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
+  /* hidden is the fallback; clip wins where supported (contains overflow
+     without creating a scroll container or breaking sticky ancestors). */
   overflow-x: hidden;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 78% -12%, rgba(110, 230, 104, 0.06), transparent 34rem),
     linear-gradient(rgba(200, 208, 201, 0.024) 1px, transparent 1px),
@@ -132,8 +143,8 @@ pre {
 
 .skip-link {
   position: fixed;
-  top: 14px;
-  left: 14px;
+  top: calc(14px + var(--safe-top, 0px));
+  left: calc(14px + var(--safe-left, 0px));
   z-index: 200;
   transform: translateY(-160%);
   border: 1px solid var(--border);
@@ -171,7 +182,7 @@ pre {
 
 .navbar {
   position: fixed;
-  top: clamp(0.85rem, 2vw, 1.4rem);
+  top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem));
   left: 50%;
   z-index: 100;
   transform: translateX(-50%);
@@ -633,15 +644,21 @@ pre {
     display: none;
     position: absolute;
     top: calc(100% + 0.5rem);
-    right: 0;
+    /* Center on the viewport, not the pill's right edge: at <=360px a 300px
+       panel anchored right would push off the left edge (was clipping ~29px at
+       320px). Width is viewport-bounded so it never overflows a small phone. */
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
     /* Row-wrap so the last two items can share a row: the description items are
        forced full-width (own rows), while the sign-in button and the github icon
        wrap onto one line together (github beside sign-in, like the desktop bar). */
     flex-flow: row wrap;
     align-items: stretch;
     gap: 0.2rem;
-    min-width: 300px;
-    max-width: 340px;
+    width: min(340px, calc(100vw - 1.5rem));
+    min-width: 0;
+    max-width: none;
     padding: 0.5rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -682,7 +699,7 @@ pre {
     max-width: 32ch;
     text-transform: none;
     letter-spacing: 0;
-    font-size: 0.68rem;
+    font-size: 0.75rem;
     font-weight: 400;
     line-height: 1.45;
     color: var(--text-faint);
@@ -765,7 +782,7 @@ pre {
     backdrop-filter: blur(18px) saturate(140%);
     box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
     color: var(--text-muted);
-    font-size: 0.66rem;
+    font-size: 0.75rem;
     font-weight: 400;
     line-height: 1.5;
     letter-spacing: 0.01em;
@@ -780,6 +797,7 @@ pre {
 
 main {
   min-height: calc(100vh - 150px);
+  min-height: calc(100dvh - 150px);
   /* Reserve clear space below the floating consolidated bar so it never sits
      on top of the page H1 / hero text. This is the SINGLE owner of top
      clearance: the first section of every page drops its own large top
@@ -792,7 +810,7 @@ main {
      gap stays EXACTLY equal to the eyebrow->heading gap at every viewport width,
      not just where the clamps happen to bottom out. Keep the first clamp in sync
      with .navbar `top` and 1.95rem in sync with .eyebrow `margin-bottom`. */
-  padding-top: calc(clamp(0.85rem, 2vw, 1.4rem) + 59px + 1.95rem);
+  padding-top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem) + 59px + 1.95rem);
 }
 
 /* The first block in <main> no longer needs its own big top padding -- main's
@@ -1031,6 +1049,10 @@ h3 {
 .thumb {
   position: relative;
   overflow: hidden;
+  /* True aspect-ratio box (was relying on the img's min-height) so the slot
+     reserves space before the image loads -> no layout shift. 16:9 matches the
+     640x360 thumbnails. */
+  aspect-ratio: 16 / 9;
   border-bottom: 1px solid var(--border-faint);
   background: var(--bg-code);
 }
@@ -1038,8 +1060,9 @@ h3 {
 .thumb img {
   width: 100%;
   height: 100%;
-  min-height: 190px;
+  min-height: 0;
   object-fit: cover;
+  display: block;
 }
 
 .specimen-card__body {
@@ -1294,22 +1317,6 @@ pre {
   color: var(--text);
 }
 
-.site-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  border-top: 1px solid var(--border-faint);
-  padding: 1.6rem max(var(--gutter), calc((100vw - var(--content-max)) / 2 + var(--gutter)));
-  color: var(--text-faint);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-  text-transform: uppercase;
-}
-
 @media (max-width: 760px) {
   .page-section {
     padding-top: clamp(5.5rem, 18vw, 7rem);
@@ -1321,11 +1328,16 @@ pre {
   }
 
   h1 {
-    font-size: clamp(2.6rem, 13vw, 4.25rem);
+    /* Cap lowered 4.25rem -> 3.35rem so the mobile headline meets the global
+       >760px size (clamp(2.7rem,7vw,5.9rem) ~= 53px at 761) instead of jumping
+       down from 68px. 390px and below are unchanged (still 13vw-driven). */
+    font-size: clamp(2.6rem, 13vw, 3.35rem);
   }
 
   .thumb img {
-    min-height: 170px;
+    /* aspect-ratio on .thumb now owns the height; keep min-height cleared so it
+       doesn't override the ratio box on mobile. */
+    min-height: 0;
   }
 }
 
@@ -1460,11 +1472,15 @@ pre {
 /* --- TDN section --- */
 .tdn__grid {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  /* minmax(0, ...) instead of bare fr so a long unbroken line in the code
+     sample can't blow out the column's min-content width and force the page
+     wider; the code box keeps its own overflow-x scroll. */
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 2.5rem;
   align-items: start;
   margin-bottom: 3rem;
 }
+.tdn__grid > * { min-width: 0; }
 /* TDN sample needs the scrollable code-box look; scoped so the app's
    minimal .code shell elsewhere is untouched. */
 .section--tdn .code {
@@ -1597,7 +1613,7 @@ pre {
 
 /* --- Footer (global: Base.astro renders .footer* on every page) --- */
 .footer { border-top: 1px solid var(--border-faint); padding: clamp(4rem, 7vw, 6rem) 0 2.5rem; margin-top: 0; }
-.footer__inner { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 3rem; margin-bottom: 4rem; }
+.footer__inner { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 3rem; margin-bottom: 4rem; }
 .footer__col h4,
 .footer__h {
   font-family: var(--font-mono);
@@ -1638,18 +1654,27 @@ pre {
 }
 .footer__sig { font-style: italic; }
 .footer__city { color: var(--text-muted); }
-.footer__emoji { display: inline-block; font-style: normal; cursor: pointer; user-select: none; transition: transform 140ms ease; }
+/* Real <button> now (was a clickable span) for keyboard + semantics; reset the
+   button chrome so it stays an inline emoji in the sentence. Decorative
+   easter-egg, so no 44px floor (it lives mid-line in body text). */
+.footer__emoji { display: inline-block; padding: 0 0.1em; border: 0; background: none; color: inherit; font: inherit; font-style: normal; line-height: 1; cursor: pointer; user-select: none; transition: transform 140ms ease; }
 .footer__emoji:hover { transform: scale(1.3) rotate(-8deg); }
 .footer__emoji:active { transform: scale(0.85); }
 .mark__word { line-height: 1; }
 
 /* --- Responsive (landing classes; hero handled in index.astro scoped) --- */
 @media (max-width: 1024px) {
-  .section--pillars .pillars { gap: 1.25rem; }
+  /* Tablet: 3 narrow columns crammed at 768-1024 (the worst pillars state).
+     Drop to 2 columns and span the lone third card full-width so it never
+     orphans, then collapse to 1 column at <=640px. */
+  .section--pillars .pillars {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+  .section--pillars .pillar:last-child { grid-column: 1 / -1; }
   .tdn__grid { gap: 2rem; }
 }
 @media (max-width: 820px) {
-  .section--pillars .pillars { grid-template-columns: 1fr; gap: 1rem; }
   .tdn__grid { grid-template-columns: 1fr; gap: 2rem; }
   .practice__row { grid-template-columns: 1fr; gap: 0.5rem; padding: 1.2rem 0; }
   .footer__inner { grid-template-columns: 1fr 1fr; gap: 2.5rem; }
@@ -1657,10 +1682,94 @@ pre {
 }
 @media (max-width: 540px) {
   .section { padding: clamp(4rem, 12vw, 6rem) 0; }
+  .section--pillars .pillars { grid-template-columns: 1fr; gap: 1rem; }
+  .section--pillars .pillar:last-child { grid-column: auto; }
   .section--pillars .pillar { padding: 1.65rem 1.5rem 1.85rem; }
   .step { padding: 1.25rem 1.4rem; gap: 1rem; }
   .section--tdn .code { padding: 1.25rem 1.35rem; font-size: 0.76rem; }
   .footer__inner { grid-template-columns: 1fr; gap: 2.25rem; margin-bottom: 3rem; }
   .footer__col--brand { grid-column: auto; }
   .footer__bottom { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+}
+
+/* ============================================================
+   Responsive audit hardening (P0-B touch targets, G2 reduced-motion,
+   H2 safe-area). Appended so it overrides earlier declarations.
+   ============================================================ */
+
+/* H2 - notch / safe-area insets (0px on non-notched devices). Consumed by
+   .skip-link, .navbar, main padding-top, and .footer above/below. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+.footer { padding-bottom: calc(2.5rem + var(--safe-bottom, 0px)); }
+
+/* B-global - touch-target floors (>=44px) on COARSE pointers only, so
+   fine-pointer desktop density is untouched. Globally-styled controls only;
+   page-scoped controls get matching rules in their own <style> blocks. */
+@media (pointer: coarse) {
+  .copy-button { min-width: 44px; min-height: 44px; }
+  .copy-button--cta { min-height: 46px; }
+  /* These three controls carry a 22px base height set by HIGHER-specificity
+     scoped/compound selectors (`.card-copy[data-astro-cid]`,
+     `.specimen-card .reaction-chip`), and the collection page also rebuilds
+     cards via innerHTML. A plain global rule (0,1,0) can't beat those, so this
+     coarse-pointer a11y FLOOR uses !important deliberately -- it only widens the
+     tap target on touch devices, never shrinks anything. */
+  .card-copy { min-height: 44px !important; }
+  .reaction-chip,
+  .reaction-add { min-height: 44px !important; min-width: 44px; padding-inline: 0.7rem; }
+  .reaction-popover__emoji { width: 44px; height: 44px; }
+  .footer__col a,
+  .tdn__link a,
+  .manifesto__link a { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+/* B1 - mobile nav (hamburger regime). The toggle and the single-line menu rows
+   (sign-in, account, github icon) were 36-40px; floor them at 44px. The
+   description rows are already ~68px and are unaffected by a 44px floor. */
+@media (max-width: 860px) {
+  .nav-toggle { width: 44px; height: 44px; }
+  .navbar__items .navbar__item { min-height: 44px; }
+  .navbar__items .navbar__item--github { min-width: 44px; }
+  .navbar__items .navbar__user-trigger { min-height: 44px; }
+}
+
+/* G2 - honor prefers-reduced-motion globally (only the cover skeleton was
+   gated before). Kills smooth-scroll, CSS transitions/animations, and the
+   React Flow animated-edge dash. fitView duration is handled in JS. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .tdn-viewer .react-flow__edge.animated .react-flow__edge-path {
+    animation: none !important;
+    stroke-dasharray: none !important;
+  }
+}
+
+/* G5 - keep the muted uppercase nav labels legible where the WebGL lens
+   refracts bright page content behind the pill. A faint shadow lifts them off
+   busy backdrops without darkening the muted tone. */
+.navbar__label { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+
+/* J1 - a signed-in account name is user-derived and was excluded from the
+   desktop overflow collapse with white-space:nowrap, so a long display name
+   could defeat the nav fit. Truncate it with an ellipsis. */
+.navbar__user-trigger { min-width: 0; }
+.navbar__user-name {
+  display: inline-block;
+  max-width: clamp(6rem, 16vw, 11rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

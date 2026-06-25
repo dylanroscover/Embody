@@ -42,6 +42,15 @@
   color: var(--tdn-accent);
 }
 
+/* Touch devices need >=44px hit targets; the 30px default is too small to tap
+   reliably. Bump only on coarse pointers so mouse/trackpad keep the compact UI. */
+@media (pointer: coarse) {
+  .tdn-viewer .react-flow__controls-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 .tdn-viewer .react-flow__attribution {
   background: color-mix(in srgb, var(--tdn-bg) 76%, transparent);
   color: var(--tdn-muted);
@@ -84,7 +93,7 @@
   align-items: center;
   gap: 10px;
   color: var(--tdn-muted);
-  font: 600 11px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font: 600 12px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -126,7 +135,7 @@
   background: color-mix(in srgb, var(--annotation-color) 18%, transparent);
   padding: 12px 14px;
   color: color-mix(in srgb, var(--tdn-text) 66%, transparent);
-  font: 600 12px/1.2 var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font: 600 13px/1.3 var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
   letter-spacing: 0;
   pointer-events: none;
 }

@@ -130,11 +130,21 @@ const items = [
     background: var(--accent-dim);
   }
 
+  /* Horizontal-scroll wrapper for the wide admin tables. Global body has
+     overflow-x: clip, which would clip an overflowing table; this region lets
+     it scroll on tablet/mobile instead. */
+  .admin-body :global(.admin-table-wrap) {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .admin-body :global(table.admin-table) {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.88rem;
   }
+  .admin-body :global(.admin-table-wrap table.admin-table) { min-width: max-content; }
+  .admin-body :global(.admin-table :is(th, td)) { white-space: nowrap; }
   .admin-body :global(.admin-table th) {
     text-align: left;
     font-family: var(--font-mono);
@@ -228,5 +238,28 @@ const items = [
     color: var(--text-muted);
     font-size: 0.9rem;
     padding: 1.5rem 0;
+  }
+
+  /* Touch targets: on coarse pointers (touch), grow the dense desktop controls
+     to a minimum 44px tap height. Nav and subfilter links also become inline
+     flex so the min-height is honored on inline-by-default anchors. */
+  @media (pointer: coarse) {
+    .admin-nav__item {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .admin-body :global(.admin-subfilter a) {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .admin-body :global(.admin-input),
+    .admin-body :global(.admin-select) {
+      min-height: 44px;
+    }
+    .admin-body :global(.admin-btn) {
+      min-height: 44px;
+    }
   }
 </style>

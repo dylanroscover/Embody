@@ -324,7 +324,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
      empty right half so the page reads as a balanced, intentional composition.
      The eyebrow lives ABOVE this grid (at section-top, matching every other
      page); the grid's first rows -- the h1 and the panel -- top-align, so the
-     panel anchors to the "sign in" heading. Collapses to one column below 860px. */
+     panel anchors to the "sign in" heading. Collapses to one column below 861px. */
   .auth-layout {
     display: grid;
     grid-template-columns: 1fr;
@@ -336,7 +336,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
     max-width: 32rem;
   }
 
-  @media (min-width: 860px) {
+  @media (min-width: 861px) {
     .auth-layout {
       grid-template-columns: minmax(0, 1fr) minmax(0, 27rem);
       gap: clamp(3rem, 7vw, 6rem);
@@ -533,5 +533,21 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
 
   .auth-back a:hover {
     color: var(--text);
+  }
+
+  /* Touch targets: bump tappable controls to >=44px on coarse pointers.
+     Inputs are already ~47px, so they are left as-is. */
+  @media (pointer: coarse) {
+    .auth-toggle__btn,
+    .auth-resend__btn {
+      min-height: 44px;
+    }
+
+    .auth-forgot a,
+    .auth-back a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+    }
   }
 </style>

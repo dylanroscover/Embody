@@ -142,13 +142,14 @@ function pluralize(count: number, singular: string): string {
   ) : (
     <Base title="user not found - embody.tools" description="No such contributor.">
       <section class="page-section profile-missing">
-        <p class="eyebrow">404</p>
+        <p class="eyebrow">Error 404</p>
         <h1>User not found</h1>
         <p class="lede">
           {handle ? <>There is no contributor with the handle <span class="mono">@{handle}</span>.</> : "No handle was provided."}
         </p>
         <div class="actions">
-          <a class="btn btn--outline" href="/collection">Browse the Collection</a>
+          <a class="btn btn--primary" href="/collection">browse the collection</a>
+          <a class="btn btn--ghost" href="/">home</a>
         </div>
       </section>
     </Base>
@@ -214,7 +215,7 @@ function pluralize(count: number, singular: string): string {
     color: var(--text-muted);
     cursor: pointer;
     font-family: var(--font-mono);
-    font-size: 0.62rem;
+    font-size: 0.75rem;
     letter-spacing: 0.06em;
     text-transform: uppercase;
     transition: border-color 140ms ease, color 140ms ease;
@@ -258,6 +259,8 @@ function pluralize(count: number, singular: string): string {
   .profile-meta h1 {
     margin-bottom: 1rem;
     font-size: clamp(2.1rem, 5.5vw, 3.6rem);
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .profile-meta .lede {
@@ -359,14 +362,40 @@ function pluralize(count: number, singular: string): string {
     margin: 0;
   }
 
+  /* Match the route 404's vertical settling so the short user-not-found
+     message doesn't strand at the top of a tall viewport (mirrors 404.astro). */
   .profile-missing {
+    min-height: 52vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     padding-bottom: clamp(3rem, 6vw, 5rem);
+  }
+
+  /* A long handle in the lede's @{handle} chip must wrap, not overflow. */
+  .profile-missing .mono {
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   /* Generic 404 heading -> lowercase. Scoped to .profile-missing so it never
      touches the .profile-meta h1, which renders the user's handle (proper noun). */
   .profile-missing h1 {
     text-transform: lowercase;
+  }
+
+  /* Touch devices: give the tiny avatar buttons and the specimen-row links a
+     >=44px hit target so they're comfortably tappable. */
+  @media (pointer: coarse) {
+    .avatar-edit__btn {
+      min-height: 44px;
+      padding: 0 0.9rem;
+    }
+
+    .specimen-row__main {
+      min-height: 44px;
+      align-items: center;
+    }
   }
 
   @media (max-width: 640px) {

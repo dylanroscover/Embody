@@ -30,6 +30,7 @@ const specimens = await listSpecimensForAdmin(env.DB, { q });
   {specimens.length === 0 ? (
     <p class="admin-empty">No specimens{q ? ` matching "${q}"` : ""}.</p>
   ) : (
+    <div class="admin-table-wrap" role="region" aria-label="Specimens table" tabindex="0">
     <table class="admin-table">
       <thead>
         <tr><th>title</th><th>by</th><th>scan</th><th>visibility</th><th>tier</th><th>likes</th><th>action</th></tr>
@@ -59,6 +60,7 @@ const specimens = await listSpecimensForAdmin(env.DB, { q });
         ))}
       </tbody>
     </table>
+    </div>
   )}
 </AdminLayout>
 

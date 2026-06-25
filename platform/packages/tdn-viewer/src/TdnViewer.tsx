@@ -74,6 +74,16 @@ const NODE_TYPES: NodeTypes = {
   operator: memo(OperatorTile)
 };
 
+// Respect prefers-reduced-motion for the fitView animation: return 0 (instant,
+// no animation) when the user has asked to reduce motion, otherwise the given
+// duration. SSR-safe -- matchMedia is only touched in the browser.
+function fitViewDuration(duration: number): number {
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return 0;
+  }
+  return duration;
+}
+
 export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
   const graph = useMemo(() => parseTDN(tdn), [tdn]);
   const { nodes, edges } = useMemo(() => toFlowElements(graph), [graph]);
@@ -90,7 +100,7 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
   // two don't conflict.
   const rfRef = useRef<ReactFlowInstance<TdnFlowNode, Edge> | null>(null);
   const handleDoubleClick = useCallback(() => {
-    rfRef.current?.fitView({ padding: 0.24, duration: 320 });
+    rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(320) });
   }, []);
 
   return (

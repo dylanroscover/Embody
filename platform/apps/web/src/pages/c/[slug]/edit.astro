@@ -169,3 +169,151 @@ const tagsValue = specimen.tags.join(", ");
     }
   });
 </script>
+
+<style>
+  /* Scoped form styles mirrored from contribute.astro. The edit form reuses the
+     same submit-form / submit-field markup classes, so it needs the same scoped
+     rules to look consistent. embody.css can't be edited here, so duplicating
+     the relevant block is the accepted approach. Contribute-only bits
+     (.submit-tdn, .submit-turnstile, sign-out chrome) are intentionally omitted
+     since this form has none of that markup. */
+
+  /* Centered reading column, same treatment as the manifesto body: a narrow
+     max-width with auto inline margins so the whole form sits centered on the
+     page instead of pinned to the left gutter. */
+  .submit {
+    max-width: 46rem;
+    margin-inline: auto;
+    padding-bottom: 56px;
+  }
+
+  .submit-form {
+    margin-top: 2rem;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .submit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .submit-field > span {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .submit-field > span em {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-faint);
+    font-style: normal;
+  }
+
+  .submit-field input,
+  .submit-field textarea,
+  .submit-field select {
+    padding: 0.65rem 0.75rem;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 1rem;
+  }
+
+  /* App-native select: strip the OS chrome, draw our own chevron, and give it
+     room so the arrow no longer crowds the right edge. The option list itself is
+     OS-drawn, but we color it to match where browsers honor it. */
+  .submit-field select.submit-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    padding-right: 2.5rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2397a098' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+    background-size: 0.72rem;
+    cursor: pointer;
+  }
+
+  .submit-field select.submit-select:hover {
+    border-color: var(--accent);
+  }
+
+  .submit-field select.submit-select option {
+    background: var(--bg-elevated);
+    color: var(--text);
+  }
+
+  .submit-field input:focus,
+  .submit-field textarea:focus,
+  .submit-field select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+
+  .submit-go {
+    align-self: flex-start;
+  }
+
+  .submit-status {
+    margin-top: 1.25rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    border: 1px solid var(--border);
+  }
+
+  .submit-status[data-kind="error"] {
+    background: rgba(220, 80, 80, 0.12);
+    border-color: rgba(220, 80, 80, 0.4);
+    color: #ff9b9b;
+  }
+
+  .submit-status[data-kind="ok"] {
+    background: rgba(110, 230, 104, 0.12);
+    border-color: rgba(110, 230, 104, 0.4);
+    color: var(--accent);
+  }
+
+  .submit-back {
+    margin-top: 2rem;
+  }
+
+  .submit-back a {
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-weight: 600;
+  }
+
+  .submit-back a:hover {
+    color: var(--text);
+  }
+
+  /* Touch targets: on coarse pointers (touch) the padding-only controls fall
+     under the 44px minimum. Bump inputs/selects/file control and the back link
+     to >=44px. The submit button is the global .btn (46px), already fine. */
+  @media (pointer: coarse) {
+    .submit-field input,
+    .submit-field select {
+      min-height: 44px;
+    }
+
+    .submit-file {
+      min-height: 44px;
+    }
+
+    .submit-back a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+    }
+  }
+</style>

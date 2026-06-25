@@ -424,4 +424,24 @@ const requiresOptions = SUBMIT_REQUIRES;
   .submit-back a:hover {
     color: var(--text);
   }
+
+  /* Touch targets: on coarse pointers (touch) the padding-only controls fall
+     under the 44px minimum. Bump inputs/selects/file control and the back link
+     to >=44px. The submit button is the global .btn (46px), already fine. */
+  @media (pointer: coarse) {
+    .submit-field input,
+    .submit-field select {
+      min-height: 44px;
+    }
+
+    .submit-file {
+      min-height: 44px;
+    }
+
+    .submit-back a {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+    }
+  }
 </style>
