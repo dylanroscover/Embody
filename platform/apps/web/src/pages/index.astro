@@ -1,9 +1,11 @@
 ---
+import { Picture } from "astro:assets";
 import { TdnViewer } from "@embody/tdn-viewer";
 import Base from "../layouts/Base.astro";
 import specimens from "../fixtures/specimens.json";
 import { sampleTdn } from "../fixtures/sample-tdn";
 import { specimenThumbnail } from "../lib/specimenThumb";
+import heroShot from "../assets/embody-screenshot.png";
 import Pillars from "../components/landing/Pillars.astro";
 import PracticeSection from "../components/landing/PracticeSection.astro";
 import TdnShowcase from "../components/landing/TdnShowcase.astro";
@@ -73,22 +75,16 @@ const jsonLd = {
       </div>
 
       <figure class="hero__shot">
-        <picture>
-          <source
-            type="image/webp"
-            srcset="/assets/embody-screenshot-640.webp 640w, /assets/embody-screenshot-960.webp 960w, /assets/embody-screenshot-1280.webp 1280w, /assets/embody-screenshot-1800.webp 1800w"
-            sizes="(max-width: 760px) calc(100vw - 3rem), min(900px, calc(100vw - 6rem))"
-          />
-          <img
-            src="/assets/embody-screenshot.png"
-            alt="Embody running inside TouchDesigner - the extension panel docked beside a live network."
-            width="2252"
-            height="972"
-            loading="eager"
-            fetchpriority="high"
-            decoding="async"
-          />
-        </picture>
+        <Picture
+          src={heroShot}
+          formats={["avif", "webp"]}
+          widths={[640, 960, 1280, 1800, 2252]}
+          sizes="(max-width: 760px) calc(100vw - 3rem), min(900px, calc(100vw - 6rem))"
+          alt="Embody running inside TouchDesigner - the extension panel docked beside a live network."
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
         <figcaption class="hero__shot__caption">The Embody manager panel, docked beside a live network &mdash; every operator externalized to readable text.</figcaption>
       </figure>
     </div>

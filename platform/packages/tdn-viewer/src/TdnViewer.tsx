@@ -113,6 +113,7 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
+        proOptions={{ hideAttribution: true }}
         onInit={(instance) => {
           rfRef.current = instance;
         }}

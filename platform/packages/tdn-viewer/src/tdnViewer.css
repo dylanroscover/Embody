@@ -51,11 +51,6 @@
   }
 }
 
-.tdn-viewer .react-flow__attribution {
-  background: color-mix(in srgb, var(--tdn-bg) 76%, transparent);
-  color: var(--tdn-muted);
-}
-
 .tdn-operator {
   width: 168px;
   min-height: 74px;
