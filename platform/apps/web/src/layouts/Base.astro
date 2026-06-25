@@ -48,9 +48,13 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" class="no-js">
   <head>
     <meta charset="utf-8" />
+    <!-- Swap no-js -> js before paint so the nav (and other JS-gated UI) render
+         in their enhanced state with no flash; without JS the .no-js fallbacks
+         (e.g. a static, toggle-less nav) stand. -->
+    <script is:inline>document.documentElement.classList.remove("no-js");document.documentElement.classList.add("js");</script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="theme-color" content="#181e1e" />

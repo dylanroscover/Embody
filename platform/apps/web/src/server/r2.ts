@@ -38,6 +38,13 @@ export async function getThumbnail(blobs: R2Bucket, key: string): Promise<R2Obje
   return blobs.get(key);
 }
 
+// Thumbnails are resized to a 640x360 WebP on the client before upload, so they
+// land around 15-50 KB. Validate content type + a generous byte cap here as
+// defense in depth: reject a non-image or an oversized payload so a caller that
+// bypasses the client resizer can't store a multi-MB original for a card slot.
+const THUMBNAIL_MAX_BYTES = 500 * 1024; // 0.5 MB -- resized WebP is far smaller
+const THUMBNAIL_CONTENT_TYPES = new Set(["image/webp", "image/png", "image/jpeg"]);
+
 export async function putThumbnail(
   blobs: R2Bucket,
   thumbnail: string | undefined
@@ -46,6 +53,8 @@ export async function putThumbnail(
 
   const parsed = parseDataUrl(thumbnail);
   if (!parsed) return null;
+  if (!THUMBNAIL_CONTENT_TYPES.has(parsed.contentType)) return null;
+  if (parsed.bytes.byteLength === 0 || parsed.bytes.byteLength > THUMBNAIL_MAX_BYTES) return null;
 
   const sha256 = await sha256Hex(parsed.bytes);
   const key = `thumbnails/${sha256}`;

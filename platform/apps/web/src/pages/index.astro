@@ -73,15 +73,22 @@ const jsonLd = {
       </div>
 
       <figure class="hero__shot">
-        <img
-          src="/assets/embody-screenshot.png"
-          alt="Embody running inside TouchDesigner - the extension panel docked beside a live network."
-          width="2252"
-          height="972"
-          loading="eager"
-          fetchpriority="high"
-          decoding="async"
-        />
+        <picture>
+          <source
+            type="image/webp"
+            srcset="/assets/embody-screenshot-640.webp 640w, /assets/embody-screenshot-960.webp 960w, /assets/embody-screenshot-1280.webp 1280w, /assets/embody-screenshot-1800.webp 1800w"
+            sizes="(max-width: 760px) calc(100vw - 3rem), min(900px, calc(100vw - 6rem))"
+          />
+          <img
+            src="/assets/embody-screenshot.png"
+            alt="Embody running inside TouchDesigner - the extension panel docked beside a live network."
+            width="2252"
+            height="972"
+            loading="eager"
+            fetchpriority="high"
+            decoding="async"
+          />
+        </picture>
         <figcaption class="hero__shot__caption">The Embody manager panel, docked beside a live network &mdash; every operator externalized to readable text.</figcaption>
       </figure>
     </div>

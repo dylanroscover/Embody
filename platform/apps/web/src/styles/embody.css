@@ -25,6 +25,25 @@
   --gutter:clamp(1.5rem, 4vw, 3rem);
 }
 
+/* ------------------------------------------------------------------------
+   Responsive breakpoint scale (max-width). Most layout reflows happen at
+   one of these; a few component values are deliberately NOT on the scale
+   because that component needs the room (noted inline where they live):
+
+     480   compact phone        (collection dropdown labels)
+     540   phone                (landing mobile rhythm, footer 1-col)
+     640   phone / small tablet
+     760   mobile <-> content   (global page-section, h1 mobile clamp)
+     860   nav hamburger boundary (paired with 861 for the inline nav);
+           landing tablet reflow aligns here too
+     1024  tablet               (pillars 2-col, landing gaps)
+
+   Intentional off-scale values (do NOT fold into the above -- folding them
+   regresses the named range):
+     920   specimen detail keeps its 2-col body down to 920 before stacking
+     1000  collection search collapses to an icon to protect the toolbar row
+   ------------------------------------------------------------------------ */
+
 *,
 *::before,
 *::after {
@@ -672,6 +691,27 @@ pre {
   }
 
   .site-header.is-open .navbar__items { display: flex; }
+
+  /* No-JS fallback: the toggle does nothing without JS, so hide it and show the
+     nav items statically (wrapped under the wordmark) instead of a menu that can
+     never open. The js->no-js class is swapped before paint, so JS users never
+     see this. */
+  .no-js .nav-toggle { display: none; }
+  .no-js .navbar { flex-wrap: wrap; }
+  .no-js .navbar__items {
+    display: flex;
+    position: static;
+    transform: none;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 
   /* Dropdown rows: full-width, left-aligned, with an optional description
      stacked below the label (collection, manifesto, contribute). SIGN IN and
@@ -1674,7 +1714,8 @@ pre {
   .section--pillars .pillar:last-child { grid-column: 1 / -1; }
   .tdn__grid { gap: 2rem; }
 }
-@media (max-width: 820px) {
+/* Landing tablet reflow, aligned to the nav hamburger boundary (was 820). */
+@media (max-width: 860px) {
   .tdn__grid { grid-template-columns: 1fr; gap: 2rem; }
   .practice__row { grid-template-columns: 1fr; gap: 0.5rem; padding: 1.2rem 0; }
   .footer__inner { grid-template-columns: 1fr 1fr; gap: 2.5rem; }
@@ -1773,3 +1814,34 @@ pre {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ============================================================
+   Legal pages (privacy, terms) - shared rules. These .legal-* classes are used
+   ONLY by the legal templates, so they live here once instead of being
+   duplicated in each page's scoped <style> (L3 dedupe). privacy adds h3 +
+   keep-case; terms has no h3, so those rules are simply inert there.
+   ============================================================ */
+.legal-hero .lede { max-width: 70ch; margin-bottom: 1rem; }
+.legal-hero h1 { text-transform: lowercase; }
+.legal-updated { margin: 0; color: var(--text-faint); font-size: 0.85rem; letter-spacing: 0.02em; }
+.legal-body { max-width: 70ch; padding-top: clamp(1.75rem, 3vw, 2.5rem); }
+.legal-body p { margin: 0 0 1.35rem; color: var(--text); font-size: 1.05rem; line-height: 1.7; }
+.legal-body h2 {
+  margin: 2.5rem 0 1rem;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+}
+.legal-body h3 { margin: 1.9rem 0 0.6rem; color: var(--text); font-size: 1.15rem; text-transform: lowercase; }
+.legal-body h3.keep-case { text-transform: none; }
+.legal-body ul { list-style: disc; padding-left: 1.25rem; margin: 0 0 1.35rem; }
+.legal-body ol { list-style: decimal; padding-left: 1.25rem; margin: 0 0 1.35rem; }
+.legal-body li { margin: 0 0 0.4rem; }
+.legal-body strong { color: var(--text); font-weight: 600; }
+.legal-body a { color: var(--accent); }
+.legal-body a:hover { color: var(--accent-hover); }
+.legal-sign { margin-top: 2.4rem; color: var(--text-faint); font-size: 0.9rem; letter-spacing: 0.02em; }
+.legal-sign a { color: var(--accent); }

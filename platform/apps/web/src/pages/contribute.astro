@@ -90,7 +90,7 @@ const requiresOptions = SUBMIT_REQUIRES;
         <input type="text" name="license" value="CC-BY-4.0" maxlength="80" />
       </label>
       <label class="submit-field">
-        <span>thumbnail <em>(optional image, max 2 MB)</em></span>
+        <span>thumbnail <em>(optional image, resized to 640x360)</em></span>
         <input type="file" name="thumbnail" accept="image/png,image/jpeg,image/webp" class="submit-file" />
       </label>
       <label class="submit-field">
@@ -144,6 +144,27 @@ const requiresOptions = SUBMIT_REQUIRES;
   // here would not be bundled -- the browser would fetch the literal path and
   // 404, silently breaking sign-out. The bundled script gets a real asset URL.
 
+  // Resize a chosen thumbnail to a 640x360 (16:9) cover-cropped WebP on the
+  // client, so a multi-MB original never gets uploaded for a small card slot.
+  // The API + R2 also enforce WebP + a byte cap as defense in depth.
+  async function thumbDataUrl(file) {
+    const bitmap = await createImageBitmap(file);
+    const W = 640;
+    const H = 360;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas unavailable");
+    // cover: scale to fill the 16:9 box, then center-crop the overflow.
+    const scale = Math.max(W / bitmap.width, H / bitmap.height);
+    const dw = bitmap.width * scale;
+    const dh = bitmap.height * scale;
+    ctx.drawImage(bitmap, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    bitmap.close();
+    return canvas.toDataURL("image/webp", 0.82);
+  }
+
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!goBtn) return;
@@ -187,25 +208,21 @@ const requiresOptions = SUBMIT_REQUIRES;
     }
 
 
-    // Optional thumbnail: read the chosen image to a data URL the API stores in
-    // R2 (putThumbnail). Skipped when no file is chosen.
+    // Optional thumbnail: resize to a 640x360 WebP on the client (thumbDataUrl)
+    // so a multi-MB original never reaches a small card slot; the API stores the
+    // result in R2 (putThumbnail). Skipped when no file is chosen.
     let thumbnail;
     const thumbFile = data.get("thumbnail");
     if (thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0) {
-      if (thumbFile.size > 2_000_000) {
-        setStatus("Thumbnail must be under 2 MB.", "error");
+      if (thumbFile.size > 8_000_000) {
+        setStatus("Thumbnail source is too large (max 8 MB).", "error");
         return;
       }
       try {
-        thumbnail = await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(thumbFile);
-        });
+        thumbnail = await thumbDataUrl(thumbFile);
       } catch (err) {
-        console.error("thumbnail read failed", err);
-        setStatus("Could not read the thumbnail image.", "error");
+        console.error("thumbnail resize failed", err);
+        setStatus("Could not process the thumbnail image.", "error");
         return;
       }
     }
