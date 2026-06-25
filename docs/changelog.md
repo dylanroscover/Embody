@@ -1,5 +1,27 @@
 # Changelog
 
+## v6.0.46
+
+A docs-accuracy and web-polish build. A multi-agent audit swept the entire docs site, the AI machine-files (`llms.txt` / `for-ai`), and the README against the live source and fixed every stale claim; the embody.tools web app gained an app-native report dialog, a simplified specimen preview header, a centred contribute form (renamed `/submit` -> `/contribute`), and a themed 404; plus minor custom-parameter organization on the Embody COMP.
+
+### Docs audit + reconciliation
+
+- **Community-paste model corrected.** The platform docs (Collection / index / contribute) still described community specimens as pasting "inert by default" unconditionally -- stale since v6.0.44. They now describe the real verdict model: a **clean** specimen pastes live and fully working, a **flagged** one imports disarmed (provably-pure value expressions preserved), and a **blocked** one is rejected.
+- **Counts reconciled to ground truth.** 72 test suites / 1,693 tests everywhere (testing.md's per-suite breakdown regenerated from real per-file counts); **49 MCP tools** across README, machine-files, and landing pages (was 48 -- `diff_tdn` was added after the count was last reconciled); `for-ai.json` version bumped to current.
+- **API + shortcut fixes.** Wrong Manager shortcut (`Ctrl+Shift+O` opens it, not `Ctrl+Shift+E`, which exports); non-existent `tagOp()` -> `applyTagToOperator()`; `getExternalizedOps()` -> `getExternalizedOps(COMP)` (the method requires an op-family) -- corrected in the docs AND the shipped AGENTS template; the Claude Code rules/skills tables corrected to what Envoy actually generates (the 6 shipped rules, `+/visual-aesthetics`, no `.claude/commands/`); a broken `#parameters` anchor and a mistargeted Clipboard Auto-Paste link.
+- **`llms-full.txt` TDN spec regenerated** from the current v2.0 specification (was a v1.3 snapshot -- missing the Back-compatibility section and the v1.4/1.5/2.0 changelog), ASCII-folded for the machine-file contract; the embedded MIME type corrected to `application/yaml`.
+
+### embody.tools web
+
+- **App-native report dialog** replaces the browser `prompt()` -- a themed `<dialog>` reason picker.
+- **Specimen network-preview header** simplified: dropped the "{name} graph" title and the "inert preview" badge, styled to match the rendered-result panel.
+- **Contribute page** (renamed `/submit` -> `/contribute`): app-styled `<select>` dropdowns with proper arrow spacing, centred form column, consistent with the manifesto.
+- **App-native 404 page** replaces the default Astro 404.
+
+### Build
+
+- Minor custom-parameter organization on the Embody COMP.
+
 ## v6.0.44
 
 Specimens from embody.tools now paste in LIVE and working, plus paste-placement and active-window fixes. The community safe-import was zeroing EVERY parameter expression -- a published specimen's GLSL uniform bindings, resolution, and animation drivers all collapsed to 0, so every pasted specimen rendered a dead frame. It now preserves provably-pure value expressions and disarms only genuinely side-effecting surfaces.
