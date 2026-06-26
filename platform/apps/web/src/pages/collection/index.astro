@@ -209,6 +209,23 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
     data-fixtures={usingFixtures ? "1" : "0"}
     data-signed-in={isSignedIn ? "1" : "0"}
   >
+    <script is:inline>
+      // Apply the saved view BEFORE the grid paints, so a persisted "gallery"
+      // preference doesn't flash the SSR default "list" first. Runs synchronously
+      // during parse -- the shell + toggle buttons already exist above this point.
+      (function () {
+        try {
+          var v = localStorage.getItem("embody:collection:view");
+          if (v !== "list" && v !== "gallery") return;
+          var shell = document.getElementById("collection-view");
+          if (shell) shell.setAttribute("data-view", v);
+          var btns = document.querySelectorAll("[data-view-option]");
+          for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle("is-active", btns[i].getAttribute("data-view-option") === v);
+          }
+        } catch (e) {}
+      })();
+    </script>
     <section class="page-section tight collection-results">
       <div class="card-grid" data-card-grid>
         {firstPage.map((specimen) => (

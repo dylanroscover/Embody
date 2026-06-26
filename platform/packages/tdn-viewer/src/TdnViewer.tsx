@@ -176,15 +176,13 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
           size={1}
           variant={BackgroundVariant.Dots}
         />
-        <Controls showZoom={false} showFitView={false} showInteractive={false}>
-          <ControlButton
-            onClick={() => setFullscreen((f) => !f)}
-            title={fullscreen ? "Exit fullscreen" : "View fullscreen"}
-            aria-label={fullscreen ? "Exit fullscreen" : "View fullscreen"}
-          >
-            {fullscreen ? closeIcon : expandIcon}
-          </ControlButton>
-        </Controls>
+        {!fullscreen && (
+          <Controls showZoom={false} showFitView={false} showInteractive={false}>
+            <ControlButton onClick={() => setFullscreen(true)} title="View fullscreen" aria-label="View fullscreen">
+              {expandIcon}
+            </ControlButton>
+          </Controls>
+        )}
       </ReactFlow>
       {fullscreen && (
         <button
