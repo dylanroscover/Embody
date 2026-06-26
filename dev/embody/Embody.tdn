@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 658
-generator: Embody/6.0.39
+build: 659
+generator: Embody/6.0.46
 td_build: 099.2025.32820
-source_file: Embody-6.40.toe
-exported_at: '2026-06-22T22:13:58Z'
+source_file: Embody-6.47.toe
+exported_at: '2026-06-26T06:09:28Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -23,12 +23,6 @@ type_defaults:
       language: python
     size: [130, 90]
     color: [0.9, 0.3, 0.4]
-  annotateCOMP:
-    parameters:
-      order: =me.digits or 0
-      layerzone: =0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1
-    flags:
-    - display
   baseCOMP:
     size: [160, 130]
     color: [0.3, 0.5, 0.9]
@@ -50,190 +44,6 @@ type_defaults:
     color: [0.9, 0.3, 0.4]
     tags:
     - tsv
-par_templates:
-  about:
-  - default: '1.0'
-    help: Annotate COMP default setup version.
-    name: Version
-    readOnly: true
-    startSection: true
-    style: Str
-  - help: Click to open help page.
-    name: Help
-    style: Pulse
-  text:
-  - default: Annotate
-    help: Text in the title bar.
-    label: Title Text
-    name: Titletext
-    startSection: true
-    style: Str
-  - clampMin: true
-    default: 30
-    help: Height of the title bar. Title font height adjusts automatically to fill.
-    label: Title Height
-    name: Titleheight
-    normMax: 100.0
-    normMin: 5.0
-    style: Int
-  - default: left
-    help: Alignment of title text.
-    label: Title Align
-    menuLabels:
-    - Left
-    - Center
-    - Right
-    menuNames:
-    - left
-    - center
-    - right
-    name: Titlealign
-    style: Menu
-  - help: Text in the body area. Use an expression for newlines etc.
-    label: Body Text
-    name: Bodytext
-    startSection: true
-    style: Str
-  - clampMin: true
-    default: 10
-    help: Size of text in the body area.
-    label: Body Font Size
-    name: Bodyfontsize
-    normMax: 100.0
-    normMin: 8.0
-    style: Int
-  - help: Limit the width of the text area.
-    label: Limit Body Text Width
-    name: Bodylimitwidth
-    style: Toggle
-  - clampMin: true
-    default: 1000
-    help: Width limit that will cause wraparound or cut-off. Measured in Panel units.
-    label: Max Body Text Width
-    name: Bodymaxwidth
-    normMax: 2000.0
-    normMin: 100.0
-    style: Int
-  settings:
-  - default: comment
-    help: 'Switch between Comment, Network Box, and Annotate Modes. '
-    menuLabels:
-    - Comment
-    - Network Box
-    - Annotate
-    menuNames:
-    - comment
-    - networkbox
-    - annotate
-    name: Mode
-    style: Menu
-  - help: Converts quotes, ellipsis, and dashes to more typographically nice unicode versions.
-    label: Smart Quote
-    name: Smartquote
-    startSection: true
-    style: Toggle
-  - default: true
-    help: Wrap body text when it extends past right bound.
-    label: Body Word Wrap
-    name: Bodywordwrap
-    style: Toggle
-  - default: 1
-    help: Background color base.
-    label: Back Color
-    name: Backcolorr
-    startSection: true
-    style: RGBA
-  - clampMax: true
-    clampMin: true
-    default: 1
-    help: Back color alpha.
-    label: Back Color Alpha
-    name: Backcoloralpha
-    style: Float
-  - clampMax: true
-    clampMin: true
-    default: 1
-    help: Opacity of the entire Annotate.
-    label: Annotate Opacity
-    name: Opacity
-    style: Float
-  op_viewer:
-  - help: Turn the visibility of the viewer specified in the OP parameter below on or off.
-    label: Viewer Display
-    name: Opviewerdisplay
-    style: Toggle
-  - help: The operator whose viewer is displayed in the Annotate.
-    label: OP
-    name: Opviewer
-    style: OP
-  - help: Allow interaction with the OP viewer.
-    label: OP Viewer Interactive
-    name: Opviewerinteractive
-    style: Toggle
-  - default: 'False'
-    help: Use the Size/Aspect Override to control viewer's size in the background.
-    label: Size/Aspect Override
-    menuLabels:
-    - Natural
-    - Specify
-    - Auto-Fit
-    menuNames:
-    - natural
-    - specify
-    - autofit
-    name: Opvieweroversize
-    startSection: true
-    style: Menu
-  - clampMin: true
-    default: 800
-    help: Diplay viewer as-if it were being displayed at this resolution. This is particularly useful for zooming into operators that don't have a built-in resolution, like CHOPs, SOPs, and DATs.
-    label: Size/Aspect
-    name: Opviewersize
-    normMax: 1000.0
-    normMin: 1.0
-    style: WH
-  - default: 1
-    help: Scale the viewer by this factor.
-    label: Scale
-    name: Opviewerscale
-    normMax: 2.0
-    startSection: true
-    style: Float
-  - help: Move the border of the viewer towards left edge of Annotate when negative or towards right edge when positive.
-    label: Justify X
-    name: Opviewerjustifyx
-    normMin: -1.0
-    style: Float
-  - label: Justify Y
-    name: Opviewerjustifyy
-    normMin: -1.0
-    style: Float
-  - help: When True, allow viewer to display in the Annotate title area as well as body.
-    label: Cover Body and Title
-    name: Opviewerfillbodytitle
-    style: Toggle
-  - clampMin: true
-    default: 1
-    help: Zoom the viewer by this scale factor without increasing the size of its display area in the Annotate.
-    label: OP Viewer Zoom
-    min: 0.001
-    name: Opviewerzoom
-    normMax: 5.0
-    normMin: 1.0
-    startSection: true
-    style: Float
-  - help: Offsets the displayed area within the viewer. Combined with OP Viewer Zoom, this lets you display a specific area of a viewer, such as a CHOP channel or table cell.
-    label: OP Viewer Offset
-    name: Opvieweroffsetx
-    style: XYZW
-  - clampMax: true
-    clampMin: true
-    default: 1
-    help: Alpha value of the background area in the OP Viewer.
-    label: Fill Alpha
-    name: Opviewerfillalpha
-    startSection: true
-    style: Float
 type: containerCOMP
 custom_pars:
   Embody:
@@ -242,6 +52,16 @@ custom_pars:
     readOnly: true
     help: Current Embody status (read-only). Shows whether Embody is initialized and running.
     value: Enabled
+  - name: Disable
+    style: Pulse
+    help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
+  - name: Update
+    style: Pulse
+    label: Enable/Update
+    help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
+  - name: Refresh
+    style: Pulse
+    help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
   - name: Performmode
     style: Toggle
     label: Perform Mode
@@ -264,17 +84,6 @@ custom_pars:
     label: Externalizations Folder
     startSection: true
     help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
-  - name: Disable
-    style: Pulse
-    startSection: true
-    help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
-  - name: Update
-    style: Pulse
-    label: Enable/Update
-    help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
-  - name: Refresh
-    style: Pulse
-    help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
   - name: Externalizeproject
     style: Pulse
     label: Externalize Full Project
@@ -477,6 +286,12 @@ custom_pars:
     - Export-on-Save
     - Roundtrip (Experimental)
     help: Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs.
+  - name: Clipboardautopaste
+    style: Toggle
+    label: Clipboard Auto-Paste
+    startSection: true
+    default: true
+    help: When on, Embody watches the OS clipboard and prompts to paste an Embody network the moment one is copied (e.g. the web "embody it" button) -- no keyboard shortcut needed. Turn off to disable the automatic prompt.
   - name: Tdncascade
     style: Toggle
     label: Cascade to Children
@@ -731,7 +546,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.39
+    value: 6.0.46
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -748,7 +563,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 658
+    value: 659
   - name: Github
     style: Pulse
     label: GitHub
@@ -759,7 +574,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-06-22 22:13:58 UTC
+    value: 2026-06-26 06:09:28 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -810,107 +625,9 @@ storage:
   _start_in_progress: true
   git_status:
     /embody/externalizations: ' M'
-    /perform: ' M'
-    /embody/unit_tests/test_tdn_sequences: ' M'
-    /embody/unit_tests/test_tdn_reconstruction: ' M'
-    /embody/unit_tests/test_tdn_palette_catalog: ' M'
-    /embody/unit_tests/test_tdn_helpers: ' M'
-    /embody/unit_tests/test_tdn_file_io: ' M'
-    /embody/unit_tests/test_tdn_export_import: ' M'
-    /embody/unit_tests/test_tdn_crash_safety: ' M'
-    /embody/unit_tests/test_tag_management: ' M'
-    /embody/unit_tests/test_tag_lifecycle: ' M'
-    /embody/unit_tests/test_strategy_handlers: ' M'
-    /embody/unit_tests/test_server_lifecycle: ' M'
-    /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests/test_rename_move_lifecycle: ' M'
-    /embody/unit_tests/test_param_tracker: ' M'
-    /embody/unit_tests/test_mcp_top_capture: ' M'
-    /embody/unit_tests/test_mcp_tdn_tools: ' M'
-    /embody/unit_tests/test_mcp_performance: ' M'
-    /embody/unit_tests/test_mcp_parameters: ' M'
-    /embody/unit_tests/test_mcp_operators: ' M'
-    /embody/unit_tests/test_mcp_flags_position: ' M'
-    /embody/unit_tests/test_mcp_externalization: ' M'
-    /embody/unit_tests/test_mcp_extensions: ' M'
-    /embody/unit_tests/test_mcp_diagnostics: ' M'
-    /embody/unit_tests/test_mcp_dat_content: ' M'
-    /embody/unit_tests/test_mcp_connections: ' M'
-    /embody/unit_tests/test_mcp_code_execution: ' M'
-    /embody/unit_tests/test_mcp_batch: ' M'
-    /embody/unit_tests/test_mcp_annotations: ' M'
-    /embody/unit_tests/test_logging: ' M'
-    /embody/unit_tests/test_file_management: ' M'
-    /embody/unit_tests/test_envoy_thread_comm: ' M'
-    /embody/unit_tests/test_envoy_bridge: ' M'
-    /embody/unit_tests/test_duplicate_handling: ' M'
-    /embody/unit_tests/test_delete_cleanup: ' M'
-    /embody/unit_tests/test_custom_parameters: ' M'
-    /embody/unit_tests/test_crud_operators: ' M'
-    /embody/unit_tests/test_catalog_bootstrap_palette: ' M'
-    /embody/unit_tests/TestRunnerExt: ' M'
     /embody/unit_tests: ' M'
-    /embody/tdn_tests: ' M'
-    /embody/base_tdn: ' M'
-    /embody/Embody/window_tagging_menu: ' M'
-    /embody/Embody/window_manager: ' M'
-    /embody/Embody/windowHeader/title: ' M'
-    /embody/Embody/windowHeader/button_min: ' M'
-    /embody/Embody/windowHeader/button_max: ' M'
-    /embody/Embody/windowHeader/button_close: ' M'
-    /embody/Embody/windowHeader/WindowHeaderExt: ' M'
-    /embody/Embody/windowHeader: ' M'
-    /embody/Embody/toolbar/tooltip/text: ' M'
-    /embody/Embody/toolbar/tooltip: ' M'
-    /embody/Embody/toolbar/toolbar_config: ' M'
-    /embody/Embody/toolbar/container_right/spacer_pars: ' M'
-    /embody/Embody/toolbar/container_right/pars: ' M'
-    /embody/Embody/toolbar/container_right/filter: ' M'
-    /embody/Embody/toolbar/container_right/close: ' M'
-    /embody/Embody/toolbar/container_right: ' M'
-    /embody/Embody/toolbar/container_left/status: ' M'
-    /embody/Embody/toolbar/container_left/spacer_tdn: ' M'
-    /embody/Embody/toolbar/container_left/spacer_envoy: ' M'
-    /embody/Embody/toolbar/container_left/save_folder: ' M'
-    /embody/Embody/toolbar/container_left/save_comp: ' M'
-    /embody/Embody/toolbar/container_left/refresh: ' M'
-    /embody/Embody/toolbar/container_left/perform: ' M'
-    /embody/Embody/toolbar/container_left/initialize: ' M'
-    /embody/Embody/toolbar/container_left/import_tdn: ' M'
-    /embody/Embody/toolbar/container_left/export_tdn: ' M'
-    /embody/Embody/toolbar/container_left/export_comp_tdn: ' M'
-    /embody/Embody/toolbar/container_left/envoy_toggle: ' M'
-    /embody/Embody/toolbar/container_left/disable: ' M'
-    /embody/Embody/toolbar/container_left: ' M'
-    /embody/Embody/toolbar/ToolbarExt: ' M'
-    /embody/Embody/toolbar: ' M'
-    /embody/Embody/templates/text_tdn_textconv: ??
-    /embody/Embody/templates/text_skill_mcp_tools_reference: ' M'
-    /embody/Embody/templates/text_rule_refresh_after_commit: ??
-    /embody/Embody/templates/text_envoy_bridge: ' M'
-    /embody/Embody/templates/text_claude: ' M'
-    /embody/Embody/templates: ' M'
-    /embody/Embody/tagger/replicator1: ' M'
-    /embody/Embody/tagger/header/text1: ' M'
-    /embody/Embody/tagger/header: ' M'
-    /embody/Embody/tagger: ' M'
-    /embody/Embody/parexec: ' M'
-    /embody/Embody/palette_catalog: ' M'
-    /embody/Embody/manager: ' M'
-    /embody/Embody/list/list_callbacks: ' M'
-    /embody/Embody/list/list1: ' M'
-    /embody/Embody/list/inject_parents_callbacks: ' M'
-    /embody/Embody/list: ' M'
-    /embody/Embody/help/text_help: ' M'
-    /embody/Embody/help: ' M'
-    /embody/Embody/execute: ' M'
-    /embody/Embody/TDNExt: ' M'
-    /embody/Embody/EnvoyExt: ' M'
-    /embody/Embody/EmbodyExt: ' M'
-    /embody/Embody/CatalogManagerExt: ' M'
-    /embody/Embody: ' M'
-    /embody: ' M'
-  _watchdog_gen: 232
+    /embody/Embody/templates/text_agents_md: ' M'
+  _watchdog_gen: 278
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -1052,6 +769,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
+  _clip_watch_gen: 41
   _suppress_dialogs: true
 operators:
 - name: help
@@ -1280,8 +998,8 @@ operators:
     file: embody/Embody/EnvoyExt.py
   position: [-300, 500]
   tags:
-  - TDExtension
   - py
+  - TDExtension
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1300,60 +1018,6 @@ operators:
   position: [-300, 600]
   tags:
   - py
-- name: annotate1
-  type: annotateCOMP
-  sequences:
-    ext:
-    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
-      promote: true
-  custom_pars:
-    Text:
-      $t: text
-      Titletext: Claude Config
-      Bodytext: CLAUDE.md template and .claude/ rule/skill templates for user-project generation.
-    Settings:
-      $t: settings
-      Mode: annotate
-      Backcolorr:
-      - '=me.color[0] # node color [r]'
-      - =me.color[1]
-      - '=me.color[2] '
-    OP Viewer:
-      $t: op_viewer
-      Opvieweroversize: natural
-    About:
-      $t: about
-  position: [-770, -1270]
-  size: [600, 370]
-  color: [0.45, 0.45, 0.45]
-  palette_clone: true
-- name: annotate2
-  type: annotateCOMP
-  sequences:
-    ext:
-    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
-      promote: true
-  custom_pars:
-    Text:
-      $t: text
-      Titletext: Collection -- community / embody.tools client
-      Bodytext: 'Untrusted-content layer: scans + default-inerts community TDN on paste. TDNExt delegates source==''embody.tools'' here.'
-    Settings:
-      $t: settings
-      Mode: annotate
-      Backcolorr:
-      - '=me.color[0] # node color [r]'
-      - =me.color[1]
-      - '=me.color[2] '
-    OP Viewer:
-      $t: op_viewer
-      Opvieweroversize: natural
-    About:
-      $t: about
-  position: [130, -620]
-  size: [300, 370]
-  color: [0.45, 0.45, 0.45]
-  palette_clone: true
 - name: templates
   type: baseCOMP
   position: [-400, -1200]
@@ -1408,33 +1072,6 @@ operators:
   size: [160, 130]
   comp_inputs:
   - manager
-  tdn_ref: embody/Embody/windowHeader.tdn
-- name: annotation_ui
-  type: annotateCOMP
-  sequences:
-    ext:
-    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
-      promote: true
-  custom_pars:
-    Text:
-      $t: text
-      Titletext: UI
-      Bodytext: 'All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.'
-    Settings:
-      $t: settings
-      Mode: annotate
-      Backcolorr:
-      - '=me.color[0] # node color [r]'
-      - =me.color[1]
-      - '=me.color[2] '
-      Opacity: 0.9
-    OP Viewer:
-      $t: op_viewer
-      Opvieweroversize: natural
-    About:
-      $t: about
-  size: [1300, 1000]
-  color: [0.45, 0.45, 0.45]
   palette_clone: true
 - name: _envoy_perform
   type: performCHOP
@@ -1494,31 +1131,6 @@ operators:
   tags:
   - py
   dock: timer1
-- name: annotation_logic
-  type: annotateCOMP
-  sequences:
-    ext:
-    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
-      promote: true
-  custom_pars:
-    Text:
-      $t: text
-      Titletext: Logic
-      Bodytext: Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.
-    Settings:
-      $t: settings
-      Mode: annotate
-      Backcolorr: [0.485, 0, 0.274833]
-      Opacity: 0.9
-    OP Viewer:
-      $t: op_viewer
-      Opvieweroversize: natural
-    About:
-      $t: about
-  position: [-770, 30]
-  size: [670, 830]
-  color: [0.45, 0.45, 0.45]
-  palette_clone: true
 - name: CatalogManagerExt
   type: textDAT
   parameters:
@@ -1526,57 +1138,6 @@ operators:
   position: [-300, 300]
   tags:
   - py
-- name: annotation_tagging
-  type: annotateCOMP
-  parameters:
-    reloadbuiltin: false
-  sequences:
-    ext:
-    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
-      promote: true
-  custom_pars:
-    Text:
-      $t: text
-      Titletext: Tagging
-      Bodytext: Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection).
-    Settings:
-      $t: settings
-      Mode: annotate
-      Backcolorr: [0.198067, 0.5, 0.1765]
-      Opacity: 0.9
-    OP Viewer:
-      $t: op_viewer
-      Opvieweroversize: natural
-    About:
-      $t: about
-  position: [-800, -700]
-  size: [700, 600]
-  palette_clone: true
-- name: annotation_windows
-  type: annotateCOMP
-  sequences:
-    ext:
-    - object: op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)
-      promote: true
-  custom_pars:
-    Text:
-      $t: text
-      Titletext: Windows
-      Bodytext: Popup windows for the tagging menu and externalization manager UI.
-    Settings:
-      $t: settings
-      Mode: annotate
-      Backcolorr: [0.574, 0.574, 0.574]
-      Opacity: 0.9
-    OP Viewer:
-      $t: op_viewer
-      Opvieweroversize: natural
-    About:
-      $t: about
-  position: [100, 600]
-  size: [1140, 310]
-  color: [0.45, 0.45, 0.45]
-  palette_clone: true
 - name: divergent_defaults
   type: tableDAT
   parameters:

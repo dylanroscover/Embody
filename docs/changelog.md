@@ -1,5 +1,28 @@
 # Changelog
 
+## v6.0.49
+
+A generated-file-safety + web-polish build. Re-running Envoy's config generation (InitEnvoy, or flipping the AI Project Root) now PRESERVES your edits to generated rules/skills instead of clobbering them, via a content-hash drift manifest. The v6.0.47 annotation dedup reached Embody's own self-externalized `.tdn` files, and embody.tools got a deep TDN-viewer / Collection / YAML-viewer polish pass.
+
+### Embody core
+
+- **Generated files survive your edits (hash-detect).** `_writeTemplate` records a SHA-256 of each file it generates in `.embody/generated-hashes.json`. On regeneration (InitEnvoy, or flipping the AI Project Root) it now skips any generated rule/skill whose on-disk content no longer matches the recorded hash -- your edits win; delete the file to opt back into regeneration. Generated files stay byte-identical to their templates (sidecar manifest, no embedded hash); a legacy file with a marker but no tracked hash regenerates once, then becomes tracked and edit-protected. New tests B08-B12 in `test_claude_config`.
+
+### TDN format
+
+- **The annotation dedup reached Embody's own externalizations.** v6.0.47 made the exporter capture annotateCOMPs only in the compact `annotations:` array; saving the dev project re-exported `dev/embody.tdn` and `dev/embody/Embody.tdn` through that path, dropping **9 redundant `annotateCOMP` operator copies** plus their now-dead `type_defaults` / `par_templates` (840 lines removed) while keeping every annotation **byte-identical** in the `annotations:` section. Confirmed a safe dedup, not data loss, by a 20-agent adversarial review plus a field-by-field check (the `annotations:` block is identical before and after; 9/9 removed ops map 1:1 to a surviving native annotation).
+
+### embody.tools
+
+- **TDN network viewer.** Correct TouchDesigner family colors (TOP purple, CHOP green, SOP blue, POP blue-violet, MAT olive-gold, DAT pinky-purple, COMP grey -- read from `ui.colors`); op-reference parameters (a Feedback TOP's Target, etc.) now draw as **dotted edges arcing over the tiles**; node overlap is **always prevented** via a minimal nudge; a data wire that crosses an intervening same-row node **arcs above it**; the fullscreen control moved top-right and reveals on hover for card covers.
+- **The Collection.** A **"by user" author filter** (mirrors the category facet, SSR-applied, shown only when there is more than one author); the toolbar + grid are encased in one panel; the Collection nav stays highlighted on a specimen page; the breadcrumb category links to a filtered collection.
+- **Raw-TDN YAML viewer.** Block-sequence keys (`operators:`, `annotations:`) are now **foldable** -- their `- ` items sit at the same indent as the key, so they were wrongly read as child-less; line-number gutter alignment fixed; `+` / `-` icons on expand/collapse-all; a show/hide toggle on the disclosure.
+- **Specimen page + chrome.** Badges + the "embody it" CTA moved to a sidebar to lift the network preview above the fold; equal-height columns and even section rhythm; the result thumbnail navigates to the specimen; a **3-10s page-load freeze fixed** (the nav-glass html2canvas snapshot was rasterizing the whole YAML viewer); sitewide OG metadata + contribute-form polish.
+
+### Tests
+
+- Test suite **73 suites / 1,707 tests**, all green (B08-B12 added to `test_claude_config` for hash-detect).
+
 ## v6.0.47
 
 A TDN-format cleanup and save-UX build. Annotation COMPs are no longer double-captured in `.tdn` exports -- they lived both as a heavy `operators:` entry and in the compact `annotations:` array, dumping 100-205 lines of palette-clone boilerplate per annotation. The exporter now omits a `null` build number, the at-risk save check no longer mislabels a normal save as a test context, and all 12 affected gallery specimens were cleaned (-2,887 lines). Verified end-to-end: the shipped release `.tox` boots clean in a fresh-install smoke test with every fix live.
