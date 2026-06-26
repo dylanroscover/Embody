@@ -34,12 +34,12 @@ test("sign out, then sign back in", async ({ page }) => {
   await expect(page).not.toHaveURL(/\/signin/, { timeout: 15_000 });
 
   // sign out: the control lives in the nav account menu (a closed dropdown), so
-  // open it first, then click [data-signout] -> awaits signOut() then -> "/"
+  // open it first, then click sign-out -> awaits signOut() then -> "/"
   await page.goto("/contribute");
   await page.locator("[data-user-menu-toggle]").click();
   await Promise.all([
     page.waitForURL((u) => new URL(u).pathname === "/", { timeout: 15_000 }),
-    page.locator("[data-signout]").click(),
+    page.locator("[data-user-signout]").click(),
   ]);
   // signed out: the gated /contribute now bounces anonymous users to /signin
   await page.goto("/contribute");

@@ -75,7 +75,7 @@ test("non-owner is redirected away from the edit page", async ({ page }) => {
   await page.locator("[data-user-menu-toggle]").click();
   await Promise.all([
     page.waitForURL((u) => new URL(u).pathname === "/", { timeout: 15_000 }),
-    page.locator("[data-signout]").click()
+    page.locator("[data-user-signout]").click()
   ]);
   await page.goto("/signin");
   await page.locator('[data-mode="register"]').click();
