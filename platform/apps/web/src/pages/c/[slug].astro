@@ -845,7 +845,9 @@ function emitKey(key: string): string {
   .specimen-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 330px;
-    gap: 20px;
+    /* 18px to match the sidebar gap + the panel padding, so the spacing between
+       every panel (horizontal AND vertical) is one consistent rhythm. */
+    gap: 18px;
     align-items: start;
     /* !important beats the global `.page-section + .page-section.tight` (0,3,0)
        rhythm; same value as the hero/raw pads so all inter-section gaps match. */
@@ -871,7 +873,7 @@ function emitKey(key: string): string {
 
   .specimen-sidebar {
     display: grid;
-    gap: 14px;
+    gap: 18px;
   }
 
   .side-block {
