@@ -548,13 +548,6 @@ function emitKey(key: string): string {
         </figure>
       </section>
 
-      <section class="side-block pillar">
-        <p class="eyebrow">Key ops</p>
-        <div class="op-list">
-          {keyOps.map((opName) => <span>{opName}</span>)}
-        </div>
-      </section>
-
       <section class="side-block pillar specimen-actions">
         <div class="badge-row">
           <span class="badge">{specimen.difficulty}</span>
@@ -595,6 +588,13 @@ function emitKey(key: string): string {
             <span class="owner-actions__status" data-delete-status role="status" aria-live="polite"></span>
           </div>
         )}
+      </section>
+
+      <section class="side-block pillar">
+        <p class="eyebrow">Key ops</p>
+        <div class="op-list">
+          {keyOps.map((opName) => <span>{opName}</span>)}
+        </div>
       </section>
     </aside>
   </section>
@@ -879,7 +879,11 @@ function emitKey(key: string): string {
 
   .specimen-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 330px;
+    /* Sidebar (rendered result / pills / key ops) 330px on the LEFT, network
+       preview flexible on the RIGHT. The DOM keeps the viewer first (so it
+       stacks first on mobile); explicit grid columns swap the visual order on
+       desktop. */
+    grid-template-columns: 330px minmax(0, 1fr);
     /* 18px to match the sidebar gap + the panel padding, so the spacing between
        every panel (horizontal AND vertical) is one consistent rhythm. */
     gap: 18px;
@@ -890,6 +894,8 @@ function emitKey(key: string): string {
     padding-top: 1.35rem !important;
     padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
   }
+  .specimen-sidebar { grid-column: 1; grid-row: 1; }
+  .viewer-panel { grid-column: 2; grid-row: 1; }
 
   .raw-section {
     padding-top: clamp(1.75rem, 3.5vw, 2.5rem) !important;
@@ -1072,6 +1078,14 @@ function emitKey(key: string): string {
   @media (max-width: 920px) {
     .specimen-layout {
       grid-template-columns: 1fr;
+    }
+
+    /* Single column: clear the desktop column swap so the panels stack in DOM
+       order (network preview first). */
+    .specimen-sidebar,
+    .viewer-panel {
+      grid-column: auto;
+      grid-row: auto;
     }
 
     /* One-column stack: let the rendered-result image span the full column
