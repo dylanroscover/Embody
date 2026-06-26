@@ -569,7 +569,7 @@ function emitKey(key: string): string {
   <section class="page-section tight specimen-layout">
     <div class="viewer-panel pillar">
       <p class="eyebrow">Network preview</p>
-      <TdnViewer tdn={tdn} client:load />
+      <TdnViewer tdn={tdn} client:visible={{ rootMargin: "300px" }} />
     </div>
 
     <aside class="specimen-sidebar">
