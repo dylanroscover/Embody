@@ -1272,6 +1272,16 @@ h3 {
   padding: 0 0.5rem;
 }
 
+/* On the specimen detail engagement row the reaction pill sits beside the
+   "Embody it" CTA button (32px); match that height so the row's controls read
+   as one family instead of a short pill next to a tall button. Injected via
+   set:html, so this must be a global rule (a scoped one would miss it). */
+.engagement .reaction-chip,
+.engagement .reaction-add {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
 .reaction-chip__emoji {
   font-size: 0.82rem;
 }
