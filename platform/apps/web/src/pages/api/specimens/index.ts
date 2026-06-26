@@ -33,6 +33,7 @@ export const prerender = false;
 //   category   exact category facet
 //   difficulty starter | intermediate | advanced
 //   requires   exact requires facet ("none", "MediaPipe", ...)
+//   author     exact author handle facet
 //   sort       newest | copied | az (default az)
 //   cursor     opaque keyset cursor from a prior page's nextCursor
 //   pageSize   default 24, max 100
@@ -45,6 +46,7 @@ export const GET: APIRoute = async ({ url }) => {
       category: params.get("category") ?? undefined,
       difficulty: params.get("difficulty") ?? undefined,
       requires: params.get("requires") ?? undefined,
+      author: params.get("author") ?? undefined,
       sort: normalizeCollectionSort(params.get("sort")),
       cursor: params.get("cursor") ?? undefined,
       pageSize: parsePositiveInteger(params.get("pageSize"))

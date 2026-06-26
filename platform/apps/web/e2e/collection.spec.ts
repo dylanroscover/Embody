@@ -32,6 +32,20 @@ test("collection lists the seeded specimens", async ({ page }) => {
   }
 });
 
+test("collection ?author= filters the grid to one author (SSR)", async ({ page }) => {
+  // The first-party seed specimens are all authored by embody.tools. The SSR
+  // author facet (?author=<handle>) must apply on first paint -- the seeded
+  // specimens stay visible and every card on the page is by that author.
+  await page.goto("/collection?author=embody.tools");
+  for (const slug of SPECIMENS) {
+    await expect(page.locator(`[data-specimen][data-slug="${slug}"]`)).toBeVisible();
+  }
+  const handles = await page
+    .locator("[data-card-grid] a.specimen-card__author .specimen-card__author-handle")
+    .evaluateAll((els) => [...new Set(els.map((e) => (e.textContent || "").trim()))]);
+  expect(handles).toEqual(["@embody.tools"]);
+});
+
 test("cover network graph fits the cover (no min-height clipping)", async ({ page }) => {
   // Regression: the standalone .tdn-viewer carries min-height: 320px, which
   // `height: 100%` does NOT override. Inside a card cover (~132-164px tall) that

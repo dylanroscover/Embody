@@ -43,6 +43,8 @@ export interface CollectionListOptions {
   category?: string;
   difficulty?: string;
   requires?: string;
+  /** Author handle facet. Empty/undefined = no author filter. */
+  author?: string;
   sort?: CollectionSort;
   /** Opaque keyset cursor from a previous page's nextCursor. */
   cursor?: string;
@@ -278,6 +280,14 @@ export async function listSpecimensForCollection(
     filterParams.push(requires);
   }
 
+  // Author facet: filter to one author by handle. The users_profile join (alias
+  // u) is already present for the author_handle select, so this reuses it.
+  const author = (options.author ?? "").trim();
+  if (author) {
+    where.push("u.handle = ?");
+    filterParams.push(author);
+  }
+
   const joinSql = joins.join("\n");
   const whereSql = where.join(" AND ");
 
@@ -344,6 +354,7 @@ export async function listSpecimensForCollection(
 export interface CollectionFacets {
   categories: string[];
   requires: string[];
+  authors: string[];
 }
 
 export async function getCollectionFacets(db: D1Database): Promise<CollectionFacets> {
@@ -365,9 +376,23 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
     )
     .all<{ value: string }>();
 
+  // Authors who have at least one public specimen, by handle. Joins the profile
+  // table (same alias/condition the listing uses) so the dropdown only ever
+  // offers handles that actually filter to something.
+  const authors = await db
+    .prepare(
+      `SELECT DISTINCT u.handle AS value
+       FROM specimens s
+       JOIN users_profile u ON u.id = s.author_id
+       WHERE s.visibility = 'public' AND u.handle <> ''
+       ORDER BY u.handle COLLATE NOCASE ASC`
+    )
+    .all<{ value: string }>();
+
   return {
     categories: (categories.results ?? []).map((row) => row.value),
-    requires: (requires.results ?? []).map((row) => row.value)
+    requires: (requires.results ?? []).map((row) => row.value),
+    authors: (authors.results ?? []).map((row) => row.value)
   };
 }
 

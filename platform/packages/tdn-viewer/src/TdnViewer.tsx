@@ -4,13 +4,17 @@ import "./tdnViewer.css";
 import {
   Background,
   BackgroundVariant,
+  BaseEdge,
   ControlButton,
   Controls,
+  getSmoothStepPath,
   Handle,
   MarkerType,
   Position,
   ReactFlow,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type Node,
   type NodeProps,
   type NodeTypes,
@@ -49,6 +53,50 @@ const TILE_W = 168;
 const TILE_H = 84;
 const DOCK_VGAP = 46; // gap below the host to the docked row
 const DOCK_HGAP = 36; // gap between docked tiles in the row
+const NODE_GAP = 24; // minimum gap kept between main tiles when nudging overlaps
+
+// Nudge any overlapping main-node tiles apart in place. The viewer draws a fixed
+// TILE_W x TILE_H box per op, often larger than TD's own node spacing, so tightly
+// packed networks collide. This is a minimal relaxation: only nodes that actually
+// overlap move, along the axis of least penetration, leaving the rest of the
+// authored layout intact. Deterministic (stable id order); a few passes converge.
+function resolveOverlaps(
+  pos: Map<string, { x: number; y: number }>,
+  w: number,
+  h: number,
+  gap: number
+): void {
+  const ids = [...pos.keys()].sort();
+  const minDx = w + gap;
+  const minDy = h + gap;
+  const MAX_ITERS = 24;
+  for (let iter = 0; iter < MAX_ITERS; iter++) {
+    let moved = false;
+    for (let i = 0; i < ids.length; i++) {
+      const a = pos.get(ids[i]!)!;
+      for (let j = i + 1; j < ids.length; j++) {
+        const b = pos.get(ids[j]!)!;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const penX = minDx - Math.abs(dx);
+        const penY = minDy - Math.abs(dy);
+        if (penX > 0 && penY > 0) {
+          if (penX <= penY) {
+            const push = (penX / 2) * (dx < 0 ? -1 : 1);
+            a.x -= push;
+            b.x += push;
+          } else {
+            const push = (penY / 2) * (dy < 0 ? -1 : 1);
+            a.y -= push;
+            b.y += push;
+          }
+          moved = true;
+        }
+      }
+    }
+    if (!moved) break;
+  }
+}
 
 type OperatorNode = Node<OperatorNodeData, "operator">;
 
@@ -85,6 +133,51 @@ const NODE_TYPES: NodeTypes = {
   annotation: memo(AnnotationBox),
   operator: memo(OperatorTile)
 };
+
+// A data wire that would run straight across an intervening same-row tile is hard
+// to read. toFlowElements detects that case and routes the edge through this
+// component with a raised `data.liftY`, so the wire arcs just above the tile it
+// passes (the side handles are unchanged -- only the middle segment rises).
+function LiftedEdge({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  markerEnd,
+  style,
+  data
+}: EdgeProps) {
+  const liftY = (data as { liftY?: number } | undefined)?.liftY;
+  let path: string;
+  if (typeof liftY === "number") {
+    // A same-row Right->Left edge has no vertical step, so getSmoothStepPath's
+    // `centerY` can't bend it -- it renders dead flat across the intervening
+    // tile. Instead draw a smooth cubic arch: the wire leaves the source and
+    // enters the target horizontally (control points offset along x), and both
+    // control points sit high enough that the curve's midpoint peaks at ~liftY.
+    // For a symmetric cubic with sourceY == targetY, the t=0.5 height is
+    // sourceY + 0.75*(ctrlY - sourceY), so ctrlY = sourceY + (liftY - sourceY)/0.75
+    // makes the peak land on liftY.
+    const dx = Math.max(40, Math.abs(targetX - sourceX) * 0.35);
+    const ctrlY = sourceY + (liftY - sourceY) / 0.75;
+    path = `M ${sourceX},${sourceY} C ${sourceX + dx},${ctrlY} ${targetX - dx},${ctrlY} ${targetX},${targetY}`;
+  } else {
+    [path] = getSmoothStepPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+      borderRadius: 12
+    });
+  }
+  return <BaseEdge path={path} markerEnd={markerEnd} style={style} />;
+}
+
+const EDGE_TYPES: EdgeTypes = { lifted: LiftedEdge };
 
 // Respect prefers-reduced-motion for the fitView animation: return 0 (instant,
 // no animation) when the user has asked to reduce motion, otherwise the given
@@ -161,6 +254,7 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={NODE_TYPES}
+        edgeTypes={EDGE_TYPES}
         proOptions={{ hideAttribution: true }}
         onInit={(instance) => {
           rfRef.current = instance;
@@ -329,30 +423,38 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
   }
 
   // Dock relationships: group docked ops under a host that actually exists in the
-  // graph. Their raw TD coords pack them tight enough to overlap at tile size, so
-  // we re-lay them in a tidy, evenly-spaced row centred under the host -- which
-  // both removes the overlap and reads as "these belong to that host".
+  // graph, so we can re-lay them in a tidy row under that host.
   const byId = new Map<string, GraphNode>(graph.nodes.map((n) => [n.id, n]));
   const dockedByHost = new Map<string, GraphNode[]>();
+  const dockedIds = new Set<string>();
   for (const node of graph.nodes) {
     if (node.dock && byId.has(node.dock) && node.dock !== node.id) {
       const list = dockedByHost.get(node.dock) ?? [];
       list.push(node);
       dockedByHost.set(node.dock, list);
+      dockedIds.add(node.id);
     }
   }
 
+  // Main (non-docked) tiles at raw TD coords, then nudge overlaps apart so no two
+  // main tiles collide. Docks are placed afterwards relative to the RESOLVED host
+  // position, so they ride along with any host the nudge moved.
+  const mainPos = new Map<string, { x: number; y: number }>();
+  for (const node of graph.nodes) {
+    if (!dockedIds.has(node.id)) mainPos.set(node.id, { x: node.x, y: -node.y });
+  }
+  resolveOverlaps(mainPos, TILE_W, TILE_H, NODE_GAP);
+
   const dockedPos = new Map<string, { x: number; y: number }>();
-  const dockedIds = new Set<string>();
   for (const [hostId, list] of dockedByHost) {
-    const host = byId.get(hostId)!;
+    const host = mainPos.get(hostId);
+    if (!host) continue; // host is itself docked (degenerate) -- skip re-layout
     const ordered = [...list].sort((a, b) => a.x - b.x || a.id.localeCompare(b.id));
     const step = TILE_W + DOCK_HGAP;
     const rowWidth = (ordered.length - 1) * step;
     const hostCenter = host.x + TILE_W / 2;
-    const rowTop = -host.y + TILE_H + DOCK_VGAP;
+    const rowTop = host.y + TILE_H + DOCK_VGAP;
     ordered.forEach((node, i) => {
-      dockedIds.add(node.id);
       dockedPos.set(node.id, {
         x: hostCenter - rowWidth / 2 - TILE_W / 2 + i * step,
         y: rowTop
@@ -363,7 +465,7 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
   const nodes: TdnFlowNode[] = graph.nodes.map((node) => ({
     id: node.id,
     type: "operator",
-    position: dockedPos.get(node.id) ?? {
+    position: dockedPos.get(node.id) ?? mainPos.get(node.id) ?? {
       x: node.x,
       y: -node.y
     },
@@ -382,6 +484,37 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
     draggable: false,
     selectable: false
   }));
+
+  // Resolved position of every operator tile (annotations are pushed later and
+  // never obstruct wires, so they're excluded).
+  const finalPos = new Map<string, { x: number; y: number }>(
+    nodes.map((n) => [n.id, n.position])
+  );
+
+  // A data wire that runs straight across an intervening same-row tile reads
+  // poorly. If another MAIN tile sits in the wire's horizontal span at its row,
+  // return a raised centreY so the wire arcs just above the highest such tile.
+  const LIFT_CLEARANCE = 28;
+  const liftFor = (from: string, to: string): number | undefined => {
+    const s = finalPos.get(from);
+    const t = finalPos.get(to);
+    if (!s || !t) return undefined;
+    const sy = s.y + TILE_H / 2;
+    const ty = t.y + TILE_H / 2;
+    if (Math.abs(sy - ty) > TILE_H) return undefined; // not the same row
+    const xMin = Math.min(s.x + TILE_W, t.x);
+    const xMax = Math.max(s.x + TILE_W, t.x);
+    if (xMax - xMin < TILE_W * 0.4) return undefined; // adjacent -> nothing between
+    const edgeY = (sy + ty) / 2;
+    let top = Infinity;
+    for (const [id, p] of mainPos) {
+      if (id === from || id === to) continue;
+      if (p.x + TILE_W > xMin && p.x < xMax && edgeY >= p.y && edgeY <= p.y + TILE_H) {
+        top = Math.min(top, p.y);
+      }
+    }
+    return top === Infinity ? undefined : top - LIFT_CLEARANCE;
+  };
 
   const edges: Edge[] = graph.edges.map((edge, index) => {
     // Parameter reference (e.g. a Feedback TOP's Target, a Render TOP's camera):
@@ -414,13 +547,16 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
         }
       };
     }
+    const liftY = edge.comp ? undefined : liftFor(edge.from, edge.to);
     return {
       id: `${edge.from}->${edge.to}:${edge.comp ? "comp" : "in"}:${edge.inputIndex}:${index}`,
       source: edge.from,
       target: edge.to,
       sourceHandle: "out",
       targetHandle: edge.comp ? `comp-in-${edge.inputIndex}` : `in-${edge.inputIndex}`,
-      type: "smoothstep",
+      // Arc over an intervening same-row tile when one is detected (LiftedEdge).
+      type: liftY !== undefined ? "lifted" : "smoothstep",
+      ...(liftY !== undefined ? { data: { liftY } } : {}),
       animated: edge.comp,
       focusable: false,
       selectable: false,
