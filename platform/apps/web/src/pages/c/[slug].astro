@@ -601,7 +601,7 @@ function emitKey(key: string): string {
 
   <section class="page-section tight raw-section">
     <details class="raw-details pillar">
-      <summary>Show raw TDN YAML</summary>
+      <summary><span class="raw-label raw-label--show">show tdn yaml</span><span class="raw-label raw-label--hide">hide tdn yaml</span></summary>
       <CopyTdnEnvelopeButton
         tdn={tdn}
         slug={specimen.slug}
@@ -1055,6 +1055,12 @@ function emitKey(key: string): string {
      (above) so the ring is a rounded rectangle concentric with the container. */
   summary:focus-visible {
     outline-offset: -2px;
+  }
+
+  /* The summary label toggles "show" (collapsed) <-> "hide" (expanded). */
+  .raw-details:not([open]) .raw-label--hide,
+  .raw-details[open] .raw-label--show {
+    display: none;
   }
 
   .raw-copy-hint {

@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect, type ReactNode } from "react";
+import { useMemo, useState, useRef, useEffect, type CSSProperties, type ReactNode } from "react";
 
 // Read-only, TDN-aware YAML viewer for the specimen "raw TDN" block:
 // syntax highlighting (with the TDN =expression shorthand in the brand accent),
@@ -300,8 +300,13 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
     `${summary.lines} lines`,
   ];
 
+  // Size the line-number gutter to the widest line number so the code text
+  // stays aligned -- otherwise a 1-digit -> 2-digit -> 3-digit number widens the
+  // column and the code drifts right (reads as spurious indentation).
+  const lnDigits = Math.max(3, String(lines.length).length);
+
   return (
-    <div className="tdn-yaml">
+    <div className="tdn-yaml" style={{ "--tdn-ln-digits": lnDigits } as CSSProperties}>
       <div className="tdn-yaml__summary">{summaryBits.join("  ·  ")}</div>
 
       <div className="tdn-yaml__toolbar">

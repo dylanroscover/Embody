@@ -2000,7 +2000,12 @@ pre {
 .tdn-yaml__fold--none { cursor: default; }
 .tdn-yaml__ln {
   display: inline-block;
-  min-width: 3ch;
+  /* content-box so the digit width (min-width) excludes the padding -- with the
+     global border-box, 3ch min-width was eaten by the 0.85rem padding, so 2-digit
+     numbers overflowed and shifted the code right. Sized to the file's widest
+     line number via --tdn-ln-digits so every row's code aligns. */
+  box-sizing: content-box;
+  min-width: calc(var(--tdn-ln-digits, 3) * 1ch);
   padding-right: 0.85rem;
   text-align: right;
   color: var(--text-faint);
