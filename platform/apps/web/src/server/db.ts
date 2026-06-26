@@ -1218,6 +1218,7 @@ export interface AdminReportRow {
   id: string;
   status: string;
   reason: string;
+  details: string | null;
   created_at: string;
   specimen_slug: string | null;
   specimen_title: string | null;
@@ -1233,7 +1234,7 @@ export async function listReports(
   const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
   const where = opts.status ? "WHERE r.status = ?" : "";
   const stmt = db.prepare(
-    `SELECT r.id, r.status, r.reason, r.created_at,
+    `SELECT r.id, r.status, r.reason, r.details, r.created_at,
             s.slug AS specimen_slug, s.title AS specimen_title,
             u.handle AS reporter_handle
        FROM reports r

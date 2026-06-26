@@ -361,12 +361,24 @@ function emitKey(key: string): string {
             </label>
           ))}
         </div>
+        <label class="report-dialog__note" data-report-note-field hidden>
+          <span>Tell us more <em>(required for "other")</em></span>
+          <textarea data-report-note rows="3" maxlength="2000" placeholder="Briefly, what's wrong with this specimen?"></textarea>
+        </label>
         <p class="report-dialog__status" data-report-status role="status" aria-live="polite"></p>
         <div class="report-dialog__actions">
           <button type="button" class="btn btn--ghost" data-report-cancel>cancel</button>
           <button type="submit" class="btn btn--primary" data-report-submit>submit report</button>
         </div>
       </form>
+      <div class="report-dialog__done" data-report-done hidden>
+        <p class="report-dialog__done-icon" aria-hidden="true">&#10003;</p>
+        <h2 class="report-dialog__title">Report submitted</h2>
+        <p class="report-dialog__lede">Thanks &mdash; the moderators will review this specimen.</p>
+        <div class="report-dialog__actions report-dialog__actions--end">
+          <button type="button" class="btn btn--primary" data-report-close>done</button>
+        </div>
+      </div>
     </dialog>
   )}
 
@@ -407,26 +419,64 @@ function emitKey(key: string): string {
         const cancelBtn = dialog.querySelector("[data-report-cancel]") as HTMLButtonElement | null;
         const submitBtn = dialog.querySelector("[data-report-submit]") as HTMLButtonElement | null;
         const dialogStatus = dialog.querySelector("[data-report-status]") as HTMLElement | null;
+        const noteField = dialog.querySelector("[data-report-note-field]") as HTMLElement | null;
+        const noteInput = dialog.querySelector("[data-report-note]") as HTMLTextAreaElement | null;
+        const donePanel = dialog.querySelector("[data-report-done]") as HTMLElement | null;
+        const closeBtn = dialog.querySelector("[data-report-close]") as HTMLButtonElement | null;
         const setDialogStatus = (message: string) => {
           if (dialogStatus) dialogStatus.textContent = message;
+        };
+        const selectedReason = (): string => {
+          const checked = form?.querySelector(
+            'input[name="report-reason"]:checked'
+          ) as HTMLInputElement | null;
+          return checked?.value ?? "";
+        };
+        // The free-text note shows (and is required) only for the "other" reason.
+        const syncNote = () => {
+          const isOther = selectedReason() === "other";
+          if (noteField) noteField.hidden = !isOther;
+          if (isOther) noteInput?.focus();
+        };
+        const showForm = () => {
+          if (form) form.hidden = false;
+          if (donePanel) donePanel.hidden = true;
+        };
+        const showDone = () => {
+          if (form) form.hidden = true;
+          if (donePanel) donePanel.hidden = false;
+          closeBtn?.focus();
         };
 
         reportButton.addEventListener("click", () => {
           if (reportButton.disabled) return;
           setDialogStatus("");
+          if (noteInput) noteInput.value = "";
+          showForm();
+          syncNote();
           dialog.showModal();
         });
 
+        // Reveal/hide the note as the reason changes.
+        form?.addEventListener("change", (event) => {
+          const t = event.target;
+          if (t instanceof HTMLInputElement && t.name === "report-reason") syncNote();
+        });
+
         cancelBtn?.addEventListener("click", () => dialog.close());
+        closeBtn?.addEventListener("click", () => dialog.close());
 
         form?.addEventListener("submit", async (event) => {
           event.preventDefault();
-          const checked = form.querySelector(
-            'input[name="report-reason"]:checked'
-          ) as HTMLInputElement | null;
-          const reason = checked?.value ?? "";
+          const reason = selectedReason();
           if (!reason || (reasons.length && !reasons.includes(reason))) {
             setDialogStatus("Pick a reason to continue.");
+            return;
+          }
+          const details = noteInput?.value.trim() ?? "";
+          if (reason === "other" && !details) {
+            setDialogStatus("Add a short note describing the issue.");
+            noteInput?.focus();
             return;
           }
 
@@ -436,14 +486,14 @@ function emitKey(key: string): string {
             const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}/report`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ reason })
+              body: JSON.stringify(details ? { reason, details } : { reason })
             });
             if (res.status === 401) {
               window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
               return;
             }
             if (res.status === 201) {
-              dialog.close();
+              showDone();
               setStatus("Thanks -- this specimen has been reported for review.");
               return;
             }
@@ -722,6 +772,51 @@ function emitKey(key: string): string {
     padding: 0.55rem 1.1rem;
     font-size: 0.9rem;
   }
+
+  /* "Other" free-text note (shown only when "other" is picked). */
+  .report-dialog__note {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font: 0.8rem/1.4 var(--font-mono);
+    color: var(--text-muted);
+  }
+  .report-dialog__note em { color: var(--text-faint); font-style: normal; }
+  .report-dialog__note textarea {
+    width: 100%;
+    min-height: 4.5rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(16, 21, 19, 0.7);
+    color: var(--text);
+    font: 0.9rem/1.5 var(--font-mono);
+    resize: vertical;
+  }
+  .report-dialog__note textarea:focus { outline: none; border-color: var(--accent); }
+
+  /* Success confirmation shown in place of the form after a report is filed. */
+  .report-dialog__done {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    text-align: center;
+    padding: 0.4rem 0;
+  }
+  .report-dialog__done-icon {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    margin: 0;
+    border-radius: 999px;
+    background: rgba(110, 230, 104, 0.14);
+    color: var(--accent);
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .report-dialog__actions--end { justify-content: center; margin-top: 0.3rem; }
 
   .specimen-layout {
     display: grid;

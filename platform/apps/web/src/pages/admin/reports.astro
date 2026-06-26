@@ -42,7 +42,10 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
                 <span class="admin-pill">deleted</span>
               )}
             </td>
-            <td>{r.reason}</td>
+            <td>
+              {r.reason}
+              {r.details && <div class="report-note" title={r.details}>{r.details}</div>}
+            </td>
             <td>{r.reporter_handle ?? "-"}</td>
             <td><span class="admin-pill" data-status-cell>{r.status}</span></td>
             <td>
@@ -100,3 +103,17 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
     });
   });
 </script>
+
+<style>
+  /* The "other"-reason free-text note, shown under the reason in the queue.
+     Overrides the admin table's nowrap so it wraps and stays narrow. */
+  .report-note {
+    max-width: 30ch;
+    margin-top: 0.3rem;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+</style>

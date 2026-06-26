@@ -31,12 +31,20 @@ export const POST: APIRoute = async ({ params, request }) => {
       return errorResponse(401, "authentication_required", "A signed-in user is required to report.");
     }
 
-    const reason = await readReason(request);
-    if (!reason) {
+    const parsed = await readReportBody(request);
+    if (!parsed) {
       return errorResponse(
         400,
         "invalid_reason",
         `reason is required and must be one of: ${REPORT_REASONS.join(", ")}.`
+      );
+    }
+    const { reason, details } = parsed;
+    if (reason === "other" && !details) {
+      return errorResponse(
+        400,
+        "details_required",
+        "Please add a short note describing the issue for an 'other' report."
       );
     }
 
@@ -45,7 +53,7 @@ export const POST: APIRoute = async ({ params, request }) => {
       return errorResponse(404, "specimen_not_found", "No specimen exists for that slug.");
     }
 
-    const result = await createReport(env.DB, specimenId, user.id, reason);
+    const result = await createReport(env.DB, specimenId, user.id, reason, details);
 
     // Moderation signal to the owner. Self-swallowing + safe-by-default
     // (notifications.ts), so a notification failure never affects the 201.
@@ -63,9 +71,15 @@ export const POST: APIRoute = async ({ params, request }) => {
   }
 };
 
-// Parse and validate the report reason from the JSON body. Returns the validated
-// reason, or null when the body is unparseable or the reason is out of vocabulary.
-async function readReason(request: Request): Promise<import("../../../../server/engagement").ReportReason | null> {
+const MAX_DETAILS = 2000;
+
+// Parse + validate the JSON body. Returns the validated reason plus an optional
+// free-text note (trimmed, length-capped; null when blank/absent), or null when
+// the body is unparseable or the reason is out of vocabulary. The "other"-needs-a
+// -note rule is enforced by the caller.
+async function readReportBody(
+  request: Request
+): Promise<{ reason: import("../../../../server/engagement").ReportReason; details: string | null } | null> {
   let raw: unknown;
   try {
     raw = await request.json();
@@ -77,6 +91,16 @@ async function readReason(request: Request): Promise<import("../../../../server/
     return null;
   }
 
-  const reason = (raw as Record<string, unknown>).reason;
-  return isReportReason(reason) ? reason : null;
+  const obj = raw as Record<string, unknown>;
+  if (!isReportReason(obj.reason)) {
+    return null;
+  }
+
+  let details: string | null = null;
+  if (typeof obj.details === "string") {
+    const trimmed = obj.details.trim().slice(0, MAX_DETAILS);
+    details = trimmed.length > 0 ? trimmed : null;
+  }
+
+  return { reason: obj.reason, details };
 }

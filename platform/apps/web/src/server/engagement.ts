@@ -144,17 +144,18 @@ export async function createReport(
   db: D1Database,
   specimenId: string,
   userId: string,
-  reason: ReportReason
+  reason: ReportReason,
+  details: string | null = null
 ): Promise<ReportResult> {
   const id = crypto.randomUUID();
   const status = "open";
 
   await db
     .prepare(
-      `INSERT INTO reports (id, specimen_id, reporter_id, reason, status)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO reports (id, specimen_id, reporter_id, reason, details, status)
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, specimenId, userId, reason, status)
+    .bind(id, specimenId, userId, reason, details, status)
     .run();
 
   return { id, reason, status };
