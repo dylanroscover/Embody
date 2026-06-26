@@ -438,7 +438,7 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
                 <span className="tdn-yaml__ln">{l.n}</span>
               </span>
               <code className="tdn-yaml__text">
-                {l.blank ? " " : (tokens[i] ?? []).map((s, k) => renderSeg(s, k, q))}
+                {l.blank ? " " : (tokens[i] ?? []).map((s, k) => renderSeg(s, k, q))}
                 {isFolded && <span className="tdn-yaml__ellipsis"> &#8943;</span>}
               </code>
             </div>

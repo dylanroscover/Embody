@@ -14,11 +14,57 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const annotations: GraphAnnotation[] = [];
+  // Op-reference parameters (e.g. a Feedback TOP's `top`/Target) are resolved
+  // AFTER every node exists, since the referenced op may be defined later.
+  const paramRefs: { parentPath: string; value: string; to: string }[] = [];
 
   walkOperators(asRecords(tdn.operators), "");
   collectAnnotations(asRecords(tdn.annotations), annotations);
+  resolveParamRefs();
 
   return { nodes, edges, annotations };
+
+  // A parameter whose value names another operator (a Feedback TOP's Target, a
+  // Render TOP's camera/geometry, etc.) is a real dependency the wires don't
+  // draw. Collect plain-string param values; resolveParamRefs() keeps only those
+  // that name an actual node and emits a dotted `ref` edge for each.
+  function collectParamRefs(op: TdnDict, parentPath: string, opId: string): void {
+    const params = isRecord(op.parameters)
+      ? op.parameters
+      : isRecord(op.pars)
+        ? op.pars
+        : null;
+    if (!params) return;
+    for (const value of Object.values(params)) {
+      if (typeof value === "string" && value && !value.startsWith("=")) {
+        paramRefs.push({ parentPath, value, to: opId });
+      }
+    }
+  }
+
+  function resolveParamRefs(): void {
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    const seen = new Set(edges.map((e) => `${e.from} ${e.to}`));
+    // A docked op is already linked to its host by a dock tether, and an op's
+    // shader/info-DAT parameters (a glslTOP's `pixeldat`, an infoDAT's `op`)
+    // point right back at those docks -- skip ref edges across any host<->dock
+    // pair so we don't double-draw the tether.
+    const dockPairs = new Set<string>();
+    for (const n of nodes) {
+      if (n.dock) {
+        dockPairs.add(`${n.dock} ${n.id}`);
+        dockPairs.add(`${n.id} ${n.dock}`);
+      }
+    }
+    for (const { parentPath, value, to } of paramRefs) {
+      const from = resolveInputPath(parentPath, value);
+      if (!from || from === to || !nodeIds.has(from)) continue;
+      const key = `${from} ${to}`;
+      if (seen.has(key) || dockPairs.has(key)) continue; // don't duplicate a wire/dock
+      seen.add(key);
+      edges.push({ from, to, inputIndex: 0, ref: true });
+    }
+  }
 
   function walkOperators(operators: TdnDict[], parentPath: string): void {
     for (const op of operators) {
@@ -66,6 +112,7 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
 
       collectEdges(asStrings(op.inputs), parentPath, id, false, edges);
       collectEdges(asStrings(op.comp_inputs), parentPath, id, true, edges);
+      collectParamRefs(op, parentPath, id);
       collectAnnotations(asRecords(op.annotations), annotations);
 
       const childOperators = [

@@ -350,27 +350,55 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
     selectable: false
   }));
 
-  const edges: Edge[] = graph.edges.map((edge, index) => ({
-    id: `${edge.from}->${edge.to}:${edge.comp ? "comp" : "in"}:${edge.inputIndex}:${index}`,
-    source: edge.from,
-    target: edge.to,
-    sourceHandle: "out",
-    targetHandle: edge.comp ? `comp-in-${edge.inputIndex}` : `in-${edge.inputIndex}`,
-    type: "smoothstep",
-    animated: edge.comp,
-    focusable: false,
-    selectable: false,
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      width: 14,
-      height: 14,
-      color: edge.comp ? "#cda05a" : "#6ee668"
-    },
-    style: {
-      stroke: edge.comp ? "rgba(205, 160, 90, 0.74)" : "rgba(110, 230, 104, 0.62)",
-      strokeWidth: edge.comp ? 1.8 : 1.5
+  const edges: Edge[] = graph.edges.map((edge, index) => {
+    // Parameter reference (e.g. a Feedback TOP's Target, a Render TOP's camera):
+    // a real dependency but NOT a data wire -- draw it dotted + muted with a
+    // small arrow, so it reads like the docked-DAT tethers, not a signal flow.
+    if (edge.ref) {
+      return {
+        id: `ref:${edge.from}->${edge.to}:${edge.inputIndex}:${index}`,
+        source: edge.from,
+        target: edge.to,
+        sourceHandle: "out",
+        targetHandle: `in-${edge.inputIndex}`,
+        type: "smoothstep",
+        focusable: false,
+        selectable: false,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          width: 11,
+          height: 11,
+          color: "rgba(150, 162, 154, 0.8)"
+        },
+        style: {
+          stroke: "rgba(150, 162, 154, 0.72)",
+          strokeWidth: 1.3,
+          strokeDasharray: "1 5"
+        }
+      };
     }
-  }));
+    return {
+      id: `${edge.from}->${edge.to}:${edge.comp ? "comp" : "in"}:${edge.inputIndex}:${index}`,
+      source: edge.from,
+      target: edge.to,
+      sourceHandle: "out",
+      targetHandle: edge.comp ? `comp-in-${edge.inputIndex}` : `in-${edge.inputIndex}`,
+      type: "smoothstep",
+      animated: edge.comp,
+      focusable: false,
+      selectable: false,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        width: 14,
+        height: 14,
+        color: edge.comp ? "#cda05a" : "#6ee668"
+      },
+      style: {
+        stroke: edge.comp ? "rgba(205, 160, 90, 0.74)" : "rgba(110, 230, 104, 0.62)",
+        strokeWidth: edge.comp ? 1.8 : 1.5
+      }
+    };
+  });
 
   // Dock tethers: a muted, dashed link from the host's bottom to each docked op,
   // visually distinct from data-flow wires (no arrowhead, no animation) so it

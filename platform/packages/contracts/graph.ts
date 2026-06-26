@@ -39,6 +39,13 @@ export interface GraphEdge {
   inputIndex: number;
   /** True for COMP-level (top/bottom) connectors; false/undefined for standard (left/right). */
   comp?: boolean;
+  /**
+   * True for a PARAMETER reference, not a wired input: an op-reference parameter
+   * (e.g. a Feedback TOP's `top`/Target, a Render TOP's camera/geometry) whose
+   * value names another operator. Drawn as a dotted link so the dependency is
+   * visible even though it is not a data wire.
+   */
+  ref?: boolean;
 }
 
 export interface GraphAnnotation {

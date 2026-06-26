@@ -466,7 +466,10 @@ export const specimenGraphs: Record<string, Record<string, unknown>> = {
         ],
         "inputs": [
           "glsl_seed"
-        ]
+        ],
+        "parameters": {
+          "top": "glsl_rd_step"
+        }
       },
       {
         "name": "glsl_seed_info",
