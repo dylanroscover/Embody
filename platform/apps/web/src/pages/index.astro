@@ -13,7 +13,6 @@ import QuickstartSteps from "../components/landing/QuickstartSteps.astro";
 import ManifestoSection from "../components/landing/ManifestoSection.astro";
 
 const featured = specimens.slice(0, 3);
-const ogImage = "https://embody.tools/assets/embody-screenshot.png";
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -42,8 +41,6 @@ const jsonLd = {
 <Base
   title="Embody - create at the speed of thought."
   description="Say what you want, watch operators appear in your live TouchDesigner session - every version saved as readable text. Open source, MIT."
-  ogImage={ogImage}
-  ogUrl="https://embody.tools/"
 >
   <script type="application/ld+json" slot="head" set:html={JSON.stringify(jsonLd)} />
 

@@ -12,6 +12,7 @@ import {
 } from "../../lib/specimenFallback";
 import { reactionsClusterHtml } from "../../lib/reactions";
 import { resultImage } from "../../lib/specimenThumb";
+import { SITE_ORIGIN, absoluteUrl } from "../../lib/site";
 import { sampleTdn } from "../../fixtures/sample-tdn";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
 import { getSpecimenBySlug } from "../../server/db";
@@ -122,6 +123,14 @@ const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorT
 // Rendered RESULT cover for the sidebar thumbnail: baked render when available,
 // otherwise the procedural placeholder (shared with the collection card covers).
 const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: specimen.category, thumbnailKey: specimen.thumbnail_key });
+
+// Social card: use the specimen's REAL rendered result as og:image when one
+// exists (cover.baked == author-uploaded thumbnail or a baked .jpg). The
+// procedural placeholder is a client-rendered SVG data URI -- invalid for OG
+// scrapers -- so in that case pass undefined and let Base fall back to the brand
+// screenshot. og:url is the canonical specimen page.
+const ogImage = cover.baked ? absoluteUrl(cover.src) : undefined;
+const ogUrl = `${SITE_ORIGIN}/c/${specimen.slug}`;
 
 function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
   return {
@@ -314,6 +323,8 @@ function emitKey(key: string): string {
 <Base
   title={`${specimen.name} - embody.tools`}
   description={specimen.description}
+  ogImage={ogImage}
+  ogUrl={ogUrl}
 >
   <section class="page-section detail-hero">
     <p class="eyebrow">Specimen / <a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(specimen.category)}`}>{specimen.category}</a></p>

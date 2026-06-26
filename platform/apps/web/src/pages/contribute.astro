@@ -42,8 +42,7 @@ const requiresOptions = SUBMIT_REQUIRES;
     <h1>contribute a specimen</h1>
     <p class="lede">
       Paste a TDN network to share it with the Collection. Every contribution is
-      scanned for capability surfaces before it goes live. This form is a working
-      scaffold of the contribution pipeline.
+      scanned for capability surfaces before it goes live.
     </p>
 
     <p class="submit-status" data-submit-status hidden role="status"></p>
@@ -124,11 +123,18 @@ const requiresOptions = SUBMIT_REQUIRES;
       </label>
       <label class="submit-field">
         <span>thumbnail <em>(optional image, resized to 640x360)</em></span>
-        <input type="file" name="thumbnail" accept="image/png,image/jpeg,image/webp" class="submit-file" />
+        <span class="submit-file" data-file>
+          <input type="file" name="thumbnail" accept="image/png,image/jpeg,image/webp" class="submit-file__input" data-file-input />
+          <span class="submit-file__btn" aria-hidden="true">choose image</span>
+          <span class="submit-file__name" data-file-name>no file chosen</span>
+        </span>
       </label>
       <label class="submit-field">
         <span>TDN (YAML)</span>
         <textarea name="tdn" rows="10" required placeholder={'format: tdn\nversion: \'2.0\'\nname: my_network\ntype: baseCOMP\noperators: []'} class="submit-tdn"></textarea>
+        <small class="submit-hint">
+          Quick export from TouchDesigner: with <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a> running, select the COMP you want to share and press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>. Embody copies that COMP's whole network to your clipboard as a TDN envelope &mdash; paste it here.
+        </small>
       </label>
       {useTurnstileWidget && (
         <div class="submit-field submit-turnstile">
@@ -471,6 +477,21 @@ const requiresOptions = SUBMIT_REQUIRES;
   document.addEventListener("keydown", (e: KeyboardEvent) => {
     if (e.key === "Escape") dropdowns.forEach((dd) => closeDropdown(dd));
   });
+
+  // App-native file picker: mirror the chosen filename into the styled span
+  // (the OS-rendered "No file chosen" text lives on the hidden input and can't
+  // be styled). data-has-file switches the name from faint placeholder to text.
+  const fileInput = document.querySelector("[data-file-input]") as HTMLInputElement | null;
+  const fileName = document.querySelector("[data-file-name]") as HTMLElement | null;
+  if (fileInput && fileName) {
+    const PLACEHOLDER = "no file chosen";
+    fileInput.addEventListener("change", () => {
+      const picked = fileInput.files?.[0]?.name ?? "";
+      fileName.textContent = picked || PLACEHOLDER;
+      if (picked) fileName.setAttribute("data-has-file", "");
+      else fileName.removeAttribute("data-has-file");
+    });
+  }
 </script>
 
 <style>
@@ -675,6 +696,111 @@ const requiresOptions = SUBMIT_REQUIRES;
   .submit-tdn {
     font-family: var(--font-mono);
     font-size: 0.85rem;
+  }
+
+  /* ---- App-native file picker ----
+     The OS-rendered "Choose File" button + "No file chosen" text can't be
+     restyled via CSS, so the real <input type=file> is visually hidden and a
+     styled button + filename span stand in. The input stays inside the <label>,
+     so clicking anywhere on the row still opens the native picker; a small
+     script (data-file-input) mirrors the chosen filename into .submit-file__name. */
+  .submit-file {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.4rem 0.5rem;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 140ms ease;
+  }
+
+  .submit-file:hover {
+    border-color: var(--accent);
+  }
+
+  /* Visually-hidden real input -- label association still opens the picker. */
+  .submit-file__input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .submit-file__btn {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-elevated);
+    padding: 0.4rem 0.85rem;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+
+  .submit-file:hover .submit-file__btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .submit-file__name {
+    min-width: 0;
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .submit-file__name[data-has-file] {
+    color: var(--text);
+  }
+
+  /* Keyboard focus ring on the styled button when the hidden input is focused. */
+  .submit-file__input:focus-visible ~ .submit-file__btn {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+
+  /* Help line under the TDN box: how to grab a network from TD in one shortcut. */
+  .submit-hint {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-faint);
+  }
+
+  .submit-hint a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  .submit-hint a:hover {
+    text-decoration: underline;
+  }
+
+  .submit-hint kbd {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    padding: 0.05rem 0.32rem;
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .submit-field input:focus,
