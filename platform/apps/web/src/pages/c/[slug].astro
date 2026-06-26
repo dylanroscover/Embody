@@ -937,6 +937,13 @@ function emitKey(key: string): string {
 
   summary {
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    /* Breathing room between the disclosure triangle and the label. */
+    gap: 0.55rem;
+    /* Match the rounded container so the focus ring (below) nests cleanly;
+       reset to top-only when open since content continues beneath. */
+    border-radius: var(--radius);
     padding: 18px 7.4rem 18px 18px;
     color: var(--accent);
     /* Match the .eyebrow labels on the sibling sections (network preview /
@@ -945,8 +952,29 @@ function emitKey(key: string): string {
     letter-spacing: 0.12em;
     text-transform: lowercase;
   }
+  /* Replace the native marker with a custom triangle so the gap to the label is
+     controllable (flex `gap` above) and consistent across browsers. */
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  summary::before {
+    content: "\25B8";
+    font-size: 0.85em;
+    line-height: 1;
+    transition: transform 140ms ease;
+  }
+  details[open] summary {
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  details[open] summary::before {
+    transform: rotate(90deg);
+  }
   /* `details { overflow: hidden }` clips the default offset focus ring into a
-     stray green line across the content -- inset it so the whole ring shows. */
+     stray green line; inset it AND give the summary a matching border-radius
+     (above) so the ring is a rounded rectangle concentric with the container. */
   summary:focus-visible {
     outline-offset: -2px;
   }
