@@ -884,6 +884,13 @@ function emitKey(key: string): string {
     padding: 18px;
   }
 
+  /* The panel section labels read as muted captions, not accent eyebrows. The
+     side-block labels already inherit --text-muted (via `.side-block p`); match
+     the viewer-panel "network preview" label so all three panel headers agree. */
+  .viewer-panel .eyebrow {
+    color: var(--text-muted);
+  }
+
   .specimen-sidebar {
     display: grid;
     gap: 18px;
