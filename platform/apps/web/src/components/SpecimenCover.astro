@@ -48,13 +48,16 @@ const defaultView = hasBaked ? "result" : "network";
 ---
 
 <!--
-  data-cover-interactive marks the whole cover as a "do not navigate" island:
-  the collection page's card-click handler bails when the click originates here,
-  so dragging/panning the TdnViewer canvas or tapping the flip buttons never
-  fires the card's navigation to /c/<slug>.
+  data-cover-interactive marks ONLY the network layer as a "do not navigate"
+  island: the collection page's card-click handler bails when the click
+  originates there, so dragging/panning the live TdnViewer canvas never fires
+  the card's navigation. The result layer (a static thumbnail) is intentionally
+  NOT marked, so clicking the rendered image navigates to /c/<slug> like the
+  rest of the card -- the card-wide pointer cursor then tells the truth. The
+  flip buttons opt out separately (the handler bails on any <button>).
 -->
-<div class="cover" data-cover={defaultView} data-cover-shell data-cover-interactive>
-  <div class="cover__layer cover__layer--network" aria-hidden={hasBaked ? "true" : "false"}>
+<div class="cover" data-cover={defaultView} data-cover-shell>
+  <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden={hasBaked ? "true" : "false"}>
     <SpecimenCoverGraph slug={slug} tdn={tdn} client:visible />
   </div>
   <div class="cover__layer cover__layer--result" aria-hidden={hasBaked ? "false" : "true"}>
@@ -93,6 +96,13 @@ const defaultView = hasBaked ? "result" : "network";
   .cover__layer {
     position: absolute;
     inset: 0;
+  }
+
+  /* The live graph is a pan/zoom island, not a navigate target -- don't show the
+     card's pointer over it (ReactFlow shows its own grab cursor on the pane).
+     The result layer keeps the inherited pointer since clicking it navigates. */
+  .cover__layer--network {
+    cursor: default;
   }
 
   /* The TdnViewer renders its own full-bleed flow canvas; pin it to the box.

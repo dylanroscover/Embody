@@ -612,8 +612,8 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
       const dis = baked ? "" : " disabled";
       article.innerHTML = `
         <div class="specimen-card__cover">
-          <div class="cover" data-cover="${baked ? 'result' : 'network'}" data-cover-shell data-cover-interactive>
-            <div class="cover__layer cover__layer--network" aria-hidden="${baked ? 'true' : 'false'}">
+          <div class="cover" data-cover="${baked ? 'result' : 'network'}" data-cover-shell>
+            <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden="${baked ? 'true' : 'false'}">
               <div class="cover-mount" data-cover-mount="${esc(s.slug)}"></div>
             </div>
             <div class="cover__layer cover__layer--result" aria-hidden="${baked ? 'false' : 'true'}">
