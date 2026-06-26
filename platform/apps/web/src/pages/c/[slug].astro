@@ -530,7 +530,7 @@ function emitKey(key: string): string {
   <section class="page-section tight specimen-layout">
     <div class="viewer-panel pillar">
       <p class="eyebrow">Network preview</p>
-      <TdnViewer tdn={tdn} client:visible={{ rootMargin: "300px" }} />
+      <TdnViewer tdn={tdn} height="100%" client:visible={{ rootMargin: "300px" }} />
     </div>
 
     <aside class="specimen-sidebar">
@@ -887,18 +887,25 @@ function emitKey(key: string): string {
     /* 18px to match the sidebar gap + the panel padding, so the spacing between
        every panel (horizontal AND vertical) is one consistent rhythm. */
     gap: 18px;
-    align-items: start;
+    /* stretch (not start): the network-preview panel grows to match the taller
+       sidebar column so the two columns are exactly equal height. The viewer
+       fills the panel (rules below), so the sidebar -- not a fixed viewer height
+       -- drives the row height. */
+    align-items: stretch;
     /* !important beats the global `.page-section + .page-section.tight` (0,3,0)
        rhythm. Lower half of the hero->preview gap: 1.35rem here + 1.35rem hero
        padding-bottom = 2.7rem, exactly 2x the heading->paragraph gap. */
     padding-top: 1.35rem !important;
-    padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
+    /* Below the main section, the gap to the raw-YAML section matches the
+       gap above it (hero->layout): 1.35rem here + 1.35rem raw-section
+       padding-top = 2.7rem. */
+    padding-bottom: 1.35rem;
   }
   .specimen-sidebar { grid-column: 1; grid-row: 1; }
   .viewer-panel { grid-column: 2; grid-row: 1; }
 
   .raw-section {
-    padding-top: clamp(1.75rem, 3.5vw, 2.5rem) !important;
+    padding-top: 1.35rem !important;
   }
 
   .viewer-panel,
@@ -911,13 +918,33 @@ function emitKey(key: string): string {
 
   .viewer-panel {
     padding: 18px;
+    /* Flex column so the viewer fills the panel below the "network preview"
+       label -- lets the panel stretch to the sidebar height (above) with the
+       graph occupying the freed space instead of a fixed 520px. */
+    display: flex;
+    flex-direction: column;
+  }
+  /* The TdnViewer mounts inside an <astro-island>; make it a growing flex item
+     and let the viewer fill it (override the standalone 320px min-height). */
+  .viewer-panel > astro-island {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .viewer-panel :global(.tdn-viewer) {
+    flex: 1;
+    min-height: 0;
   }
 
-  /* The panel section labels read as muted captions, not accent eyebrows. The
-     side-block labels already inherit --text-muted (via `.side-block p`); match
-     the viewer-panel "network preview" label so all three panel headers agree. */
-  .viewer-panel .eyebrow {
+  /* The panel section labels read as muted captions, not accent eyebrows, and
+     sit vertically centered in the header zone -- equal space above (the panel's
+     18px top padding) and below, instead of the default 1.95rem eyebrow margin
+     that left them top-heavy. */
+  .viewer-panel .eyebrow,
+  .side-block .eyebrow {
     color: var(--text-muted);
+    margin-bottom: 18px;
   }
 
   .specimen-sidebar {
