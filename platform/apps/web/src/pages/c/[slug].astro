@@ -319,45 +319,6 @@ function emitKey(key: string): string {
     <p class="eyebrow">Specimen / <a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(specimen.category)}`}>{specimen.category}</a></p>
     <h1>{specimen.name}</h1>
     <p class="lede">{specimen.description}</p>
-    <div class="badge-row">
-      <span class="badge">{specimen.difficulty}</span>
-      {specimen.requires !== "none" && (
-        <span class="badge needs">needs {specimen.requires}</span>
-      )}
-      <span class="badge">{specimen.operator_count} operators</span>
-      <span class="badge license">CC-BY</span>
-    </div>
-
-    <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
-      <CopyTdnEnvelopeButton
-        tdn={tdn}
-        slug={specimen.slug}
-        version={specimen.current_version}
-        label="embody it"
-        className="copy-button--cta"
-        client:load
-      />
-
-      <Fragment set:html={reactionsClusterHtml({ slug: specimen.slug, reactions: specimen.reactions, mine: myReactions })} />
-
-      {isSignedIn ? (
-        <button type="button" class="report-link" data-report>Report</button>
-      ) : (
-        <a class="report-link" href={signInHref}>Report</a>
-      )}
-      <span class="engagement-status" data-engagement-status role="status" aria-live="polite"></span>
-    </div>
-
-    {isOwner && (
-      <div class="owner-actions" data-owner-actions data-slug={specimen.slug} data-owner-handle={specimen.author_handle}>
-        <span class="owner-actions__label">you own this specimen</span>
-        <a class="owner-actions__btn" href={`/c/${specimen.slug}/edit`}>edit</a>
-        <button type="button" class="owner-actions__btn owner-actions__btn--danger" data-delete-specimen>
-          delete
-        </button>
-        <span class="owner-actions__status" data-delete-status role="status" aria-live="polite"></span>
-      </div>
-    )}
   </section>
 
   {isSignedIn && (
@@ -593,6 +554,48 @@ function emitKey(key: string): string {
           {keyOps.map((opName) => <span>{opName}</span>)}
         </div>
       </section>
+
+      <section class="side-block pillar specimen-actions">
+        <div class="badge-row">
+          <span class="badge">{specimen.difficulty}</span>
+          {specimen.requires !== "none" && (
+            <span class="badge needs">needs {specimen.requires}</span>
+          )}
+          <span class="badge">{specimen.operator_count} operators</span>
+          <span class="badge license">CC-BY</span>
+        </div>
+
+        <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
+          <CopyTdnEnvelopeButton
+            tdn={tdn}
+            slug={specimen.slug}
+            version={specimen.current_version}
+            label="embody it"
+            className="copy-button--cta"
+            client:load
+          />
+
+          <Fragment set:html={reactionsClusterHtml({ slug: specimen.slug, reactions: specimen.reactions, mine: myReactions })} />
+
+          {isSignedIn ? (
+            <button type="button" class="report-link" data-report>Report</button>
+          ) : (
+            <a class="report-link" href={signInHref}>Report</a>
+          )}
+          <span class="engagement-status" data-engagement-status role="status" aria-live="polite"></span>
+        </div>
+
+        {isOwner && (
+          <div class="owner-actions" data-owner-actions data-slug={specimen.slug} data-owner-handle={specimen.author_handle}>
+            <span class="owner-actions__label">you own this specimen</span>
+            <a class="owner-actions__btn" href={`/c/${specimen.slug}/edit`}>edit</a>
+            <button type="button" class="owner-actions__btn owner-actions__btn--danger" data-delete-specimen>
+              delete
+            </button>
+            <span class="owner-actions__status" data-delete-status role="status" aria-live="polite"></span>
+          </div>
+        )}
+      </section>
     </aside>
   </section>
 
@@ -640,6 +643,19 @@ function emitKey(key: string): string {
     align-items: center;
     gap: 14px;
     margin-top: 22px;
+  }
+
+  /* Actions block in the sidebar (below "key ops"): the badges + embody-it /
+     reaction / report. They're CTAs, not "read first", so moving them out of the
+     hero keeps it compact and lets the network preview rise toward the fold.
+     Stack them with even gaps; the block's own spacing replaces the hero margin. */
+  .specimen-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .specimen-actions .engagement {
+    margin-top: 0;
   }
 
   /* License pill -- matches the collection card's CC-BY badge. */
