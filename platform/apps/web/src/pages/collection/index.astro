@@ -955,6 +955,12 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
     border-color: var(--accent);
   }
 
+  /* The native clear (X) is a clickable button, so show a pointer over it --
+     not the text caret the rest of the input shows. */
+  .collection-search::-webkit-search-cancel-button {
+    cursor: pointer;
+  }
+
   .toolbar-controls {
     display: flex;
     flex-wrap: nowrap;
