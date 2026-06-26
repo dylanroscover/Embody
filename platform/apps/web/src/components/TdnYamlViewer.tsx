@@ -397,8 +397,14 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
               )}
             </div>
           )}
-          <button type="button" className="tdn-yaml__btn" onClick={collapseAll}>collapse all</button>
-          <button type="button" className="tdn-yaml__btn" onClick={expandAll}>expand all</button>
+          <button type="button" className="tdn-yaml__btn" onClick={collapseAll}>
+            <svg className="tdn-yaml__btn-icon" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M2.5 5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            collapse all
+          </button>
+          <button type="button" className="tdn-yaml__btn" onClick={expandAll}>
+            <svg className="tdn-yaml__btn-icon" width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true"><path d="M5 2.5v5M2.5 5h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" /></svg>
+            expand all
+          </button>
           <button
             type="button"
             className={`tdn-yaml__btn${wrap ? " is-on" : ""}`}

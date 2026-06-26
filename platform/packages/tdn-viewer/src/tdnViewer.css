@@ -122,6 +122,19 @@
   background: rgba(150, 162, 154, 0.7);
 }
 
+/* Ref-edge endpoints (e.g. a Feedback TOP's Target): invisible top connectors --
+   the dotted arc over the tiles conveys the parameter reference, so the handle
+   dot itself stays hidden. */
+.tdn-handle.tdn-handle--ref {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border: 0;
+  opacity: 0;
+}
+
 .tdn-annotation {
   display: grid;
   align-content: start;

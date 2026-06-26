@@ -224,16 +224,17 @@ pre {
     inset 0 1px 0 rgba(220, 255, 220, 0.22),
     inset 0 -1px 0 rgba(110, 230, 104, 0.08),
     inset 0 0 0 1px rgba(110, 230, 104, 0.04);
-  /* Clear glass that ACTUALLY renders in GPU browsers. NOTE: a real refraction
-     lens (backdrop-filter: url(#svg-feDisplacementMap)) does NOT work in the GPU
-     compositor path of Chromium/WebKit -- it only renders in the CPU/software
-     filter path (headless SwiftShader), so it looks bent in software captures
-     but flat in real Brave/Chrome/Safari (WebKit bug 245510). Until that's
-     done via WebGL, this is a supported clear-glass: a light backdrop blur +
-     saturate/brightness/contrast for optical pop, with the specular border and
-     translucent fill above selling the glass. */
-  -webkit-backdrop-filter: blur(3px) saturate(180%) brightness(1.05) contrast(1.04);
-  backdrop-filter: blur(3px) saturate(180%) brightness(1.05) contrast(1.04);
+  /* CLEAR glass -- deliberately NO blur. This is the immediate first-paint look
+     and the fallback when the WebGL refraction lens (Base.astro [data-nav-gl])
+     hasn't loaded yet or isn't supported. It must MATCH the lens (which bends,
+     never blurs), so the fallback->lens swap is invisible: saturate/brightness/
+     contrast give the optical pop, while the specular border + translucent fill
+     above sell the glass. (A real CSS refraction -- backdrop-filter:
+     url(#svg-feDisplacementMap) -- only renders in Chromium/WebKit's software
+     filter path, not the GPU compositor; WebKit bug 245510 -- hence the WebGL
+     lens for the actual bend.) */
+  -webkit-backdrop-filter: saturate(180%) brightness(1.05) contrast(1.04);
+  backdrop-filter: saturate(180%) brightness(1.05) contrast(1.04);
 }
 
 /* WebGL refraction canvas (Base.astro [data-nav-gl]). Fixed, behind the pill,
@@ -249,8 +250,22 @@ pre {
   pointer-events: none;
 }
 
+/* Reveal = display:none -> block. A keyframe (not a transition) plays on that
+   display flip, so the WebGL lens FADES in over the clear-glass fallback instead
+   of popping. The navbar's own tint fades out in step (transition below) -> a
+   smooth crossfade from fallback to shader. */
 .has-gl-glass .nav-gl-glass {
   display: block;
+  animation: nav-gl-fade-in 360ms ease-out both;
+}
+
+@keyframes nav-gl-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .has-gl-glass .nav-gl-glass { animation: none; }
 }
 
 /* When the GL lens is live it provides the glass body, so drop the CSS
@@ -1926,6 +1941,16 @@ pre {
   letter-spacing: 0.02em;
   cursor: pointer;
   transition: color 140ms ease, border-color 140ms ease;
+}
+/* collapse-all / expand-all carry a -/+ glyph before the label. */
+.tdn-yaml__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.tdn-yaml__btn-icon {
+  flex: none;
+  opacity: 0.85;
 }
 .tdn-yaml__search-nav button { min-width: 30px; padding: 0.2rem 0.4rem; }
 .tdn-yaml__search-nav button:hover:not(:disabled),

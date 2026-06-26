@@ -38,6 +38,10 @@ type OperatorNodeData = {
   isDockHost: boolean;
   /** True when this op is docked to a host (shows a dock-in connector). */
   isDocked: boolean;
+  /** Endpoints of a parameter-reference (ref) edge: top handles let the dotted
+      link arc over the tiles instead of running flat through the data wires. */
+  isRefSource: boolean;
+  isRefTarget: boolean;
 };
 
 // Tile footprint used for the docked-row layout (matches tdnViewer.css).
@@ -255,6 +259,24 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
           type="target"
         />
       )}
+      {data.isRefSource && (
+        <Handle
+          className="tdn-handle tdn-handle--ref"
+          id="ref-out"
+          position={Position.Top}
+          style={{ left: "62%" }}
+          type="source"
+        />
+      )}
+      {data.isRefTarget && (
+        <Handle
+          className="tdn-handle tdn-handle--ref"
+          id="ref-in"
+          position={Position.Top}
+          style={{ left: "38%" }}
+          type="target"
+        />
+      )}
       <div className="tdn-operator__head" />
       <div className="tdn-operator__body">
         <div className="tdn-operator__name" title={data.name}>
@@ -291,8 +313,17 @@ function AnnotationBox({ data }: NodeProps<AnnotationNode>) {
 function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: Edge[] } {
   const inputCounts = new Map<string, number>();
   const compInputCounts = new Map<string, number>();
+  const refSources = new Set<string>();
+  const refTargets = new Set<string>();
 
   for (const edge of graph.edges) {
+    if (edge.ref) {
+      // Ref edges connect via dedicated top handles, not input slots, so they
+      // must NOT inflate a node's input-handle count.
+      refSources.add(edge.from);
+      refTargets.add(edge.to);
+      continue;
+    }
     const counts = edge.comp ? compInputCounts : inputCounts;
     counts.set(edge.to, Math.max(counts.get(edge.to) ?? 0, edge.inputIndex + 1));
   }
@@ -344,7 +375,9 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
       inputCount: inputCounts.get(node.id) ?? 0,
       compInputCount: compInputCounts.get(node.id) ?? 0,
       isDockHost: dockedByHost.has(node.id),
-      isDocked: dockedIds.has(node.id)
+      isDocked: dockedIds.has(node.id),
+      isRefSource: refSources.has(node.id),
+      isRefTarget: refTargets.has(node.id)
     },
     draggable: false,
     selectable: false
@@ -359,21 +392,25 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
         id: `ref:${edge.from}->${edge.to}:${edge.inputIndex}:${index}`,
         source: edge.from,
         target: edge.to,
-        sourceHandle: "out",
-        targetHandle: `in-${edge.inputIndex}`,
+        // Top handles + smoothstep with a tall offset -> the dotted link rises
+        // well ABOVE the tiles and drops into each node with a clear vertical
+        // segment, reading as a feedback loop instead of hugging the top edge.
+        sourceHandle: "ref-out",
+        targetHandle: "ref-in",
         type: "smoothstep",
+        pathOptions: { offset: 30, borderRadius: 10 },
         focusable: false,
         selectable: false,
         markerEnd: {
           type: MarkerType.ArrowClosed,
           width: 11,
           height: 11,
-          color: "rgba(150, 162, 154, 0.8)"
+          color: "rgba(150, 162, 154, 0.85)"
         },
         style: {
-          stroke: "rgba(150, 162, 154, 0.72)",
-          strokeWidth: 1.3,
-          strokeDasharray: "1 5"
+          stroke: "rgba(150, 162, 154, 0.8)",
+          strokeWidth: 1.4,
+          strokeDasharray: "2 4"
         }
       };
     }
