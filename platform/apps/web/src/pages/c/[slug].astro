@@ -962,7 +962,9 @@ function emitKey(key: string): string {
   }
   summary::before {
     content: "\25B8";
-    font-size: 0.85em;
+    /* Absolute size: the 0.72rem label is tiny, so an em-relative marker reads
+       too small -- size the triangle independently so it stays legible. */
+    font-size: 0.95rem;
     line-height: 1;
     transition: transform 140ms ease;
   }
