@@ -592,7 +592,7 @@ function emitKey(key: string): string {
         className="copy-button--corner"
         client:load
       />
-      <p class="raw-copy-hint">Paste in TouchDesigner with Embody running.</p>
+      <p class="raw-copy-hint">Copy to your clipboard &mdash; Embody auto-detects it in TouchDesigner and adds it for you.</p>
       <TdnYamlViewer raw={rawTdn} summary={tdnSummary} client:visible />
     </details>
   </section>
@@ -600,7 +600,11 @@ function emitKey(key: string): string {
 
 <style>
   .detail-hero {
-    padding-bottom: 48px;
+    /* Equal, tight gaps between the three stacked specimen sections: each gap is
+       this section's padding-bottom + the next section's padding-top, so giving
+       every section the SAME vertical pad makes hero->layout and layout->raw
+       identical (and tighter than the default page rhythm). */
+    padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
   }
 
   .engagement {
@@ -823,6 +827,14 @@ function emitKey(key: string): string {
     grid-template-columns: minmax(0, 1fr) 330px;
     gap: 20px;
     align-items: start;
+    /* !important beats the global `.page-section + .page-section.tight` (0,3,0)
+       rhythm; same value as the hero/raw pads so all inter-section gaps match. */
+    padding-top: clamp(1.75rem, 3.5vw, 2.5rem) !important;
+    padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
+  }
+
+  .raw-section {
+    padding-top: clamp(1.75rem, 3.5vw, 2.5rem) !important;
   }
 
   .viewer-panel,
@@ -905,9 +917,16 @@ function emitKey(key: string): string {
     cursor: pointer;
     padding: 18px 7.4rem 18px 18px;
     color: var(--accent);
-    font: 600 13px/1 var(--font-mono);
+    /* Match the .eyebrow labels on the sibling sections (network preview /
+       rendered result) so all three section titles read consistently. */
+    font: 500 0.72rem/1.2 var(--font-mono);
     letter-spacing: 0.12em;
-    text-transform: uppercase;
+    text-transform: lowercase;
+  }
+  /* `details { overflow: hidden }` clips the default offset focus ring into a
+     stray green line across the content -- inset it so the whole ring shows. */
+  summary:focus-visible {
+    outline-offset: -2px;
   }
 
   .raw-copy-hint {

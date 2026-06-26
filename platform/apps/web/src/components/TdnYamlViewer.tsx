@@ -201,7 +201,20 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
   const [query, setQuery] = useState("");
   const [wrap, setWrap] = useState(false);
   const [active, setActive] = useState(0);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpActive, setJumpActive] = useState(0);
   const codeRef = useRef<HTMLDivElement>(null);
+  const jumpRef = useRef<HTMLDivElement>(null);
+
+  // Close the jump menu on outside click / Escape.
+  useEffect(() => {
+    if (!jumpOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (jumpRef.current && !jumpRef.current.contains(e.target as Node)) setJumpOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [jumpOpen]);
 
   const q = query.trim();
 
@@ -311,20 +324,73 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
         </div>
         <div className="tdn-yaml__tools">
           {topKeys.length > 1 && (
-            <select
-              className="tdn-yaml__jump"
-              aria-label="Jump to section"
-              value=""
-              onChange={(e) => {
-                const v = Number(e.target.value);
-                if (!Number.isNaN(v)) jumpTo(v);
-              }}
-            >
-              <option value="">jump to...</option>
-              {topKeys.map((k) => (
-                <option key={k.idx} value={k.idx}>{k.name}</option>
-              ))}
-            </select>
+            <div className="tdn-yaml__jump" ref={jumpRef}>
+              <button
+                type="button"
+                className="tdn-yaml__jump-btn"
+                aria-haspopup="listbox"
+                aria-expanded={jumpOpen}
+                onClick={() => { setJumpActive(0); setJumpOpen((o) => !o); }}
+                onKeyDown={(e) => {
+                  if (!jumpOpen && (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ")) {
+                    e.preventDefault();
+                    setJumpActive(0);
+                    setJumpOpen(true);
+                  }
+                }}
+              >
+                <span>jump to...</span>
+                <svg className="tdn-yaml__chev" width="9" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.4" /></svg>
+              </button>
+              {jumpOpen && (
+                <ul
+                  className="tdn-yaml__jump-menu"
+                  role="listbox"
+                  aria-label="Jump to section"
+                  aria-activedescendant={`tdn-jump-${jumpActive}`}
+                  tabIndex={-1}
+                  ref={(el) => el?.focus()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setJumpOpen(false);
+                      (jumpRef.current?.querySelector(".tdn-yaml__jump-btn") as HTMLElement | null)?.focus();
+                    } else if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setJumpActive((a) => Math.min(a + 1, topKeys.length - 1));
+                    } else if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setJumpActive((a) => Math.max(a - 1, 0));
+                    } else if (e.key === "Home") {
+                      e.preventDefault();
+                      setJumpActive(0);
+                    } else if (e.key === "End") {
+                      e.preventDefault();
+                      setJumpActive(topKeys.length - 1);
+                    } else if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      const k = topKeys[jumpActive];
+                      if (k) jumpTo(k.idx);
+                      setJumpOpen(false);
+                    }
+                  }}
+                >
+                  {topKeys.map((k, i) => (
+                    <li
+                      key={k.idx}
+                      id={`tdn-jump-${i}`}
+                      role="option"
+                      aria-selected={i === jumpActive}
+                      className={`tdn-yaml__jump-opt${i === jumpActive ? " is-active" : ""}`}
+                      onMouseEnter={() => setJumpActive(i)}
+                      onClick={() => { jumpTo(k.idx); setJumpOpen(false); }}
+                    >
+                      {k.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
           <button type="button" className="tdn-yaml__btn" onClick={collapseAll}>collapse all</button>
           <button type="button" className="tdn-yaml__btn" onClick={expandAll}>expand all</button>
