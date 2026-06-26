@@ -40,6 +40,10 @@ function parse(raw: string): { lines: Line[]; topKeys: { name: string; idx: numb
   const n = rawLines.length;
   const blanks: boolean[] = rawLines.map((l) => l.trim() === "");
   const indents: number[] = rawLines.map((l, i) => (blanks[i] ? 0 : leadingSpaces(l)));
+  // A block-sequence item: "- ..." (or a bare "-") at the line's indent. YAML
+  // (and PyYAML's dump) puts these at the SAME indent as their owning key.
+  const seqItem: boolean[] = rawLines.map((l, i) =>
+    !(blanks[i] ?? false) && /^-(\s|$)/.test(l.slice(indents[i] ?? 0)));
 
   const lines: Line[] = rawLines.map((text, i) => ({
     n: i + 1,
@@ -54,8 +58,22 @@ function parse(raw: string): { lines: Line[]; topKeys: { name: string; idx: numb
     const line = lines[i];
     if (!line || line.blank) continue;
     const d = line.indent;
+    // A mapping key with no inline value (its text ends in ":") can own a block
+    // SEQUENCE whose "- " items sit at the SAME indent as the key -- e.g.
+    // `operators:` / `tags:`. Without absorbing those same-indent list items
+    // such keys look child-less and never fold. Every other line only owns the
+    // deeper-indented block beneath it (siblings at the same indent are not
+    // children -- so a "- name: in1" item never swallows the next item).
+    const ownsSeq = /:$/.test(line.text.trim());
     let j = i + 1;
-    while (j < n && ((blanks[j] ?? false) || (indents[j] ?? 0) > d)) j++;
+    while (
+      j < n &&
+      ((blanks[j] ?? false) ||
+        (indents[j] ?? 0) > d ||
+        (ownsSeq && (indents[j] ?? 0) === d && (seqItem[j] ?? false)))
+    ) {
+      j++;
+    }
     // trim trailing blank lines out of the child block
     let end = j;
     while (end > i + 1 && (blanks[end - 1] ?? false)) end--;
