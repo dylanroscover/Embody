@@ -1854,3 +1854,126 @@ pre {
 .legal-body a:hover { color: var(--accent-hover); }
 .legal-sign { margin-top: 2.4rem; color: var(--text-faint); font-size: 0.9rem; letter-spacing: 0.02em; }
 .legal-sign a { color: var(--accent); }
+
+/* ============================================================
+   TDN YAML viewer (specimen "raw TDN" block, TdnYamlViewer.tsx)
+   ============================================================ */
+.tdn-yaml {
+  /* Syntax palette tuned to the dark-green theme. TDN =expressions reuse the
+     brand accent so live expressions glow. */
+  --tdn-key: #9fc6b3;
+  --tdn-str: #cbb892;
+  --tdn-num: #d79a73;
+  --tdn-kw: #c79bd1;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.tdn-yaml__summary {
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+}
+.tdn-yaml__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+.tdn-yaml__search { display: inline-flex; align-items: center; gap: 0.4rem; }
+.tdn-yaml__search-input {
+  min-height: 34px;
+  width: min(260px, 50vw);
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(24, 30, 30, 0.72);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+}
+.tdn-yaml__search-input::placeholder { color: var(--text-faint); }
+.tdn-yaml__search-input:focus { outline: none; border-color: var(--accent); }
+.tdn-yaml__search-nav { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--text-muted); }
+.tdn-yaml__count { min-width: 3em; text-align: right; font-size: 0.72rem; }
+.tdn-yaml__tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.tdn-yaml__search-nav button,
+.tdn-yaml__btn,
+.tdn-yaml__jump {
+  min-height: 30px;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(24, 30, 30, 0.5);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.tdn-yaml__jump { appearance: none; padding-right: 1.4rem; }
+.tdn-yaml__search-nav button { min-width: 30px; padding: 0.2rem 0.4rem; }
+.tdn-yaml__search-nav button:hover:not(:disabled),
+.tdn-yaml__btn:hover,
+.tdn-yaml__jump:hover { color: var(--text); border-color: var(--accent); }
+.tdn-yaml__search-nav button:disabled { opacity: 0.4; cursor: default; }
+.tdn-yaml__btn.is-on { color: var(--accent); border-color: var(--accent); }
+
+.tdn-yaml__code {
+  max-height: 540px;
+  overflow: auto;
+  padding: 0.55rem 0;
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  background: var(--bg-code);
+  line-height: 1.55;
+  -webkit-overflow-scrolling: touch;
+}
+.tdn-yaml__line { display: flex; align-items: flex-start; padding: 0 0.7rem; white-space: pre; }
+.tdn-yaml__code.is-wrap .tdn-yaml__line { white-space: pre-wrap; }
+.tdn-yaml__code.is-wrap .tdn-yaml__text { overflow-wrap: anywhere; word-break: break-word; }
+.tdn-yaml__line.is-active { background: rgba(110, 230, 104, 0.09); }
+.tdn-yaml__gutter { flex: none; display: inline-flex; align-items: baseline; gap: 0.15rem; user-select: none; }
+.tdn-yaml__fold {
+  width: 1.2em;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  line-height: 1.55;
+  cursor: pointer;
+}
+.tdn-yaml__fold:hover { color: var(--accent); }
+.tdn-yaml__fold--none { cursor: default; }
+.tdn-yaml__ln {
+  display: inline-block;
+  min-width: 3ch;
+  padding-right: 0.85rem;
+  text-align: right;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  user-select: none;
+}
+.tdn-yaml__text { white-space: inherit; color: var(--text); }
+.tdn-yaml__ellipsis { color: var(--text-faint); }
+
+.tdn-yaml__key { color: var(--tdn-key); }
+.tdn-yaml__str { color: var(--tdn-str); }
+.tdn-yaml__num { color: var(--tdn-num); }
+.tdn-yaml__kw { color: var(--tdn-kw); }
+.tdn-yaml__expr { color: var(--accent); }
+.tdn-yaml__com { color: var(--text-faint); font-style: italic; }
+.tdn-yaml__punct { color: var(--text-muted); }
+.tdn-yaml__plain { color: var(--text); }
+.tdn-yaml__hit { background: rgba(110, 230, 104, 0.28); color: var(--text); border-radius: 2px; }
+
+@media (pointer: coarse) {
+  .tdn-yaml__search-nav button,
+  .tdn-yaml__btn,
+  .tdn-yaml__jump { min-height: 40px; }
+  .tdn-yaml__fold { width: 1.6em; min-height: 28px; }
+}

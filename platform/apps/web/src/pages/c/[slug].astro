@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import type { SpecimenDetail } from "@embody/contracts";
 import { TdnViewer } from "@embody/tdn-viewer";
 import CopyTdnEnvelopeButton from "../../components/CopyTdnEnvelopeButton";
+import TdnYamlViewer from "../../components/TdnYamlViewer";
 import Base from "../../layouts/Base.astro";
 import {
   findFixtureSpecimen,
@@ -93,6 +94,15 @@ try {
   tdn = specimenGraph(specimen.slug) ?? sampleTdn;
   rawTdn = tdnToYaml(tdn);
 }
+
+// Quick counts for the raw-YAML viewer's summary bar.
+const countOf = (k: string): number => (Array.isArray(tdn[k]) ? (tdn[k] as unknown[]).length : 0);
+const tdnSummary = {
+  operators: countOf("operators"),
+  connections: countOf("connections"),
+  annotations: countOf("annotations"),
+  lines: rawTdn.replace(/\n+$/, "").split("\n").length,
+};
 
 const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorTypes(tdn);
 
@@ -533,7 +543,7 @@ function emitKey(key: string): string {
         client:load
       />
       <p class="raw-copy-hint">Paste in TouchDesigner with Embody running.</p>
-      <pre id="raw-tdn-yaml"><code>{rawTdn}</code></pre>
+      <TdnYamlViewer raw={rawTdn} summary={tdnSummary} client:visible />
     </details>
   </section>
 </Base>
