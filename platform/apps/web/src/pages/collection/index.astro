@@ -30,36 +30,47 @@ const DEFAULT_SORT = "az" as const;
 // filters, sort, and infinite scroll then talk to /api/specimens and take over
 // the grid client-side. On any D1 error we degrade to the embedded fixture set
 // so the page is never blank.
+// A category link (e.g. the specimen breadcrumb "Specimen / generative") lands
+// here as ?category=<facet>. SSR-apply it so the first paint is already filtered
+// (no client flash) and the dropdown renders pre-selected.
+const requestedCategory = (Astro.url.searchParams.get("category") ?? "").trim();
+
 let firstPage: SpecimenSummary[];
 let totalCount: number;
 let nextCursor: string | null;
 let facets: CollectionFacets;
 let usingFixtures = false;
+let activeCategory = "";
 
 try {
+  // Facets double as a D1 health probe AND the whitelist that validates the
+  // requested category (an unknown ?category is ignored, falling back to "all").
+  facets = await getCollectionFacets(env.DB);
+  activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
   const response: ListResponse = await listSpecimensForCollection(env.DB, {
     sort: DEFAULT_SORT,
-    pageSize: PAGE_SIZE
+    pageSize: PAGE_SIZE,
+    category: activeCategory || undefined
   });
-  if (response.specimens.length > 0) {
-    firstPage = response.specimens;
-    totalCount = response.count;
-    nextCursor = response.nextCursor ?? null;
-    facets = await getCollectionFacets(env.DB);
-  } else {
-    throw new Error("empty");
-  }
+  // An empty UNFILTERED result means the DB has no rows (e.g. dev without a
+  // seed) -- degrade to fixtures. An empty FILTERED result is legitimate.
+  if (response.specimens.length === 0 && !activeCategory) throw new Error("empty");
+  firstPage = response.specimens;
+  totalCount = response.count;
+  nextCursor = response.nextCursor ?? null;
 } catch {
   usingFixtures = true;
-  firstPage = [...fixtureSummaries]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .slice(0, PAGE_SIZE);
-  totalCount = fixtureSummaries.length;
-  nextCursor = null;
   facets = {
     categories: [...new Set(fixtureSummaries.map((s) => s.category))].sort(),
     requires: [...new Set(fixtureSummaries.map((s) => s.requires))].sort()
   };
+  activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
+  const pool = activeCategory
+    ? fixtureSummaries.filter((s) => s.category === activeCategory)
+    : [...fixtureSummaries];
+  firstPage = pool.sort((a, b) => a.name.localeCompare(b.name)).slice(0, PAGE_SIZE);
+  totalCount = pool.length;
+  nextCursor = null;
 }
 
 // Same user-facing wording whether the rows came from D1 or the embedded
@@ -93,19 +104,19 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
           <span class="sort-control__label mono" id="ddlbl-category">category</span>
           <div class="dd" data-dd>
             <button type="button" class="dd__btn mono" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-category dd-val-category">
-              <span class="dd__val" id="dd-val-category">all</span>
+              <span class="dd__val" id="dd-val-category">{activeCategory || "all"}</span>
               <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
             </button>
             <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-category" hidden>
-              <li class="dd__opt" role="option" data-value="" aria-selected="true">all</li>
+              <li class="dd__opt" role="option" data-value="" aria-selected={!activeCategory}>all</li>
               {facets.categories.map((value) => (
-                <li class="dd__opt" role="option" data-value={value} aria-selected="false">{value}</li>
+                <li class="dd__opt" role="option" data-value={value} aria-selected={value === activeCategory}>{value}</li>
               ))}
             </ul>
             <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-category>
-              <option value="" selected>all</option>
+              <option value="" selected={!activeCategory}>all</option>
               {facets.categories.map((value) => (
-                <option value={value}>{value}</option>
+                <option value={value} selected={value === activeCategory}>{value}</option>
               ))}
             </select>
           </div>

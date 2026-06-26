@@ -316,7 +316,7 @@ function emitKey(key: string): string {
   description={specimen.description}
 >
   <section class="page-section detail-hero">
-    <p class="eyebrow">Specimen / {specimen.category}</p>
+    <p class="eyebrow">Specimen / <a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(specimen.category)}`}>{specimen.category}</a></p>
     <h1>{specimen.name}</h1>
     <p class="lede">{specimen.description}</p>
     <div class="badge-row">
@@ -619,6 +619,19 @@ function emitKey(key: string): string {
        every section the SAME vertical pad makes hero->layout and layout->raw
        identical (and tighter than the default page rhythm). */
     padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
+  }
+
+  /* The category in the breadcrumb links to the collection filtered to it. */
+  .eyebrow-cat {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+  .eyebrow-cat:hover,
+  .eyebrow-cat:focus-visible {
+    border-bottom-color: currentColor;
+    outline: none;
   }
 
   .engagement {
