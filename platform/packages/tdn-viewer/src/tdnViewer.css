@@ -90,7 +90,9 @@
   color: var(--tdn-muted);
   font: 600 12px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0;
-  text-transform: uppercase;
+  /* Keep TouchDesigner's native camelCase op types (textDAT, glslTOP) -- not
+     uppercased -- for readability and correctness. */
+  text-transform: none;
 }
 
 .tdn-handle {

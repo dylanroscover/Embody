@@ -312,6 +312,7 @@ function emitKey(key: string): string {
         <span class="badge needs">needs {specimen.requires}</span>
       )}
       <span class="badge">{specimen.operator_count} operators</span>
+      <span class="badge license">CC-BY</span>
     </div>
 
     <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
@@ -613,6 +614,12 @@ function emitKey(key: string): string {
     align-items: center;
     gap: 14px;
     margin-top: 22px;
+  }
+
+  /* License pill -- matches the collection card's CC-BY badge. */
+  .badge.license {
+    border-color: rgba(178, 145, 176, 0.45);
+    color: #b291b0;
   }
 
   .owner-actions {
