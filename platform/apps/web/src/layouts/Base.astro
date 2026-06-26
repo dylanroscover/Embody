@@ -20,7 +20,12 @@ const {
 // Active-nav highlight: mark the item whose href matches the current path.
 const path = Astro.url.pathname.replace(/\/+$/, "") || "/";
 const isActive = (href: string) =>
-  href !== "/" && (path === href || path.startsWith(href + "/"));
+  href !== "/" &&
+  (path === href ||
+    path.startsWith(href + "/") ||
+    // Specimen pages (/c/<slug>, /c/<slug>/edit) belong to the collection, so
+    // highlight "Collection" while viewing one.
+    (href === "/collection" && path.startsWith("/c/")));
 
 // Signed-in user (or null). When present the auth button becomes "account"
 // (-> their profile) instead of the redundant "sign in".
