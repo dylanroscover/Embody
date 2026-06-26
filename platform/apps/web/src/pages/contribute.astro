@@ -142,7 +142,7 @@ const requiresOptions = SUBMIT_REQUIRES;
           <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-turnstile></div>
         </div>
       )}
-      <button type="submit" class="btn btn--primary submit-go" data-submit-go>
+      <button type="submit" class="btn btn--primary submit-go" data-submit-go aria-disabled="true">
         contribute specimen
       </button>
     </form>
@@ -178,6 +178,30 @@ const requiresOptions = SUBMIT_REQUIRES;
     statusBox.hidden = false;
   }
 
+  // --- Readiness gate -------------------------------------------------------
+  // The submit button is greyed (aria-disabled) until every REQUIRED field has
+  // a value. It stays clickable on purpose: a truly `disabled` button fires no
+  // click, so we could never explain WHY it isn't ready. Clicking while greyed
+  // announces what's missing (the status box is role=status, a live region) and
+  // jumps focus to the first empty field, since the status sits at the top of
+  // the form -- out of view when the button is clicked from the bottom.
+  const requiredFields = [
+    { el: form?.querySelector('[name="title"]'), label: "a title" },
+    { el: form?.querySelector('[name="tdn"]'), label: "a TDN network" }
+  ];
+
+  function missingFields() {
+    return requiredFields.filter((f) => !f.el || !String(f.el.value || "").trim());
+  }
+
+  function refreshReady() {
+    if (!goBtn) return;
+    goBtn.setAttribute("aria-disabled", missingFields().length ? "true" : "false");
+  }
+
+  form?.addEventListener("input", refreshReady);
+  refreshReady();
+
   // NOTE: sign-out lives in a SEPARATE bundled <script> below. A `define:vars`
   // script is emitted inline and untransformed, so `import("../lib/authClient")`
   // here would not be bundled -- the browser would fetch the literal path and
@@ -211,12 +235,19 @@ const requiresOptions = SUBMIT_REQUIRES;
 
     const title = String(data.get("title") || "").trim();
     const tdnRaw = String(data.get("tdn") || "").trim();
-    if (!title) {
-      setStatus("A title is required.", "error");
-      return;
-    }
-    if (!tdnRaw) {
-      setStatus("Paste a TDN network.", "error");
+    const missing = missingFields();
+    if (missing.length) {
+      const labels = missing.map((f) => f.label);
+      const list =
+        labels.length === 1
+          ? labels[0]
+          : labels.slice(0, -1).join(", ") + " and " + labels[labels.length - 1];
+      setStatus(`Add ${list} before contributing.`, "error");
+      const first = missing[0] && missing[0].el;
+      if (first) {
+        first.focus();
+        first.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       return;
     }
     // TDN is YAML (a JSON superset). This inline define:vars script can't bundle
@@ -308,6 +339,7 @@ const requiresOptions = SUBMIT_REQUIRES;
     } finally {
       goBtn.disabled = false;
       goBtn.textContent = original;
+      refreshReady();
       // Turnstile tokens are single-use; reset the widget so a retry gets a
       // fresh challenge token instead of replaying a now-spent one.
       if (useTurnstileWidget) {
@@ -812,6 +844,18 @@ const requiresOptions = SUBMIT_REQUIRES;
 
   .submit-go {
     align-self: flex-start;
+  }
+
+  /* Not-ready state: greyed while required fields are empty. The button stays
+     clickable (aria-disabled, not the disabled attribute) so a click can
+     explain what's missing -- a real disabled button fires no click. Higher
+     specificity than .btn--primary[:hover] so it wins over the green. */
+  .submit-go[aria-disabled="true"],
+  .submit-go[aria-disabled="true"]:hover {
+    background: var(--bg-elevated-2);
+    color: var(--text-faint);
+    cursor: not-allowed;
+    transform: none;
   }
 
   .submit-status {
