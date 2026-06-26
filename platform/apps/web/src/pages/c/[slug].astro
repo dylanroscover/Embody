@@ -97,9 +97,22 @@ try {
 
 // Quick counts for the raw-YAML viewer's summary bar.
 const countOf = (k: string): number => (Array.isArray(tdn[k]) ? (tdn[k] as unknown[]).length : 0);
+// Connections aren't a top-level array in TDN -- they're each operator's data
+// `inputs` (the wires the graph draws). Sum those (recursing into nested COMPs);
+// dock links (comp_inputs) are structural, not counted as connections.
+const countConnections = (ops: unknown): number => {
+  if (!Array.isArray(ops)) return 0;
+  let n = 0;
+  for (const op of ops) {
+    const o = op as Record<string, unknown>;
+    if (Array.isArray(o.inputs)) n += o.inputs.length;
+    if (Array.isArray(o.operators)) n += countConnections(o.operators);
+  }
+  return n;
+};
 const tdnSummary = {
   operators: countOf("operators"),
-  connections: countOf("connections"),
+  connections: countOf("connections") || countConnections(tdn.operators),
   annotations: countOf("annotations"),
   lines: rawTdn.replace(/\n+$/, "").split("\n").length,
 };
