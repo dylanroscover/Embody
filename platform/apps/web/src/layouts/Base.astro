@@ -694,14 +694,16 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
               ignoreElements: (el) =>
                 el === canvas || (el.hasAttribute && el.hasAttribute("data-site-header")) ||
                 (el.classList && (el.classList.contains("site-header") || el.classList.contains("skip-link") ||
-                  // The TDN network preview and card-cover graphs are React Flow:
-                  // hundreds of SVG/DOM nodes that cost html2canvas ~2.3s to
-                  // rasterize, freezing the whole page (and delaying THIS glass)
-                  // on specimen pages. Skip the graph subtree -- the glass is a
-                  // thin top strip, so this only blanks the refraction where the
-                  // (mostly dark-grid) preview scrolls behind the nav. Worth it
-                  // to keep the main thread free.
-                  el.classList.contains("tdn-viewer"))),
+                  // Skip the heavy specimen-page islands from the snapshot: the
+                  // raw-TDN YAML viewer (.tdn-yaml) renders ~3600 tokenized spans
+                  // even while collapsed, and the React Flow graph (.tdn-viewer)
+                  // is hundreds of SVG nodes. Together they were ~4800 of ~5000
+                  // page elements and cost html2canvas ~2.3s -- a main-thread
+                  // freeze that also delayed THIS glass from appearing. The glass
+                  // is a thin top strip, so excluding them only blanks the
+                  // refraction where those (below-fold) panels scroll behind the
+                  // nav -- a fair trade for keeping the main thread free.
+                  el.classList.contains("tdn-viewer") || el.classList.contains("tdn-yaml"))),
             });
             gl.bindTexture(gl.TEXTURE_2D, tex);
             gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
