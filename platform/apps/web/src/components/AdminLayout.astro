@@ -40,6 +40,211 @@ const items = [
       <slot />
     </div>
   </section>
+
+  <script>
+    // App-native dropdowns for the whole admin area. Each .dd[data-dd] wraps a
+    // visually-hidden native <select> (the value source the per-row save/apply
+    // handlers read, and the element Playwright drives with selectOption) plus a
+    // styled trigger + listbox. Choosing an option writes the native value and
+    // dispatches a bubbling 'change' so the existing change-listeners fire
+    // UNCHANGED. We also listen for the native's own 'change' (covers a
+    // programmatic selectOption) to keep the visible trigger label in sync.
+    function initDropdowns(): void {
+      const dropdowns = Array.from(
+        document.querySelectorAll<HTMLElement>(".dd[data-dd]")
+      );
+      if (dropdowns.length === 0) return;
+
+      // While any dropdown is open, switch its enclosing scroll wrapper to
+      // overflow:visible so the absolutely-positioned menu is not clipped by the
+      // table's overflow-x:auto region. Restore on close.
+      const wrapOpenCount = new WeakMap<HTMLElement, number>();
+      const setWrapOpen = (dd: HTMLElement, open: boolean) => {
+        const wrap = dd.closest<HTMLElement>(".admin-table-wrap");
+        if (!wrap) return;
+        const next = (wrapOpenCount.get(wrap) ?? 0) + (open ? 1 : -1);
+        const clamped = Math.max(0, next);
+        wrapOpenCount.set(wrap, clamped);
+        wrap.classList.toggle("dd-open", clamped > 0);
+      };
+
+      const closeDropdown = (dd: HTMLElement) => {
+        if (!dd.hasAttribute("data-open")) return;
+        dd.removeAttribute("data-open");
+        const menu = dd.querySelector<HTMLElement>(".dd__menu");
+        if (menu) {
+          menu.hidden = true;
+          menu.removeAttribute("aria-activedescendant");
+        }
+        const btn = dd.querySelector(".dd__btn");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+        dd.querySelectorAll<HTMLElement>(".dd__opt").forEach((o) =>
+          o.classList.remove("is-active")
+        );
+        setWrapOpen(dd, false);
+      };
+
+      let ddOptSeq = 0;
+      dropdowns.forEach((dd) => {
+        const btn = dd.querySelector<HTMLButtonElement>(".dd__btn");
+        const menu = dd.querySelector<HTMLElement>(".dd__menu");
+        const valEl = dd.querySelector<HTMLElement>(".dd__val");
+        const native = dd.querySelector(".dd__native") as HTMLSelectElement | null;
+        const opts = Array.from(dd.querySelectorAll<HTMLElement>(".dd__opt"));
+        if (!btn || !menu || !valEl || !native) return;
+
+        opts.forEach((opt) => {
+          if (!opt.id) opt.id = `dd-opt-${ddOptSeq++}`;
+        });
+
+        // Keep the visible trigger label + aria-selected in lockstep with the
+        // native value. Drives BOTH a user click and a programmatic selectOption.
+        const syncFromNative = () => {
+          const value = native.value;
+          valEl.textContent =
+            native.options[native.selectedIndex]?.text ?? value;
+          opts.forEach((o) =>
+            o.setAttribute(
+              "aria-selected",
+              String((o.getAttribute("data-value") ?? "") === value)
+            )
+          );
+        };
+
+        let active = -1;
+        const setActive = (index: number) => {
+          const next = Math.max(0, Math.min(index, opts.length - 1));
+          const opt = opts[next];
+          if (!opt) return;
+          opts.forEach((o, i) => o.classList.toggle("is-active", i === next));
+          active = next;
+          menu.setAttribute("aria-activedescendant", opt.id);
+          opt.scrollIntoView({ block: "nearest" });
+        };
+        const clearActive = () => {
+          active = -1;
+          opts.forEach((o) => o.classList.remove("is-active"));
+          menu.removeAttribute("aria-activedescendant");
+        };
+
+        const open = () => {
+          dropdowns.forEach((other) => {
+            if (other !== dd) closeDropdown(other);
+          });
+          dd.setAttribute("data-open", "");
+          menu.hidden = false;
+          btn.setAttribute("aria-expanded", "true");
+          setWrapOpen(dd, true);
+          const sel = opts.findIndex(
+            (o) => o.getAttribute("aria-selected") === "true"
+          );
+          setActive(sel >= 0 ? sel : 0);
+        };
+        const close = () => {
+          clearActive();
+          closeDropdown(dd);
+        };
+        const choose = (opt: HTMLElement) => {
+          native.value = opt.getAttribute("data-value") ?? "";
+          // Bubbling change so the page's existing per-row listeners fire, and
+          // syncFromNative (wired below) updates the visible label.
+          native.dispatchEvent(new Event("change", { bubbles: true }));
+          close();
+          btn.focus();
+        };
+
+        btn.addEventListener("click", () => {
+          if (dd.hasAttribute("data-open")) close();
+          else open();
+        });
+        btn.addEventListener("keydown", (e) => {
+          const isOpen = dd.hasAttribute("data-open");
+          switch (e.key) {
+            case "Escape":
+              if (isOpen) {
+                e.preventDefault();
+                close();
+                btn.focus();
+              }
+              return;
+            case "Tab":
+              if (isOpen) close();
+              return;
+            case "Enter":
+            case " ": {
+              e.preventDefault();
+              if (!isOpen) {
+                open();
+                return;
+              }
+              const activeOpt = active >= 0 ? opts[active] : undefined;
+              if (activeOpt) choose(activeOpt);
+              return;
+            }
+            case "ArrowDown":
+              e.preventDefault();
+              if (!isOpen) {
+                open();
+                return;
+              }
+              setActive(active < 0 ? 0 : active + 1);
+              return;
+            case "ArrowUp":
+              e.preventDefault();
+              if (!isOpen) {
+                open();
+                return;
+              }
+              setActive(active < 0 ? opts.length - 1 : active - 1);
+              return;
+            case "Home":
+              if (isOpen) {
+                e.preventDefault();
+                setActive(0);
+              }
+              return;
+            case "End":
+              if (isOpen) {
+                e.preventDefault();
+                setActive(opts.length - 1);
+              }
+              return;
+            default:
+              return;
+          }
+        });
+
+        opts.forEach((opt, i) => {
+          opt.addEventListener("click", () => choose(opt));
+          opt.addEventListener("mousemove", () => setActive(i));
+        });
+
+        // A programmatic selectOption (Playwright) or any other native change
+        // updates the visible trigger without going through choose().
+        native.addEventListener("change", syncFromNative);
+
+        // Paint the initial label from whichever option the SSR marked selected.
+        syncFromNative();
+      });
+
+      document.addEventListener("click", (e) => {
+        const target = e.target as Node | null;
+        dropdowns.forEach((dd) => {
+          if (
+            dd.hasAttribute("data-open") &&
+            (target === null || !dd.contains(target))
+          ) {
+            closeDropdown(dd);
+          }
+        });
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") dropdowns.forEach((dd) => closeDropdown(dd));
+      });
+    }
+
+    initDropdowns();
+  </script>
 </Base>
 
 <style>
@@ -185,6 +390,107 @@ const items = [
   }
   .admin-body :global(.admin-table .admin-select) { margin-right: 0.35rem; }
 
+  /* ---- App-native dropdown ---- */
+  /* A styled trigger + listbox layered over a visually-hidden native <select>.
+     The native select is the value source: per-row save/apply handlers read its
+     .value and Playwright drives it with selectOption(), so it must NOT be
+     display:none (which would make it unfocusable/unselectable). Choosing an
+     option (or a programmatic selectOption) writes the native value and fires a
+     bubbling 'change'; initDropdowns() also listens for that 'change' to keep
+     the visible trigger label in sync. Shared by every admin page. */
+  .admin-body :global(.dd) {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+  }
+  .admin-body :global(.admin-table .dd) { margin-right: 0.35rem; }
+
+  /* Visually-hidden value carrier (clip pattern, NOT display:none) so the
+     native select stays selectOption-able and its change-listeners still fire. */
+  .admin-body :global(.dd__native) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    pointer-events: none;
+  }
+
+  .admin-body :global(.dd__btn) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 0.85rem;
+    line-height: 1.2;
+    padding: 0.3rem 0.5rem;
+    cursor: pointer;
+    transition: border-color 140ms ease;
+  }
+  .admin-body :global(.dd__btn:hover) { border-color: var(--text-faint); }
+  .admin-body :global(.dd__btn:focus-visible) {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .admin-body :global(.dd[data-open] .dd__btn) { border-color: var(--accent); }
+
+  .admin-body :global(.dd__val) { white-space: nowrap; }
+
+  .admin-body :global(.dd__chev) {
+    flex: none;
+    color: var(--text-faint);
+    transition: transform 180ms ease;
+  }
+  .admin-body :global(.dd[data-open] .dd__chev) { transform: rotate(180deg); }
+
+  /* The menu must overflow the table cell (and the overflow-x:auto wrapper). It
+     is absolutely positioned with a high z-index; initDropdowns() toggles the
+     wrapper to overflow:visible while any dropdown is open so it is not clipped. */
+  .admin-body :global(.dd__menu) {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 80;
+    min-width: 100%;
+    width: max-content;
+    max-width: 14rem;
+    margin: 0;
+    padding: 0.25rem;
+    list-style: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated, #14181a);
+    box-shadow: 0 18px 44px -20px rgba(0, 0, 0, 0.85);
+  }
+  .admin-body :global(.dd__menu[hidden]) { display: none; }
+
+  .admin-body :global(.dd__opt) {
+    display: block;
+    padding: 0.35rem 0.55rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .admin-body :global(.dd__opt:hover),
+  .admin-body :global(.dd__opt.is-active) {
+    background: var(--accent-dim, rgba(120, 200, 150, 0.14));
+    color: var(--accent);
+  }
+  .admin-body :global(.dd__opt[aria-selected="true"]) { color: var(--accent); }
+
+  /* While a dropdown is open, let the scroll wrapper show the overflowing menu
+     instead of clipping it. Added/removed by initDropdowns(). */
+  .admin-body :global(.admin-table-wrap.dd-open) { overflow: visible; }
+
   .admin-body :global(.admin-btn) {
     background: transparent;
     border: 1px solid var(--border);
@@ -260,6 +566,14 @@ const items = [
     }
     .admin-body :global(.admin-btn) {
       min-height: 44px;
+    }
+    .admin-body :global(.dd__btn) {
+      min-height: 44px;
+    }
+    .admin-body :global(.dd__opt) {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
     }
   }
 </style>

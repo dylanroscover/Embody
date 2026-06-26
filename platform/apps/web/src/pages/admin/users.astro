@@ -44,9 +44,20 @@ const meId = Astro.locals.user?.id ?? "";
             <td>{u.email_verified ? "yes" : "no"}</td>
             <td>{u.created_at}</td>
             <td>
-              <select class="admin-select" data-trust aria-label="Trust level">
-                {TRUST_LEVELS.map((t) => (<option value={t} selected={t === u.trust_level}>{t}</option>))}
-              </select>
+              <div class="dd" data-dd>
+                <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Trust level">
+                  <span class="dd__val">{u.trust_level}</span>
+                  <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+                </button>
+                <ul class="dd__menu" role="listbox" aria-label="Trust level" hidden>
+                  {TRUST_LEVELS.map((t) => (
+                    <li class="dd__opt" role="option" data-value={t} aria-selected={t === u.trust_level ? "true" : "false"}>{t}</li>
+                  ))}
+                </ul>
+                <select class="dd__native" data-trust aria-hidden="true" tabindex="-1" aria-label="Trust level">
+                  {TRUST_LEVELS.map((t) => (<option value={t} selected={t === u.trust_level}>{t}</option>))}
+                </select>
+              </div>
               {u.id === meId && <span class="admin-pill">you</span>}
             </td>
             <td><button type="button" class="admin-btn" data-save>save</button></td>

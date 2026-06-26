@@ -29,9 +29,20 @@ const resendConfigured = Boolean((env as unknown as CloudflareEnv).RESEND_API_KE
 
   <form class="admin-email-form" data-email-form>
     <label>template
-      <select name="template" class="admin-select">
-        {EMAIL_TEMPLATES.map((t) => (<option value={t}>{t}</option>))}
-      </select>
+      <div class="dd" data-dd>
+        <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Template">
+          <span class="dd__val">{EMAIL_TEMPLATES[0]}</span>
+          <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+        </button>
+        <ul class="dd__menu" role="listbox" aria-label="Template" hidden>
+          {EMAIL_TEMPLATES.map((t, i) => (
+            <li class="dd__opt" role="option" data-value={t} aria-selected={i === 0 ? "true" : "false"}>{t}</li>
+          ))}
+        </ul>
+        <select name="template" class="dd__native" aria-hidden="true" tabindex="-1" aria-label="Template">
+          {EMAIL_TEMPLATES.map((t) => (<option value={t}>{t}</option>))}
+        </select>
+      </div>
     </label>
     <label>send to
       <input type="email" name="to" value={myEmail} class="admin-input" placeholder="you@example.com" />

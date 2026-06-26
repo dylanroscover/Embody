@@ -7,6 +7,11 @@ import { ensureAdminSignedIn, registerNormalUser } from "./admin-helpers";
 test("admin can change another user's trust level", async ({ page }) => {
   // Create the target first (this signs THEM in), then switch to the admin.
   const email = await registerNormalUser(page);
+  // registerNormalUser leaves that user signed in IN THIS CONTEXT; a signed-in
+  // visitor is redirected away from /signin (signin.astro -> /u/<handle>), so
+  // ensureAdminSignedIn's goto("/signin") would never show the email field.
+  // Drop the session cookie first so the admin sign-in form is reachable.
+  await page.context().clearCookies();
   const admin = await ensureAdminSignedIn(page);
   test.skip(!admin, "admin-positive: configure ADMIN_EMAILS (or trust_level=admin) for the e2e admin");
 

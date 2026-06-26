@@ -49,11 +49,22 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
             <td>{r.reporter_handle ?? "-"}</td>
             <td><span class="admin-pill" data-status-cell>{r.status}</span></td>
             <td>
-              <select class="admin-select" data-status-select aria-label="New status">
-                {REPORT_STATUSES.map((s) => (
-                  <option value={s} selected={s === r.status}>{s}</option>
-                ))}
-              </select>
+              <div class="dd" data-dd>
+                <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-label="New status">
+                  <span class="dd__val">{r.status}</span>
+                  <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+                </button>
+                <ul class="dd__menu" role="listbox" aria-label="New status" hidden>
+                  {REPORT_STATUSES.map((s) => (
+                    <li class="dd__opt" role="option" data-value={s} aria-selected={s === r.status ? "true" : "false"}>{s}</li>
+                  ))}
+                </ul>
+                <select class="dd__native" data-status-select aria-hidden="true" tabindex="-1" aria-label="New status">
+                  {REPORT_STATUSES.map((s) => (
+                    <option value={s} selected={s === r.status}>{s}</option>
+                  ))}
+                </select>
+              </div>
               <button type="button" class="admin-btn" data-apply>save</button>
             </td>
           </tr>

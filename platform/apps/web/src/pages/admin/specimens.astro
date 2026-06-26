@@ -42,14 +42,36 @@ const specimens = await listSpecimensForAdmin(env.DB, { q });
             <td>{s.author_handle ?? "-"}</td>
             <td><span class="admin-pill">{s.scan_status}</span></td>
             <td>
-              <select class="admin-select" data-visibility aria-label="Visibility">
-                {VISIBILITIES.map((v) => (<option value={v} selected={v === s.visibility}>{v}</option>))}
-              </select>
+              <div class="dd" data-dd>
+                <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Visibility">
+                  <span class="dd__val">{s.visibility}</span>
+                  <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+                </button>
+                <ul class="dd__menu" role="listbox" aria-label="Visibility" hidden>
+                  {VISIBILITIES.map((v) => (
+                    <li class="dd__opt" role="option" data-value={v} aria-selected={v === s.visibility ? "true" : "false"}>{v}</li>
+                  ))}
+                </ul>
+                <select class="dd__native" data-visibility aria-hidden="true" tabindex="-1" aria-label="Visibility">
+                  {VISIBILITIES.map((v) => (<option value={v} selected={v === s.visibility}>{v}</option>))}
+                </select>
+              </div>
             </td>
             <td>
-              <select class="admin-select" data-tier aria-label="Tier">
-                {TIERS.map((t) => (<option value={t} selected={t === s.tier}>{t}</option>))}
-              </select>
+              <div class="dd" data-dd>
+                <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Tier">
+                  <span class="dd__val">{s.tier}</span>
+                  <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+                </button>
+                <ul class="dd__menu" role="listbox" aria-label="Tier" hidden>
+                  {TIERS.map((t) => (
+                    <li class="dd__opt" role="option" data-value={t} aria-selected={t === s.tier ? "true" : "false"}>{t}</li>
+                  ))}
+                </ul>
+                <select class="dd__native" data-tier aria-hidden="true" tabindex="-1" aria-label="Tier">
+                  {TIERS.map((t) => (<option value={t} selected={t === s.tier}>{t}</option>))}
+                </select>
+              </div>
             </td>
             <td>{s.likes_count}</td>
             <td>
