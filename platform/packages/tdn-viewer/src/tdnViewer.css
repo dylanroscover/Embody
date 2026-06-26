@@ -161,3 +161,38 @@
 .tdn-viewer .react-flow svg {
   max-width: none;
 }
+
+/* Fullscreen modal: the "view fullscreen" control lifts the whole viewer to a
+   full-viewport overlay (same ReactFlow, resized) so the graph can be inspected
+   large; Escape or the close button exits. !important beats the inline height
+   the host passes via the `height` prop. */
+.tdn-viewer.is-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 9999;
+  border-radius: 0;
+  background: var(--tdn-bg);
+}
+.tdn-viewer__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--tdn-line);
+  border-radius: 10px;
+  background: var(--tdn-panel);
+  color: var(--tdn-text);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.tdn-viewer__close:hover {
+  border-color: var(--accent, #6ee668);
+  color: var(--accent, #6ee668);
+}

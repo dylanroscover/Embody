@@ -4,6 +4,7 @@ import "./tdnViewer.css";
 import {
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   Handle,
   MarkerType,
@@ -15,7 +16,7 @@ import {
   type NodeTypes,
   type ReactFlowInstance
 } from "@xyflow/react";
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/contracts";
 import { parseTDN } from "./parseTDN";
@@ -103,9 +104,45 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
     rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(320) });
   }, []);
 
+  // Fullscreen modal: a single control opens the graph as a full-viewport
+  // overlay (the same ReactFlow, resized via CSS), with Escape / a close button
+  // to exit. Replaces the default zoom +/- buttons.
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [fullscreen]);
+  // Re-fit after the container resizes (entering/leaving fullscreen).
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(220) });
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [fullscreen]);
+
+  const expandIcon = (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" />
+    </svg>
+  );
+  const closeIcon = (
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+
   return (
     <div
-      className={["tdn-viewer", className].filter(Boolean).join(" ")}
+      className={["tdn-viewer", fullscreen ? "is-fullscreen" : "", className].filter(Boolean).join(" ")}
       style={style}
       onDoubleClick={handleDoubleClick}
     >
@@ -139,8 +176,26 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
           size={1}
           variant={BackgroundVariant.Dots}
         />
-        <Controls showInteractive={false} />
+        <Controls showZoom={false} showFitView={false} showInteractive={false}>
+          <ControlButton
+            onClick={() => setFullscreen((f) => !f)}
+            title={fullscreen ? "Exit fullscreen" : "View fullscreen"}
+            aria-label={fullscreen ? "Exit fullscreen" : "View fullscreen"}
+          >
+            {fullscreen ? closeIcon : expandIcon}
+          </ControlButton>
+        </Controls>
       </ReactFlow>
+      {fullscreen && (
+        <button
+          type="button"
+          className="tdn-viewer__close"
+          onClick={() => setFullscreen(false)}
+          aria-label="Close fullscreen"
+        >
+          {closeIcon}
+        </button>
+      )}
     </div>
   );
 }
