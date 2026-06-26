@@ -188,7 +188,7 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
           variant={BackgroundVariant.Dots}
         />
         {!fullscreen && (
-          <Controls showZoom={false} showFitView={false} showInteractive={false}>
+          <Controls position="top-right" showZoom={false} showFitView={false} showInteractive={false}>
             <ControlButton onClick={() => setFullscreen(true)} title="View fullscreen" aria-label="View fullscreen">
               {expandIcon}
             </ControlButton>

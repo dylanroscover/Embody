@@ -225,11 +225,27 @@ const defaultView = hasBaked ? "result" : "network";
     opacity: 1;
   }
 
+  /* The TdnViewer's fullscreen control reveals on hover for card covers only
+     (the detail-page preview is not a .cover, so it keeps the button visible). */
+  .cover__layer--network :global(.react-flow__controls) {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  .cover:hover .cover__layer--network :global(.react-flow__controls),
+  .cover:focus-within .cover__layer--network :global(.react-flow__controls) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
   .cover__flip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 0;
     border-radius: 999px;
     background: transparent;
-    padding: 0.2rem 0.6rem;
+    padding: 0.25rem 0.6rem;
     color: var(--text-faint);
     cursor: pointer;
     font-family: var(--font-mono);
@@ -237,7 +253,7 @@ const defaultView = hasBaked ? "result" : "network";
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    line-height: 1.4;
+    line-height: 1;
   }
 
   .cover__flip-btn:hover {
