@@ -69,8 +69,10 @@ test("non-owner is redirected away from the edit page", async ({ page }) => {
   // Register user A and submit, then register user B and try to open A's edit page.
   const { slug } = await registerAndSubmit(page);
 
-  // Sign out, then register a different user (B).
+  // Sign out, then register a different user (B). The sign-out control lives in
+  // the nav account menu (a closed dropdown) -- open it before clicking.
   await page.goto("/contribute");
+  await page.locator("[data-user-menu-toggle]").click();
   await Promise.all([
     page.waitForURL((u) => new URL(u).pathname === "/", { timeout: 15_000 }),
     page.locator("[data-signout]").click()
