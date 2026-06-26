@@ -114,10 +114,26 @@ This applies to:
 3. **Guard against missing children.** During the strip phase of a save, the COMP's children are temporarily gone. If `onInitTD` fires during this window, `op('child')` returns `None`. Always null-check operators before accessing them.
 4. **Store persistent state outside the TDN boundary.** If an extension needs state that survives reimport, use `store()` on the COMP itself (storage is preserved through TDN import) or on an ancestor outside the TDN COMP.
 
-## Threading
+## Threading and Background Work
 
-- **NEVER access TD objects from a worker thread** — all TD operations must go through main-thread hooks.
-- **ThreadManager is a TD COMP**: Calling `EnqueueTask()` from a worker thread triggers THREAD CONFLICT. Use plain `threading.Thread` for sub-tasks in workers.
+**Ironclad rule (a read is treated exactly like a write).** From any thread but the main thread, NEVER touch a main-thread-owned TD object: `op()`/`opex()`, a `Par`/`ParGroup` (read OR write, including `.eval()`/`.val` on a live parameter), DAT/CHOP/SOP/TOP content, `storage` (`fetch`/`store`), `tdu.Dependency` (setting `.val` recooks on the main thread), or `debug()`/`print()` (they route to the Textport / a DAT). **Never call `run()`/`td.run()` from a worker** - it raises `tdError`; this is exactly what froze TD in the field. A worker may use ONLY: pure Python (`math`, `json`, `requests`), `tdu` math/value utilities (`tdu.clamp`/`remap`/`Vector`/`Matrix` - they do not reference TD data), parameter VALUES evaluated on the main thread and passed in, `queue.Queue`, `threading.Event`/`Lock`, `td.isMainThread()` as a guard, and the Thread Manager's `InfoQueue`/`Get/Set*Safe`/`SafeLogger`. Resolve every op path and value on the main thread BEFORE spawning the worker; the worker returns plain data for a main-thread callback to apply.
+
+**Do NOT reach for threading first.** Match the rung to the problem TYPE (these are routes, not a strict escalation); threading is the LAST resort:
+
+0. **Prototype synchronously** to prove the URL/auth/parse - one-shot only, short explicit timeout, never in a per-frame callback or on project open, never shipped.
+1. **Fast, TD-only, no I/O -> run it inline.** Any network/disk/subprocess call is NEVER this step (latency is unbounded).
+2. **Fetch data -> a native TD I/O operator, NOT Python threading.** HTTP one-shot or streaming -> **Web Client DAT**: `op('webclient1').request(url, 'GET', timeout=8000)` returns a connection id immediately and never blocks the frame; the `onResponse` callback fires on the MAIN thread, so write the result there. Parse with a **JSON DAT** (or `dat.jsonObject`) and bridge numbers to channels with **DAT to CHOP** (there is no Web Client CHOP). `ws://` -> WebSocket DAT; inbound/host -> Web Server DAT; control -> OSC; files -> File In / Folder DAT.
+3. **Long main-thread (TD-touching) work -> chunk with `run(delayFrames=N)`**, each chunk small enough to fit one frame. `run()` controls WHEN, not HOW MUCH; it is not a thread and is main-thread-only (a single heavy parse deferred with `run()` still blocks whatever frame it lands on).
+4. **Blocking pure-Python work (custom auth, file/disk, subprocess, heavy CPU) -> the Thread Manager.** Prefer the Palette **Thread Manager Client**; advanced: `op.TDResources.ThreadManager` + a `TDTask` whose `target` touches ZERO TD objects, applying results only in its main-thread hooks. Never call `EnqueueTask()` from a worker (ThreadManager is itself a TD COMP).
+5. **Long-lived server/loop -> ThreadManager `standalone=True`** (Envoy's own MCP server, drained by its `RefreshHook` on the main thread) **or a top-level `threading.Thread`** that touches ZERO TD objects, never calls `run()`, and hands results to a `queue.Queue` drained every frame by a main-thread callback (an Execute DAT `onFrameStart` or a ThreadManager `RefreshHook`). A worker spawning a `run()`-calling sub-thread is the crash, not a rung.
+
+Engine COMP / TouchEngine offloads heavy COOKING to a separate process (TOP/CHOP/DAT I/O only) - never use it for an I/O fetch. Stock `asyncio` blocks the frame loop; a worker-hosted loop still needs zero TD access and a queue handoff.
+
+**Triggers.** Prefer a user-driven Pulse parameter (`onPulse` / `Par.pulse()`) for a one-shot/manual fetch, or a **Timer CHOP** for genuine intervals (fire one request per tick). Never a `sleep` loop, a self-rescheduling `run()` poller, or an auto-fetch on project open unless asked; do not start a new request while one is still pending.
+
+**Gates.** Do not pre-optimize: a synchronous fetch that does not measurably drop a frame may not need anything above Step 2 (measurement decides whether a callback needs chunking or a worker - it never makes shipped blocking I/O acceptable on the main thread). After wiring, verify with primary evidence: `get_project_performance` shows fps/frameTime held vs baseline and `droppedFrames` flat, AND the result actually arrived (read the DAT/CHOP back; branch on `statusCode['code']` - a callback that never fires leaves TD running but empty).
+
+For code patterns (Web Client DAT example, Thread Manager Client, polling, large payloads), load `/td-api-reference`.
 
 ## Cook Model
 
@@ -166,4 +182,6 @@ TouchDesigner's render and texture coordinate system places **(0, 0) at the bott
 
 ## Pre-Installed Packages
 
-Available without installation: `numpy`, `cv2` (OpenCV), `requests`, `yaml` (PyYAML), `cryptography`, `attrs`. Auto-imported stdlib: `math`, `re`, `sys`, `collections`, `enum`, `inspect`, `traceback`, `warnings`.
+Commonly importable without installation: `numpy`, `cv2` (OpenCV), `requests`, `yaml` (PyYAML), `cryptography`, `attrs` (only `numpy` and `cv2` are documented as bundled; verify the rest in your build before relying on them). Auto-imported stdlib: `math`, `re`, `sys`, `collections`, `enum`, `inspect`, `traceback`, `warnings`.
+
+**`requests` blocks the frame - see the Threading ladder above.** `execute_python`, parameter expressions, and operator/cook callbacks all run on TD's main thread, so a synchronous `requests.get(...)` (or `urllib`/`socket`, a large file read, `subprocess.run`, or a blocking DB call) freezes the whole UI/cook cycle for the round-trip - on a slow endpoint it can hang TD or exceed the 30s MCP timeout. `requests` has no default timeout; always pass `timeout=(connect, read)` in seconds. To fetch data, use the Web Client DAT (async, never blocks); if you must use `requests`, run it in a Thread Manager worker.

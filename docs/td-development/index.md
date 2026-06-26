@@ -49,6 +49,8 @@ Available without installation: `numpy`, `cv2` (OpenCV), `requests`, `yaml` (PyY
 
 Auto-imported (no `import` needed): `math`, `re`, `sys`, `collections`, `enum`, `inspect`, `traceback`, `warnings`
 
+Calling `requests` synchronously blocks TD's main thread and stalls or hangs the frame — for HTTP fetches use the Web Client DAT, or move `requests` to a Thread Manager worker. See [Threading](threading.md).
+
 ### TD Documentation
 
 - [Wiki home](https://docs.derivative.ca/Main_Page)

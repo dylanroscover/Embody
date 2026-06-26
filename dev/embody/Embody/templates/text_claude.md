@@ -27,6 +27,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
     - Before `create_extension`: load `/create-extension`
     - Before `externalize_op` or `save_externalization`: load `/externalize-operator`
     - Before writing TD Python (`execute_python`, `set_dat_content`, `edit_dat_content`): load `/td-api-reference`
+    - Before fetching data over HTTP, or building any background / long-running / blocking task: load `/td-api-reference` (use a Web Client DAT, not hand-rolled threading)
     - When diagnosing operator errors: load `/debug-operator`
     - Before first MCP call in a new session: load `/mcp-tools-reference`
 

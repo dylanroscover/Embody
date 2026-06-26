@@ -114,7 +114,7 @@ parent().MyProperty if parent().extensionsReady else 0
 
 ### 10. Accessing ThreadManager from a worker thread
 
-`op.TDResources.ThreadManager` is a TD COMP — accessing it from a worker thread triggers a THREAD CONFLICT. Use plain `threading.Thread` for sub-tasks inside workers.
+`op.TDResources.ThreadManager` is a TD COMP — accessing it from a worker thread (including calling `EnqueueTask()`) triggers a THREAD CONFLICT. For a sub-task spawned inside an existing worker, use a plain `threading.Thread` whose body touches ZERO TD objects and never calls `run()`/`td.run()`. Do not reach for `threading.Thread` to START background work — prefer the Web Client DAT (HTTP) or the Thread Manager (blocking pure-Python); see [Threading](threading.md).
 
 ### 11. TD imports in worker threads
 
