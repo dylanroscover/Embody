@@ -1046,6 +1046,12 @@ class TDNExt:
 					'include_storage': include_storage,
 				},
 			}
+			# Omit `build` when there is no build number (untracked /
+			# portable networks -- e.g. a specimen with no TSV row and no
+			# Build par). Matches the format's omit-when-absent philosophy
+			# rather than emitting a noisy `build: null`.
+			if tdn['build'] is None:
+				del tdn['build']
 			if type_defaults:
 				tdn['type_defaults'] = type_defaults
 			if par_templates:
@@ -1306,6 +1312,10 @@ class TDNExt:
 						state['options'].get('include_storage', True),
 				},
 			}
+			# Omit `build` when absent (see sync path above) -- no noisy
+			# `build: null` for untracked/portable networks.
+			if tdn['build'] is None:
+				del tdn['build']
 			if type_defaults:
 				tdn['type_defaults'] = type_defaults
 			if par_templates:
@@ -2087,6 +2097,17 @@ class TDNExt:
 			# Skip system/internal paths (exact match or children)
 			if child.path in SYSTEM_PATHS or child.path.startswith(
 					_SYSTEM_PATH_PREFIXES):
+				continue
+
+			# Annotations (annotateCOMP) are captured exclusively by the
+			# dedicated `annotations:` section via _exportAnnotations -- a
+			# compact title/text/box form. Serializing them here too would
+			# double-capture the same COMP and (because _exportCustomPars
+			# emits ALL of an annotate's custom pars, default or not) dump
+			# ~180 lines of Opviewer*/Body* noise per annotation for zero
+			# added fidelity. The import rebuilds them from `annotations:`
+			# (Phase 7a), so the op-list entry is pure dead weight.
+			if child.type == 'annotate':
 				continue
 
 			# Skip COMPs tagged for exclusion -- the whole subtree is

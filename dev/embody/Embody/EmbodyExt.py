@@ -720,12 +720,6 @@ class EmbodyExt:
         keys remain.
         """
         responses = self.my.fetch('_smoke_test_responses', None, search=False)
-        # test_mode is True if a test seeded responses OR dialogs are suppressed
-        # (_suppressDialogs: a test run is active, or a project save is in
-        # progress). Suppression is decoupled from _smoke_test_responses so the
-        # modal stays gated even after a test drains the dict, AND it covers the
-        # save window, where a post-save Refresh could otherwise reach a modal.
-        test_mode = (responses is not None) or self._suppressDialogs()
         if responses is not None and title in responses:
             value = responses[title]
             if isinstance(value, list):
@@ -748,14 +742,27 @@ class EmbodyExt:
             if not responses:
                 self.my.unstore('_smoke_test_responses')
             return choice
-        if test_mode:
-            # Test is running but no response was seeded for this title --
-            # bail with -1 instead of opening a modal that would freeze TD.
+        # A test run is active (or seeded the store) but left THIS dialog
+        # unanswered -- a genuine test gap. Surface it LOUDLY so the test
+        # author seeds a response; bail with -1 rather than freezing TD on a
+        # modal. This path is for tests ONLY -- never a normal save.
+        if (responses is not None) or self._testRunnerActive():
             self.Log(
                 f'[test] No response seeded for "{title}"; returning -1 '
                 f'instead of opening modal dialog. Seed it via '
                 f'op.Embody.store("_smoke_test_responses", {{...}}).',
                 'WARNING')
+            return -1
+        # A project save is mid-flight (onProjectPreSave set _suppress_dialogs):
+        # the .toe is already open for writing, so showing a modal now would
+        # risk freezing the save. Return the safe default QUIETLY -- this is
+        # expected, not a test, so it must not log a misleading "[test]"
+        # warning on every Ctrl+S. The caller logs its own outcome (e.g. the
+        # TDN at-risk skip summary names what was dropped).
+        if self.my.fetch('_suppress_dialogs', False, search=False):
+            self.Log(
+                f'Dialog "{title}" suppressed during save -- using default '
+                f'(-1).', 'DEBUG')
             return -1
         return ui.messageBox(title, message, buttons=buttons)
 

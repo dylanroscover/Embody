@@ -1,5 +1,23 @@
 # Changelog
 
+## v6.0.47
+
+A TDN-format cleanup and save-UX build. Annotation COMPs are no longer double-captured in `.tdn` exports -- they lived both as a heavy `operators:` entry and in the compact `annotations:` array, dumping 100-205 lines of palette-clone boilerplate per annotation. The exporter now omits a `null` build number, the at-risk save check no longer mislabels a normal save as a test context, and all 12 affected gallery specimens were cleaned (-2,887 lines). Verified end-to-end: the shipped release `.tox` boots clean in a fresh-install smoke test with every fix live.
+
+### TDN format
+
+- **Annotation COMPs are captured ONLY in the `annotations:` array, never as `operators:` entries.** A stock TD annotate is a *palette clone* with an extension and ~40 custom parameters; serializing it as a regular operator dumped well over 100 lines of `custom_pars` (every `Opviewer*`/`Body*`) that exactly duplicated -- in a far heavier form -- what the compact `annotations:` entry already records: a single 205-line block for a single-annotate network, or a shared 183-line `par_templates` for a multi-annotate one. `_exportChildren` now skips any `annotateCOMP` child (even a non-utility palette clone, which is how they leaked in); the importer already rebuilds annotations from the `annotations:` array (Phase 7a), so the op-list entry was pure dead weight. The TDN spec and JSON schema gained an "Export Behavior" note documenting the guarantee.
+- **`build: null` is omitted entirely.** Untracked / portable networks (no externalizations-table row, no `Build` parameter) previously emitted `build: null` in the header -- inconsistent with the format's omit-when-absent philosophy (`position`, `size`, etc.). Both export paths now drop the key when there's no build; older files carrying an explicit `null` still read fine.
+- **12 gallery specimens cleaned.** Every affected `specimens/**` and `dev/specimen_lab/**` `.tdn` was stripped of its redundant annotate operators and the now-orphaned annotate-only `par_templates` / `annotateCOMP` `type_defaults` -- **2,887 lines of pure deletion**, validated by live re-import (every annotation rebuilds from the `annotations:` array with its title intact) and by clean reconstruction on project open.
+
+### Save UX
+
+- **The save-time "TDN Content at Risk" check no longer logs a misleading `[test]` warning.** During a project save, `_messageBox` saw the `_suppress_dialogs` save-window flag and mislabeled it as a test context, logging `[test] No response seeded for "TDN Content at Risk" ...` on every Ctrl+S whenever a TDN COMP held unprotected DAT content. The test gate (`_smoke_test_responses` seeded OR a runner active) and the save gate (`_suppress_dialogs`) are now separated: a real test still warns loudly so test authors notice an unseeded dialog, while a save returns the safe default quietly (DEBUG) -- no more textport spam. Return values are unchanged.
+
+### Tests
+
+- New **`test_tdn_annotation_export`** suite (7 tests): annotate excluded from `operators:`, present in `annotations:`, no heavy `custom_pars` dump, round-trips via the `annotations:` array, and `build` omitted-not-null. Two new **`test_dialog_suppression`** tests guard the save-vs-test split (a save stays quiet; a real run still warns). Test suite **73 suites / 1,702 tests**, all green; the shipped `Embody-v6.0.47.tox` passed a fresh-install smoke test (Embody/Envoy/TDN loaded, no script errors, both TDN fixes confirmed running live).
+
 ## v6.0.46
 
 A docs-accuracy and web-polish build. A multi-agent audit swept the entire docs site, the AI machine-files (`llms.txt` / `for-ai`), and the README against the live source and fixed every stale claim; the embody.tools web app gained an app-native report dialog, a simplified specimen preview header, a centred contribute form (renamed `/submit` -> `/contribute`), and a themed 404; plus minor custom-parameter organization on the Embody COMP.

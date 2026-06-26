@@ -49,7 +49,7 @@ A legacy JSON `.tdn` (version `1.x`) is the same object encoded as JSON; v2.0 im
 |-------|------|----------|-------------|
 | `format` | string | Yes | Always `"tdn"`. Identifies the file format. |
 | `version` | string | Yes | Format version. Currently `2.0`. Files `<2.0` are JSON; `>=2.0` are YAML. |
-| `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. `null` if the COMP has no build tracking. |
+| `build` | integer | No | Embody build number for the exported COMP. Incremented each time the network is saved via Embody. Useful for version tracking and git diffs. **Omitted entirely** when the COMP has no build tracking (an untracked or portable network — no externalizations-table row and no `Build` parameter). Older files may carry an explicit `build: null`; readers still accept it. |
 | `generator` | string | Yes | Tool that produced the file (e.g., `"Embody/6.0.4"`). |
 | `td_build` | string | Yes | TouchDesigner version and build number (e.g., `"2025.32050"`). |
 | `source_file` | string | No | Basename of the `.toe` project file the COMP was exported from (e.g., `"MyProject.toe"`). Informational provenance only; not used on import. |
@@ -1043,6 +1043,10 @@ For nested COMPs, `annotations` appears alongside `children`:
 | `size` | `[width, height]` | Yes | Always included — annotations have no standard default size. |
 | `color` | `[r, g, b]` | No | Only if different from the default gray `[0.545, 0.545, 0.545]`. Background color. |
 | `opacity` | number | No | Only if different from `1.0`. Background opacity (0.0 to 1.0). |
+
+### Export Behavior
+
+Annotation COMPs (`annotateCOMP`) are serialized **exclusively** to the `annotations` array — never as `operators` entries. The exporter skips any `annotateCOMP` child of a network, even a non-utility one. This matters because TD's stock annotate is a *palette clone* with an extension and ~40 custom parameters: capturing it as a regular operator would dump well over 100 lines of `custom_pars`/`par_templates` per annotation that exactly duplicate (in a far heavier form) what the compact `annotations` entry already records. The `annotations` array is the single source of truth for annotations; the round-trip rebuilds them from it (see Import Behavior).
 
 ### Import Behavior
 

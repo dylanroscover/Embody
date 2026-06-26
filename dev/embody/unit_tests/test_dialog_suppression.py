@@ -135,3 +135,62 @@ class TestDialogSuppression(EmbodyTestCase):
                 'idle (no run, no save) must allow dialogs -- predicate False')
         finally:
             runner._running = saved_running
+
+    # ----- The misleading-"[test]"-on-save regression --------------------
+    # A save suppressed the dialog AND mislabeled it as a test context, so
+    # every Ctrl+S logged '[test] No response seeded for "TDN Content at
+    # Risk" ...'. The fix splits the test gate from the save gate: a save
+    # returns the safe default QUIETLY (DEBUG), only a real run still warns.
+
+    def test_save_suppress_does_not_log_test_warning(self):
+        """While a save is in progress (NOT a test run), a gated dialog must
+        return -1 WITHOUT emitting the '[test] No response seeded' WARNING
+        that used to hit the textport on every save."""
+        emb = self.embody_ext
+        runner = op.unit_tests.ext.TestRunnerExt
+        saved_running = getattr(runner, '_running', False)
+        saved_resp = op.Embody.fetch('_smoke_test_responses', None, search=False)
+        try:
+            runner._running = False                       # isolate: not a test
+            op.Embody.unstore('_smoke_test_responses')    # no seed
+            op.Embody.store('_suppress_dialogs', True)    # a save is mid-flight
+            before = len(emb._log_buffer)
+            ret = emb._messageBox('TDN Content at Risk', 'guard',
+                                  ['Externalize', 'Skip'])
+            new_entries = list(emb._log_buffer)[before:]
+            self.assertEqual(ret, -1, 'must return the safe default during save')
+            offending = [e for e in new_entries
+                         if e['level'] == 'WARNING'
+                         and 'No response seeded' in e['message']]
+            self.assertEqual(
+                offending, [],
+                'a save-suppressed dialog must NOT log a "[test] No response '
+                f'seeded" WARNING; got: {offending}')
+        finally:
+            op.Embody.unstore('_suppress_dialogs')
+            runner._running = saved_running
+            if saved_resp is not None:
+                op.Embody.store('_smoke_test_responses', saved_resp)
+
+    def test_active_test_run_still_warns_on_unseeded_dialog(self):
+        """Counterpart: a genuine test run with an unseeded dialog MUST still
+        emit the '[test] No response seeded' WARNING so test authors notice
+        the gap. The real runner is active here, so _testRunnerActive() is
+        True and the test gate -- not the save gate -- fires."""
+        emb = self.embody_ext
+        saved_resp = op.Embody.fetch('_smoke_test_responses', None, search=False)
+        try:
+            op.Embody.unstore('_smoke_test_responses')    # no seed, run active
+            self.assertTrue(emb._testRunnerActive())
+            before = len(emb._log_buffer)
+            ret = emb._messageBox('UNSEEDED DURING RUN', 'guard', ['A', 'B'])
+            new_entries = list(emb._log_buffer)[before:]
+            self.assertEqual(ret, -1)
+            warned = [e for e in new_entries
+                      if e['level'] == 'WARNING'
+                      and 'No response seeded' in e['message']]
+            self.assertTrue(
+                warned, 'an unseeded dialog during a real run must still warn')
+        finally:
+            if saved_resp is not None:
+                op.Embody.store('_smoke_test_responses', saved_resp)

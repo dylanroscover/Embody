@@ -17,7 +17,7 @@
     },
     "build": {
       "type": ["integer", "null"],
-      "description": "Embody build number for the exported COMP. null if no build tracking."
+      "description": "Embody build number for the exported COMP. Omitted entirely when there is no build tracking (untracked/portable network); older files may carry an explicit null, which readers still accept."
     },
     "generator": {
       "type": "string",

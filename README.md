@@ -2,7 +2,7 @@
 
 **Create at the speed of thought.**
 
-![Version](https://img.shields.io/badge/version-6.0.46-blue)
+![Version](https://img.shields.io/badge/version-6.0.47-blue)
 ![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
 ![MCP Tools](https://img.shields.io/badge/MCP_tools-49-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -150,7 +150,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **72 test suites** (1,693 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes **73 test suites** (1,702 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -181,6 +181,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.47**: A TDN-format cleanup. **Annotation COMPs are no longer double-captured in `.tdn` exports** -- a stock TD annotate is a palette clone with an extension and ~40 custom parameters, so the exporter was writing it both as a 100-205 line `operators:` entry *and* in the compact `annotations:` array; `_exportChildren` now skips `annotateCOMP` children (the importer already rebuilds them from `annotations:`, Phase 7a). `build: null` is omitted from the header for untracked/portable networks, and all 12 gallery specimens were cleaned (**-2,887 lines**, pure deletion, validated by live re-import and clean reconstruction on project open). Save UX: the at-risk content check no longer logs a misleading `[test]` warning on every Ctrl+S -- the test gate and the save gate are now separate (a real test still warns; a save stays quiet). New `test_tdn_annotation_export` (7) + 2 `test_dialog_suppression` tests; the shipped `Embody-v6.0.47.tox` passed a fresh-install smoke test with both TDN fixes confirmed running live. Test suite **73 suites / 1,702 tests**, all green.
 - **6.0.46**: A docs-accuracy + web-polish build. A multi-agent audit reconciled the entire docs site, the AI machine-files (`llms`/`for-ai`), and this README to the live source: the stale "inert by default" community-paste wording is now the real clean/flagged/blocked verdict model; counts corrected (72 suites / 1,693 tests; **49 MCP tools**); API/shortcut examples fixed in the docs and the shipped AGENTS template (`Ctrl+Shift+O` opens the Manager, `getExternalizedOps(COMP)`); and `llms-full.txt`'s embedded TDN spec regenerated to v2.0 (ASCII-folded, `application/yaml`). embody.tools gained an app-native report dialog, a simplified specimen network-preview header, a centred `/contribute` form (renamed from `/submit`), and a themed 404. Plus minor custom-parameter organization.
 - **6.0.44**: Community specimens paste in LIVE and working. The safe-import was zeroing EVERY parameter expression (a published specimen's GLSL uniform bindings, resolution, and animation drivers all collapsed to 0 -- a dead frame), so it now preserves provably-pure value expressions (par reads, `absTime`, `math.*`, `Par.eval()`, arithmetic) via a new AST allowlist and disarms only genuinely side-effecting surfaces; a clean specimen pastes with no warning (live-if-scanned-clean). Fixes the scanner false positives on `.eval()`/`.store()`/`tdu`/GLSL DATs, trusts TD palette extensions (with an `opshortcut`-hijack defense), and closes adjacent holes (Script OPs bypassed, `tox_ref` stripped, cooking suspended during untrusted import). Paste UX: the new COMP auto-selects and the view pans to centre it (via writable `pane.x/y`), and the auto-paste prompt fires only while the TD window is the OS-frontmost app (NSWorkspace / GetForegroundWindow). New `test_collection_pure` (14) + standalone `test_safe_import_pure` (25) + a 70-case validator corpus. Test suite **72 suites / 1,693 tests**.
 - **6.0.42**: Clipboard auto-paste -- bring a TDN into your network with no keyboard shortcut. The conflicting Cmd-Shift-V paste binding is removed (TD's native operator-clipboard paste fires on the same keystroke and can't be suppressed, pasting leftover nodes). Instead Embody watches the OS clipboard (`ui.clipboard`) and, when a TDN network appears (web "embody it" button or Cmd-Shift-C), prompts to **Embody it** into the current network as a new COMP -- debounced, gated on a new Clipboard Auto-Paste toggle, skipped in Perform Mode, and suppressed during saves/tests. `test_clipboard_watch` (5); no regression. Test suite **71 suites / 1,678 tests**.

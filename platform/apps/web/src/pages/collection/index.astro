@@ -95,8 +95,20 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
     <p class="lede">
       Copy any specimen's TDN to your clipboard and paste it straight into a TouchDesigner .toe running <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a>.
     </p>
+  </section>
 
-    <div class="collection-toolbar">
+  <section class="page-section tight collection-gallery">
+    <div
+      class="collection-shell"
+      id="collection-view"
+      data-view="list"
+      data-page-size={PAGE_SIZE}
+      data-next-cursor={nextCursor ?? ""}
+      data-base-count={countLabel}
+      data-fixtures={usingFixtures ? "1" : "0"}
+      data-signed-in={isSignedIn ? "1" : "0"}
+    >
+      <div class="collection-toolbar">
       <div class="toolbar-controls">
         <span class="collection-total mono" data-collection-count>{countLabel}</span>
 
@@ -207,20 +219,9 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
           </button>
         </div>
       </div>
-    </div>
-  </section>
+      </div>
 
-  <div
-    class="collection-shell"
-    id="collection-view"
-    data-view="list"
-    data-page-size={PAGE_SIZE}
-    data-next-cursor={nextCursor ?? ""}
-    data-base-count={countLabel}
-    data-fixtures={usingFixtures ? "1" : "0"}
-    data-signed-in={isSignedIn ? "1" : "0"}
-  >
-    <script is:inline>
+      <script is:inline>
       // Apply the saved view BEFORE the grid paints, so a persisted "gallery"
       // preference doesn't flash the SSR default "list" first. Runs synchronously
       // during parse -- the shell + toggle buttons already exist above this point.
@@ -237,7 +238,7 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
         } catch (e) {}
       })();
     </script>
-    <section class="page-section tight collection-results">
+    <section class="collection-results">
       <div class="card-grid" data-card-grid>
         {firstPage.map((specimen) => (
           <article
@@ -341,7 +342,8 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
       -->
       <div class="scroll-sentinel" data-scroll-sentinel aria-hidden="true"></div>
     </section>
-  </div>
+    </div>
+  </section>
 
   <script>
     // Server-driven collection: the SSR first page paints instantly; this module
@@ -930,7 +932,17 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
     flex-wrap: wrap;
     align-items: center;
     gap: 0.75rem 1rem;
-    margin-top: 1.1rem;
+  }
+
+  /* The gallery panel: one encased box holding the toolbar AND the card grid,
+     with no divider line between them -- the panel itself is the grouping.
+     Page-base background (darker than the elevated cards) so the cards read as
+     sitting inside the frame. */
+  .collection-shell {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg);
+    padding: clamp(1rem, 2.2vw, 1.35rem);
   }
 
   .collection-search {
@@ -1222,10 +1234,10 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
   /* ---- Results ---- */
   /* The divider above the grid gets generous breathing room so the grid does
      not crowd the line (product-owner feedback: v1 was too tight). */
+  /* No divider line above the grid -- the encasing panel groups it with the
+     toolbar. Just an even gap below the toolbar (matches the panel padding). */
   .collection-results {
-    border-top: 1px solid var(--border-faint);
-    padding-top: 2.6rem;
-    margin-top: 1.4rem;
+    margin-top: clamp(1rem, 2.2vw, 1.35rem);
   }
 
   .scroll-sentinel {
