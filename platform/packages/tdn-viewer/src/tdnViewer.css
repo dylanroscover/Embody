@@ -176,7 +176,15 @@
   height: 100dvh !important;
   z-index: 9999;
   border-radius: 0;
-  background: var(--tdn-bg);
+  /* Keep the inline viewer's dot-grid background instead of flattening to a
+     solid fill, so fullscreen matches the main-page view. (The base .tdn-viewer
+     background layers the grid over an opaque var(--tdn-bg), so the overlay
+     still fully covers the page.) */
+  background:
+    linear-gradient(rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    var(--tdn-bg);
+  background-size: 32px 32px;
 }
 .tdn-viewer__close {
   position: absolute;

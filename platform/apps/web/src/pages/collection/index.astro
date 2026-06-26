@@ -912,19 +912,31 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
      (product-owner feedback). Shrink the h1 + lede and trim padding. */
   .collection-hero {
     padding-top: 1.6rem;
-    padding-bottom: 1.4rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* Consistent title-block rhythm: equal tight gaps between eyebrow, h1 and lede
+     (was 31px / 7px -- jarringly uneven), then a section gap to the gallery that
+     is exactly 2x that (0.75rem hero padding-bottom + 0.75rem gallery
+     padding-top = 1.5rem). */
+  .collection-hero .eyebrow {
+    margin-bottom: 0.75rem;
   }
 
   .collection-hero h1 {
-    margin: 0.35rem 0 0;
+    margin: 0;
     font-size: clamp(1.5rem, 3vw, 2rem);
     line-height: 1.15;
   }
 
   .collection-hero .lede {
-    margin: 0.45rem 0 0;
+    margin: 0.75rem 0 0;
     font-size: 0.92rem;
     color: var(--text-muted);
+  }
+
+  .collection-gallery {
+    padding-top: 0.75rem !important;
   }
 
   .collection-toolbar {
