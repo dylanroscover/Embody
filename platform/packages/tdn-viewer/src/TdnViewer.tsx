@@ -59,15 +59,22 @@ type AnnotationNodeData = {
 type AnnotationNode = Node<AnnotationNodeData, "annotation">;
 type TdnFlowNode = OperatorNode | AnnotationNode;
 
+// Operator-family colors follow TouchDesigner's own family palette so each node
+// reads with its correct family identity (TOPs purple, CHOPs green, SOPs blue,
+// etc.) -- NOT an arbitrary assignment. The reference hexes in the comments are
+// TD's exact `ui.colors[<FAMILY>]` values (read live from the app); the values
+// used here are those hues brightened/saturated so they pop as the vivid header
+// bar on the dark viewer, since TD's are muted node-body tints. COMP is lifted
+// from TD's near-black grey (#303030) to a legible neutral.
 const FAMILY_COLORS: Record<string, string> = {
-  TOP: "#6ee668",
-  CHOP: "#9ccb5a",
-  SOP: "#c9954f",
-  DAT: "#d98a6a",
-  MAT: "#b291b0",
-  POP: "#d9c25a",
-  COMP: "#5fa777",
-  OBJECT: "#b9b09d"
+  TOP: "#9d8cdb", // TD #695c93 -- blue-purple
+  CHOP: "#7cc45a", // TD #628c46 -- green
+  SOP: "#5fa3dd", // TD #4a80b2 -- blue
+  POP: "#7a78ec", // TD #504ebf -- blue-violet (bluer than TOP)
+  MAT: "#c9b85f", // TD #9f9447 -- olive-gold
+  DAT: "#c684ad", // TD #935c80 -- mauve / pinky-purple
+  COMP: "#9aa1a8", // TD #303030 -- neutral grey (lifted for legibility)
+  OBJECT: "#b9b09d" // fallback for any unrecognized family
 };
 
 const NODE_TYPES: NodeTypes = {
