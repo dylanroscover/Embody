@@ -617,11 +617,17 @@ function emitKey(key: string): string {
 
 <style>
   .detail-hero {
-    /* Equal, tight gaps between the three stacked specimen sections: each gap is
-       this section's padding-bottom + the next section's padding-top, so giving
-       every section the SAME vertical pad makes hero->layout and layout->raw
-       identical (and tighter than the default page rhythm). */
-    padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
+    /* The hero->preview gap is exactly 2x the heading->paragraph gap (the h1's
+       1.35rem margin-bottom). That gap = this padding-bottom + the lede's
+       (zeroed) margin + the layout's padding-top: 1.35rem + 1.35rem = 2.7rem. */
+    padding-bottom: 1.35rem;
+  }
+
+  /* The lede is the last hero element now (badges/CTA moved to the sidebar), so
+     its default 3rem trailing margin is vestigial -- zero it so the section
+     paddings alone own the hero->preview gap. */
+  .detail-hero .lede {
+    margin-bottom: 0;
   }
 
   /* The category in the breadcrumb links to the collection filtered to it. */
@@ -879,8 +885,9 @@ function emitKey(key: string): string {
     gap: 18px;
     align-items: start;
     /* !important beats the global `.page-section + .page-section.tight` (0,3,0)
-       rhythm; same value as the hero/raw pads so all inter-section gaps match. */
-    padding-top: clamp(1.75rem, 3.5vw, 2.5rem) !important;
+       rhythm. Lower half of the hero->preview gap: 1.35rem here + 1.35rem hero
+       padding-bottom = 2.7rem, exactly 2x the heading->paragraph gap. */
+    padding-top: 1.35rem !important;
     padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
   }
 
