@@ -67,6 +67,11 @@ try {
 const countLabel = `${totalCount} specimen${totalCount === 1 ? "" : "s"}`;
 
 const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
+
+// Card badges abbreviate the difficulty (STR/INT/ADV) so the pill row stays on
+// one line in the narrow gallery cards; the full word is on the title tooltip.
+const DIFFICULTY_ABBR: Record<string, string> = { starter: "STR", intermediate: "INT", advanced: "ADV" };
+const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUpperCase();
 ---
 
 <Base
@@ -229,7 +234,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
 
             <div class="specimen-card__body">
               <div class="badge-row">
-                <span class="badge">{specimen.difficulty}</span>
+                <span class="badge" title={specimen.difficulty}>{diffAbbr(specimen.difficulty)}</span>
                 <span class="badge specimen-category">{specimen.category}</span>
                 <span class="badge license">CC-BY</span>
 
@@ -549,6 +554,10 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
       "noise-terrain", "plasma-interference", "reaction-diffusion",
     ]);
 
+    const diffAbbr = (d: string): string =>
+      (({ starter: "STR", intermediate: "INT", advanced: "ADV" }) as Record<string, string>)[d] ??
+      d.slice(0, 3).toUpperCase();
+
     function buildCard(s: SpecimenSummary): HTMLElement {
       const search = `${s.name} ${s.description} ${s.category} ${s.difficulty} ${s.requires}`.toLowerCase();
       const uploaded = Boolean(s.thumbnail_key);
@@ -591,7 +600,7 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
         </div>
         <div class="specimen-card__body">
           <div class="badge-row">
-            <span class="badge">${esc(s.difficulty)}</span>
+            <span class="badge" title="${esc(s.difficulty)}">${esc(diffAbbr(s.difficulty))}</span>
             <span class="badge specimen-category">${esc(s.category)}</span>
             <span class="badge license">CC-BY</span>
             <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Embody it -- copy ${esc(s.name)}'s TDN for TouchDesigner" title="Embody it -- copy this specimen's TDN for your agent">
@@ -1338,9 +1347,23 @@ const DIFFICULTIES = ["starter", "intermediate", "advanced"] as const;
   .badge-row {
     align-items: center;
     gap: 0.35rem;
+    /* One line, always: abbreviated difficulty (STR/INT/ADV) + CC-BY keep the
+       gallery row from wrapping. The copy button is pinned right and never
+       shrinks; the secondary badges shrink/clip first if a card is ever too
+       narrow, so the copy action is always reachable. */
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  .badge-row .badge {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .badge-row .card-copy {
+    flex: none;
     margin-left: auto;
   }
 
