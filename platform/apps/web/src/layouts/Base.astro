@@ -570,7 +570,8 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
           uniform float uScroll, uRadius, uScale, uGy;
           uniform sampler2D uSnap;
           #define PI 3.14159265
-          #define BEVEL 18.0   // px band at the rim where the bend lives (bigger = wider edge zone, flatter center)
+          #define BEVEL 18.0   // px band at the rounded ENDS where the horizontal bend lives
+          #define VFLOOR 0.16  // residual vertical bend at the center (0 = perfectly flat middle, never quite reached)
           float sdRR(vec2 p, vec2 b, float r){ vec2 q = abs(p)-b+r; return min(max(q.x,q.y),0.0)+length(max(q,0.0))-r; }
           void main(){
             vec2 px = vUv * uCanvasPx;
@@ -585,13 +586,21 @@ const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefin
             // edges (top/bottom + the rounded ends) -- a glass slab with a
             // curved bevel, not a whole dome. -d is depth inside the pill (0 at
             // the rim); edge ramps from 1 at the rim to 0 once BEVEL deep.
-            vec2 pn = rel / hb;
+            vec2 pn = rel / hb;                            // normalized, -1..1
             float L = length(pn);
             vec2 dir = L > 1e-3 ? pn / L : vec2(0.0);      // outward (~= edge normal)
+            // Horizontal: the rounded ENDS keep a rim bevel (bend within BEVEL px).
             float edge = 1.0 - smoothstep(0.0, BEVEL, -d);
-            edge *= edge;                                  // ease the onset so the
-                                                           // flat center blends in
-            vec2 grad = (-0.5 * PI) * edge * dir;
+            edge *= edge;
+            // Vertical: ONE seamless curve over the FULL height -- not a narrow rim
+            // bevel with a flat center band (which read as curve->straighten->curve).
+            // sign(y)*smoothstep(|y|) is C1-smooth through the center (value 0,
+            // slope 0 -> readable middle) and rounds off at the top/bottom edges
+            // (slope 0 at |y|=1); VFLOOR*y keeps the middle gently bending --
+            // "almost flattening, but not quite".
+            float vy = pn.y;
+            float vbend = sign(vy) * smoothstep(0.0, 1.0, abs(vy)) + VFLOOR * vy;
+            vec2 grad = vec2((-0.5 * PI) * edge * dir.x, (-0.5 * PI) * vbend);
             grad.y *= uGy;                                  // soften vertical (thin bar)
             vec2 offset = -uScale * grad;                   // magnify = sample inward
             vec2 screen = uOffset + px;
