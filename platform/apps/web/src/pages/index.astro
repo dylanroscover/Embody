@@ -137,6 +137,29 @@ const jsonLd = {
       </p>
     </div>
   </section>
+
+  <script>
+    // Fade the node-graph backdrop in once the ReactFlow island has actually
+    // rendered nodes, so it no longer pops in at the end of load. Decorative, so
+    // a safety-net timeout reveals it regardless; reduced-motion users get an
+    // instant reveal via the global prefers-reduced-motion rule.
+    const heroGraph = document.querySelector(".hero-graph");
+    if (heroGraph) {
+      const reveal = () => heroGraph.classList.add("is-ready");
+      if (heroGraph.querySelector(".react-flow__node")) {
+        reveal();
+      } else {
+        const obs = new MutationObserver(() => {
+          if (heroGraph.querySelector(".react-flow__node")) {
+            reveal();
+            obs.disconnect();
+          }
+        });
+        obs.observe(heroGraph, { childList: true, subtree: true });
+        window.setTimeout(reveal, 2500);
+      }
+    }
+  </script>
 </Base>
 
 <style>
@@ -158,10 +181,16 @@ const jsonLd = {
        blur kept light so it stays a soft backdrop. */
     inset: -150px -130px 38% -130px;
     z-index: 0;
-    opacity: 0.3;
+    /* Starts hidden and fades in only once the ReactFlow island has rendered
+       (the .is-ready class is added by the script below), instead of popping in
+       at the end of load. Decorative, so if the script never fires it simply
+       stays as backdrop-less -- no content is hidden. */
+    opacity: 0;
+    transition: opacity 450ms ease;
     filter: blur(2px);
     pointer-events: none;
   }
+  .hero-graph.is-ready { opacity: 0.3; }
 
   .hero-graph :global(.tdn-viewer) {
     height: 100%;
@@ -229,7 +258,7 @@ const jsonLd = {
 
     .hero-graph {
       inset: -60px -220px 120px 0;
-      opacity: 0.16;
     }
+    .hero-graph.is-ready { opacity: 0.16; }
   }
 </style>
