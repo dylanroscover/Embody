@@ -138,19 +138,27 @@ const defaultView = hasBaked ? "result" : "network";
     background: var(--bg-code);
   }
 
+  /* A narrow band swept across with translateX. It sits fully off-screen at both
+     keyframe endpoints, so the infinite loop's instant reset is invisible -- and
+     linear timing keeps the sweep at constant velocity (ease-in-out would halt
+     and snap-back each cycle, reading as a stutter). Transform is GPU-composited,
+     unlike background-position which repaints every frame and moves nonlinearly. */
   .cover__layer--network :global(.cover-skeleton__shimmer) {
     position: absolute;
-    inset: 0;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 60%;
     background: linear-gradient(
       100deg,
-      transparent 20%,
-      rgba(110, 230, 104, 0.06) 45%,
+      transparent 0%,
+      rgba(110, 230, 104, 0.06) 35%,
       rgba(110, 230, 104, 0.1) 50%,
-      rgba(110, 230, 104, 0.06) 55%,
-      transparent 80%
+      rgba(110, 230, 104, 0.06) 65%,
+      transparent 100%
     );
-    background-size: 220% 100%;
-    animation: cover-skeleton-sweep 1.4s ease-in-out infinite;
+    will-change: transform;
+    animation: cover-skeleton-sweep 1.4s linear infinite;
   }
 
   .cover__layer--network :global(.cover-skeleton.is-error .cover-skeleton__shimmer) {
@@ -158,12 +166,15 @@ const defaultView = hasBaked ? "result" : "network";
     background: none;
   }
 
+  /* -100% = band just off the left edge; 166.667% = band just off the right edge
+     (band is 60% wide, so 100/60 of its own width clears the container). Both ends
+     are off-screen, so the from/to teleport never shows. */
   @keyframes cover-skeleton-sweep {
     from {
-      background-position: 180% 0;
+      transform: translateX(-100%);
     }
     to {
-      background-position: -80% 0;
+      transform: translateX(166.667%);
     }
   }
 
