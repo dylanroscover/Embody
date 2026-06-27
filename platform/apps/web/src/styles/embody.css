@@ -985,6 +985,7 @@ h3 {
   letter-spacing: 0.005em;
   line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
   transition: background 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
 
@@ -1214,6 +1215,14 @@ h3 {
   top: 0.75rem;
   right: 0.75rem;
   z-index: 1;
+}
+
+/* In the "show/hide tdn yaml" disclosure summary: pinned to the right of the row
+   so the copy button is visible whether the disclosure is collapsed or expanded.
+   (A script on the summary stops a click here from toggling the disclosure.) */
+.copy-button--summary {
+  flex: none;
+  margin-left: auto;
 }
 
 /* Branded "Embody" call-to-action -- the copy button, labelled and prominent so

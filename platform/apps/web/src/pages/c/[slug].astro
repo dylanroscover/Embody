@@ -34,6 +34,7 @@ type DisplaySpecimen = {
   current_version?: number;
   reactions: Record<string, number>;
   author_handle: string;
+  author_display_name: string | null;
 };
 
 const fallback = firstFixtureSpecimen();
@@ -146,12 +147,13 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     reactions: {},
     // Fixtures are all first-party; mirror the hardcode in toFixtureSummary
     // (FixtureSpecimen carries no author_handle field).
-    author_handle: "embody.tools"
+    author_handle: "embody.tools",
+    author_display_name: null
   };
 }
 
 function specimenFromLive(
-  live: SpecimenDetail,
+  live: SpecimenDetail & { author_display_name: string | null },
   fixture: FixtureSpecimen | undefined
 ): DisplaySpecimen {
   // Only borrow fixture-authored copy (key_ops) when the fixture actually IS this
@@ -171,7 +173,8 @@ function specimenFromLive(
     key_ops: authored?.key_ops ?? [],
     current_version: live.current_version,
     reactions: live.reactions ?? {},
-    author_handle: live.author_handle
+    author_handle: live.author_handle,
+    author_display_name: live.author_display_name
   };
 }
 
@@ -327,15 +330,31 @@ function emitKey(key: string): string {
   ogUrl={ogUrl}
 >
   <section class="page-section detail-hero">
+    {isOwner && (
+      <div class="owner-tools" data-owner-actions data-slug={specimen.slug} data-owner-handle={specimen.author_handle}>
+        <a class="owner-tools__btn" href={`/c/${specimen.slug}/edit`} aria-label="edit this specimen" title="edit specimen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+            <path d="M13.5 6.5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </a>
+        <button type="button" class="owner-tools__btn owner-tools__btn--danger" data-delete-specimen aria-label="delete this specimen" title="delete specimen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7h16M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2m2 0v12a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 7 19V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M10 11v5M14 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    )}
     <p class="eyebrow">Specimen / <a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(specimen.category)}`}>{specimen.category}</a></p>
     <h1>{specimen.name}</h1>
-    <p class="lede">{specimen.description}</p>
+    <p class="specimen-byline">by <a class="specimen-byline__link" href={`/u/${encodeURIComponent(specimen.author_handle)}`}>{specimen.author_display_name ?? `@${specimen.author_handle}`}</a></p>
   </section>
 
   {isSignedIn && (
     <dialog class="report-dialog" data-report-dialog aria-labelledby="report-dialog-title">
       <form class="report-dialog__form" data-report-form>
-        <h2 class="report-dialog__title" id="report-dialog-title">Report specimen</h2>
+        <h2 class="report-dialog__title" id="report-dialog-title">report specimen</h2>
         <p class="report-dialog__lede">
           Tell us why. Your report goes to the moderators for review.
         </p>
@@ -359,10 +378,26 @@ function emitKey(key: string): string {
       </form>
       <div class="report-dialog__done" data-report-done hidden>
         <p class="report-dialog__done-icon" aria-hidden="true">&#10003;</p>
-        <h2 class="report-dialog__title">Report submitted</h2>
+        <h2 class="report-dialog__title">report submitted</h2>
         <p class="report-dialog__lede">Thanks &mdash; the moderators will review this specimen.</p>
         <div class="report-dialog__actions report-dialog__actions--end">
           <button type="button" class="btn btn--primary" data-report-close>done</button>
+        </div>
+      </div>
+    </dialog>
+  )}
+
+  {isOwner && (
+    <dialog class="confirm-dialog" data-delete-dialog aria-labelledby="delete-dialog-title">
+      <div class="confirm-dialog__body">
+        <h2 class="confirm-dialog__title" id="delete-dialog-title">delete this specimen?</h2>
+        <p class="confirm-dialog__lede">
+          This permanently removes &ldquo;{specimen.name}&rdquo; from the Collection. This cannot be undone.
+        </p>
+        <p class="confirm-dialog__status" data-delete-dialog-status role="status" aria-live="polite"></p>
+        <div class="confirm-dialog__actions">
+          <button type="button" class="btn btn--ghost" data-delete-cancel>cancel</button>
+          <button type="button" class="btn confirm-dialog__danger" data-delete-confirm>delete permanently</button>
         </div>
       </div>
     </dialog>
@@ -495,27 +530,34 @@ function emitKey(key: string): string {
   </script>
 
   <script>
-    // Owner-only delete. Confirms, calls DELETE /api/specimens/:slug, then sends
-    // the owner to their profile. The API re-checks ownership by author_id.
+    // Owner-only delete. Opens an app-native <dialog> confirm (no window.confirm),
+    // then calls DELETE /api/specimens/:slug and sends the owner to their profile.
+    // The API re-checks ownership by author_id.
     const ownerActions = document.querySelector("[data-owner-actions]") as HTMLElement | null;
     const deleteBtn = ownerActions?.querySelector("[data-delete-specimen]") as HTMLButtonElement | null;
-    if (ownerActions && deleteBtn) {
+    const deleteDialog = document.querySelector("[data-delete-dialog]") as HTMLDialogElement | null;
+    if (ownerActions && deleteBtn && deleteDialog) {
       const slug = ownerActions.dataset.slug ?? "";
       const handle = ownerActions.dataset.ownerHandle ?? "";
-      const statusEl = ownerActions.querySelector("[data-delete-status]") as HTMLElement | null;
+      const confirmBtn = deleteDialog.querySelector("[data-delete-confirm]") as HTMLButtonElement | null;
+      const cancelBtn = deleteDialog.querySelector("[data-delete-cancel]") as HTMLButtonElement | null;
+      const statusEl = deleteDialog.querySelector("[data-delete-dialog-status]") as HTMLElement | null;
       const setStatus = (message: string) => {
         if (statusEl) statusEl.textContent = message;
       };
 
-      deleteBtn.addEventListener("click", async () => {
+      deleteBtn.addEventListener("click", () => {
         if (deleteBtn.disabled) return;
-        const ok = window.confirm(
-          "Delete this specimen permanently? This removes it from the Collection and cannot be undone."
-        );
-        if (!ok) return;
+        setStatus("");
+        if (confirmBtn) confirmBtn.disabled = false;
+        deleteDialog.showModal();
+      });
+      cancelBtn?.addEventListener("click", () => deleteDialog.close());
 
-        deleteBtn.disabled = true;
-        setStatus("Deleting...");
+      confirmBtn?.addEventListener("click", async () => {
+        if (confirmBtn.disabled) return;
+        confirmBtn.disabled = true;
+        setStatus("deleting...");
         try {
           const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}`, {
             method: "DELETE"
@@ -525,28 +567,32 @@ function emitKey(key: string): string {
             return;
           }
           if (!res.ok) {
-            setStatus("Could not delete this specimen. Please try again.");
-            deleteBtn.disabled = false;
+            setStatus("could not delete this specimen. please try again.");
+            confirmBtn.disabled = false;
             return;
           }
+          setStatus("deleted. redirecting...");
           window.location.assign(handle ? `/u/${handle}` : "/collection");
         } catch {
-          setStatus("Could not delete this specimen. Please try again.");
-          deleteBtn.disabled = false;
+          setStatus("could not delete this specimen. please try again.");
+          confirmBtn.disabled = false;
         }
       });
     }
   </script>
 
   <section class="page-section tight specimen-layout">
-    <div class="viewer-panel pillar">
-      <p class="eyebrow">Network preview</p>
-      <TdnViewer tdn={tdn} height="100%" client:visible={{ rootMargin: "300px" }} />
+    <div class="specimen-main">
+      {specimen.description && <p class="specimen-desc">{specimen.description}</p>}
+      <div class="viewer-panel pillar">
+        <p class="eyebrow">network preview</p>
+        <TdnViewer tdn={tdn} height="100%" client:visible={{ rootMargin: "300px" }} />
+      </div>
     </div>
 
     <aside class="specimen-sidebar">
       <section class="side-block pillar">
-        <p class="eyebrow">Rendered result</p>
+        <p class="eyebrow">rendered result</p>
         <figure class="cover-thumb">
           <img
             src={cover.src}
@@ -582,27 +628,16 @@ function emitKey(key: string): string {
           <Fragment set:html={reactionsClusterHtml({ slug: specimen.slug, reactions: specimen.reactions, mine: myReactions })} />
 
           {isSignedIn ? (
-            <button type="button" class="report-link" data-report>Report</button>
+            <button type="button" class="report-link" data-report>report</button>
           ) : (
-            <a class="report-link" href={signInHref}>Report</a>
+            <a class="report-link" href={signInHref}>report</a>
           )}
           <span class="engagement-status" data-engagement-status role="status" aria-live="polite"></span>
         </div>
-
-        {isOwner && (
-          <div class="owner-actions" data-owner-actions data-slug={specimen.slug} data-owner-handle={specimen.author_handle}>
-            <span class="owner-actions__label">you own this specimen</span>
-            <a class="owner-actions__btn" href={`/c/${specimen.slug}/edit`}>edit</a>
-            <button type="button" class="owner-actions__btn owner-actions__btn--danger" data-delete-specimen>
-              delete
-            </button>
-            <span class="owner-actions__status" data-delete-status role="status" aria-live="polite"></span>
-          </div>
-        )}
       </section>
 
       <section class="side-block pillar">
-        <p class="eyebrow">Key ops</p>
+        <p class="eyebrow">key ops</p>
         <div class="op-list">
           {keyOps.map((opName) => <span>{opName}</span>)}
         </div>
@@ -612,33 +647,98 @@ function emitKey(key: string): string {
 
   <section class="page-section tight raw-section">
     <details class="raw-details pillar">
-      <summary><span class="raw-label raw-label--show">show tdn yaml</span><span class="raw-label raw-label--hide">hide tdn yaml</span></summary>
-      <CopyTdnEnvelopeButton
-        tdn={tdn}
-        slug={specimen.slug}
-        version={specimen.current_version}
-        className="copy-button--corner"
-        client:load
-      />
-      <p class="raw-copy-hint">Copy to your clipboard &mdash; Embody auto-detects it in TouchDesigner and adds it for you.</p>
+      <summary>
+        <span class="raw-label raw-label--show">show tdn yaml</span>
+        <span class="raw-label raw-label--hide">hide tdn yaml</span>
+        <CopyTdnEnvelopeButton
+          tdn={tdn}
+          slug={specimen.slug}
+          version={specimen.current_version}
+          className="copy-button--summary"
+          client:load
+        />
+      </summary>
+      <p class="raw-copy-hint">copy to your clipboard &mdash; Embody auto-detects it in TouchDesigner and adds it for you.</p>
       <TdnYamlViewer raw={rawTdn} summary={tdnSummary} client:visible />
     </details>
   </section>
+
+  <script>
+    // The copy button now lives inside the "show/hide tdn yaml" <summary> so it is
+    // visible whether the disclosure is collapsed or expanded. A click inside it must
+    // copy, NOT toggle the disclosure -- cancel the summary's default toggle action
+    // for clicks that originate within the copy button.
+    for (const summary of document.querySelectorAll(".raw-details > summary")) {
+      summary.addEventListener("click", (e) => {
+        const tgt = e.target;
+        if (tgt instanceof Element && tgt.closest(".copy-button")) e.preventDefault();
+      });
+    }
+  </script>
 </Base>
 
 <style>
   .detail-hero {
-    /* The hero->preview gap is exactly 2x the heading->paragraph gap (the h1's
-       1.35rem margin-bottom). That gap = this padding-bottom + the lede's
-       (zeroed) margin + the layout's padding-top: 1.35rem + 1.35rem = 2.7rem. */
+    /* relative: the owner edit/delete icon tools pin to the top-right corner.
+       padding-bottom + the layout's 1.35rem padding-top own the hero->preview gap. */
+    position: relative;
     padding-bottom: 1.35rem;
   }
 
-  /* The lede is the last hero element now (badges/CTA moved to the sidebar), so
-     its default 3rem trailing margin is vestigial -- zero it so the section
-     paddings alone own the hero->preview gap. */
-  .detail-hero .lede {
-    margin-bottom: 0;
+  /* The byline is the last hero element now (description moved to the preview
+     column); tighten the title->byline gap. */
+  .detail-hero h1 {
+    margin-bottom: 0.7rem;
+  }
+
+  .specimen-byline {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 1.9rem;
+  }
+  .specimen-byline__link {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .specimen-byline__link:hover {
+    text-decoration: underline;
+  }
+
+  /* Owner tools: edit + delete icon buttons, pinned to the hero's top-right.
+     Shown only for the specimen's owner. */
+  .owner-tools {
+    position: absolute;
+    top: 0;
+    /* The page-section insets its content by --gutter; match that so the tools'
+       right edge is flush with the content (title / panels) right edge, not the
+       section's outer padding edge. */
+    right: var(--gutter);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .owner-tools__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .owner-tools__btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .owner-tools__btn--danger:hover {
+    border-color: #d65555;
+    color: #ff9b9b;
+    background: rgba(220, 80, 80, 0.12);
   }
 
   /* The category in the breadcrumb links to the collection filtered to it. */
@@ -681,52 +781,6 @@ function emitKey(key: string): string {
     color: #b291b0;
   }
 
-  .owner-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-    margin-top: 18px;
-    padding-top: 16px;
-    border-top: 1px solid var(--border-faint);
-  }
-
-  .owner-actions__label {
-    color: var(--text-faint);
-    font: 600 12px/1 var(--font-mono);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  .owner-actions__btn {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-elevated);
-    padding: 0.4rem 0.85rem;
-    color: var(--text);
-    font: 600 12px/1 var(--font-mono);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    text-decoration: none;
-    cursor: pointer;
-    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
-  }
-
-  .owner-actions__btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
-
-  .owner-actions__btn--danger:hover {
-    border-color: #d65555;
-    color: #ff9b9b;
-    background: rgba(220, 80, 80, 0.12);
-  }
-
-  .owner-actions__status {
-    color: var(--text-faint);
-    font: 500 12px/1 var(--font-mono);
-  }
 
   .report-link {
     border: 0;
@@ -888,6 +942,58 @@ function emitKey(key: string): string {
   }
   .report-dialog__actions--end { justify-content: center; margin-top: 0.3rem; }
 
+  /* Delete-confirm dialog: an app-native <dialog> (replaces window.confirm),
+     styled to match the report dialog. */
+  .confirm-dialog {
+    width: min(440px, calc(100vw - 2rem));
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text);
+    padding: 0;
+  }
+  .confirm-dialog::backdrop {
+    background: rgba(10, 14, 12, 0.62);
+  }
+  .confirm-dialog__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .confirm-dialog__title {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .confirm-dialog__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .confirm-dialog__status {
+    margin: 0;
+    min-height: 1em;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  .confirm-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+  .confirm-dialog__danger {
+    background: rgba(220, 80, 80, 0.14);
+    border: 1px solid #d65555;
+    color: #ff9b9b;
+  }
+  .confirm-dialog__danger:hover {
+    background: rgba(220, 80, 80, 0.22);
+    border-color: #e06a6a;
+    color: #ffb3b3;
+  }
+
   .specimen-layout {
     display: grid;
     /* Sidebar (rendered result / pills / key ops) 330px on the LEFT, network
@@ -913,7 +1019,20 @@ function emitKey(key: string): string {
     padding-bottom: 1.35rem;
   }
   .specimen-sidebar { grid-column: 1; grid-row: 1; }
-  .viewer-panel { grid-column: 2; grid-row: 1; }
+  /* Column 2: the description sits ABOVE the network-preview panel (not inside
+     it); the panel then fills the rest of the column's stretched height. */
+  .specimen-main {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+  }
+  .specimen-main .viewer-panel {
+    flex: 1;
+    min-height: 0;
+  }
 
   .raw-section {
     padding-top: 1.35rem !important;
@@ -956,6 +1075,16 @@ function emitKey(key: string): string {
   .side-block .eyebrow {
     color: var(--text-muted);
     margin-bottom: 18px;
+  }
+
+  /* Specimen description: moved out of the hero to the top of the preview
+     column, ABOVE the network-preview panel (the .specimen-main flex gap spaces
+     it from the panel). */
+  .specimen-desc {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.6;
   }
 
   .specimen-sidebar {
@@ -1031,7 +1160,9 @@ function emitKey(key: string): string {
     /* Match the rounded container so the focus ring (below) nests cleanly;
        reset to top-only when open since content continues beneath. */
     border-radius: var(--radius);
-    padding: 18px 7.4rem 18px 18px;
+    /* The copy button now lives in the summary (right-aligned), so the row no
+       longer reserves space for an absolutely-positioned corner button. */
+    padding: 10px 14px 10px 18px;
     color: var(--accent);
     /* Match the .eyebrow labels on the sibling sections (network preview /
        rendered result) so all three section titles read consistently. */
@@ -1102,12 +1233,16 @@ function emitKey(key: string): string {
      via set:html / lives in a component, so scoped selectors here would not
      reach it anyway) -- not duplicated here. */
   @media (pointer: coarse) {
-    .report-link,
-    .owner-actions__btn {
+    .report-link {
       display: inline-flex;
       align-items: center;
       min-height: 44px;
       padding-inline: 0.6rem;
+    }
+
+    .owner-tools__btn {
+      width: 44px;
+      height: 44px;
     }
 
     .report-dialog__actions .btn {
@@ -1125,9 +1260,9 @@ function emitKey(key: string): string {
     }
 
     /* Single column: clear the desktop column swap so the panels stack in DOM
-       order (network preview first). */
+       order (description + network preview first). */
     .specimen-sidebar,
-    .viewer-panel {
+    .specimen-main {
       grid-column: auto;
       grid-row: auto;
     }
