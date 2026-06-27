@@ -112,6 +112,16 @@ def onProjectPreSave():
 		parent.Embody.unstore('_tdn_pane_restore')
 		parent.Embody.unstore('_perform_state')
 
+		# Retire any live build-visualization artifacts (the follow bot + node
+		# colour pulses) BEFORE the .toe write / .tox export, so they can never
+		# bake into a saved file. Guarded so it can never break the save.
+		try:
+			_envoy = getattr(parent.Embody.ext, 'Envoy', None)
+			if _envoy is not None:
+				_envoy._vizCleanup()
+		except Exception:
+			pass
+
 		# Suppress interactive modals (the Envoy onboarding prompt AND the
 		# file-cleanup / continuity prompts) for the whole save window. The
 		# post-save Refresh + Envoy restart can reach a _messageBox/ui.messageBox

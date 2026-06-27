@@ -88,7 +88,7 @@ When Envoy starts, it generates a full Claude Code configuration in your project
 - **`.claude/rules/`** — always-loaded conventions (TD Python, network layout, MCP safety)
 - **`.claude/skills/`** — on-demand workflow guides (operator creation, debugging, externalization)
 
-These files are regenerated each time Envoy starts to stay up to date. See [Claude Code Integration](claude-code.md) for the full reference.
+Pristine generated files are refreshed each time Envoy starts to stay up to date. If you edit a generated rule or skill, Embody detects the change (via a content hash in `.embody/generated-hashes.json`) and keeps your version instead of overwriting it — delete the file to opt back into regeneration. See [Claude Code Integration](claude-code.md) for the full reference.
 
 ## MCP Tool Permissions
 

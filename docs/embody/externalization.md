@@ -198,6 +198,16 @@ Embody automatically restores all externalized operators when a project is opene
 
 In **Roundtrip** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdn` files exist purely for git diff / MCP reads.
 
+### Crash Recovery
+
+The restoration above covers a *clean* reopen, where your last `.toe` is on disk. A **crash** is different: TouchDesigner exits before you saved, so the `.toe` rolls back to its last save and any work since is gone from it. The **Auto-Save Checkpoints** engine (ON by default) closes that gap.
+
+A beat after the agent (or you) goes idle, Embody writes each changed TDN COMP to disk as a frame-cheap `.tdn` checkpoint — **~3-6 ms, with no full project save, no TDN strip/restore, and no frame freeze**. It also fires a synchronous pre-checkpoint just before a destructive `delete_op` inside a tracked COMP. The engine is bypassed in Perform Mode and during saves, and perf-gated so a checkpoint never lands on a hot frame. `execute_python` is deliberately not a trigger (its effects are unbounded and opaque).
+
+On the next open after a crash, recovery runs even in Export-on-Save mode: any TDN COMP that has a `.tdn` file and a row in `externalizations.tsv` but is **missing from the recovered `.toe`** is rebuilt from its `.tdn`. This works because `externalizations.tsv` is a `syncfile` DAT, so checkpoint rows reach disk within a frame *without* a project save. Nested TDN children rebuild with their own content (no empty shells), and a COMP you deleted is not resurrected (its tracking row is purged on delete).
+
+So with auto-save on, a crash costs you at most the handful of operations since the last idle settle — not the whole session. The toggle and a read-only status readout live on the Embody COMP's TDN page; see [Configuration](configuration.md#tdn).
+
 ## Export Portable Tox
 
 Export any COMP as a **self-contained `.tox`** with all external file references and Embody tags stripped. The exported `.tox` works when loaded into any TouchDesigner project — no missing file errors and no Embody metadata.

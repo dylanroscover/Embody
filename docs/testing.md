@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **72 test suites** and **1,693 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **74 test suites** and **1,725 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -38,7 +38,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 ## Test Coverage
 
-### Core Embody (24 suites, 388 tests)
+### Core Embody (25 suites, 408 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -52,6 +52,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_v6_hardening` | 20 | v6 community-paste + strip/restore hardening |
 | `test_ancestor_rename` | 19 | Ancestor-rename detection and folder migration |
 | `test_path_utils` | 18 | Path normalization and utilities |
+| `test_autosave` | 18 | Auto-save checkpoint engine (skip_cleanup, idle-settle drain, crash recovery, gates) |
 | `test_tag_lifecycle` | 17 | Tag application and removal |
 | `test_delete_cleanup` | 16 | Deletion and file cleanup |
 | `test_strategy_handlers` | 15 | TOX/TDN strategy switch, remove, DAT convert |
@@ -63,7 +64,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_file_management` | 8 | File I/O, path handling, tracked-file delete safety |
 | `test_os_label` | 8 | OS label resolution (Win10/11 build thresholds, macOS) |
 | `test_update_sync` | 7 | Sync between .toe and externalized files |
-| `test_dialog_suppression` | 6 | File-cleanup dialog suppression during tests |
+| `test_dialog_suppression` | 8 | File-cleanup dialog suppression during tests |
 | `test_operator_queries` | 6 | Operator discovery and queries |
 | `test_settings_persistence` | 3 | Settings serialization (byte-stable, sorted keys) |
 
@@ -87,7 +88,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_mcp_extensions` | 6 | Extension creation and setup |
 | `test_mcp_performance` | 5 | Per-operator performance monitoring |
 
-### TDN Format (16 suites, 613 tests)
+### TDN Format (17 suites, 620 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -106,6 +107,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_tdn_yaml` | 14 | TDN v2.0 YAML emitter / parser |
 | `test_tdn_diff` | 11 | `diff_tdn` tool (live-vs-disk, project-wide) |
 | `test_tdn_fingerprint` | 11 | Param-aware dirty detection (fingerprint) |
+| `test_tdn_annotation_export` | 7 | Annotation-only `.tdn` export (annotateCOMP not double-captured) |
 | `test_tdn_external_connections` | 6 | External wire capture/restore across strip |
 
 ### Community & Collection (6 suites, 121 tests)
@@ -119,12 +121,12 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_collection_pure` | 14 | Pure-value-expression preservation (live-if-clean) |
 | `test_clipboard_watch` | 6 | Clipboard watcher poll + gating |
 
-### Envoy Server & Bridge (8 suites, 329 tests)
+### Envoy Server & Bridge (8 suites, 334 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_envoy_bridge` | 156 | STDIO bridge: forwarding, reconciler, registry, meta-tools |
-| `test_claude_config` | 71 | AI client config generation (Claude/Cursor/Copilot/Windsurf) |
+| `test_claude_config` | 76 | AI client config generation (Claude/Cursor/Copilot/Windsurf) |
 | `test_server_lifecycle` | 22 | Envoy MCP server start/stop |
 | `test_envoy_watchdog` | 21 | Envoy liveness watchdog (revive on dropped socket / save) |
 | `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |

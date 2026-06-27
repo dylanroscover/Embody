@@ -1,5 +1,34 @@
 # Changelog
 
+## v6.0.54
+
+A crash-resilience build. **Embody now writes a cheap `.tdn` checkpoint of whatever changed after the agent (or you) goes idle** -- so a TouchDesigner crash loses little unsaved work, with no full project save and no freeze. Plus an opt-in live build visualization (watch Claude build, with a little builder-bot), threading guidance that stops agents over-engineering data fetches, and a web contribute-form fix.
+
+### Embody core
+
+- **Auto-save crash checkpoints.** A new always-on engine writes changed TDN COMPs to disk as a frame-cheap `.tdn` checkpoint a beat after the agent or user goes idle -- **no full project save, no TDN strip/restore, no frame freeze** -- so an accidental crash (often agent-induced during a heavy build) loses little, and the checkpointed COMPs rebuild on next open. The key was measuring where a normal export spends its time: the dominant cost of `ExportNetwork` is the `rglob` stale-file scan + cleanup (hundreds of ms), **not** the write (`_safe_write_tdn` is ~1.6 ms, serialization ~2 ms). A new `skip_cleanup=True` path on `ExportNetwork` skips the rglob, the stale-file cleanup, and the modal size/lock warnings, so a single-COMP checkpoint lands at **~3-6 ms** synchronous -- cheap enough to run inline on the main thread with no worker, no async, and no git churn from async-vs-sync output drift.
+- **How it triggers.** Mutating MCP ops record the touched TDN COMP (walking up to the nearest tracked boundary) and arm a ~1 s idle-settle timer; on settle, the touched COMPs are checkpointed one-per-frame. A destructive `delete_op` of a child inside a tracked COMP also fires a synchronous pre-checkpoint *before* the delete, so a crash mid-delete still loses nothing since the last settle. `execute_python` / `exec_op_method` are deliberately **not** checkpoint triggers (their effects are unbounded and opaque -- skip-and-document), and `import_network` is excluded from the pre-risky path because its `.tdn` is the user's source-of-truth being reloaded, not state to overwrite.
+- **Recovery on open.** In Export-on-Save mode (the default), reconstruction normally no-ops because the `.toe` is the source of truth -- but a crash means the `.toe` was never saved, so any TDN COMP that is present on disk (`.tdn` + a row in `externalizations.tsv`) yet **missing from the recovered `.toe`** is rebuilt from its `.tdn`. This works because `externalizations.tsv` is a `syncfile` DAT, so checkpoint rows reach disk within a frame *without* a project save. Recovery rebuilds nested TDN children with their own content (no empty shells), and a deleted COMP's tracking row is purged so recovery can't resurrect it.
+- **Controls + self-heal.** A new **Auto-Save Checkpoints** toggle (default ON) and a read-only **Auto-Save Status** readout (Idle / Saved / Bypassed / Disabled) appear on the Embody COMP's TDN page; both self-heal onto a fresh install of the shipped `.tox` or an older `.toe` that predates them. The engine is **bypassed in Perform Mode and during saves**, and perf-gated so a checkpoint never piles onto a hot frame (it reschedules if FPS is under budget).
+- **Verified by a 20-agent adversarial review** (10 codex exec + 10 claude sub-agents) that caught and fixed real defects pre-merge: a pre-risky checkpoint over `import_network(clear_first=True)` that would have **overwritten the user's just-edited `.tdn`** (data loss), nested-child recovery leaving an empty shell, a tracking-table mutation during the save window (crash), and an O(rows)-per-op lookup regression (now an O(1) keyed lookup). New `test_autosave` suite (**18 tests**).
+
+### Envoy
+
+- **Live build visualization (opt-in).** A new **Envoy Follow** toggle (default OFF, Envoy page) makes the network editor follow Envoy's work as Claude builds: within the viewed network it **glides** (ease-out) to center on each operator just touched; when the work moves to a COMP no pane is showing, it **navigates** a network-editor pane into that COMP and snaps to frame the op (you cannot glide across coordinate spaces). It **yields the instant you pan, zoom, or navigate** the view yourself and resumes once you stop. Main-thread only (driven from `_onRefresh`) and side-effect-free with respect to saved files -- it writes only pane/view state, which is never externalized.
+- **The builder-bot ("embot").** While following, a small figure built from minimal networkbox annotations (head, eyes, body, arms, legs) **hops node-to-node** along a parabolic arc, hovers when idle, and does occasional gestures (a wave, an arms-forward reach, an arms-up pump, and now and then a full robot dance). Its color reflects "thinking time" -- cool cyan-green right after Envoy acts, warming toward red the longer the gap between ops -- and the touched node pulses the Envoy accent. The bot and pulse retire after ~30 s of quiet and are destroyed before each save, so they never externalize.
+
+### Guidance
+
+- **Stop agents over-engineering threading for TD data fetches.** `rules/td-python.md` and the `td-api-reference` skill (plus their shipped templates and a `skill-prerequisites` cross-link) gained a "Background and Long-Running Work" decision ladder: reach for the **Web Client DAT** (async, main-thread `onResponse` callback) or native JSON DAT -> DAT-to-CHOP chain for HTTP, the **Palette Thread Manager** only for genuinely blocking pure-Python work, and never a worker thread that touches a TD object or a `sleep`/`run()` poller. The CLAUDE.md template gained the matching pointer, and the published `td-development` threading docs were updated to match.
+
+### embody.tools
+
+- **Contribute form gates submit** until the required fields are filled.
+
+### Tests
+
+- Test suite **74 suites / 1,725 tests**, all green (`test_autosave`, 18, added for the checkpoint engine).
+
 ## v6.0.49
 
 A generated-file-safety + web-polish build. Re-running Envoy's config generation (InitEnvoy, or flipping the AI Project Root) now PRESERVES your edits to generated rules/skills instead of clobbering them, via a content-hash drift manifest. The v6.0.47 annotation dedup reached Embody's own self-externalized `.tdn` files, and embody.tools got a deep TDN-viewer / Collection / YAML-viewer polish pass.

@@ -971,7 +971,8 @@ class TDNExt:
 					  output_file: Optional[str] = None, max_depth: Optional[int] = None,
 					  cleanup_protected: Optional[list[str]] = None,
 					  embed_all: bool = False,
-					  include_storage: Optional[bool] = None) -> dict[str, Any]:
+					  include_storage: Optional[bool] = None,
+					  skip_cleanup: bool = False) -> dict[str, Any]:
 		"""
 		Export a TouchDesigner network to .tdn JSON format.
 
@@ -1108,26 +1109,37 @@ class TDNExt:
 			if output_file:
 				# Scan from project folder -- TDN paths mirror TD hierarchy
 				scan_folder = str(project.folder)
-				before_tdn = TDNExt._collectExistingTDNFiles(
-					scan_folder, root_path)
-
 				filepath = self._resolveOutputPath(output_file, root_op)
 				content = TDNExt._compact_json_dumps(tdn)
+
+				# Stale-file cleanup scans the whole project folder with rglob,
+				# which is hundreds of ms (the dominant checkpoint cost). Autosave
+				# checkpoints pass skip_cleanup=True: a checkpoint re-writes ONE
+				# COMP's .tdn and orphans nothing, so the scan is unnecessary on the
+				# main thread. Orphans (from a removed child COMP) are reclaimed by
+				# the continuity sweep / next full save; recovery is tsv-driven, so a
+				# no-row orphan .tdn is ignored -- never resurrected.
+				before_tdn = set()
+				if not skip_cleanup:
+					before_tdn = TDNExt._collectExistingTDNFiles(
+						scan_folder, root_path)
+
 				write_result = TDNExt._safe_write_tdn(
 					filepath, content, scan_folder)
 				if not write_result.get('success'):
 					return {'error':
 						f'Safe write failed: {write_result.get("error")}'}
 
-				protected = [filepath]
-				if cleanup_protected:
-					protected.extend(cleanup_protected)
-				stale = TDNExt._cleanupStaleTDNFiles(
-					before_tdn, protected, scan_folder)
-				if stale:
-					self._log(
-						f'Cleaned up {len(stale)} stale .tdn file(s)',
-						'INFO')
+				if not skip_cleanup:
+					protected = [filepath]
+					if cleanup_protected:
+						protected.extend(cleanup_protected)
+					stale = TDNExt._cleanupStaleTDNFiles(
+						before_tdn, protected, scan_folder)
+					if stale:
+						self._log(
+							f'Cleaned up {len(stale)} stale .tdn file(s)',
+							'INFO')
 
 				result['file'] = filepath
 				self._trackTDNExport(root_path, filepath,
@@ -1136,13 +1148,16 @@ class TDNExt:
 				self._log(
 					f'Exported network to {filepath}', 'SUCCESS')
 
-				# Warn about locked non-DAT operators whose frozen
-				# content won't survive a TDN round-trip
-				self._warnLockedNonDATs(root_op, context='export')
-
-				# One-time warning for large monolithic TDN files
-				if not options.get('embed_all'):
-					self._warnLargeTDN(filepath, root_path)
+				# These warnings recursively scan descendants and can pop a modal
+				# ui.messageBox -- never do that on a frequent autosave checkpoint
+				# (skip_cleanup). Reserved for explicit user/save exports.
+				if not skip_cleanup:
+					# Locked non-DAT operators whose frozen content won't
+					# survive a TDN round-trip.
+					self._warnLockedNonDATs(root_op, context='export')
+					# One-time warning for large monolithic TDN files.
+					if not options.get('embed_all'):
+						self._warnLargeTDN(filepath, root_path)
 
 			return result
 

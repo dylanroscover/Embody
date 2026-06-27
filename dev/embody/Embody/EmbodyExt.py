@@ -102,6 +102,17 @@ class EmbodyExt:
         self.tagger = self.my.op('tagger')
         self.root = op('/')
         self._tagger_mode = 'tag'  # 'tag' or 'manage'
+
+        # --- Auto-save / crash checkpoint engine state ---
+        # tdn boundaries touched (via MCP) since the last drain; drained one per
+        # frame at idle by _autosaveDrain. _autosave_gen + the identity guard make
+        # the settle-drain run()-loop survive reinit / collapse re-arms (watchdog
+        # pattern). monotonic, NEVER absTime (which pauses/resets).
+        self._pending_checkpoint_roots = set()
+        self._last_checkpoint_activity = 0.0   # time.monotonic()
+        self._autosave_gen = 0
+        self._autosave_armed = False
+        self._ensureAutosaveParams()  # self-heal the toggle + status if missing
         
         # Logging configuration
         self.header = 'Embody >'
@@ -2917,6 +2928,308 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f"SaveTDN failed for {opPath}", "ERROR", str(e))
 
+    def Checkpoint(self, opPath: str) -> bool:
+        """Frame-cheap SYNCHRONOUS auto-save checkpoint of one TDN COMP.
+
+        Re-exports the COMP's .tdn with stale-cleanup skipped -- the ~700ms rglob
+        stale-scan is the dominant save cost, and a single-COMP checkpoint orphans
+        nothing, so it is unnecessary (orphans are reclaimed by the continuity
+        sweep / next full save; recovery is tsv-driven so a no-row orphan .tdn is
+        ignored). Measured ~6ms for a typical COMP. The ~40ms fingerprint
+        re-baseline is DEFERRED one frame so it never rides the export frame.
+
+        Returns True on a successful write. Gated on Perform Mode and the save
+        window (table mutation during onProjectPreSave/strip is a fatal crash);
+        the caller (the drain) owns the perf-gate. Unlike SaveTDN, does NOT bump
+        the Build number (a checkpoint must be diff-stable vs the next Ctrl+S).
+        """
+        if self._performMode:
+            return False
+        if self.my.fetch('_suppress_dialogs', False, search=False):
+            return False  # save window open -- never mutate the table now
+        if not self._tdnEnabled():
+            return False
+        try:
+            oper = op(opPath)
+            if not oper:
+                return False
+            rel_path = self._getStrategyFilePath(opPath, 'tdn')
+            if not rel_path:
+                return False
+            abs_path = str(self.buildAbsolutePath(rel_path))
+            result = self.my.ext.TDN.ExportNetwork(
+                root_path=opPath, output_file=abs_path, skip_cleanup=True)
+            if not result.get('success'):
+                self.Log(f'Checkpoint export failed for {opPath}: '
+                         f'{result.get("error")}', 'WARNING')
+                return False
+            # Mark clean + stamp now; defer the heavy fingerprint re-baseline off
+            # this frame. Without re-baselining, _isTDNDirty reads false-dirty
+            # forever and the next Ctrl+S re-exports an already-current COMP.
+            self.Externalizations[opPath, 'timestamp'] = datetime.utcnow().strftime(
+                '%Y-%m-%d %H:%M:%S UTC')
+            self.Externalizations[opPath, 'dirty'] = ''
+            # Recovery restores the boundary's own node_x/y/color from the table
+            # (not the .tdn), so keep them current or a moved/recolored COMP
+            # recovers at stale coordinates (SaveTDN does the same).
+            self._updatePositionInTable(oper, opPath)
+            self._setAutosaveStatus(
+                'Saved ' + datetime.utcnow().strftime('%H:%M:%S') + ' UTC')
+            # delayFrames=2 staggers the ~40ms re-baseline off F+1, where the
+            # drain schedules the NEXT root's checkpoint -- so they never co-fire.
+            run(f"op({self.my.path!r}).ext.Embody._reBaselineCheckpoint({opPath!r})",
+                fromOP=self.my, delayFrames=2)
+            return True
+        except Exception as e:
+            self.Log(f'Checkpoint failed for {opPath}', 'WARNING', str(e))
+            return False
+
+    def _reBaselineCheckpoint(self, opPath: str) -> None:
+        """Deferred dirty-detection re-baseline after a checkpoint.
+
+        Runs the ~40ms fingerprint + param-store snapshot OFF the export frame so
+        _isTDNDirty reads clean. This is the HEAVIEST cost the feature adds, so it
+        is gated: identity (a stale instance after reinit is a no-op), Perform
+        Mode + save window (skip), and the perf-gate (reschedule under FPS danger
+        rather than pile ~40ms onto a hot frame -- the .tdn is already durable, so
+        only the dirty badge waits)."""
+        if self.my.ext.Embody is not self:
+            return  # superseded instance (reinit)
+        if opPath in self._pending_checkpoint_roots:
+            # Re-touched since this checkpoint -- the .tdn on disk is now STALE, so
+            # do NOT baseline the (newer) live state as clean. The pending
+            # re-checkpoint will write the new .tdn and baseline it then.
+            return
+        if self._performMode or self.my.fetch('_suppress_dialogs', False, search=False):
+            return
+        if not self._autosavePerfOk():
+            run(f"op({self.my.path!r}).ext.Embody._reBaselineCheckpoint({opPath!r})",
+                fromOP=self.my, delayFrames=15)
+            return
+        oper = op(opPath)
+        if not oper:
+            return
+        try:
+            self.param_tracker.updateParamStore(oper)
+            self._storeTDNFingerprint(oper)
+        except Exception as e:
+            self.Log(f'Checkpoint re-baseline failed for {opPath}', 'DEBUG', str(e))
+
+    # --- Auto-save / crash checkpoint engine (event-armed idle-settle drain) ---
+    _AUTOSAVE_IDLE_SECONDS = 1.0    # checkpoint this long after the last MCP mutation
+    _AUTOSAVE_POLL_FRAMES = 12      # re-check cadence while waiting to settle
+    _AUTOSAVE_FPS_FLOOR_FRAC = 0.9  # perf-gate: defer if fps < this * target
+
+    def _autosaveEnabled(self) -> bool:
+        """True if the Autosave toggle is on (default on until the param exists)."""
+        p = getattr(self.my.par, 'Autosave', None)
+        return bool(p.eval()) if p is not None else True
+
+    def NoteCheckpointTouch(self, op_path: str) -> None:
+        """Record (best-effort) that op_path was mutated via MCP, and queue an idle
+        checkpoint of its nearest tracked TDN boundary. HOT PATH: cheap, never
+        raises. Walks the PATH STRING up to the boundary so it survives a
+        just-deleted op (delete_op leaves no live op to resolve)."""
+        try:
+            if not op_path or self._performMode or not self._autosaveEnabled():
+                return
+            parts = op_path.rstrip('/').split('/')
+            while len(parts) > 1:
+                cand = '/'.join(parts)
+                m = self._findExternalizedComp(cand)
+                if m and m[1] == 'tdn':
+                    self._queueCheckpoint(cand)
+                    return
+                parts.pop()
+        except Exception:
+            pass
+
+    def _queueCheckpoint(self, comp_path: str) -> None:
+        import time
+        self._pending_checkpoint_roots.add(comp_path)
+        self._last_checkpoint_activity = time.monotonic()
+        if not self._autosave_armed:
+            self._armAutosaveDrain()
+
+    def _armAutosaveDrain(self) -> None:
+        self._autosave_armed = True
+        self._autosave_gen += 1
+        run(f"op({self.my.path!r}).ext.Embody._autosaveDrain({self._autosave_gen})",
+            fromOP=self.my, delayFrames=self._AUTOSAVE_POLL_FRAMES)
+
+    def _autosaveDrain(self, gen: int) -> None:
+        """Settle-debounced one-COMP-per-frame checkpoint drain (main thread).
+
+        Fires ~_AUTOSAVE_IDLE_SECONDS after the last MCP mutation, then writes one
+        pending root per frame. Self-stops when the set drains (no perpetual poll).
+        Defers (re-arms) on: not-settled / save window open / perf danger. Holds
+        the set (stops, resumes later) when disabled or in Perform Mode."""
+        import time
+        # reinit guard (a stale instance) + superseded-gen guard (collapses re-arms)
+        if self.my.ext.Embody is not self or gen != self._autosave_gen:
+            return
+        self._autosave_armed = False
+        if not self._pending_checkpoint_roots:
+            return
+        if not self._autosaveEnabled() or self._performMode:
+            self._setAutosaveStatus(
+                'Disabled' if not self._autosaveEnabled()
+                else 'Bypassed (Perform Mode)')
+            return  # hold the set; Perform-Mode exit / re-enable re-arms it
+        if time.monotonic() - self._last_checkpoint_activity < self._AUTOSAVE_IDLE_SECONDS:
+            self._armAutosaveDrain()  # not settled -- wait
+            return
+        if self.my.fetch('_suppress_dialogs', False, search=False):
+            self._armAutosaveDrain()  # save window -- table mutation now is fatal
+            return
+        if not self._autosavePerfOk():
+            self._armAutosaveDrain()  # perf danger -- don't pile onto a hot frame
+            return
+        try:
+            root = self._pending_checkpoint_roots.pop()
+        except KeyError:
+            return
+        if not self.Checkpoint(root):
+            # Export/write failed (rare; logged in Checkpoint). We don't re-add
+            # here -- that would tight-loop on a persistently-failing COMP; the
+            # next edit to this COMP re-queues it.
+            self.Log(f'Autosave: checkpoint of {root} did not complete', 'DEBUG')
+        if self._pending_checkpoint_roots:  # more roots -- one per frame
+            self._autosave_armed = True
+            self._autosave_gen += 1
+            run(f"op({self.my.path!r}).ext.Embody._autosaveDrain({self._autosave_gen})",
+                fromOP=self.my, delayFrames=1)
+
+    def _autosavePerfOk(self) -> bool:
+        """Best-effort perf-gate: False only if fps is clearly in the danger zone."""
+        try:
+            perf = self.my.op('_envoy_perform')
+            if not perf or 'fps' not in [c.name for c in perf.chans]:
+                return True
+            fps = float(perf['fps'].eval())
+            target = float(project.cookRate or 60)
+            return fps >= self._AUTOSAVE_FPS_FLOOR_FRAC * target
+        except Exception:
+            return True
+
+    def _setAutosaveStatus(self, msg: str) -> None:
+        """Set the read-only Autosavestatus readout (no-op if the param is absent)."""
+        p = getattr(self.my.par, 'Autosavestatus', None)
+        if p is not None:
+            try:
+                p.val = msg
+            except Exception:
+                pass
+
+    def _ensureAutosaveParams(self) -> None:
+        """Create the Autosave toggle + status readout on the TDN page if missing.
+
+        Self-heal so the feature is controllable on a fresh install of the shipped
+        .tox / an older .toe that predates these params (the engine itself
+        defaults ON when the param is absent, so this only adds the control
+        surface). Idempotent; the params bake into the .toe + Embody.tdn on save.
+        Called once from __init__; never raises."""
+        try:
+            tdn_page = None
+            for pg in self.my.customPages:
+                if pg.name == 'TDN':
+                    tdn_page = pg
+                    break
+            if tdn_page is None:
+                return
+            if not hasattr(self.my.par, 'Autosave'):
+                p = tdn_page.appendToggle('Autosave', label='Auto-Save Checkpoints')[0]
+                p.default = True
+                p.val = True
+                p.startSection = True
+                p.help = (
+                    'When on, after the agent (or you) goes idle Embody writes '
+                    'changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- '
+                    'no full project save, no strip/restore, no freeze -- so a '
+                    'crash loses little unsaved work. Checkpointed COMPs are '
+                    'rebuilt on next open. Skips during Perform Mode and saves.')
+            if not hasattr(self.my.par, 'Autosavestatus'):
+                s = tdn_page.appendStr('Autosavestatus', label='Auto-Save Status')[0]
+                s.readOnly = True
+                s.default = ''
+                s.val = 'Idle'
+                s.help = ('Read-only auto-save state: Idle / Saved <time> / '
+                          'Bypassed (Perform Mode) / Disabled.')
+        except Exception as e:
+            self.Log(f'_ensureAutosaveParams failed: {e}', 'DEBUG')
+
+    def _preRiskyCheckpoint(self, operation: str, params: dict) -> None:
+        """Synchronously checkpoint the touched TDN root BEFORE a destructive
+        delete (delete_op of a CHILD inside a tracked COMP) so an agent-induced
+        crash DURING it loses nothing since it. ~6ms one COMP; gated like
+        Checkpoint. Called from EnvoyExt _execute_operation before the handler.
+
+        NOT for import_network: its .tdn is the user's source-of-truth being
+        reloaded, so checkpointing the live state over it would corrupt the edit.
+        And NOT when the op being deleted IS the boundary itself (it is going away
+        and _delete_op purges it -- the checkpoint would be discarded). Best-effort."""
+        try:
+            if self._performMode or not self._autosaveEnabled():
+                return
+            if self.my.fetch('_suppress_dialogs', False, search=False):
+                return
+            path = params.get('op_path')
+            if not path:
+                return
+            norm = path.rstrip('/')
+            parts = norm.split('/')
+            first = True
+            while len(parts) > 1:
+                cand = '/'.join(parts)
+                m = self._findExternalizedComp(cand)
+                if m and m[1] == 'tdn':
+                    if first and cand == norm:
+                        return  # deleting the boundary itself -- nothing to protect
+                    if self.Checkpoint(cand):
+                        self._pending_checkpoint_roots.discard(cand)
+                    return
+                parts.pop()
+                first = False
+        except Exception:
+            pass
+
+    def _purgeTDNTracking(self, op_path: str) -> None:
+        """Remove the TDN tracking row(s) for op_path and any tracked TDN
+        DESCENDANT, called from delete_op BEFORE the op is destroyed.
+
+        Without this, deleting a tracked TDN COMP leaves its row + .tdn on disk
+        until the next continuity sweep; a crash in that window would let
+        export-mode autosave recovery RESURRECT the just-deleted COMP on reopen
+        (it is tsv-driven, so a lingering row = a rebuild). Removing the row up
+        front makes the deletion durable. `_removeTDNStrategy` removes the row
+        synchronously (the safety hinge) and deletes the .tdn shortly after.
+        Best-effort; never raises into the delete path. Drops the paths from the
+        pending checkpoint queue too."""
+        try:
+            # Never mutate the externalizations table during the save window
+            # (table mutation during onProjectPreSave/strip is a fatal crash).
+            # A delete landing mid-save just leaves the row for the post-save
+            # continuity sweep to reclaim -- recovery is tsv-driven so a brief
+            # lingering row is benign.
+            if self.my.fetch('_suppress_dialogs', False, search=False):
+                return
+            table = self.Externalizations
+            if not table or table[0, 'strategy'] is None:
+                return
+            prefix = op_path.rstrip('/') + '/'
+            to_remove = []
+            for i in range(1, table.numRows):
+                if self._cellVal(i, 'strategy') != 'tdn':
+                    continue
+                p = self._cellVal(i, 'path')
+                if p == op_path or p.startswith(prefix):
+                    to_remove.append(p)
+            for p in to_remove:
+                self._pending_checkpoint_roots.discard(p)
+                self._removeTDNStrategy(p, delete_file=True)
+        except Exception as e:
+            self.Log(f'_purgeTDNTracking failed for {op_path}: {e}', 'DEBUG')
+
     def ExportPortableTox(self, target: 'OP' = None,
                           save_path: Optional[str] = None) -> bool:
         """Export a self-contained .tox with all external file references
@@ -3311,17 +3624,22 @@ class EmbodyExt:
         self.Log(f"No externalized COMP found at or above '{comp_path}'", "WARNING")
 
     def _findExternalizedComp(self, comp_path: str) -> Optional[tuple[str, str]]:
-        """Find a COMP in the externalizations table and return (path, strategy)."""
-        has_strategy_col = self.Externalizations[0, 'strategy'] is not None
-        for i in range(1, self.Externalizations.numRows):
-            if self._cellVal(i, 'path') == comp_path:
-                if has_strategy_col:
-                    s = self._cellVal(i, 'strategy')
-                    if s in ('tox', 'tdn'):
-                        return (comp_path, s)
-                else:
-                    return (comp_path, 'tox')
-        return None
+        """Find a COMP in the externalizations table and return (path, strategy).
+
+        Keyed lookup by the 'path' column (the table's first column) via TD's
+        native row-name index -- O(1), not an O(rows) Python scan. This is a hot
+        path: the autosave recorder calls it once per ancestor level on EVERY
+        mutating MCP op (and per batch sub-op), so a linear scan here was a real
+        per-op regression on large builds."""
+        table = self.Externalizations
+        if table[0, 'strategy'] is None:
+            # Legacy table without a strategy column -- any matching row is tox.
+            return (comp_path, 'tox') if table[comp_path, 'path'] is not None else None
+        cell = table[comp_path, 'strategy']
+        if cell is None:
+            return None
+        s = cell.val
+        return (comp_path, s) if s in ('tox', 'tdn') else None
 
     def _saveByStrategy(self, op_path: str, strategy: str) -> None:
         """Save a COMP using the appropriate strategy."""
@@ -6344,13 +6662,18 @@ class EmbodyExt:
         if mode == 'off':
             self.Log('TDN mode=off -- skipping reconstruction', 'INFO')
             return
-        if mode == 'export':
-            self.Log('TDN mode=export -- .toe is source of truth, skipping '
-                     'reconstruction', 'INFO')
-            return
-        # mode == 'full'
         if not self.my.par.Tdncreateonstart.eval():
             return
+        if mode == 'export':
+            # .toe is the source of truth for COMPs that EXIST in it, so we do
+            # NOT repopulate those. But a COMP ABSENT from the .toe (e.g. an agent
+            # built + autosave-checkpointed it, then crashed before any save) has
+            # no .toe truth to honor -- rebuild it from its .tdn. Additive: never
+            # clear_first an existing COMP. tsv-driven, so an orphan .tdn with no
+            # row is invisible. (Spike-verified 2026-06-27.)
+            self._recoverMissingTDNComps()
+            return
+        # mode == 'full' -- repopulate ALL TDN COMPs (loop below)
 
         tdn_comps = self._getTDNStrategyComps()
         if not tdn_comps:
@@ -6445,6 +6768,71 @@ class EmbodyExt:
 
         # Build report
         self._logReconstructionReport(tdn_comps, errors_total)
+
+    def _recoverMissingTDNComps(self) -> None:
+        """Export-mode auto-save recovery: rebuild TDN COMPs that are tracked and
+        have a .tdn on disk but are ABSENT from the just-opened .toe.
+
+        This is the crash-insurance recovery path. An agent that builds +
+        autosave-checkpoints a COMP, then crashes before any Ctrl+S, leaves the
+        COMP's .tdn + tsv row on disk but the .toe (last saved) lacks the COMP.
+        On open we rebuild ONLY those absent COMPs from their .tdn -- additive, so
+        it can never clobber a COMP the .toe deliberately carries. tsv-driven (via
+        _getTDNStrategyComps, which excludes Embody + ancestors/descendants), so an
+        orphan .tdn with no row is invisible -- a deleted COMP is never
+        resurrected. Spike-verified 2026-06-27 (children + connections round-trip).
+        """
+        tdn_comps = self._getTDNStrategyComps()
+        if not tdn_comps:
+            return
+        # Snapshot missing-at-start BEFORE any import, so a parent import that
+        # creates a child shell mid-pass doesn't make us skip a child still
+        # needing its own .tdn populated.
+        missing = []
+        for comp_path, rel_tdn in tdn_comps:
+            if op(comp_path) is not None:
+                continue  # exists in the .toe -> .toe is truth, leave it
+            abs_path = self.buildAbsolutePath(rel_tdn)
+            if abs_path.is_file():
+                missing.append((comp_path, abs_path))
+        if not missing:
+            return
+        # Parent-before-child so an ancestor shell exists before its children.
+        missing.sort(key=lambda m: m[0].count('/'))
+        recovered = 0
+        for comp_path, abs_path in missing:
+            try:
+                tdn_doc = self.my.ext.TDN.tdn_load(
+                    abs_path.read_text(encoding='utf-8'))
+                # The op may ALREADY exist as a tdn_ref shell created by a parent
+                # import earlier in this pass -- reuse it; only create when truly
+                # absent. Either way we still import its OWN .tdn (a nested TDN
+                # child is left as a bare shell by the parent import and must be
+                # populated). Never skip a missing-at-start path.
+                shell = op(comp_path)
+                if shell is None:
+                    shell = self._createMissingCompShell(
+                        comp_path, 'tdn', comp_type_override=tdn_doc.get('type'))
+                if shell is None:
+                    self.Log(f'Auto-save recovery: cannot create shell for '
+                             f'{comp_path} (parent missing?)', 'WARNING')
+                    continue
+                res = self.my.ext.TDN.ImportNetwork(
+                    target_path=comp_path, tdn=tdn_doc,
+                    clear_first=True, restore_file_links=True)
+                if res.get('success'):
+                    recovered += 1
+                    self._reconstructAboutPage(shell, comp_path)
+                    self.param_tracker.updateParamStore(shell)
+                    self._storeTDNFingerprint(shell)
+                else:
+                    self.Log(f'Auto-save recovery import failed for {comp_path}: '
+                             f'{res.get("error")}', 'ERROR')
+            except Exception as e:
+                self.Log(f'Auto-save recovery failed for {comp_path}: {e}', 'ERROR')
+        if recovered:
+            self.Log(f'Auto-save recovery: rebuilt {recovered} unsaved COMP(s) '
+                     f'from .tdn (crash-before-save)', 'SUCCESS')
 
     # Params visible only in 'full' mode (strip/reconstruction concepts).
     _TDN_FULL_ONLY_PARAMS = {'Tdnstriponsave', 'Tdncreateonstart'}

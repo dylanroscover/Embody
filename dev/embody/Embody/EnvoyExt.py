@@ -20,7 +20,10 @@ from __future__ import annotations
 from typing import Optional, Any, Callable
 from queue import Queue, Empty
 from threading import Lock, Event, Thread
+import colorsys
 import json
+import math
+import random
 import subprocess
 import sys
 import tempfile
@@ -1565,8 +1568,18 @@ class EnvoyExt:
         # resets to 0 each launch while storage persists, so a stored frame from a
         # prior session compared negative and permanently no-op'd recovery.
         self._last_revive_time: float = 0.0
-        self._MAX_RESTARTS: int = 3
-        self._RESTART_RESET_SECONDS: float = 120.0  # Reset counter after 2 min uptime
+        # Auto-restart policy: retry with EXPONENTIAL BACKOFF for up to
+        # _RESTART_WINDOW_SECONDS before giving up -- not a tiny fixed strike
+        # count. A transient failure (e.g. a port-rebind race during a reload)
+        # self-heals long before the window closes; only a genuinely dead server
+        # runs the full window out. The old 3-strike / ~6-second cap could trip
+        # permanently on a transient blip, then disable Envoy and force a manual
+        # toggle (which also defeated the liveness watchdog).
+        self._RESTART_WINDOW_SECONDS: float = 1800.0  # keep retrying for 30 min
+        self._RESTART_BACKOFF_BASE: float = 1.0       # first retry after ~1s
+        self._RESTART_BACKOFF_MAX: float = 60.0       # cap the gap at 1 min
+        self._RESTART_RESET_SECONDS: float = 120.0    # stable this long -> fresh storm
+        self._restart_window_start: float = 0.0       # time.time() of a storm's 1st failure
         # H1 startup-readiness state: 'Running' is declared only after the
         # worker confirms a real bind (via _pollStartup).  _starting guards the
         # window so duplicate Start() calls are suppressed before envoy_running.
@@ -1581,6 +1594,35 @@ class EnvoyExt:
         # against overlapping bootstraps from repeated Start() calls.
         self._bootstrap_result: Optional[tuple] = None
         self._bootstrapping: bool = False
+
+        # --- Live build visualization (smooth follow of the active op) ---
+        # The network editor glides to centre on the op Envoy just touched.
+        # All state is plain instance attrs (reset on reinit, which is fine).
+        # NEVER COMP storage (would pickle on save). Only ever read/written from
+        # the main thread (via _onRefresh).
+        self._viz_target_op: Optional[str] = None    # path of the op to glide to
+        self._viz_last_view: Optional[tuple] = None  # (pane_id, owner, x, y, zoom) we last set
+        self._viz_takeover_until: float = 0.0  # absTime.seconds; yield to the user until then
+        self._viz_settle_until: float = 0.0    # grace after a navigate while the view settles
+        self._viz_selected_op: Optional[str] = None  # path of the op we last auto-highlighted
+        self._viz_last_activity: float = 0.0   # absTime.seconds of the last build op
+        self._viz_action_text: str = ''        # what Embot says he is doing (speech bubble)
+        self._viz_speech_src: str = ''         # last action typed into the bubble
+        self._viz_speech_t0: float = 0.0       # when the current line started typing
+        self._viz_last_skin: Optional[tuple] = None  # last colour written (skip redundant writes)
+        self._viz_last_paint: float = 0.0            # last figure repaint (caps repaint fps)
+        self._viz_gesture_type: int = 0              # 0 wave / 1 reach / 2 pump / 3 dance
+        self._viz_gesture_start: float = 0.0         # when the current gesture began
+        self._viz_gesture_end: float = 0.0           # when it ends
+        self._viz_next_gesture: float = 0.0          # earliest time the next may start
+        self._viz_pulse_op: Optional[str] = None      # path of the op currently pulsing
+        self._viz_pulse_orig: Optional[tuple] = None  # its original node colour
+        self._viz_pulse_start: float = 0.0     # absTime.seconds the pulse began
+        self._viz_bot_net: Optional[str] = None       # path of the net the bot figure lives in
+        self._viz_bot_pos: Optional[tuple] = None     # (x, y) current figure centre (animated)
+        self._viz_bot_from: Optional[tuple] = None    # (x, y) jump origin
+        self._viz_bot_target: Optional[tuple] = None  # (x, y) jump destination (stands on op)
+        self._viz_bot_jump_t0: float = 0.0            # absTime.seconds the current hop began
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -2429,6 +2471,7 @@ class EnvoyExt:
         # The next manual toggle would immediately hit the limit again,
         # making Envoyenable appear to "do nothing."
         self._restart_count = 0
+        self._restart_window_start = 0.0  # fresh retry window on the next storm
         if not self.ownerComp.fetch('envoy_running', False):
             self._log('Envoy disabled')
             # Only set 'Disabled' if hooks haven't already set a more
@@ -2579,6 +2622,14 @@ class EnvoyExt:
 
             self._send_response(request_id, result)
 
+        # Live build visualization (opt-in): camera follow + node pulse + the
+        # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so
+        # visualization can NEVER break the refresh loop.
+        try:
+            self._vizTick()
+        except Exception:
+            pass
+
     def _onServerSuccess(self, returnValue=None):
         """SuccessHook - Called when the thread task completes successfully"""
         self._log('Server thread exited')
@@ -2599,28 +2650,41 @@ class EnvoyExt:
             self._scheduleRestart(f'Server error: {error}')
 
     def _scheduleRestart(self, reason: str):
-        """Auto-restart the MCP server after a crash, with backoff and cap."""
-        uptime = time.time() - self._last_start_time
-        if uptime > self._RESTART_RESET_SECONDS:
-            self._restart_count = 0  # Stable long enough -- reset
+        """Auto-restart the MCP server with exponential backoff, retrying for up
+        to _RESTART_WINDOW_SECONDS (30 min) before giving up. Replaces the old
+        3-strike / ~6-second cap, which a transient port-rebind race could trip
+        permanently -- then disable Envoy and force a manual toggle."""
+        now = time.time()
+        uptime = now - self._last_start_time
+        # A NEW storm: either the very first failure, or the server had been
+        # stable long enough that this death is unrelated to the last streak.
+        if self._restart_window_start == 0.0 or uptime > self._RESTART_RESET_SECONDS:
+            self._restart_count = 0
+            self._restart_window_start = now
 
-        self._restart_count += 1
-        if self._restart_count > self._MAX_RESTARTS:
+        elapsed = now - self._restart_window_start
+        if elapsed > self._RESTART_WINDOW_SECONDS:
+            mins = int(self._RESTART_WINDOW_SECONDS // 60)
             self._log(
-                f'Server failed {self._restart_count} times -- giving up. '
-                f'Last: {reason}. Toggle Envoy off/on to retry.', 'ERROR')
-            self.ownerComp.par.Envoystatus = f'Error: {reason} (restart limit reached)'
+                f'Server kept failing for over {mins} min '
+                f'({self._restart_count} attempts) -- giving up. Last: {reason}. '
+                f'Toggle Envoy off/on to retry.', 'ERROR')
+            self.ownerComp.par.Envoystatus = f'Error: {reason} (gave up after {mins} min)'
             self.ownerComp.par.Envoyenable = False
             return
 
-        delay_frames = 60 * self._restart_count  # ~1s, 2s, 3s at 60fps
+        self._restart_count += 1
+        # Exponential backoff: 1, 2, 4, 8, ... seconds, capped at the max gap.
+        delay = min(self._RESTART_BACKOFF_MAX,
+                    self._RESTART_BACKOFF_BASE * (2 ** (self._restart_count - 1)))
+        remaining = max(0, int((self._RESTART_WINDOW_SECONDS - elapsed) // 60))
         self._log(
-            f'Auto-restarting server (attempt {self._restart_count}/{self._MAX_RESTARTS}): '
-            f'{reason}', 'WARNING')
+            f'Auto-restarting server (attempt {self._restart_count}, retry in '
+            f'{delay:.0f}s, ~{remaining} min left in retry window): {reason}', 'WARNING')
         self.ownerComp.par.Envoystatus = (
-            f'Restarting ({self._restart_count}/{self._MAX_RESTARTS})...')
+            f'Restarting (attempt {self._restart_count}, ~{remaining} min left)...')
         run(f"op('{self.ownerComp.path}').ext.Envoy.Start()",
-            fromOP=self.ownerComp, delayFrames=delay_frames)
+            fromOP=self.ownerComp, delayMilliSeconds=int(delay * 1000))
 
     # === Operation Routing ===
 
@@ -2694,11 +2758,669 @@ class EnvoyExt:
         handler = handlers.get(operation)
         if handler:
             try:
-                return handler(**params)
+                # Pre-risky: durably checkpoint the touched TDN root BEFORE a
+                # destructive delete so an agent-induced crash during it loses
+                # nothing since it. Best-effort, ~6ms. NOT for import_network: its
+                # .tdn is the user's source-of-truth being reloaded (the canonical
+                # TDN edit->import workflow), so writing the live state over it
+                # would corrupt the edit.
+                if operation == 'delete_op':
+                    try:
+                        op.Embody.ext.Embody._preRiskyCheckpoint(operation, params)
+                    except Exception:
+                        pass
+                result = handler(**params)
+                # Record where Envoy is building for the re-center camera.
+                # Routed here (not at the _onRefresh chokepoint) so each sub-op
+                # of a batch_operations call is seen -- batches loop back through
+                # _execute_operation. Best-effort; never affects the response.
+                self._noteVizActivity(operation, params, result)
+                self._noteCheckpointActivity(operation, params, result)
+                return result
             except Exception as e:
                 self._log(f'Operation {operation} failed: {e}', 'ERROR')
                 return {'error': str(e)}
         return {'error': f'Unknown operation: {operation}'}
+
+    # === Live Build Visualization: smooth follow + navigate to the active op ===
+    # While Claude builds via MCP, the network editor follows Envoy's work so the
+    # user can watch in real time:
+    #   - within the viewed network it smoothly GLIDES to centre on the op just
+    #     touched (ease-out, one step per frame);
+    #   - when the work moves to a network NO pane is showing, it NAVIGATES a
+    #     network-editor pane into that COMP and SNAPS to frame the op (you cannot
+    #     glide across networks -- different coordinate spaces -- so it cuts).
+    # Opt-in (Envoyfollow), main-thread only (driven from _onRefresh, which fires
+    # every frame), and side-effect-free w.r.t. saved files: it only writes
+    # pane.owner / pane.x / pane.y (view state -- not externalized, and verified to
+    # add no operator to project.modified). home()/homeSelected() are deliberately
+    # NOT used -- no-ops on an unfocused pane, which is what an MCP build presents.
+    #
+    # No throttle parameter: a move happens at most once per frame (after the
+    # request drain loop), so a 50-op batch_operations is a single move to its
+    # last op, never a strobe. The frame rate is the rate limiter, not a knob.
+    #
+    # Yield: if the user pans/zooms/navigates the follow pane, _userTookOver adopts
+    # their view as the new baseline and (re)arms an idle cooldown -- so we resume
+    # only after they stop, never give up forever, never yank them mid-interaction.
+
+    _VIZ_EASE = 0.25        # fraction of the remaining distance covered per frame
+    _VIZ_EPS = 1.0          # network units; closer than this -> snap and release
+    _VIZ_TAKEOVER_S = 6.0   # seconds to yield after the user's last interaction
+    _VIZ_ZOOM = 0.55        # framing zoom while following -- zoomed out for context
+    _VIZ_TAKEOVER_PAN = 12.0   # min pan (network units) that counts as a user takeover
+    _VIZ_TAKEOVER_ZOOM = 0.08  # min zoom change that counts as a user takeover
+    _VIZ_IDLE_S = 30.0      # seconds of quiet before the bot + pulse retire (survives thinking pauses)
+    _VIZ_PULSE_S = 0.45     # seconds for a node's colour pulse to fade back
+    _VIZ_PULSE_COLOR = (0.15, 0.85, 0.70)    # Envoy accent (cyan-green)
+    # The builder-bot is a little figure of 8 minimal networkbox annotations
+    # (no text header) -- head, 2 eyes, body, 2 arms, 2 legs. Each part:
+    # (suffix, centre-offset-x, centre-offset-y, base-w, base-h, is_eye).
+    # Offsets are network units from the figure's anchor (y up). Body first so
+    # later parts (head, eyes) draw on top.
+    _VIZ_BOT_PREFIX = 'envoy_bot_'
+    _VIZ_BOT_PARTS = (
+        ('body',   0.0,    0.0,   30.0, 34.0, False),
+        ('arm_l', -22.0,   3.0,    9.0, 26.0, False),
+        ('arm_r',  22.0,   3.0,    9.0, 26.0, False),
+        ('leg_l',  -8.0,  -29.0,  11.0, 24.0, False),
+        ('leg_r',   8.0,  -29.0,  11.0, 24.0, False),
+        ('head',   0.0,   31.0,   34.0, 26.0, False),
+        ('eye_l',  -8.0,  35.0,    9.0,  9.0, True),
+        ('eye_r',   8.0,  35.0,    9.0,  9.0, True),
+    )
+    # Robotic motion: the figure JUMPS from node to node (parabolic arc, snappy
+    # ease) and does a small stepped hover when idle. Squash is subtle and only
+    # applied on landing.
+    _VIZ_JUMP_DUR = 0.4       # seconds per hop between nodes
+    _VIZ_JUMP_ARC = 55.0      # hop arc height (network units)
+    _VIZ_HOVER_AMP = 3.0      # idle hover amplitude (network units)
+    _VIZ_HOVER_FREQ = 3.0     # idle hover frequency
+    _VIZ_SQUASH = 0.07        # landing squash amount (subtle)
+    # Embot does an occasional gesture, cycling through several types so it stays
+    # varied: a wave, an arms-forward reach, an arms-up pump, and -- now and then
+    # -- a full-body robot dance. Any single gesture (incl. the wave) is therefore
+    # infrequent.
+    _VIZ_GESTURE_GAP_MIN = 4.0  # min seconds between gestures (randomized)
+    _VIZ_GESTURE_GAP_MAX = 11.0 # max seconds between gestures
+    _VIZ_GESTURE_DUR = 1.6      # how long a hand gesture lasts
+    _VIZ_DANCE_DUR = 3.0        # the robot dance runs a bit longer
+    _VIZ_WAVE_LIFT = 28.0       # how high the right arm raises to wave
+    _VIZ_WAVE_FREQ = 14.0       # wiggle speed of the wave
+    _VIZ_WAVE_AMP = 9.0         # wiggle amplitude of the wave
+    # Colour reflects "thinking time" -- how long since the last build op. Cool
+    # (cyan/blue) when Envoy just acted; warming through green/yellow to red the
+    # longer it goes between actions (a heavier "thinking" gap). Resets cool on
+    # each new op.
+    _VIZ_WARM_S = 14.0        # seconds of thinking to ramp fully cool -> warm
+    _VIZ_COOL_HUE = 0.58      # short/quick: cool blue-cyan
+    _VIZ_WARM_HUE = 0.0       # long/thought-heavy: warm red
+
+    # Operations that count as "building" and should move the camera. Read-only
+    # ops (get_*, query_network, read_tdn, capture_top) and batch_operations
+    # itself (its sub-ops route back through _execute_operation individually) are
+    # excluded. delete_op is excluded too: the op is gone post-dispatch and a
+    # deletion has no centre to frame.
+    _VIZ_MUTATING_OPS = frozenset({
+        'create_op', 'import_network', 'connect_ops', 'copy_op',
+        'create_annotation', 'create_extension', 'set_parameter',
+        'set_op_position', 'set_dat_content', 'edit_dat_content',
+        'rename_op', 'set_op_flags',
+    })
+
+    def _noteVizActivity(self, operation: str, params: dict, result) -> None:
+        """Record the op Envoy just acted on as the follow target and stamp the
+        activity time. Hot path -- called for every sub-op of a batch; must never
+        raise."""
+        try:
+            if operation not in self._VIZ_MUTATING_OPS:
+                return
+            target = self._resolveActiveOp(operation, params, result)
+            if target:
+                self._viz_target_op = target
+                self._viz_last_activity = absTime.seconds
+                self._viz_action_text = self._actionText(operation, target)
+        except Exception:
+            pass
+
+    # Ops that change exported .tdn content and should arm an auto-save checkpoint.
+    # BROADER than _VIZ_MUTATING_OPS: includes delete/disconnect/layout/annotation
+    # ops (which mutate structure but have no camera target). execute_python /
+    # exec_op_method are deliberately EXCLUDED (A1 skip+document -- the touched COMP
+    # is unknowable; their edits are captured by the next typed op / Ctrl+S).
+    _CHECKPOINT_MUTATING_OPS = frozenset({
+        'create_op', 'delete_op', 'set_parameter', 'connect_ops', 'disconnect_op',
+        'copy_op', 'rename_op', 'set_op_flags', 'set_op_position', 'layout_children',
+        'set_dat_content', 'edit_dat_content', 'create_annotation', 'set_annotation',
+        'create_extension', 'import_network', 'externalize_op', 'save_externalization',
+        'remove_externalization_tag',
+    })
+
+    def _noteCheckpointActivity(self, operation: str, params: dict, result) -> None:
+        """Arm the auto-save touched-set off the single MCP chokepoint. Best-effort,
+        never raises -- a failure here must never affect the tool response."""
+        try:
+            if operation not in self._CHECKPOINT_MUTATING_OPS:
+                return
+            path = self._resolveActiveOp(operation, params, result)
+            if not path:
+                # delete_op leaves no live op; fall back to the param path string.
+                path = (params.get('op_path') or params.get('target_path')
+                        or params.get('dest_path') or params.get('parent_path'))
+            if path:
+                op.Embody.ext.Embody.NoteCheckpointTouch(path)
+        except Exception:
+            pass
+
+    # What each operator type does -- Embot explains it when no comment is set.
+    _OP_DESCRIPTIONS = {
+        'noiseTOP': 'seeding a noise texture',
+        'rampTOP': 'laying down a gradient',
+        'constantTOP': 'filling a solid colour',
+        'transformTOP': 'repositioning the image',
+        'blurTOP': 'softening it with a blur',
+        'levelTOP': 'tuning brightness & contrast',
+        'edgeTOP': 'tracing the edges',
+        'compositeTOP': 'blending two layers together',
+        'hsvadjustTOP': 'shifting hue & saturation',
+        'feedbackTOP': 'feeding the output back in',
+        'glslTOP': 'running a GLSL shader',
+        'nullTOP': 'marking the final output',
+        'outTOP': 'marking the final output',
+    }
+
+    def _actionText(self, operation: str, path: str) -> str:
+        """What Embot says: the op's comment (my reasoning for it) if I set one,
+        else a description of what that op type does, else a plain verb."""
+        try:
+            o = op(path)
+            if o is not None:
+                note = (o.comment or '').strip()
+                if note:
+                    return note
+                desc = self._OP_DESCRIPTIONS.get(o.type)
+                if desc:
+                    return desc
+        except Exception:
+            pass
+        verbs = {'create_op': 'building', 'connect_ops': 'wiring up',
+                 'set_parameter': 'tuning', 'import_network': 'rebuilding'}
+        return '%s %s' % (verbs.get(operation, 'working on'), path.rsplit('/', 1)[-1])
+
+    def _resolveActiveOp(self, operation: str, params: dict, result) -> Optional[str]:
+        """Best-effort path of the single op to move to. Prefers the path the
+        handler reports (a freshly created op), else the param target."""
+        try:
+            if isinstance(result, dict):
+                for k in ('path', 'new_path', 'comp_path'):
+                    v = result.get(k)
+                    if v:
+                        return v
+            if operation == 'connect_ops':
+                return params.get('dest_path')
+            if operation == 'import_network':
+                return params.get('target_path')
+            return params.get('op_path')
+        except Exception:
+            return None
+
+    def _vizTick(self) -> None:
+        """Once-per-frame visualization driver (after the drain loop): retire
+        artifacts when idle/disabled/saving, advance the colour pulse + bot dance,
+        and follow the active op. Fully guarded -- never breaks the refresh loop."""
+        try:
+            # Perform mode or the save window: tear everything down so nothing can
+            # bake into the .toe (belt-and-suspenders with onProjectPreSave).
+            if getattr(self.ownerComp.ext.Embody, '_performMode', False):
+                self._vizCleanup()
+                return
+            if self.ownerComp.fetch('_suppress_dialogs', False, search=False):
+                self._vizCleanup()
+                return
+            if not self.ownerComp.par.Envoyfollow.eval():
+                self._vizCleanup()
+                return
+            now = absTime.seconds
+            # Quiet for a while -> retire the bot + restore any pulse.
+            if self._viz_last_activity and (now - self._viz_last_activity) > self._VIZ_IDLE_S:
+                self._vizCleanup()
+                self._viz_target_op = None
+                return
+            self._pulseTick(now)
+            if self._viz_target_op:
+                self._followActive(now)
+            self._botDance(now)
+        except Exception as e:
+            try:
+                self._log(f'Viz tick skipped: {type(e).__name__}: {e}', 'DEBUG')
+            except Exception:
+                pass
+
+    def _followActive(self, now: float) -> None:
+        """Camera follow + highlight + pulse-start + bot-placement for the active
+        op. Glides within its network, or navigates+snaps into a network no pane
+        is showing."""
+        target = op(self._viz_target_op) if self._viz_target_op else None
+        if not target or not target.valid:
+            self._viz_target_op = None
+            return
+        # A docked DAT (e.g. a callbacks DAT) renders attached to its host even
+        # though its own nodeX/nodeY is elsewhere -- follow + stand on the HOST
+        # (the op you actually see). The speech bubble still names the real op.
+        try:
+            if target.dock is not None:
+                target = target.dock
+        except Exception:
+            pass
+        net = target.parent()
+        if net is None:
+            return
+        self._pulseStart(target, now)        # ping the node colour
+        self._placeBot(net, target, now)     # bring the dancing bot to the op
+        self._highlightOp(target)            # mark Envoy's focus AFTER the bot is
+                                             # placed (a freshly created bot would
+                                             # otherwise steal TD's selection)
+        pane, navigate = self._pickFollowPane(net)
+        if pane is None:
+            return
+        if navigate:
+            self._navigateAndFrame(pane, net, target)
+        else:
+            self._glideStep(pane, target)
+
+    def _pickFollowPane(self, net: 'COMP'):
+        """Choose the pane to follow `net` in, and whether it must be navigated.
+        Prefers a network-editor pane already showing `net` (-> glide); else the
+        current/first network-editor pane (-> navigate into net). Returns
+        (pane, navigate_bool), or (None, False) if the user has taken over."""
+        try:
+            neteditors = [p for p in ui.panes
+                          if str(p.type) == 'PaneType.NETWORKEDITOR']
+            if not neteditors:
+                return None, False
+            netpath = net.path
+            pane = next((p for p in neteditors
+                         if p.owner is not None and p.owner.path == netpath), None)
+            navigate = False
+            if pane is None:
+                cur_id = ui.panes.current.id
+                pane = next((p for p in neteditors if p.id == cur_id), neteditors[0])
+                navigate = True
+            if self._userTookOver(pane):
+                return None, False
+            return pane, navigate
+        except Exception:
+            return None, False
+
+    def _userTookOver(self, pane) -> bool:
+        """True while we should yield this pane to the user. A manual change
+        (owner/pan/zoom since we last set it) adopts their view as the new
+        baseline and (re)arms an idle cooldown, so we resume only once they stop
+        -- never a perpetual back-off, never a yank mid-interaction."""
+        now = absTime.seconds
+        cur = self._viewTuple(pane)              # (id, owner, x, y, zoom)
+        if now < self._viz_settle_until:
+            self._viz_last_view = cur            # our navigate is still settling -> adopt
+            return False
+        lv = self._viz_last_view
+        if lv and lv[0] == pane.id:
+            # Tolerant: ignore tiny float/settle jitter -- only a real user pan,
+            # zoom, or navigation counts. (An exact compare spuriously armed the
+            # cooldown and blocked most follows.)
+            took = (lv[1] != cur[1] or
+                    abs(lv[2] - cur[2]) > self._VIZ_TAKEOVER_PAN or
+                    abs(lv[3] - cur[3]) > self._VIZ_TAKEOVER_PAN or
+                    abs(lv[4] - cur[4]) > self._VIZ_TAKEOVER_ZOOM)
+            if took:
+                self._viz_takeover_until = now + self._VIZ_TAKEOVER_S
+                self._viz_last_view = cur        # adopt -> avoids perpetual backoff
+        return now < self._viz_takeover_until
+
+    def _navigateAndFrame(self, pane, net: 'COMP', target: 'OP') -> None:
+        """Cut `pane` into `net` and SNAP to frame `target` (coordinate spaces
+        differ across networks, so gliding from the old view is meaningless).
+        Releases the target -- subsequent same-network ops glide from here."""
+        # Set ONLY the owner here. pane.x/pane.y/zoom set in the same frame as the
+        # owner change do NOT stick (the pane is mid-navigation), and the stale
+        # values then misfired takeover and froze the follow. Owner alone sticks;
+        # we do NOT clear the target, so the glide -- which runs in-network on the
+        # following frames, where pan writes DO stick -- pans to the target.
+        pane.owner = net
+        self._recordView(pane)
+        self._viz_settle_until = absTime.seconds + 0.4
+
+    def _glideStep(self, pane, target: 'OP') -> None:
+        """One frame of an ease-out glide of `pane` toward `target`'s centre.
+        Pan only -- no zoom change. Within _VIZ_EPS we snap and clear the target,
+        releasing the pane so the user is free to move it again until the next op
+        arrives."""
+        cx = target.nodeX + target.nodeWidth / 2.0
+        cy = target.nodeY + target.nodeHeight / 2.0
+        dx = cx - pane.x
+        dy = cy - pane.y
+        if abs(dx) < self._VIZ_EPS and abs(dy) < self._VIZ_EPS:
+            pane.x = cx
+            pane.y = cy
+            self._viz_target_op = None   # settled -> release the pane to the user
+        else:
+            pane.x = pane.x + dx * self._VIZ_EASE
+            pane.y = pane.y + dy * self._VIZ_EASE
+        # Pan only -- zoom is set once on navigate. Easing zoom per-frame made the
+        # read-back jitter trip _userTookOver, freezing the follow.
+        self._recordView(pane)
+
+    def _highlightOp(self, target: 'OP') -> None:
+        """Select + make-current the op being worked, so Envoy's focus is visibly
+        marked. Only deselects the op WE previously highlighted -- the user's own
+        selections elsewhere are left alone. Best-effort; never raises."""
+        try:
+            prev = self._viz_selected_op
+            if prev and prev != target.path:
+                po = op(prev)
+                if po and po.valid:
+                    po.selected = False
+            target.selected = True
+            target.current = True
+            self._viz_selected_op = target.path
+        except Exception:
+            pass
+
+    # --- colour pulse on the active op ---
+
+    def _pulseStart(self, target: 'OP', now: float) -> None:
+        """Begin a colour pulse on `target` (snapshot its colour first). No-op if
+        we are already pulsing this op."""
+        if self._viz_pulse_op == target.path:
+            return
+        self._restorePulse()
+        try:
+            self._viz_pulse_orig = tuple(target.color)
+            self._viz_pulse_op = target.path
+            self._viz_pulse_start = now
+        except Exception:
+            self._viz_pulse_op = None
+
+    def _pulseTick(self, now: float) -> None:
+        """Fade the active pulse from the accent colour back to the op's original."""
+        if not self._viz_pulse_op:
+            return
+        o = op(self._viz_pulse_op)
+        if not o or not o.valid:
+            self._viz_pulse_op = None
+            return
+        t = (now - self._viz_pulse_start) / self._VIZ_PULSE_S
+        if t >= 1.0:
+            self._restorePulse()
+            return
+        ac = self._VIZ_PULSE_COLOR
+        og = self._viz_pulse_orig or (0.67, 0.67, 0.67)
+        k = 1.0 - t   # accent weight fades to 0
+        try:
+            o.color = (og[0] + (ac[0] - og[0]) * k,
+                       og[1] + (ac[1] - og[1]) * k,
+                       og[2] + (ac[2] - og[2]) * k)
+        except Exception:
+            self._restorePulse()
+
+    def _restorePulse(self) -> None:
+        """Restore the pulsing op's original colour and clear pulse state."""
+        p = self._viz_pulse_op
+        if p and self._viz_pulse_orig is not None:
+            o = op(p)
+            if o and o.valid:
+                try:
+                    o.color = self._viz_pulse_orig
+                except Exception:
+                    pass
+        self._viz_pulse_op = None
+        self._viz_pulse_orig = None
+
+    # --- the dancing builder-bot (ephemeral annotation) ---
+
+    def _placeBot(self, net: 'COMP', target: 'OP', now: float) -> None:
+        """Ensure the figure exists in `net` and set its destination so it STANDS
+        on top of the active op (feet on the node's top edge). A new node triggers
+        a hop; a network change snaps. Motion + colour come from _botDance."""
+        prev_net = self._viz_bot_net
+        if not self._ensureBot(net):
+            return
+        dest = (target.nodeX + target.nodeWidth / 2.0,
+                target.nodeY + target.nodeHeight + self._botFootGap())
+        if self._viz_bot_pos is None or prev_net != self._viz_bot_net:
+            self._viz_bot_pos = dest        # appear / snap (first time or new network)
+            self._viz_bot_from = dest
+            self._viz_bot_target = dest
+            self._viz_bot_jump_t0 = now - self._VIZ_JUMP_DUR
+        elif dest != self._viz_bot_target:
+            self._viz_bot_from = self._viz_bot_pos    # hop from where we are now
+            self._viz_bot_target = dest
+            self._viz_bot_jump_t0 = now
+
+    def _botFootGap(self) -> float:
+        """Distance from the figure centre down to its feet, so it stands with
+        feet on the node's top edge."""
+        return max(h / 2.0 - oy for (_s, _ox, oy, _w, h, _e) in self._VIZ_BOT_PARTS)
+
+    def _ensureBot(self, net: 'COMP') -> bool:
+        """Ensure the 8 figure parts exist in `net` (rebuild on a network change).
+        Returns False where a bot must not live (see _botUnsafeNet)."""
+        netpath = net.path
+        if self._viz_bot_net == netpath and net.op(self._VIZ_BOT_PREFIX + 'body'):
+            return True
+        self._destroyBot()
+        if self._botUnsafeNet(net):
+            return False
+        try:
+            for (suffix, ox, oy, w, h, is_eye) in self._VIZ_BOT_PARTS:
+                stale = net.op(self._VIZ_BOT_PREFIX + suffix)   # clear orphan in net
+                if stale:
+                    stale.destroy()
+                p = net.create(annotateCOMP)
+                p.name = self._VIZ_BOT_PREFIX + suffix
+                p.selected = False     # don't steal the op's selection
+                p.par.Mode = 'networkbox'
+                p.par.Titletext = ''
+                p.par.Bodytext = ''
+                try:
+                    p.par.Titleheight = 0   # minimal box -- no text header
+                except Exception:
+                    pass
+                p.par.Backcoloralpha = 1.0
+                p.nodeWidth = w
+                p.nodeHeight = h
+            # Embot's speech bubble (a titled text annotation -- distinct from the
+            # minimal body boxes).
+            sp = net.op(self._VIZ_BOT_PREFIX + 'speech')
+            if sp:
+                sp.destroy()
+            sp = net.create(annotateCOMP)
+            sp.name = self._VIZ_BOT_PREFIX + 'speech'
+            sp.selected = False
+            sp.par.Titletext = 'Embot'
+            sp.par.Bodytext = self._viz_action_text
+            sp.par.Backcolorr = 0.12
+            sp.par.Backcolorg = 0.12
+            sp.par.Backcolorb = 0.17
+            sp.par.Backcoloralpha = 0.95
+            sp.par.Bodyfontsize = 11
+            sp.nodeWidth = 185
+            sp.nodeHeight = 74
+            self._viz_bot_net = netpath
+            return True
+        except Exception:
+            self._destroyBot()
+            return False
+
+    def _botDance(self, now: float) -> None:
+        """Animate the figure: a robotic HOP from node to node (parabolic arc,
+        snappy ease, subtle landing squash) and a small stepped idle hover, with a
+        vibrant colour cycle. Pure UI-attr + annotation colour writes (cook-free)."""
+        np = self._viz_bot_net
+        if not np or self._viz_bot_target is None:
+            return
+        net = op(np)
+        if not net:
+            self._viz_bot_net = None
+            return
+        if (now - self._viz_last_paint) < 0.033:    # cap figure repaint at ~30fps
+            return
+        self._viz_last_paint = now
+        t = (now - self._viz_bot_jump_t0) / self._VIZ_JUMP_DUR
+        sx = sy = 1.0
+        if t < 1.0:                                   # mid-hop
+            e = 1.0 - (1.0 - t) * (1.0 - t)           # easeOutQuad (snappy)
+            fx, fy = self._viz_bot_from
+            tx, ty = self._viz_bot_target
+            px = fx + (tx - fx) * e
+            py = fy + (ty - fy) * e + self._VIZ_JUMP_ARC * math.sin(math.pi * t)
+            if t > 0.82:                              # subtle squash on landing
+                k = (t - 0.82) / 0.18
+                sx = 1.0 + self._VIZ_SQUASH * k
+                sy = 1.0 - self._VIZ_SQUASH * k
+        else:                                         # standing still (robotic; no idle churn)
+            tx, ty = self._viz_bot_target
+            px, py = tx, ty
+        self._viz_bot_pos = (px, py)
+        # --- random gestures at random intervals (not a fixed loop) ---
+        if t >= 1.0 and now >= self._viz_gesture_end and now >= self._viz_next_gesture:
+            if random.random() < 0.18:
+                gtype = 3                               # robot dance, now and then
+            else:
+                gtype = int(random.random() * 3)        # 0 wave / 1 reach / 2 pump
+                if gtype == self._viz_gesture_type:     # avoid an immediate repeat
+                    gtype = (gtype + 1) % 3
+            self._viz_gesture_type = gtype
+            self._viz_gesture_start = now
+            self._viz_gesture_end = now + (self._VIZ_DANCE_DUR if gtype == 3 else self._VIZ_GESTURE_DUR)
+            self._viz_next_gesture = self._viz_gesture_end + self._VIZ_GESTURE_GAP_MIN + \
+                random.random() * (self._VIZ_GESTURE_GAP_MAX - self._VIZ_GESTURE_GAP_MIN)
+        active = (t >= 1.0) and (now < self._viz_gesture_end)
+        gi = self._viz_gesture_type
+        gdur = self._viz_gesture_end - self._viz_gesture_start
+        gp = now - self._viz_gesture_start
+        genv = math.sin(math.pi * (gp / gdur)) if (active and gdur > 0.0) else 0.0
+        if active and gi == 3:                          # robot dance: full-body sway + bob
+            px = px + round(math.sin(gp * 6.0)) * 11.0 * genv
+            py = py + abs(math.sin(gp * 9.0)) * 7.0 * genv
+        # Quantized "thinking" colour -- changes a few times/sec, not 60. Writing
+        # colour + positions on every part every frame forced a continuous
+        # network-editor redraw and halved the FPS; quantize + the moving check
+        # below keep idle frames write-free.
+        idle = now - self._viz_last_activity
+        f = min(1.0, max(0.0, idle / self._VIZ_WARM_S))
+        hue = round((self._VIZ_COOL_HUE + (self._VIZ_WARM_HUE - self._VIZ_COOL_HUE) * f) * 36.0) / 36.0
+        skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
+        recolor = (skin != self._viz_last_skin)
+        self._viz_last_skin = skin
+        # Only repaint when actually animating (a jump or a gesture) or when the
+        # quantized colour ticks -- otherwise leave the parts untouched so idle
+        # frames cost nothing.
+        moving = (t < 1.0) or active
+        if moving or recolor:
+            for (suffix, ox, oy, w, h, is_eye) in self._VIZ_BOT_PARTS:
+                p = net.op(self._VIZ_BOT_PREFIX + suffix)
+                if not p or not p.valid:
+                    continue
+                gw = gh = 1.0
+                if active:
+                    if gi == 0 and suffix == 'arm_r':                  # wave
+                        oy = oy + self._VIZ_WAVE_LIFT * genv
+                        ox = ox + math.sin(gp * self._VIZ_WAVE_FREQ) * self._VIZ_WAVE_AMP * genv
+                    elif gi == 1 and suffix in ('arm_l', 'arm_r'):     # reach: extend arms on Y only
+                        gh = 1.0 + 0.7 * genv
+                        oy = oy + 9.0 * genv
+                    elif gi == 2 and suffix in ('arm_l', 'arm_r'):     # both arms pump up
+                        oy = oy + self._VIZ_WAVE_LIFT * 0.75 * genv
+                    elif gi == 3:                                      # robot dance: limbs + head
+                        if suffix == 'arm_l':
+                            oy = oy + 20.0 * genv * (0.5 + 0.5 * math.sin(gp * 7.0))
+                        elif suffix == 'arm_r':
+                            oy = oy + 20.0 * genv * (0.5 + 0.5 * math.sin(gp * 7.0 + math.pi))
+                        elif suffix in ('head', 'eye_l', 'eye_r'):
+                            ox = ox + round(math.sin(gp * 6.0)) * 4.0 * genv
+                pw, ph = w * sx * gw, h * sy * gh
+                p.nodeWidth = pw
+                p.nodeHeight = ph
+                p.nodeX = (px + ox * sx) - pw / 2.0
+                p.nodeY = (py + oy * sy) - ph / 2.0
+                if recolor:
+                    if is_eye:
+                        p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = 0.0, 0.0, 0.0
+                    else:
+                        p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = skin
+        # Speech bubble: follow + a Claude-Code-style typewriter -> spinner + dots.
+        # The spinner only runs while actively building (idle < a few sec) so an
+        # idle Embot does not churn redraws.
+        sp = net.op(self._VIZ_BOT_PREFIX + 'speech')
+        if sp and sp.valid:
+            if moving:
+                sp.nodeX = px - sp.nodeWidth / 2.0
+                sp.nodeY = py + 58.0
+            act = self._viz_action_text
+            if act != self._viz_speech_src:
+                self._viz_speech_src = act
+                self._viz_speech_t0 = now
+            shown = act[:int((now - self._viz_speech_t0) * 22.0)]
+            if len(shown) < len(act):
+                line = shown + '_'                            # typing
+            elif idle < 4.0:                                  # working -> spinner + dots
+                line = '%s %s%s' % ('|/-\\'[int(now * 4.0) % 4], act, '.' * (int(now * 2.0) % 4))
+            else:
+                line = act                                    # idle -> static (no churn)
+            if sp.par.Bodytext.eval() != line:
+                sp.par.Bodytext = line
+
+    def _botUnsafeNet(self, net: 'COMP') -> bool:
+        """True if a bot must NOT be created in `net` -- it would risk being saved.
+        Unsafe: under /local, under the Embody COMP (ExportPortableTox captures
+        Embody's descendants), or inside any TDN-strategy COMP (captured by .tdn
+        export)."""
+        try:
+            if net.path.startswith('/local'):
+                return True
+            embody_path = self.ownerComp.path
+            tdn = self.ownerComp.ext.Embody._getTDNPaths()
+            p = net
+            while p is not None and p.path != '/':
+                if p.path == embody_path or p.path in tdn:
+                    return True
+                p = p.parent()
+        except Exception:
+            return True   # any doubt -> do not create
+        return False
+
+    def _destroyBot(self) -> None:
+        """Remove all figure parts if present."""
+        np = self._viz_bot_net
+        if np:
+            net = op(np)
+            if net:
+                for c in list(net.children):
+                    if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
+                        try:
+                            c.destroy()
+                        except Exception:
+                            pass
+        self._viz_bot_net = None
+        self._viz_bot_pos = None
+        self._viz_bot_from = None
+        self._viz_bot_target = None
+
+    def _vizCleanup(self) -> None:
+        """Retire all live visualization artifacts (restore pulse, destroy bot).
+        Idempotent and safe to call from the save path."""
+        self._restorePulse()
+        self._destroyBot()
+
+    def _viewTuple(self, pane) -> tuple:
+        """A comparable snapshot of a pane's view state (id, owner, pan, zoom)."""
+        owner_path = pane.owner.path if pane.owner else None
+        return (pane.id, owner_path, round(pane.x, 2), round(pane.y, 2),
+                round(pane.zoom, 4))
+
+    def _recordView(self, pane) -> None:
+        """Remember what WE last set the pane to (baseline for takeover detect)."""
+        self._viz_last_view = self._viewTuple(pane)
 
     # === TD Operations (Main Thread Only) ===
 
@@ -2884,6 +3606,13 @@ class EnvoyExt:
 
         try:
             name = target.name
+            # Purge TDN tracking for this op + any tracked TDN descendant BEFORE
+            # destroying, so an unsaved delete + crash can't leave an orphan row
+            # that export-mode autosave recovery would resurrect on next open.
+            try:
+                op.Embody.ext.Embody._purgeTDNTracking(op_path)
+            except Exception:
+                pass
             target.destroy()
             return {'success': True, 'deleted': op_path, 'name': name}
         except Exception as e:
