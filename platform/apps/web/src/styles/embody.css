@@ -2094,6 +2094,7 @@ pre {
   justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
+  padding: 0.5rem 0;
 }
 .tdn-editor__search {
   flex: 1 1 auto;

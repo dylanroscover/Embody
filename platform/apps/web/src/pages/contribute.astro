@@ -42,7 +42,7 @@ const requiresOptions = SUBMIT_REQUIRES;
     <p class="eyebrow">contribute</p>
     <h1>contribute a specimen</h1>
     <p class="lede">
-      Paste a TDN network to share it with the Collection. Every contribution is
+      paste a TDN network to share it with the Collection. every contribution is
       scanned for capability surfaces before it goes live.
     </p>
 
@@ -153,10 +153,12 @@ const requiresOptions = SUBMIT_REQUIRES;
           <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-turnstile></div>
         </div>
       )}
-      <p class="submit-status" data-submit-status role="status"></p>
-      <button type="submit" class="btn btn--primary submit-go" data-submit-go aria-disabled="true">
-        contribute specimen
-      </button>
+      </div>
+      <div class="submit-footer">
+        <p class="submit-status" data-submit-status role="status"></p>
+        <button type="submit" class="btn btn--primary submit-go" data-submit-go aria-disabled="true">
+          contribute specimen
+        </button>
       </div>
       </div>
     </form>
@@ -619,7 +621,11 @@ const requiresOptions = SUBMIT_REQUIRES;
   .submit-cols {
     display: grid;
     grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
-    gap: 2rem;
+    column-gap: 2rem;
+    /* Row gap (the space above the full-width submit footer) tracks the card's
+       bottom padding exactly, so the button is equidistant from the editor's
+       bottom edge and the card's bottom edge at every viewport. */
+    row-gap: clamp(1.25rem, 3vw, 2rem);
     align-items: start;
     padding: clamp(1.25rem, 3vw, 2rem);
     border: 1px solid var(--border-faint);
@@ -634,9 +640,14 @@ const requiresOptions = SUBMIT_REQUIRES;
     min-width: 0;
   }
 
-  /* The editor field grows to fill the right column's height. */
+  /* Stretch the editor column to the full row height (overriding the grid's
+     align-items: start) so the editor's bottom edge lines up with the taller
+     fields column. Without this the shorter column leaves dead space, and the
+     centered submit button below ends up further from the editor's bottom than
+     from the card's bottom edge. The editor field (flex: 1) fills the stretch.
+     align-self works against an auto grid row where min-height: 100% does not. */
   .submit-col--tdn {
-    min-height: 100%;
+    align-self: stretch;
   }
 
   .submit-field--editor {
@@ -931,8 +942,33 @@ const requiresOptions = SUBMIT_REQUIRES;
     border-color: var(--accent);
   }
 
-  .submit-go {
-    align-self: flex-start;
+  /* Status + submit span both columns at the bottom of the panel, centered
+     under the whole form (grid-column: 1 / -1 keeps them inside the card). */
+  .submit-footer {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Symmetric vertical breathing room: the gap above the button (the grid's
+     row gap, from the editor's bottom edge) matches the gap below it (the card's
+     bottom padding). */
+  .submit-footer .submit-status {
+    width: 100%;
+    max-width: 30rem;
+    text-align: center;
+  }
+
+  /* Space the status from the button ONLY when it carries a message. An empty
+     status must add nothing, or it offsets the button and breaks the symmetry.
+     This has to be gated on :not(:empty) rather than zeroed via
+     .submit-status:empty, because Astro's scoping appends a [data-astro-cid]
+     attribute to each compound -- making the two-part descendant selector
+     (0,4,0) outweigh the single-part .submit-status:empty (0,3,0), so :empty
+     could never win. Gating the margin on content sidesteps the cascade. */
+  .submit-footer .submit-status:not(:empty) {
+    margin-bottom: 1.1rem;
   }
 
   /* Not-ready state: greyed while required fields are empty. The button stays
