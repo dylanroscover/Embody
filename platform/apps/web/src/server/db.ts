@@ -23,6 +23,8 @@ export type TrustLevel = "anon" | "verified" | "curator" | "admin";
 
 export interface UserProfile {
   handle: string;
+  /** Optional free-form display name; null falls back to "@handle" in the UI. */
+  display_name: string | null;
   avatar_url: string | null;
   bio: string | null;
   trust_level: TrustLevel;
@@ -399,7 +401,7 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
 export async function getSpecimenBySlug(
   db: D1Database,
   slug: string
-): Promise<SpecimenDetail | null> {
+): Promise<(SpecimenDetail & { author_display_name: string | null }) | null> {
   // Tags are folded into the detail row via a correlated GROUP_CONCAT subquery
   // (delimited by char(31), the ASCII unit separator, so a comma inside a tag
   // name can't corrupt the split), collapsing the prior 2-query N+1 into one
@@ -408,6 +410,7 @@ export async function getSpecimenBySlug(
   const row = await db
     .prepare(
       `SELECT ${SUMMARY_COLUMNS},
+              u.display_name AS author_display_name,
               s.capability_json,
               v.version_num AS current_version,
               s.created_at,
@@ -428,7 +431,7 @@ export async function getSpecimenBySlug(
        LIMIT 1`
     )
     .bind(slug)
-    .first<SpecimenDetailRow & { tag_names: string | null }>();
+    .first<SpecimenDetailRow & { tag_names: string | null; author_display_name: string | null }>();
 
   if (!row) return null;
 
@@ -442,6 +445,7 @@ export async function getSpecimenBySlug(
 
   return {
     ...rowToSummary(row),
+    author_display_name: row.author_display_name,
     capability: parseCapability(row.capability_json),
     current_version: Number(row.current_version ?? 1),
     tags,
@@ -460,7 +464,7 @@ export async function getUserByHandle(
   try {
     const row = await db
       .prepare(
-        `SELECT handle, avatar_url, bio, trust_level, created_at
+        `SELECT handle, display_name, avatar_url, bio, trust_level, created_at
          FROM users_profile
          WHERE handle = ?
          LIMIT 1`
@@ -468,6 +472,7 @@ export async function getUserByHandle(
       .bind(trimmed)
       .first<{
         handle: string;
+        display_name: string | null;
         avatar_url: string | null;
         bio: string | null;
         trust_level: string;
@@ -477,6 +482,7 @@ export async function getUserByHandle(
     if (row) {
       return {
         handle: row.handle,
+        display_name: row.display_name,
         avatar_url: row.avatar_url,
         bio: row.bio,
         trust_level: normalizeTrustLevel(row.trust_level),
@@ -539,11 +545,74 @@ function fallbackUserProfile(handle: string): UserProfile | null {
 
   return {
     handle,
+    display_name: null,
     avatar_url: null,
     bio: "First-party Embody specimen author. Curating the transparent TDN Collection.",
     trust_level: "curator",
     created_at: "2026-01-01T00:00:00Z"
   };
+}
+
+// Handles reserved for routes / system use -- never assignable to a user.
+const RESERVED_HANDLES = new Set([
+  "admin", "administrator", "api", "app", "about", "account", "settings", "auth",
+  "collection", "contribute", "manifesto", "signin", "signup", "register", "login",
+  "logout", "u", "c", "embody", "envoy", "tdn", "support", "help", "terms",
+  "privacy", "static", "assets", "public", "new", "edit", "me", "profile",
+  "dashboard", "null", "undefined", "anon", "anonymous", "system", "root", "home",
+  "404", "favicon", "robots", "sitemap"
+]);
+
+// Validate a user-chosen handle: 3-30 chars, lowercase a-z0-9 with single hyphens
+// (no leading / trailing / double hyphen), not reserved. Returns the normalized
+// (trimmed + lowercased) handle.
+export function validateHandle(
+  raw: string
+): { ok: true; handle: string } | { ok: false; detail: string } {
+  const handle = raw.trim().toLowerCase();
+  if (handle.length < 3 || handle.length > 30) {
+    return { ok: false, detail: "Handle must be 3-30 characters." };
+  }
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(handle)) {
+    return {
+      ok: false,
+      detail: "Handle may use lowercase letters, numbers, and single hyphens (no leading, trailing, or double hyphens)."
+    };
+  }
+  if (RESERVED_HANDLES.has(handle)) {
+    return { ok: false, detail: "That handle is reserved." };
+  }
+  return { ok: true, handle };
+}
+
+// Owner edit of identity: the unique URL handle + the optional display name.
+// Validates + enforces handle uniqueness (excluding self). Returns the saved
+// handle, or a reason it was rejected.
+//
+// NOTE: the specimens_fts mirror denormalizes author_handle, so after a handle
+// change a FREE-TEXT search for the OLD handle can still match until that specimen
+// is next re-synced (re-edited). The "by user" FILTER joins live users_profile, so
+// it reflects the new handle immediately -- the only staleness is search text.
+export async function updateUserProfile(
+  db: D1Database,
+  input: { userId: string; handle: string; displayName: string | null }
+): Promise<{ ok: true; handle: string } | { ok: false; detail: string }> {
+  const v = validateHandle(input.handle);
+  if (!v.ok) return v;
+
+  const taken = await db
+    .prepare("SELECT 1 AS hit FROM users_profile WHERE handle = ? AND id != ? LIMIT 1")
+    .bind(v.handle, input.userId)
+    .first<{ hit: number }>();
+  if (taken) return { ok: false, detail: "That handle is already taken." };
+
+  const display = (input.displayName ?? "").trim().slice(0, 60) || null;
+  await db
+    .prepare("UPDATE users_profile SET handle = ?, display_name = ? WHERE id = ?")
+    .bind(v.handle, display, input.userId)
+    .run();
+
+  return { ok: true, handle: v.handle };
 }
 
 function fallbackSpecimensByAuthor(handle: string): SpecimenSummary[] {

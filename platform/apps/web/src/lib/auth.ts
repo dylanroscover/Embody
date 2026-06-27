@@ -94,6 +94,28 @@ function buildAuth(env: AuthEnv, secret: string) {
       }
     },
     ...(socialProviders ? { socialProviders } : {}),
+    // Owner email change. A confirmation link goes to the user's CURRENT address,
+    // so a stolen session cannot move the account to an attacker's email -- only
+    // the existing owner can approve (clicking the link applies the change). In
+    // dev / without an email provider, accounts are unverified and no confirmation
+    // can be delivered, so the change applies directly (updateEmailWithoutVerification).
+    user: {
+      changeEmail: {
+        enabled: true,
+        updateEmailWithoutVerification: !hasEmail,
+        sendChangeEmailConfirmation: async (data: {
+          user: { email: string };
+          newEmail: string;
+          url: string;
+        }) => {
+          await sendEmail(env, {
+            to: data.user.email,
+            subject: "Confirm your embody.tools email change",
+            html: changeEmailHtml(data.newEmail, data.url)
+          });
+        }
+      }
+    },
     // Link the Better Auth user to our app-domain users_profile row on creation.
     // Direct D1 query (we intentionally do NOT touch src/server/db.ts).
     databaseHooks: {
@@ -229,6 +251,18 @@ function verificationEmailHtml(url: string): string {
     cta: { href: url, label: "Verify email" },
     fallbackUrl: url,
     footerNote: "If you did not request this, you can safely ignore this email."
+  });
+}
+
+function changeEmailHtml(newEmail: string, url: string): string {
+  return renderEmail({
+    heading: "Confirm your email change",
+    bodyHtml: bodyParagraph(
+      `We received a request to change your embody.tools email to ${newEmail}. Confirm to apply the change. If you did not request this, ignore this email and nothing changes.`
+    ),
+    cta: { href: url, label: "Confirm email change" },
+    fallbackUrl: url,
+    footerNote: "If you did not request this, you can safely ignore this email -- your address stays the same."
   });
 }
 
