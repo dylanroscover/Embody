@@ -9,7 +9,7 @@ interface Props {
 const {
   text,
   targetId,
-  ariaLabel = "Copy to clipboard",
+  ariaLabel = "copy to clipboard",
   class: className = ""
 } = Astro.props;
 ---
@@ -30,5 +30,5 @@ const {
   <svg class="copy-icon copy-icon--check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
     <path d="M20 6 9 17l-5-5" />
   </svg>
-  <span class="sr-only">Copy</span>
+  <span class="sr-only">copy</span>
 </button>

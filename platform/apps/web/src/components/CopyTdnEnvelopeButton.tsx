@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { buildEmbodyEnvelope } from "../lib/tdnEnvelope";
 
 const COPY_RESET_MS = 1500;
-const LABEL = "Copy TDN for TouchDesigner";
+const LABEL = "copy TDN for TouchDesigner";
 
 interface Props {
   tdn: Record<string, unknown>;
@@ -40,8 +40,8 @@ export default function CopyTdnEnvelopeButton({
   }
 
   const statusClass = state === "copied" ? "is-copied" : state === "failed" ? "is-failed" : "";
-  const ariaLabel = state === "copied" ? "Copied to clipboard" : label ? `${label} - ${LABEL}` : LABEL;
-  const labelText = state === "copied" ? "Copied" : label;
+  const ariaLabel = state === "copied" ? "copied to clipboard" : label ? `${label} - ${LABEL}` : LABEL;
+  const labelText = state === "copied" ? "copied" : label;
 
   return (
     <button

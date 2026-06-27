@@ -21,7 +21,7 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
     ))}
   </nav>
 
-  <p class="admin-status" data-status hidden role="status"></p>
+  <p class="admin-status" data-status role="status"></p>
 
   {reports.length === 0 ? (
     <p class="admin-empty">No reports{statusFilter ? ` with status "${statusFilter}"` : ""}.</p>
@@ -82,7 +82,6 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
     if (!statusBox) return;
     statusBox.textContent = message;
     statusBox.dataset.kind = kind;
-    statusBox.hidden = false;
   }
 
   document.querySelectorAll<HTMLButtonElement>("[data-apply]").forEach((btn) => {

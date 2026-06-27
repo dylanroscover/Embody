@@ -26,7 +26,7 @@ const meId = Astro.locals.user?.id ?? "";
     <button type="submit" class="admin-btn">search</button>
   </form>
 
-  <p class="admin-status" data-status hidden role="status"></p>
+  <p class="admin-status" data-status role="status"></p>
 
   {users.length === 0 ? (
     <p class="admin-empty">No users{q ? ` matching "${q}"` : ""}.</p>
@@ -76,7 +76,6 @@ const meId = Astro.locals.user?.id ?? "";
     if (!statusBox) return;
     statusBox.textContent = message;
     statusBox.dataset.kind = kind;
-    statusBox.hidden = false;
   }
 
   document.querySelectorAll<HTMLButtonElement>("[data-save]").forEach((btn) => {

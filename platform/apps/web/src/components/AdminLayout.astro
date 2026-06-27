@@ -540,6 +540,14 @@ const items = [
     border-color: rgba(220, 80, 80, 0.4);
     color: #ff9b9b;
   }
+  /* Empty -> collapsed, but the element STAYS in the DOM / a11y tree (never
+     display:none or hidden) so this role=status live region is registered
+     before its first message lands -- otherwise some screen readers swallow it. */
+  .admin-body :global(.admin-status:empty) {
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+  }
   .admin-body :global(.admin-empty) {
     color: var(--text-muted);
     font-size: 0.9rem;

@@ -50,7 +50,7 @@ const resendConfigured = Boolean((env as unknown as CloudflareEnv).RESEND_API_KE
     <button type="submit" class="admin-btn" data-send>send test</button>
   </form>
 
-  <p class="admin-status" data-status hidden role="status"></p>
+  <p class="admin-status" data-status role="status"></p>
 </AdminLayout>
 
 <script>
@@ -62,7 +62,6 @@ const resendConfigured = Boolean((env as unknown as CloudflareEnv).RESEND_API_KE
     if (!statusBox) return;
     statusBox.textContent = message;
     statusBox.dataset.kind = kind;
-    statusBox.hidden = false;
   }
 
   form?.addEventListener("submit", async (event) => {

@@ -25,26 +25,26 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
 
 <Base
   title="sign in - embody.tools"
-  description="Sign in or create an account on embody.tools."
+  description="sign in or create an account on embody.tools."
 >
   <section class="page-section auth">
-    <p class="eyebrow">Account</p>
+    <p class="eyebrow">account</p>
     <div class="auth-layout">
       <div class="auth-intro">
         <h1 id="auth-heading">sign in</h1>
         <p class="lede">
-          Create an account or sign in to contribute Specimens and react to the
-          networks you love. It's completely free, and the Collection stays
+          create an account or sign in to contribute Specimens and react to the
+          networks you love. it's completely free, and the Collection stays
           fully browsable without an account.
         </p>
         <p class="auth-back">
-          <a href="/collection">Browse the Collection instead</a>
+          <a href="/collection">browse the Collection instead</a>
         </p>
       </div>
 
       <div class="auth-card" data-next={nextPath}>
       {justVerified && (
-        <p class="auth-verified-banner" role="status">Email verified -- you can sign in below.</p>
+        <p class="auth-verified-banner" role="status">email verified -- you can sign in below.</p>
       )}
       <div class="auth-toggle" role="tablist" aria-label="Sign in or register">
         <button type="button" class="auth-toggle__btn is-active" data-mode="signin" role="tab" aria-selected="true">
@@ -55,16 +55,16 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
         </button>
       </div>
 
-      <p class="auth-error" data-auth-error hidden role="alert"></p>
-      <p class="auth-notice" data-auth-notice hidden role="status"></p>
+      <p class="auth-error" data-auth-error role="alert"></p>
+      <p class="auth-notice" data-auth-notice role="status"></p>
       <p class="auth-resend" data-resend hidden>
-        <button type="button" class="auth-resend__btn" data-resend-btn>Resend verification email</button>
+        <button type="button" class="auth-resend__btn" data-resend-btn>resend verification email</button>
       </p>
 
       <form class="auth-form" data-auth-form novalidate>
         <label class="auth-field" data-field="name" hidden>
           <span>name</span>
-          <input type="text" name="name" autocomplete="name" placeholder="Your name" />
+          <input type="text" name="name" autocomplete="name" placeholder="your name" />
         </label>
         <label class="auth-field">
           <span>email</span>
@@ -80,7 +80,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
       </form>
 
       <p class="auth-forgot" data-forgot>
-        <a href="/forgot-password">Forgot password?</a>
+        <a href="/forgot-password">forgot password?</a>
       </p>
 
       {githubEnabled && (
@@ -130,26 +130,22 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
   function showError(message: string) {
     if (!errorBox) return;
     errorBox.textContent = message;
-    errorBox.hidden = false;
   }
 
   function clearError() {
     if (!errorBox) return;
     errorBox.textContent = "";
-    errorBox.hidden = true;
   }
 
   function showNotice(message: string) {
     clearError();
     if (!noticeBox) return;
     noticeBox.textContent = message;
-    noticeBox.hidden = false;
   }
 
   function clearNotice() {
     if (!noticeBox) return;
     noticeBox.textContent = "";
-    noticeBox.hidden = true;
   }
 
   function showResend() {
@@ -190,7 +186,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
       passwordInput.autocomplete = next === "register" ? "new-password" : "current-password";
       // "At least 8 characters" is a new-password hint -- only show it when
       // registering. Signing in, the field is blank (you know your password).
-      passwordInput.placeholder = next === "register" ? "At least 8 characters" : "";
+      passwordInput.placeholder = next === "register" ? "at least 8 characters" : "";
     }
   }
 
@@ -209,11 +205,11 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
     const name = String(data.get("name") || "").trim();
 
     if (!email || !password) {
-      showError("Email and password are required.");
+      showError("email and password are required.");
       return;
     }
     if (mode === "register" && password.length < 8) {
-      showError("Password must be at least 8 characters.");
+      showError("password must be at least 8 characters.");
       return;
     }
 
@@ -230,7 +226,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
           callbackURL: "/signin?verified=1"
         });
         if (res.error) {
-          showError(res.error.message || "Could not create the account.");
+          showError(res.error.message || "could not create the account.");
           return;
         }
         // When email verification is required, sign-up creates the account but
@@ -250,10 +246,10 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
           // the generic "invalid password".
           if (res.error.code === "EMAIL_NOT_VERIFIED" || res.error.status === 403) {
             pendingEmail = email;
-            showError("Your email isn't verified yet -- check your inbox for the link.");
+            showError("your email isn't verified yet -- check your inbox for the link.");
             showResend();
           } else {
-            showError(res.error.message || "Invalid email or password.");
+            showError(res.error.message || "invalid email or password.");
           }
           return;
         }
@@ -262,7 +258,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
       window.location.assign(destination());
     } catch (err) {
       console.error("auth submit failed", err);
-      showError("Something went wrong. Please try again.");
+      showError("something went wrong. please try again.");
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = original;
@@ -278,7 +274,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
       });
     } catch (err) {
       console.error("github sign-in failed", err);
-      showError("GitHub sign-in failed. Please try again.");
+      showError("GitHub sign-in failed. please try again.");
     }
   });
 
@@ -296,7 +292,7 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
       showResend();
     } catch (err) {
       console.error("resend verification failed", err);
-      showError("Could not resend right now. Please try again.");
+      showError("could not resend right now. please try again.");
     } finally {
       resendBtn.disabled = false;
       resendBtn.textContent = original;
@@ -493,6 +489,16 @@ const justVerified = Astro.url.searchParams.get("verified") === "1";
 
   .auth-verified-banner {
     margin-bottom: 1.25rem;
+  }
+
+  /* Empty -> collapsed, but the element STAYS in the DOM / a11y tree (never
+     display:none or hidden) so this role=status/alert live region is registered
+     before its first message lands -- otherwise some screen readers swallow it. */
+  .auth-error:empty,
+  .auth-notice:empty {
+    margin: 0;
+    padding: 0;
+    border-width: 0;
   }
 
   .auth-resend {
