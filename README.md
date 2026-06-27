@@ -1,14 +1,20 @@
-# 💬 Embody
+<div align="center">
 
-**Create at the speed of thought.**
+<img src="docs/assets/embody-mark.svg" alt="Embody" width="96" height="96">
 
-![Version](https://img.shields.io/badge/version-6.0.55-blue)
-![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-orange)
-![MCP Tools](https://img.shields.io/badge/MCP_tools-49-purple)
-![License](https://img.shields.io/badge/license-MIT-green)
-![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody)
+# Embody
 
-[Full Documentation](https://dylanroscover.github.io/Embody/) &nbsp;|&nbsp; [Manifesto](https://dylanroscover.github.io/Embody/manifesto/) &nbsp;|&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
+**create at the speed of thought.**
+
+[![Version](https://img.shields.io/badge/version-6.0.55-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-49-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
+[![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/stargazers)
+
+[**embody.tools**](https://embody.tools) &nbsp;&middot;&nbsp; [Documentation](https://dylanroscover.github.io/Embody/) &nbsp;&middot;&nbsp; [Manifesto](https://dylanroscover.github.io/Embody/manifesto/) &nbsp;&middot;&nbsp; [Changelog](https://dylanroscover.github.io/Embody/changelog/)
+
+</div>
 
 ---
 
