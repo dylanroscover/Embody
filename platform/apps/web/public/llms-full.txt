@@ -229,7 +229,7 @@ When Envoy starts, it generates a full Claude Code configuration in your project
 - **`.claude/skills/`** - on-demand workflow guides (operator creation, debugging, externalization)
 - **`.claude/commands/`** - slash commands (`/run-tests`, `/status`, `/explore-network`)
 
-These files are regenerated each time Envoy starts to stay up to date. See [Claude Code Integration](claude-code.md) for the full reference.
+Pristine generated files are refreshed each time Envoy starts to stay up to date. If you edit a generated rule or skill, Embody detects the change (via a content hash in .embody/generated-hashes.json) and keeps your version instead of overwriting it - delete the file to opt back into regeneration. See [Claude Code Integration](claude-code.md) for the full reference.
 
 ## MCP Tool Permissions
 
@@ -273,8 +273,8 @@ When Envoy starts, it generates a complete Claude Code configuration in your pro
 | `.mcp.json` | MCP server connection config | Yes |
 | `.embody/envoy-bridge.py` | STDIO-to-HTTP bridge for MCP transport | Yes |
 | `.claude/settings.local.json` | Tool permissions and MCP server config | Yes |
-| `.claude/rules/` | Always-loaded conventions (see below) | Yes |
-| `.claude/skills/` | On-demand workflow guides (see below) | Yes |
+| `.claude/rules/` | Always-loaded conventions (see below) | Yes (unless edited) |
+| `.claude/skills/` | On-demand workflow guides (see below) | Yes (unless edited) |
 
 All generated files except `CLAUDE.md` are automatically added to `.gitignore`.
 
@@ -375,7 +375,7 @@ See [Architecture](architecture.md#multiple-instances) for technical details.
 Embody stores master copies of all rules and skills as template DATs inside the `templates` baseCOMP. When Envoy starts in a user project, `_extractClaudeConfig()` reads these templates and writes them to the project's `.claude/` directory. This means:
 
 - **Updates are automatic** - upgrading Embody gives you the latest rules and skills
-- **Templates are the source of truth** - the generated `.claude/` files are overwritten on each Envoy start
+- **Templates are the source of truth for pristine files** - an unedited generated `.claude/` file is refreshed from its template on Envoy start, but Embody records a content hash of each file it generates (.embody/generated-hashes.json) and will not overwrite one you've since edited (delete the file to opt back into regeneration)
 - **Project-specific customization** - add your own rules or skills to `.claude/` alongside the generated ones (they won't be overwritten)
 
 ## Customization
@@ -387,7 +387,7 @@ You can extend the generated configuration:
 - **Modify permissions**: Edit `.claude/settings.local.json` to allow or restrict specific tools
 
 !!! warning
-    Don't modify the Envoy-generated rules or skills - they'll be overwritten when Envoy restarts. Add your own files alongside them instead.
+    You can edit the Envoy-generated rules and skills directly - Embody records a content hash of each generated file (.embody/generated-hashes.json) and won't overwrite one you've changed (it logs that it kept your edits). Pristine generated files still refresh on regeneration; delete a file to discard your changes and pull the latest template.
 
 
 ==============================================================================
