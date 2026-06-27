@@ -100,7 +100,7 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
   description="Browse transparent TouchDesigner networks - inspect every node and parameter, then copy any specimen's TDN straight into a live .toe running Embody."
 >
   <section class="page-section collection-hero">
-    <p class="eyebrow">The Collection</p>
+    <p class="eyebrow">the Collection</p>
     <h1>see it. embody it.</h1>
     <p class="lede">
       Copy any specimen's TDN to your clipboard and paste it straight into a TouchDesigner .toe running <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a>.
@@ -168,7 +168,7 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
 
         {facets.authors.length > 1 && (
           <div class="sort-control">
-            <span class="sort-control__label mono" id="ddlbl-author">by user</span>
+            <span class="sort-control__label mono" id="ddlbl-author">contributor</span>
             <div class="dd" data-dd>
               <button type="button" class="dd__btn mono" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-author dd-val-author">
                 <span class="dd__val" id="dd-val-author">{activeAuthor ? `@${activeAuthor}` : "all"}</span>
@@ -199,15 +199,15 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
             </button>
             <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-sort" hidden>
               <li class="dd__opt" role="option" data-value="az" aria-selected="true">A-Z</li>
-              <li class="dd__opt" role="option" data-value="newest" aria-selected="false">Newest</li>
-              <li class="dd__opt" role="option" data-value="liked" aria-selected="false">Most liked 👍</li>
-              <li class="dd__opt" role="option" data-value="copied" aria-selected="false">Most copied</li>
+              <li class="dd__opt" role="option" data-value="newest" aria-selected="false">newest</li>
+              <li class="dd__opt" role="option" data-value="liked" aria-selected="false">most liked 👍</li>
+              <li class="dd__opt" role="option" data-value="copied" aria-selected="false">most copied</li>
             </ul>
             <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-sort>
               <option value="az" selected>A-Z</option>
-              <option value="newest">Newest</option>
-              <option value="liked">Most liked 👍</option>
-              <option value="copied">Most copied</option>
+              <option value="newest">newest</option>
+              <option value="liked">most liked 👍</option>
+              <option value="copied">most copied</option>
             </select>
           </div>
         </div>
@@ -215,8 +215,8 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
         <input
           type="search"
           class="collection-search"
-          placeholder="search the collection..."
-          aria-label="Search specimens"
+          placeholder=" "
+          aria-label="Search the collection"
           data-collection-search
         />
 
@@ -291,7 +291,7 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
                 name={specimen.name}
                 category={specimen.category}
                 thumbnailKey={specimen.thumbnail_key}
-                tdn={specimenGraph(specimen.slug) ?? sampleTdn}
+                tdn={usingFixtures ? (specimenGraph(specimen.slug) ?? sampleTdn) : specimenGraph(specimen.slug)}
               />
             </div>
 
@@ -364,7 +364,7 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
         ))}
       </div>
 
-      <p class="empty-state mono" data-empty-state hidden>No specimens match that filter.</p>
+      <p class="empty-state mono" data-empty-state hidden>no specimens match that filter.</p>
       <p class="empty-state mono" data-loading-state hidden>loading...</p>
 
       <!--
@@ -995,13 +995,20 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
   }
 
   .collection-search {
-    flex: 0 0 auto;
-    width: 240px;
+    /* Shrinkable (not a fixed 240px) so it yields width to the filter controls
+       on a tight row -- keeps "contributor" and the dropdowns on a single line. */
+    flex: 0 1 240px;
+    min-width: 130px;
     margin-left: auto;
     border: 1px solid var(--border);
     border-radius: 999px;
-    background: rgba(24, 30, 30, 0.72);
-    padding: 0.4rem 0.9rem;
+    /* A magnifying-glass icon replaces the placeholder text (left-aligned). */
+    background-color: rgba(24, 30, 30, 0.72);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23909990' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 0.85rem center;
+    background-size: 15px 15px;
+    padding: 0.4rem 0.9rem 0.4rem 2.15rem;
     color: var(--text);
     font-family: var(--font-mono);
     font-size: 0.78rem;
@@ -1113,6 +1120,7 @@ const diffAbbr = (d: string): string => DIFFICULTY_ABBR[d] ?? d.slice(0, 3).toUp
     font-size: 0.72rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+    white-space: nowrap;
   }
 
   /* App-native dropdown: a styled trigger + listbox over a hidden <select>. */
