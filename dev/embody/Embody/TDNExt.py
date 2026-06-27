@@ -5857,6 +5857,18 @@ class TDNExt:
 			return {'ok': False, 'reason': 'export_failed', 'detail': (export or {}).get('error')}
 		env = wrap_tdn(export.get('tdn'), source='embody', slug=comp.name)
 		ui.clipboard = to_clipboard_str(env)
+		# Outbound copy: seed the clipboard watcher's "already seen" signature with
+		# what we just wrote, so it does NOT turn around and offer to paste our own
+		# export back in -- the user copied this to share/export (outbound), not to
+		# re-import it (inbound). _clipboardWatchPoll computes sig = (len(raw),
+		# hash(raw)) from ui.clipboard; re-read it here so the sig matches exactly.
+		# An inbound TDN (web "embody it", a foreign envelope) is a different string
+		# -> a different sig -> still prompts, so inbound paste is unaffected.
+		try:
+			raw = ui.clipboard or ''
+			self._clip_last_sig = (len(raw), hash(raw))
+		except Exception:
+			pass
 		op_count = len(env['tdn'].get('operators', []))
 		self._log("Copied %s TDN to clipboard (%d ops)" % (comp.name, op_count), 'SUCCESS')
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}

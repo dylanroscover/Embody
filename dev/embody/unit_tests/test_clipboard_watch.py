@@ -101,3 +101,39 @@ class TestClipboardWatch(EmbodyTestCase):
         op.Embody.ext.TDN._tdWindowActive = lambda: True       # user returns to TD
         op.Embody.ext.TDN._clipboardWatchPoll()
         self.assertEqual(len(calls), 1, 'back in TD -> prompts the current clipboard')
+
+    def test_outbound_copy_does_not_prompt(self):
+        # Ctrl+Shift+C copies a COMP's TDN to the clipboard (OUTBOUND -- to share or
+        # paste elsewhere). The watcher must NOT turn around and offer to paste our
+        # own export back in: CopyNetworkToClipboard seeds _clip_last_sig with what it
+        # just wrote, so the next poll sees no NEW (inbound) content. This is the
+        # outbound-vs-inbound fix -- note the sig is left exactly as the copy set it.
+        op.Embody.ext.TDN._clip_last_sig = None
+        self._put_envelope()                                   # outbound copy
+        self.assertIsNotNone(op.Embody.ext.TDN._clip_last_sig,
+                             'outbound copy must seed the watcher signature')
+        calls = []
+        op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(1), 1)[1]
+        op.Embody.par.Clipboardautopaste = 1
+        op.Embody.ext.TDN._clipboardWatchPoll()                # sig NOT cleared
+        self.assertEqual(len(calls), 0,
+                         'outbound copy -> watcher must not prompt to re-import')
+
+    def test_inbound_after_outbound_still_prompts(self):
+        # Suppression is content-specific, not a blanket mute: after an outbound copy
+        # (sig = our export), a DIFFERENT TDN landing on the clipboard (the web
+        # "embody it" button, a foreign envelope) is genuinely inbound -- a different
+        # string -> a different sig -> it still prompts.
+        self._put_envelope()                                   # outbound copy of cw_probe
+        m = op.Embody.op('TDNExt').module
+        foreign = m.wrap_tdn(
+            {'format': 'tdn', 'version': '2.0', 'network_path': '/x/foreign',
+             'operators': [{'name': 'n', 'type': 'noiseTOP'}]},
+            source='embody', slug='foreign')
+        ui.clipboard = m.to_clipboard_str(foreign)             # inbound -- NOT via CopyNetwork
+        calls = []
+        op.Embody.ext.Embody._messageBox = lambda *a, **k: (calls.append(a[0]), 1)[1]
+        op.Embody.par.Clipboardautopaste = 1
+        op.Embody.ext.TDN._clipboardWatchPoll()
+        self.assertEqual(len(calls), 1,
+                         'a different (inbound) TDN after an outbound copy still prompts')

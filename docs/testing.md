@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **74 test suites** and **1,725 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **74 test suites** and **1,727 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -110,7 +110,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_tdn_annotation_export` | 7 | Annotation-only `.tdn` export (annotateCOMP not double-captured) |
 | `test_tdn_external_connections` | 6 | External wire capture/restore across strip |
 
-### Community & Collection (6 suites, 121 tests)
+### Community & Collection (6 suites, 123 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -119,7 +119,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_specimen_publish` | 19 | Specimen publish hook |
 | `test_collection_safe_import` | 18 | Safe-import `make_inert` disarming |
 | `test_collection_pure` | 14 | Pure-value-expression preservation (live-if-clean) |
-| `test_clipboard_watch` | 6 | Clipboard watcher poll + gating |
+| `test_clipboard_watch` | 8 | Clipboard watcher poll + gating (incl. outbound-copy suppression) |
 
 ### Envoy Server & Bridge (8 suites, 334 tests)
 

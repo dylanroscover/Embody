@@ -1,5 +1,17 @@
 # Changelog
 
+## v6.0.55
+
+A clipboard UX fix. Copying a COMP's network with `Ctrl+Shift+C` no longer immediately prompts to paste it back into TouchDesigner -- an *outbound* copy (you are exporting it to share or paste elsewhere) is now distinguished from an *inbound* TDN (the web "embody it" button, a shared envelope).
+
+### Embody core
+
+- **`Ctrl+Shift+C` (copy TDN) no longer turns around and offers to paste it back.** The clipboard auto-paste watcher polls `ui.clipboard` and offers to "embody" any new TDN it sees as a new COMP -- but it could not tell your own *outbound* copy from an *inbound* one, so copying a COMP to share it fired an immediate "Embody it into ... as a new COMP?" prompt. `CopyNetworkToClipboard` now seeds the watcher's last-seen signature with exactly what it wrote (re-read from `ui.clipboard` so it matches what the poll computes), so an outbound copy is recognized and skipped. An inbound TDN has different content -> a different signature -> still prompts, so paste-from-web is unaffected. Smoke-tested in the shipped `.tox` (a copy seeds the signature in the released build; clean boot, 0 errors). New `test_outbound_copy_does_not_prompt` + `test_inbound_after_outbound_still_prompts`.
+
+### Tests
+
+- Test suite **74 suites / 1,727 tests**, all green (+2 in `test_clipboard_watch` for the outbound/inbound distinction).
+
 ## v6.0.54
 
 A crash-resilience build. **Embody now writes a cheap `.tdn` checkpoint of whatever changed after the agent (or you) goes idle** -- so a TouchDesigner crash loses little unsaved work, with no full project save and no freeze. Plus an opt-in live build visualization (watch Claude build, with a little builder-bot), threading guidance that stops agents over-engineering data fetches, and a web contribute-form fix.
