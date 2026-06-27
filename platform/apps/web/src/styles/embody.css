@@ -2050,6 +2050,196 @@ pre {
 .tdn-yaml__plain { color: var(--text); }
 .tdn-yaml__hit { background: rgba(110, 230, 104, 0.28); color: var(--text); border-radius: 2px; }
 
+/* ---- Editable TDN editor (contribute + edit forms) ----
+   Built to look like the read-only .tdn-yaml viewer: a pinned line-number gutter,
+   a transparent <textarea> over a syntax-highlighted <pre> backdrop, and the SAME
+   font / size / line-height / palette as the viewer. The backdrop + textarea must
+   share identical text metrics or the colored backdrop drifts from the caret; the
+   gutter shares the per-line box height so numbers line up with code rows. The
+   --tdn-* palette is redefined here so the shared .tdn-yaml__<token> color classes
+   resolve outside a .tdn-yaml ancestor. */
+.tdn-editor {
+  /* Match the viewer's palette (.tdn-yaml). */
+  --tdn-key: #9fc6b3;
+  --tdn-str: #cbb892;
+  --tdn-num: #d79a73;
+  --tdn-kw: #c79bd1;
+  /* Shared text metrics (viewer-matched): font-size 0.82rem, line-height 1.55. */
+  --tdn-fs: 0.82rem;
+  --tdn-lh: 1.55;
+  --tdn-pad-y: 0.7rem;
+  --tdn-pad-x: 0.85rem;
+  --tdn-line-h: calc(var(--tdn-fs) * var(--tdn-lh));
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+  flex: 1;
+}
+
+/* CodeMirror-based editor: a compact one-row toolbar (search + fold -/+ + wrap)
+   above a CM instance themed (in TdnYamlEditor.tsx) to match the read-only viewer. */
+.tdn-editor__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.tdn-editor__search {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 320px;
+  min-height: 30px;
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(24, 30, 30, 0.72);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+.tdn-editor__search::placeholder { color: var(--text-faint); }
+.tdn-editor__search:focus { outline: none; border-color: var(--accent); }
+.tdn-editor__tools { display: inline-flex; align-items: center; gap: 0.35rem; flex: none; }
+.tdn-editor__btn {
+  min-height: 30px;
+  min-width: 30px;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(24, 30, 30, 0.5);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.tdn-editor__btn:hover { color: var(--text); border-color: var(--accent); }
+.tdn-editor__btn.is-on { color: var(--accent); border-color: var(--accent); }
+.tdn-editor__cm {
+  position: relative;
+  flex: 1;
+  min-height: clamp(320px, 52vh, 680px);
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  background: var(--bg-code);
+  overflow: hidden;
+  transition: border-color 140ms ease;
+}
+.tdn-editor__cm:focus-within { border-color: var(--accent); }
+.tdn-editor__cm .cm-editor { height: 100%; }
+
+.tdn-editor__scroll {
+  /* Width of the line-number gutter, sized to the widest line number. The mono
+     font + size below are LOAD-BEARING: `1ch` must resolve against the SAME font
+     here as in the textarea's padding-left, or the gutter ends up wider than the
+     padding and tucks the first character under it. */
+  font-family: var(--font-mono);
+  font-size: var(--tdn-fs);
+  --tdn-gutter-w: calc(var(--tdn-ln-digits, 2) * 1ch + 1.5rem);
+  position: relative;
+  flex: 1;
+  min-height: clamp(320px, 52vh, 680px);
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  background: var(--bg-code);
+  overflow: hidden;
+  transition: border-color 140ms ease;
+}
+.tdn-editor__scroll:focus-within { border-color: var(--accent); }
+
+/* Pinned gutter column: scrolls vertically (transform synced in JS), never
+   horizontally. Opaque so horizontally-scrolled code tucks behind it. */
+.tdn-editor__gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--tdn-gutter-w);
+  overflow: hidden;
+  z-index: 2;
+  background: var(--bg-code);
+  border-right: 1px solid var(--border-faint);
+  pointer-events: none;
+}
+.tdn-editor__gutter-inner {
+  padding-top: var(--tdn-pad-y);
+  will-change: transform;
+}
+.tdn-editor__ln {
+  display: block;
+  height: var(--tdn-line-h);
+  line-height: var(--tdn-line-h);
+  padding-right: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-align: right;
+  color: var(--text-faint);
+}
+
+.tdn-editor__backdrop,
+.tdn-editor__textarea {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  /* Left padding clears the gutter (+ a small gap) so code starts just right of
+     the numbers and never tucks under the opaque gutter. */
+  padding: var(--tdn-pad-y) var(--tdn-pad-x) var(--tdn-pad-y) calc(var(--tdn-gutter-w) + 0.4rem);
+  font-family: var(--font-mono);
+  font-size: var(--tdn-fs);
+  /* Integer px (set in JS from font-size * --tdn-lh, snapped) so every row is the
+     SAME whole-pixel height in the textarea, backdrop, and gutter. calc() fallback
+     pre-hydration. */
+  line-height: var(--tdn-line-h);
+  letter-spacing: 0;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  box-sizing: border-box;
+}
+.tdn-editor__backdrop {
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+  z-index: 0;
+}
+.tdn-editor__backdrop code {
+  font: inherit;
+  white-space: inherit;
+}
+/* The windowed slab: only the visible line range lives here; JS translates it to
+   glue it to the scrolled textarea. Each row is a fixed-height block so empty
+   lines still occupy a row. */
+.tdn-editor__slab {
+  display: block;
+  will-change: transform;
+}
+.tdn-editor__bline {
+  display: block;
+  height: var(--tdn-line-h);
+  line-height: var(--tdn-line-h);
+}
+.tdn-editor__textarea {
+  overflow: auto;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  z-index: 1;
+  -webkit-overflow-scrolling: touch;
+}
+.tdn-editor__textarea::placeholder { color: var(--text-faint); }
+.tdn-editor__textarea:focus { outline: none; }
+.tdn-editor__error {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #ff9b9b;
+}
+
 @media (pointer: coarse) {
   .tdn-yaml__search-nav button,
   .tdn-yaml__btn,

@@ -6,6 +6,7 @@ import {
   SUBMIT_REQUIRES
 } from "@embody/contracts";
 import Base from "../layouts/Base.astro";
+import TdnYamlEditor from "../components/TdnYamlEditor";
 
 export const prerender = false;
 
@@ -38,28 +39,30 @@ const requiresOptions = SUBMIT_REQUIRES;
   description="Share a transparent TouchDesigner Specimen with the Collection."
 >
   <section class="page-section submit">
-    <p class="eyebrow">Contribute</p>
+    <p class="eyebrow">contribute</p>
     <h1>contribute a specimen</h1>
     <p class="lede">
       Paste a TDN network to share it with the Collection. Every contribution is
       scanned for capability surfaces before it goes live.
     </p>
 
-    <p class="submit-status" data-submit-status hidden role="status"></p>
-
     <form class="submit-form" data-submit-form novalidate>
+      <div class="submit-cols">
+      <div class="submit-col submit-col--fields">
       <label class="submit-field">
         <span>title</span>
         <input type="text" name="title" required maxlength="160" placeholder="Feedback Bloom" />
+        <small class="submit-error" data-error-for="title" role="alert"></small>
       </label>
       <label class="submit-field">
         <span>description</span>
-        <textarea name="description" rows="3" maxlength="4000" placeholder="What it does and how to read it."></textarea>
+        <textarea name="description" rows="3" maxlength="4000" placeholder="what it does and how to read it."></textarea>
       </label>
       <label class="submit-field">
         <span>tags <em>(comma separated)</em></span>
         <input type="text" name="tags" placeholder="feedback, generative, TOP" />
       </label>
+      <div class="submit-row">
       <div class="submit-field">
         <span class="submit-field__label" id="ddlbl-difficulty">difficulty</span>
         <div class="dd" data-dd>
@@ -117,6 +120,7 @@ const requiresOptions = SUBMIT_REQUIRES;
           </select>
         </div>
       </div>
+      </div>
       <label class="submit-field">
         <span>license</span>
         <input type="text" name="license" value="CC-BY-4.0" maxlength="80" />
@@ -129,22 +133,32 @@ const requiresOptions = SUBMIT_REQUIRES;
           <span class="submit-file__name" data-file-name>no file chosen</span>
         </span>
       </label>
-      <label class="submit-field">
+      </div>
+
+      <div class="submit-col submit-col--tdn">
+      <div class="submit-field submit-field--editor">
         <span>TDN (YAML)</span>
-        <textarea name="tdn" rows="10" required placeholder={'format: tdn\nversion: \'2.0\'\nname: my_network\ntype: baseCOMP\noperators: []'} class="submit-tdn"></textarea>
         <small class="submit-hint">
-          Quick export from TouchDesigner: with <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a> running, select the COMP you want to share and press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>. Embody copies that COMP's whole network to your clipboard as a TDN envelope &mdash; paste it here.
+          quick export from TouchDesigner: with <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a> running, select the COMP you want to share and press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>Shift</kbd> + <kbd>C</kbd>. Embody copies that COMP's whole network to your clipboard as a TDN envelope &mdash; paste it here.
         </small>
-      </label>
+        <TdnYamlEditor
+          client:load
+          name="tdn"
+          placeholder={'format: tdn\nversion: \'2.0\'\nname: my_network\ntype: baseCOMP\noperators: []'}
+        />
+      </div>
       {useTurnstileWidget && (
         <div class="submit-field submit-turnstile">
           <span>verification</span>
           <div class="cf-turnstile" data-sitekey={turnstileSiteKey} data-turnstile></div>
         </div>
       )}
+      <p class="submit-status" data-submit-status role="status"></p>
       <button type="submit" class="btn btn--primary submit-go" data-submit-go aria-disabled="true">
         contribute specimen
       </button>
+      </div>
+      </div>
     </form>
   </section>
 </Base>
@@ -175,31 +189,50 @@ const requiresOptions = SUBMIT_REQUIRES;
     if (!statusBox) return;
     statusBox.textContent = message;
     statusBox.dataset.kind = kind;
-    statusBox.hidden = false;
+  }
+
+  // Inline field errors render directly beneath the offending field (the slot is
+  // <small data-error-for="NAME">). The TDN editor shows its own format error.
+  function setFieldError(name, message) {
+    const el = form?.querySelector(`[data-error-for="${name}"]`);
+    if (!el) return;
+    el.textContent = message || "";
   }
 
   // --- Readiness gate -------------------------------------------------------
-  // The submit button is greyed (aria-disabled) until every REQUIRED field has
-  // a value. It stays clickable on purpose: a truly `disabled` button fires no
-  // click, so we could never explain WHY it isn't ready. Clicking while greyed
-  // announces what's missing (the status box is role=status, a live region) and
-  // jumps focus to the first empty field, since the status sits at the top of
-  // the form -- out of view when the button is clicked from the bottom.
-  const requiredFields = [
-    { el: form?.querySelector('[name="title"]'), label: "a title" },
-    { el: form?.querySelector('[name="tdn"]'), label: "a TDN network" }
-  ];
+  // The submit button is greyed (aria-disabled) until the title is filled AND
+  // the TDN parses to a mapping. It stays clickable on purpose: a truly
+  // `disabled` button fires no click, so we could never explain WHY it isn't
+  // ready. The TDN editor (a React island) validates on every edit and
+  // broadcasts a bubbling `tdn:change` event carrying its validity -- so the
+  // button never lights up on unparseable YAML and re-checks after any edit.
+  function titleEl() {
+    return form?.querySelector('[name="title"]');
+  }
+  function titleMissing() {
+    const el = titleEl();
+    return !el || !String(el.value || "").trim();
+  }
 
-  function missingFields() {
-    return requiredFields.filter((f) => !f.el || !String(f.el.value || "").trim());
+  let tdnValid = false;
+  form?.addEventListener("tdn:change", (event) => {
+    tdnValid = Boolean(event.detail && event.detail.valid);
+    refreshReady();
+  });
+
+  function isReady() {
+    return !titleMissing() && tdnValid;
   }
 
   function refreshReady() {
     if (!goBtn) return;
-    goBtn.setAttribute("aria-disabled", missingFields().length ? "true" : "false");
+    goBtn.setAttribute("aria-disabled", isReady() ? "false" : "true");
   }
 
-  form?.addEventListener("input", refreshReady);
+  form?.addEventListener("input", () => {
+    if (!titleMissing()) setFieldError("title", "");
+    refreshReady();
+  });
   refreshReady();
 
   // NOTE: sign-out lives in a SEPARATE bundled <script> below. A `define:vars`
@@ -235,24 +268,28 @@ const requiresOptions = SUBMIT_REQUIRES;
 
     const title = String(data.get("title") || "").trim();
     const tdnRaw = String(data.get("tdn") || "").trim();
-    const missing = missingFields();
-    if (missing.length) {
-      const labels = missing.map((f) => f.label);
+    if (!isReady()) {
+      // Summarize what's missing near the button, inline the title error under
+      // the title field, and land focus on the first problem. The TDN editor
+      // shows its own format error live, so we don't duplicate it here.
+      const probs = [];
+      if (titleMissing()) probs.push("a title");
+      if (!tdnValid) probs.push("a valid TDN network");
+      setFieldError("title", titleMissing() ? "add a title." : "");
       const list =
-        labels.length === 1
-          ? labels[0]
-          : labels.slice(0, -1).join(", ") + " and " + labels[labels.length - 1];
-      setStatus(`Add ${list} before contributing.`, "error");
-      const first = missing[0] && missing[0].el;
-      if (first) {
-        first.focus();
-        first.scrollIntoView({ behavior: "smooth", block: "center" });
+        probs.length === 1
+          ? probs[0]
+          : probs.slice(0, -1).join(", ") + " and " + probs[probs.length - 1];
+      setStatus(`add ${list} before contributing.`, "error");
+      const focusTarget = titleMissing() ? titleEl() : form?.querySelector('[name="tdn"]');
+      if (focusTarget) {
+        focusTarget.focus();
+        focusTarget.scrollIntoView({ behavior: "smooth", block: "center" });
       }
       return;
     }
-    // TDN is YAML (a JSON superset). This inline define:vars script can't bundle
-    // the yaml parser, so format validation happens server-side (it returns a
-    // clear error); the client only checks that something was pasted.
+    // The client gates submit on valid-YAML-that-is-a-mapping (see TdnYamlEditor
+    // validateTdn). The server re-validates and runs the capability scan.
 
     const tags = String(data.get("tags") || "")
       .split(",")
@@ -272,7 +309,7 @@ const requiresOptions = SUBMIT_REQUIRES;
       const fromField = String(data.get("cf-turnstile-response") || "");
       turnstileToken = String(fromApi || fromField || "");
       if (!turnstileToken) {
-        setStatus("Please complete the verification challenge.", "error");
+        setStatus("please complete the verification challenge.", "error");
         return;
       }
     }
@@ -285,14 +322,14 @@ const requiresOptions = SUBMIT_REQUIRES;
     const thumbFile = data.get("thumbnail");
     if (thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0) {
       if (thumbFile.size > 8_000_000) {
-        setStatus("Thumbnail source is too large (max 8 MB).", "error");
+        setStatus("thumbnail source is too large (max 8 MB).", "error");
         return;
       }
       try {
         thumbnail = await thumbDataUrl(thumbFile);
       } catch (err) {
         console.error("thumbnail resize failed", err);
-        setStatus("Could not process the thumbnail image.", "error");
+        setStatus("could not process the thumbnail image.", "error");
         return;
       }
     }
@@ -313,7 +350,7 @@ const requiresOptions = SUBMIT_REQUIRES;
     goBtn.disabled = true;
     const original = goBtn.textContent;
     goBtn.textContent = "contributing...";
-    setStatus("Scanning and contributing...", "pending");
+    setStatus("scanning and contributing...", "pending");
 
     try {
       const res = await fetch("/api/specimens", {
@@ -323,19 +360,19 @@ const requiresOptions = SUBMIT_REQUIRES;
       });
       const body = await res.json().catch(() => ({}));
       if (res.status === 401) {
-        setStatus("Your session expired. Redirecting to sign in...", "error");
+        setStatus("your session expired. redirecting to sign in...", "error");
         window.location.assign("/signin?next=/contribute");
         return;
       }
       if (!res.ok) {
-        setStatus(body.detail || body.error || `Contribution failed (${res.status}).`, "error");
+        setStatus(body.detail || body.error || `contribution failed (${res.status}).`, "error");
         return;
       }
-      setStatus("Contributed. Redirecting to your specimen...", "ok");
+      setStatus("contributed. redirecting to your specimen...", "ok");
       window.location.assign(`/c/${body.slug}`);
     } catch (err) {
       console.error("submit failed", err);
-      setStatus("Something went wrong. Please try again.", "error");
+      setStatus("something went wrong. please try again.", "error");
     } finally {
       goBtn.disabled = false;
       goBtn.textContent = original;
@@ -531,7 +568,7 @@ const requiresOptions = SUBMIT_REQUIRES;
      max-width with auto inline margins so the whole form sits centered on the
      page instead of pinned to the left gutter. */
   .submit {
-    max-width: 46rem;
+    max-width: 72rem;
     margin-inline: auto;
     padding-bottom: 56px;
   }
@@ -573,15 +610,72 @@ const requiresOptions = SUBMIT_REQUIRES;
   .submit-form {
     margin-top: 2rem;
     max-width: 100%;
+  }
+
+  /* Two columns: metadata fields on the left, the large live TDN editor (plus
+     verification + status + submit) on the right, so as much as possible sits
+     above the fold. The whole form sits inside one bordered panel (matching the
+     site's .pillar cards). Collapses to a single column on narrow viewports. */
+  .submit-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
+    gap: 2rem;
+    align-items: start;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+
+  .submit-col {
     display: flex;
     flex-direction: column;
     gap: 1.1rem;
+    min-width: 0;
+  }
+
+  /* The editor field grows to fill the right column's height. */
+  .submit-col--tdn {
+    min-height: 100%;
+  }
+
+  .submit-field--editor {
+    flex: 1;
+    min-height: 0;
+  }
+
+  @media (max-width: 60rem) {
+    .submit-cols {
+      grid-template-columns: 1fr;
+    }
   }
 
   .submit-field {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
+  }
+
+  /* Inline error beneath a field (title); the TDN editor renders its own. */
+  .submit-error {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #ff9b9b;
+  }
+
+  /* The three short dropdowns (difficulty / category / requires) share one
+     row on wider screens, collapsing to a stack on narrow viewports. */
+  .submit-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.1rem;
+    align-items: start;
+  }
+
+  @media (max-width: 34rem) {
+    .submit-row {
+      grid-template-columns: 1fr;
+    }
   }
 
   .submit-field > span {
@@ -725,11 +819,6 @@ const requiresOptions = SUBMIT_REQUIRES;
     margin-top: 0.25rem;
   }
 
-  .submit-tdn {
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-  }
-
   /* ---- App-native file picker ----
      The OS-rendered "Choose File" button + "No file chosen" text can't be
      restyled via CSS, so the real <input type=file> is visually hidden and a
@@ -859,7 +948,7 @@ const requiresOptions = SUBMIT_REQUIRES;
   }
 
   .submit-status {
-    margin-top: 1.25rem;
+    margin-top: 0;
     padding: 0.65rem 0.75rem;
     border-radius: var(--radius-sm);
     font-size: 0.9rem;
@@ -876,6 +965,15 @@ const requiresOptions = SUBMIT_REQUIRES;
     background: rgba(110, 230, 104, 0.12);
     border-color: rgba(110, 230, 104, 0.4);
     color: var(--accent);
+  }
+
+  /* Empty -> collapsed, but the element STAYS in the DOM / a11y tree (never
+     display:none or hidden) so this role=status/alert live region is registered
+     before its first message lands -- otherwise some screen readers swallow it. */
+  .submit-status:empty {
+    margin: 0;
+    padding: 0;
+    border-width: 0;
   }
 
   .submit-back {
