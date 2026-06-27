@@ -2,7 +2,9 @@
 import { env } from "cloudflare:workers";
 import { SUBMIT_CATEGORIES, SUBMIT_DIFFICULTIES, SUBMIT_REQUIRES } from "@embody/contracts";
 import Base from "../../../layouts/Base.astro";
-import { getSpecimenForEdit } from "../../../server/db";
+import TdnYamlEditor from "../../../components/TdnYamlEditor";
+import { getCurrentTdnBlobForSlug, getSpecimenForEdit } from "../../../server/db";
+import { getTdn } from "../../../server/r2";
 
 export const prerender = false;
 
@@ -25,6 +27,15 @@ if (specimen.authorId !== user.id) {
   return Astro.redirect(`/c/${slug}`);
 }
 
+// Pre-fill the editor with the current network text (raw TDN exactly as stored).
+let currentTdn = "";
+try {
+  const blob = await getCurrentTdnBlobForSlug(env.DB, slug);
+  if (blob) currentTdn = (await getTdn(env.BLOBS, blob.key)) ?? "";
+} catch {
+  currentTdn = "";
+}
+
 const difficultyOptions = SUBMIT_DIFFICULTIES;
 const categoryOptions = SUBMIT_CATEGORIES;
 const requiresOptions = SUBMIT_REQUIRES;
@@ -36,19 +47,20 @@ const tagsValue = specimen.tags.join(", ");
   description={`Edit your specimen "${specimen.title}".`}
 >
   <section class="page-section submit">
-    <p class="eyebrow">Edit specimen</p>
+    <p class="eyebrow">edit specimen</p>
     <h1>edit {specimen.title}</h1>
     <p class="lede">
-      Update your specimen's details. The network itself (the TDN) is not editable
-      here -- to change the network, submit a new specimen.
+      Update your specimen's details and network. Editing the TDN re-runs the
+      capability scan and saves a new version of the network.
     </p>
 
-    <p class="submit-status" data-edit-status hidden role="status"></p>
-
     <form class="submit-form" data-edit-form data-slug={specimen.slug} novalidate>
+      <div class="submit-cols">
+      <div class="submit-col submit-col--fields">
       <label class="submit-field">
         <span>title</span>
         <input type="text" name="title" required maxlength="160" value={specimen.title} />
+        <small class="submit-error" data-error-for="title" role="alert"></small>
       </label>
       <label class="submit-field">
         <span>description</span>
@@ -58,6 +70,7 @@ const tagsValue = specimen.tags.join(", ");
         <span>tags <em>(comma separated)</em></span>
         <input type="text" name="tags" value={tagsValue} placeholder="feedback, generative, TOP" />
       </label>
+      <div class="submit-row">
       <div class="submit-field">
         <span class="submit-field__label" id="ddlbl-difficulty">difficulty</span>
         <div class="dd" data-dd>
@@ -115,24 +128,39 @@ const tagsValue = specimen.tags.join(", ");
           </select>
         </div>
       </div>
+      </div>
       <label class="submit-field">
         <span>license</span>
         <input type="text" name="license" value={specimen.license} maxlength="80" />
       </label>
-      <button type="submit" class="btn btn--primary submit-go" data-edit-go>
+      </div>
+
+      <div class="submit-col submit-col--tdn">
+      <div class="submit-field submit-field--editor">
+        <span>TDN (YAML)</span>
+        <small class="submit-hint">
+          edit the network directly. saving a changed TDN re-runs the capability scan and creates a new version.
+        </small>
+        <TdnYamlEditor client:load name="tdn" initialValue={currentTdn} />
+      </div>
+      <p class="submit-status" data-edit-status role="status"></p>
+      <button type="submit" class="btn btn--primary submit-go" data-edit-go aria-disabled="true">
         save changes
       </button>
+      </div>
+      </div>
     </form>
 
     <p class="submit-back">
-      <a href={`/c/${specimen.slug}`}>Cancel and return to the specimen</a>
+      <a href={`/c/${specimen.slug}`}>cancel and return to the specimen</a>
     </p>
   </section>
 </Base>
 
 <script>
-  // Owner metadata edit. PUTs the form to /api/specimens/:slug; on success
-  // returns to the specimen page. The TDN body is not part of this form.
+  // Owner edit. PUTs the form to /api/specimens/:slug; on success returns to the
+  // specimen page. Includes the (editable) TDN body -- a changed network re-runs
+  // the capability scan + saves a new version server-side.
   const form = document.querySelector("[data-edit-form]") as HTMLFormElement | null;
   const statusBox = document.querySelector("[data-edit-status]") as HTMLElement | null;
   const goBtn = document.querySelector("[data-edit-go]") as HTMLButtonElement | null;
@@ -141,8 +169,43 @@ const tagsValue = specimen.tags.join(", ");
     if (!statusBox) return;
     statusBox.textContent = message;
     statusBox.dataset.kind = kind;
-    statusBox.hidden = false;
   }
+
+  function setFieldError(name: string, message: string) {
+    const el = form?.querySelector(`[data-error-for="${name}"]`) as HTMLElement | null;
+    if (!el) return;
+    el.textContent = message || "";
+  }
+
+  function titleEl() {
+    return form?.querySelector('[name="title"]') as HTMLInputElement | null;
+  }
+  function titleMissing() {
+    const el = titleEl();
+    return !el || !String(el.value || "").trim();
+  }
+
+  // The TDN editor (React island) validates on every edit and broadcasts a
+  // bubbling `tdn:change` with its validity, so "save changes" stays greyed while
+  // the network is unparseable.
+  let tdnValid = false;
+  form?.addEventListener("tdn:change", (event) => {
+    tdnValid = Boolean((event as CustomEvent).detail?.valid);
+    refreshReady();
+  });
+
+  function isReady() {
+    return !titleMissing() && tdnValid;
+  }
+  function refreshReady() {
+    if (!goBtn) return;
+    goBtn.setAttribute("aria-disabled", isReady() ? "false" : "true");
+  }
+  form?.addEventListener("input", () => {
+    if (!titleMissing()) setFieldError("title", "");
+    refreshReady();
+  });
+  refreshReady();
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -151,8 +214,12 @@ const tagsValue = specimen.tags.join(", ");
     const data = new FormData(form);
 
     const title = String(data.get("title") || "").trim();
-    if (!title) {
-      setStatus("A title is required.", "error");
+    if (!isReady()) {
+      const probs: string[] = [];
+      if (titleMissing()) probs.push("a title");
+      if (!tdnValid) probs.push("a valid TDN network");
+      setFieldError("title", titleMissing() ? "add a title." : "");
+      setStatus(`fix ${probs.join(" and ")} before saving.`, "error");
       return;
     }
 
@@ -168,13 +235,14 @@ const tagsValue = specimen.tags.join(", ");
       license: String(data.get("license") || "CC-BY-4.0").trim() || "CC-BY-4.0",
       difficulty: String(data.get("difficulty") || "intermediate"),
       category: String(data.get("category") || ""),
-      requires: String(data.get("requires") || "none")
+      requires: String(data.get("requires") || "none"),
+      tdn: String(data.get("tdn") || "")
     };
 
     goBtn.disabled = true;
     const original = goBtn.textContent;
     goBtn.textContent = "saving...";
-    setStatus("Saving changes...", "pending");
+    setStatus("saving changes...", "pending");
 
     try {
       const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}`, {
@@ -188,15 +256,15 @@ const tagsValue = specimen.tags.join(", ");
         return;
       }
       if (!res.ok) {
-        setStatus(body.detail || body.error || `Update failed (${res.status}).`, "error");
+        setStatus(body.detail || body.error || `update failed (${res.status}).`, "error");
         goBtn.disabled = false;
         goBtn.textContent = original;
         return;
       }
-      setStatus("Saved. Returning to your specimen...", "ok");
+      setStatus("saved. returning to your specimen...", "ok");
       window.location.assign(`/c/${slug}`);
     } catch {
-      setStatus("Something went wrong. Please try again.", "error");
+      setStatus("something went wrong. please try again.", "error");
       goBtn.disabled = false;
       goBtn.textContent = original;
     }
@@ -377,7 +445,7 @@ const tagsValue = specimen.tags.join(", ");
      max-width with auto inline margins so the whole form sits centered on the
      page instead of pinned to the left gutter. */
   .submit {
-    max-width: 46rem;
+    max-width: 72rem;
     margin-inline: auto;
     padding-bottom: 56px;
   }
@@ -385,15 +453,75 @@ const tagsValue = specimen.tags.join(", ");
   .submit-form {
     margin-top: 2rem;
     max-width: 100%;
+  }
+
+  /* Two columns, mirroring the contribute form: metadata fields left, the large
+     editable TDN editor (+ status + submit) right. The whole form sits inside one
+     bordered panel (matching the site's .pillar cards). Collapses on narrow
+     viewports. */
+  .submit-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
+    gap: 2rem;
+    align-items: start;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+
+  .submit-col {
     display: flex;
     flex-direction: column;
     gap: 1.1rem;
+    min-width: 0;
+  }
+
+  .submit-col--tdn {
+    min-height: 100%;
+  }
+
+  .submit-field--editor {
+    flex: 1;
+    min-height: 0;
+  }
+
+  @media (max-width: 60rem) {
+    .submit-cols {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* The three short dropdowns share one row on wider screens. */
+  .submit-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.1rem;
+    align-items: start;
+  }
+
+  @media (max-width: 34rem) {
+    .submit-row {
+      grid-template-columns: 1fr;
+    }
   }
 
   .submit-field {
     display: flex;
     flex-direction: column;
     gap: 0.35rem;
+  }
+
+  .submit-error {
+    font-size: 0.8rem;
+    line-height: 1.4;
+    color: #ff9b9b;
+  }
+
+  .submit-hint {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    color: var(--text-faint);
   }
 
   .submit-field > span {
@@ -555,8 +683,18 @@ const tagsValue = specimen.tags.join(", ");
     align-self: flex-start;
   }
 
+  /* Greyed while the title is empty or the TDN is unparseable. Stays clickable
+     (aria-disabled, not disabled) so a click can explain what's missing. */
+  .submit-go[aria-disabled="true"],
+  .submit-go[aria-disabled="true"]:hover {
+    background: var(--bg-elevated-2);
+    color: var(--text-faint);
+    cursor: not-allowed;
+    transform: none;
+  }
+
   .submit-status {
-    margin-top: 1.25rem;
+    margin-top: 0;
     padding: 0.65rem 0.75rem;
     border-radius: var(--radius-sm);
     font-size: 0.9rem;
@@ -573,6 +711,15 @@ const tagsValue = specimen.tags.join(", ");
     background: rgba(110, 230, 104, 0.12);
     border-color: rgba(110, 230, 104, 0.4);
     color: var(--accent);
+  }
+
+  /* Empty -> collapsed, but the element STAYS in the DOM / a11y tree (never
+     display:none or hidden) so this role=status/alert live region is registered
+     before its first message lands -- otherwise some screen readers swallow it. */
+  .submit-status:empty {
+    margin: 0;
+    padding: 0;
+    border-width: 0;
   }
 
   .submit-back {

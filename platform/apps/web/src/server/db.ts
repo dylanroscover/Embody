@@ -824,6 +824,98 @@ export async function updateSpecimenMetadata(
   });
 }
 
+// Owner edit of a specimen's NETWORK (the TDN body). Appends a new
+// specimen_versions row + its scan, repoints current_version_id, and refreshes
+// the specimen's op_count / scan_status / capability_json + the FTS dat_text. The
+// caller MUST have already parsed + scanned the new TDN (same gates as submit:
+// blocked verdict / obvious-malware are rejected BEFORE this runs) and stored the
+// blob. Metadata (title/tags/etc.) is updated separately via updateSpecimenMetadata.
+export async function addSpecimenVersion(
+  db: D1Database,
+  input: {
+    specimenId: string;
+    slug: string;
+    authorHandle: string;
+    title: string;
+    description: string;
+    tags: string[];
+    tdnR2Key: string;
+    tdnSha256: string;
+    sizeBytes: number;
+    scan: CapabilityJson;
+    parsedTdn: Record<string, unknown>;
+  }
+): Promise<{ versionNum: number }> {
+  const versionId = crypto.randomUUID();
+  const scanId = crypto.randomUUID();
+  const capabilityJson = JSON.stringify(input.scan);
+  const opCount = countTdnOperators(input.parsedTdn);
+  const scanStatus = input.scan.verdict;
+
+  // Next version number for this specimen (current max + 1).
+  const maxRow = await db
+    .prepare("SELECT MAX(version_num) AS n FROM specimen_versions WHERE specimen_id = ?")
+    .bind(input.specimenId)
+    .first<{ n: number | null }>();
+  const versionNum = Number(maxRow?.n ?? 0) + 1;
+
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO specimen_versions (
+           id, specimen_id, version_num, tdn_r2_key, tdn_sha256, size_bytes,
+           op_count, scan_id, signature_ref, changelog
+         )
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`
+      )
+      .bind(
+        versionId,
+        input.specimenId,
+        versionNum,
+        input.tdnR2Key,
+        input.tdnSha256,
+        input.sizeBytes,
+        opCount,
+        scanId
+      ),
+    db
+      .prepare(
+        `INSERT INTO scans (
+           id, version_id, scanner_version, verdict, capability_json, findings_json
+         )
+         VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        scanId,
+        versionId,
+        input.scan.scanner_version,
+        input.scan.verdict,
+        capabilityJson,
+        JSON.stringify(input.scan.findings)
+      ),
+    db
+      .prepare(
+        `UPDATE specimens
+            SET current_version_id = ?, op_count = ?, scan_status = ?,
+                capability_json = ?, updated_at = datetime('now')
+          WHERE id = ?`
+      )
+      .bind(versionId, opCount, scanStatus, capabilityJson, input.specimenId)
+  ]);
+
+  await syncSpecimensFts(db, {
+    specimenId: input.specimenId,
+    slug: input.slug,
+    title: input.title.trim(),
+    description: input.description.trim(),
+    tags: normalizeTags(input.tags).map((tag) => tag.name),
+    authorHandle: input.authorHandle,
+    datText: extractDatText(input.parsedTdn)
+  });
+
+  return { versionNum };
+}
+
 // Hard-delete a specimen and every row that references it. FK order matters:
 // scans -> specimen_versions -> (tags/likes/comments/reports/reactions) -> the
 // specimen itself. The final delete fires the AFTER DELETE trigger from
