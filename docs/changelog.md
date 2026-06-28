@@ -1,5 +1,29 @@
 # Changelog
 
+## v6.0.57
+
+A live-build-visualization split plus a major embody.tools Collection upgrade. In TouchDesigner, the opt-in build visualization (shipped in v6.0.54) is now two independent toggles -- the **Embot** character and the **Envoy Follow** camera -- and self-heals so it survives a restart. On the web, specimens gain **multiple categories**, **private drafts**, a **license picker**, and a meaningfully better TDN editor/profile.
+
+### Embody core
+
+- **The build visualization splits into Embot (character) + Envoy Follow (camera), each separately toggleable.** v6.0.54 bundled the mascot and the camera under one `Envoyfollow` switch; they are now `Embotenable` (the little builder who stands on each operator and narrates what he just did) and `Envoyfollow` (the network-editor camera that pans to the active op). The camera frames the *operator* now, so it follows Envoy's work whether or not the character is shown.
+- **The toggles self-heal on every init.** They were added live in a session and vanished on the next restart; a new `_ensureVizParams()` recreates them if missing (idempotent, bakes into the `.toe` on save), so the feature is always controllable.
+- **Per-frame bot assembly restored.** Embot is copied from his template one part per frame -- the version that ran stably for hours -- replacing a single block `copyOPs` that was implicated in repeated TD crashes.
+- **Past-tense narration.** Embot describes the node he just finished and is standing on ("seeded a noise texture"), keyed on `OPType`, with coverage expanded across TOP / CHOP / SOP / POP / MAT / COMP / DAT.
+- **Follow no longer freezes on TD's auto-frame.** The user-takeover detector now yields only on a real network change (you click into another COMP); a transient pan/zoom from TD auto-framing a freshly-spawned node used to stall the follow for ~6s while Embot raced off.
+
+### embody.tools
+
+- **Specimens can belong to several categories (up to 3).** A new `specimen_categories` join table backs ANY-match facet filtering and the category facet list; `specimens.category` stays the primary (single-slot display + thumbnail motif + back-compat). Cards show a `+N` badge; the detail breadcrumb links each category. (D1 migration `0010`, backfilled.)
+- **Private drafts + a publish toggle.** New uploads default to **private** -- yours to preview and refine -- and you publish (or unpublish) from the specimen page or delete from your profile. Owner-scoped reads let you see your own drafts; everyone else sees only public. Your profile splits specimens into public/private groups with a persisted list/gallery view toggle and inline edit / arm-to-delete controls.
+- **License is a real picker.** A fixed SPDX-style vocabulary (Creative Commons family + common code licenses + all-rights-reserved) replaces the free-text field on submit and edit; off-list values coerce to the default, and a legacy value survives an edit. The detail page shows the actual license.
+- **A better TDN editor + viewer.** The editor gains a search match counter with prev/next/clear, a go-to-line popover, and paste-from-clipboard that unwraps an `_embody_tdn` envelope; the read-only viewer's jump menu now lists every top-level operator and annotation with type labels. Edit also accepts a replacement cover image (client-resized to 640x360).
+- **Privacy: Inter is now self-hosted.** The four woff2 faces ship from `/fonts` and the Google Fonts CDN `<link>` is gone, so no visitor IP leaks to a third party. New **cookie notice** and **copyright/DMCA** pages round out the footer's policy set, alongside refreshed privacy and terms.
+
+### Tests
+
+- Test suite unchanged at **74 suites / 1,727 tests** -- the visualization split is runtime UI/camera behavior with no new Python unit coverage. The web added 2 Playwright e2e cases (multi-category submit + the 3-category cap).
+
 ## v6.0.55
 
 A clipboard UX fix. Copying a COMP's network with `Ctrl+Shift+C` no longer immediately prompts to paste it back into TouchDesigner -- an *outbound* copy (you are exporting it to share or paste elsewhere) is now distinguished from an *inbound* TDN (the web "embody it" button, a shared envelope).
