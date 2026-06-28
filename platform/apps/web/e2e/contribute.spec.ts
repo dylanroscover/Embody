@@ -38,6 +38,48 @@ test("signed-in user submits a specimen and lands on its page", async ({ page })
   await expect(page.getByRole("heading", { level: 1, name: new RegExp(`E2E Net ${stamp}`, "i") })).toBeVisible();
 });
 
+test("signed-in user submits with multiple categories", async ({ page }) => {
+  await register(page);
+
+  const stamp = Date.now();
+  const title = `E2E Multicat ${stamp}`;
+  const tdn = JSON.stringify({ name: "e2e_multicat", type: "baseCOMP", children: [] }, null, 2);
+
+  await page.goto("/contribute");
+  await page.locator('input[name="title"]').fill(title);
+  await page.locator('textarea[name="tdn"]').fill(tdn);
+
+  // Open the categories picker (the .msdd holding name="categories") and add two
+  // more on top of the default-checked "generative".
+  await page.locator('.msdd:has(input[name="categories"]) [data-msdd-toggle]').click();
+  await page.locator('input[name="categories"][value="3d"]').check({ force: true });
+  await page.locator('input[name="categories"][value="shaders"]').check({ force: true });
+
+  await page.locator("[data-submit-go]").click();
+  await expect(page).toHaveURL(/\/c\/e2e-multicat-/, { timeout: 25_000 });
+
+  // The detail breadcrumb links every category (primary first).
+  await expect(page.getByRole("link", { name: "generative", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "3d", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "shaders", exact: true })).toBeVisible();
+});
+
+test("category picker caps the selection at three", async ({ page }) => {
+  await register(page);
+  await page.goto("/contribute");
+
+  // "generative" is pre-checked. Add two more to reach the cap of 3.
+  await page.locator('.msdd:has(input[name="categories"]) [data-msdd-toggle]').click();
+  await page.locator('input[name="categories"][value="3d"]').check({ force: true });
+  await page.locator('input[name="categories"][value="shaders"]').check({ force: true });
+
+  // At the cap, every other (unchecked) category box is disabled.
+  await expect(page.locator('input[name="categories"][value="video"]')).toBeDisabled();
+  // Unchecking one re-enables the rest.
+  await page.locator('input[name="categories"][value="3d"]').uncheck({ force: true });
+  await expect(page.locator('input[name="categories"][value="video"]')).toBeEnabled();
+});
+
 test("invalid TDN is rejected", async ({ page }) => {
   await register(page);
   await page.goto("/contribute");

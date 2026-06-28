@@ -28,7 +28,7 @@ type Line = {
 
 // ---- parsing ---------------------------------------------------------------
 
-function parse(raw: string): { lines: Line[]; topKeys: { name: string; idx: number }[] } {
+function parse(raw: string): { lines: Line[] } {
   const rawLines = raw.replace(/\n$/, "").split("\n");
   const n = rawLines.length;
   const blanks: boolean[] = rawLines.map((l) => l.trim() === "");
@@ -76,15 +76,65 @@ function parse(raw: string): { lines: Line[]; topKeys: { name: string; idx: numb
     }
   }
 
-  const topKeys: { name: string; idx: number }[] = [];
-  for (let i = 0; i < n; i++) {
-    const line = lines[i];
-    if (!line || line.blank || line.indent !== 0) continue;
-    const m = line.text.match(/^([A-Za-z0-9_.-]+):/);
-    if (m && m[1]) topKeys.push({ name: m[1], idx: i });
+  return { lines };
+}
+
+function unquoteScalar(s: string): string {
+  const t = s.trim();
+  if (t.length >= 2 && ((t[0] === "'" && t.endsWith("'")) || (t[0] === '"' && t.endsWith('"')))) {
+    return t.slice(1, -1);
+  }
+  return t;
+}
+
+export type Jump = { name: string; idx: number; kind: "comp" | "op" | "anno"; type?: string };
+
+// Build the "jump to" targets: every TOP-LEVEL operator and annotation. Nested
+// COMP children sit at deeper indent and are intentionally skipped (a COMP with
+// hundreds of inner ops shows up as the single COMP, not its contents). When a
+// network has many top-level operators AND some COMPs, collapse to just the
+// COMPs so the menu stays a readable structural overview.
+function buildJumps(lines: Line[]): Jump[] {
+  let opStart = -1, opEnd = -1, annoStart = -1, annoEnd = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (!l || l.blank || l.indent !== 0) continue;
+    const key = l.text.match(/^([A-Za-z0-9_.-]+):\s*$/)?.[1];
+    if (key === "operators") { opStart = i; opEnd = l.rangeEnd; }
+    else if (key === "annotations") { annoStart = i; annoEnd = l.rangeEnd; }
   }
 
-  return { lines, topKeys };
+  // First field in this item's child block matching `key:` (deeper indent).
+  const fieldOf = (item: Line, key: string): string => {
+    for (let j = lines.indexOf(item) + 1; j < item.rangeEnd; j++) {
+      const m = lines[j]?.text.match(new RegExp(`^\\s*${key}:\\s*(.+)$`));
+      if (m && m[1]) return unquoteScalar(m[1]);
+    }
+    return "";
+  };
+
+  const ops: Jump[] = [];
+  for (let i = opStart + 1; opStart >= 0 && i < opEnd; i++) {
+    const l = lines[i];
+    if (!l || l.blank || l.indent !== 0) continue;          // indent-0 items only -> no COMP children
+    const m = l.text.match(/^-\s*name:\s*(.+)$/);
+    if (!m || !m[1]) continue;
+    const type = fieldOf(l, "type");
+    ops.push({ name: unquoteScalar(m[1]), idx: i, type, kind: /comp$/i.test(type) ? "comp" : "op" });
+  }
+
+  const annos: Jump[] = [];
+  for (let i = annoStart + 1; annoStart >= 0 && i < annoEnd; i++) {
+    const l = lines[i];
+    if (!l || l.blank || l.indent !== 0) continue;
+    const m = l.text.match(/^-\s*name:\s*(.+)$/);
+    if (!m || !m[1]) continue;
+    annos.push({ name: fieldOf(l, "title") || unquoteScalar(m[1]), idx: i, kind: "anno" });
+  }
+
+  const comps = ops.filter((o) => o.kind === "comp");
+  const opList = ops.length > 40 && comps.length > 0 ? comps : ops;
+  return [...opList, ...annos];
 }
 
 // Render one segment, wrapping any case-insensitive query matches in <mark>.
@@ -113,7 +163,8 @@ function renderSeg(seg: Seg, key: number, q: string): ReactNode {
 const EMPTY: ReadonlySet<number> = new Set();
 
 export default function TdnYamlViewer({ raw, summary }: Props) {
-  const { lines, topKeys } = useMemo(() => parse(raw), [raw]);
+  const { lines } = useMemo(() => parse(raw), [raw]);
+  const jumps = useMemo(() => buildJumps(lines), [lines]);
   const tokens = useMemo(() => lines.map((l) => (l.blank ? [] : tokenize(l.text))), [lines]);
 
   const [folded, setFolded] = useState<ReadonlySet<number>>(EMPTY);
@@ -247,7 +298,7 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
           )}
         </div>
         <div className="tdn-yaml__tools">
-          {topKeys.length > 1 && (
+          {jumps.length > 1 && (
             <div className="tdn-yaml__jump" ref={jumpRef}>
               <button
                 type="button"
@@ -281,7 +332,7 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
                       (jumpRef.current?.querySelector(".tdn-yaml__jump-btn") as HTMLElement | null)?.focus();
                     } else if (e.key === "ArrowDown") {
                       e.preventDefault();
-                      setJumpActive((a) => Math.min(a + 1, topKeys.length - 1));
+                      setJumpActive((a) => Math.min(a + 1, jumps.length - 1));
                     } else if (e.key === "ArrowUp") {
                       e.preventDefault();
                       setJumpActive((a) => Math.max(a - 1, 0));
@@ -290,16 +341,16 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
                       setJumpActive(0);
                     } else if (e.key === "End") {
                       e.preventDefault();
-                      setJumpActive(topKeys.length - 1);
+                      setJumpActive(jumps.length - 1);
                     } else if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      const k = topKeys[jumpActive];
+                      const k = jumps[jumpActive];
                       if (k) jumpTo(k.idx);
                       setJumpOpen(false);
                     }
                   }}
                 >
-                  {topKeys.map((k, i) => (
+                  {jumps.map((k, i) => (
                     <li
                       key={k.idx}
                       id={`tdn-jump-${i}`}
@@ -309,7 +360,8 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
                       onMouseEnter={() => setJumpActive(i)}
                       onClick={() => { jumpTo(k.idx); setJumpOpen(false); }}
                     >
-                      {k.name}
+                      <span className="tdn-yaml__jump-name">{k.name}</span>
+                      <span className="tdn-yaml__jump-kind">{k.kind === "anno" ? "annotation" : (k.type || "")}</span>
                     </li>
                   ))}
                 </ul>
@@ -328,9 +380,16 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
             type="button"
             className={`tdn-yaml__btn${wrap ? " is-on" : ""}`}
             aria-pressed={wrap}
+            title="Toggle word wrap"
+            aria-label="Toggle word wrap"
             onClick={() => setWrap((w) => !w)}
           >
-            wrap
+            <svg className="tdn-yaml__btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <path d="M3 12h15a3 3 0 1 1 0 6h-4" />
+              <polyline points="16 16 14 18 16 20" />
+              <line x1="3" y1="18" x2="10" y2="18" />
+            </svg>
           </button>
         </div>
       </div>

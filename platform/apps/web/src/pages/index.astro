@@ -131,6 +131,9 @@ const jsonLd = {
             <div class="specimen-card__body">
               <div class="badge-row">
                 <span class="badge">{specimen.category}</span>
+                {specimen.categories.length > 1 && (
+                  <span class="badge" title={specimen.categories.slice(1).join(", ")}>+{specimen.categories.length - 1}</span>
+                )}
                 {specimen.requires.map((req) => (
                   <span class="badge needs">needs {req}</span>
                 ))}

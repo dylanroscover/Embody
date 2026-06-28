@@ -4,11 +4,20 @@ import type { CapabilityJson } from "./capability";
 
 export type Level = "starter" | "intermediate" | "advanced";
 export type Tier = "community" | "verified" | "featured";
+/**
+ * Who can see a specimen. New uploads default to `private` (the author's draft);
+ * the author publishes to `public` to add it to the Collection. `unlisted` is a
+ * moderator-only state (reachable via the link, hidden from listings).
+ */
+export type Visibility = "public" | "unlisted" | "private";
 
 export interface SpecimenSummary {
   slug: string;
   name: string;
+  /** Primary category (the first of `categories`); backs single-slot display. */
   category: string;
+  /** Full category set (1..MAX_CATEGORIES), primary first. Includes `category`. */
+  categories: string[];
   level: Level;
   description: string;
   /** Zero or more values from SUBMIT_REQUIRES; empty = stock TouchDesigner. */
@@ -28,6 +37,12 @@ export interface SpecimenSummary {
   views_count: number;
   /** How many times this specimen's TDN envelope has been copied from the website. */
   copies_count: number;
+  /**
+   * Visibility of the specimen. Present on owner/admin-scoped reads (e.g. a user's
+   * own profile) so private drafts can be badged; omitted on public listings,
+   * where every row is `public` by construction.
+   */
+  visibility?: Visibility;
 }
 
 export interface SpecimenDetail extends SpecimenSummary {
@@ -35,6 +50,8 @@ export interface SpecimenDetail extends SpecimenSummary {
   capability: CapabilityJson;
   current_version: number;
   tags: string[];
+  /** SPDX-style license identifier (one of SUBMIT_LICENSE_VALUES, or a legacy value). */
+  license: string;
   created_at: string;
   updated_at: string;
 }
@@ -98,6 +115,34 @@ export const SUBMIT_CATEGORIES: readonly string[] = [
   "system"
 ] as const;
 
+// A specimen may belong to several categories; this caps how many. The submit
+// form enforces it client-side and the API rejects more than this server-side.
+export const MAX_CATEGORIES = 3;
+
+// License vocabulary for the submit + edit forms. `value` is the SPDX-style
+// identifier we store; `label` is what the dropdown shows. Free-form licenses are
+// NOT accepted on submit; a value outside this set is coerced to the default
+// server-side. The first entry is the default. Covers the Creative Commons family
+// most creative-coding work uses, the common permissive/copyleft code licenses,
+// and an explicit all-rights-reserved opt-out.
+export const SUBMIT_LICENSES: readonly { value: string; label: string }[] = [
+  { value: "CC-BY-4.0", label: "CC BY 4.0 - attribution" },
+  { value: "CC-BY-SA-4.0", label: "CC BY-SA 4.0 - attribution, share-alike" },
+  { value: "CC-BY-NC-4.0", label: "CC BY-NC 4.0 - attribution, non-commercial" },
+  { value: "CC-BY-NC-SA-4.0", label: "CC BY-NC-SA 4.0 - non-commercial, share-alike" },
+  { value: "CC0-1.0", label: "CC0 1.0 - public domain" },
+  { value: "MIT", label: "MIT" },
+  { value: "Apache-2.0", label: "Apache 2.0" },
+  { value: "GPL-3.0", label: "GPL 3.0" },
+  { value: "All-rights-reserved", label: "All rights reserved" }
+] as const;
+
+// Flat whitelist of valid license values, for server-side validation.
+export const SUBMIT_LICENSE_VALUES: readonly string[] = SUBMIT_LICENSES.map((l) => l.value);
+
+// The default license when none is supplied or an unknown value arrives.
+export const DEFAULT_LICENSE = "CC-BY-4.0";
+
 // Hardware / capability requirements facet. A specimen can require SEVERAL of
 // these (multi-select); an EMPTY list means it runs on stock TouchDesigner. The
 // submit form renders a grouped (multi-level) checkbox picker from these groups;
@@ -159,14 +204,26 @@ export interface SubmitRequest {
   license: string;
   /** One of SUBMIT_LEVELS. */
   level: Level;
-  /** One of SUBMIT_CATEGORIES. */
-  category: string;
+  /**
+   * 1..MAX_CATEGORIES values from SUBMIT_CATEGORIES; the first is the primary.
+   * Legacy callers may send a single `category` string instead (accepted but
+   * deprecated); the server coerces it to a one-element `categories`.
+   */
+  categories: string[];
+  /** @deprecated Use `categories`. Legacy single-category field. */
+  category?: string;
   /** Zero or more values from SUBMIT_REQUIRES; empty = stock TouchDesigner. */
   requires: string[];
   /** YAML (or legacy JSON) string of the TDN dict (the raw network). */
   tdn: string;
   /** Optional data-URL thumbnail; otherwise generated server-side. */
   thumbnail?: string;
+  /**
+   * Initial visibility. Only 'public' or 'private' are accepted on submit;
+   * absent (or anything else) defaults to 'private' -- the author's draft, which
+   * they publish to 'public' from the specimen page. ('unlisted' is admin-only.)
+   */
+  visibility?: Visibility;
   /** Cloudflare Turnstile token, validated server-side. */
   turnstileToken: string;
 }

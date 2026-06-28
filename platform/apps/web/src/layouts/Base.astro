@@ -39,6 +39,12 @@ const showAdmin = isAdmin(user, env);
 
 // Display name + initials for the signed-in account menu (name, else handle).
 const displayName = user ? (user.name.trim() || user.handle) : "";
+// Navbar trigger shows just the first word of the name (full name stays in the
+// aria-label and the dropdown), so a long name doesn't get ellipsis-truncated.
+// When even the first name is long, drop the label and show the avatar only --
+// the chip stays compact instead of stretching the nav.
+const firstName = displayName.split(/\s+/)[0] || displayName;
+const showFirstName = firstName.length <= 12;
 const userInitials =
   displayName
     .split(/[\s._-]+/)
@@ -75,9 +81,11 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
     <title>{title}</title>
     <link rel="canonical" href={canonicalUrl} />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23181e1e'/%3E%3Ccircle cx='45' cy='45' r='4.7' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='8.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 33 L 47.5 33'/%3E%3C/g%3E%3C/svg%3E" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
+    <!-- Inter is self-hosted (see @font-face in embody.css) so no request goes
+         to Google's font CDN -- that fetch would leak every visitor's IP to a
+         third party. Preload the primary face (latin 600, used by every page's
+         heading) for fast first paint; the rest load on demand from /fonts. -->
+    <link rel="preload" href="/fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -166,11 +174,11 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
                 ) : (
                   <span class="navbar__user-avatar" aria-hidden="true">{userInitials}</span>
                 )}
-                <span class="navbar__user-name">{displayName}</span>
+                {showFirstName && <span class="navbar__user-name">{firstName}</span>}
               </button>
               <div class="navbar__user-menu" data-user-menu-list role="menu" hidden>
                 <a class="navbar__user-link" role="menuitem" href={`/u/${user.handle}`}>
-                  <span class="navbar__user-link-label">profile</span>
+                  <span class="navbar__user-link-label">my profile</span>
                   <span class="navbar__user-link-sub">@{user.handle}</span>
                 </a>
                 {showAdmin && (
@@ -239,6 +247,8 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
             <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
             <li><a href="/privacy">privacy</a></li>
             <li><a href="/terms">terms</a></li>
+            <li><a href="/cookies">cookies</a></li>
+            <li><a href="/dmca">copyright</a></li>
           </ul>
         </nav>
       </div>

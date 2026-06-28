@@ -173,6 +173,7 @@ export function toFixtureSummary(specimen: FixtureSpecimen): SpecimenSummary {
     slug: specimen.slug,
     name: specimen.name,
     category: specimen.category,
+    categories: [specimen.category],
     level: toLevel(specimen.level),
     description: specimen.description,
     requires: toRequires(specimen.requires),

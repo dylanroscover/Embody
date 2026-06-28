@@ -1,12 +1,14 @@
 import {
   emptyCapabilityCounts,
+  MAX_CATEGORIES,
   type CapabilityJson,
   type Level,
   type ListResponse,
   type SearchResponse,
   type SpecimenDetail,
   type SpecimenSummary,
-  type Tier
+  type Tier,
+  type Visibility
 } from "@embody/contracts";
 import type { RequestUser } from "./auth";
 import { fixtureSummaries } from "../lib/specimenFallback";
@@ -73,8 +75,14 @@ export interface InsertSpecimenInput {
   level?: Level;
   /** Known category facet; empty falls back to the first tag (legacy behavior). */
   category?: string;
+  /** Full category set (1..MAX_CATEGORIES). First entry is the primary; falls
+   *  back to `category` when absent. Whitelist-validated upstream in the route. */
+  categories?: string[];
   /** Hardware/capability requirements (multi); empty list = stock TouchDesigner. */
   requires?: string[];
+  /** 'public' or 'private'; anything else (or absent) defaults to 'private'
+   *  (the author's draft -- they publish to 'public' to add it to the Collection). */
+  visibility?: Visibility;
   tdnR2Key: string;
   tdnSha256: string;
   sizeBytes: number;
@@ -92,6 +100,8 @@ interface SpecimenSummaryRow {
   slug: string;
   title: string;
   category: string;
+  /** char(31)-joined full category set from specimen_categories (may be null). */
+  categories_concat: string | null;
   level: string;
   description: string;
   requires: string;
@@ -99,6 +109,7 @@ interface SpecimenSummaryRow {
   thumbnail_key: string | null;
   author_handle: string;
   tier: string;
+  visibility: string;
   likes_count: number;
   reactions_summary: string | null;
   views_count: number;
@@ -123,6 +134,7 @@ const SUMMARY_COLUMNS = [
   "s.slug",
   "s.title",
   "s.category",
+  "(SELECT GROUP_CONCAT(sc.category, char(31)) FROM specimen_categories sc WHERE sc.specimen_id = s.id) AS categories_concat",
   "s.level",
   "s.description",
   "s.requires",
@@ -130,6 +142,7 @@ const SUMMARY_COLUMNS = [
   "s.thumbnail_key",
   "u.handle AS author_handle",
   "s.tier",
+  "s.visibility",
   "s.likes_count",
   "s.reactions_summary",
   "s.views_count",
@@ -264,9 +277,13 @@ export async function listSpecimensForCollection(
     filterParams.push(matchQuery);
   }
 
+  // Category is multi now: match specimens that have the facet among ANY of
+  // their categories (the join table holds the full set, primary included).
   const category = (options.category ?? "").trim();
   if (category) {
-    where.push("s.category = ?");
+    where.push(
+      "EXISTS (SELECT 1 FROM specimen_categories sc WHERE sc.specimen_id = s.id AND sc.category = ?)"
+    );
     filterParams.push(category);
   }
 
@@ -363,10 +380,11 @@ export interface CollectionFacets {
 export async function getCollectionFacets(db: D1Database): Promise<CollectionFacets> {
   const categories = await db
     .prepare(
-      `SELECT DISTINCT category AS value
-       FROM specimens
-       WHERE visibility = 'public' AND category <> ''
-       ORDER BY category COLLATE NOCASE ASC`
+      `SELECT DISTINCT sc.category AS value
+       FROM specimen_categories sc
+       JOIN specimens s ON s.id = sc.specimen_id
+       WHERE s.visibility = 'public' AND sc.category <> ''
+       ORDER BY sc.category COLLATE NOCASE ASC`
     )
     .all<{ value: string }>();
 
@@ -403,7 +421,11 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
 
 export async function getSpecimenBySlug(
   db: D1Database,
-  slug: string
+  slug: string,
+  // When set to the signed-in user's id, that user can also load their OWN
+  // non-public (private/unlisted) specimens -- so an author can view a draft to
+  // verify it before publishing. Anonymous/other viewers still only see public.
+  viewerId?: string | null
 ): Promise<(SpecimenDetail & { author_display_name: string | null }) | null> {
   // Tags are folded into the detail row via a correlated GROUP_CONCAT subquery
   // (delimited by char(31), the ASCII unit separator, so a comma inside a tag
@@ -415,6 +437,7 @@ export async function getSpecimenBySlug(
       `SELECT ${SUMMARY_COLUMNS},
               u.display_name AS author_display_name,
               s.capability_json,
+              s.license,
               v.version_num AS current_version,
               s.created_at,
               s.updated_at,
@@ -430,11 +453,17 @@ export async function getSpecimenBySlug(
        FROM specimens s
        JOIN users_profile u ON u.id = s.author_id
        LEFT JOIN specimen_versions v ON v.id = s.current_version_id
-       WHERE s.slug = ? AND s.visibility = 'public'
+       WHERE s.slug = ? AND (s.visibility = 'public' OR s.author_id = ?)
        LIMIT 1`
     )
-    .bind(slug)
-    .first<SpecimenDetailRow & { tag_names: string | null; author_display_name: string | null }>();
+    .bind(slug, viewerId ?? "")
+    .first<
+      SpecimenDetailRow & {
+        tag_names: string | null;
+        author_display_name: string | null;
+        license: string;
+      }
+    >();
 
   if (!row) return null;
 
@@ -452,6 +481,7 @@ export async function getSpecimenBySlug(
     capability: parseCapability(row.capability_json),
     current_version: Number(row.current_version ?? 1),
     tags,
+    license: row.license || "CC-BY-4.0",
     created_at: row.created_at,
     updated_at: row.updated_at
   };
@@ -514,7 +544,11 @@ export async function setProfileAvatarUrl(
 
 export async function listSpecimensByAuthor(
   db: D1Database,
-  handle: string
+  handle: string,
+  // When set to the signed-in user's id, the author's OWN non-public specimens
+  // (private drafts / unlisted) are included too -- so a user sees their drafts
+  // on their own profile (badged), while visitors see only the public set.
+  viewerId?: string | null
 ): Promise<SpecimenSummary[]> {
   const trimmed = handle.trim();
   if (!trimmed) return [];
@@ -525,10 +559,10 @@ export async function listSpecimensByAuthor(
         `SELECT ${SUMMARY_COLUMNS}
          FROM specimens s
          JOIN users_profile u ON u.id = s.author_id
-         WHERE u.handle = ? AND s.visibility = 'public'
+         WHERE u.handle = ? AND (s.visibility = 'public' OR s.author_id = ?)
          ORDER BY s.created_at DESC, s.slug ASC`
       )
-      .bind(trimmed)
+      .bind(trimmed, viewerId ?? "")
       .all<SpecimenSummaryRow>();
 
     const mapped = (rows.results ?? []).map(rowToSummary);
@@ -624,7 +658,11 @@ function fallbackSpecimensByAuthor(handle: string): SpecimenSummary[] {
 
 export async function getCurrentTdnBlobForSlug(
   db: D1Database,
-  slug: string
+  slug: string,
+  // When set to the signed-in user's id, that user can also load their OWN
+  // non-public draft's network (preview / edit prefill / edit diff). Left unset
+  // by the public /tdn + /copy endpoints, which must only ever serve public TDN.
+  viewerId?: string | null
 ): Promise<CurrentTdnBlob | null> {
   const row = await db
     .prepare(
@@ -632,10 +670,10 @@ export async function getCurrentTdnBlobForSlug(
               s.capability_json
        FROM specimens s
        JOIN specimen_versions v ON v.id = s.current_version_id
-       WHERE s.slug = ? AND s.visibility = 'public'
+       WHERE s.slug = ? AND (s.visibility = 'public' OR s.author_id = ?)
        LIMIT 1`
     )
-    .bind(slug)
+    .bind(slug, viewerId ?? "")
     .first<{ key: string | null; capability_json: string | null }>();
 
   if (!row?.key) return null;
@@ -659,13 +697,20 @@ export async function insertSpecimenWithVersion(
   const description = input.description.trim();
   const capabilityJson = JSON.stringify(input.scan);
   const opCount = countTdnOperators(input.parsedTdn);
-  // Prefer the submit-form category (whitelist-validated upstream); fall back to
-  // the first tag's slug, then "community", to preserve pre-metadata behavior.
-  const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
+  // Categories (multi). Prefer the submit-form list; fall back to the legacy
+  // single category, then the first tag's slug, then "community". The first
+  // entry is the PRIMARY, stored in specimens.category (single-slot display +
+  // back-compat); the full set goes to the specimen_categories join table.
+  const primaryFallback = (input.category ?? "").trim() || tags[0]?.slug || "community";
+  const categories = normalizeCategories(input.categories, primaryFallback);
+  const category = categories[0] ?? primaryFallback;
   const level = normalizeLevel(input.level ?? "intermediate");
   const requires = serializeRequires(input.requires);
   const scanStatus = input.scan.verdict;
   const license = input.license.trim() || "CC-BY-4.0";
+  // Only the binary public/private states are settable on submit; anything else
+  // (or absent) defaults to 'private' so a new upload is a draft until published.
+  const visibility = input.visibility === "public" ? "public" : "private";
 
   const statements: D1PreparedStatement[] = [
     db
@@ -681,7 +726,7 @@ export async function insertSpecimenWithVersion(
            op_count, family_summary, current_version_id, thumbnail_key, license,
            visibility, tier, scan_status, capability_json
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, 'public',
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?,
                  'community', ?, ?)`
       )
       .bind(
@@ -697,6 +742,7 @@ export async function insertSpecimenWithVersion(
         versionId,
         input.thumbnailKey ?? "",
         license,
+        visibility,
         scanStatus,
         capabilityJson
       ),
@@ -745,6 +791,14 @@ export async function insertSpecimenWithVersion(
     );
   }
 
+  for (const cat of categories) {
+    statements.push(
+      db
+        .prepare("INSERT OR IGNORE INTO specimen_categories (specimen_id, category) VALUES (?, ?)")
+        .bind(specimenId, cat)
+    );
+  }
+
   await db.batch(statements);
   await syncSpecimensFts(db, {
     specimenId,
@@ -775,9 +829,15 @@ export interface SpecimenEditData {
   license: string;
   level: string;
   category: string;
+  categories: string[];
   requires: string[];
+  visibility: Visibility;
 }
 
+// Load a specimen by slug for an owner action (edit prefill, publish toggle,
+// delete). Intentionally OWNER-AGNOSTIC and visibility-agnostic -- it loads any
+// specimen by slug so a private draft can be edited/published. Callers MUST gate
+// on `authorId === user.id` (resolveOwner in the API; the edit page guard).
 export async function getSpecimenForEdit(
   db: D1Database,
   slug: string
@@ -785,14 +845,17 @@ export async function getSpecimenForEdit(
   const row = await db
     .prepare(
       `SELECT s.id, s.author_id, u.handle AS author_handle, s.slug, s.title,
-              s.description, s.license, s.level, s.category, s.requires,
+              s.description, s.license, s.level, s.category, s.requires, s.visibility,
               (SELECT GROUP_CONCAT(t.name, char(31))
                  FROM specimen_tags st
                  JOIN tags t ON t.id = st.tag_id
-                WHERE st.specimen_id = s.id) AS tag_names
+                WHERE st.specimen_id = s.id) AS tag_names,
+              (SELECT GROUP_CONCAT(sc.category, char(31))
+                 FROM specimen_categories sc
+                WHERE sc.specimen_id = s.id) AS categories_concat
          FROM specimens s
          JOIN users_profile u ON u.id = s.author_id
-        WHERE s.slug = ? AND s.visibility = 'public'
+        WHERE s.slug = ?
         LIMIT 1`
     )
     .bind(slug)
@@ -807,7 +870,9 @@ export async function getSpecimenForEdit(
       level: string;
       category: string;
       requires: string;
+      visibility: string;
       tag_names: string | null;
+      categories_concat: string | null;
     }>();
 
   if (!row) return null;
@@ -823,8 +888,10 @@ export async function getSpecimenForEdit(
     license: row.license,
     level: row.level,
     category: row.category,
+    categories: buildCategories(row.category, row.categories_concat),
     requires: parseRequires(row.requires),
-    tags: row.tag_names ? row.tag_names.split(TAG_SEP).filter(Boolean) : []
+    tags: row.tag_names ? row.tag_names.split(TAG_SEP).filter(Boolean) : [],
+    visibility: normalizeVisibility(row.visibility)
   };
 }
 
@@ -846,29 +913,44 @@ export async function updateSpecimenMetadata(
     license: string;
     level?: string;
     category?: string;
+    categories?: string[];
     requires?: string[];
+    /** New R2 thumbnail key. Omitted/undefined leaves the existing thumbnail untouched. */
+    thumbnailKey?: string;
     parsedTdn?: Record<string, unknown> | null;
   }
 ): Promise<void> {
   const tags = normalizeTags(input.tags);
   const title = input.title.trim();
   const description = input.description.trim();
-  const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
+  const primaryFallback = (input.category ?? "").trim() || tags[0]?.slug || "community";
+  const categories = normalizeCategories(input.categories, primaryFallback);
+  const category = categories[0] ?? primaryFallback;
   const level = normalizeLevel(input.level ?? "intermediate");
   const requires = serializeRequires(input.requires);
   const license = input.license.trim() || "CC-BY-4.0";
+
+  // Only overwrite thumbnail_key when a new key is supplied -- an edit that
+  // doesn't change the image leaves the column as-is.
+  const newThumb = typeof input.thumbnailKey === "string" && input.thumbnailKey ? input.thumbnailKey : null;
 
   const statements: D1PreparedStatement[] = [
     db
       .prepare(
         `UPDATE specimens
             SET title = ?, description = ?, category = ?, level = ?,
-                requires = ?, license = ?, updated_at = datetime('now')
+                requires = ?, license = ?${newThumb ? ", thumbnail_key = ?" : ""}, updated_at = datetime('now')
           WHERE id = ?`
       )
-      .bind(title, description, category, level, requires, license, input.specimenId),
+      .bind(
+        ...(newThumb
+          ? [title, description, category, level, requires, license, newThumb, input.specimenId]
+          : [title, description, category, level, requires, license, input.specimenId])
+      ),
     // Tags are a full replace: drop the existing links, re-add the new set.
-    db.prepare("DELETE FROM specimen_tags WHERE specimen_id = ?").bind(input.specimenId)
+    db.prepare("DELETE FROM specimen_tags WHERE specimen_id = ?").bind(input.specimenId),
+    // Categories are a full replace too.
+    db.prepare("DELETE FROM specimen_categories WHERE specimen_id = ?").bind(input.specimenId)
   ];
 
   for (const tag of tags) {
@@ -879,6 +961,14 @@ export async function updateSpecimenMetadata(
       db
         .prepare("INSERT OR IGNORE INTO specimen_tags (specimen_id, tag_id) VALUES (?, ?)")
         .bind(input.specimenId, `tag-${tag.slug}`)
+    );
+  }
+
+  for (const cat of categories) {
+    statements.push(
+      db
+        .prepare("INSERT OR IGNORE INTO specimen_categories (specimen_id, category) VALUES (?, ?)")
+        .bind(input.specimenId, cat)
     );
   }
 
@@ -986,6 +1076,23 @@ export async function addSpecimenVersion(
   });
 
   return { versionNum };
+}
+
+// Set a specimen's visibility (the owner's publish/unpublish toggle, or an admin
+// moderation change). Returns false when no specimen has that id. updated_at is
+// bumped so the change surfaces in any "recently updated" view. The public
+// listing/detail queries filter on visibility, so flipping to 'private' removes
+// it from the Collection immediately and 'public' adds it back.
+export async function setSpecimenVisibility(
+  db: D1Database,
+  specimenId: string,
+  visibility: Visibility
+): Promise<boolean> {
+  const result = await db
+    .prepare("UPDATE specimens SET visibility = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(visibility, specimenId)
+    .run();
+  return (result.meta?.changes ?? 0) > 0;
 }
 
 // Hard-delete a specimen and every row that references it. FK order matters:
@@ -1191,6 +1298,7 @@ function rowToSummary(row: SpecimenSummaryRow): SpecimenSummary {
     slug: row.slug,
     name: row.title,
     category: row.category,
+    categories: buildCategories(row.category, row.categories_concat),
     level: normalizeLevel(row.level),
     description: row.description,
     requires: parseRequires(row.requires),
@@ -1198,6 +1306,7 @@ function rowToSummary(row: SpecimenSummaryRow): SpecimenSummary {
     thumbnail_key: row.thumbnail_key ?? "",
     author_handle: row.author_handle,
     tier: normalizeTier(row.tier),
+    visibility: normalizeVisibility(row.visibility),
     likes_count: Number(row.likes_count ?? 0),
     reactions: parseReactions(row.reactions_summary),
     views_count: Number(row.views_count ?? 0),
@@ -1246,6 +1355,41 @@ function parseRequires(raw: string | null): string[] {
   return [trimmed]; // legacy single value
 }
 
+// Build the primary-first category list for a SpecimenSummary. `primary` is the
+// specimens.category column; `concat` is the char(31)-joined full set from the
+// specimen_categories join table. Primary leads; the rest follow sorted for a
+// stable order. Falls back to [primary] when the join table has no rows yet
+// (e.g. a specimen created before the backfill ran).
+const CAT_SEP = String.fromCharCode(31);
+function buildCategories(primary: string, concat: string | null): string[] {
+  const all = (concat ?? "")
+    .split(CAT_SEP)
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const set = new Set(all);
+  if (primary) set.add(primary);
+  const rest = [...set].filter((c) => c !== primary).sort((a, b) => a.localeCompare(b));
+  return primary ? [primary, ...rest] : rest;
+}
+
+// Normalize a submitted categories list for storage: trim, drop empties, dedupe
+// (order-preserving, so the first stays primary), cap at MAX_CATEGORIES. If the
+// result is empty, fall back to a single `fallbackPrimary` so every specimen
+// always has at least one category. Whitelist validation happens in the route.
+function normalizeCategories(input: string[] | undefined, fallbackPrimary: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of input ?? []) {
+    const t = (v ?? "").trim();
+    if (!t || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+    if (out.length >= MAX_CATEGORIES) break;
+  }
+  if (out.length === 0 && fallbackPrimary) out.push(fallbackPrimary);
+  return out;
+}
+
 // Normalize a submitted requires list into the JSON string stored in D1: trim,
 // drop empties and the "none" sentinel, dedupe (order-preserving).
 function serializeRequires(input: string[] | undefined): string {
@@ -1263,6 +1407,11 @@ function serializeRequires(input: string[] | undefined): string {
 function normalizeTier(value: string): Tier {
   if (value === "verified" || value === "featured") return value;
   return "community";
+}
+
+function normalizeVisibility(value: string): Visibility {
+  if (value === "private" || value === "unlisted") return value;
+  return "public";
 }
 
 function normalizeTrustLevel(value: string): TrustLevel {

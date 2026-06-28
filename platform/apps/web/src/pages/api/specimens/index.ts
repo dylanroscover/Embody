@@ -2,8 +2,11 @@ import { env } from "cloudflare:workers";
 import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
 import { parse as parseYaml } from "yaml";
 import {
+  DEFAULT_LICENSE,
+  MAX_CATEGORIES,
   SUBMIT_CATEGORIES,
   SUBMIT_LEVELS,
+  SUBMIT_LICENSE_VALUES,
   SUBMIT_REQUIRES,
   type Level,
   type SubmitRequest,
@@ -141,8 +144,9 @@ export const POST: APIRoute = async ({ request }) => {
       tags: body.request.tags,
       license: body.request.license,
       level: body.request.level,
-      category: body.request.category,
+      categories: body.request.categories,
       requires: body.request.requires,
+      visibility: body.request.visibility,
       tdnR2Key: blob.key,
       tdnSha256: blob.sha256,
       sizeBytes: byteLength(body.request.tdn),
@@ -199,7 +203,10 @@ async function readSubmitRequest(
 
   const title = readString(raw.title).trim();
   const description = readString(raw.description).trim();
-  const license = readString(raw.license).trim() || "CC-BY-4.0";
+  // License is a fixed dropdown vocabulary; coerce anything off-whitelist to the
+  // default rather than rejecting (it is not security-relevant).
+  const rawLicense = readString(raw.license).trim();
+  const license = SUBMIT_LICENSE_VALUES.includes(rawLicense) ? rawLicense : DEFAULT_LICENSE;
   const tdn = readString(raw.tdn);
   const turnstileToken = readString(raw.turnstileToken);
   const tags = Array.isArray(raw.tags)
@@ -225,8 +232,29 @@ async function readSubmitRequest(
     };
   }
 
-  const category = readString(raw.category).trim();
-  if (category && !SUBMIT_CATEGORIES.includes(category)) {
+  // categories: 1..MAX_CATEGORIES from the whitelist; the first is the primary.
+  // Accept a legacy single `category` string (coerced to a one-element list).
+  const rawCategories = Array.isArray(raw.categories)
+    ? raw.categories
+    : typeof raw.category === "string" && raw.category.trim()
+      ? [raw.category]
+      : [];
+  const categories = [
+    ...new Set(
+      rawCategories
+        .filter((c): c is string => typeof c === "string")
+        .map((c) => c.trim())
+        .filter(Boolean)
+    )
+  ];
+  if (categories.length === 0) {
+    return { ok: false, detail: "at least one category is required." };
+  }
+  if (categories.length > MAX_CATEGORIES) {
+    return { ok: false, detail: `choose at most ${MAX_CATEGORIES} categories.` };
+  }
+  const unknownCategory = categories.find((c) => !SUBMIT_CATEGORIES.includes(c));
+  if (unknownCategory) {
     return {
       ok: false,
       detail: `category must be one of: ${SUBMIT_CATEGORIES.join(", ")}.`
@@ -259,6 +287,11 @@ async function readSubmitRequest(
 
   const thumbnail = typeof raw.thumbnail === "string" ? raw.thumbnail : undefined;
 
+  // Initial visibility: only the binary public/private is accepted; anything
+  // else (or absent) defaults to 'private' so a new upload is a draft until the
+  // author chooses to publish it.
+  const visibility = raw.visibility === "public" ? "public" : "private";
+
   return {
     ok: true,
     request: {
@@ -267,10 +300,11 @@ async function readSubmitRequest(
       tags,
       license: license.slice(0, 80),
       level: level as Level,
-      category,
+      categories,
       requires,
       tdn,
       thumbnail,
+      visibility,
       turnstileToken
     }
   };

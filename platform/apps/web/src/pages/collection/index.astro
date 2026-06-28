@@ -130,10 +130,12 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
               <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
             </button>
             <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-category" hidden>
+              <li class="dd__search-row" role="presentation"><input class="dd__search" type="search" placeholder="" aria-label="Search categories" data-dd-search /></li>
               <li class="dd__opt" role="option" data-value="" aria-selected={!activeCategory}>all</li>
               {facets.categories.map((value) => (
                 <li class="dd__opt" role="option" data-value={value} aria-selected={value === activeCategory}>{value}</li>
               ))}
+              <li class="dd__empty" role="presentation" hidden>no matches.</li>
             </ul>
             <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-category>
               <option value="" selected={!activeCategory}>all</option>
@@ -175,10 +177,12 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
                 <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
               </button>
               <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-author" hidden>
+                <li class="dd__search-row" role="presentation"><input class="dd__search" type="search" placeholder="" aria-label="Search contributors" data-dd-search /></li>
                 <li class="dd__opt" role="option" data-value="" aria-selected={!activeAuthor}>all</li>
                 {facets.authors.map((value) => (
                   <li class="dd__opt" role="option" data-value={value} aria-selected={value === activeAuthor}>@{value}</li>
                 ))}
+                <li class="dd__empty" role="presentation" hidden>no matches.</li>
               </ul>
               <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-author>
                 <option value="" selected={!activeAuthor}>all</option>
@@ -283,7 +287,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
             data-href={`/c/${specimen.slug}`}
             data-copied={specimen.copies_count}
             data-copies={specimen.copies_count}
-            data-search={`${specimen.name} ${specimen.description} ${specimen.category} ${specimen.level} ${specimen.requires}`.toLowerCase()}
+            data-search={`${specimen.name} ${specimen.description} ${specimen.categories.join(" ")} ${specimen.level} ${specimen.requires}`.toLowerCase()}
           >
             <div class="specimen-card__cover">
               <SpecimenCover
@@ -299,6 +303,9 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
               <div class="badge-row">
                 <span class="badge" title={specimen.level}>{diffAbbr(specimen.level)}</span>
                 <span class="badge specimen-category">{specimen.category}</span>
+                {specimen.categories.length > 1 && (
+                  <span class="badge specimen-category" title={specimen.categories.slice(1).join(", ")}>+{specimen.categories.length - 1}</span>
+                )}
                 <span class="badge license">CC-BY</span>
 
                 <button
@@ -624,7 +631,11 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       d.slice(0, 3).toUpperCase();
 
     function buildCard(s: SpecimenSummary): HTMLElement {
-      const search = `${s.name} ${s.description} ${s.category} ${s.level} ${s.requires}`.toLowerCase();
+      const cats = s.categories?.length ? s.categories : [s.category];
+      const search = `${s.name} ${s.description} ${cats.join(" ")} ${s.level} ${s.requires}`.toLowerCase();
+      const moreCats = cats.length > 1
+        ? `<span class="badge specimen-category" title="${esc(cats.slice(1).join(", "))}">+${cats.length - 1}</span>`
+        : "";
       const uploaded = Boolean(s.thumbnail_key);
       const baked = uploaded || BAKED_THUMBS.has(s.slug);
       const thumb = uploaded
@@ -667,6 +678,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
           <div class="badge-row">
             <span class="badge" title="${esc(s.level)}">${esc(diffAbbr(s.level))}</span>
             <span class="badge specimen-category">${esc(s.category)}</span>
+            ${moreCats}
             <span class="badge license">CC-BY</span>
             <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Embody it -- copy ${esc(s.name)}'s TDN for TouchDesigner" title="Embody it -- copy this specimen's TDN for your agent">
               <svg class="card-copy__icon card-copy__icon--copy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
@@ -835,6 +847,29 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
       const opts = Array.from(dd.querySelectorAll(".dd__opt")) as HTMLElement[];
       if (!btn || !menu || !valEl || !native) return;
 
+      // Optional search filter (only on dropdowns that render a .dd__search, e.g.
+      // category + contributor). Hides non-matching options; never steals focus.
+      const ddSearch = dd.querySelector(".dd__search") as HTMLInputElement | null;
+      const ddEmpty = dd.querySelector(".dd__empty") as HTMLElement | null;
+      const filterOpts = (q: string): void => {
+        const needle = q.trim().toLowerCase();
+        let any = false;
+        opts.forEach((o) => {
+          const match = !needle || (o.textContent || "").toLowerCase().includes(needle);
+          o.hidden = !match;
+          if (match) any = true;
+        });
+        if (ddEmpty) ddEmpty.hidden = any;
+      };
+      if (ddSearch) {
+        ddSearch.addEventListener("input", () => filterOpts(ddSearch.value));
+        ddSearch.addEventListener("keydown", (e: KeyboardEvent) => {
+          if (e.key === "Enter") e.preventDefault();
+          else if (e.key === "Escape") { e.preventDefault(); close(); btn.focus(); }
+        });
+        ddSearch.addEventListener("click", (e) => e.stopPropagation());
+      }
+
       // Give every option a stable id so the listbox can name the ACTIVE option
       // via aria-activedescendant (the focus stays on the button; this is how a
       // screen reader announces which option is highlighted without moving DOM
@@ -865,6 +900,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
         dd.setAttribute("data-open", "");
         menu.hidden = false;
         btn.setAttribute("aria-expanded", "true");
+        if (ddSearch) { ddSearch.value = ""; filterOpts(""); }
         if (highlightSelected) {
           // Open with the currently-selected option highlighted (or the first).
           const sel = opts.findIndex((o) => o.getAttribute("aria-selected") === "true");
@@ -876,6 +912,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
         closeDropdown(dd);
       };
       const choose = (opt: HTMLElement) => {
+        if (opt.hidden) return;
         native.value = opt.getAttribute("data-value") || "";
         native.dispatchEvent(new Event("change", { bubbles: true }));
         valEl.textContent = opt.textContent;
@@ -1229,6 +1266,38 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
   .dd__opt[aria-selected="true"] {
     color: var(--accent);
   }
+
+  .dd__opt[hidden] { display: none; }
+
+  /* Sticky search field at the top of the category / contributor menus. */
+  .dd__search-row {
+    position: sticky;
+    top: -0.3rem;
+    margin: -0.3rem -0.3rem 0.3rem;
+    padding: 0.3rem;
+    background: var(--bg-elevated, #14181a);
+  }
+  .dd__search {
+    width: 100%;
+    padding: 0.4rem 0.6rem 0.4rem 1.9rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg)
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='14'%20height='14'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23889'%20stroke-width='2'%20stroke-linecap='round'%3E%3Ccircle%20cx='11'%20cy='11'%20r='7'/%3E%3Cpath%20d='M21%2021l-4.3-4.3'/%3E%3C/svg%3E")
+      no-repeat left 0.6rem center;
+    background-size: 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .dd__search::placeholder { color: var(--text-faint); }
+  .dd__search:focus { outline: none; border-color: var(--accent); }
+  .dd__empty {
+    padding: 0.5rem 0.7rem;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  .dd__empty[hidden] { display: none; }
 
   /* ---- Icon view toggle (LIST left, GALLERY right) ---- */
   .view-toggle {

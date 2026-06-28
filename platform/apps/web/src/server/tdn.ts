@@ -39,9 +39,13 @@ export function parseTdnYaml(raw: string | null): Record<string, unknown> | null
 export async function getParsedTdnForSlug(
   db: D1Database,
   blobs: R2Bucket,
-  slug: string
+  slug: string,
+  // Forwarded to getCurrentTdnBlobForSlug: when set to the signed-in user's id,
+  // the author can resolve their OWN private draft's network (for the specimen
+  // page preview / edit prefill). Unset = public only (the public /tdn + /copy).
+  viewerId?: string | null
 ): Promise<ParsedTdn | null> {
-  const blob = await getCurrentTdnBlobForSlug(db, slug);
+  const blob = await getCurrentTdnBlobForSlug(db, slug, viewerId);
   if (!blob) return null;
 
   const raw = await getTdn(blobs, blob.key);

@@ -8,6 +8,7 @@ import {
   type UserProfile
 } from "../../server/db";
 import { emailEnabled, type EmailEnv } from "../../server/email";
+import { resultImage } from "../../lib/specimenThumb";
 
 export const prerender = false;
 
@@ -30,7 +31,9 @@ if (handle) {
 
   if (profile) {
     try {
-      specimens = await listSpecimensByAuthor(env.DB, profile.handle);
+      // Pass the viewer id so a user viewing their OWN profile also sees their
+      // private drafts (badged below); visitors see only the public set.
+      specimens = await listSpecimensByAuthor(env.DB, profile.handle, Astro.locals.user?.id);
     } catch {
       specimens = [];
     }
@@ -48,6 +51,16 @@ const avatarInitial = profile ? initialFor(profile.handle) : "?";
 // The viewer can edit the avatar only on their OWN profile.
 const viewer = Astro.locals.user;
 const isOwn = Boolean(viewer && profile && viewer.handle === profile.handle);
+
+// Split the author's specimens into public + private groups, each its own
+// labeled section. Private specimens are only ever in this list for the owner
+// (the query scopes them by viewer id), so visitors just see the public group.
+const publicSpecimens = specimens.filter((s) => (s.visibility ?? "public") === "public");
+const privateSpecimens = specimens.filter((s) => s.visibility && s.visibility !== "public");
+const specimenGroups = [
+  { key: "public", label: "public specimens", items: publicSpecimens },
+  { key: "private", label: "private specimens", items: privateSpecimens }
+].filter((g) => g.items.length > 0);
 
 function initialFor(value: string): string {
   const cleaned = value.replace(/[^a-z0-9]/gi, "");
@@ -112,7 +125,7 @@ function pluralize(count: number, singular: string): string {
             )}
           </div>
           <div class="profile-meta">
-            <p class="eyebrow">contributor</p>
+            <p class="eyebrow">{specimens.length > 0 ? "contributor" : "member"}</p>
             {profile.display_name ? (
               <Fragment>
                 <h1>{profile.display_name}</h1>
@@ -162,40 +175,112 @@ function pluralize(count: number, singular: string): string {
               {(profile.trust_level === "curator" || profile.trust_level === "admin") && (
                 <span class:list={["badge", `trust-${profile.trust_level}`]}>{profile.trust_level}</span>
               )}
-              {memberSince && <span class="badge">member since {memberSince}</span>}
+              {memberSince && (
+                <span class="badge">
+                  {specimens.length > 0 ? "contributor" : "member"} since {memberSince}
+                </span>
+              )}
             </div>
             <p class="stat-line">
               <strong>{pluralize(specimens.length, "specimen")}</strong>
               <span class="dot" aria-hidden="true">&middot;</span>
               <strong>{pluralize(totalCopies, "copy")}</strong> total
             </p>
+            <div class="profile-specimens" data-specimens data-view="list" data-owner={isOwn ? "" : undefined}>
+              {specimens.length > 0 ? (
+                specimenGroups.map((group, groupIndex) => (
+                  <section class="specimen-group" data-group={group.key}>
+                    <div class="specimen-group__head">
+                      <p class="eyebrow specimen-group__label">{group.label}</p>
+                      {groupIndex === 0 && (
+                        <div class="view-toggle" role="group" aria-label="View mode">
+                          <button type="button" class="view-toggle__btn is-on" data-view-set="list" aria-label="List view" title="List view">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                              <line x1="8" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="20" y2="12" /><line x1="8" y1="18" x2="20" y2="18" />
+                              <line x1="4" y1="6" x2="4" y2="6" /><line x1="4" y1="12" x2="4" y2="12" /><line x1="4" y1="18" x2="4" y2="18" />
+                            </svg>
+                          </button>
+                          <button type="button" class="view-toggle__btn" data-view-set="gallery" aria-label="Gallery view" title="Gallery view">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <ul class="specimen-list">
+                      {group.items.map((item) => (
+                        <li class="specimen-row pillar">
+                          <a class="specimen-row__main" href={`/c/${item.slug}`}>
+                            <img
+                              class="specimen-row__thumb"
+                              src={resultImage({ slug: item.slug, name: item.name, category: item.category, thumbnailKey: item.thumbnail_key }).src}
+                              width="64"
+                              height="36"
+                              loading="lazy"
+                              decoding="async"
+                              alt=""
+                            />
+                            <span class="specimen-row__name">{item.name}</span>
+                            <span class="specimen-row__cat mono">{item.category}</span>
+                          </a>
+                          <span class="badge specimen-row__level">{item.level}</span>
+                          <div class="badge-row specimen-row__badges">
+                            {item.requires.map((req) => (
+                              <span class="badge needs">needs {req}</span>
+                            ))}
+                            <span class="badge specimen-row__copies">{pluralize(item.copies_count, "copy")}</span>
+                          </div>
+                          {isOwn && (
+                            <div class="specimen-row__actions">
+                              <a class="specimen-row__action" href={`/c/${item.slug}/edit`} aria-label={`Edit ${item.name}`} title="Edit">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z" /><path d="M13.5 6.5l3 3" />
+                                </svg>
+                              </a>
+                              <button
+                                type="button"
+                                class="specimen-row__action specimen-row__action--delete"
+                                data-delete-specimen={item.slug}
+                                data-specimen-name={item.name}
+                                aria-label={`Delete ${item.name}`}
+                                title="Delete"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))
+              ) : (
+                <p class="muted empty-note">no specimens shared yet.</p>
+              )}
+            </div>
+            <script is:inline>
+              // Apply the saved view BEFORE the rows paint, so a persisted
+              // "gallery" preference doesn't flash the SSR default "list" first.
+              // Runs synchronously during parse -- the container + toggle buttons
+              // already exist above this point.
+              (function () {
+                try {
+                  var v = localStorage.getItem("embody:profile-view");
+                  if (v !== "list" && v !== "gallery") return;
+                  var shell = document.querySelector("[data-specimens]");
+                  if (shell) shell.setAttribute("data-view", v);
+                  var btns = document.querySelectorAll("[data-view-set]");
+                  for (var i = 0; i < btns.length; i++) {
+                    btns[i].classList.toggle("is-on", btns[i].getAttribute("data-view-set") === v);
+                  }
+                } catch (e) {}
+              })();
+            </script>
           </div>
         </div>
-      </section>
-
-      <section class="page-section tight specimen-section">
-        <p class="eyebrow">shared specimens</p>
-        {specimens.length > 0 ? (
-          <ul class="specimen-list">
-            {specimens.map((item) => (
-              <li class="specimen-row pillar">
-                <a class="specimen-row__main" href={`/c/${item.slug}`}>
-                  <span class="specimen-row__name">{item.name}</span>
-                  <span class="specimen-row__cat mono">{item.category}</span>
-                </a>
-                <div class="badge-row specimen-row__badges">
-                  <span class="badge">{item.level}</span>
-                  {item.requires.map((req) => (
-                    <span class="badge needs">needs {req}</span>
-                  ))}
-                  <span class="badge specimen-row__copies">{pluralize(item.copies_count, "copy")}</span>
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p class="muted empty-note">no public specimens shared yet.</p>
-        )}
       </section>
     </Base>
   ) : (
@@ -336,6 +421,10 @@ function pluralize(count: number, singular: string): string {
   }
 
   .profile-meta {
+    /* Fill the column (not content-sized) so the meta -- and the shared-specimens
+       list/gallery inside it -- keep a CONSTANT width regardless of which view is
+       active. Height changes between views; width does not. */
+    flex: 1;
     min-width: 0;
   }
 
@@ -359,6 +448,13 @@ function pluralize(count: number, singular: string): string {
     margin: -0.6rem 0 0;
     color: var(--text-muted);
     font-size: 1rem;
+  }
+
+  /* Breathing room between the handle/name block and the identity badges (the
+     "contributor since" badge). Direct child only -- the specimen rows now live
+     in this column too and carry their own .badge-row. */
+  .profile-meta > .badge-row {
+    margin-top: 1.5rem;
   }
 
   /* Owner-only identity + account editor (display name + handle + email), toggled
@@ -471,8 +567,65 @@ function pluralize(count: number, singular: string): string {
     color: var(--text);
   }
 
-  .specimen-section .eyebrow {
-    margin-bottom: 1.4rem;
+  /* Shared specimens now live in the meta column (aligned with the name), set
+     off from the identity block above. */
+  .profile-specimens {
+    margin-top: clamp(2rem, 4vw, 3rem);
+    /* Rounded card matching the rest of the app (mirrors the contribute form's
+       .submit-cols and the .pillar tokens). */
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+
+  /* Public / private specimen groups: each a labeled section. The first group's
+     head also carries the list/gallery toggle, inline with the label and
+     vertically centered. Groups stack with even breathing room between them. */
+  .specimen-group + .specimen-group {
+    margin-top: 1.6rem;
+  }
+  .specimen-group__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.85rem;
+    /* min-height of the toggle so a group WITHOUT the toggle (the 2nd group)
+       keeps the same label baseline rhythm as the first. */
+    min-height: 30px;
+  }
+  /* Beat `.profile-meta .eyebrow` (0,2,0) so the label has no bottom margin and
+     stays vertically centered against the toggle in the flex head. */
+  .specimen-group__head .specimen-group__label {
+    margin-bottom: 0;
+  }
+
+  /* List / gallery view toggle. */
+  .view-toggle {
+    display: inline-flex;
+    gap: 0.2rem;
+    padding: 0.2rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .view-toggle__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 26px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: color 140ms ease, background 140ms ease;
+  }
+  .view-toggle__btn:hover { color: var(--text-muted); }
+  .view-toggle__btn.is-on {
+    background: var(--accent-dim, rgba(110, 230, 104, 0.14));
+    color: var(--accent);
   }
 
   .specimen-list {
@@ -484,22 +637,109 @@ function pluralize(count: number, singular: string): string {
   }
 
   .specimen-row {
-    display: flex;
-    flex-wrap: wrap;
+    /* Grid columns so the badges + actions line up vertically across rows
+       (space-between centered the middle group, floating the badges by name
+       length). main | badges, plus an actions column on your own page. */
+    display: grid;
+    grid-template-columns: 1fr auto auto;
     align-items: center;
-    justify-content: space-between;
     gap: 0.85rem 1.25rem;
     padding: 1.05rem 1.25rem;
+    /* Inset against the elevated section card (rows would otherwise share the
+       container's background and read flat). */
+    background: var(--bg);
   }
+  [data-owner] .specimen-row {
+    grid-template-columns: 1fr auto auto auto;
+  }
+  /* Level badge gets its own column so levels line up regardless of word width
+     (ADVANCED vs INTERMEDIATE); left-aligned within the auto column. */
+  .specimen-row__level { justify-self: start; }
 
   .specimen-row__main {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     flex-wrap: wrap;
     gap: 0.35rem 0.85rem;
     min-width: 0;
     color: inherit;
     text-decoration: none;
+  }
+
+  .specimen-row__thumb {
+    flex: none;
+    width: 64px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--bg-code, #161e1a);
+    border: 1px solid var(--border-faint);
+  }
+
+  /* Owner-only edit / delete controls. */
+  .specimen-row__actions {
+    display: inline-flex;
+    gap: 0.3rem;
+    flex: none;
+  }
+  .specimen-row__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 140ms ease, border-color 140ms ease;
+  }
+  .specimen-row__action:hover { border-color: var(--accent); color: var(--accent); }
+  .specimen-row__action--delete:hover { border-color: #c46b6b; color: #c46b6b; }
+  /* Armed (first click): a second click confirms the delete. */
+  .specimen-row__action--delete.is-armed {
+    border-color: #c46b6b;
+    color: #ff9b9b;
+    background: rgba(196, 107, 107, 0.16);
+  }
+
+  /* Gallery view: a minimalist grid showing only the cover + title. */
+  [data-specimens][data-view="gallery"] .specimen-list {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+  }
+  [data-view="gallery"] .specimen-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  [data-view="gallery"] .specimen-row__main {
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 0;
+  }
+  [data-view="gallery"] .specimen-row__thumb {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    border: none;
+    border-radius: 0;
+  }
+  [data-view="gallery"] .specimen-row__name {
+    padding: 0.65rem 0.85rem 0.85rem;
+    font-size: 1rem;
+  }
+  [data-view="gallery"] .specimen-row__cat,
+  [data-view="gallery"] .specimen-row__level,
+  [data-view="gallery"] .specimen-row__badges,
+  [data-view="gallery"] .specimen-row__actions {
+    display: none;
   }
 
   .specimen-row__name {
@@ -527,6 +767,7 @@ function pluralize(count: number, singular: string): string {
 
   .specimen-row__badges {
     flex: none;
+    justify-content: flex-end;
   }
 
   .empty-note {
@@ -575,9 +816,10 @@ function pluralize(count: number, singular: string): string {
       align-items: flex-start;
     }
 
-    .specimen-row {
-      flex-direction: column;
-      align-items: flex-start;
+    .specimen-row,
+    [data-owner] .specimen-row {
+      grid-template-columns: 1fr;
+      justify-items: start;
     }
   }
 </style>
@@ -663,6 +905,59 @@ function pluralize(count: number, singular: string): string {
       }
     });
   }
+</script>
+
+<script>
+  // List <-> gallery view toggle, persisted across visits.
+  const specimens = document.querySelector<HTMLElement>("[data-specimens]");
+  if (specimens) {
+    const KEY = "embody:profile-view";
+    const setView = (v: string): void => {
+      specimens.setAttribute("data-view", v);
+      specimens.querySelectorAll<HTMLElement>("[data-view-set]").forEach((b) =>
+        b.classList.toggle("is-on", b.getAttribute("data-view-set") === v));
+      try { localStorage.setItem(KEY, v); } catch { /* private mode */ }
+    };
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(KEY); } catch { saved = null; }
+    if (saved === "gallery" || saved === "list") setView(saved);
+    specimens.querySelectorAll<HTMLElement>("[data-view-set]").forEach((b) =>
+      b.addEventListener("click", () => setView(b.getAttribute("data-view-set") ?? "list")));
+  }
+
+  // Owner delete: an inline "arm, then confirm" (no OS dialog). First click arms
+  // the button (turns red); a second click within a few seconds deletes the
+  // specimen and removes its row. Clicking away / waiting disarms it.
+  document.querySelectorAll<HTMLButtonElement>("[data-delete-specimen]").forEach((btn) => {
+    let armed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const disarm = (): void => {
+      armed = false;
+      btn.classList.remove("is-armed");
+      btn.title = "Delete";
+      if (timer) clearTimeout(timer);
+    };
+    btn.addEventListener("click", async () => {
+      const slug = btn.getAttribute("data-delete-specimen");
+      if (!slug) return;
+      if (!armed) {
+        armed = true;
+        btn.classList.add("is-armed");
+        btn.title = "Click again to delete";
+        timer = setTimeout(disarm, 3500);
+        return;
+      }
+      disarm();
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/specimens/${slug}`, { method: "DELETE" });
+        if (res.ok) btn.closest(".specimen-row")?.remove();
+        else btn.disabled = false;
+      } catch {
+        btn.disabled = false;
+      }
+    });
+  });
 </script>
 
 <script>

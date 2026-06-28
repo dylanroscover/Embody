@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_REQUIRES } from "@embody/contracts";
+import { DEFAULT_LICENSE, MAX_CATEGORIES, SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_LICENSE_VALUES, SUBMIT_REQUIRES } from "@embody/contracts";
 import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
 import { parse as parseYaml } from "yaml";
 import type { APIRoute } from "astro";
@@ -9,13 +9,14 @@ import {
   getCurrentTdnBlobForSlug,
   getSpecimenBySlug,
   getSpecimenForEdit,
+  setSpecimenVisibility,
   updateSpecimenMetadata,
   type SpecimenEditData
 } from "../../../server/db";
 import { getParsedTdnForSlug } from "../../../server/tdn";
 import { requireUser } from "../../../server/auth";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
-import { byteLength, getTdn, putTdn } from "../../../server/r2";
+import { byteLength, getTdn, putThumbnail, putTdn } from "../../../server/r2";
 
 export const prerender = false;
 
@@ -56,7 +57,9 @@ export const PUT: APIRoute = async ({ params, request }) => {
     const auth = await resolveOwner(request, slug);
     if (!auth.ok) return auth.response;
 
-    const body = await readEditRequest(request);
+    // Existing categories are also accepted on edit (beyond the current
+    // whitelist) so a specimen carrying a retired category can still be saved.
+    const body = await readEditRequest(request, auth.specimen.categories, auth.specimen.license);
     if (!body.ok) {
       return errorResponse(400, "invalid_request", body.detail);
     }
@@ -65,7 +68,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
     // replaces the whole row). Overwritten with the new network below if it changes.
     let parsedTdn: Record<string, unknown> | null = null;
     try {
-      parsedTdn = (await getParsedTdnForSlug(env.DB, env.BLOBS, slug))?.tdn ?? null;
+      parsedTdn = (await getParsedTdnForSlug(env.DB, env.BLOBS, slug, auth.specimen.authorId))?.tdn ?? null;
     } catch {
       parsedTdn = null;
     }
@@ -78,7 +81,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
       const newTdn = body.value.tdn.trim();
       let currentText: string | null = null;
       try {
-        const blob = await getCurrentTdnBlobForSlug(env.DB, slug);
+        const blob = await getCurrentTdnBlobForSlug(env.DB, slug, auth.specimen.authorId);
         currentText = blob ? await getTdn(env.BLOBS, blob.key) : null;
       } catch {
         currentText = null;
@@ -134,6 +137,15 @@ export const PUT: APIRoute = async ({ params, request }) => {
       }
     }
 
+    // Optional new cover image. Store it in R2 first; putThumbnail returns null
+    // on a missing/malformed/oversized payload, in which case thumbnailKey stays
+    // undefined and the existing thumbnail is left untouched.
+    let thumbnailKey: string | undefined;
+    if (body.value.thumbnail) {
+      const stored = await putThumbnail(env.BLOBS, body.value.thumbnail);
+      if (stored) thumbnailKey = stored.key;
+    }
+
     await updateSpecimenMetadata(env.DB, {
       specimenId: auth.specimen.id,
       slug: auth.specimen.slug,
@@ -143,13 +155,52 @@ export const PUT: APIRoute = async ({ params, request }) => {
       tags: body.value.tags,
       license: body.value.license,
       level: body.value.level,
-      category: body.value.category,
+      categories: body.value.categories,
       requires: body.value.requires,
+      thumbnailKey,
       parsedTdn
     });
 
     return jsonResponse({ updated: true, slug: auth.specimen.slug, version: newVersion });
   } catch {
+    return serverErrorResponse();
+  }
+};
+
+// Owner-only publish toggle. Flips a specimen between 'private' (the author's
+// draft, hidden from the Collection) and 'public' (live). This is the lightweight
+// one-click action behind the Publish / Make-private buttons -- distinct from PUT,
+// which is a full metadata/network edit. Only the binary public<->private states
+// are user-settable here; 'unlisted' stays a moderator-only state (admin route).
+export const PATCH: APIRoute = async ({ params, request }) => {
+  try {
+    const slug = params.slug;
+    if (!slug) {
+      return errorResponse(400, "invalid_slug", "A specimen slug is required.");
+    }
+
+    const auth = await resolveOwner(request, slug);
+    if (!auth.ok) return auth.response;
+
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      return errorResponse(400, "invalid_body", "A JSON body is required.");
+    }
+    const visibility = (raw as { visibility?: unknown })?.visibility;
+    if (visibility !== "public" && visibility !== "private") {
+      return errorResponse(
+        400,
+        "invalid_visibility",
+        "visibility must be 'public' or 'private'."
+      );
+    }
+
+    await setSpecimenVisibility(env.DB, auth.specimen.id, visibility);
+    return jsonResponse({ updated: true, slug: auth.specimen.slug, visibility });
+  } catch (error) {
+    console.error("PATCH /api/specimens/[slug] failed", error);
     return serverErrorResponse();
   }
 };
@@ -231,16 +282,21 @@ interface EditValue {
   tags: string[];
   license: string;
   level: string;
-  category: string;
+  categories: string[];
   requires: string[];
   /** New TDN body. Present only when the owner edited the network. */
   tdn?: string;
+  /** New thumbnail as a data URL. Present only when the owner picked an image. */
+  thumbnail?: string;
 }
 
 // Validate the edit payload. Mirrors readSubmitRequest's whitelist rules for the
-// frozen vocabularies, minus tdn/turnstile/thumbnail (the body is not editable).
+// frozen vocabularies, minus turnstile. tdn + thumbnail are optional -- supplied
+// only when the owner actually changed the network or the cover image.
 async function readEditRequest(
-  request: Request
+  request: Request,
+  existingCategories: string[] = [],
+  existingLicense: string = DEFAULT_LICENSE
 ): Promise<{ ok: true; value: EditValue } | { ok: false; detail: string }> {
   let raw: unknown;
   try {
@@ -257,7 +313,14 @@ async function readEditRequest(
   if (!title) return { ok: false, detail: "title is required." };
 
   const description = readString(raw.description).trim();
-  const license = readString(raw.license).trim() || "CC-BY-4.0";
+  // License is a fixed dropdown vocabulary. Accept a whitelisted value, or the
+  // specimen's CURRENT license (so a legacy/retired value survives an edit);
+  // anything else preserves the existing license rather than silently changing it.
+  const rawLicense = readString(raw.license).trim();
+  const license =
+    SUBMIT_LICENSE_VALUES.includes(rawLicense) || rawLicense === existingLicense
+      ? rawLicense
+      : existingLicense;
   const tags = Array.isArray(raw.tags)
     ? raw.tags
         .filter((tag): tag is string => typeof tag === "string")
@@ -271,8 +334,33 @@ async function readEditRequest(
     return { ok: false, detail: `level must be one of: ${SUBMIT_LEVELS.join(", ")}.` };
   }
 
-  const category = readString(raw.category).trim();
-  if (category && !SUBMIT_CATEGORIES.includes(category)) {
+  // categories: 1..MAX_CATEGORIES from the whitelist (legacy single `category`
+  // coerced to one item). The first is the primary.
+  const rawCategories = Array.isArray(raw.categories)
+    ? raw.categories
+    : typeof raw.category === "string" && raw.category.trim()
+      ? [raw.category]
+      : [];
+  const categories = [
+    ...new Set(
+      rawCategories
+        .filter((c): c is string => typeof c === "string")
+        .map((c) => c.trim())
+        .filter(Boolean)
+    )
+  ];
+  if (categories.length === 0) {
+    return { ok: false, detail: "at least one category is required." };
+  }
+  if (categories.length > MAX_CATEGORIES) {
+    return { ok: false, detail: `choose at most ${MAX_CATEGORIES} categories.` };
+  }
+  // Allow the current whitelist plus any category the specimen already carries
+  // (so a retired taxonomy value can be preserved through an edit), but nothing
+  // arbitrary beyond that.
+  const allowedCategories = new Set<string>([...SUBMIT_CATEGORIES, ...existingCategories]);
+  const unknownCategory = categories.find((c) => !allowedCategories.has(c));
+  if (unknownCategory) {
     return { ok: false, detail: `category must be one of: ${SUBMIT_CATEGORIES.join(", ")}.` };
   }
 
@@ -299,6 +387,10 @@ async function readEditRequest(
   // validation (parse + scan) happens in the PUT handler when it actually changed.
   const tdn = typeof raw.tdn === "string" ? raw.tdn : undefined;
 
+  // Optional replacement thumbnail (a client-resized data URL). putThumbnail
+  // re-validates the content type + byte cap and ignores anything malformed.
+  const thumbnail = typeof raw.thumbnail === "string" ? raw.thumbnail : undefined;
+
   return {
     ok: true,
     value: {
@@ -307,9 +399,10 @@ async function readEditRequest(
       tags,
       license: license.slice(0, 80),
       level,
-      category,
+      categories,
       requires,
-      tdn
+      tdn,
+      thumbnail
     }
   };
 }

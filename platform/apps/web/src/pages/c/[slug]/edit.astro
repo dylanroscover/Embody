@@ -1,6 +1,6 @@
 ---
 import { env } from "cloudflare:workers";
-import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_REQUIRE_GROUPS } from "@embody/contracts";
+import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_LICENSES, SUBMIT_REQUIRE_GROUPS } from "@embody/contracts";
 import Base from "../../../layouts/Base.astro";
 import TdnYamlEditor from "../../../components/TdnYamlEditor";
 import { getCurrentTdnBlobForSlug, getSpecimenForEdit } from "../../../server/db";
@@ -30,16 +30,32 @@ if (specimen.authorId !== user.id) {
 // Pre-fill the editor with the current network text (raw TDN exactly as stored).
 let currentTdn = "";
 try {
-  const blob = await getCurrentTdnBlobForSlug(env.DB, slug);
+  // user.id (ownership verified above) so a private draft's network prefills too.
+  const blob = await getCurrentTdnBlobForSlug(env.DB, slug, user.id);
   if (blob) currentTdn = (await getTdn(env.BLOBS, blob.key)) ?? "";
 } catch {
   currentTdn = "";
 }
 
 const levelOptions = SUBMIT_LEVELS;
-const categoryOptions = SUBMIT_CATEGORIES;
+// Offer the whitelist PLUS any category this specimen already carries that the
+// current taxonomy no longer lists, so editing never silently drops (or blocks
+// saving) a legacy/retired category. Stored extras sort after the whitelist.
+const categoryOptions = [
+  ...SUBMIT_CATEGORIES,
+  ...specimen.categories.filter((c) => !SUBMIT_CATEGORIES.includes(c))
+];
 const requireGroups = SUBMIT_REQUIRE_GROUPS;
 const tagsValue = specimen.tags.join(", ");
+// License dropdown options. If the specimen carries a legacy license outside the
+// current whitelist (e.g. a bare "CC-BY"), prepend it so the edit never silently
+// changes it -- the server also accepts the existing value through.
+const currentLicense = specimen.license || "CC-BY-4.0";
+const licenseOptions = SUBMIT_LICENSES.some((l) => l.value === currentLicense)
+  ? SUBMIT_LICENSES
+  : [{ value: currentLicense, label: `${currentLicense} (current)` }, ...SUBMIT_LICENSES];
+const currentLicenseLabel =
+  licenseOptions.find((l) => l.value === currentLicense)?.label ?? currentLicense;
 ---
 
 <Base
@@ -54,7 +70,7 @@ const tagsValue = specimen.tags.join(", ");
       capability scan and saves a new version of the network.
     </p>
 
-    <form class="submit-form" data-edit-form data-slug={specimen.slug} novalidate>
+    <form class="submit-form" data-edit-form data-slug={specimen.slug} data-tdn-prefilled={currentTdn.trim() ? "1" : "0"} novalidate>
       <div class="submit-cols">
       <div class="submit-col submit-col--fields">
       <label class="submit-field">
@@ -91,24 +107,24 @@ const tagsValue = specimen.tags.join(", ");
         </div>
       </div>
       <div class="submit-field">
-        <span class="submit-field__label" id="ddlbl-category">category</span>
-        <div class="dd" data-dd>
-          <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-category dd-val-category">
-            <span class="dd__val" id="dd-val-category">{specimen.category}</span>
+        <span class="submit-field__label" id="ddlbl-categories">categories <em>(max 3)</em></span>
+        <div class="msdd" data-msdd data-msdd-max="3">
+          <button type="button" class="dd__btn msdd__btn" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="ddlbl-categories msdd-summary-categories" data-msdd-toggle>
+            <span class="dd__val msdd__summary" id="msdd-summary-categories" data-msdd-summary>none</span>
             <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
           </button>
-          <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-category" hidden>
-            <li class="dd__search-row" role="presentation"><input class="dd__search" type="search" placeholder="search..." aria-label="Search categories" data-dd-search /></li>
-            {categoryOptions.map((value) => (
-              <li class="dd__opt" role="option" data-value={value} aria-selected={value === specimen.category ? "true" : "false"}>{value}</li>
-            ))}
-            <li class="dd__empty" role="presentation" hidden>no matches.</li>
-          </ul>
-          <select class="dd__native" name="category" aria-hidden="true" tabindex="-1">
-            {categoryOptions.map((value) => (
-              <option value={value} selected={value === specimen.category}>{value}</option>
-            ))}
-          </select>
+          <div class="msdd__panel" data-msdd-panel hidden>
+            <input class="msdd__search" type="search" placeholder="" aria-label="Search categories" data-msdd-search />
+            <div class="msdd__group" data-msdd-group>
+              {categoryOptions.map((value) => (
+                <label class="msdd__opt" data-msdd-opt data-label={value.toLowerCase()}>
+                  <input type="checkbox" name="categories" value={value} checked={specimen.categories.includes(value)} data-msdd-checkbox />
+                  <span class="msdd__opt-label">{value}</span>
+                </label>
+              ))}
+            </div>
+            <p class="msdd__empty" data-msdd-empty hidden>no matches.</p>
+          </div>
         </div>
       </div>
       <div class="submit-field">
@@ -119,7 +135,7 @@ const tagsValue = specimen.tags.join(", ");
             <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
           </button>
           <div class="msdd__panel" data-msdd-panel hidden>
-            <input class="msdd__search" type="search" placeholder="search requirements..." aria-label="Search requirements" data-msdd-search />
+            <input class="msdd__search" type="search" placeholder="" aria-label="Search requirements" data-msdd-search />
             {requireGroups.map((g) => (
               <div class="msdd__group" data-msdd-group>
                 <p class="msdd__group-label">{g.group}</p>
@@ -136,9 +152,32 @@ const tagsValue = specimen.tags.join(", ");
         </div>
       </div>
       </div>
+      <div class="submit-field">
+        <span class="submit-field__label" id="ddlbl-license">license</span>
+        <div class="dd" data-dd>
+          <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-license dd-val-license">
+            <span class="dd__val" id="dd-val-license">{currentLicenseLabel}</span>
+            <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+          </button>
+          <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-license" hidden>
+            {licenseOptions.map((l) => (
+              <li class="dd__opt" role="option" data-value={l.value} aria-selected={l.value === currentLicense ? "true" : "false"}>{l.label}</li>
+            ))}
+          </ul>
+          <select class="dd__native" name="license" aria-hidden="true" tabindex="-1">
+            {licenseOptions.map((l) => (
+              <option value={l.value} selected={l.value === currentLicense}>{l.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
       <label class="submit-field">
-        <span>license</span>
-        <input type="text" name="license" value={specimen.license} maxlength="80" />
+        <span>thumbnail <em>(optional - replaces the current cover, resized to 640x360)</em></span>
+        <span class="submit-file" data-file>
+          <input type="file" name="thumbnail" accept="image/png,image/jpeg,image/webp" class="submit-file__input" data-file-input />
+          <span class="submit-file__btn" aria-hidden="true">choose image</span>
+          <span class="submit-file__name" data-file-name>keep current</span>
+        </span>
       </label>
       </div>
 
@@ -150,10 +189,12 @@ const tagsValue = specimen.tags.join(", ");
         </small>
         <TdnYamlEditor client:load name="tdn" initialValue={currentTdn} />
       </div>
-      <p class="submit-status" data-edit-status role="status"></p>
-      <button type="submit" class="btn btn--primary submit-go" data-edit-go aria-disabled="true">
-        save changes
-      </button>
+      </div>
+      <div class="submit-footer">
+        <p class="submit-status" data-edit-status role="status"></p>
+        <button type="submit" class="btn btn--primary submit-go" data-edit-go aria-disabled="true">
+          save changes
+        </button>
       </div>
       </div>
     </form>
@@ -178,6 +219,39 @@ const tagsValue = specimen.tags.join(", ");
     statusBox.dataset.kind = kind;
   }
 
+  // Mirror the chosen filename into the styled file row (the real <input> is
+  // visually hidden). data-has-file switches it from faint placeholder to text.
+  const fileInput = document.querySelector("[data-file-input]") as HTMLInputElement | null;
+  const fileName = document.querySelector("[data-file-name]") as HTMLElement | null;
+  fileInput?.addEventListener("change", () => {
+    if (!fileName) return;
+    const picked = fileInput.files && fileInput.files[0];
+    fileName.textContent = picked ? picked.name : "keep current";
+    if (picked) fileName.setAttribute("data-has-file", "");
+    else fileName.removeAttribute("data-has-file");
+  });
+
+  // Resize a chosen thumbnail to a 640x360 (16:9) cover-cropped WebP on the
+  // client, so a multi-MB original never gets uploaded for a small card slot.
+  // The API + R2 also enforce WebP + a byte cap as defense in depth.
+  async function thumbDataUrl(file: File): Promise<string> {
+    const bitmap = await createImageBitmap(file);
+    const W = 640;
+    const H = 360;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas unavailable");
+    // cover: scale to fill the 16:9 box, then center-crop the overflow.
+    const scale = Math.max(W / bitmap.width, H / bitmap.height);
+    const dw = bitmap.width * scale;
+    const dh = bitmap.height * scale;
+    ctx.drawImage(bitmap, (W - dw) / 2, (H - dh) / 2, dw, dh);
+    bitmap.close();
+    return canvas.toDataURL("image/webp", 0.82);
+  }
+
   function setFieldError(name: string, message: string) {
     const el = form?.querySelector(`[data-error-for="${name}"]`) as HTMLElement | null;
     if (!el) return;
@@ -194,8 +268,12 @@ const tagsValue = specimen.tags.join(", ");
 
   // The TDN editor (React island) validates on every edit and broadcasts a
   // bubbling `tdn:change` with its validity, so "save changes" stays greyed while
-  // the network is unparseable.
-  let tdnValid = false;
+  // the network is unparseable. Seed the flag from the SERVER-prefilled content
+  // (data-tdn-prefilled): the stored network was already valid when saved, so a
+  // rename that never touches the editor still passes the gate even if the
+  // island's mount event fires before this listener attaches (a race that would
+  // otherwise leave the button permanently greyed and silently block saves).
+  let tdnValid = form?.dataset.tdnPrefilled === "1";
   form?.addEventListener("tdn:change", (event) => {
     tdnValid = Boolean((event as CustomEvent).detail?.valid);
     refreshReady();
@@ -235,15 +313,42 @@ const tagsValue = specimen.tags.join(", ");
       .map((tag) => tag.trim())
       .filter(Boolean);
 
+    // Categories: at least one is required (max 3 is enforced by the picker).
+    const categoriesSel = data.getAll("categories").map(String);
+    if (categoriesSel.length === 0) {
+      setStatus("choose at least one category.", "error");
+      return;
+    }
+
+    // Optional replacement thumbnail: resize to a 640x360 WebP on the client, the
+    // same as contribute. Omitted from the payload when no new file is chosen, so
+    // the server leaves the current cover untouched.
+    let thumbnail: string | undefined;
+    const thumbFile = data.get("thumbnail");
+    if (thumbFile && typeof thumbFile === "object" && "size" in thumbFile && thumbFile.size > 0) {
+      if (thumbFile.size > 8_000_000) {
+        setStatus("thumbnail source is too large (max 8 MB).", "error");
+        return;
+      }
+      try {
+        thumbnail = await thumbDataUrl(thumbFile as File);
+      } catch (err) {
+        console.error("thumbnail resize failed", err);
+        setStatus("could not process the thumbnail image.", "error");
+        return;
+      }
+    }
+
     const payload = {
       title,
       description: String(data.get("description") || "").trim(),
       tags,
       license: String(data.get("license") || "CC-BY-4.0").trim() || "CC-BY-4.0",
       level: String(data.get("level") || "intermediate"),
-      category: String(data.get("category") || ""),
+      categories: categoriesSel,
       requires: data.getAll("requires").map(String),
-      tdn: String(data.get("tdn") || "")
+      tdn: String(data.get("tdn") || ""),
+      ...(thumbnail ? { thumbnail } : {})
     };
 
     goBtn.disabled = true;
@@ -288,9 +393,16 @@ const tagsValue = specimen.tags.join(", ");
   // native select's value and dispatches a 'change' event, so the submitted
   // value tracks the visible choice. Mirrors contribute.astro's [data-dd].
 
-  // Multi-select grouped "requires" picker. Checkboxes (server-rendered with the
-  // specimen's current selection checked) carry name="requires" so getAll reads
-  // them; the trigger summary reflects the count.
+  // One-open-at-a-time across BOTH dropdown systems (.dd single-selects and the
+  // .msdd multi-selects). Opening any dropdown broadcasts; the rest close.
+  const DD_OPEN_EVENT = "edit:dropdown-open";
+  const broadcastDropdownOpen = (source: Element): void => {
+    document.dispatchEvent(new CustomEvent(DD_OPEN_EVENT, { detail: { source } }));
+  };
+
+  // Multi-select grouped pickers (requires + categories). Checkboxes (server-
+  // rendered with the specimen's current selection checked) carry their field
+  // name so getAll reads them; the trigger summary reflects the count.
   document.querySelectorAll<HTMLElement>("[data-msdd]").forEach((msdd) => {
     const toggle = msdd.querySelector("[data-msdd-toggle]") as HTMLButtonElement | null;
     const panel = msdd.querySelector("[data-msdd-panel]") as HTMLElement | null;
@@ -305,6 +417,8 @@ const tagsValue = specimen.tags.join(", ");
     const tg = toggle;
     const pn = panel;
     const sm = summary;
+    // Optional selection cap (e.g. categories allow at most 3). Infinity = no cap.
+    const max = Number(msdd.getAttribute("data-msdd-max")) || Infinity;
     let open = false;
 
     const refresh = (): void => {
@@ -315,6 +429,11 @@ const tagsValue = specimen.tags.join(", ");
           : picked.length === 1
             ? picked[0] ?? ""
             : `${picked.length} selected`;
+      // At the cap, lock the remaining unchecked boxes; unlock below the cap.
+      if (Number.isFinite(max)) {
+        const atCap = picked.length >= max;
+        boxes.forEach((b) => { b.disabled = atCap && !b.checked; });
+      }
     };
     const applyFilter = (q: string): void => {
       const needle = q.trim().toLowerCase();
@@ -338,12 +457,19 @@ const tagsValue = specimen.tags.join(", ");
       open = next;
       pn.hidden = !next;
       tg.setAttribute("aria-expanded", next ? "true" : "false");
-      if (next && search) search.focus();
+      if (next) {
+        broadcastDropdownOpen(msdd);
+        if (search) search.focus();
+      }
     };
 
     tg.addEventListener("click", (e) => {
       e.stopPropagation();
       setOpen(!open);
+    });
+    // Close when any OTHER dropdown opens.
+    document.addEventListener(DD_OPEN_EVENT, (e) => {
+      if ((e as CustomEvent).detail?.source !== msdd) setOpen(false);
     });
     search?.addEventListener("input", () => applyFilter(search.value));
     boxes.forEach((b) => b.addEventListener("change", refresh));
@@ -431,9 +557,7 @@ const tagsValue = specimen.tags.join(", ");
     };
 
     const open = (highlightSelected = true): void => {
-      dropdowns.forEach((other) => {
-        if (other !== dd) closeDropdown(other);
-      });
+      broadcastDropdownOpen(dd);
       dd.setAttribute("data-open", "");
       menu.hidden = false;
       btn.setAttribute("aria-expanded", "true");
@@ -461,6 +585,10 @@ const tagsValue = specimen.tags.join(", ");
     btn.addEventListener("click", () => {
       if (dd.hasAttribute("data-open")) close();
       else open();
+    });
+    // Close when any OTHER dropdown opens (sibling .dd or an .msdd picker).
+    document.addEventListener(DD_OPEN_EVENT, (e) => {
+      if ((e as CustomEvent).detail?.source !== dd) close();
     });
     btn.addEventListener("keydown", (e: KeyboardEvent) => {
       const isOpen = dd.hasAttribute("data-open");
@@ -646,6 +774,78 @@ const tagsValue = specimen.tags.join(", ");
     font-style: normal;
   }
 
+  /* Styled file picker (thumbnail). The real <input> is visually hidden; a small
+     script (data-file-input) mirrors the chosen filename into .submit-file__name. */
+  .submit-file {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.4rem 0.5rem;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 140ms ease;
+  }
+
+  .submit-file:hover {
+    border-color: var(--accent);
+  }
+
+  /* Visually-hidden real input -- label association still opens the picker. */
+  .submit-file__input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  .submit-file__btn {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background-color: var(--bg-elevated);
+    padding: 0.4rem 0.85rem;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+
+  .submit-file:hover .submit-file__btn {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .submit-file__name {
+    min-width: 0;
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .submit-file__name[data-has-file] {
+    color: var(--text);
+  }
+
+  /* Keyboard focus ring on the styled button when the hidden input is focused. */
+  .submit-file__input:focus-visible ~ .submit-file__btn {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
   .submit-field input,
   .submit-field textarea {
     padding: 0.65rem 0.75rem;
@@ -653,7 +853,10 @@ const tagsValue = specimen.tags.join(", ");
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: var(--text);
+    /* Match the inputs -- a bare <textarea> defaults to the browser monospace. */
+    font-family: inherit;
     font-size: 1rem;
+    font-weight: inherit;
   }
 
   /* The dropdown label is a plain <span> (not a wrapping <label>), so it needs
@@ -665,6 +868,8 @@ const tagsValue = specimen.tags.join(", ");
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--text-muted);
+    /* Labels never wrap -- a 2-line label shoves its dropdown out of row alignment. */
+    white-space: nowrap;
   }
 
   /* ---- App-native dropdown ---- */
@@ -714,8 +919,7 @@ const tagsValue = specimen.tags.join(", ");
 
   .dd__btn:focus-visible {
     outline: 2px solid var(--accent);
-    outline-offset: 1px;
-    border-color: var(--accent);
+    outline-offset: 3px;
   }
 
   .dd[data-open] .dd__btn {
@@ -743,7 +947,8 @@ const tagsValue = specimen.tags.join(", ");
     z-index: 60;
     min-width: 100%;
     width: max-content;
-    max-width: 18rem;
+    /* Wide enough for the longest license label; never past the viewport edge. */
+    max-width: min(28rem, calc(100vw - 2rem));
     max-height: 16rem;
     margin: 0;
     padding: 0.3rem;
@@ -789,18 +994,26 @@ const tagsValue = specimen.tags.join(", ");
     padding: 0.3rem;
     background: var(--bg-elevated, #14181a);
   }
-  .dd__search {
+  .submit-field .dd__search,
+  .submit-field .msdd__search {
     width: 100%;
-    padding: 0.4rem 0.6rem;
+    padding: 0.4rem 0.6rem 0.4rem 1.9rem;
     border: 1px solid var(--border);
     border-radius: 7px;
-    background: var(--bg);
+    background: var(--bg)
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='14'%20height='14'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23889'%20stroke-width='2'%20stroke-linecap='round'%3E%3Ccircle%20cx='11'%20cy='11'%20r='7'/%3E%3Cpath%20d='M21%2021l-4.3-4.3'/%3E%3C/svg%3E")
+      no-repeat left 0.6rem center;
+    background-size: 14px;
     color: var(--text);
     font-family: var(--font-mono);
     font-size: 0.78rem;
   }
-  .dd__search::placeholder { color: var(--text-faint); }
-  .dd__search:focus { outline: none; border-color: var(--accent); }
+  .submit-field .dd__search::placeholder,
+  .submit-field .msdd__search::placeholder { color: var(--text-faint); }
+  .submit-field input.dd__search:focus,
+  .submit-field input.msdd__search:focus { outline: none; border-color: var(--accent); }
+  .dd__search::-webkit-search-cancel-button,
+  .msdd__search::-webkit-search-cancel-button { cursor: pointer; }
   .dd__empty {
     padding: 0.5rem 0.7rem;
     color: var(--text-faint);
@@ -811,12 +1024,32 @@ const tagsValue = specimen.tags.join(", ");
   .submit-field input:focus,
   .submit-field textarea:focus {
     outline: 2px solid var(--accent);
-    outline-offset: 1px;
-    border-color: var(--accent);
+    outline-offset: 3px;
+  }
+
+  /* Full-width footer below both columns, centering the status + save button
+     (mirrors the contribute form's .submit-footer). */
+  .submit-footer {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .submit-footer .submit-status {
+    width: 100%;
+    max-width: 30rem;
+    text-align: center;
+  }
+
+  /* Only space the status from the button when it actually carries a message
+     (gated on :not(:empty) so an empty live region adds no offset). */
+  .submit-footer .submit-status:not(:empty) {
+    margin-bottom: 1.1rem;
   }
 
   .submit-go {
-    align-self: flex-start;
+    align-self: center;
   }
 
   /* Greyed while the title is empty or the TDN is unparseable. Stays clickable

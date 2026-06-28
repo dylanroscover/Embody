@@ -25,6 +25,7 @@ type DisplaySpecimen = {
   slug: string;
   name: string;
   category: string;
+  categories: string[];
   level: string;
   description: string;
   requires: string[];
@@ -35,6 +36,8 @@ type DisplaySpecimen = {
   reactions: Record<string, number>;
   author_handle: string;
   author_display_name: string | null;
+  visibility: string;
+  license: string;
 };
 
 const fallback = firstFixtureSpecimen();
@@ -43,7 +46,9 @@ const fixtureSpecimen = findFixtureSpecimen(slug) ?? fallback;
 let specimen = specimenFromFixture(fixtureSpecimen);
 
 try {
-  const liveSpecimen = await getSpecimenBySlug(env.DB, slug);
+  // Pass the viewer id so an author can load their OWN private/unlisted draft
+  // (to verify it before publishing); other viewers still only get public ones.
+  const liveSpecimen = await getSpecimenBySlug(env.DB, slug, Astro.locals.user?.id);
   if (liveSpecimen) {
     specimen = specimenFromLive(liveSpecimen, fixtureSpecimen);
   }
@@ -61,6 +66,9 @@ const isSignedIn = Boolean(sessionUser);
 // Owner-only controls (edit/delete). Gated by handle for the UI; the API
 // re-checks by author_id, so this is presentation only, never the auth boundary.
 const isOwner = isSignedIn && sessionUser?.handle === specimen.author_handle;
+// Publish state for the owner-only status banner. Anything other than 'public'
+// (private / unlisted) reads as "not live in the Collection".
+const isPublic = specimen.visibility === "public";
 const signInHref = `/signin?next=${encodeURIComponent(`/c/${specimen.slug}`)}`;
 
 let myReactions: string[] = [];
@@ -84,7 +92,7 @@ let tdn: Record<string, unknown>;
 let rawTdn: string;
 
 try {
-  const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, specimen.slug);
+  const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, specimen.slug, Astro.locals.user?.id);
   if (parsed) {
     tdn = parsed.tdn;
     rawTdn = parsed.raw;
@@ -138,6 +146,7 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     slug: fixture.slug,
     name: fixture.name,
     category: fixture.category,
+    categories: [fixture.category],
     level: fixture.level,
     description: fixture.description,
     requires: fixture.requires && fixture.requires !== "none" ? [fixture.requires] : [],
@@ -148,7 +157,9 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     // Fixtures are all first-party; mirror the hardcode in toFixtureSummary
     // (FixtureSpecimen carries no author_handle field).
     author_handle: "embody.tools",
-    author_display_name: null
+    author_display_name: null,
+    visibility: "public",
+    license: "CC-BY-4.0"
   };
 }
 
@@ -165,6 +176,7 @@ function specimenFromLive(
     slug: live.slug,
     name: live.name,
     category: live.category,
+    categories: live.categories,
     level: live.level,
     description: live.description,
     requires: live.requires,
@@ -174,7 +186,9 @@ function specimenFromLive(
     current_version: live.current_version,
     reactions: live.reactions ?? {},
     author_handle: live.author_handle,
-    author_display_name: live.author_display_name
+    author_display_name: live.author_display_name,
+    visibility: live.visibility ?? "public",
+    license: live.license || "CC-BY-4.0"
   };
 }
 
@@ -346,10 +360,41 @@ function emitKey(key: string): string {
         </button>
       </div>
     )}
-    <p class="eyebrow">Specimen / <a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(specimen.category)}`}>{specimen.category}</a></p>
+    <p class="eyebrow">Specimen / {specimen.categories.map((cat, i) => (
+      <Fragment>{i > 0 && ", "}<a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(cat)}`}>{cat}</a></Fragment>
+    ))}</p>
     <h1>{specimen.name}</h1>
     <p class="specimen-byline">by <a class="specimen-byline__link" href={`/u/${encodeURIComponent(specimen.author_handle)}`}>{specimen.author_display_name ?? `@${specimen.author_handle}`}</a></p>
   </section>
+
+  {isOwner && (
+    <section class="page-section tight owner-status">
+      <div class={`owner-status__card ${isPublic ? "is-public" : "is-private"}`} data-owner-status data-slug={specimen.slug}>
+        <span class="owner-status__icon" aria-hidden="true">
+          {isPublic ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+          )}
+        </span>
+        <div class="owner-status__text">
+          <strong>{isPublic ? "Public" : "Private draft"}</strong>
+          <span>{isPublic
+            ? "This specimen is live in the Collection. You can pull it back to private anytime."
+            : "Only you can see this. Tweak it until it looks right, then publish to add it to the Collection."}</span>
+        </div>
+        <span class="owner-status__msg" data-visibility-msg role="status" aria-live="polite"></span>
+        <button
+          type="button"
+          class={`btn owner-status__btn ${isPublic ? "btn--ghost" : "btn--primary"}`}
+          data-visibility-toggle
+          data-target={isPublic ? "private" : "public"}
+        >
+          {isPublic ? "make private" : "publish to collection"}
+        </button>
+      </div>
+    </section>
+  )}
 
   {isSignedIn && (
     <dialog class="report-dialog" data-report-dialog aria-labelledby="report-dialog-title">
@@ -581,6 +626,48 @@ function emitKey(key: string): string {
     }
   </script>
 
+  <script>
+    // Owner-only publish toggle. PATCHes /api/specimens/:slug with the target
+    // visibility, then reloads so the page (and its public/private chrome) re-renders
+    // from the new state. The API re-checks ownership by author_id.
+    const ownerStatus = document.querySelector("[data-owner-status]") as HTMLElement | null;
+    const toggleBtn = ownerStatus?.querySelector("[data-visibility-toggle]") as HTMLButtonElement | null;
+    if (ownerStatus && toggleBtn) {
+      const slug = ownerStatus.dataset.slug ?? "";
+      const msgEl = ownerStatus.querySelector("[data-visibility-msg]") as HTMLElement | null;
+      const setMsg = (message: string) => {
+        if (msgEl) msgEl.textContent = message;
+      };
+      toggleBtn.addEventListener("click", async () => {
+        if (toggleBtn.disabled) return;
+        const target = toggleBtn.dataset.target === "public" ? "public" : "private";
+        toggleBtn.disabled = true;
+        setMsg(target === "public" ? "publishing..." : "making private...");
+        try {
+          const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ visibility: target })
+          });
+          if (res.status === 401) {
+            window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
+            return;
+          }
+          if (!res.ok) {
+            setMsg("could not update. please try again.");
+            toggleBtn.disabled = false;
+            return;
+          }
+          setMsg(target === "public" ? "published. refreshing..." : "set to private. refreshing...");
+          window.location.reload();
+        } catch {
+          setMsg("could not update. please try again.");
+          toggleBtn.disabled = false;
+        }
+      });
+    }
+  </script>
+
   <section class="page-section tight specimen-layout">
     <div class="specimen-main">
       {specimen.description && <p class="specimen-desc">{specimen.description}</p>}
@@ -612,7 +699,7 @@ function emitKey(key: string): string {
             <span class="badge needs">needs {req}</span>
           ))}
           <span class="badge">{specimen.operator_count} operators</span>
-          <span class="badge license">CC-BY</span>
+          <span class="badge license">{specimen.license}</span>
         </div>
 
         <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
@@ -648,8 +735,8 @@ function emitKey(key: string): string {
   <section class="page-section tight raw-section">
     <details class="raw-details pillar">
       <summary>
-        <span class="raw-label raw-label--show">show tdn yaml</span>
-        <span class="raw-label raw-label--hide">hide tdn yaml</span>
+        <span class="raw-label raw-label--show">show tdn</span>
+        <span class="raw-label raw-label--hide">hide tdn</span>
         <CopyTdnEnvelopeButton
           tdn={tdn}
           slug={specimen.slug}
@@ -739,6 +826,83 @@ function emitKey(key: string): string {
     border-color: #d65555;
     color: #ff9b9b;
     background: rgba(220, 80, 80, 0.12);
+  }
+
+  /* Owner-only publish-state banner (private draft vs public). Sits between the
+     hero and the main layout; only the specimen's owner ever sees it. */
+  .owner-status {
+    /* Sit snug between the hero and the layout: kill the section's own vertical
+       padding so the only gaps are the hero's 1.35rem bottom (above) and the
+       layout's 1.35rem top (below) -- symmetric, not a big dead band. */
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .owner-status__card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+  .owner-status__card.is-private {
+    border-color: rgba(214, 180, 90, 0.5);
+    background: rgba(214, 180, 90, 0.08);
+  }
+  .owner-status__card.is-public {
+    border-color: rgba(110, 230, 104, 0.4);
+    background: rgba(110, 230, 104, 0.07);
+  }
+  .owner-status__icon {
+    display: inline-flex;
+    flex: none;
+  }
+  .is-private .owner-status__icon { color: #e0c068; }
+  .is-public .owner-status__icon { color: var(--accent); }
+  .owner-status__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .owner-status__text strong {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .is-private .owner-status__text strong { color: #e0c068; }
+  .is-public .owner-status__text strong { color: var(--accent); }
+  .owner-status__text span {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .owner-status__msg {
+    margin-left: auto;
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
+  }
+  .owner-status__btn {
+    flex: none;
+    /* When there's no status message, the button still hugs the right edge. */
+    margin-left: 0;
+  }
+  .owner-status__msg:empty + .owner-status__btn {
+    margin-left: auto;
+  }
+  @media (max-width: 620px) {
+    .owner-status__card {
+      flex-wrap: wrap;
+    }
+    .owner-status__msg,
+    .owner-status__btn {
+      margin-left: 0;
+    }
+    .owner-status__btn {
+      width: 100%;
+    }
   }
 
   /* The category in the breadcrumb links to the collection filtered to it. */
@@ -1206,7 +1370,9 @@ function emitKey(key: string): string {
   }
 
   .raw-copy-hint {
-    margin: -6px 18px 14px;
+    /* Top gap (summary padding 10px + 4px) matches the 14px bottom gap, so the
+       toggle / copy-hint / summary lines are evenly spaced. */
+    margin: 4px 18px 14px;
     color: var(--text-faint);
     font: 12px/1.4 var(--font-mono);
   }
