@@ -260,7 +260,9 @@ export async function listSpecimensForCollection(
   const sort = normalizeCollectionSort(options.sort ?? "az");
   const plan = COLLECTION_SORT_PLAN[sort];
 
-  const where = ["s.visibility = 'public'"];
+  // Public + non-banned author. A banned account's specimens drop out of every
+  // listing here (reversible -- unban restores them, no per-row state).
+  const where = ["s.visibility = 'public'", "u.banned = 0"];
   const joins: string[] = [];
   const filterParams: (string | number)[] = [];
 
@@ -384,6 +386,7 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
        FROM specimen_categories sc
        JOIN specimens s ON s.id = sc.specimen_id
        WHERE s.visibility = 'public' AND sc.category <> ''
+         AND s.author_id NOT IN (SELECT id FROM users_profile WHERE banned = 1)
        ORDER BY sc.category COLLATE NOCASE ASC`
     )
     .all<{ value: string }>();
@@ -395,6 +398,7 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
       `SELECT DISTINCT je.value AS value
        FROM specimens s, json_each(s.requires) je
        WHERE s.visibility = 'public' AND je.value <> ''
+         AND s.author_id NOT IN (SELECT id FROM users_profile WHERE banned = 1)
        ORDER BY je.value COLLATE NOCASE ASC`
     )
     .all<{ value: string }>();
@@ -407,7 +411,7 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
       `SELECT DISTINCT u.handle AS value
        FROM specimens s
        JOIN users_profile u ON u.id = s.author_id
-       WHERE s.visibility = 'public' AND u.handle <> ''
+       WHERE s.visibility = 'public' AND u.banned = 0 AND u.handle <> ''
        ORDER BY u.handle COLLATE NOCASE ASC`
     )
     .all<{ value: string }>();
@@ -453,7 +457,7 @@ export async function getSpecimenBySlug(
        FROM specimens s
        JOIN users_profile u ON u.id = s.author_id
        LEFT JOIN specimen_versions v ON v.id = s.current_version_id
-       WHERE s.slug = ? AND (s.visibility = 'public' OR s.author_id = ?)
+       WHERE s.slug = ? AND u.banned = 0 AND (s.visibility = 'public' OR s.author_id = ?)
        LIMIT 1`
     )
     .bind(slug, viewerId ?? "")
@@ -559,7 +563,7 @@ export async function listSpecimensByAuthor(
         `SELECT ${SUMMARY_COLUMNS}
          FROM specimens s
          JOIN users_profile u ON u.id = s.author_id
-         WHERE u.handle = ? AND (s.visibility = 'public' OR s.author_id = ?)
+         WHERE u.handle = ? AND u.banned = 0 AND (s.visibility = 'public' OR s.author_id = ?)
          ORDER BY s.created_at DESC, s.slug ASC`
       )
       .bind(trimmed, viewerId ?? "")
@@ -670,7 +674,8 @@ export async function getCurrentTdnBlobForSlug(
               s.capability_json
        FROM specimens s
        JOIN specimen_versions v ON v.id = s.current_version_id
-       WHERE s.slug = ? AND (s.visibility = 'public' OR s.author_id = ?)
+       JOIN users_profile u ON u.id = s.author_id
+       WHERE s.slug = ? AND u.banned = 0 AND (s.visibility = 'public' OR s.author_id = ?)
        LIMIT 1`
     )
     .bind(slug, viewerId ?? "")
@@ -1110,12 +1115,231 @@ export async function deleteSpecimenById(db: D1Database, specimenId: string): Pr
       .bind(specimenId),
     db.prepare("DELETE FROM specimen_versions WHERE specimen_id = ?").bind(specimenId),
     db.prepare("DELETE FROM specimen_tags WHERE specimen_id = ?").bind(specimenId),
+    db.prepare("DELETE FROM specimen_categories WHERE specimen_id = ?").bind(specimenId),
     db.prepare("DELETE FROM likes WHERE specimen_id = ?").bind(specimenId),
     db.prepare("DELETE FROM comments WHERE specimen_id = ?").bind(specimenId),
     db.prepare("DELETE FROM reports WHERE specimen_id = ?").bind(specimenId),
     db.prepare("DELETE FROM reactions WHERE specimen_id = ?").bind(specimenId),
     db.prepare("DELETE FROM specimens WHERE id = ?").bind(specimenId)
   ]);
+}
+
+// Hard-delete an entire user account: every specimen they authored (and all of
+// each specimen's dependents), all of their engagement on OTHER people's
+// specimens (reactions/likes/comments/reports), their profile row, and their
+// Better Auth identity (session/account/user). One atomic D1 batch. The bulk
+// `DELETE FROM specimens WHERE author_id` fires the per-row FTS delete trigger
+// (migration 0005), keeping the search mirror consistent. session/account also
+// cascade off `user` (migration 0003), but they are deleted explicitly first so
+// this holds regardless of D1's FK-enforcement state. Returns false if no such
+// profile exists (nothing deleted).
+export async function deleteUserAccount(db: D1Database, userId: string): Promise<boolean> {
+  const exists = await db
+    .prepare("SELECT 1 AS hit FROM users_profile WHERE id = ? LIMIT 1")
+    .bind(userId)
+    .first<{ hit: number }>();
+  if (!exists) return false;
+
+  const ownSpecimens = "(SELECT id FROM specimens WHERE author_id = ?)";
+  await db.batch([
+    // 1. Dependents of the user's OWN specimens.
+    db
+      .prepare(
+        `DELETE FROM scans WHERE version_id IN
+           (SELECT v.id FROM specimen_versions v
+              JOIN specimens s ON s.id = v.specimen_id
+             WHERE s.author_id = ?)`
+      )
+      .bind(userId),
+    db.prepare(`DELETE FROM specimen_versions WHERE specimen_id IN ${ownSpecimens}`).bind(userId),
+    db.prepare(`DELETE FROM specimen_tags WHERE specimen_id IN ${ownSpecimens}`).bind(userId),
+    db.prepare(`DELETE FROM specimen_categories WHERE specimen_id IN ${ownSpecimens}`).bind(userId),
+    db.prepare(`DELETE FROM likes WHERE specimen_id IN ${ownSpecimens}`).bind(userId),
+    db.prepare(`DELETE FROM comments WHERE specimen_id IN ${ownSpecimens}`).bind(userId),
+    db.prepare(`DELETE FROM reports WHERE specimen_id IN ${ownSpecimens}`).bind(userId),
+    db.prepare(`DELETE FROM reactions WHERE specimen_id IN ${ownSpecimens}`).bind(userId),
+    db.prepare("DELETE FROM specimens WHERE author_id = ?").bind(userId),
+    // 2. The user's engagement on OTHER people's specimens.
+    db.prepare("DELETE FROM reactions WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM likes WHERE user_id = ?").bind(userId),
+    db.prepare("DELETE FROM comments WHERE author_id = ?").bind(userId),
+    db.prepare("DELETE FROM reports WHERE reporter_id = ?").bind(userId),
+    // 3. Profile + Better Auth identity (session/account before user).
+    db.prepare("DELETE FROM users_profile WHERE id = ?").bind(userId),
+    db.prepare("DELETE FROM session WHERE userId = ?").bind(userId),
+    db.prepare("DELETE FROM account WHERE userId = ?").bind(userId),
+    db.prepare('DELETE FROM "user" WHERE id = ?').bind(userId)
+  ]);
+  return true;
+}
+
+// --- Ban / suspend ---------------------------------------------------------
+
+// Ban or unban an account. A banned profile makes getSessionUser return null
+// (so they cannot sign in or submit) and drops their specimens from every public
+// query (the `u.banned = 0` filters above). Fully reversible. Returns false when
+// no such profile exists.
+export async function setUserBanned(
+  db: D1Database,
+  userId: string,
+  banned: boolean,
+  reason?: string | null
+): Promise<boolean> {
+  const stmt = banned
+    ? db
+        .prepare(
+          "UPDATE users_profile SET banned = 1, banned_reason = ?, banned_at = datetime('now') WHERE id = ?"
+        )
+        .bind(reason ?? null, userId)
+    : db
+        .prepare(
+          "UPDATE users_profile SET banned = 0, banned_reason = NULL, banned_at = NULL WHERE id = ?"
+        )
+        .bind(userId);
+  const result = await stmt.run();
+  return (result.meta?.changes ?? 0) > 0;
+}
+
+// Resolve a specimen's author id (used by the report auto-ban flow).
+export async function getSpecimenAuthorId(
+  db: D1Database,
+  specimenId: string
+): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT author_id FROM specimens WHERE id = ? LIMIT 1")
+    .bind(specimenId)
+    .first<{ author_id: string }>();
+  return row?.author_id ?? null;
+}
+
+// Distinct reporters across all still-open reports on ONE specimen (auto-hide
+// signal). DISTINCT so a single person can't inflate the count by re-reporting.
+export async function countDistinctReportersForSpecimen(
+  db: D1Database,
+  specimenId: string
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(DISTINCT reporter_id) AS n FROM reports
+        WHERE specimen_id = ? AND status IN ('open', 'reviewing')`
+    )
+    .bind(specimenId)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+// Distinct reporters across all still-open reports on EVERY specimen an author
+// owns (auto-ban signal). DISTINCT so one mass-reporter can't trigger a ban.
+export async function countDistinctReportersForAuthor(
+  db: D1Database,
+  authorId: string
+): Promise<number> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(DISTINCT r.reporter_id) AS n
+         FROM reports r
+         JOIN specimens s ON s.id = r.specimen_id
+        WHERE s.author_id = ? AND r.status IN ('open', 'reviewing')`
+    )
+    .bind(authorId)
+    .first<{ n: number }>();
+  return Number(row?.n ?? 0);
+}
+
+// --- Audit log -------------------------------------------------------------
+
+export interface AuditEvent {
+  actorId?: string | null;
+  actorHandle?: string | null;
+  action: string;
+  targetType?: string | null;
+  targetId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  ip?: string | null;
+}
+
+export interface AuditLogRow {
+  id: string;
+  ts: string;
+  actor_id: string | null;
+  actor_handle: string | null;
+  action: string;
+  target_type: string | null;
+  target_id: string | null;
+  metadata: string | null;
+  ip: string | null;
+}
+
+// Record a security / abuse / admin event: append to audit_log AND emit a
+// structured console line (captured by Cloudflare Workers Logs for the hybrid
+// telemetry layer). Best-effort -- a logging failure is swallowed so it never
+// breaks the action it is recording.
+export async function logEvent(db: D1Database, event: AuditEvent): Promise<void> {
+  console.log(
+    "AUDIT",
+    JSON.stringify({
+      action: event.action,
+      actor: event.actorId ?? null,
+      actorHandle: event.actorHandle ?? null,
+      targetType: event.targetType ?? null,
+      target: event.targetId ?? null,
+      metadata: event.metadata ?? null,
+      ip: event.ip ?? null
+    })
+  );
+  try {
+    await db
+      .prepare(
+        `INSERT INTO audit_log
+           (id, actor_id, actor_handle, action, target_type, target_id, metadata, ip)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(
+        crypto.randomUUID(),
+        event.actorId ?? null,
+        event.actorHandle ?? null,
+        event.action,
+        event.targetType ?? null,
+        event.targetId ?? null,
+        event.metadata ? JSON.stringify(event.metadata) : null,
+        event.ip ?? null
+      )
+      .run();
+  } catch (error) {
+    console.error("logEvent: audit insert failed", error);
+  }
+}
+
+export async function listAuditLog(
+  db: D1Database,
+  opts: { action?: string; actorId?: string; targetId?: string; limit?: number } = {}
+): Promise<AuditLogRow[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 100, 1), 200);
+  const clauses: string[] = [];
+  const vals: (string | number)[] = [];
+  if (opts.action) {
+    clauses.push("action = ?");
+    vals.push(opts.action);
+  }
+  if (opts.actorId) {
+    clauses.push("actor_id = ?");
+    vals.push(opts.actorId);
+  }
+  if (opts.targetId) {
+    clauses.push("target_id = ?");
+    vals.push(opts.targetId);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const rows = await db
+    .prepare(
+      `SELECT id, ts, actor_id, actor_handle, action, target_type, target_id, metadata, ip
+         FROM audit_log ${where}
+        ORDER BY ts DESC
+        LIMIT ?`
+    )
+    .bind(...vals, limit)
+    .all<AuditLogRow>();
+  return rows.results ?? [];
 }
 
 export async function searchSpecimensFts(
@@ -1134,7 +1358,7 @@ export async function searchSpecimensFts(
        FROM specimens_fts
        JOIN specimens s ON s.rowid = specimens_fts.rowid
        JOIN users_profile u ON u.id = s.author_id
-       WHERE specimens_fts MATCH ? AND s.visibility = 'public'
+       WHERE specimens_fts MATCH ? AND s.visibility = 'public' AND u.banned = 0
        ORDER BY bm25(specimens_fts), s.likes_count DESC, s.slug ASC
        LIMIT ?`
     )
@@ -1262,7 +1486,8 @@ function specimenListQuery(options: ListSpecimensOptions): {
   where: string[];
   params: (string | number)[];
 } {
-  const where = ["s.visibility = 'public'"];
+  // Public + non-banned author (the consuming listSpecimens always joins u).
+  const where = ["s.visibility = 'public'", "u.banned = 0"];
   const params: (string | number)[] = [];
   const joins: string[] = [];
 
@@ -1593,9 +1818,14 @@ export interface AdminReportRow {
   reason: string;
   details: string | null;
   created_at: string;
+  specimen_id: string | null;
   specimen_slug: string | null;
   specimen_title: string | null;
+  specimen_visibility: string | null;
   reporter_handle: string | null;
+  author_id: string | null;
+  author_handle: string | null;
+  author_banned: number | null;
 }
 
 // Moderation queue. LEFT JOINs so an orphaned report (specimen/reporter deleted)
@@ -1608,11 +1838,14 @@ export async function listReports(
   const where = opts.status ? "WHERE r.status = ?" : "";
   const stmt = db.prepare(
     `SELECT r.id, r.status, r.reason, r.details, r.created_at,
-            s.slug AS specimen_slug, s.title AS specimen_title,
-            u.handle AS reporter_handle
+            s.id AS specimen_id, s.slug AS specimen_slug, s.title AS specimen_title,
+            s.visibility AS specimen_visibility,
+            u.handle AS reporter_handle,
+            s.author_id AS author_id, au.handle AS author_handle, au.banned AS author_banned
        FROM reports r
        LEFT JOIN specimens s ON s.id = r.specimen_id
        LEFT JOIN users_profile u ON u.id = r.reporter_id
+       LEFT JOIN users_profile au ON au.id = s.author_id
        ${where}
       ORDER BY r.created_at DESC
       LIMIT ?`
@@ -1704,6 +1937,8 @@ export interface AdminUserRow {
   email_verified: number | null;
   trust_level: string;
   created_at: string;
+  banned: number;
+  banned_reason: string | null;
 }
 
 // User list for the admin table. Joins the app profile to the Better Auth `user`
@@ -1718,7 +1953,7 @@ export async function listUsersForAdmin(
   const where = q ? "WHERE p.handle LIKE ? OR u.email LIKE ?" : "";
   const stmt = db.prepare(
     `SELECT p.id, p.handle, u.email AS email, u.emailVerified AS email_verified,
-            p.trust_level, p.created_at
+            p.trust_level, p.created_at, p.banned, p.banned_reason
        FROM users_profile p
        LEFT JOIN "user" u ON u.id = p.id
        ${where}
@@ -1747,11 +1982,21 @@ export async function setUserTrustLevel(
 // has none. Backs GET /api/specimens/:slug/thumbnail.
 export async function getThumbnailKeyForSlug(
   db: D1Database,
-  slug: string
+  slug: string,
+  // When set to the signed-in user's id, that user can also resolve the thumbnail
+  // of their OWN non-public (private/unlisted) specimen -- so an author viewing a
+  // draft sees its cover, matching getSpecimenBySlug's visibility rule. Without it
+  // (anonymous / other viewer), only public specimens resolve.
+  viewerId?: string | null
 ): Promise<string | null> {
   const row = await db
-    .prepare("SELECT thumbnail_key FROM specimens WHERE slug = ? AND visibility = 'public' LIMIT 1")
-    .bind(slug)
+    .prepare(
+      `SELECT thumbnail_key FROM specimens
+        WHERE slug = ? AND (visibility = 'public' OR author_id = ?)
+          AND author_id NOT IN (SELECT id FROM users_profile WHERE banned = 1)
+        LIMIT 1`
+    )
+    .bind(slug, viewerId ?? "")
     .first<{ thumbnail_key: string | null }>();
   const key = row?.thumbnail_key ?? "";
   return key ? key : null;

@@ -89,6 +89,12 @@ export function assertSameOrigin(request: Request): Response | null {
   return null;
 }
 
+// Best-effort client IP for audit records. Cloudflare sets CF-Connecting-IP on
+// every proxied request; null when absent (e.g. local dev).
+export function clientIp(request: Request): string | null {
+  return request.headers.get("CF-Connecting-IP");
+}
+
 // --- Bounded vocabularies (server-side validation; mirror the DDL comments) ---
 
 export const REPORT_STATUSES = ["open", "reviewing", "actioned", "dismissed"] as const;

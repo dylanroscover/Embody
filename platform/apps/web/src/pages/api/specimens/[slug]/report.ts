@@ -1,8 +1,17 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { requireUser } from "../../../../server/auth";
+import { clientIp } from "../../../../server/admin";
 import { notifyOwnerNewReport } from "../../../../server/notifications";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
+import {
+  countDistinctReportersForAuthor,
+  countDistinctReportersForSpecimen,
+  getSpecimenAuthorId,
+  logEvent,
+  setSpecimenVisibility,
+  setUserBanned
+} from "../../../../server/db";
 import {
   createReport,
   getSpecimenIdBySlug,
@@ -11,6 +20,12 @@ import {
 } from "../../../../server/engagement";
 
 export const prerender = false;
+
+// Auto-moderation thresholds, counted by DISTINCT reporters (so one person can't
+// brigade an account into a takedown). At AUTO_HIDE the reported specimen is
+// pulled private pending review; at AUTO_BAN the author is suspended outright.
+const AUTO_HIDE_THRESHOLD = 3;
+const AUTO_BAN_THRESHOLD = 5;
 
 // POST /api/specimens/:slug/report
 // Files a moderation report against a specimen. Requires a signed-in user (401
@@ -55,6 +70,20 @@ export const POST: APIRoute = async ({ params, request }) => {
 
     const result = await createReport(env.DB, specimenId, user.id, reason, details);
 
+    await logEvent(env.DB, {
+      actorId: user.id,
+      actorHandle: user.handle,
+      action: "report.create",
+      targetType: "specimen",
+      targetId: specimenId,
+      metadata: { slug, reason },
+      ip: clientIp(request)
+    });
+
+    // Distinct-reporter auto-moderation. Best-effort and fully guarded -- any
+    // failure here is swallowed so it never affects the 201 the reporter gets.
+    await maybeAutoModerate(slug, specimenId, clientIp(request));
+
     // Moderation signal to the owner. Self-swallowing + safe-by-default
     // (notifications.ts), so a notification failure never affects the 201.
     await notifyOwnerNewReport(env as CloudflareEnv, { slug, reason, reporterHandle: user.handle });
@@ -70,6 +99,68 @@ export const POST: APIRoute = async ({ params, request }) => {
     return serverErrorResponse();
   }
 };
+
+// Distinct-reporter auto-moderation. AUTO_HIDE pulls the reported specimen
+// private; AUTO_BAN suspends its author. Privileged authors (curator/admin) and
+// already-banned authors are never auto-acted on. Wrapped so any failure is
+// swallowed -- auto-moderation must never break the report's 201.
+async function maybeAutoModerate(
+  slug: string,
+  specimenId: string,
+  ip: string | null
+): Promise<void> {
+  try {
+    // Auto-hide the specimen once enough distinct people have flagged it.
+    const specimenReporters = await countDistinctReportersForSpecimen(env.DB, specimenId);
+    if (specimenReporters >= AUTO_HIDE_THRESHOLD) {
+      const hidden = await setSpecimenVisibility(env.DB, specimenId, "private");
+      if (hidden) {
+        await logEvent(env.DB, {
+          action: "specimen.auto_hide",
+          targetType: "specimen",
+          targetId: specimenId,
+          metadata: { slug, distinctReporters: specimenReporters, threshold: AUTO_HIDE_THRESHOLD },
+          ip
+        });
+      }
+    }
+
+    // Auto-ban the author once enough distinct people have flagged their content.
+    const authorId = await getSpecimenAuthorId(env.DB, specimenId);
+    if (!authorId) return;
+
+    const author = await env.DB.prepare(
+      "SELECT trust_level, banned FROM users_profile WHERE id = ? LIMIT 1"
+    )
+      .bind(authorId)
+      .first<{ trust_level: string; banned: number }>();
+    // Never auto-ban a privileged or already-banned account.
+    if (!author || author.banned || author.trust_level === "admin" || author.trust_level === "curator") {
+      return;
+    }
+
+    const authorReporters = await countDistinctReportersForAuthor(env.DB, authorId);
+    if (authorReporters >= AUTO_BAN_THRESHOLD) {
+      const banned = await setUserBanned(
+        env.DB,
+        authorId,
+        true,
+        `Auto-banned: ${authorReporters} distinct reporters flagged this account's content.`
+      );
+      if (banned) {
+        await logEvent(env.DB, {
+          action: "user.auto_ban",
+          targetType: "user",
+          targetId: authorId,
+          metadata: { distinctReporters: authorReporters, threshold: AUTO_BAN_THRESHOLD },
+          ip
+        });
+      }
+    }
+  } catch (error) {
+    console.error("maybeAutoModerate failed", error);
+  }
+}
 
 const MAX_DETAILS = 2000;
 

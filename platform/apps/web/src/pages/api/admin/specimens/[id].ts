@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
-import { assertSameOrigin, isTier, isVisibility, requireAdmin } from "../../../../server/admin";
-import { deleteSpecimenById, updateSpecimenModeration } from "../../../../server/db";
+import { assertSameOrigin, clientIp, isTier, isVisibility, requireAdmin } from "../../../../server/admin";
+import { deleteSpecimenById, logEvent, updateSpecimenModeration } from "../../../../server/db";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 
 export const prerender = false;
@@ -54,11 +54,14 @@ export const POST: APIRoute = async ({ params, request }) => {
     const ok = await updateSpecimenModeration(env.DB, id, patch);
     if (!ok) return errorResponse(404, "specimen_not_found", "No specimen exists for that id.");
 
-    console.log("ADMIN action", {
-      actor: admin.id,
+    await logEvent(env.DB, {
+      actorId: admin.id,
+      actorHandle: admin.handle,
       action: "specimen.moderate",
-      target: id,
-      value: patch
+      targetType: "specimen",
+      targetId: id,
+      metadata: patch,
+      ip: clientIp(request)
     });
     return jsonResponse({ updated: true, id, ...patch });
   } catch (error) {
@@ -85,7 +88,14 @@ export const DELETE: APIRoute = async ({ params, request }) => {
     if (!id) return errorResponse(400, "invalid_id", "A specimen id is required.");
 
     await deleteSpecimenById(env.DB, id);
-    console.log("ADMIN action", { actor: admin.id, action: "specimen.delete", target: id });
+    await logEvent(env.DB, {
+      actorId: admin.id,
+      actorHandle: admin.handle,
+      action: "specimen.delete",
+      targetType: "specimen",
+      targetId: id,
+      ip: clientIp(request)
+    });
     return jsonResponse({ deleted: true, id });
   } catch (error) {
     console.error("DELETE /api/admin/specimens/[id] failed", error);

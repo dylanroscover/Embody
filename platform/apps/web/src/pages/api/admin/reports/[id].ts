@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
-import { assertSameOrigin, isReportStatus, requireAdmin } from "../../../../server/admin";
-import { updateReportStatus } from "../../../../server/db";
+import { assertSameOrigin, clientIp, isReportStatus, requireAdmin } from "../../../../server/admin";
+import { logEvent, updateReportStatus } from "../../../../server/db";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 
 export const prerender = false;
@@ -41,11 +41,14 @@ export const POST: APIRoute = async ({ params, request }) => {
     const ok = await updateReportStatus(env.DB, id, status);
     if (!ok) return errorResponse(404, "report_not_found", "No report exists for that id.");
 
-    console.log("ADMIN action", {
-      actor: admin.id,
+    await logEvent(env.DB, {
+      actorId: admin.id,
+      actorHandle: admin.handle,
       action: "report.status",
-      target: id,
-      value: status
+      targetType: "report",
+      targetId: id,
+      metadata: { status },
+      ip: clientIp(request)
     });
     return jsonResponse({ updated: true, id, status });
   } catch (error) {

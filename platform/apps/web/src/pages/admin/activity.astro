@@ -1,0 +1,91 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../components/AdminLayout.astro";
+import { isAdmin } from "../../server/admin";
+import { listAuditLog } from "../../server/db";
+
+export const prerender = false;
+
+if (!isAdmin(Astro.locals.user, env)) return Astro.redirect("/");
+
+// Optional filter by action (e.g. user.ban, specimen.delete, report.create).
+const action = (Astro.url.searchParams.get("action") ?? "").trim();
+const events = await listAuditLog(env.DB, { action: action || undefined, limit: 200 });
+
+// Pretty short metadata for the table cell (full JSON on hover via title).
+function shortMeta(raw: string | null): { text: string; full: string } {
+  if (!raw) return { text: "-", full: "" };
+  try {
+    const obj = JSON.parse(raw);
+    const text = Object.entries(obj)
+      .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : String(v)}`)
+      .join(" ");
+    return { text: text || "-", full: JSON.stringify(obj, null, 2) };
+  } catch {
+    return { text: raw, full: raw };
+  }
+}
+---
+
+<AdminLayout title="activity" active="activity">
+  <form class="admin-filter" method="get">
+    <input
+      type="search"
+      name="action"
+      value={action}
+      placeholder="filter by action (e.g. user.ban)"
+      class="admin-input"
+      aria-label="Filter by action"
+    />
+    <button type="submit" class="admin-btn">filter</button>
+    {action && <a class="admin-btn" href="/admin/activity">clear</a>}
+  </form>
+
+  <p class="admin-note">
+    Security &amp; moderation audit trail (last 200{action ? ` matching "${action}"` : ""}).
+    High-volume app telemetry lives in Cloudflare Workers Logs, not here.
+  </p>
+
+  {events.length === 0 ? (
+    <p class="admin-empty">No activity{action ? ` for "${action}"` : ""}.</p>
+  ) : (
+    <div class="admin-table-wrap" role="region" aria-label="Activity log" tabindex="0">
+      <table class="admin-table">
+        <thead>
+          <tr><th>when</th><th>actor</th><th>action</th><th>target</th><th>detail</th><th>ip</th></tr>
+        </thead>
+        <tbody>
+          {events.map((e) => {
+            const meta = shortMeta(e.metadata);
+            return (
+              <tr>
+                <td class="mono">{e.ts}</td>
+                <td>{e.actor_handle ? `@${e.actor_handle}` : e.actor_id ? <span class="mono">{e.actor_id.slice(0, 8)}</span> : <span class="admin-pill">system</span>}</td>
+                <td><span class="admin-pill">{e.action}</span></td>
+                <td class="mono">{e.target_type ? `${e.target_type}:${(e.target_id ?? "").slice(0, 8)}` : "-"}</td>
+                <td class="mono admin-meta" title={meta.full}>{meta.text}</td>
+                <td class="mono">{e.ip ?? "-"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  )}
+</AdminLayout>
+
+<style>
+  .admin-note {
+    margin: 0 0 1rem;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  .admin-meta {
+    max-width: 28rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+  }
+</style>

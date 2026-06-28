@@ -33,7 +33,13 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
       </thead>
       <tbody>
         {reports.map((r) => (
-          <tr data-row data-id={r.id}>
+          <tr
+            data-row
+            data-id={r.id}
+            data-specimen-id={r.specimen_id ?? undefined}
+            data-author-id={r.author_id ?? undefined}
+            data-author-handle={r.author_handle ?? undefined}
+          >
             <td>{r.created_at}</td>
             <td>
               {r.specimen_slug ? (
@@ -65,7 +71,16 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
                   ))}
                 </select>
               </div>
-              <button type="button" class="admin-btn" data-apply>save</button>
+              <div class="report-actions">
+                <button type="button" class="admin-btn" data-apply>save</button>
+                {r.specimen_id && (
+                  <button type="button" class="admin-btn admin-btn--danger" data-del-specimen data-slug={r.specimen_slug ?? r.specimen_id}>delete specimen</button>
+                )}
+                {r.author_id && !r.author_banned && (
+                  <button type="button" class="admin-btn admin-btn--danger" data-ban-author data-handle={r.author_handle ?? "author"}>ban author</button>
+                )}
+                {r.author_banned ? <span class="admin-pill admin-pill--banned">author banned</span> : null}
+              </div>
             </td>
           </tr>
         ))}
@@ -76,6 +91,8 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
 </AdminLayout>
 
 <script>
+  import { adminConfirm, adminPrompt } from "../../lib/adminDialog";
+
   const statusBox = document.querySelector<HTMLParagraphElement>("[data-status]");
 
   function setStatus(message: string, kind: "ok" | "error") {
@@ -112,6 +129,90 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
       }
     });
   });
+
+  // After acting on the reported content, mark the report actioned (best-effort).
+  async function markActioned(reportId: string): Promise<void> {
+    try {
+      await fetch(`/api/admin/reports/${reportId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "actioned" })
+      });
+    } catch {
+      /* non-fatal: the content action already succeeded */
+    }
+  }
+
+  // Act-from-report: delete the reported specimen, then mark the report actioned.
+  document.querySelectorAll<HTMLButtonElement>("[data-del-specimen]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("[data-row]") as HTMLElement | null;
+      const reportId = row?.dataset.id;
+      const specimenId = row?.dataset.specimenId;
+      const slug = btn.dataset.slug ?? "this specimen";
+      if (!reportId || !specimenId) return;
+      if (!(await adminConfirm({
+        title: "Delete specimen",
+        message: `Delete "${slug}" permanently? This cannot be undone.`,
+        okLabel: "delete"
+      }))) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/specimens/${specimenId}`, { method: "DELETE" });
+        const body: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(body.detail || body.error || `Failed (${res.status}).`, "error");
+          btn.disabled = false;
+          return;
+        }
+        await markActioned(reportId);
+        setStatus(`Deleted "${slug}" and marked the report actioned.`, "ok");
+        location.reload();
+      } catch {
+        setStatus("Something went wrong. Please try again.", "error");
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // Act-from-report: ban the specimen's author, then mark the report actioned.
+  document.querySelectorAll<HTMLButtonElement>("[data-ban-author]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const row = btn.closest("[data-row]") as HTMLElement | null;
+      const reportId = row?.dataset.id;
+      const authorId = row?.dataset.authorId;
+      const handle = btn.dataset.handle ?? "author";
+      if (!reportId || !authorId) return;
+      const reason = await adminPrompt({
+        title: `Ban @${handle}`,
+        message: "They can't sign in or post, and their specimens leave the Collection (reversible).",
+        label: "reason (optional)",
+        defaultValue: "Reported content",
+        okLabel: "ban"
+      });
+      if (reason === null) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/admin/users/${authorId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ banned: true, reason: reason || undefined })
+        });
+        const body: any = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus(body.detail || body.error || `Failed (${res.status}).`, "error");
+          btn.disabled = false;
+          return;
+        }
+        await markActioned(reportId);
+        setStatus(`Banned @${handle} and marked the report actioned.`, "ok");
+        location.reload();
+      } catch {
+        setStatus("Something went wrong. Please try again.", "error");
+        btn.disabled = false;
+      }
+    });
+  });
 </script>
 
 <style>
@@ -125,5 +226,19 @@ const reports = await listReports(env.DB, { status: statusFilter || undefined })
     line-height: 1.4;
     white-space: normal;
     overflow-wrap: anywhere;
+  }
+  /* Act-from-report controls: status save + delete-specimen + ban-author wrap
+     under the status dropdown instead of stretching the row. */
+  .report-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+  }
+  .admin-pill--banned {
+    border-color: rgba(214, 90, 90, 0.5);
+    background: rgba(214, 90, 90, 0.14);
+    color: #ff9b9b;
   }
 </style>

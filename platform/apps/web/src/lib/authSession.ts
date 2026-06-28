@@ -40,10 +40,14 @@ export async function getSessionUser(
   let avatarUrl: string | null = null;
   try {
     const row = await env.DB.prepare(
-      "SELECT handle, trust_level, avatar_url FROM users_profile WHERE id = ? LIMIT 1"
+      "SELECT handle, trust_level, avatar_url, banned FROM users_profile WHERE id = ? LIMIT 1"
     )
       .bind(user.id)
-      .first<{ handle: string; trust_level: string; avatar_url: string | null }>();
+      .first<{ handle: string; trust_level: string; avatar_url: string | null; banned: number }>();
+    // Banned accounts resolve to NULL everywhere -- they appear logged-out, so
+    // they cannot sign in, submit, or reach any authed surface. This single
+    // chokepoint IS the ban (reversible: unban -> they resolve again).
+    if (row?.banned) return null;
     if (row?.handle) {
       handle = row.handle;
       trustLevel = row.trust_level ?? "verified";
