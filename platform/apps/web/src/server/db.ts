@@ -73,8 +73,8 @@ export interface InsertSpecimenInput {
   level?: Level;
   /** Known category facet; empty falls back to the first tag (legacy behavior). */
   category?: string;
-  /** Hardware/capability requirement; "none" runs on a clean TouchDesigner install. */
-  requires?: string;
+  /** Hardware/capability requirements (multi); empty list = stock TouchDesigner. */
+  requires?: string[];
   tdnR2Key: string;
   tdnSha256: string;
   sizeBytes: number;
@@ -276,9 +276,10 @@ export async function listSpecimensForCollection(
     filterParams.push(level);
   }
 
+  // requires is a JSON array; filter to specimens whose list CONTAINS the value.
   const requires = (options.requires ?? "").trim();
   if (requires) {
-    where.push("s.requires = ?");
+    where.push("EXISTS (SELECT 1 FROM json_each(s.requires) WHERE value = ?)");
     filterParams.push(requires);
   }
 
@@ -369,12 +370,14 @@ export async function getCollectionFacets(db: D1Database): Promise<CollectionFac
     )
     .all<{ value: string }>();
 
+  // requires is a JSON array per row; unnest with json_each to get the distinct
+  // set of individual requirements present across all public specimens.
   const requires = await db
     .prepare(
-      `SELECT DISTINCT requires AS value
-       FROM specimens
-       WHERE visibility = 'public' AND requires <> ''
-       ORDER BY requires COLLATE NOCASE ASC`
+      `SELECT DISTINCT je.value AS value
+       FROM specimens s, json_each(s.requires) je
+       WHERE s.visibility = 'public' AND je.value <> ''
+       ORDER BY je.value COLLATE NOCASE ASC`
     )
     .all<{ value: string }>();
 
@@ -660,7 +663,7 @@ export async function insertSpecimenWithVersion(
   // the first tag's slug, then "community", to preserve pre-metadata behavior.
   const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
   const level = normalizeLevel(input.level ?? "intermediate");
-  const requires = (input.requires ?? "").trim() || "none";
+  const requires = serializeRequires(input.requires);
   const scanStatus = input.scan.verdict;
   const license = input.license.trim() || "CC-BY-4.0";
 
@@ -772,7 +775,7 @@ export interface SpecimenEditData {
   license: string;
   level: string;
   category: string;
-  requires: string;
+  requires: string[];
 }
 
 export async function getSpecimenForEdit(
@@ -820,7 +823,7 @@ export async function getSpecimenForEdit(
     license: row.license,
     level: row.level,
     category: row.category,
-    requires: row.requires,
+    requires: parseRequires(row.requires),
     tags: row.tag_names ? row.tag_names.split(TAG_SEP).filter(Boolean) : []
   };
 }
@@ -843,7 +846,7 @@ export async function updateSpecimenMetadata(
     license: string;
     level?: string;
     category?: string;
-    requires?: string;
+    requires?: string[];
     parsedTdn?: Record<string, unknown> | null;
   }
 ): Promise<void> {
@@ -852,7 +855,7 @@ export async function updateSpecimenMetadata(
   const description = input.description.trim();
   const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
   const level = normalizeLevel(input.level ?? "intermediate");
-  const requires = (input.requires ?? "").trim() || "none";
+  const requires = serializeRequires(input.requires);
   const license = input.license.trim() || "CC-BY-4.0";
 
   const statements: D1PreparedStatement[] = [
@@ -1190,7 +1193,7 @@ function rowToSummary(row: SpecimenSummaryRow): SpecimenSummary {
     category: row.category,
     level: normalizeLevel(row.level),
     description: row.description,
-    requires: row.requires,
+    requires: parseRequires(row.requires),
     op_count: Number(row.op_count ?? 0),
     thumbnail_key: row.thumbnail_key ?? "",
     author_handle: row.author_handle,
@@ -1220,6 +1223,41 @@ function normalizeSearchLimit(value: number): number {
 function normalizeLevel(value: string): Level {
   if (value === "starter" || value === "advanced") return value;
   return "intermediate";
+}
+
+// requires is stored as a JSON array of strings. Parse defensively: a legacy
+// pre-0009 single value (or the old "none" sentinel) maps to [] or [value]; bad
+// JSON yields []. Empty array = stock TouchDesigner.
+function parseRequires(raw: string | null): string[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "none") return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      const arr = JSON.parse(trimmed);
+      if (Array.isArray(arr)) {
+        return arr.filter((v): v is string => typeof v === "string" && v.trim().length > 0);
+      }
+    } catch {
+      /* fall through */
+    }
+    return [];
+  }
+  return [trimmed]; // legacy single value
+}
+
+// Normalize a submitted requires list into the JSON string stored in D1: trim,
+// drop empties and the "none" sentinel, dedupe (order-preserving).
+function serializeRequires(input: string[] | undefined): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const v of input ?? []) {
+    const t = (v ?? "").trim();
+    if (!t || t === "none" || seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return JSON.stringify(out);
 }
 
 function normalizeTier(value: string): Tier {

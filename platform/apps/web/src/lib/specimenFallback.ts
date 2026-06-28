@@ -175,7 +175,7 @@ export function toFixtureSummary(specimen: FixtureSpecimen): SpecimenSummary {
     category: specimen.category,
     level: toLevel(specimen.level),
     description: specimen.description,
-    requires: specimen.requires,
+    requires: toRequires(specimen.requires),
     op_count: specimen.operator_count,
     thumbnail_key: "",
     author_handle: "embody.tools",
@@ -190,4 +190,11 @@ export function toFixtureSummary(specimen: FixtureSpecimen): SpecimenSummary {
 function toLevel(value: string): SpecimenSummary["level"] {
   if (value === "starter" || value === "advanced") return value;
   return "intermediate";
+}
+
+// Fixture requires is a single legacy string; map to the multi-select list shape
+// ("none"/empty -> [], otherwise a one-element list).
+function toRequires(value: string): string[] {
+  const t = (value ?? "").trim();
+  return !t || t === "none" ? [] : [t];
 }

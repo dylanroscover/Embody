@@ -2271,3 +2271,77 @@ pre {
   .tdn-yaml__jump-opt { padding: 0.6rem; }
   .tdn-yaml__fold { width: 1.6em; min-height: 28px; }
 }
+
+/* Multi-select grouped dropdown (the "requires" picker on the submit + edit
+   forms). A trigger button shows a summary; the panel overlays with grouped
+   checkboxes and scrolls when the full requirement taxonomy exceeds its height.
+   Checkboxes carry name="requires" so the form's FormData.getAll collects them. */
+.msdd {
+  position: relative;
+  display: block;
+}
+.msdd__btn {
+  width: 100%;
+  justify-content: space-between;
+}
+.msdd__summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msdd__panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 260px;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated-2, #1f2321);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+.msdd__group {
+  padding: 0.25rem 0;
+}
+.msdd__group + .msdd__group {
+  border-top: 1px solid var(--border-faint);
+  margin-top: 0.25rem;
+  padding-top: 0.4rem;
+}
+.msdd__group-label {
+  margin: 0 0 0.25rem;
+  padding: 0 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.msdd__opt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.32rem 0.4rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.msdd__opt:hover {
+  background: rgba(110, 230, 104, 0.08);
+  color: var(--text);
+}
+.msdd__opt input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex: none;
+  cursor: pointer;
+}
+.msdd__opt:has(input:checked) {
+  color: var(--accent);
+}

@@ -68,7 +68,7 @@ try {
   usingFixtures = true;
   facets = {
     categories: [...new Set(fixtureSummaries.map((s) => s.category))].sort(),
-    requires: [...new Set(fixtureSummaries.map((s) => s.requires))].sort(),
+    requires: [...new Set(fixtureSummaries.flatMap((s) => s.requires))].sort(),
     authors: [...new Set(fixtureSummaries.map((s) => s.author_handle))].sort()
   };
   activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
@@ -101,7 +101,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
 >
   <section class="page-section collection-hero">
     <p class="eyebrow">the Collection</p>
-    <h1>see it. embody it.</h1>
+    <h1>see it. embody it</h1>
     <p class="lede">
       Copy any specimen's TDN to your clipboard and paste it straight into a TouchDesigner .toe running <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a>.
     </p>

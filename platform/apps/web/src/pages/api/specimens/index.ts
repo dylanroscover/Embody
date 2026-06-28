@@ -233,11 +233,27 @@ async function readSubmitRequest(
     };
   }
 
-  const requires = readString(raw.requires).trim() || "none";
-  if (!SUBMIT_REQUIRES.includes(requires)) {
+  // requires is now a multi-select list; accept an array (legacy single string
+  // is coerced to a one-element list). Each value must be in the whitelist; an
+  // empty list = stock TouchDesigner.
+  const rawRequires = Array.isArray(raw.requires)
+    ? raw.requires
+    : typeof raw.requires === "string" && raw.requires.trim() && raw.requires.trim() !== "none"
+      ? [raw.requires]
+      : [];
+  const requires = [
+    ...new Set(
+      rawRequires
+        .filter((r): r is string => typeof r === "string")
+        .map((r) => r.trim())
+        .filter(Boolean)
+    )
+  ];
+  const unknownRequire = requires.find((r) => !SUBMIT_REQUIRES.includes(r));
+  if (unknownRequire) {
     return {
       ok: false,
-      detail: `requires must be one of: ${SUBMIT_REQUIRES.join(", ")}.`
+      detail: `requires must be values from: ${SUBMIT_REQUIRES.join(", ")}.`
     };
   }
 

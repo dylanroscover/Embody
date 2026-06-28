@@ -11,8 +11,8 @@ export interface SpecimenSummary {
   category: string;
   level: Level;
   description: string;
-  /** "none" | "MediaPipe" | "Kinect Azure" | ... */
-  requires: string;
+  /** Zero or more values from SUBMIT_REQUIRES; empty = stock TouchDesigner. */
+  requires: string[];
   op_count: number;
   /** R2 key for the thumbnail. */
   thumbnail_key: string;
@@ -98,13 +98,59 @@ export const SUBMIT_CATEGORIES: readonly string[] = [
   "system"
 ] as const;
 
-// Hardware / capability requirement facet. "none" = runs on stock TouchDesigner.
-export const SUBMIT_REQUIRES: readonly string[] = [
-  "none",
-  "MediaPipe",
-  "Kinect Azure",
-  "Audio"
+// Hardware / capability requirements facet. A specimen can require SEVERAL of
+// these (multi-select); an EMPTY list means it runs on stock TouchDesigner. The
+// submit form renders a grouped (multi-level) checkbox picker from these groups;
+// SUBMIT_REQUIRES is the flat whitelist the API validates each selected value
+// against. ASCII only. Keep labels short (dropdown-friendly).
+export const SUBMIT_REQUIRE_GROUPS: readonly { group: string; items: readonly string[] }[] = [
+  { group: "Depth & body tracking", items: [
+    "Kinect Azure", "Kinect v2", "Intel RealSense", "Stereolabs ZED", "Orbbec", "Leap Motion", "iPhone/iPad LiDAR", "Luxonis OAK-D"
+  ] },
+  { group: "Motion capture & eye tracking", items: [
+    "OptiTrack", "Vicon", "Rokoko", "Xsens", "Tobii eye tracker", "ARKit face"
+  ] },
+  { group: "Cameras & video capture", items: [
+    "Webcam", "IP camera (RTSP)", "HDMI capture", "Blackmagic DeckLink", "AJA", "Machine-vision camera", "PTZ camera"
+  ] },
+  { group: "Video over IP & texture sharing", items: [
+    "NDI", "Spout (Windows)", "Syphon (macOS)"
+  ] },
+  { group: "Audio", items: [
+    "Audio interface (ASIO)", "Ableton Link", "Virtual audio (BlackHole/VB-Cable)", "Multichannel/spatial audio", "VST plugin", "Dante"
+  ] },
+  { group: "Control & protocols", items: [
+    "OSC", "MIDI controller", "WebSocket", "MQTT", "Serial/Arduino", "Stream Deck", "TouchOSC"
+  ] },
+  { group: "Lighting & show control", items: [
+    "DMX/Art-Net", "sACN", "Lighting console (grandMA)", "LED processor"
+  ] },
+  { group: "Projection & display", items: [
+    "Projector(s)", "Multi-projector warp/blend", "Genlock", "Multi-GPU (Mosaic)"
+  ] },
+  { group: "VR / AR / XR", items: [
+    "SteamVR/OpenVR", "Vive Tracker", "Meta Quest"
+  ] },
+  { group: "External engines & hosts", items: [
+    "TouchEngine", "Notch", "Unreal Engine", "Unity", "Resolume", "MadMapper", "Disguise"
+  ] },
+  { group: "AI & ML runtimes", items: [
+    "MediaPipe", "NVIDIA GPU (CUDA)", "NVIDIA RTX", "StreamDiffusion", "ONNX Runtime", "Stable Diffusion/ComfyUI"
+  ] },
+  { group: "Cloud AI APIs", items: [
+    "OpenAI API", "Anthropic API", "Cloud AI/LLM API", "ElevenLabs", "Runway"
+  ] },
+  { group: "Microcontrollers & sensors", items: [
+    "ESP32", "Raspberry Pi (GPIO)", "IMU sensor", "EEG (Muse)", "LiDAR scanner", "GPS"
+  ] },
+  { group: "System & platform", items: [
+    "Windows only", "macOS only", "TouchDesigner Pro", "High-VRAM GPU", "Internet connection"
+  ] },
 ] as const;
+
+// Flat whitelist derived from the groups -- the set the submit API validates
+// each selected requirement against. An empty selection = stock TouchDesigner.
+export const SUBMIT_REQUIRES: readonly string[] = SUBMIT_REQUIRE_GROUPS.flatMap((g) => g.items);
 
 export interface SubmitRequest {
   title: string;
@@ -115,8 +161,8 @@ export interface SubmitRequest {
   level: Level;
   /** One of SUBMIT_CATEGORIES. */
   category: string;
-  /** One of SUBMIT_REQUIRES ("none" = stock TouchDesigner). */
-  requires: string;
+  /** Zero or more values from SUBMIT_REQUIRES; empty = stock TouchDesigner. */
+  requires: string[];
   /** YAML (or legacy JSON) string of the TDN dict (the raw network). */
   tdn: string;
   /** Optional data-URL thumbnail; otherwise generated server-side. */

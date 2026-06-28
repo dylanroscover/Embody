@@ -232,7 +232,7 @@ interface EditValue {
   license: string;
   level: string;
   category: string;
-  requires: string;
+  requires: string[];
   /** New TDN body. Present only when the owner edited the network. */
   tdn?: string;
 }
@@ -276,9 +276,23 @@ async function readEditRequest(
     return { ok: false, detail: `category must be one of: ${SUBMIT_CATEGORIES.join(", ")}.` };
   }
 
-  const requires = readString(raw.requires).trim() || "none";
-  if (!SUBMIT_REQUIRES.includes(requires)) {
-    return { ok: false, detail: `requires must be one of: ${SUBMIT_REQUIRES.join(", ")}.` };
+  // requires is a multi-select list (legacy single string coerced to one item).
+  const rawRequires = Array.isArray(raw.requires)
+    ? raw.requires
+    : typeof raw.requires === "string" && raw.requires.trim() && raw.requires.trim() !== "none"
+      ? [raw.requires]
+      : [];
+  const requires = [
+    ...new Set(
+      rawRequires
+        .filter((r): r is string => typeof r === "string")
+        .map((r) => r.trim())
+        .filter(Boolean)
+    )
+  ];
+  const unknownRequire = requires.find((r) => !SUBMIT_REQUIRES.includes(r));
+  if (unknownRequire) {
+    return { ok: false, detail: `requires must be values from: ${SUBMIT_REQUIRES.join(", ")}.` };
   }
 
   // Optional new network body; only present when the owner edited the TDN. Full

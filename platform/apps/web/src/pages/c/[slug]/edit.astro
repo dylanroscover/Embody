@@ -1,6 +1,6 @@
 ---
 import { env } from "cloudflare:workers";
-import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_REQUIRES } from "@embody/contracts";
+import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_REQUIRE_GROUPS } from "@embody/contracts";
 import Base from "../../../layouts/Base.astro";
 import TdnYamlEditor from "../../../components/TdnYamlEditor";
 import { getCurrentTdnBlobForSlug, getSpecimenForEdit } from "../../../server/db";
@@ -38,7 +38,7 @@ try {
 
 const levelOptions = SUBMIT_LEVELS;
 const categoryOptions = SUBMIT_CATEGORIES;
-const requiresOptions = SUBMIT_REQUIRES;
+const requireGroups = SUBMIT_REQUIRE_GROUPS;
 const tagsValue = specimen.tags.join(", ");
 ---
 
@@ -111,21 +111,24 @@ const tagsValue = specimen.tags.join(", ");
       </div>
       <div class="submit-field">
         <span class="submit-field__label" id="ddlbl-requires">requires</span>
-        <div class="dd" data-dd>
-          <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-requires dd-val-requires">
-            <span class="dd__val" id="dd-val-requires">{specimen.requires}</span>
+        <div class="msdd" data-msdd>
+          <button type="button" class="dd__btn msdd__btn" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="ddlbl-requires msdd-summary-requires" data-msdd-toggle>
+            <span class="dd__val msdd__summary" id="msdd-summary-requires" data-msdd-summary>stock TouchDesigner</span>
             <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
           </button>
-          <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-requires" hidden>
-            {requiresOptions.map((value) => (
-              <li class="dd__opt" role="option" data-value={value} aria-selected={value === specimen.requires ? "true" : "false"}>{value}</li>
+          <div class="msdd__panel" data-msdd-panel hidden>
+            {requireGroups.map((g) => (
+              <div class="msdd__group">
+                <p class="msdd__group-label">{g.group}</p>
+                {g.items.map((item) => (
+                  <label class="msdd__opt">
+                    <input type="checkbox" name="requires" value={item} checked={specimen.requires.includes(item)} data-msdd-checkbox />
+                    <span class="msdd__opt-label">{item}</span>
+                  </label>
+                ))}
+              </div>
             ))}
-          </ul>
-          <select class="dd__native" name="requires" aria-hidden="true" tabindex="-1">
-            {requiresOptions.map((value) => (
-              <option value={value} selected={value === specimen.requires}>{value}</option>
-            ))}
-          </select>
+          </div>
         </div>
       </div>
       </div>
@@ -235,7 +238,7 @@ const tagsValue = specimen.tags.join(", ");
       license: String(data.get("license") || "CC-BY-4.0").trim() || "CC-BY-4.0",
       level: String(data.get("level") || "intermediate"),
       category: String(data.get("category") || ""),
-      requires: String(data.get("requires") || "none"),
+      requires: data.getAll("requires").map(String),
       tdn: String(data.get("tdn") || "")
     };
 
@@ -280,6 +283,55 @@ const tagsValue = specimen.tags.join(", ");
   // initial state shows the existing choice. Choosing an option writes the
   // native select's value and dispatches a 'change' event, so the submitted
   // value tracks the visible choice. Mirrors contribute.astro's [data-dd].
+
+  // Multi-select grouped "requires" picker. Checkboxes (server-rendered with the
+  // specimen's current selection checked) carry name="requires" so getAll reads
+  // them; the trigger summary reflects the count.
+  document.querySelectorAll<HTMLElement>("[data-msdd]").forEach((msdd) => {
+    const toggle = msdd.querySelector("[data-msdd-toggle]") as HTMLButtonElement | null;
+    const panel = msdd.querySelector("[data-msdd-panel]") as HTMLElement | null;
+    const summary = msdd.querySelector("[data-msdd-summary]") as HTMLElement | null;
+    const boxes = Array.from(
+      msdd.querySelectorAll("[data-msdd-checkbox]")
+    ) as HTMLInputElement[];
+    if (!toggle || !panel || !summary) return;
+    const tg = toggle;
+    const pn = panel;
+    const sm = summary;
+    let open = false;
+
+    const refresh = (): void => {
+      const picked = boxes.filter((b) => b.checked).map((b) => b.value);
+      sm.textContent =
+        picked.length === 0
+          ? "stock TouchDesigner"
+          : picked.length === 1
+            ? picked[0] ?? ""
+            : `${picked.length} selected`;
+    };
+    const setOpen = (next: boolean): void => {
+      open = next;
+      pn.hidden = !next;
+      tg.setAttribute("aria-expanded", next ? "true" : "false");
+    };
+
+    tg.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setOpen(!open);
+    });
+    boxes.forEach((b) => b.addEventListener("change", refresh));
+    document.addEventListener("click", (e) => {
+      if (!msdd.contains(e.target as Node)) setOpen(false);
+    });
+    msdd.addEventListener("keydown", (e) => {
+      if ((e as KeyboardEvent).key === "Escape") {
+        setOpen(false);
+        tg.focus();
+      }
+    });
+    refresh();
+  });
+
   const closeDropdown = (dd: Element): void => {
     dd.removeAttribute("data-open");
     const menu = dd.querySelector(".dd__menu");

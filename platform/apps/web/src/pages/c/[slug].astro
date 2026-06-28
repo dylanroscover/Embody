@@ -27,7 +27,7 @@ type DisplaySpecimen = {
   category: string;
   level: string;
   description: string;
-  requires: string;
+  requires: string[];
   thumbnail_key: string;
   operator_count: number;
   key_ops: string[];
@@ -140,7 +140,7 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     category: fixture.category,
     level: fixture.level,
     description: fixture.description,
-    requires: fixture.requires,
+    requires: fixture.requires && fixture.requires !== "none" ? [fixture.requires] : [],
     thumbnail_key: "",
     operator_count: fixture.operator_count,
     key_ops: fixture.key_ops,
@@ -608,9 +608,9 @@ function emitKey(key: string): string {
       <section class="side-block pillar specimen-actions">
         <div class="badge-row">
           <span class="badge">{specimen.level}</span>
-          {specimen.requires !== "none" && (
-            <span class="badge needs">needs {specimen.requires}</span>
-          )}
+          {specimen.requires.map((req) => (
+            <span class="badge needs">needs {req}</span>
+          ))}
           <span class="badge">{specimen.operator_count} operators</span>
           <span class="badge license">CC-BY</span>
         </div>
