@@ -328,6 +328,16 @@ pre {
   flex-shrink: 0;
 }
 
+/* Filled circle behind the brand glyph so it stays legible over the refracted
+   glass nav -- same page-colored fill as the .navbar__item pills. Scoped to the
+   navbar (the footer mark sits on a solid background and needs no plate). The
+   glyph is inset within the disc so the fill reads as a deliberate badge. */
+.navbar__mark .mark__dot {
+  background-color: var(--bg);
+  background-size: 20px 20px;
+  border-radius: 50%;
+}
+
 /* The inner item row -- a centered flex group with consistent gaps. */
 .navbar__items {
   display: inline-flex;
@@ -2130,8 +2140,12 @@ pre {
 .tdn-editor__btn.is-on { color: var(--accent); border-color: var(--accent); }
 .tdn-editor__cm {
   position: relative;
-  flex: 1;
-  min-height: clamp(320px, 52vh, 680px);
+  /* DEFINITE height (not flex:1 + min-height) so CodeMirror's .cm-editor
+     height:100% resolves and .cm-scroller (overflow:auto) scrolls a long TDN
+     INTERNALLY. With only a min-height the box grew to fit every line, so a
+     several-thousand-line paste stretched the page instead of scrolling.
+     Viewport-relative so it stays a sensible size on any screen. */
+  height: clamp(320px, 52vh, 680px);
   border: 1px solid var(--border-faint);
   border-radius: 10px;
   background: var(--bg-code);
