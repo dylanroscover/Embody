@@ -254,7 +254,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
       </div>
       <div class="container footer__bottom">
         <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
-        <p class="footer__sig">made with <button type="button" class="footer__emoji" data-emoji aria-label="made with love (roll the emoji again)" title="roll again">&#10084;&#65039;</button> in <span class="footer__city">idyllwild california</span></p>
+        <p class="footer__sig">made with <button type="button" class="footer__emoji" aria-label="made with love (roll the emoji again)" title="roll again">&#10084;&#65039;</button> in <span class="footer__city">idyllwild california</span></p>
       </div>
     </footer>
     <script>
@@ -262,7 +262,11 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
       // are stored as code points (ASCII source per the repo's ASCII rule) and
       // rendered at runtime; the markup's entity heart is the no-JS fallback.
       (() => {
-        const el = document.querySelector("[data-emoji]");
+        // Target the footer button by its OWN class -- NOT [data-emoji], which is
+        // the reactions feature's hook (reaction chips carry data-emoji too). A
+        // bare [data-emoji] selector grabbed the first reaction chip on specimen
+        // pages and overwrote it with a random emoji every load.
+        const el = document.querySelector(".footer__emoji");
         if (!el) return;
         const EMOJI: [number[], string][] = [
           [[0x2764, 0xfe0f], "love"], [[0x1f49a], "love"], [[0x1f49c], "love"],
