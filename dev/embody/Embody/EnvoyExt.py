@@ -1612,6 +1612,7 @@ class EnvoyExt:
         self._viz_takeover_until: float = 0.0  # absTime.seconds; yield to the user until then
         self._viz_settle_until: float = 0.0    # grace after a navigate while the view settles
         self._viz_zoom_pending: bool = False   # apply _VIZ_ZOOM one frame after a navigate
+        self._viz_follow_net: Optional[str] = None  # net we're currently following in (zoom-on-engage)
         self._viz_selected_op: Optional[str] = None  # path of the op we last auto-highlighted
         self._viz_last_activity: float = 0.0   # absTime.seconds of the last build op
         self._viz_action_text: str = ''        # what Embot says he is doing (speech bubble)
@@ -1633,6 +1634,7 @@ class EnvoyExt:
         self._viz_bot_jump_t0: float = 0.0            # absTime.seconds the current hop began
         self._viz_bot_build_queue: list = []          # template part names still to copy this assembly
         self._viz_bot_pending_cleanup: set = set()    # nets whose left-behind bot to tear down off-screen
+        self._ensureVizParams()                       # self-heal the Embot + Envoy Follow toggles
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -2800,7 +2802,8 @@ class EnvoyExt:
     #   - when the work moves to a network NO pane is showing, it NAVIGATES a
     #     network-editor pane into that COMP and SNAPS to frame the op (you cannot
     #     glide across networks -- different coordinate spaces -- so it cuts).
-    # Opt-in (Envoyfollow), main-thread only (driven from _onRefresh, which fires
+    # Opt-in (Embotenable for the character, Envoyfollow for the camera), main-thread
+    # only (driven from _onRefresh, which fires
     # every frame), and side-effect-free w.r.t. saved files: it only writes
     # pane.owner / pane.x / pane.y (view state -- not externalized, and verified to
     # add no operator to project.modified). home()/homeSelected() are deliberately
@@ -2814,7 +2817,7 @@ class EnvoyExt:
     # their view as the new baseline and (re)arms an idle cooldown -- so we resume
     # only after they stop, never give up forever, never yank them mid-interaction.
 
-    _VIZ_EASE = 0.25        # fraction of the remaining distance covered per frame
+    _VIZ_EASE = 0.4         # fraction of the remaining distance covered per frame (snappy -> stays on Embot)
     _VIZ_EPS = 1.0          # network units; closer than this -> snap and release
     _VIZ_TAKEOVER_S = 6.0   # seconds to yield after the user's last interaction
     _VIZ_ZOOM = 0.55        # framing zoom while following -- zoomed out for context
@@ -2947,40 +2950,69 @@ class EnvoyExt:
         except Exception:
             pass
 
-    # What each operator type does -- Embot explains it when no comment is set.
+    # What each operator type just DID. Embot narrates a node he has already built
+    # and is standing ON, so the copy is PAST TENSE ("marked the output") -- present
+    # continuous ("marking") reads as outdated the instant he lands on the finished
+    # node.
     _OP_DESCRIPTIONS = {
-        'noiseTOP': 'seeding a noise texture',
-        'rampTOP': 'laying down a gradient',
-        'constantTOP': 'filling a solid colour',
-        'transformTOP': 'repositioning the image',
-        'blurTOP': 'softening it with a blur',
-        'levelTOP': 'tuning brightness & contrast',
-        'edgeTOP': 'tracing the edges',
-        'compositeTOP': 'blending two layers together',
-        'hsvadjustTOP': 'shifting hue & saturation',
-        'feedbackTOP': 'feeding the output back in',
-        'glslTOP': 'running a GLSL shader',
-        'nullTOP': 'marking the final output',
-        'outTOP': 'marking the final output',
+        # TOPs
+        'noiseTOP': 'seeded a noise texture',
+        'rampTOP': 'laid down a gradient',
+        'constantTOP': 'filled a solid colour',
+        'transformTOP': 'repositioned the image',
+        'blurTOP': 'softened it with a blur',
+        'levelTOP': 'graded brightness & contrast',
+        'edgeTOP': 'traced the edges',
+        'compositeTOP': 'blended two layers',
+        'hsvadjustTOP': 'shifted hue & saturation',
+        'feedbackTOP': 'fed the output back in',
+        'glslTOP': 'ran a GLSL shader',
+        'renderTOP': 'rendered the scene',
+        'nullTOP': 'marked the output',
+        'outTOP': 'exposed the output',
+        # CHOPs
+        'lfoCHOP': 'set an oscillator going',
+        'mathCHOP': 'scaled the signal',
+        'filterCHOP': 'smoothed the motion',
+        'noiseCHOP': 'added some jitter',
+        'nullCHOP': 'marked the channel output',
+        # SOPs
+        'gridSOP': 'built a point grid',
+        'noiseSOP': 'displaced the geometry',
+        'transformSOP': 'transformed the points',
+        'nullSOP': 'marked the geometry output',
+        # POPs
+        'gridPOP': 'built GPU points',
+        'noisePOP': 'displaced them on the GPU',
+        'nullPOP': 'marked the POP output',
+        # MATs / COMPs / DATs
+        'phongMAT': 'set up a phong material',
+        'geometryCOMP': 'placed geometry to render',
+        'cameraCOMP': 'set up the camera',
+        'lightCOMP': 'added a light',
+        'baseCOMP': 'opened a sub-network',
+        'webclientDAT': 'wired up a web client',
+        'textDAT': 'dropped in a text DAT',
     }
 
     def _actionText(self, operation: str, path: str) -> str:
-        """What Embot says: the op's comment (my reasoning for it) if I set one,
-        else a description of what that op type does, else a plain verb."""
+        """What Embot says about the node he just finished and is standing on. PAST
+        tense throughout: his comment if one is set, else what that op type did, else
+        a plain past-tense verb. Never present-continuous -- he has already done it."""
         try:
             o = op(path)
             if o is not None:
                 note = (o.comment or '').strip()
                 if note:
                     return note
-                desc = self._OP_DESCRIPTIONS.get(o.type)
+                desc = self._OP_DESCRIPTIONS.get(o.OPType)   # OPType = 'noiseTOP'; .type = 'noise'
                 if desc:
                     return desc
         except Exception:
             pass
-        verbs = {'create_op': 'building', 'connect_ops': 'wiring up',
-                 'set_parameter': 'tuning', 'import_network': 'rebuilding'}
-        return '%s %s' % (verbs.get(operation, 'working on'), path.rsplit('/', 1)[-1])
+        verbs = {'create_op': 'built', 'connect_ops': 'wired up',
+                 'set_parameter': 'tuned', 'import_network': 'rebuilt'}
+        return '%s %s' % (verbs.get(operation, 'worked on'), path.rsplit('/', 1)[-1])
 
     def _resolveActiveOp(self, operation: str, params: dict, result) -> Optional[str]:
         """Best-effort path of the single op to move to. Prefers the path the
@@ -2999,6 +3031,45 @@ class EnvoyExt:
         except Exception:
             return None
 
+    def _ensureVizParams(self) -> None:
+        """Create the Embot (character) + Envoy Follow (camera) toggles on the Envoy
+        page if missing, so the feature is controllable on any load. They were added
+        live in a session and vanished on restart; this self-heals them on every init
+        -- idempotent, and they bake into the .toe on save. Mirrors
+        EmbodyExt._ensureAutosaveParams. Called once from __init__; never raises (the
+        viz tick no-ops cleanly while a param is briefly absent)."""
+        try:
+            comp = self.ownerComp
+            page = None
+            for pg in comp.customPages:
+                if pg.name == 'Envoy':
+                    page = pg
+                    break
+            if page is None:
+                return
+            if not hasattr(comp.par, 'Embotenable'):
+                p = page.appendToggle('Embotenable', label='Embot')[0]
+                p.default = True
+                p.val = True
+                p.startSection = True
+                p.order = 5.0
+                p.help = ('Show the Embot builder mascot. He appears on each operator '
+                          'Envoy creates or edits and narrates what it does. Off hides '
+                          'him entirely (no character, no camera movement).')
+            if not hasattr(comp.par, 'Envoyfollow'):
+                f = page.appendToggle('Envoyfollow', label='Envoy Follow')[0]
+                f.default = True
+                f.val = True
+                f.order = 5.6
+                f.help = ('Camera follows the operator Envoy is working on, panning '
+                          'the network editor to it. Works with or without the Embot '
+                          'character shown.')
+        except Exception as e:
+            try:
+                self._log('_ensureVizParams failed: %s' % e, 'DEBUG')
+            except Exception:
+                pass
+
     def _vizTick(self) -> None:
         """Once-per-frame visualization driver (after the drain loop): retire
         artifacts when idle/disabled/saving, advance the colour pulse + bot dance,
@@ -3012,7 +3083,9 @@ class EnvoyExt:
             if self.ownerComp.fetch('_suppress_dialogs', False, search=False):
                 self._vizCleanup()
                 return
-            if not self.ownerComp.par.Envoyfollow.eval():
+            show_bot = self.ownerComp.par.Embotenable.eval()   # render the character
+            follow = self.ownerComp.par.Envoyfollow.eval()     # camera tracks the active op
+            if not show_bot and not follow:
                 self._vizCleanup()
                 return
             now = absTime.seconds
@@ -3024,9 +3097,13 @@ class EnvoyExt:
             self._pulseTick(now)
             self._vizPumpQueue(now)
             if self._viz_target_op:
-                self._followActive(now)
-            self._cleanupDeadBots()   # tear down a left-behind bot off-screen
-            self._botDance(now)
+                self._trackActive(now, follow, show_bot)
+            if show_bot:
+                self._cleanupDeadBots()   # tear down a left-behind bot off-screen
+                self._assembleTick()      # copy one template part per frame (no freeze)
+                self._botDance(now)
+            elif self._viz_bot_net:
+                self._destroyBot()        # camera-only: ensure no character lingers
         except Exception as e:
             try:
                 self._log(f'Viz tick skipped: {type(e).__name__}: {e}', 'DEBUG')
@@ -3049,17 +3126,17 @@ class EnvoyExt:
         self._viz_hop_until = now + (dwell if dwell > self._VIZ_HOP_MIN
                                      else self._VIZ_HOP_MIN)
 
-    def _followActive(self, now: float) -> None:
-        """Camera follow + highlight + pulse-start + bot-placement for the active
-        op. Glides within its network, or navigates+snaps into a network no pane
-        is showing."""
+    def _trackActive(self, now: float, follow: bool, show_bot: bool) -> None:
+        """For the active op: stand Embot on it (if show_bot / Embotenable) and pan the
+        network editor to it (if follow / Envoyfollow). Independent -- the camera frames
+        the OP itself, so it follows Envoy's work whether or not the character renders."""
         target = op(self._viz_target_op) if self._viz_target_op else None
         if not target or not target.valid:
             self._viz_target_op = None
             return
         # A docked DAT (e.g. a callbacks DAT) renders attached to its host even
-        # though its own nodeX/nodeY is elsewhere -- follow + stand on the HOST
-        # (the op you actually see). The speech bubble still names the real op.
+        # though its own nodeX/nodeY is elsewhere -- stand on the HOST (the op you
+        # actually see). The speech bubble still names the real op.
         try:
             if target.dock is not None:
                 target = target.dock
@@ -3068,11 +3145,21 @@ class EnvoyExt:
         net = target.parent()
         if net is None:
             return
-        self._pulseStart(target, now)        # ping the node colour
-        self._placeBot(net, target, now)     # bring the dancing bot to the op
-        self._highlightOp(target)            # mark Envoy's focus AFTER the bot is
-                                             # placed (a freshly created bot would
-                                             # otherwise steal TD's selection)
+        # --- the character (Embotenable) ---
+        if show_bot:
+            self._pulseStart(target, now)    # ping the node colour
+            self._placeBot(net, target, now) # bring the dancing bot to the op
+        # --- the camera (Envoyfollow) -- frames the op, bot-independent ---
+        if not follow:
+            return
+        # First time we follow in this network, establish our wide _VIZ_ZOOM (once,
+        # applied by _glideStep). The glide otherwise only PANS, so if the pane sat
+        # at a tight zoom the follow would track him at that tight zoom.
+        if net.path != self._viz_follow_net:
+            self._viz_follow_net = net.path
+            self._viz_zoom_pending = True
+        self._highlightOp(target)            # mark Envoy's focus (changes selection ->
+                                             # only when actually following)
         pane, navigate = self._pickFollowPane(net)
         if pane is None:
             return
@@ -3106,27 +3193,22 @@ class EnvoyExt:
             return None, False
 
     def _userTookOver(self, pane) -> bool:
-        """True while we should yield this pane to the user. A manual change
-        (owner/pan/zoom since we last set it) adopts their view as the new
-        baseline and (re)arms an idle cooldown, so we resume only once they stop
-        -- never a perpetual back-off, never a yank mid-interaction."""
+        """True only while the user has deliberately navigated the pane to a DIFFERENT
+        network -- then we briefly yield it to them. Pan/zoom changes are deliberately
+        IGNORED: TD auto-frames (pans + zooms into) a freshly-spawned node, a change we
+        did NOT make, and treating that as 'the user took over' froze the follow for
+        ~6s while Embot raced off -- the camera then snapped to the last node instead
+        of ever tracking him. Following him beats honouring a transient auto-frame; a
+        real owner change (the user clicking into another network) still yields."""
         now = absTime.seconds
         cur = self._viewTuple(pane)              # (id, owner, x, y, zoom)
         if now < self._viz_settle_until:
             self._viz_last_view = cur            # our navigate is still settling -> adopt
             return False
         lv = self._viz_last_view
-        if lv and lv[0] == pane.id:
-            # Tolerant: ignore tiny float/settle jitter -- only a real user pan,
-            # zoom, or navigation counts. (An exact compare spuriously armed the
-            # cooldown and blocked most follows.)
-            took = (lv[1] != cur[1] or
-                    abs(lv[2] - cur[2]) > self._VIZ_TAKEOVER_PAN or
-                    abs(lv[3] - cur[3]) > self._VIZ_TAKEOVER_PAN or
-                    abs(lv[4] - cur[4]) > self._VIZ_TAKEOVER_ZOOM)
-            if took:
-                self._viz_takeover_until = now + self._VIZ_TAKEOVER_S
-                self._viz_last_view = cur        # adopt -> avoids perpetual backoff
+        if lv and lv[0] == cur[0] and lv[1] != cur[1]:   # OWNER changed -> user navigated away
+            self._viz_takeover_until = now + self._VIZ_TAKEOVER_S
+        self._viz_last_view = cur                # always re-baseline (no stale pan/zoom compare)
         return now < self._viz_takeover_until
 
     def _navigateAndFrame(self, pane, net: 'COMP', target: 'OP') -> None:
@@ -3147,10 +3229,11 @@ class EnvoyExt:
         self._viz_zoom_pending = True
 
     def _glideStep(self, pane, target: 'OP') -> None:
-        """One frame of an ease-out glide of `pane` toward `target`'s centre.
-        Pan only -- no zoom change. Within _VIZ_EPS we snap and clear the target,
-        releasing the pane so the user is free to move it again until the next op
-        arrives."""
+        """One frame of an ease toward the active OP's standing point -- the spot where
+        Embot stands (op centre-x, top edge), computed from the OP so the camera follows
+        whether or not the character is rendered. `target` is the CURRENT pump op (the
+        one the bot is on), not a stale queue entry. Pan only; releases the pane once it
+        has caught the op and nothing is left queued."""
         if self._viz_zoom_pending:
             try:
                 pane.zoom = self._VIZ_ZOOM   # undo TD's auto-frame zoom-in (once, sticks now)
@@ -3158,13 +3241,14 @@ class EnvoyExt:
                 pass
             self._viz_zoom_pending = False
         cx = target.nodeX + target.nodeWidth / 2.0
-        cy = target.nodeY + target.nodeHeight / 2.0
+        cy = target.nodeY + target.nodeHeight + self._botFootGap()   # Embot's standing centre
         dx = cx - pane.x
         dy = cy - pane.y
         if abs(dx) < self._VIZ_EPS and abs(dy) < self._VIZ_EPS:
             pane.x = cx
             pane.y = cy
-            self._viz_target_op = None   # settled -> release the pane to the user
+            if not self._viz_target_queue:   # on him AND nothing left to build/visit
+                self._viz_target_op = None   # -> release the pane to the user
         else:
             pane.x = pane.x + dx * self._VIZ_EASE
             pane.y = pane.y + dy * self._VIZ_EASE
@@ -3318,51 +3402,94 @@ class EnvoyExt:
             return None
 
     def _ensureBot(self, net: 'COMP') -> bool:
-        """Ensure Embot is present in `net`, copied from the template in ONE block
-        copyOPs. Each copyOPs into the DISPLAYED network forces a full editor redraw
-        whose cost scales with how many ops are in view; an earlier per-frame spread
-        of the 9 parts therefore paid that redraw NINE times (multiple seconds in a
-        busy net). One block copy is ONE redraw. When following INTO a new COMP this
-        runs before the navigate (target net still off-screen -> cheap); the bot we
-        are LEAVING is torn down a frame later, off-screen (see _cleanupDeadBots).
-        Returns False where a bot must not live (see _botUnsafeNet)."""
+        """Ensure Embot is present (or assembling) in `net`. On a network change he is
+        COPIED from the template ONE PART PER FRAME (see _assembleTick) rather than in
+        a single block copyOPs. This per-frame spread is the version that ran stably
+        for hours; the block copy that replaced it was implicated in repeated TD
+        crashes and was reverted. Returns False where a bot must not live."""
         netpath = net.path
         if self._viz_bot_net == netpath:
-            return True
+            return True                         # already here (assembled or assembling)
         if self._botUnsafeNet(net):
             return False
-        tmpl = self._ensureTemplate()
-        if tmpl is None:
+        if self._ensureTemplate() is None:
             return False
-        # Defer teardown of the bot we're leaving until it is off-screen (cheap).
+        # Defer teardown of the bot we're LEAVING. Destroying ops from a network that
+        # is still on-screen forces a full editor redraw per op (~280ms for a busy
+        # net -- the bulk of an old switch frame). Queue the old net instead and tear
+        # it down a frame later, once the navigate has moved it off-screen (cheap).
         if self._viz_bot_net and self._viz_bot_net != netpath:
             self._viz_bot_pending_cleanup.add(self._viz_bot_net)
-        self._viz_bot_pending_cleanup.discard(netpath)
-        # Clear any orphan parts already here so copyOPs keeps the exact names.
-        for c in list(net.children):
-            if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
-                try:
-                    c.destroy()
-                except Exception:
-                    pass
-        # Reset live animation state for the fresh figure.
+        self._viz_bot_pending_cleanup.discard(netpath)   # we're living here again -> keep it
+        # Reset live animation state for the fresh figure (without destroying yet).
         self._viz_bot_pos = None
         self._viz_bot_from = None
         self._viz_bot_target = None
-        self._viz_last_skin = None              # force a recolour onto the new parts
-        # ONE block copy -> ONE redraw. Template colours ride along; _botDance
-        # repositions + recolours the parts on the same frame.
-        srcs = [tmpl.op(self._VIZ_BOT_PREFIX + s)
-                for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS]
-        srcs.append(tmpl.op(self._VIZ_BOT_PREFIX + 'speech'))
-        srcs = [s for s in srcs if s]
-        try:
-            for n in net.copyOPs(srcs):
-                n.selected = False
-        except Exception:
-            return False
         self._viz_bot_net = netpath
+        self._viz_bot_build_queue = [self._VIZ_BOT_PREFIX + s
+                                     for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS]
+        self._viz_bot_build_queue.append(self._VIZ_BOT_PREFIX + 'speech')
+        self._viz_last_skin = None              # force a recolour onto the new parts
+        self._assembleStep(net)                 # copy part #1 (body) this frame
         return True
+
+    def _assembleStep(self, net: 'COMP') -> None:
+        """Copy ONE queued template part into `net` -- the per-frame unit of Embot's
+        spread assembly. Colours each part on arrival (skin for the body, black for
+        eyes) so it looks right immediately, independent of _botDance's recolour
+        throttle. The speech bubble keeps its own template styling."""
+        q = self._viz_bot_build_queue
+        if not q:
+            return
+        tmpl = self._ensureTemplate()
+        if tmpl is None:
+            self._viz_bot_build_queue = []
+            return
+        name = q.pop(0)
+        src = tmpl.op(name)
+        if not src or net.op(name):             # missing source / already present
+            return
+        try:
+            new = net.copyOPs([src])
+            idle = absTime.seconds - self._viz_last_activity
+            f = min(1.0, max(0.0, idle / self._VIZ_WARM_S))
+            hue = round((self._VIZ_COOL_HUE +
+                         (self._VIZ_WARM_HUE - self._VIZ_COOL_HUE) * f) * 36.0) / 36.0
+            skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
+            pos = self._viz_bot_pos
+            for n in new:
+                n.selected = False
+                bn = n.name
+                if bn.endswith('speech'):
+                    # Place the bubble at the head on arrival so it never flashes at
+                    # its copied (0,0) spot before _botDance catches it.
+                    if pos:
+                        n.nodeX = pos[0] - n.nodeWidth / 2.0
+                        n.nodeY = pos[1] + 58.0
+                    continue
+                if bn.endswith('eye_l') or bn.endswith('eye_r'):
+                    n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = 0.0, 0.0, 0.0
+                else:
+                    n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = skin
+        except Exception:
+            pass
+
+    def _assembleTick(self) -> None:
+        """Drive Embot's spread assembly: one template part copied per frame until he
+        is whole. Runs unconditionally each frame so assembly completes even after the
+        follow target clears (idle mid-build)."""
+        q = self._viz_bot_build_queue
+        if not q:
+            return
+        netpath = self._viz_bot_net
+        if not netpath:
+            self._viz_bot_build_queue = []
+            return
+        net = op(netpath)
+        if not net or not net.valid:
+            self._viz_bot_build_queue = []
+            return
+        self._assembleStep(net)
 
     def _cleanupDeadBots(self) -> None:
         """Tear down a bot left behind by a switch -- ONE network per frame, now that
@@ -3447,7 +3574,7 @@ class EnvoyExt:
         # Only repaint when actually animating (a jump or a gesture) or when the
         # quantized colour ticks -- otherwise leave the parts untouched so idle
         # frames cost nothing.
-        moving = (t < 1.0) or active
+        moving = (t < 1.0) or active or bool(self._viz_bot_build_queue)  # place new parts mid-assembly
         if moving or recolor:
             for (suffix, ox, oy, w, h, is_eye) in self._VIZ_BOT_PARTS:
                 p = net.op(self._VIZ_BOT_PREFIX + suffix)
@@ -3571,6 +3698,7 @@ class EnvoyExt:
         self._viz_bot_pending_cleanup = set()
         self._viz_target_queue = []
         self._viz_hop_until = 0.0
+        self._viz_follow_net = None   # re-establish zoom next time we follow somewhere
 
     def _viewTuple(self, pane) -> tuple:
         """A comparable snapshot of a pane's view state (id, owner, pan, zoom)."""
