@@ -6,7 +6,7 @@ Anyone with a free [account](accounts.md) can share a network with the [Collecti
 
 - **TDN (YAML)** — paste your network as TDN. Export it from Embody with ++ctrl+shift+e++ (whole project) or ++ctrl+alt+e++ (current COMP), or copy a COMP with ++ctrl+shift+c++. Both YAML and legacy JSON are accepted.
 - **Title, description, tags.**
-- **Category, difficulty, and hardware requirements** (e.g. MediaPipe, Kinect Azure, Audio — or none, for stock TouchDesigner).
+- **Category, level, and hardware requirements** (e.g. MediaPipe, Kinect Azure, Audio — or none, for stock TouchDesigner).
 - **An optional thumbnail image.**
 
 ## The capability scan

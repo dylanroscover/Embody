@@ -58,7 +58,7 @@ INSERT OR REPLACE INTO tags (id, name, slug) VALUES
 
 -- Specimens (real first-party metadata from specimens/manifest.json).
 INSERT OR REPLACE INTO specimens (
-  id, slug, author_id, title, description, category, difficulty, requires, op_count,
+  id, slug, author_id, title, description, category, level, requires, op_count,
   family_summary, current_version_id, thumbnail_key, license, visibility, tier, scan_status,
   capability_json, likes_count, views_count, copies_count
 ) VALUES

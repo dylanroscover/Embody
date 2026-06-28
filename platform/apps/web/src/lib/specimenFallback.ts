@@ -7,14 +7,14 @@ import type { SpecimenSummary } from "@embody/contracts";
 //
 // Shape mirrors the fields the UI reads: collection/index.astro consumes
 // fixtureSummaries (SpecimenSummary), and c/[slug].astro reads slug, name,
-// category, difficulty, description, requires, operator_count, key_ops, prompt.
+// category, level, description, requires, operator_count, key_ops, prompt.
 // tags / want / evolve back the client-side search helper.
 
 export interface FixtureSpecimen {
   slug: string;
   name: string;
   category: string;
-  difficulty: string;
+  level: string;
   description: string;
   tags: string[];
   requires: string;
@@ -30,7 +30,7 @@ const fixtureSpecimens: FixtureSpecimen[] = [
     slug: "reaction-diffusion",
     name: "Reaction-Diffusion (Gray-Scott)",
     category: "generative",
-    difficulty: "intermediate",
+    level: "intermediate",
     description:
       "A living Gray-Scott reaction-diffusion field. Two chemicals diffuse and react in a GPU feedback loop, growing organic maze and coral patterns that evolve continuously. Usable as a texture, displacement, or mask source.",
     tags: ["feedback", "glsl", "generative", "simulation", "texture"],
@@ -46,7 +46,7 @@ const fixtureSpecimens: FixtureSpecimen[] = [
     slug: "kaleidoscope",
     name: "Kaleidoscope",
     category: "compositing",
-    difficulty: "intermediate",
+    level: "intermediate",
     description:
       "A reusable kaleidoscope compositor. Folds any TOP (or its built-in animated source) into an N-fold mirrored mandala that rotates, twists, breathes, and tumbles. Drop it onto any visual via the External source mode.",
     tags: ["compositing", "glsl", "mirror", "symmetry", "effect"],
@@ -62,7 +62,7 @@ const fixtureSpecimens: FixtureSpecimen[] = [
     slug: "noise-terrain",
     name: "Ridged Mountain Terrain",
     category: "3d",
-    difficulty: "advanced",
+    level: "advanced",
     description:
       "A procedural snow-mountain scene. A GLSL POP compute shader displaces a grid into ridged-multifractal peaks that morph in place, shaded by a snow/rock GLSL MAT with elevation-based snow, sun/sky lighting, and atmospheric haze, composited under a procedural sky.",
     tags: ["3d", "glsl", "terrain", "geometry", "procedural"],
@@ -78,7 +78,7 @@ const fixtureSpecimens: FixtureSpecimen[] = [
     slug: "murmuration",
     name: "Murmuration",
     category: "simulation",
-    difficulty: "advanced",
+    level: "advanced",
     description:
       "A dense GPU particle swarm that flocks like a starling murmuration at dusk - cohering, separating, aligning, and flowing around a slow invisible attractor with curl-noise wander. True per-neighbor Reynolds flocking computed on the GPU (a Neighbor POP index list iterated in a GLSL POP), rendered as luminous additive point sprites.",
     tags: ["simulation", "glsl", "pop", "flocking", "particles", "generative"],
@@ -94,7 +94,7 @@ const fixtureSpecimens: FixtureSpecimen[] = [
     slug: "plasma-interference",
     name: "Plasma (Sine Interference)",
     category: "generative",
-    difficulty: "intermediate",
+    level: "intermediate",
     description:
       "A flowing GPU plasma. Two sine-wave fields at slightly detuned scales beat against each other into shimmering moire fringes, a slow rotating domain warp bends the coordinates into liquid motion, and the result is mapped through a cyclic cosine palette. Self-contained and stateless - one GLSL TOP, no input, no feedback - so it drops in anywhere as a VJ loop, texture, or displacement source.",
     tags: ["generative", "glsl", "plasma", "palette", "vj", "texture"],
@@ -110,7 +110,7 @@ const fixtureSpecimens: FixtureSpecimen[] = [
     slug: "mandelbulb-march",
     name: "Mandelbulb March",
     category: "raymarching-sdf",
-    difficulty: "advanced",
+    level: "advanced",
     description:
       "A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic distance estimator is marched per pixel against a slowly orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows, a fresnel rim, and a proximity glow give it depth. No input, no feedback - a drop-in hero render, a looping VJ source, or a reference for distance-estimated raymarching.",
     tags: ["raymarching", "sdf", "glsl", "fractal", "3d", "mandelbulb"],
@@ -173,7 +173,7 @@ export function toFixtureSummary(specimen: FixtureSpecimen): SpecimenSummary {
     slug: specimen.slug,
     name: specimen.name,
     category: specimen.category,
-    difficulty: toDifficulty(specimen.difficulty),
+    level: toLevel(specimen.level),
     description: specimen.description,
     requires: specimen.requires,
     op_count: specimen.operator_count,
@@ -187,7 +187,7 @@ export function toFixtureSummary(specimen: FixtureSpecimen): SpecimenSummary {
   };
 }
 
-function toDifficulty(value: string): SpecimenSummary["difficulty"] {
+function toLevel(value: string): SpecimenSummary["level"] {
   if (value === "starter" || value === "advanced") return value;
   return "intermediate";
 }

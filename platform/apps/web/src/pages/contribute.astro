@@ -2,7 +2,7 @@
 import { env } from "cloudflare:workers";
 import {
   SUBMIT_CATEGORIES,
-  SUBMIT_DIFFICULTIES,
+  SUBMIT_LEVELS,
   SUBMIT_REQUIRES
 } from "@embody/contracts";
 import Base from "../layouts/Base.astro";
@@ -29,7 +29,7 @@ const turnstileSiteKey = String(
 ).trim();
 const useTurnstileWidget = !isDev && Boolean(turnstileSiteKey);
 
-const difficultyOptions = SUBMIT_DIFFICULTIES;
+const levelOptions = SUBMIT_LEVELS;
 const categoryOptions = SUBMIT_CATEGORIES;
 const requiresOptions = SUBMIT_REQUIRES;
 ---
@@ -64,19 +64,19 @@ const requiresOptions = SUBMIT_REQUIRES;
       </label>
       <div class="submit-row">
       <div class="submit-field">
-        <span class="submit-field__label" id="ddlbl-difficulty">difficulty</span>
+        <span class="submit-field__label" id="ddlbl-level">level</span>
         <div class="dd" data-dd>
-          <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-difficulty dd-val-difficulty">
-            <span class="dd__val" id="dd-val-difficulty">intermediate</span>
+          <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-level dd-val-level">
+            <span class="dd__val" id="dd-val-level">intermediate</span>
             <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
           </button>
-          <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-difficulty" hidden>
-            {difficultyOptions.map((value) => (
+          <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-level" hidden>
+            {levelOptions.map((value) => (
               <li class="dd__opt" role="option" data-value={value} aria-selected={value === "intermediate" ? "true" : "false"}>{value}</li>
             ))}
           </ul>
-          <select class="dd__native" name="difficulty" aria-hidden="true" tabindex="-1">
-            {difficultyOptions.map((value) => (
+          <select class="dd__native" name="level" aria-hidden="true" tabindex="-1">
+            {levelOptions.map((value) => (
               <option value={value} selected={value === "intermediate"}>{value}</option>
             ))}
           </select>
@@ -341,7 +341,7 @@ const requiresOptions = SUBMIT_REQUIRES;
       description: String(data.get("description") || "").trim(),
       tags,
       license: String(data.get("license") || "CC-BY-4.0").trim() || "CC-BY-4.0",
-      difficulty: String(data.get("difficulty") || "intermediate"),
+      level: String(data.get("level") || "intermediate"),
       category: String(data.get("category") || ""),
       requires: String(data.get("requires") || "none"),
       tdn: tdnRaw,
@@ -392,7 +392,7 @@ const requiresOptions = SUBMIT_REQUIRES;
 <script>
   // App-native dropdowns for the contribute form. Each .dd wraps a
   // visually-hidden native <select> (the value the form's FormData reads via
-  // data.get("difficulty"/"category"/"requires")) plus a styled trigger + ARIA
+  // data.get("level"/"category"/"requires")) plus a styled trigger + ARIA
   // listbox. Choosing an option writes the native select's value and dispatches
   // a 'change' event, so the submitted value tracks the visible choice. Mirrors
   // the collection page's [data-dd] behavior. This is a bundled module script
@@ -674,7 +674,7 @@ const requiresOptions = SUBMIT_REQUIRES;
     color: #ff9b9b;
   }
 
-  /* The three short dropdowns (difficulty / category / requires) share one
+  /* The three short dropdowns (level / category / requires) share one
      row on wider screens, collapsing to a stack on narrow viewports. */
   .submit-row {
     display: grid;

@@ -1,7 +1,7 @@
 import {
   emptyCapabilityCounts,
   type CapabilityJson,
-  type Difficulty,
+  type Level,
   type ListResponse,
   type SearchResponse,
   type SpecimenDetail,
@@ -43,7 +43,7 @@ export interface CollectionListOptions {
   /** Full-text query (FTS via specimens_fts). Empty/undefined = no text filter. */
   q?: string;
   category?: string;
-  difficulty?: string;
+  level?: string;
   requires?: string;
   /** Author handle facet. Empty/undefined = no author filter. */
   author?: string;
@@ -70,7 +70,7 @@ export interface InsertSpecimenInput {
   tags: string[];
   license: string;
   /** Submit-form metadata; whitelist-validated upstream in the API route. */
-  difficulty?: Difficulty;
+  level?: Level;
   /** Known category facet; empty falls back to the first tag (legacy behavior). */
   category?: string;
   /** Hardware/capability requirement; "none" runs on a clean TouchDesigner install. */
@@ -92,7 +92,7 @@ interface SpecimenSummaryRow {
   slug: string;
   title: string;
   category: string;
-  difficulty: string;
+  level: string;
   description: string;
   requires: string;
   op_count: number;
@@ -123,7 +123,7 @@ const SUMMARY_COLUMNS = [
   "s.slug",
   "s.title",
   "s.category",
-  "s.difficulty",
+  "s.level",
   "s.description",
   "s.requires",
   "s.op_count",
@@ -270,10 +270,10 @@ export async function listSpecimensForCollection(
     filterParams.push(category);
   }
 
-  const difficulty = (options.difficulty ?? "").trim();
-  if (difficulty) {
-    where.push("s.difficulty = ?");
-    filterParams.push(difficulty);
+  const level = (options.level ?? "").trim();
+  if (level) {
+    where.push("s.level = ?");
+    filterParams.push(level);
   }
 
   const requires = (options.requires ?? "").trim();
@@ -659,7 +659,7 @@ export async function insertSpecimenWithVersion(
   // Prefer the submit-form category (whitelist-validated upstream); fall back to
   // the first tag's slug, then "community", to preserve pre-metadata behavior.
   const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
-  const difficulty = normalizeDifficulty(input.difficulty ?? "intermediate");
+  const level = normalizeLevel(input.level ?? "intermediate");
   const requires = (input.requires ?? "").trim() || "none";
   const scanStatus = input.scan.verdict;
   const license = input.license.trim() || "CC-BY-4.0";
@@ -674,7 +674,7 @@ export async function insertSpecimenWithVersion(
     db
       .prepare(
         `INSERT INTO specimens (
-           id, slug, author_id, title, description, category, difficulty, requires,
+           id, slug, author_id, title, description, category, level, requires,
            op_count, family_summary, current_version_id, thumbnail_key, license,
            visibility, tier, scan_status, capability_json
          )
@@ -688,7 +688,7 @@ export async function insertSpecimenWithVersion(
         title,
         description,
         category,
-        difficulty,
+        level,
         requires,
         opCount,
         versionId,
@@ -770,7 +770,7 @@ export interface SpecimenEditData {
   description: string;
   tags: string[];
   license: string;
-  difficulty: string;
+  level: string;
   category: string;
   requires: string;
 }
@@ -782,7 +782,7 @@ export async function getSpecimenForEdit(
   const row = await db
     .prepare(
       `SELECT s.id, s.author_id, u.handle AS author_handle, s.slug, s.title,
-              s.description, s.license, s.difficulty, s.category, s.requires,
+              s.description, s.license, s.level, s.category, s.requires,
               (SELECT GROUP_CONCAT(t.name, char(31))
                  FROM specimen_tags st
                  JOIN tags t ON t.id = st.tag_id
@@ -801,7 +801,7 @@ export async function getSpecimenForEdit(
       title: string;
       description: string | null;
       license: string;
-      difficulty: string;
+      level: string;
       category: string;
       requires: string;
       tag_names: string | null;
@@ -818,7 +818,7 @@ export async function getSpecimenForEdit(
     title: row.title,
     description: row.description ?? "",
     license: row.license,
-    difficulty: row.difficulty,
+    level: row.level,
     category: row.category,
     requires: row.requires,
     tags: row.tag_names ? row.tag_names.split(TAG_SEP).filter(Boolean) : []
@@ -826,7 +826,7 @@ export async function getSpecimenForEdit(
 }
 
 // Owner edit of a specimen's METADATA (title/description/tags/license/
-// difficulty/category/requires). The TDN body is NOT touched here -- changing
+// level/category/requires). The TDN body is NOT touched here -- changing
 // the network would require a re-scan + a new specimen_versions row, which is a
 // separate "new version" path. parsedTdn (the unchanged current network) is
 // passed only so the FTS mirror's dat_text is preserved on re-sync: syncSpecimensFts
@@ -841,7 +841,7 @@ export async function updateSpecimenMetadata(
     description: string;
     tags: string[];
     license: string;
-    difficulty?: string;
+    level?: string;
     category?: string;
     requires?: string;
     parsedTdn?: Record<string, unknown> | null;
@@ -851,7 +851,7 @@ export async function updateSpecimenMetadata(
   const title = input.title.trim();
   const description = input.description.trim();
   const category = (input.category ?? "").trim() || tags[0]?.slug || "community";
-  const difficulty = normalizeDifficulty(input.difficulty ?? "intermediate");
+  const level = normalizeLevel(input.level ?? "intermediate");
   const requires = (input.requires ?? "").trim() || "none";
   const license = input.license.trim() || "CC-BY-4.0";
 
@@ -859,11 +859,11 @@ export async function updateSpecimenMetadata(
     db
       .prepare(
         `UPDATE specimens
-            SET title = ?, description = ?, category = ?, difficulty = ?,
+            SET title = ?, description = ?, category = ?, level = ?,
                 requires = ?, license = ?, updated_at = datetime('now')
           WHERE id = ?`
       )
-      .bind(title, description, category, difficulty, requires, license, input.specimenId),
+      .bind(title, description, category, level, requires, license, input.specimenId),
     // Tags are a full replace: drop the existing links, re-add the new set.
     db.prepare("DELETE FROM specimen_tags WHERE specimen_id = ?").bind(input.specimenId)
   ];
@@ -1188,7 +1188,7 @@ function rowToSummary(row: SpecimenSummaryRow): SpecimenSummary {
     slug: row.slug,
     name: row.title,
     category: row.category,
-    difficulty: normalizeDifficulty(row.difficulty),
+    level: normalizeLevel(row.level),
     description: row.description,
     requires: row.requires,
     op_count: Number(row.op_count ?? 0),
@@ -1217,7 +1217,7 @@ function normalizeSearchLimit(value: number): number {
   return Math.min(50, Math.max(1, Math.trunc(value)));
 }
 
-function normalizeDifficulty(value: string): Difficulty {
+function normalizeLevel(value: string): Level {
   if (value === "starter" || value === "advanced") return value;
   return "intermediate";
 }

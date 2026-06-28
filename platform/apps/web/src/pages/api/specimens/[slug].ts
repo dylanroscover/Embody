@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { SUBMIT_CATEGORIES, SUBMIT_DIFFICULTIES, SUBMIT_REQUIRES } from "@embody/contracts";
+import { SUBMIT_CATEGORIES, SUBMIT_LEVELS, SUBMIT_REQUIRES } from "@embody/contracts";
 import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
 import { parse as parseYaml } from "yaml";
 import type { APIRoute } from "astro";
@@ -41,7 +41,7 @@ export const GET: APIRoute = async ({ params }) => {
   }
 };
 
-// Owner-only edit. Metadata (title/description/tags/license/difficulty/category/
+// Owner-only edit. Metadata (title/description/tags/license/level/category/
 // requires) always updates. If a NEW tdn is supplied AND differs from the current
 // network, it re-runs the SAME safety gates as submit (parse -> capability scan ->
 // obvious-malware block) and, only if it clears them, stores the blob + appends a
@@ -142,7 +142,7 @@ export const PUT: APIRoute = async ({ params, request }) => {
       description: body.value.description,
       tags: body.value.tags,
       license: body.value.license,
-      difficulty: body.value.difficulty,
+      level: body.value.level,
       category: body.value.category,
       requires: body.value.requires,
       parsedTdn
@@ -230,7 +230,7 @@ interface EditValue {
   description: string;
   tags: string[];
   license: string;
-  difficulty: string;
+  level: string;
   category: string;
   requires: string;
   /** New TDN body. Present only when the owner edited the network. */
@@ -266,9 +266,9 @@ async function readEditRequest(
         .slice(0, 20)
     : [];
 
-  const difficulty = readString(raw.difficulty).trim() || "intermediate";
-  if (!SUBMIT_DIFFICULTIES.includes(difficulty as (typeof SUBMIT_DIFFICULTIES)[number])) {
-    return { ok: false, detail: `difficulty must be one of: ${SUBMIT_DIFFICULTIES.join(", ")}.` };
+  const level = readString(raw.level).trim() || "intermediate";
+  if (!SUBMIT_LEVELS.includes(level as (typeof SUBMIT_LEVELS)[number])) {
+    return { ok: false, detail: `level must be one of: ${SUBMIT_LEVELS.join(", ")}.` };
   }
 
   const category = readString(raw.category).trim();
@@ -292,7 +292,7 @@ async function readEditRequest(
       description: description.slice(0, 4000),
       tags,
       license: license.slice(0, 80),
-      difficulty,
+      level,
       category,
       requires,
       tdn

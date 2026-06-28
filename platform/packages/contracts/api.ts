@@ -2,14 +2,14 @@
 // call these. Changing a shape is a contract bump. ASCII only.
 import type { CapabilityJson } from "./capability";
 
-export type Difficulty = "starter" | "intermediate" | "advanced";
+export type Level = "starter" | "intermediate" | "advanced";
 export type Tier = "community" | "verified" | "featured";
 
 export interface SpecimenSummary {
   slug: string;
   name: string;
   category: string;
-  difficulty: Difficulty;
+  level: Level;
   description: string;
   /** "none" | "MediaPipe" | "Kinect Azure" | ... */
   requires: string;
@@ -61,7 +61,7 @@ export interface SearchResponse {
 // Submit-form metadata vocabularies. These are the whitelists the submit API
 // validates against; the submit form renders pickers from the same sets so the
 // client and server agree. ASCII only.
-export const SUBMIT_DIFFICULTIES: readonly Difficulty[] = [
+export const SUBMIT_LEVELS: readonly Level[] = [
   "starter",
   "intermediate",
   "advanced"
@@ -87,7 +87,15 @@ export const SUBMIT_CATEGORIES: readonly string[] = [
   "machine-learning",
   "glitch",
   "fractal",
-  "typography"
+  "typography",
+  "audio",
+  "animation",
+  "ui",
+  "utility",
+  "networking",
+  "hardware",
+  "api",
+  "system"
 ] as const;
 
 // Hardware / capability requirement facet. "none" = runs on stock TouchDesigner.
@@ -103,8 +111,8 @@ export interface SubmitRequest {
   description: string;
   tags: string[];
   license: string;
-  /** One of SUBMIT_DIFFICULTIES. */
-  difficulty: Difficulty;
+  /** One of SUBMIT_LEVELS. */
+  level: Level;
   /** One of SUBMIT_CATEGORIES. */
   category: string;
   /** One of SUBMIT_REQUIRES ("none" = stock TouchDesigner). */

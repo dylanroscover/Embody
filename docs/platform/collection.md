@@ -4,7 +4,7 @@ The [Collection](https://embody.tools/collection) is a gallery of **Specimens** 
 
 ## Browse & filter
 
-- Filter by **category** (generative, compositing, 3D, simulation, raymarching/SDF, audio-reactive, shaders, and more), **difficulty**, and hardware **requirements** — or full-text search.
+- Filter by **category** (generative, compositing, 3D, simulation, raymarching/SDF, audio-reactive, shaders, and more), **level**, and hardware **requirements** — or full-text search.
 - Each card flips between a **rendered result** and the **live node graph** (an in-browser TDN viewer), so you can see both what it makes and how it's wired.
 
 ## Inspect a Specimen

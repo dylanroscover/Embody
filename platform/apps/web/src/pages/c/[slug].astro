@@ -25,7 +25,7 @@ type DisplaySpecimen = {
   slug: string;
   name: string;
   category: string;
-  difficulty: string;
+  level: string;
   description: string;
   requires: string;
   thumbnail_key: string;
@@ -138,7 +138,7 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     slug: fixture.slug,
     name: fixture.name,
     category: fixture.category,
-    difficulty: fixture.difficulty,
+    level: fixture.level,
     description: fixture.description,
     requires: fixture.requires,
     thumbnail_key: "",
@@ -165,7 +165,7 @@ function specimenFromLive(
     slug: live.slug,
     name: live.name,
     category: live.category,
-    difficulty: live.difficulty,
+    level: live.level,
     description: live.description,
     requires: live.requires,
     thumbnail_key: live.thumbnail_key,
@@ -607,7 +607,7 @@ function emitKey(key: string): string {
 
       <section class="side-block pillar specimen-actions">
         <div class="badge-row">
-          <span class="badge">{specimen.difficulty}</span>
+          <span class="badge">{specimen.level}</span>
           {specimen.requires !== "none" && (
             <span class="badge needs">needs {specimen.requires}</span>
           )}

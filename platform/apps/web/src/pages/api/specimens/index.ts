@@ -3,9 +3,9 @@ import { detectObviousMalware, scanTdn } from "@embody/scanner-ts";
 import { parse as parseYaml } from "yaml";
 import {
   SUBMIT_CATEGORIES,
-  SUBMIT_DIFFICULTIES,
+  SUBMIT_LEVELS,
   SUBMIT_REQUIRES,
-  type Difficulty,
+  type Level,
   type SubmitRequest,
   type SubmitResponse
 } from "@embody/contracts";
@@ -31,7 +31,7 @@ export const prerender = false;
 // Server-side list/filter/sort/paginate for the collection page. Accepts:
 //   q          full-text query (FTS via specimens_fts)
 //   category   exact category facet
-//   difficulty starter | intermediate | advanced
+//   level starter | intermediate | advanced
 //   requires   exact requires facet ("none", "MediaPipe", ...)
 //   author     exact author handle facet
 //   sort       newest | copied | az (default az)
@@ -44,7 +44,7 @@ export const GET: APIRoute = async ({ url }) => {
     const response = await listSpecimensForCollection(env.DB, {
       q: params.get("q") ?? undefined,
       category: params.get("category") ?? undefined,
-      difficulty: params.get("difficulty") ?? undefined,
+      level: params.get("level") ?? undefined,
       requires: params.get("requires") ?? undefined,
       author: params.get("author") ?? undefined,
       sort: normalizeCollectionSort(params.get("sort")),
@@ -140,7 +140,7 @@ export const POST: APIRoute = async ({ request }) => {
       description: body.request.description,
       tags: body.request.tags,
       license: body.request.license,
-      difficulty: body.request.difficulty,
+      level: body.request.level,
       category: body.request.category,
       requires: body.request.requires,
       tdnR2Key: blob.key,
@@ -217,11 +217,11 @@ async function readSubmitRequest(
   // Submit metadata: whitelist-validate against the frozen vocabularies. Each
   // defaults to a safe value when absent (back-compat with older callers), but
   // a PRESENT value outside its set is a hard 400 rather than a silent coerce.
-  const difficulty = readString(raw.difficulty).trim() || "intermediate";
-  if (!SUBMIT_DIFFICULTIES.includes(difficulty as Difficulty)) {
+  const level = readString(raw.level).trim() || "intermediate";
+  if (!SUBMIT_LEVELS.includes(level as Level)) {
     return {
       ok: false,
-      detail: `difficulty must be one of: ${SUBMIT_DIFFICULTIES.join(", ")}.`
+      detail: `level must be one of: ${SUBMIT_LEVELS.join(", ")}.`
     };
   }
 
@@ -250,7 +250,7 @@ async function readSubmitRequest(
       description: description.slice(0, 4000),
       tags,
       license: license.slice(0, 80),
-      difficulty: difficulty as Difficulty,
+      level: level as Level,
       category,
       requires,
       tdn,
