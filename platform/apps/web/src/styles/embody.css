@@ -126,6 +126,11 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* No orphans, ANYWHERE -- baseline for every element via inheritance, not an
+     enumerated list (which always misses one, e.g. <small>). text-wrap is an
+     inherited property, so this reaches any text node; headings override to
+     `balance` below. */
+  text-wrap: pretty;
 }
 
 img,
@@ -171,15 +176,17 @@ p {
   text-wrap: pretty;
 }
 
-/* No orphans, anywhere. Headings balance so a short last line is never a lone
-   word; all body/text elements pretty-wrap so paragraphs never strand the final
-   word on its own line. */
+/* No orphans, anywhere. `body` sets `text-wrap: pretty` as the inherited baseline
+   (above), so EVERY text element pretty-wraps by default and no paragraph strands
+   its final word -- even elements not listed here (e.g. <small>). Headings instead
+   `balance` so a short last line is never a lone word. The pretty list below is
+   redundant with the body baseline but kept as explicit documentation of intent. */
 h1, h2, h3, h4, h5, h6,
 .section__title, .eyebrow, .lede {
   text-wrap: balance;
 }
 
-p, li, dd, dt, blockquote, figcaption, summary, label, th, td {
+p, li, dd, dt, blockquote, figcaption, summary, label, small, th, td {
   text-wrap: pretty;
 }
 
