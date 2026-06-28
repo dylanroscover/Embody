@@ -2278,13 +2278,17 @@ pre {
    Checkboxes carry name="requires" so the form's FormData.getAll collects them. */
 .msdd {
   position: relative;
-  display: block;
+  /* Content-width like the sibling .dd dropdowns so it stays in-line with the
+     level/category fields instead of stretching to fill its grid cell. */
+  display: inline-flex;
+  align-self: flex-start;
+  max-width: 100%;
 }
 .msdd__btn {
-  width: 100%;
-  justify-content: space-between;
+  max-width: 100%;
 }
 .msdd__summary {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2294,8 +2298,10 @@ pre {
   z-index: 30;
   top: calc(100% + 6px);
   left: 0;
-  right: 0;
-  min-width: 260px;
+  /* The trigger is narrow (content-width); give the panel a comfortable fixed
+     width that opens rightward rather than tracking the button. */
+  width: 280px;
+  max-width: min(90vw, 340px);
   max-height: min(52vh, 420px);
   overflow-y: auto;
   padding: 0.5rem;
@@ -2304,6 +2310,31 @@ pre {
   background: var(--bg-elevated-2, #1f2321);
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
 }
+/* Sticky search field at the top of the requires panel. */
+.msdd__search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+.msdd__search::placeholder { color: var(--text-faint); }
+.msdd__search:focus { outline: none; border-color: var(--accent); }
+.msdd__group[hidden],
+.msdd__opt[hidden] { display: none; }
+.msdd__empty {
+  padding: 0.5rem 0.4rem;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+}
+.msdd__empty[hidden] { display: none; }
 .msdd__group {
   padding: 0.25rem 0;
 }

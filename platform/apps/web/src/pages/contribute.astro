@@ -90,9 +90,11 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
             <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
           </button>
           <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-category" hidden>
+            <li class="dd__search-row" role="presentation"><input class="dd__search" type="search" placeholder="search..." aria-label="Search categories" data-dd-search /></li>
             {categoryOptions.map((value) => (
               <li class="dd__opt" role="option" data-value={value} aria-selected={value === "generative" ? "true" : "false"}>{value}</li>
             ))}
+            <li class="dd__empty" role="presentation" hidden>no matches.</li>
           </ul>
           <select class="dd__native" name="category" aria-hidden="true" tabindex="-1">
             {categoryOptions.map((value) => (
@@ -105,21 +107,23 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
         <span class="submit-field__label" id="ddlbl-requires">requires</span>
         <div class="msdd" data-msdd>
           <button type="button" class="dd__btn msdd__btn" aria-haspopup="dialog" aria-expanded="false" aria-labelledby="ddlbl-requires msdd-summary-requires" data-msdd-toggle>
-            <span class="dd__val msdd__summary" id="msdd-summary-requires" data-msdd-summary>stock TouchDesigner</span>
+            <span class="dd__val msdd__summary" id="msdd-summary-requires" data-msdd-summary>none</span>
             <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
           </button>
           <div class="msdd__panel" data-msdd-panel hidden>
+            <input class="msdd__search" type="search" placeholder="search requirements..." aria-label="Search requirements" data-msdd-search />
             {requireGroups.map((g) => (
-              <div class="msdd__group">
+              <div class="msdd__group" data-msdd-group>
                 <p class="msdd__group-label">{g.group}</p>
                 {g.items.map((item) => (
-                  <label class="msdd__opt">
+                  <label class="msdd__opt" data-msdd-opt data-label={item.toLowerCase()}>
                     <input type="checkbox" name="requires" value={item} data-msdd-checkbox />
                     <span class="msdd__opt-label">{item}</span>
                   </label>
                 ))}
               </div>
             ))}
+            <p class="msdd__empty" data-msdd-empty hidden>no matches.</p>
           </div>
         </div>
       </div>
@@ -407,6 +411,9 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
     const toggle = msdd.querySelector("[data-msdd-toggle]") as HTMLButtonElement | null;
     const panel = msdd.querySelector("[data-msdd-panel]") as HTMLElement | null;
     const summary = msdd.querySelector("[data-msdd-summary]") as HTMLElement | null;
+    const search = msdd.querySelector("[data-msdd-search]") as HTMLInputElement | null;
+    const empty = msdd.querySelector("[data-msdd-empty]") as HTMLElement | null;
+    const groups = Array.from(msdd.querySelectorAll("[data-msdd-group]")) as HTMLElement[];
     const boxes = Array.from(
       msdd.querySelectorAll("[data-msdd-checkbox]")
     ) as HTMLInputElement[];
@@ -420,21 +427,41 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
       const picked = boxes.filter((b) => b.checked).map((b) => b.value);
       sm.textContent =
         picked.length === 0
-          ? "stock TouchDesigner"
+          ? "none"
           : picked.length === 1
             ? picked[0] ?? ""
             : `${picked.length} selected`;
+    };
+    const applyFilter = (q: string): void => {
+      const needle = q.trim().toLowerCase();
+      let anyVisible = false;
+      groups.forEach((g) => {
+        // A group-name match (e.g. "depth") reveals the whole group.
+        const groupLabel = (g.querySelector(".msdd__group-label")?.textContent || "").toLowerCase();
+        const groupMatch = needle.length > 0 && groupLabel.includes(needle);
+        let groupVisible = false;
+        g.querySelectorAll<HTMLElement>("[data-msdd-opt]").forEach((opt) => {
+          const match = !needle || groupMatch || (opt.getAttribute("data-label") || "").includes(needle);
+          opt.hidden = !match;
+          if (match) groupVisible = true;
+        });
+        g.hidden = !groupVisible;
+        if (groupVisible) anyVisible = true;
+      });
+      if (empty) empty.hidden = anyVisible;
     };
     const setOpen = (next: boolean): void => {
       open = next;
       pn.hidden = !next;
       tg.setAttribute("aria-expanded", next ? "true" : "false");
+      if (next && search) search.focus();
     };
 
     tg.addEventListener("click", (e) => {
       e.stopPropagation();
       setOpen(!open);
     });
+    search?.addEventListener("input", () => applyFilter(search.value));
     boxes.forEach((b) => b.addEventListener("change", refresh));
     document.addEventListener("click", (e) => {
       if (!msdd.contains(e.target as Node)) setOpen(false);
@@ -469,6 +496,34 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
     const opts = Array.from(dd.querySelectorAll(".dd__opt")) as HTMLElement[];
     if (!btn || !menu || !valEl || !native) return;
 
+    // Optional search filter (present only on dropdowns with a .dd__search).
+    // Hides non-matching options; never steals focus, so arrow-key nav from the
+    // button still works exactly as before on dropdowns without a search.
+    const ddSearch = dd.querySelector(".dd__search") as HTMLInputElement | null;
+    const ddEmpty = dd.querySelector(".dd__empty") as HTMLElement | null;
+    const filterOpts = (q: string): void => {
+      const needle = q.trim().toLowerCase();
+      let any = false;
+      opts.forEach((o) => {
+        const match = !needle || (o.textContent || "").toLowerCase().includes(needle);
+        o.hidden = !match;
+        if (match) any = true;
+      });
+      if (ddEmpty) ddEmpty.hidden = any;
+    };
+    if (ddSearch) {
+      ddSearch.addEventListener("input", () => filterOpts(ddSearch.value));
+      ddSearch.addEventListener("keydown", (e: KeyboardEvent) => {
+        if (e.key === "Enter") e.preventDefault(); // never submit the form from here
+        else if (e.key === "Escape") {
+          e.preventDefault();
+          closeDropdown(dd);
+          btn.focus();
+        }
+      });
+      ddSearch.addEventListener("click", (e) => e.stopPropagation());
+    }
+
     // Give every option a stable id so the listbox can name the ACTIVE option
     // via aria-activedescendant (focus stays on the button; this is how a
     // screen reader announces the highlighted option without moving DOM focus).
@@ -500,6 +555,7 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
       dd.setAttribute("data-open", "");
       menu.hidden = false;
       btn.setAttribute("aria-expanded", "true");
+      if (ddSearch) { ddSearch.value = ""; filterOpts(""); }
       if (highlightSelected) {
         // Open with the currently-selected option highlighted (or the first).
         const sel = opts.findIndex((o) => o.getAttribute("aria-selected") === "true");
@@ -511,6 +567,7 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
       closeDropdown(dd);
     };
     const choose = (opt: HTMLElement): void => {
+      if (opt.hidden) return;
       native.value = opt.getAttribute("data-value") || "";
       native.dispatchEvent(new Event("change", { bubbles: true }));
       valEl.textContent = opt.textContent;
@@ -880,6 +937,35 @@ const requireGroups = SUBMIT_REQUIRE_GROUPS;
   .dd__opt[aria-selected="true"] {
     color: var(--accent);
   }
+
+  .dd__opt[hidden] { display: none; }
+
+  /* Sticky search field at the top of a searchable .dd menu (e.g. category). */
+  .dd__search-row {
+    position: sticky;
+    top: -0.3rem;
+    margin: -0.3rem -0.3rem 0.3rem;
+    padding: 0.3rem;
+    background: var(--bg-elevated, #14181a);
+  }
+  .dd__search {
+    width: 100%;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .dd__search::placeholder { color: var(--text-faint); }
+  .dd__search:focus { outline: none; border-color: var(--accent); }
+  .dd__empty {
+    padding: 0.5rem 0.7rem;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  .dd__empty[hidden] { display: none; }
 
   .submit-turnstile .cf-turnstile {
     margin-top: 0.25rem;
