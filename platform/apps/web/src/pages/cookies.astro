@@ -1,0 +1,95 @@
+---
+import Base from "../layouts/Base.astro";
+
+const updated = "June 28, 2026";
+---
+
+<Base
+  title="cookie notice - embody.tools"
+  description="The complete, honest list of cookies embody.tools uses. Spoiler: only the strictly-necessary ones, no tracking, and that's why there's no cookie banner."
+>
+  <section class="page-section legal-hero">
+    <p class="eyebrow">cookies</p>
+    <h1>cookie notice</h1>
+    <p class="lede">
+      Most cookie banners exist because the site behind them is tracking you. This one
+      isn&rsquo;t, so there&rsquo;s no banner &mdash; just this page, which lists every
+      cookie we use and why. We set no advertising or cross-site tracking cookies, full
+      stop.
+    </p>
+    <p class="legal-updated mono">Last updated: {updated}</p>
+  </section>
+
+  <article class="page-section tight legal-body">
+    <h2>The short version</h2>
+    <p>
+      Under EU and UK law you only have to ask for consent before setting cookies that
+      aren&rsquo;t <strong>strictly necessary</strong> &mdash; the analytics, advertising,
+      and tracking kind. We don&rsquo;t use any of those. The only cookies in play keep you
+      signed in and keep the site secure, our analytics is cookieless, and our fonts are
+      served from our own domain. That&rsquo;s why you don&rsquo;t get a pop-up asking you
+      to &ldquo;accept all.&rdquo;
+    </p>
+
+    <h2>What we actually set</h2>
+    <ul>
+      <li>
+        <strong>A session cookie</strong> &mdash; set only after you sign in, so the site
+        recognizes you on the next request. It&rsquo;s issued by
+        <a href="https://www.better-auth.com/">Better Auth</a>, marked HttpOnly and Secure
+        (so it can&rsquo;t be read by scripts and only travels over HTTPS), and it clears
+        when you sign out or it expires. If you never sign in, it&rsquo;s never set.
+      </li>
+      <li>
+        <strong>Cloudflare security cookies</strong> &mdash; Cloudflare protects and
+        delivers the site, and may set its own strictly-necessary cookies (such as
+        <span class="mono">__cf_bm</span>) to tell humans from bots. These are short-lived,
+        hold no personal profile, and aren&rsquo;t used to track you across sites.
+      </li>
+      <li>
+        <strong>A Turnstile check</strong> &mdash; on sign-up, sign-in, and contribution,
+        <a href="https://www.cloudflare.com/products/turnstile/">Cloudflare Turnstile</a>
+        runs a background challenge to confirm you&rsquo;re human. It may store a
+        short-lived token strictly to run that security check, not to profile you.
+      </li>
+    </ul>
+
+    <h2>What we don&rsquo;t set</h2>
+    <p>
+      No advertising cookies. No cross-site tracking cookies. No analytics cookies. No
+      &ldquo;social&rdquo; pixels. We don&rsquo;t sell or share your data, and there are no
+      third-party trackers embedded anywhere on this site.
+    </p>
+
+    <h2>Analytics without cookies</h2>
+    <p>
+      We use
+      <a href="https://www.cloudflare.com/web-analytics/">Cloudflare Web Analytics</a> to
+      see aggregate page traffic. It is <strong>cookieless</strong> by design: it sets no
+      cookie, stores no client-side state, doesn&rsquo;t fingerprint your device, and
+      collects no personal data. If the analytics token isn&rsquo;t configured for a given
+      deployment, the beacon isn&rsquo;t even loaded.
+    </p>
+
+    <h2>Fonts and embeds</h2>
+    <p>
+      Our display font (Inter) is <strong>self-hosted</strong> on this domain, so loading
+      the site doesn&rsquo;t send your IP address to a third-party font CDN. Specimen
+      thumbnails and other images are served through Cloudflare. None of this sets a cookie
+      on your browser.
+    </p>
+
+    <h2>Your controls</h2>
+    <p>
+      You can block or delete cookies in your browser settings at any time &mdash; if you
+      block the session cookie you simply won&rsquo;t be able to stay signed in. Signing out
+      clears the session immediately. Because we don&rsquo;t track you, there&rsquo;s nothing
+      for a &ldquo;Do Not Track&rdquo; or &ldquo;Global Privacy Control&rdquo; signal to turn
+      off &mdash; but we honor the spirit of both regardless.
+    </p>
+
+    <p class="legal-sign mono">
+      More detail is in the <a href="/privacy">Privacy Policy</a>.
+    </p>
+  </article>
+</Base>
