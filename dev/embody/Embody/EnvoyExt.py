@@ -1624,6 +1624,9 @@ class EnvoyExt:
         self._viz_gesture_start: float = 0.0         # when the current gesture began
         self._viz_gesture_end: float = 0.0           # when it ends
         self._viz_next_gesture: float = 0.0          # earliest time the next may start
+        self._viz_next_blink: float = 0.0            # absTime.seconds of the next eye blink
+        self._viz_blink_end: float = 0.0             # absTime.seconds the current blink ends
+        self._viz_eyes_closed: bool = False          # eyes currently coloured shut (blink)
         self._viz_pulse_op: Optional[str] = None      # path of the op currently pulsing
         self._viz_pulse_orig: Optional[tuple] = None  # its original node colour
         self._viz_pulse_start: float = 0.0     # absTime.seconds the pulse began
@@ -1634,6 +1637,8 @@ class EnvoyExt:
         self._viz_bot_jump_t0: float = 0.0            # absTime.seconds the current hop began
         self._viz_bot_build_queue: list = []          # template part names still to copy this assembly
         self._viz_bot_pending_cleanup: set = set()    # nets whose left-behind bot to tear down off-screen
+        self._crash_trace_enabled: bool = False       # diagnostic: flush a breadcrumb per viz annotation-graph op
+        self._crash_trace_f = None                    # open handle to the breadcrumb file
         self._ensureVizParams()                       # self-heal the Embot + Envoy Follow toggles
 
         # Get Thread Manager from TDResources
@@ -3031,6 +3036,27 @@ class EnvoyExt:
         except Exception:
             return None
 
+    def _crashTrace(self, msg: str) -> None:
+        """Append a FLUSHED breadcrumb so the LAST viz annotation-graph op before a
+        hard TD crash survives on disk (logs/embot_crash_trace.log). flush() (no fsync)
+        is enough -- a TD process crash leaves kernel-buffered writes intact; we trade
+        the cost of fsync to keep frame timing close to normal. Gated on
+        _crash_trace_enabled (off in normal use). Never raises."""
+        if not self._crash_trace_enabled:
+            return
+        try:
+            f = self._crash_trace_f
+            if f is None:
+                import os
+                d = os.path.join(project.folder, 'logs')
+                os.makedirs(d, exist_ok=True)
+                f = open(os.path.join(d, 'embot_crash_trace.log'), 'a')
+                self._crash_trace_f = f
+            f.write('f%d %.3f %s\n' % (absTime.frame, absTime.seconds, msg))
+            f.flush()
+        except Exception:
+            pass
+
     def _ensureVizParams(self) -> None:
         """Create the Embot (character) + Envoy Follow (camera) toggles on the Envoy
         page if missing, so the feature is controllable on any load. They were added
@@ -3364,6 +3390,7 @@ class EnvoyExt:
                 return tmpl
             if tmpl:
                 tmpl.destroy()                  # partial/stale -> rebuild clean
+            self._crashTrace('ensureTemplate BUILD (creating annotateCOMPs)')
             tmpl = host.create(baseCOMP, 'embot_template')
             tmpl.nodeX, tmpl.nodeY = -1400, -1400   # parked out of the way
             skin = colorsys.hsv_to_rgb(self._VIZ_COOL_HUE, 0.95, 1.0)  # default cool
@@ -3412,26 +3439,96 @@ class EnvoyExt:
             return True                         # already here (assembled or assembling)
         if self._botUnsafeNet(net):
             return False
+        self._crashTrace('ensureBot NET-CHANGE %s -> %s' % (self._viz_bot_net, netpath))
         if self._ensureTemplate() is None:
             return False
-        # Defer teardown of the bot we're LEAVING. Destroying ops from a network that
-        # is still on-screen forces a full editor redraw per op (~280ms for a busy
-        # net -- the bulk of an old switch frame). Queue the old net instead and tear
-        # it down a frame later, once the navigate has moved it off-screen (cheap).
+        # Defer teardown of the bot we're LEAVING (destroying ops from an on-screen net
+        # forces a redraw per op); tear it down a frame later, off-screen.
         if self._viz_bot_net and self._viz_bot_net != netpath:
             self._viz_bot_pending_cleanup.add(self._viz_bot_net)
-        self._viz_bot_pending_cleanup.discard(netpath)   # we're living here again -> keep it
-        # Reset live animation state for the fresh figure (without destroying yet).
+        self._viz_bot_pending_cleanup.discard(netpath)   # re-entering -> keep its parts
         self._viz_bot_pos = None
         self._viz_bot_from = None
         self._viz_bot_target = None
         self._viz_bot_net = netpath
-        self._viz_bot_build_queue = [self._VIZ_BOT_PREFIX + s
-                                     for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS]
-        self._viz_bot_build_queue.append(self._VIZ_BOT_PREFIX + 'speech')
         self._viz_last_skin = None              # force a recolour onto the new parts
-        self._assembleStep(net)                 # copy part #1 (body) this frame
+        # FAST + SAFE spawn. A single copyOPs of all 9 parts HARD-CRASHES TD when the
+        # target net is ON-SCREEN (instantiating many annotateCOMPs concurrent with the
+        # editor redraw -- pinpointed via crash trace: TD died inside copyOPs). But it
+        # is crash-free AND ~4x faster into an OFF-SCREEN net. _ensureBot runs BEFORE
+        # the follow's navigate, so a net we are about to dive into is still off-screen
+        # here -> block-copy it. Only when the net is already displayed do we fall back
+        # to the per-frame spread (slower, but safe on a live net).
+        if self._netIsDisplayed(net):
+            # net ON-SCREEN: per-frame spread. A single block copyOPs into a displayed
+            # net crashes TD; the owner-swap that dodged the crash broke the pane's
+            # render (owning the project root). Spread is slower but safe and stable.
+            self._viz_bot_build_queue = [self._VIZ_BOT_PREFIX + s
+                                         for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS]
+            self._viz_bot_build_queue.append(self._VIZ_BOT_PREFIX + 'speech')
+            self._assembleStep(net)             # copy part #1 this frame
+        else:
+            # net OFF-SCREEN (about to navigate into it): ONE fast block copyOPs.
+            self._viz_bot_build_queue = []
+            self._blockSpawn(net)
         return True
+
+    def _netIsDisplayed(self, net: 'COMP') -> bool:
+        """True if any network-editor pane currently shows `net` -- i.e. a block copy
+        into it would redraw the editor and crash TD. Called BEFORE the follow's
+        navigate, so a net we are about to dive into reads False (still off-screen).
+        Any doubt -> True, so we take the safe spread path."""
+        try:
+            np = net.path
+            for p in ui.panes:
+                if str(p.type) == 'PaneType.NETWORKEDITOR' and \
+                        p.owner is not None and p.owner.path == np:
+                    return True
+        except Exception:
+            return True
+        return False
+
+    def _blockSpawn(self, net: 'COMP') -> None:
+        """Copy ALL 9 parts into `net` in ONE copyOPs (~180ms, one frame -- vs the
+        ~9-frame, ~464ms spread). ONLY called by _ensureBot when `net` is OFF-SCREEN
+        (a sub-COMP we are about to navigate into): copyOPs of many annotateCOMPs into
+        a DISPLAYED net hard-crashes TD (the editor redraw -- pinpointed via crash
+        trace), and the off-screen owner-swap that once dodged that crash broke the
+        pane render, so displayed nets use the safe spread instead. Clears orphans;
+        colours on arrival."""
+        tmpl = self._ensureTemplate()
+        if tmpl is None:
+            return
+        for c in list(net.children):            # clear orphans
+            if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
+                try:
+                    c.destroy()
+                except Exception:
+                    pass
+        srcs = [tmpl.op(self._VIZ_BOT_PREFIX + s)
+                for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS]
+        srcs.append(tmpl.op(self._VIZ_BOT_PREFIX + 'speech'))
+        srcs = [s for s in srcs if s]
+        try:
+            self._crashTrace('blockSpawn COPY %d -> %s (off-screen)' % (len(srcs), net.path))
+            new = net.copyOPs(srcs)
+            self._crashTrace('blockSpawn COPIED %s' % net.path)
+        except Exception:
+            return
+        idle = absTime.seconds - self._viz_last_activity
+        f = min(1.0, max(0.0, idle / self._VIZ_WARM_S))
+        hue = round((self._VIZ_COOL_HUE +
+                     (self._VIZ_WARM_HUE - self._VIZ_COOL_HUE) * f) * 36.0) / 36.0
+        skin = colorsys.hsv_to_rgb(hue, 0.95, 1.0)
+        for n in new:
+            n.selected = False
+            bn = n.name
+            if bn.endswith('speech'):
+                continue
+            if bn.endswith('eye_l') or bn.endswith('eye_r'):
+                n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = 0.0, 0.0, 0.0
+            else:
+                n.par.Backcolorr, n.par.Backcolorg, n.par.Backcolorb = skin
 
     def _assembleStep(self, net: 'COMP') -> None:
         """Copy ONE queued template part into `net` -- the per-frame unit of Embot's
@@ -3450,7 +3547,9 @@ class EnvoyExt:
         if not src or net.op(name):             # missing source / already present
             return
         try:
+            self._crashTrace('assembleStep COPY %s -> %s' % (name, net.path))
             new = net.copyOPs([src])
+            self._crashTrace('assembleStep COPIED %s' % name)
             idle = absTime.seconds - self._viz_last_activity
             f = min(1.0, max(0.0, idle / self._VIZ_WARM_S))
             hue = round((self._VIZ_COOL_HUE +
@@ -3503,12 +3602,14 @@ class EnvoyExt:
             return
         net = op(netpath)
         if net and net.valid:
+            self._crashTrace('cleanupDead ENTER %s' % netpath)
             for c in list(net.children):
                 if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
                     try:
                         c.destroy()
                     except Exception:
                         pass
+            self._crashTrace('cleanupDead DONE %s' % netpath)
 
     def _botDance(self, now: float) -> None:
         """Animate the figure: a robotic HOP from node to node (parabolic arc,
@@ -3574,8 +3675,33 @@ class EnvoyExt:
         # Only repaint when actually animating (a jump or a gesture) or when the
         # quantized colour ticks -- otherwise leave the parts untouched so idle
         # frames cost nothing.
-        moving = (t < 1.0) or active or bool(self._viz_bot_build_queue)  # place new parts mid-assembly
+        # Periodic eye blink. TD clamps annotation node size to a 10px MINIMUM, so a
+        # Y-squash of the 9px eyes cannot render -- instead the eyes briefly take the
+        # face/skin colour (closed -> invisible) then return to black. Written only on
+        # the open<->closed TRANSITION (2 colour writes per blink), so it costs almost
+        # nothing and does NOT force a full-figure repaint.
+        if now >= self._viz_next_blink:
+            self._viz_blink_end = now + 0.13                          # blink lasts ~0.13s
+            self._viz_next_blink = now + 2.0 + random.random() * 3.5  # next blink in 2-5.5s
+        blinking = now < self._viz_blink_end
+        if blinking != self._viz_eyes_closed:
+            if blinking:
+                # match the body's ACTUAL current colour (recolor lags the computed
+                # skin) so the eyes truly vanish into the face.
+                _bp = net.op(self._VIZ_BOT_PREFIX + 'body')
+                eye_col = ((_bp.par.Backcolorr.eval(), _bp.par.Backcolorg.eval(),
+                            _bp.par.Backcolorb.eval()) if (_bp and _bp.valid) else skin)
+            else:
+                eye_col = (0.0, 0.0, 0.0)
+            for _es in ('eye_l', 'eye_r'):
+                _ep = net.op(self._VIZ_BOT_PREFIX + _es)
+                if _ep and _ep.valid:
+                    _ep.par.Backcolorr, _ep.par.Backcolorg, _ep.par.Backcolorb = eye_col
+            self._viz_eyes_closed = blinking
+        moving = (t < 1.0) or active or bool(self._viz_bot_build_queue)
         if moving or recolor:
+            self._crashTrace('botDance PARTS moving=%d recolor=%d t=%.2f %s' %
+                             (int(moving), int(recolor), t, np))
             for (suffix, ox, oy, w, h, is_eye) in self._VIZ_BOT_PARTS:
                 p = net.op(self._VIZ_BOT_PREFIX + suffix)
                 if not p or not p.valid:
@@ -3604,22 +3730,26 @@ class EnvoyExt:
                 p.nodeY = (py + oy * sy) - ph / 2.0
                 if recolor:
                     if is_eye:
-                        p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = 0.0, 0.0, 0.0
+                        # open -> black; mid-blink -> track the body's NEW skin so the
+                        # eyes stay vanished even if the thinking-colour ticks.
+                        p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = \
+                            (skin if blinking else (0.0, 0.0, 0.0))
                     else:
                         p.par.Backcolorr, p.par.Backcolorg, p.par.Backcolorb = skin
+            self._crashTrace('botDance PARTS-DONE')
         # Speech bubble: follow + a Claude-Code-style typewriter -> spinner + dots.
         # The spinner only runs while actively building (idle < a few sec) so an
         # idle Embot does not churn redraws.
         sp = net.op(self._VIZ_BOT_PREFIX + 'speech')
         if sp and sp.valid:
-            # Track the head whenever the bubble is off-position -- NOT gated on
-            # `moving`. The bubble is the LAST part assembled, so when it lands the
-            # build queue is already empty (moving=False) and a moving-only write
-            # would strand it at its copied (0,0) spot until the next hop. The
-            # changed-guard still skips writes once it is in place, so idle frames
-            # stay redraw-free.
-            sx_sp = px - sp.nodeWidth / 2.0
-            sy_sp = py + 58.0
+            # Anchor the bubble to Embot's BASE position (_viz_bot_pos, captured before
+            # the dance sway is added to px/py), NOT the animated px/py. So it follows
+            # only while he HOPS to a new node, and stays put while he dances/gestures
+            # in place -- saving a per-frame bubble redraw during every dance. The
+            # changed-guard still (re)places it once after a hop and skips otherwise.
+            bp = self._viz_bot_pos or (px, py)
+            sx_sp = bp[0] - sp.nodeWidth / 2.0
+            sy_sp = bp[1] + 58.0
             if abs(sp.nodeX - sx_sp) > 0.5 or abs(sp.nodeY - sy_sp) > 0.5:
                 sp.nodeX = sx_sp
                 sp.nodeY = sy_sp
@@ -3640,7 +3770,9 @@ class EnvoyExt:
                 else:
                     line = act                                # idle -> static (no churn)
             if sp.par.Bodytext.eval() != line:
+                self._crashTrace('botDance SPEECH-WRITE')
                 sp.par.Bodytext = line
+                self._crashTrace('botDance SPEECH-DONE')
 
     def _botUnsafeNet(self, net: 'COMP') -> bool:
         """True if a bot must NOT be created in `net` -- it would risk being saved.
@@ -3667,12 +3799,15 @@ class EnvoyExt:
         if np:
             net = op(np)
             if net:
+                self._crashTrace('destroyBot ENTER %s' % np)
                 for c in list(net.children):
                     if c.name.startswith(self._VIZ_BOT_PREFIX) and c.valid:
                         try:
+                            self._crashTrace('destroyBot DESTROY %s' % c.name)
                             c.destroy()
                         except Exception:
                             pass
+                self._crashTrace('destroyBot DONE %s' % np)
         self._viz_bot_net = None
         self._viz_bot_pos = None
         self._viz_bot_from = None
