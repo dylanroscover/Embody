@@ -1,10 +1,12 @@
 ---
+import { env } from "cloudflare:workers";
 import { Picture } from "astro:assets";
 import { TdnViewer } from "@embody/tdn-viewer";
 import Base from "../layouts/Base.astro";
-import specimens from "../fixtures/specimens.json";
 import { sampleTdn } from "../fixtures/sample-tdn";
 import { specimenThumbnail } from "../lib/specimenThumb";
+import { fixtureSummaries } from "../lib/specimenFallback";
+import { listSpecimensForCollection } from "../server/db";
 import heroShot from "../assets/embody-screenshot.png";
 import Pillars from "../components/landing/Pillars.astro";
 import PracticeSection from "../components/landing/PracticeSection.astro";
@@ -12,7 +14,18 @@ import TdnShowcase from "../components/landing/TdnShowcase.astro";
 import QuickstartSteps from "../components/landing/QuickstartSteps.astro";
 import ManifestoSection from "../components/landing/ManifestoSection.astro";
 
-const featured = specimens.slice(0, 3);
+// The teaser shows the 3 most recently contributed specimens straight from D1
+// (sort: newest). Mirrors /collection's degrade-to-fixtures pattern: an empty
+// unfiltered result means no DB rows (dev without a seed) and a thrown query
+// means no DB at all -- both fall back to the bundled fixtures so the landing
+// never renders an empty section.
+let featured = fixtureSummaries.slice(0, 3);
+try {
+  const recent = await listSpecimensForCollection(env.DB, { sort: "newest", pageSize: 3 });
+  if (recent.specimens.length > 0) featured = recent.specimens;
+} catch {
+  // keep the fixture fallback
+}
 
 const jsonLd = {
   "@context": "https://schema.org",

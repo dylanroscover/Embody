@@ -129,7 +129,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
             aria-current={isActive("/collection") ? "page" : undefined}
           >
             <span class="navbar__label">collection</span>
-            <span class="nav-item__desc">Transparent TDN networks to inspect, copy, and remix.</span>
+            <span class="nav-item__desc">transparent TDN networks to inspect, copy, and remix.</span>
           </a>
           <a
             class:list={["navbar__item", { "is-active": isActive("/manifesto") }]}
@@ -137,7 +137,11 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
             aria-current={isActive("/manifesto") ? "page" : undefined}
           >
             <span class="navbar__label">manifesto</span>
-            <span class="nav-item__desc">Why TouchDesigner should be transparent and diffable.</span>
+            <span class="nav-item__desc">why TouchDesigner should be transparent and diffable.</span>
+          </a>
+          <a class="navbar__item" href="https://dylanroscover.github.io/Embody/">
+            <span class="navbar__label">docs</span>
+            <span class="nav-item__desc">guides and API reference for Embody and Envoy.</span>
           </a>
           <a
             class:list={["navbar__item", { "is-active": isActive("/contribute") }]}
@@ -145,7 +149,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
             aria-current={isActive("/contribute") ? "page" : undefined}
           >
             <span class="navbar__label">contribute</span>
-            <span class="nav-item__desc">Add your own TDN network to the Collection.</span>
+            <span class="nav-item__desc">add your own TDN network to the Collection.</span>
           </a>
           {user ? (
             <div class="navbar__user" data-user-menu>
