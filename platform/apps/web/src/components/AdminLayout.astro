@@ -7,7 +7,7 @@ import Base from "../layouts/Base.astro";
 
 interface Props {
   title: string;
-  active: "index" | "reports" | "specimens" | "users" | "email";
+  active: "index" | "reports" | "specimens" | "users" | "activity" | "email";
 }
 const { title, active } = Astro.props;
 
@@ -16,6 +16,7 @@ const items = [
   { key: "reports", href: "/admin/reports", label: "reports" },
   { key: "specimens", href: "/admin/specimens", label: "specimens" },
   { key: "users", href: "/admin/users", label: "users" },
+  { key: "activity", href: "/admin/activity", label: "activity" },
   { key: "email", href: "/admin/email", label: "email" }
 ] as const;
 ---
@@ -40,6 +41,23 @@ const items = [
       <slot />
     </div>
   </section>
+
+  {/* Shared app-native confirm/prompt dialog (driven by src/lib/adminDialog.ts).
+      Replaces window.confirm()/prompt() across every admin page. Rendered once. */}
+  <dialog class="admin-dialog" data-admin-dialog aria-labelledby="admin-dialog-title">
+    <div class="admin-dialog__body">
+      <h2 class="admin-dialog__title" id="admin-dialog-title" data-admin-dialog-title></h2>
+      <p class="admin-dialog__msg" data-admin-dialog-msg></p>
+      <label class="admin-dialog__field" data-admin-dialog-field hidden>
+        <span class="mono" data-admin-dialog-label></span>
+        <input type="text" data-admin-dialog-input autocomplete="off" />
+      </label>
+      <div class="admin-dialog__actions">
+        <button type="button" class="admin-btn" data-admin-dialog-cancel>cancel</button>
+        <button type="button" class="admin-btn admin-btn--danger" data-admin-dialog-ok>ok</button>
+      </div>
+    </div>
+  </dialog>
 
   <script>
     // App-native dropdowns for the whole admin area. Each .dd[data-dd] wraps a
@@ -249,7 +267,20 @@ const items = [
 
 <style>
   .admin { padding-bottom: 56px; }
-  .admin-title { margin-bottom: 1rem; }
+  /* Tighten the eyebrow -> title gap (override the global .eyebrow margin)... */
+  .admin :global(.eyebrow) { margin-bottom: 0.4rem; }
+  /* ...and open up the title -> nav gap a touch. */
+  .admin-title { margin-bottom: 1.6rem; }
+
+  /* Each admin page's content sits in a rounded card, matching the rest of the
+     app (contribute / profile / specimen panels). The header (eyebrow + title +
+     nav) stays outside the card. */
+  .admin-body {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    padding: clamp(1.25rem, 3vw, 2rem);
+  }
 
   .admin-nav {
     display: flex;
@@ -285,7 +316,8 @@ const items = [
     margin-bottom: 2rem;
   }
   .admin-body :global(.admin-card) {
-    background: var(--bg-elevated);
+    /* Recessed against the elevated .admin-body card (avoid card-on-card flat). */
+    background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1.1rem 1.25rem;
@@ -584,4 +616,60 @@ const items = [
       align-items: center;
     }
   }
+
+  /* App-native confirm/prompt dialog (driven by src/lib/adminDialog.ts). The
+     buttons live in THIS component's template, so .admin-btn here is scoped to
+     them directly (the .admin-body :global rules don't reach outside the body). */
+  .admin-dialog {
+    width: min(460px, calc(100vw - 2rem));
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text);
+    padding: 0;
+  }
+  .admin-dialog::backdrop { background: rgba(10, 14, 12, 0.62); }
+  .admin-dialog[hidden] { display: none; }
+  .admin-dialog__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .admin-dialog__title { margin: 0; font-size: 1.2rem; }
+  .admin-dialog__msg { margin: 0; color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
+  .admin-dialog__field { display: flex; flex-direction: column; gap: 0.35rem; }
+  .admin-dialog__field[hidden] { display: none; }
+  .admin-dialog__field span {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .admin-dialog__field input {
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+  }
+  .admin-dialog__field input:focus { outline: none; border-color: var(--accent); }
+  .admin-dialog__actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+  .admin-dialog .admin-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 0.45rem 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .admin-dialog .admin-btn:hover { color: var(--text); border-color: var(--accent); }
+  .admin-dialog .admin-btn--danger { color: #ff9b9b; border-color: rgba(220, 80, 80, 0.5); }
+  .admin-dialog .admin-btn--danger:hover { color: #ffb3b3; border-color: #d65555; background: rgba(220, 80, 80, 0.12); }
 </style>

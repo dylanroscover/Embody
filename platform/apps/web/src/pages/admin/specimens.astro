@@ -87,6 +87,8 @@ const specimens = await listSpecimensForAdmin(env.DB, { q });
 </AdminLayout>
 
 <script>
+  import { adminConfirm } from "../../lib/adminDialog";
+
   const statusBox = document.querySelector<HTMLParagraphElement>("[data-status]");
 
   function setStatus(message: string, kind: "ok" | "error") {
@@ -129,7 +131,11 @@ const specimens = await listSpecimensForAdmin(env.DB, { q });
       const id = row?.dataset.id;
       const slug = row?.dataset.slug;
       if (!id) return;
-      if (!confirm(`Delete "${slug}" permanently? This cannot be undone.`)) return;
+      if (!(await adminConfirm({
+        title: "Delete specimen",
+        message: `Delete "${slug}" permanently? This cannot be undone.`,
+        okLabel: "delete"
+      }))) return;
       btn.disabled = true;
       try {
         const res = await fetch(`/api/admin/specimens/${id}`, { method: "DELETE" });

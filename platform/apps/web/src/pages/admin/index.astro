@@ -32,24 +32,4 @@ const counts = await dashboardCounts(env.DB);
       <div class="admin-card__label">signups (7d)</div>
     </div>
   </div>
-
-  <p class="admin-links">
-    <a href="/admin/reports">Moderation queue ({counts.openReports} open)</a>
-    <span class="dot">&middot;</span>
-    <a href="/admin/specimens">Specimens</a>
-    <span class="dot">&middot;</span>
-    <a href="/admin/users">Users</a>
-    <span class="dot">&middot;</span>
-    <a href="/admin/email">Email test console</a>
-  </p>
 </AdminLayout>
-
-<style>
-  .admin-links {
-    margin-top: 0.5rem;
-    font-family: var(--font-mono);
-    font-size: 0.85rem;
-  }
-  .admin-links a { color: var(--accent); }
-  .admin-links .dot { color: var(--text-faint); margin: 0 0.35rem; }
-</style>
