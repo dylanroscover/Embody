@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { getAuth, type AuthEnv } from "../../../lib/auth";
-import { checkRateLimit, type RateLimitOptions } from "../../../server/rateLimit";
+import { checkRateLimit, rateLimitDisabled, type RateLimitOptions } from "../../../server/rateLimit";
 import { errorResponse } from "../../../server/http";
 
 // Better Auth catch-all handler. Mounts every Better Auth endpoint under
@@ -32,9 +32,11 @@ const AUTH_RATE_LIMITS: Array<{ test: RegExp; tag: string; limit: RateLimitOptio
 export const ALL: APIRoute = async (ctx) => {
   const { request } = ctx;
   // Only POSTs mutate / send mail; GETs (get-session, OAuth callback) are exempt.
-  if (request.method === "POST") {
-    const path = new URL(request.url).pathname;
-    const rule = AUTH_RATE_LIMITS.find((r) => r.test.test(path));
+  // Skip entirely in development (rateLimitDisabled) so the e2e suite -- which
+  // bursts many sign-ups from one origin -- never throttles itself; prod limits
+  // by the real CF-Connecting-IP.
+  if (request.method === "POST" && !rateLimitDisabled(env)) {
+    const rule = AUTH_RATE_LIMITS.find((r) => r.test.test(new URL(request.url).pathname));
     if (rule) {
       const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
       const rate = await checkRateLimit(env.KV, `auth:${rule.tag}:${ip}`, rule.limit);

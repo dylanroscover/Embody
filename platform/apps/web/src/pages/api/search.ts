@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { searchSpecimensFts } from "../../server/db";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../server/http";
-import { checkRateLimit } from "../../server/rateLimit";
+import { checkRateLimit, rateLimitDisabled } from "../../server/rateLimit";
 
 export const prerender = false;
 
@@ -12,15 +12,18 @@ const SEARCH_RATE_LIMIT = { limit: 60, windowSec: 60 };
 
 export const GET: APIRoute = async ({ url, request }) => {
   try {
-    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-    const rate = await checkRateLimit(env.KV, `search:${ip}`, SEARCH_RATE_LIMIT);
-    if (!rate.ok) {
-      return errorResponse(
-        429,
-        "rate_limited",
-        "Too many searches. Please slow down and try again shortly.",
-        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
-      );
+    // Skip in development (e2e); limit by real IP in production.
+    if (!rateLimitDisabled(env)) {
+      const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      const rate = await checkRateLimit(env.KV, `search:${ip}`, SEARCH_RATE_LIMIT);
+      if (!rate.ok) {
+        return errorResponse(
+          429,
+          "rate_limited",
+          "Too many searches. Please slow down and try again shortly.",
+          rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+        );
+      }
     }
 
     const response = await searchSpecimensFts(

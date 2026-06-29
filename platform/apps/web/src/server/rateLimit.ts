@@ -98,3 +98,14 @@ export async function checkRateLimit(
 
   return { ok: true };
 }
+
+// Rate limiting is a PRODUCTION abuse control. In development it only throttles
+// the developer and -- critically -- the e2e suite, which bursts hundreds of
+// auth/search/copy requests from a single origin (and miniflare DOES populate
+// CF-Connecting-IP locally, so an IP-presence check is NOT enough to skip dev).
+// Gate every limiter on this so dev/e2e never rate-limits itself, while prod is
+// unaffected. Mirrors `rateLimit: { enabled: ENVIRONMENT === "production" }` on
+// the Better Auth side.
+export function rateLimitDisabled(env: { ENVIRONMENT?: string } | undefined | null): boolean {
+  return env?.ENVIRONMENT === "development";
+}

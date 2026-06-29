@@ -4,7 +4,7 @@ import { isReactionEmoji } from "../../../../lib/reactions";
 import { requireUser } from "../../../../server/auth";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 import { getSpecimenIdBySlug, toggleReaction } from "../../../../server/engagement";
-import { checkRateLimit } from "../../../../server/rateLimit";
+import { checkRateLimit, rateLimitDisabled } from "../../../../server/rateLimit";
 
 export const prerender = false;
 
@@ -44,14 +44,16 @@ export const POST: APIRoute = async ({ params, request }) => {
       return errorResponse(401, "authentication_required", "A signed-in user is required to react.");
     }
 
-    const rate = await checkRateLimit(env.KV, `react:${user.id}`, REACT_RATE_LIMIT);
-    if (!rate.ok) {
-      return errorResponse(
-        429,
-        "rate_limited",
-        "Too many reactions. Please slow down and try again shortly.",
-        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
-      );
+    if (!rateLimitDisabled(env)) {
+      const rate = await checkRateLimit(env.KV, `react:${user.id}`, REACT_RATE_LIMIT);
+      if (!rate.ok) {
+        return errorResponse(
+          429,
+          "rate_limited",
+          "Too many reactions. Please slow down and try again shortly.",
+          rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+        );
+      }
     }
 
     const specimenId = await getSpecimenIdBySlug(env.DB, slug);

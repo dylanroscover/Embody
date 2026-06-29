@@ -15,5 +15,14 @@ export default defineConfig({
     // the Cloudflare dashboard (free tier); without it, images serve as-is.
     imageService: "cloudflare"
   }),
-  integrations: [react()]
+  integrations: [react()],
+  vite: {
+    // Keep a single React instance across the module graph (good hygiene for the
+    // monorepo). The real fix for the React Flow SSR crash is rendering TdnViewer
+    // client:only (it is a DOM-only canvas that must not be server-rendered) --
+    // see the TdnViewer mounts in index.astro and c/[slug].astro.
+    resolve: {
+      dedupe: ["react", "react-dom"]
+    }
+  }
 });

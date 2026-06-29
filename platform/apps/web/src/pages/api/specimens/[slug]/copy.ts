@@ -4,7 +4,7 @@ import { getSpecimenBySlug } from "../../../../server/db";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 import { getParsedTdnForSlug } from "../../../../server/tdn";
 import { buildEmbodyEnvelope } from "../../../../lib/tdnEnvelope";
-import { checkRateLimit } from "../../../../server/rateLimit";
+import { checkRateLimit, rateLimitDisabled } from "../../../../server/rateLimit";
 
 export const prerender = false;
 
@@ -29,15 +29,18 @@ export const POST: APIRoute = async ({ params, request }) => {
       return errorResponse(400, "invalid_slug", "A specimen slug is required.");
     }
 
-    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
-    const rate = await checkRateLimit(env.KV, `copy:${ip}`, COPY_RATE_LIMIT);
-    if (!rate.ok) {
-      return errorResponse(
-        429,
-        "rate_limited",
-        "Too many copies. Please slow down and try again shortly.",
-        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
-      );
+    // Skip in development (e2e); limit by real IP in production.
+    if (!rateLimitDisabled(env)) {
+      const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      const rate = await checkRateLimit(env.KV, `copy:${ip}`, COPY_RATE_LIMIT);
+      if (!rate.ok) {
+        return errorResponse(
+          429,
+          "rate_limited",
+          "Too many copies. Please slow down and try again shortly.",
+          rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+        );
+      }
     }
 
     const specimen = await getSpecimenBySlug(env.DB, slug);

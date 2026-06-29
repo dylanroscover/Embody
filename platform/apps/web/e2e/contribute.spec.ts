@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { fillTdn } from "./editor";
 
 // The core write path: a signed-in user submits a Specimen. In dev,
 // ENVIRONMENT=development so the Turnstile gate accepts the dev-bypass path.
@@ -30,7 +31,7 @@ test("signed-in user submits a specimen and lands on its page", async ({ page })
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(title);
   await page.locator('textarea[name="description"]').fill("An e2e-submitted test network.");
-  await page.locator('textarea[name="tdn"]').fill(tdn);
+  await fillTdn(page, tdn);
   await page.locator("[data-submit-go]").click();
 
   // On success the client redirects to /c/<new-slug>.
@@ -47,7 +48,7 @@ test("signed-in user submits with multiple categories", async ({ page }) => {
 
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(title);
-  await page.locator('textarea[name="tdn"]').fill(tdn);
+  await fillTdn(page, tdn);
 
   // Open the categories picker (the .msdd holding name="categories") and add two
   // more on top of the default-checked "generative".
@@ -84,8 +85,12 @@ test("invalid TDN is rejected", async ({ page }) => {
   await register(page);
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(`Bad TDN ${Date.now()}`);
-  await page.locator('textarea[name="tdn"]').fill("{ not valid json");
-  await page.locator("[data-submit-go]").click();
+  await fillTdn(page, "{ not valid json");
+  // Invalid TDN keeps the submit button in the not-ready (aria-disabled) state.
+  await expect(page.locator("[data-submit-go]")).toHaveAttribute("aria-disabled", "true");
+  // It is aria-disabled (not the `disabled` attribute), so a real click still
+  // fires and surfaces a status; force past Playwright's actionability gate.
+  await page.locator("[data-submit-go]").click({ force: true });
   await expect(page.locator("[data-submit-status]")).toBeVisible({ timeout: 10_000 });
   await expect(page).toHaveURL(/\/contribute/); // stayed put
 });

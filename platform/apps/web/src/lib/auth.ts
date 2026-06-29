@@ -53,8 +53,18 @@ function buildAuth(env: AuthEnv, secret: string) {
   // immediately. See src/server/email.ts.
   const hasEmail = emailEnabled(env);
 
+  // Built-in rate limiting: ON in production, OFF in development. Better Auth's
+  // default limiter is per-IP; the e2e suite (and local dev) drives a burst of
+  // hundreds of auth requests from one localhost IP, which trips the limiter and
+  // makes registration 429 mid-run. NODE_ENV is unset on the Worker so Better
+  // Auth can't infer dev itself -- gate it on our ENVIRONMENT var. Our tighter
+  // custom per-endpoint limits in api/auth/[...all].ts (also dev-skipped) layer
+  // on top in production.
+  const isProd = env.ENVIRONMENT === "production";
+
   return betterAuth({
     secret,
+    rateLimit: { enabled: isProd },
     // baseURL is optional; when unset Better Auth derives it from the request.
     // Set BETTER_AUTH_URL in production so OAuth callbacks resolve correctly.
     ...(env.BETTER_AUTH_URL ? { baseURL: env.BETTER_AUTH_URL } : {}),

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { fillTdn } from "./editor";
 
 // Owner submission lifecycle: edit metadata, delete, and the ownership gate.
 const pw = "e2e-passw0rd";
@@ -17,7 +18,7 @@ async function registerAndSubmit(page: Page): Promise<{ slug: string; stamp: num
   const tdn = JSON.stringify({ name: "e2e_owned", type: "baseCOMP", children: [] }, null, 2);
   await page.goto("/contribute");
   await page.locator('input[name="title"]').fill(`E2E Owned ${stamp}`);
-  await page.locator('textarea[name="tdn"]').fill(tdn);
+  await fillTdn(page, tdn);
   await page.locator("[data-submit-go]").click();
   await expect(page).toHaveURL(/\/c\/e2e-owned-/, { timeout: 25_000 });
   const slug = new URL(page.url()).pathname.split("/").filter(Boolean).pop() as string;
@@ -48,8 +49,9 @@ test("owner sees edit/delete controls and can edit metadata", async ({ page }) =
 test("owner can delete a specimen", async ({ page, request }) => {
   const { slug } = await registerAndSubmit(page);
 
-  page.on("dialog", (d) => d.accept()); // accept the confirm() prompt
+  // The delete control opens a confirm <dialog>; confirm inside it to delete.
   await page.locator("[data-delete-specimen]").click();
+  await page.locator("[data-delete-confirm]").click();
 
   // Redirects to the owner's profile, and the specimen is gone from the API.
   await expect(page).toHaveURL(/\/u\//, { timeout: 15_000 });

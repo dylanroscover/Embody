@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { requireUser } from "../../../../server/auth";
 import { clientIp } from "../../../../server/admin";
-import { checkRateLimit } from "../../../../server/rateLimit";
+import { checkRateLimit, rateLimitDisabled } from "../../../../server/rateLimit";
 import { notifyOwnerNewReport } from "../../../../server/notifications";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 import {
@@ -51,14 +51,16 @@ export const POST: APIRoute = async ({ params, request }) => {
       return errorResponse(401, "authentication_required", "A signed-in user is required to report.");
     }
 
-    const rate = await checkRateLimit(env.KV, `report:${user.id}`, REPORT_RATE_LIMIT);
-    if (!rate.ok) {
-      return errorResponse(
-        429,
-        "rate_limited",
-        "Too many reports. Please slow down and try again shortly.",
-        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
-      );
+    if (!rateLimitDisabled(env)) {
+      const rate = await checkRateLimit(env.KV, `report:${user.id}`, REPORT_RATE_LIMIT);
+      if (!rate.ok) {
+        return errorResponse(
+          429,
+          "rate_limited",
+          "Too many reports. Please slow down and try again shortly.",
+          rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+        );
+      }
     }
 
     const parsed = await readReportBody(request);

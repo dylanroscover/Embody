@@ -673,7 +673,7 @@ function emitKey(key: string): string {
       {specimen.description && <p class="specimen-desc">{specimen.description}</p>}
       <div class="viewer-panel pillar">
         <p class="eyebrow">network preview</p>
-        <TdnViewer tdn={tdn} height="100%" client:visible={{ rootMargin: "300px" }} />
+        <TdnViewer tdn={tdn} height="100%" client:only="react" />
       </div>
     </div>
 
