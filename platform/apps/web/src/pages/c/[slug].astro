@@ -767,14 +767,14 @@ function emitKey(key: string): string {
 <style>
   .detail-hero {
     /* relative: the owner edit/delete icon tools pin to the top-right corner.
-       padding-bottom (9px) + the layout's 9px padding-top = the 18px byline->box
+       padding-bottom (13px) + the layout's 13px padding-top = the 26px byline->box
        box-gap. Paired with h1's margin-bottom below, the two VISUAL gaps around
-       the byline (title->byline and byline->box) come out perfectly equal (~26px
+       the byline (title->byline and byline->box) come out perfectly equal (~34px
        each) -- the byline's line-leading + the title's descender overflow are
        folded into the margins so the rendered whitespace, not the raw box gap,
        matches. */
     position: relative;
-    padding-bottom: 9px;
+    padding-bottom: 13px;
   }
 
   /* The byline is the last hero element. Spacing here is BASELINE-referenced, not
@@ -785,14 +785,14 @@ function emitKey(key: string): string {
      line box left a huge gap of empty descender space above the byline that did
      NOT match the byline->box gap below -- the title looked far from the byline on
      every page except Kaleidoscope (whose 'p' happens to fill that space). Measured
-     from the BASELINE instead, this ~2px margin makes the title-baseline -> byline
-     gap (~28px) equal the byline -> rendered-result gap (~27px) for EVERY title.
+     from the BASELINE instead, this ~10px margin makes the title-baseline -> byline
+     gap (~36px) equal the byline -> rendered-result gap (~35px) for EVERY title.
      Titles that DO carry a last-line descender ('p' in Kaleidoscope, 'y' in
      Gray-Scott) simply let it poke into the leading -- standard display
      typography, optically even. Verified across all six specimens via glyph
      metrics (canvas measureText actual-bounding-box), not eyeballed. */
   .detail-hero h1 {
-    margin-bottom: 2px;
+    margin-bottom: 10px;
   }
 
   .specimen-byline {
@@ -1191,10 +1191,10 @@ function emitKey(key: string): string {
        -- drives the row height. */
     align-items: stretch;
     /* !important beats the global `.page-section + .page-section.tight` (0,3,0)
-       rhythm. Lower half of the byline->box gap: 9px here + 9px hero
-       padding-bottom = the 18px box-gap that makes the byline's two visible gaps
+       rhythm. Lower half of the byline->box gap: 13px here + 13px hero
+       padding-bottom = the 26px box-gap that makes the byline's two visible gaps
        equal (see .detail-hero). */
-    padding-top: 9px !important;
+    padding-top: 13px !important;
     /* Gap to the raw-YAML section below: 1.35rem here + 1.35rem raw-section
        padding-top = 2.7rem. */
     padding-bottom: 1.35rem;
