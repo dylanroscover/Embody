@@ -26,11 +26,19 @@ export const GET: APIRoute = async ({ params, request }) => {
     const object = await getThumbnail(env.BLOBS, key);
     if (!object) return errorResponse(404, "thumbnail_not_found", "The thumbnail blob is missing.");
 
+    // Anonymous requests can only ever resolve a PUBLIC thumbnail (viewer id is
+    // undefined), so a shared CDN cache is safe. An authenticated request may
+    // resolve the owner's OWN private/unlisted draft cover -- that must never
+    // land in a shared cache, so mark it private (browser-only, short-lived).
+    const cacheControl = viewer
+      ? "private, max-age=60"
+      : "public, max-age=300, s-maxage=86400";
+
     return new Response(object.body, {
       status: 200,
       headers: {
         "Content-Type": object.httpMetadata?.contentType || "image/png",
-        "Cache-Control": "public, max-age=300, s-maxage=86400",
+        "Cache-Control": cacheControl,
         ETag: object.httpEtag
       }
     });

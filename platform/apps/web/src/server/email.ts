@@ -65,7 +65,11 @@ export async function sendEmail(env: EmailEnv, args: SendEmailArgs): Promise<Sen
         to: args.to,
         subject: args.subject,
         html: args.html
-      })
+      }),
+      // Bound the request. This fetch is awaited inline in user-facing flows
+      // (signup verification, password reset, change-email); a hung Resend
+      // endpoint would otherwise stall the response for the whole Worker budget.
+      signal: AbortSignal.timeout(8000)
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

@@ -4,8 +4,14 @@ import { getSpecimenBySlug } from "../../../../server/db";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 import { getParsedTdnForSlug } from "../../../../server/tdn";
 import { buildEmbodyEnvelope } from "../../../../lib/tdnEnvelope";
+import { checkRateLimit } from "../../../../server/rateLimit";
 
 export const prerender = false;
+
+// Per-IP cap on the unauthenticated copy action. The Idempotency-Key path only
+// dedups a single client's retries; it does nothing against a script that omits
+// the header, so this is the real bound on copies_count inflation.
+const COPY_RATE_LIMIT = { limit: 40, windowSec: 60 };
 
 // POST /api/specimens/:slug/copy
 // Builds the `_embody_tdn` clipboard envelope for a specimen from its real R2
@@ -21,6 +27,17 @@ export const POST: APIRoute = async ({ params, request }) => {
     const slug = params.slug;
     if (!slug) {
       return errorResponse(400, "invalid_slug", "A specimen slug is required.");
+    }
+
+    const ip = request.headers.get("CF-Connecting-IP") ?? "unknown";
+    const rate = await checkRateLimit(env.KV, `copy:${ip}`, COPY_RATE_LIMIT);
+    if (!rate.ok) {
+      return errorResponse(
+        429,
+        "rate_limited",
+        "Too many copies. Please slow down and try again shortly.",
+        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+      );
     }
 
     const specimen = await getSpecimenBySlug(env.DB, slug);

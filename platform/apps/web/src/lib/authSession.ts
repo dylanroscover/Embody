@@ -8,6 +8,9 @@ export interface SessionUser {
   id: string;
   handle: string;
   email: string;
+  // Whether Better Auth considers this account's email verified. Used by admin
+  // gating so the ADMIN_EMAILS allowlist can require a verified address.
+  emailVerified: boolean;
   name: string;
   image: string | null;
   trustLevel: string;
@@ -55,10 +58,16 @@ export async function getSessionUser(
     }
   } catch (error) {
     console.error("getSessionUser: profile lookup failed", error);
+    // Fail CLOSED: an unresolvable profile must not authenticate. Falling through
+    // to the backfill below would re-read the handle WITHOUT the banned check and
+    // could reconstitute a BANNED user during a transient D1 error -- the ban is
+    // enforced solely here, so a thrown lookup must resolve to logged-out.
+    return null;
   }
 
   // Backfill if the profile row is missing (created before the hook, or a failed
-  // hook insert). ensureUserProfile seeds the GitHub avatar too.
+  // hook insert). ensureUserProfile seeds the GitHub avatar too. Only reached
+  // when the lookup SUCCEEDED but returned no row (so banned is known-not-set).
   if (!handle) {
     handle = await ensureUserProfile(env.DB, {
       id: user.id,
@@ -91,6 +100,7 @@ export async function getSessionUser(
     id: user.id,
     handle,
     email: user.email ?? "",
+    emailVerified: Boolean((user as { emailVerified?: boolean }).emailVerified),
     name: user.name ?? "",
     image: user.image ?? null,
     trustLevel,

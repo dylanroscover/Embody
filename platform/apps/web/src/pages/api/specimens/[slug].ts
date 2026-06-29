@@ -13,7 +13,7 @@ import {
   updateSpecimenMetadata,
   type SpecimenEditData
 } from "../../../server/db";
-import { getParsedTdnForSlug } from "../../../server/tdn";
+import { getParsedTdnForSlug, MAX_TDN_TEXT_CHARS } from "../../../server/tdn";
 import { requireUser } from "../../../server/auth";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
 import { byteLength, getTdn, putThumbnail, putTdn } from "../../../server/r2";
@@ -209,6 +209,11 @@ export const PATCH: APIRoute = async ({ params, request }) => {
 function parseTdn(
   value: string
 ): { ok: true; tdn: Record<string, unknown> } | { ok: false; detail: string } {
+  // Bound the synchronous parse on the edit path (DoS guard), same cap the read
+  // path enforces in parseTdnYaml.
+  if (value.length > MAX_TDN_TEXT_CHARS) {
+    return { ok: false, detail: "tdn is too large." };
+  }
   let parsed: unknown;
   try {
     parsed = parseYaml(value) as unknown;

@@ -38,5 +38,28 @@ export const onRequest = defineMiddleware(async (context, next) => {
     }
   }
 
-  return next();
+  const response = await next();
+
+  // Baseline security response headers (defense-in-depth), applied to every
+  // response including API JSON and served images. `nosniff` in particular
+  // closes the avatar/thumbnail MIME-sniff vector where a stored Content-Type is
+  // echoed back. A full Content-Security-Policy is intentionally NOT set here --
+  // it needs per-page nonce/allowlist work and would break inline scripts/styles
+  // and the React islands; track it as a separate hardening step.
+  try {
+    const h = response.headers;
+    if (!h.has("X-Content-Type-Options")) h.set("X-Content-Type-Options", "nosniff");
+    if (!h.has("X-Frame-Options")) h.set("X-Frame-Options", "SAMEORIGIN");
+    if (!h.has("Referrer-Policy")) h.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    if (!h.has("Strict-Transport-Security")) {
+      // No includeSubDomains/preload -- the apex is HTTPS-only behind Cloudflare,
+      // but we don't want to assert anything about subdomains we don't control.
+      h.set("Strict-Transport-Security", "max-age=15552000");
+    }
+  } catch {
+    // Some responses (e.g. immutable redirect/asset responses) reject header
+    // mutation; never fail a request over a defense-in-depth header.
+  }
+
+  return response;
 });

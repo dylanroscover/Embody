@@ -16,9 +16,28 @@ export interface ParsedTdn {
   tdn: Record<string, unknown>;
 }
 
+// Hard cap on the raw YAML text we will hand to the parser, measured in JS
+// string length (UTF-16 code units -- a tight upper bound on parse cost). parse()
+// is a synchronous, CPU-and-memory-bound operation on the Worker's main thread;
+// an oversized or pathologically nested document can exhaust the 128MB isolate or
+// burn the CPU budget (DoS). Reject anything past the cap up front. The 'yaml'
+// library already bounds alias expansion (maxAliasCount, default 100), so this
+// guards the remaining size/nesting vector. 8M chars comfortably exceeds any real
+// specimen while staying well under the isolate limit. Exported so the submit/
+// edit WRITE paths (which run their own parse) enforce the SAME bound -- the read
+// helper below covers /tdn, /copy, /c/[slug], cover-graph.
+export const MAX_TDN_TEXT_CHARS = 8 * 1024 * 1024;
+
 /** Parse raw TDN v2.0 YAML text into a TDN object, or null if it is not a map. */
 export function parseTdnYaml(raw: string | null): Record<string, unknown> | null {
   if (!raw) return null;
+
+  if (raw.length > MAX_TDN_TEXT_CHARS) {
+    console.error(
+      `parseTdnYaml: raw TDN is ${raw.length} chars, over the ${MAX_TDN_TEXT_CHARS} cap -- refusing to parse`
+    );
+    return null;
+  }
 
   try {
     const parsed = parse(raw) as unknown;

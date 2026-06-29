@@ -15,6 +15,7 @@
 
 import { getSessionUser, type SessionUser } from "../lib/authSession";
 import type { AuthEnv } from "../lib/auth";
+import { emailEnabled } from "./email";
 import { errorResponse } from "./http";
 
 // isAdmin / getAdminUser take the full CloudflareEnv. The generated runtime
@@ -35,13 +36,23 @@ function adminAllowlist(env: CloudflareEnv): Set<string> {
 
 // Pure predicate over an already-resolved user (page side: Astro.locals.user).
 export function isAdmin(
-  user: Pick<SessionUser, "email" | "trustLevel"> | null,
+  user: Pick<SessionUser, "email" | "trustLevel" | "emailVerified"> | null,
   env: CloudflareEnv
 ): boolean {
   if (!user) return false;
+  // A directly-DB-assigned trust_level 'admin' is the durable grant (and the
+  // recommended bootstrap) -- independent of email entirely.
   if (user.trustLevel === "admin") return true;
   const email = (user.email ?? "").trim().toLowerCase();
-  return email !== "" && adminAllowlist(env).has(email);
+  if (email === "") return false;
+  // The ADMIN_EMAILS allowlist grants admin by email. When email verification
+  // is actually in force (a provider is configured), require the address to be
+  // VERIFIED so an unverified signup can never claim an admin address. In
+  // no-email mode nobody can verify, so the allowlist still works for bootstrap.
+  if (emailEnabled(env as unknown as { RESEND_API_KEY?: string }) && !user.emailVerified) {
+    return false;
+  }
+  return adminAllowlist(env).has(email);
 }
 
 // API side: resolve the FULL SessionUser from the request (requireUser drops

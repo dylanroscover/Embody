@@ -584,10 +584,19 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     // The cover network layer is an empty mount node the React root fills in
     // (lazy-fetched graph). reactionsClusterHtml is shared with the SSR card so
     // both emit identical reaction markup.
+    // Escape for interpolation into HTML text AND double/single-quoted attribute
+    // values. The previous textContent->innerHTML round-trip escaped < > & but
+    // NOT " or ' (text-node serialization never escapes quotes), so author-
+    // controlled fields (name/description) interpolated into attributes in
+    // buildCard's article.innerHTML could break out of the attribute -> stored
+    // XSS. Escape all five characters so attribute contexts are safe too.
     function esc(value: string): string {
-      const el = document.createElement("div");
-      el.textContent = value;
-      return el.innerHTML;
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
     }
 
     // Astro scopes the page's (and SpecimenCover's) <style> by stamping a

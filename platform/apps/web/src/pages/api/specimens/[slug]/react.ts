@@ -4,8 +4,13 @@ import { isReactionEmoji } from "../../../../lib/reactions";
 import { requireUser } from "../../../../server/auth";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 import { getSpecimenIdBySlug, toggleReaction } from "../../../../server/engagement";
+import { checkRateLimit } from "../../../../server/rateLimit";
 
 export const prerender = false;
+
+// Per-user cap. Each toggle is a read-modify-write of the specimen's
+// denormalized like tallies; rapid toggling is pure write amplification.
+const REACT_RATE_LIMIT = { limit: 60, windowSec: 60 };
 
 // POST /api/specimens/:slug/react   body: { emoji }
 // Toggles the signed-in user's reaction with `emoji` on a specimen. Anonymous
@@ -37,6 +42,16 @@ export const POST: APIRoute = async ({ params, request }) => {
       user = await requireUser(request, env);
     } catch {
       return errorResponse(401, "authentication_required", "A signed-in user is required to react.");
+    }
+
+    const rate = await checkRateLimit(env.KV, `react:${user.id}`, REACT_RATE_LIMIT);
+    if (!rate.ok) {
+      return errorResponse(
+        429,
+        "rate_limited",
+        "Too many reactions. Please slow down and try again shortly.",
+        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+      );
     }
 
     const specimenId = await getSpecimenIdBySlug(env.DB, slug);

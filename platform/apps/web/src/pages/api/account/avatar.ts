@@ -4,8 +4,13 @@ import { getRequestUser } from "../../../server/auth";
 import { setProfileAvatarUrl } from "../../../server/db";
 import { putAvatar } from "../../../server/r2";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../server/http";
+import { checkRateLimit } from "../../../server/rateLimit";
 
 export const prerender = false;
+
+// Per-user cap on avatar uploads. Each POST base64-decodes the payload and writes
+// to R2 + D1; without a bound it is a cheap per-account CPU/storage abuse path.
+const AVATAR_RATE_LIMIT = { limit: 20, windowSec: 300 };
 
 // POST /api/account/avatar -- the signed-in user uploads a new avatar. Body is
 // { avatar: <data URL> }; the client downscales/squares the image to a small
@@ -16,6 +21,16 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const user = await getRequestUser(request, env);
     if (!user) return errorResponse(401, "unauthorized", "Sign in to set an avatar.");
+
+    const rate = await checkRateLimit(env.KV, `avatar:${user.id}`, AVATAR_RATE_LIMIT);
+    if (!rate.ok) {
+      return errorResponse(
+        429,
+        "rate_limited",
+        "Too many avatar updates. Please slow down and try again shortly.",
+        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+      );
+    }
 
     let body: { avatar?: unknown };
     try {

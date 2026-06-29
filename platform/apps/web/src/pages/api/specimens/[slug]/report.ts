@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import type { APIRoute } from "astro";
 import { requireUser } from "../../../../server/auth";
 import { clientIp } from "../../../../server/admin";
+import { checkRateLimit } from "../../../../server/rateLimit";
 import { notifyOwnerNewReport } from "../../../../server/notifications";
 import { errorResponse, jsonResponse, serverErrorResponse } from "../../../../server/http";
 import {
@@ -27,6 +28,10 @@ export const prerender = false;
 const AUTO_HIDE_THRESHOLD = 3;
 const AUTO_BAN_THRESHOLD = 5;
 
+// Per-user cap. Each report writes a row, an audit event, and fires an owner
+// email; without a bound one account can flood the moderation queue and mailbox.
+const REPORT_RATE_LIMIT = { limit: 10, windowSec: 300 };
+
 // POST /api/specimens/:slug/report
 // Files a moderation report against a specimen. Requires a signed-in user (401
 // otherwise). The body is { reason } validated against the bounded REPORT_REASONS
@@ -44,6 +49,16 @@ export const POST: APIRoute = async ({ params, request }) => {
       user = await requireUser(request, env);
     } catch {
       return errorResponse(401, "authentication_required", "A signed-in user is required to report.");
+    }
+
+    const rate = await checkRateLimit(env.KV, `report:${user.id}`, REPORT_RATE_LIMIT);
+    if (!rate.ok) {
+      return errorResponse(
+        429,
+        "rate_limited",
+        "Too many reports. Please slow down and try again shortly.",
+        rate.retryAfter ? { "Retry-After": String(rate.retryAfter) } : undefined
+      );
     }
 
     const parsed = await readReportBody(request);

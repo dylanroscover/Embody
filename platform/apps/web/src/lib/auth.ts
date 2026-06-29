@@ -58,6 +58,13 @@ function buildAuth(env: AuthEnv, secret: string) {
     // baseURL is optional; when unset Better Auth derives it from the request.
     // Set BETTER_AUTH_URL in production so OAuth callbacks resolve correctly.
     ...(env.BETTER_AUTH_URL ? { baseURL: env.BETTER_AUTH_URL } : {}),
+    // Force the Secure flag + __Secure- cookie prefix in production. Better Auth
+    // otherwise infers `secure` from NODE_ENV/baseURL, but NODE_ENV is unset on
+    // the Worker and BETTER_AUTH_URL is intentionally unset (wrangler.jsonc), so
+    // the inference falls through to false -> a session cookie with NO Secure
+    // flag in production. Pin it to our own ENVIRONMENT var instead (which is
+    // "development" only via .dev.vars for local http dev).
+    advanced: { useSecureCookies: env.ENVIRONMENT === "production" },
     database: {
       dialect: new D1Dialect({ database: env.DB }),
       type: "sqlite"

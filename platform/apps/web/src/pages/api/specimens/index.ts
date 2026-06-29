@@ -24,6 +24,7 @@ import { errorResponse, jsonResponse, serverErrorResponse } from "../../../serve
 import { byteLength, putTdn, putThumbnail } from "../../../server/r2";
 import { checkRateLimit } from "../../../server/rateLimit";
 import { verifyTurnstile } from "../../../server/turnstile";
+import { MAX_TDN_TEXT_CHARS } from "../../../server/tdn";
 
 // Submit abuse cap: 10 submissions per 10 minutes per client IP. Enforced via
 // KV; with no KV (dev) the limiter allows everything (see rateLimit.ts).
@@ -314,6 +315,12 @@ async function readSubmitRequest(
 function parseTdn(
   value: string
 ): { ok: true; tdn: Record<string, unknown> } | { ok: false; detail: string } {
+  // Bound the synchronous parse on the submit path (DoS guard), same cap the
+  // read path enforces in parseTdnYaml. Without this a large/deeply-nested YAML
+  // body would parse unbounded on the Worker main thread before any scan.
+  if (value.length > MAX_TDN_TEXT_CHARS) {
+    return { ok: false, detail: "tdn is too large." };
+  }
   let parsed: unknown;
   try {
     parsed = parseYaml(value) as unknown;
