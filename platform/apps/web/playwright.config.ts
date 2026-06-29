@@ -25,7 +25,16 @@ export default defineConfig({
     trace: "on-first-retry",
     screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Runs once before everything: resets the local D1 to a clean seed-only
+    // state and provisions the e2e admin (see e2e/global.setup.ts).
+    { name: "setup", testMatch: /global\.setup\.ts/ },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"] },
+      dependencies: ["setup"]
+    }
+  ],
   webServer: {
     command: "npm run dev",
     url: BASE_URL,

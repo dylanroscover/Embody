@@ -11,11 +11,14 @@
 INSERT OR REPLACE INTO users_profile (id, handle, avatar_url, bio, trust_level)
 VALUES ('dev-user', 'embody.tools', NULL, 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');
 
--- Rebuild the contentless FTS5 mirror from scratch (it has no DELETE/UPDATE).
+-- Rebuild the FTS5 mirror from scratch. Must match migration 0005's
+-- contentless_delete=1 form -- a plain content='' table breaks the
+-- specimens_fts_ad delete trigger (DELETE FROM specimens_fts WHERE rowid=?),
+-- so every specimen delete after a seed would error.
 DROP TABLE IF EXISTS specimens_fts;
 CREATE VIRTUAL TABLE specimens_fts USING fts5(
   slug UNINDEXED, title, description, tags, author_handle, dat_text,
-  content=''
+  content='', contentless_delete=1
 );
 
 -- Purge fictional placeholders and stray test specimens by slug.

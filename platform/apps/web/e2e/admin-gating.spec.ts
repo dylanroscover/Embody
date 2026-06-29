@@ -39,5 +39,8 @@ test("the bootstrap admin reaches the dashboard and sees the admin nav link", as
   await page.goto("/admin");
   expect(new URL(page.url()).pathname).toBe("/admin");
   await expect(page.getByRole("heading", { level: 1, name: /dashboard/i })).toBeVisible();
-  await expect(page.locator('a.navbar__item[href="/admin"]')).toBeVisible();
+  // The admin link lives in the account dropdown (a navbar__user-link), hidden
+  // until the menu is opened -- open it, then assert the link is visible.
+  await page.locator("[data-user-menu-toggle]").click();
+  await expect(page.locator('a.navbar__user-link[href="/admin"]')).toBeVisible();
 });

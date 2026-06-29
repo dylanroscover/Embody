@@ -228,17 +228,16 @@ def write_seed_sql(rows: list[dict]) -> None:
     a(f"VALUES ('dev-user', '{AUTHOR_HANDLE}', NULL, 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');")
     a("")
 
-    # specimens_fts is a contentless FTS5 table (content=''), which does NOT
-    # support DELETE/UPDATE. The migration comment prescribes drop -> recreate
-    # for any rebuild; we do exactly that so the seed is fully re-runnable. The
-    # virtual table + its shadow tables are dropped and recreated empty, then
-    # repopulated below for the six real specimens only. This also wipes any FTS
-    # rows that belonged to the purged fictional/test specimens.
-    a("-- Rebuild the contentless FTS5 mirror from scratch (it has no DELETE/UPDATE).")
+    # specimens_fts is a contentless FTS5 mirror. Recreate it in migration 0005's
+    # contentless_delete=1 form -- a plain content='' table breaks the
+    # specimens_fts_ad delete trigger (DELETE FROM specimens_fts WHERE rowid=?),
+    # so every specimen delete after a seed would error. Drop -> recreate so the
+    # seed stays fully re-runnable; repopulated below for the six real specimens.
+    a("-- Rebuild the FTS5 mirror (contentless_delete=1, matching migration 0005).")
     a("DROP TABLE IF EXISTS specimens_fts;")
     a("CREATE VIRTUAL TABLE specimens_fts USING fts5(")
     a("  slug UNINDEXED, title, description, tags, author_handle, dat_text,")
-    a("  content=''")
+    a("  content='', contentless_delete=1")
     a(");")
     a("")
 
