@@ -256,7 +256,9 @@ pre {
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  /* Match .navbar__items gap so the brand->first-item gap equals every
+     item->item gap (the brand is just another block in the row). */
+  gap: 0.3rem;
   max-width: calc(100vw - clamp(1.5rem, 6vw, 3rem));
   padding: 0.4rem;
   border: 1px solid var(--border);
@@ -346,7 +348,9 @@ pre {
 .navbar__mark {
   gap: 0.5rem;
   padding-left: 0.85rem;
-  padding-right: 0.95rem;
+  /* Symmetric, and equal to .navbar__item padding so the brand's gap to the
+     first nav item matches the item-to-item gaps (see .navbar gap). */
+  padding-right: 0.85rem;
   border: 1px solid transparent;
   border-radius: 999px;
   color: var(--text);
