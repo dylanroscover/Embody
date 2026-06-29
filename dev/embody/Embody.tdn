@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 659
-generator: Embody/6.0.46
+build: 660
+generator: Embody/6.0.60
 td_build: 099.2025.32820
-source_file: Embody-6.47.toe
-exported_at: '2026-06-26T06:09:28Z'
+source_file: Embody-6.61.toe
+exported_at: '2026-06-29T00:35:10Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -25,9 +25,6 @@ type_defaults:
     color: [0.9, 0.3, 0.4]
   baseCOMP:
     size: [160, 130]
-    color: [0.3, 0.5, 0.9]
-    tags:
-    - tdn
   windowCOMP:
     parameters:
       title: =me
@@ -318,12 +315,24 @@ custom_pars:
     label: Embed Storage (default)
     default: true
     help: Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu.
+  - name: Autosave
+    style: Toggle
+    label: Auto-Save Checkpoints
+    startSection: true
+    default: true
+    help: When on, after the agent (or you) goes idle Embody writes changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves.
   - name: Tdncreateonstart
     style: Toggle
     label: TDN Create on Start
     startSection: true
     default: true
     help: When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save.
+  - name: Autosavestatus
+    style: Str
+    label: Auto-Save Status
+    readOnly: true
+    help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
+    value: Saved 06:21:35 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -396,6 +405,7 @@ custom_pars:
   - name: Envoyenable
     style: Toggle
     label: Envoy Enable
+    startSection: true
     help: Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.
     value: true
   - name: Envoyport
@@ -404,9 +414,21 @@ custom_pars:
     default: 9876
     help: 'Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.'
     value: 9870
+  - name: Embotenable
+    style: Toggle
+    label: Embot
+    startSection: true
+    default: true
+    help: Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. Off hides him entirely (no character, no camera movement).
+  - name: Envoyfollow
+    style: Toggle
+    label: Envoy Follow
+    default: true
+    help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
   - name: Envoystatus
     style: Str
     label: Envoy Status
+    startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
     value: Running on port 9870
@@ -546,7 +568,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.46
+    value: 6.0.60
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -563,7 +585,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 659
+    value: 660
   - name: Github
     style: Pulse
     label: GitHub
@@ -574,7 +596,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-06-26 06:09:28 UTC
+    value: 2026-06-29 00:35:10 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -624,10 +646,8 @@ storage:
   expand_order: []
   _start_in_progress: true
   git_status:
-    /embody/externalizations: ' M'
-    /embody/unit_tests: ' M'
-    /embody/Embody/templates/text_agents_md: ' M'
-  _watchdog_gen: 278
+    /embody/Embody/EnvoyExt: ' M'
+  _watchdog_gen: 441
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -769,7 +789,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 41
+  _clip_watch_gen: 205
   _suppress_dialogs: true
 operators:
 - name: help
@@ -998,8 +1018,8 @@ operators:
     file: embody/Embody/EnvoyExt.py
   position: [-300, 500]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1021,6 +1041,9 @@ operators:
 - name: templates
   type: baseCOMP
   position: [-400, -1200]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/templates.tdn
 - name: Collection
   type: baseCOMP
@@ -1030,6 +1053,9 @@ operators:
       name: Collection
       promote: true
   position: [200, -550]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/Collection.tdn
 - name: keyboardin1
   type: keyboardinDAT
@@ -1072,7 +1098,7 @@ operators:
   size: [160, 130]
   comp_inputs:
   - manager
-  palette_clone: true
+  tdn_ref: embody/Embody/windowHeader.tdn
 - name: _envoy_perform
   type: performCHOP
   parameters:
@@ -1097,6 +1123,59 @@ operators:
   comment: Envoy project performance monitor
   tags:
   - embody_internal
+- name: embot_template
+  type: baseCOMP
+  position: [-1400, -1400]
+  color: [0.67, 0.67, 0.67]
+  annotations:
+  - name: envoy_bot_arm_l
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 26]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_arm_r
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 26]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_body
+    mode: networkbox
+    position: [1594, 131]
+    size: [30, 34]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_eye_l
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 10]
+    color: [0.0, 0.0, 0.0]
+  - name: envoy_bot_eye_r
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 10]
+    color: [0.0, 0.0, 0.0]
+  - name: envoy_bot_head
+    mode: networkbox
+    position: [1594, 131]
+    size: [34, 26]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_leg_l
+    mode: networkbox
+    position: [1594, 131]
+    size: [11, 24]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_leg_r
+    mode: networkbox
+    position: [1594, 131]
+    size: [11, 24]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_speech
+    mode: annotate
+    title: Embot
+    position: [1594, 131]
+    size: [185, 74]
+    color: [0.12, 0.12, 0.17]
+    backAlpha: 0.95
+    bodyFontSize: 11
 - name: window_manager
   type: windowCOMP
   parameters:

@@ -1627,6 +1627,9 @@ class EnvoyExt:
         self._viz_next_blink: float = 0.0            # absTime.seconds of the next eye blink
         self._viz_blink_end: float = 0.0             # absTime.seconds the current blink ends
         self._viz_eyes_closed: bool = False          # eyes currently coloured shut (blink)
+        self._viz_next_squint: float = 0.0           # absTime.seconds of the next happy squint
+        self._viz_squint_end: float = 0.0            # absTime.seconds the current squint ends
+        self._viz_squinting: bool = False            # eyes currently flattened (squint)
         self._viz_pulse_op: Optional[str] = None      # path of the op currently pulsing
         self._viz_pulse_orig: Optional[tuple] = None  # its original node colour
         self._viz_pulse_start: float = 0.0     # absTime.seconds the pulse began
@@ -1635,7 +1638,12 @@ class EnvoyExt:
         self._viz_bot_from: Optional[tuple] = None    # (x, y) jump origin
         self._viz_bot_target: Optional[tuple] = None  # (x, y) jump destination (stands on op)
         self._viz_bot_jump_t0: float = 0.0            # absTime.seconds the current hop began
+        self._viz_jump_dur: float = 0.52              # duration of the current hop (longer for the entrance swoop)
+        self._viz_bot_pending_entrance: bool = False  # assembled off-view, awaiting the swoop-in
+        self._viz_bot_dest: Optional[tuple] = None    # (x,y) op standing point to swoop to once whole
+        self._viz_bot_stage: Optional[tuple] = None   # (x,y) off-view point where parts are copied in
         self._viz_bot_build_queue: list = []          # template part names still to copy this assembly
+        self._viz_assemble_next_frame: int = 0        # earliest absTime.frame the next spread part may copy
         self._viz_bot_pending_cleanup: set = set()    # nets whose left-behind bot to tear down off-screen
         self._crash_trace_enabled: bool = False       # diagnostic: flush a breadcrumb per viz annotation-graph op
         self._crash_trace_f = None                    # open handle to the breadcrumb file
@@ -2844,14 +2852,23 @@ class EnvoyExt:
         ('leg_l',  -8.0,  -29.0,  11.0, 24.0, False),
         ('leg_r',   8.0,  -29.0,  11.0, 24.0, False),
         ('head',   0.0,   31.0,   34.0, 26.0, False),
-        ('eye_l',  -8.0,  35.0,    9.0,  9.0, True),
-        ('eye_r',   8.0,  35.0,    9.0,  9.0, True),
+        ('eye_l',  -8.0,  35.0,   12.0, 13.0, True),
+        ('eye_r',   8.0,  35.0,   12.0, 13.0, True),
     )
     # Robotic motion: the figure JUMPS from node to node (parabolic arc, snappy
     # ease) and does a small stepped hover when idle. Squash is subtle and only
     # applied on landing.
     _VIZ_JUMP_DUR = 0.52      # seconds per hop between nodes
     _VIZ_JUMP_ARC = 55.0      # hop arc height (network units)
+    # Off-view assembly. Copying an annotateCOMP into a net you're VIEWING costs ~280ms
+    # (the in-viewport redraw); copying it OUTSIDE the viewport costs ~100ms (verified).
+    # So on an on-screen spawn Embot assembles at a staging point parked just past the
+    # viewport edge, then swoops in whole -- the per-part copies render off-view (much
+    # shallower fps sag) and the user sees a clean entrance instead of a stuttering
+    # build. _VIZ_STAGE_MARGIN is how far past the viewport edge to park; the swoop home
+    # uses _VIZ_ENTRANCE_DUR (slower than a normal hop, since it covers a big distance).
+    _VIZ_STAGE_MARGIN = 700.0   # network units past the viewport edge for the staging point
+    _VIZ_ENTRANCE_DUR = 0.95    # seconds for the swoop-in from staging (vs _VIZ_JUMP_DUR hops)
     # Stepping cadence: how long Embot dwells on each queued op before advancing to
     # the next. >= the jump so a hop lands before the next begins. When the queue
     # backs up (a fat batch) the dwell shrinks toward _VIZ_HOP_MIN so he races to
@@ -2859,11 +2876,35 @@ class EnvoyExt:
     _VIZ_HOP_DWELL = 0.8      # base dwell per hop (queue empty)
     _VIZ_HOP_MIN = 0.32       # floor dwell when the queue is deep
     _VIZ_QUEUE_CAP = 24       # hard cap on pending hops (drop oldest beyond this)
+    # On-screen spawn pacing. Copying ONE annotateCOMP into a net you are LOOKING AT
+    # forces a ~70ms annotation-layer redraw -- a single dropped frame that cannot be
+    # made cheaper (the cost is the editor relayout, not the copy; verified by stripping
+    # the annotate's internals to no effect). What CAN be fixed is the clustering: the
+    # old spread copied one part every frame, so 9 hitches landed back-to-back and read
+    # as a ~1s freeze. Spacing the copies _VIZ_ASSEMBLE_INTERVAL frames apart isolates
+    # each hitch (smooth motion between them) so assembly reads as "building himself".
+    # Off-screen spawns use one fast block copy and ignore this entirely -- only the
+    # on-screen spread is gated. Higher = smoother but slower to finish assembling.
+    _VIZ_ASSEMBLE_INTERVAL = 32     # frames between on-screen part copies (~0.53s @ 60fps)
+    # Build order for the on-screen spread: body + head + speech first so he is instantly
+    # recognizable as "here", then limbs, then eyes -- never a half-built torso sitting
+    # limbless for seconds. Names match _VIZ_BOT_PARTS suffixes (+ the speech bubble).
+    _VIZ_ASSEMBLE_ORDER = ('body', 'head', 'speech', 'arm_l', 'arm_r',
+                           'leg_l', 'leg_r', 'eye_l', 'eye_r')
     _VIZ_HOVER_AMP = 3.0      # idle hover amplitude (network units)
     _VIZ_HOVER_FREQ = 3.0     # idle hover frequency
     _VIZ_SQUASH = 0.07        # landing squash amount (subtle)
+    # Occasional happy squint -- eyes briefly flatten + spread, reading as a content
+    # "^_^". Much rarer than the blink so it stays a gentle accent, not a tic. The
+    # 10px annotate-size floor means a squint only reads if the eyes are tall enough
+    # to flatten FROM -- hence the eyes are a bit bigger now (see _VIZ_BOT_PARTS).
+    _VIZ_SQUINT_GAP_MIN = 9.0    # min seconds between squints
+    _VIZ_SQUINT_GAP_MAX = 17.0   # max seconds between squints
+    _VIZ_SQUINT_DUR = 1.1        # how long a squint holds
+    _VIZ_SQUINT_FLATTEN = 0.74   # eye HEIGHT scale while squinting (toward the 10px floor)
+    _VIZ_SQUINT_WIDEN = 1.18     # eye WIDTH scale while squinting (the smile spread)
     # Embot does an occasional gesture, cycling through several types so it stays
-    # varied: a wave, an arms-forward reach, an arms-up pump, and -- now and then
+    # varied: a wave, an arms-up shrug, an arms-up pump, and -- now and then
     # -- a full-body robot dance. Any single gesture (incl. the wave) is therefore
     # infrequent.
     _VIZ_GESTURE_GAP_MIN = 4.0  # min seconds between gestures (randomized)
@@ -3359,15 +3400,49 @@ class EnvoyExt:
             return
         dest = (target.nodeX + target.nodeWidth / 2.0,
                 target.nodeY + target.nodeHeight + self._botFootGap())
+        self._viz_bot_dest = dest           # current op standing point (swoop target)
         if self._viz_bot_pos is None or prev_net != self._viz_bot_net:
-            self._viz_bot_pos = dest        # appear / snap (first time or new network)
-            self._viz_bot_from = dest
-            self._viz_bot_target = dest
-            self._viz_bot_jump_t0 = now - self._VIZ_JUMP_DUR
-        elif dest != self._viz_bot_target:
+            self._viz_jump_dur = self._VIZ_JUMP_DUR
+            if self._viz_bot_build_queue:
+                # ON-SCREEN spread spawn: assemble at an off-view staging point (just past
+                # the viewport edge) so each annotate copy renders OUTSIDE the viewport
+                # (~100ms vs ~280ms in-view -> a far shallower fps sag). He swoops in once
+                # whole -- the entrance is fired from _assembleTick when the queue drains.
+                stage = (dest[0] + self._stageOffset(net), dest[1])
+                self._viz_bot_stage = stage
+                self._viz_bot_pos = stage
+                self._viz_bot_from = stage
+                self._viz_bot_target = stage
+                self._viz_bot_pending_entrance = True
+            else:
+                # off-screen (dive) block spawn -- already cheap -> snap onto the op
+                self._viz_bot_pos = dest
+                self._viz_bot_from = dest
+                self._viz_bot_target = dest
+                self._viz_bot_pending_entrance = False
+            self._viz_bot_jump_t0 = now - self._viz_jump_dur   # already standing
+            return
+        if self._viz_bot_build_queue:
+            return                          # still assembling off-view -> hold at staging
+        if dest != self._viz_bot_target:
+            self._viz_jump_dur = self._VIZ_JUMP_DUR
             self._viz_bot_from = self._viz_bot_pos    # hop from where we are now
             self._viz_bot_target = dest
             self._viz_bot_jump_t0 = now
+
+    def _stageOffset(self, net: 'COMP') -> float:
+        """Network-units to the RIGHT of the active op to park Embot while he assembles,
+        so his per-part copies render OUTSIDE the viewport (cheap) instead of inside it.
+        Derived from the viewing pane's zoom so it always clears the right edge; falls
+        back to a generous fixed value if no pane is found."""
+        try:
+            for p in ui.panes:
+                if str(p.type) == 'PaneType.NETWORKEDITOR' and \
+                        p.owner is not None and p.owner.path == net.path:
+                    return (ui.windowWidth / 2.0) / max(p.zoom, 0.05) + self._VIZ_STAGE_MARGIN
+        except Exception:
+            pass
+        return 3000.0
 
     def _botFootGap(self) -> float:
         """Distance from the figure centre down to its feet, so it stands with
@@ -3460,13 +3535,20 @@ class EnvoyExt:
         # here -> block-copy it. Only when the net is already displayed do we fall back
         # to the per-frame spread (slower, but safe on a live net).
         if self._netIsDisplayed(net):
-            # net ON-SCREEN: per-frame spread. A single block copyOPs into a displayed
-            # net crashes TD; the owner-swap that dodged the crash broke the pane's
-            # render (owning the project root). Spread is slower but safe and stable.
+            # net ON-SCREEN: spaced spread. A single block copyOPs into a displayed net
+            # crashes TD; the owner-swap that dodged the crash broke the pane's render
+            # (owning the project root). So we copy ONE part at a time, but spaced
+            # _VIZ_ASSEMBLE_INTERVAL frames apart (not every frame) so the per-part redraw
+            # hitches stay isolated instead of fusing into a freeze. Order is body/head/
+            # speech first (recognizable immediately), then limbs, then eyes.
+            valid = {s for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS}
+            valid.add('speech')
             self._viz_bot_build_queue = [self._VIZ_BOT_PREFIX + s
-                                         for (s, _ox, _oy, _w, _h, _e) in self._VIZ_BOT_PARTS]
-            self._viz_bot_build_queue.append(self._VIZ_BOT_PREFIX + 'speech')
-            self._assembleStep(net)             # copy part #1 this frame
+                                         for s in self._VIZ_ASSEMBLE_ORDER if s in valid]
+            # Copy nothing yet -- _placeBot (runs right after this, same frame) computes the
+            # off-view staging point, then _assembleTick copies the parts there. Copying
+            # part #1 here would land it in-view (staging not set) and pay the full cost.
+            self._viz_assemble_next_frame = absTime.frame
         else:
             # net OFF-SCREEN (about to navigate into it): ONE fast block copyOPs.
             self._viz_bot_build_queue = []
@@ -3546,6 +3628,16 @@ class EnvoyExt:
         src = tmpl.op(name)
         if not src or net.op(name):             # missing source / already present
             return
+        # copyOPs lands the copy at the SOURCE's coords, and the copy's cost is set by
+        # whether THAT landing spot is in the viewport. So park the source at the off-view
+        # staging point first -> the copy lands off-view and pays ~100ms, not ~280ms.
+        # (_botDance then arranges the copies into the figure wherever the bot stands.)
+        stage = self._viz_bot_stage
+        if stage:
+            try:
+                src.nodeX, src.nodeY = stage[0], stage[1]
+            except Exception:
+                pass
         try:
             self._crashTrace('assembleStep COPY %s -> %s' % (name, net.path))
             new = net.copyOPs([src])
@@ -3574,21 +3666,36 @@ class EnvoyExt:
             pass
 
     def _assembleTick(self) -> None:
-        """Drive Embot's spread assembly: one template part copied per frame until he
-        is whole. Runs unconditionally each frame so assembly completes even after the
-        follow target clears (idle mid-build)."""
+        """Drive Embot's spread assembly: one template part copied every
+        _VIZ_ASSEMBLE_INTERVAL frames until he is whole. He assembles at an off-view
+        staging point (see _placeBot) so each copy renders outside the viewport; once the
+        queue drains he swoops in via _startEntrance. Runs each frame so assembly completes
+        even after the follow target clears (idle mid-build)."""
         q = self._viz_bot_build_queue
-        if not q:
+        if q and absTime.frame >= self._viz_assemble_next_frame:
+            netpath = self._viz_bot_net
+            net = op(netpath) if netpath else None
+            if not net or not net.valid:
+                self._viz_bot_build_queue = []
+            else:
+                self._assembleStep(net)
+                self._viz_assemble_next_frame = absTime.frame + self._VIZ_ASSEMBLE_INTERVAL
+        # Assembly finished -> swoop in from the off-view staging point.
+        if not self._viz_bot_build_queue and self._viz_bot_pending_entrance:
+            self._startEntrance()
+
+    def _startEntrance(self) -> None:
+        """Fire Embot's swoop from the off-view staging point onto his destination op,
+        once off-view assembly has completed. Uses the slower entrance duration so the
+        long travel reads as a deliberate fly-in, not a teleport."""
+        self._viz_bot_pending_entrance = False
+        dest = self._viz_bot_dest
+        if dest is None or self._viz_bot_pos is None:
             return
-        netpath = self._viz_bot_net
-        if not netpath:
-            self._viz_bot_build_queue = []
-            return
-        net = op(netpath)
-        if not net or not net.valid:
-            self._viz_bot_build_queue = []
-            return
-        self._assembleStep(net)
+        self._viz_bot_from = self._viz_bot_pos
+        self._viz_bot_target = dest
+        self._viz_jump_dur = self._VIZ_ENTRANCE_DUR
+        self._viz_bot_jump_t0 = absTime.seconds
 
     def _cleanupDeadBots(self) -> None:
         """Tear down a bot left behind by a switch -- ONE network per frame, now that
@@ -3625,7 +3732,7 @@ class EnvoyExt:
         if (now - self._viz_last_paint) < 0.033:    # cap figure repaint at ~30fps
             return
         self._viz_last_paint = now
-        t = (now - self._viz_bot_jump_t0) / self._VIZ_JUMP_DUR
+        t = (now - self._viz_bot_jump_t0) / self._viz_jump_dur
         sx = sy = 1.0
         if t < 1.0:                                   # mid-hop
             e = 1.0 - (1.0 - t) * (1.0 - t)           # easeOutQuad (snappy)
@@ -3698,8 +3805,21 @@ class EnvoyExt:
                 if _ep and _ep.valid:
                     _ep.par.Backcolorr, _ep.par.Backcolorg, _ep.par.Backcolorb = eye_col
             self._viz_eyes_closed = blinking
+        # Occasional happy squint -- far rarer than the blink. The eyes flatten toward
+        # the 10px floor and spread a little wider for ~1s, reading as a content "^_^".
+        # Applied via the parts loop below (eye gw/gh when squinting), so it costs only
+        # the 2 transition frames it forces, not a per-frame repaint.
+        if self._viz_next_squint == 0.0:
+            self._viz_next_squint = now + self._VIZ_SQUINT_GAP_MIN   # never squint on spawn
+        if now >= self._viz_next_squint:
+            self._viz_squint_end = now + self._VIZ_SQUINT_DUR
+            self._viz_next_squint = now + self._VIZ_SQUINT_GAP_MIN + \
+                random.random() * (self._VIZ_SQUINT_GAP_MAX - self._VIZ_SQUINT_GAP_MIN)
+        squinting = now < self._viz_squint_end
+        squint_changed = (squinting != self._viz_squinting)
+        self._viz_squinting = squinting
         moving = (t < 1.0) or active or bool(self._viz_bot_build_queue)
-        if moving or recolor:
+        if moving or recolor or squint_changed:
             self._crashTrace('botDance PARTS moving=%d recolor=%d t=%.2f %s' %
                              (int(moving), int(recolor), t, np))
             for (suffix, ox, oy, w, h, is_eye) in self._VIZ_BOT_PARTS:
@@ -3711,9 +3831,8 @@ class EnvoyExt:
                     if gi == 0 and suffix == 'arm_r':                  # wave
                         oy = oy + self._VIZ_WAVE_LIFT * genv
                         ox = ox + math.sin(gp * self._VIZ_WAVE_FREQ) * self._VIZ_WAVE_AMP * genv
-                    elif gi == 1 and suffix in ('arm_l', 'arm_r'):     # reach: extend arms on Y only
-                        gh = 1.0 + 0.7 * genv
-                        oy = oy + 9.0 * genv
+                    elif gi == 1 and suffix in ('arm_l', 'arm_r'):     # shrug: lift arms straight up (no scaling)
+                        oy = oy + 16.0 * genv
                     elif gi == 2 and suffix in ('arm_l', 'arm_r'):     # both arms pump up
                         oy = oy + self._VIZ_WAVE_LIFT * 0.75 * genv
                     elif gi == 3:                                      # robot dance: limbs + head
@@ -3723,6 +3842,9 @@ class EnvoyExt:
                             oy = oy + 20.0 * genv * (0.5 + 0.5 * math.sin(gp * 7.0 + math.pi))
                         elif suffix in ('head', 'eye_l', 'eye_r'):
                             ox = ox + round(math.sin(gp * 6.0)) * 4.0 * genv
+                if is_eye and squinting:                    # happy squint: flatten + spread
+                    gw *= self._VIZ_SQUINT_WIDEN
+                    gh *= self._VIZ_SQUINT_FLATTEN
                 pw, ph = w * sx * gw, h * sy * gh
                 p.nodeWidth = pw
                 p.nodeHeight = ph

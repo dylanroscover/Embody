@@ -1,5 +1,20 @@
 # Changelog
 
+## v6.0.61
+
+An Embot polish pass aimed squarely at the spawn-time frame drops, plus more character. The mascot now assembles **off-view and swoops in whole** instead of stuttering together in the net you're watching, and he picks up an occasional happy squint and a cleaner shrug.
+
+### Embody core
+
+- **Embot spawns without the frame-drop sag.** Copying an annotateCOMP into the network you are *viewing* costs ~280ms (the in-viewport annotation-layer redraw); copying it *outside* the viewport costs ~100ms (measured). So on an on-screen spawn Embot now assembles at an off-view staging point just past the viewport edge and **swoops in once whole** -- each part's copy renders off-screen, so the fps sag is far shallower and you see a clean entrance instead of a stuttering build. Dives still snap in place (already cheap, off-screen). The fix was chased through `copyOPs`, `ui.pasteOPs`, and a redraw-suppressed block copy -- all of which crash TD on repeat into a *displayed* net (one annotate at a time is the only stable primitive) -- before landing on off-view staging.
+- **Paced, ordered assembly.** The on-screen spread copies one part every `_VIZ_ASSEMBLE_INTERVAL` frames (32) in a body -> head -> speech -> limbs -> eyes order, so the per-part redraw hitches stay isolated instead of fusing into a freeze, and he reads as "building himself" rather than sitting half-built.
+- **A happy squint.** Every ~9-17s Embot briefly flattens and spreads his eyes into a content `^_^` (separate from the ~2-5s blink). His eyes are a touch bigger now (12x13) so the squint has height to flatten *from* -- TD clamps an annotation node to a 10px floor, so the eyes must start tall enough to visibly squint (the same floor that made a scale-Y blink impossible).
+- **Shrug, not stretch.** The arms-up gesture used to lift the arms by *scaling their height* (a weird stretch); it now just raises them straight up.
+
+### Tests
+
+- Test suite unchanged at **74 suites / 1,727 tests** -- this is runtime character/camera behavior in `EnvoyExt`, with no new Python unit coverage.
+
 ## v6.0.57
 
 A live-build-visualization split plus a major embody.tools Collection upgrade. In TouchDesigner, the opt-in build visualization (shipped in v6.0.54) is now two independent toggles -- the **Embot** character and the **Envoy Follow** camera -- and self-heals so it survives a restart. On the web, specimens gain **multiple categories**, **private drafts**, a **license picker**, and a meaningfully better TDN editor/profile.
