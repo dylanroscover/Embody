@@ -41,14 +41,6 @@ export interface TdnViewerProps {
   rootLabel?: string;
 }
 
-// "Enter sub-network" glyph (lucide log-in) shown on a COMP tile that can be
-// drilled into. SVG paths only -- no glyph text -- so the source stays ASCII.
-const enterIcon = (
-  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
-  </svg>
-);
-
 type OperatorNodeData = {
   name: string;
   type: string;
@@ -65,10 +57,8 @@ type OperatorNodeData = {
   isRefSource: boolean;
   isRefTarget: boolean;
   /** True when this is a COMP with a sub-network to drill into (navigable view
-      only). Drives the clickable hover state and the "enter" badge. */
+      only). Drives the clickable cursor + hover state. */
   canEnter: boolean;
-  /** Operator count inside this COMP (0 when none / not navigable). */
-  childCount: number;
 };
 
 // Tile footprint used for the docked-row layout (matches tdnViewer.css).
@@ -455,15 +445,6 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
         />
       )}
       <div className="tdn-operator__head" />
-      {data.canEnter && (
-        <div
-          className="tdn-operator__enter"
-          title={`Open ${data.name} (${data.childCount} operator${data.childCount === 1 ? "" : "s"} inside)`}
-          aria-hidden="true"
-        >
-          {enterIcon}
-        </div>
-      )}
       <div className="tdn-operator__body">
         <div className="tdn-operator__name" title={data.name}>
           {data.name}
@@ -574,8 +555,7 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
       isRefTarget: refTargets.has(node.id),
       // childCount is only set by the single-level parse, so canEnter is
       // naturally false in the flattened (non-navigable) view.
-      canEnter: (node.childCount ?? 0) > 0,
-      childCount: node.childCount ?? 0
+      canEnter: (node.childCount ?? 0) > 0
     },
     draggable: false,
     selectable: false

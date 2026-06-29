@@ -83,24 +83,6 @@
     0 0 20px color-mix(in srgb, var(--family-color) 26%, transparent);
 }
 
-/* "Enter sub-network" badge, top-right of a drillable COMP tile. Muted until the
-   tile is hovered, then it picks up the accent to confirm the click target. */
-.tdn-operator__enter {
-  position: absolute;
-  top: 7px;
-  right: 9px;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  color: color-mix(in srgb, var(--tdn-text) 64%, transparent);
-  pointer-events: none;
-  transition: color 130ms ease;
-}
-
-.tdn-operator--enterable:hover .tdn-operator__enter {
-  color: var(--tdn-accent);
-}
-
 .tdn-operator__head {
   height: 12px;
   background: var(--family-color);
