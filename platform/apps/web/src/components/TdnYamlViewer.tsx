@@ -28,8 +28,18 @@ type Line = {
 
 // ---- parsing ---------------------------------------------------------------
 
-function parse(raw: string): { lines: Line[] } {
-  const rawLines = raw.replace(/\n$/, "").split("\n");
+// Cap how many lines we tokenize and render. The TDN blob can be multi-MB; a
+// pathological specimen would otherwise build tens of thousands of DOM nodes and
+// tokenize every line, hanging SSR and the client. Past the cap we render the
+// first MAX_RENDER_LINES and show a truncation notice -- the full TDN is always
+// available via the copy button / .tdn download.
+const MAX_RENDER_LINES = 5000;
+
+function parse(raw: string): { lines: Line[]; truncated: boolean; totalLines: number } {
+  const allLines = raw.replace(/\n$/, "").split("\n");
+  const totalLines = allLines.length;
+  const truncated = totalLines > MAX_RENDER_LINES;
+  const rawLines = truncated ? allLines.slice(0, MAX_RENDER_LINES) : allLines;
   const n = rawLines.length;
   const blanks: boolean[] = rawLines.map((l) => l.trim() === "");
   const indents: number[] = rawLines.map((l, i) => (blanks[i] ? 0 : leadingSpaces(l)));
@@ -76,7 +86,7 @@ function parse(raw: string): { lines: Line[] } {
     }
   }
 
-  return { lines };
+  return { lines, truncated, totalLines };
 }
 
 function unquoteScalar(s: string): string {
@@ -163,7 +173,7 @@ function renderSeg(seg: Seg, key: number, q: string): ReactNode {
 const EMPTY: ReadonlySet<number> = new Set();
 
 export default function TdnYamlViewer({ raw, summary }: Props) {
-  const { lines } = useMemo(() => parse(raw), [raw]);
+  const { lines, truncated, totalLines } = useMemo(() => parse(raw), [raw]);
   const jumps = useMemo(() => buildJumps(lines), [lines]);
   const tokens = useMemo(() => lines.map((l) => (l.blank ? [] : tokenize(l.text))), [lines]);
 
@@ -278,6 +288,17 @@ export default function TdnYamlViewer({ raw, summary }: Props) {
   return (
     <div className="tdn-yaml" style={{ "--tdn-ln-digits": lnDigits } as CSSProperties}>
       <div className="tdn-yaml__summary">{summaryBits.join("  ·  ")}</div>
+
+      {truncated && (
+        <div
+          className="tdn-yaml__truncated"
+          role="status"
+          style={{ padding: "0.4rem 0.7rem", fontSize: "0.8rem", opacity: 0.85 }}
+        >
+          Showing the first {MAX_RENDER_LINES.toLocaleString()} of {totalLines.toLocaleString()} lines.
+          Use the copy button or download the .tdn to get the whole network.
+        </div>
+      )}
 
       <div className="tdn-yaml__toolbar">
         <div className="tdn-yaml__search">
