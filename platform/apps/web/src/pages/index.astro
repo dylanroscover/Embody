@@ -247,8 +247,17 @@ const jsonLd = {
     margin: 0;
   }
 
+  /* Headline + eyebrow stay left-aligned; the CTA row and the shot share the
+     container's center axis so the small button cluster reads as a deliberate
+     focal funnel rather than stranded against the centered screenshot. */
+  .hero__ctas {
+    align-self: center;
+  }
+
   .hero__shot {
     max-width: 900px;
+    align-self: center;
+    width: 100%;
   }
 
   .section--collection .card-grid {
