@@ -258,7 +258,7 @@ pre {
   align-items: center;
   /* Match .navbar__items gap so the brand->first-item gap equals every
      item->item gap (the brand is just another block in the row). */
-  gap: 0.9rem;
+  gap: 0.3rem;
   max-width: calc(100vw - clamp(1.5rem, 6vw, 3rem));
   padding: 0.4rem;
   border: 1px solid var(--border);
@@ -395,7 +395,7 @@ pre {
 .navbar__items {
   display: inline-flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.3rem;
 }
 
 /* Generic nav link/button: identical height to the wordmark and to each
