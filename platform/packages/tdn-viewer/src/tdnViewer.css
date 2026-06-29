@@ -9,6 +9,11 @@
   --tdn-muted: var(--text-muted, #97a098);
   --tdn-faint: var(--text-faint, #6b756c);
   --tdn-accent: var(--accent, #6ee668);
+  /* Positioning context for the absolutely-placed breadcrumb (and the fullscreen
+     close button). Without this, the breadcrumb escapes to the viewport. The
+     fullscreen rule below overrides with position: fixed, which is also a valid
+     containing block, so the breadcrumb stays pinned to the viewer either way. */
+  position: relative;
   width: 100%;
   min-height: 320px;
   overflow: hidden;
@@ -52,6 +57,7 @@
 }
 
 .tdn-operator {
+  position: relative;
   width: 168px;
   min-height: 74px;
   overflow: hidden;
@@ -60,6 +66,39 @@
   background: color-mix(in srgb, var(--family-color) 14%, var(--tdn-panel) 86%);
   box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
   color: var(--tdn-text);
+}
+
+/* A COMP that can be drilled into: pointer cursor + a lift on hover so it reads
+   as openable, and a brightened family-color outline echoing the head bar. */
+.tdn-operator--enterable {
+  cursor: pointer;
+  transition: border-color 130ms ease, box-shadow 130ms ease;
+}
+
+.tdn-operator--enterable:hover {
+  border-color: color-mix(in srgb, var(--family-color) 64%, var(--tdn-line));
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--family-color) 52%, transparent),
+    0 0 20px color-mix(in srgb, var(--family-color) 26%, transparent);
+}
+
+/* "Enter sub-network" badge, top-right of a drillable COMP tile. Muted until the
+   tile is hovered, then it picks up the accent to confirm the click target. */
+.tdn-operator__enter {
+  position: absolute;
+  top: 7px;
+  right: 9px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  color: color-mix(in srgb, var(--tdn-text) 64%, transparent);
+  pointer-events: none;
+  transition: color 130ms ease;
+}
+
+.tdn-operator--enterable:hover .tdn-operator__enter {
+  color: var(--tdn-accent);
 }
 
 .tdn-operator__head {
@@ -218,4 +257,78 @@
 .tdn-viewer__close:hover {
   border-color: var(--accent, #6ee668);
   color: var(--accent, #6ee668);
+}
+
+/* Breadcrumb "address bar": a simplified network path overlaid top-left, showing
+   where in the COMP hierarchy you are. Each crumb is a button that jumps to that
+   level; the leading crumb is the root network. Kept clear of the top-right
+   fullscreen control via max-width. */
+.tdn-viewer__breadcrumb {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px;
+  max-width: calc(100% - 84px);
+  padding: 4px 6px;
+  border: 1px solid var(--tdn-line);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--tdn-panel) 84%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+}
+
+.tdn-crumb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.tdn-crumb {
+  max-width: 22ch;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--tdn-muted);
+  cursor: pointer;
+  font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.tdn-crumb:hover:not(:disabled):not([aria-current="page"]) {
+  color: var(--tdn-accent);
+  background: var(--tdn-panel-strong);
+}
+
+/* The current (deepest) level: emphasized, not a live target. */
+.tdn-crumb[aria-current="page"] {
+  color: var(--tdn-text);
+  cursor: default;
+}
+
+/* The root crumb is disabled while already at root -- still legible, just inert. */
+.tdn-crumb:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.tdn-crumb__sep {
+  color: var(--tdn-faint);
+  font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  .tdn-crumb {
+    padding: 7px 10px;
+  }
 }

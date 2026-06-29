@@ -28,6 +28,14 @@ export interface GraphNode {
    * draws a dock tether instead of a data-flow wire. Undefined for normal ops.
    */
   dock?: string;
+  /**
+   * Number of operators nested directly inside this op (a COMP's sub-network).
+   * Only the SINGLE-LEVEL parse (parseTDNLevel) sets this -- it powers the
+   * viewer's drill-down affordance. The flattening parse (parseTDN) leaves it
+   * undefined, since it splays every nested op into one plane. 0/undefined =
+   * a leaf op with no sub-network to enter.
+   */
+  childCount?: number;
 }
 
 export interface GraphEdge {

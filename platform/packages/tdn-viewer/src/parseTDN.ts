@@ -10,7 +10,61 @@ type TdnDict = Record<string, unknown>;
 
 const FAMILIES = ["TOP", "CHOP", "SOP", "DAT", "MAT", "POP", "COMP"] as const;
 
+// A network's child operators. TDN names them `operators` at the document root
+// and `children` inside a nested COMP -- accept either (and both, defensively),
+// so the same walk works at any depth. Order (children before operators) matches
+// the original flatten recursion so the dense view stays byte-identical.
+function networkOperators(dict: TdnDict): TdnDict[] {
+  return [...asRecords(dict.children), ...asRecords(dict.operators)];
+}
+
+/**
+ * Descend the raw TDN tree to the sub-network at `path` (each segment a COMP
+ * name); the empty path is the document root. Returns null if a segment names no
+ * operator at its level. The returned dict is the network whose operators the
+ * viewer should draw -- feed it straight to parseTDNLevel via the path.
+ */
+export function getNetworkAtPath(tdn: TdnDict, path: string[]): TdnDict | null {
+  let net: TdnDict = tdn;
+  for (const segment of path) {
+    const match = networkOperators(net).find((op) => readString(op.name) === segment);
+    if (!match) return null;
+    net = match;
+  }
+  return net;
+}
+
+/**
+ * Parse the WHOLE network into one flat graph, recursing into every nested COMP
+ * so all descendants are drawn at once. This is the dense, all-in-one-plane view
+ * (homepage hero, card-cover thumbnails). For the navigable, TD-faithful
+ * one-level-at-a-time view, use parseTDNLevel instead.
+ */
 export function parseTDN(tdn: TdnDict): NormalizedGraph {
+  return buildGraph(networkOperators(tdn), asRecords(tdn.annotations), true);
+}
+
+/**
+ * Parse a SINGLE network level -- the sub-network at `path` (COMP names), or the
+ * root when path is empty. COMPs are NOT recursed into: each is drawn as one tile
+ * carrying a `childCount` so the viewer can offer drill-down. This is the 1:1
+ * representation of a TD network, navigated like TD's own editor (enter a COMP,
+ * climb back out). Returns an empty graph if the path doesn't resolve.
+ */
+export function parseTDNLevel(tdn: TdnDict, path: string[]): NormalizedGraph {
+  const net = getNetworkAtPath(tdn, path);
+  if (!net) return { nodes: [], edges: [], annotations: [] };
+  return buildGraph(networkOperators(net), asRecords(net.annotations), false);
+}
+
+// Shared engine for both parses. `recurse` decides whether a COMP's children are
+// walked into the same graph (flatten) or summarized as a `childCount` on the
+// COMP's own node (single level).
+function buildGraph(
+  rootOperators: TdnDict[],
+  rootAnnotations: TdnDict[],
+  recurse: boolean
+): NormalizedGraph {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const annotations: GraphAnnotation[] = [];
@@ -18,8 +72,8 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
   // AFTER every node exists, since the referenced op may be defined later.
   const paramRefs: { parentPath: string; value: string; to: string }[] = [];
 
-  walkOperators(asRecords(tdn.operators), "");
-  collectAnnotations(asRecords(tdn.annotations), annotations);
+  walkOperators(rootOperators, "");
+  collectAnnotations(rootAnnotations, annotations);
   resolveParamRefs();
 
   return { nodes, edges, annotations };
@@ -108,19 +162,27 @@ export function parseTDN(tdn: TdnDict): NormalizedGraph {
         if (hostId) node.dock = hostId;
       }
 
+      const childOperators = networkOperators(op);
+
+      // Single-level mode: a COMP stays one tile, tagged with how many ops live
+      // inside so the viewer can offer a drill-in affordance -- its children are
+      // NOT walked, and its internal annotations belong to that sub-network, not
+      // this level. Flatten mode: walk children into this same graph below.
+      if (!recurse && childOperators.length > 0) {
+        node.childCount = childOperators.length;
+      }
+
       nodes.push(node);
 
       collectEdges(asStrings(op.inputs), parentPath, id, false, edges);
       collectEdges(asStrings(op.comp_inputs), parentPath, id, true, edges);
       collectParamRefs(op, parentPath, id);
-      collectAnnotations(asRecords(op.annotations), annotations);
 
-      const childOperators = [
-        ...asRecords(op.children),
-        ...asRecords(op.operators)
-      ];
-      if (childOperators.length > 0) {
-        walkOperators(childOperators, id);
+      if (recurse) {
+        collectAnnotations(asRecords(op.annotations), annotations);
+        if (childOperators.length > 0) {
+          walkOperators(childOperators, id);
+        }
       }
     }
   }

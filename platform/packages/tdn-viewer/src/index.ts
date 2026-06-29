@@ -1,4 +1,4 @@
-export { parseTDN } from "./parseTDN";
+export { parseTDN, parseTDNLevel, getNetworkAtPath } from "./parseTDN";
 export { TdnViewer } from "./TdnViewer";
 export type { TdnViewerProps } from "./TdnViewer";
 export type {

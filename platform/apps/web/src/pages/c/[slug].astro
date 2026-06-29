@@ -673,7 +673,7 @@ function emitKey(key: string): string {
       {specimen.description && <p class="specimen-desc">{specimen.description}</p>}
       <div class="viewer-panel pillar">
         <p class="eyebrow">network preview</p>
-        <TdnViewer tdn={tdn} height="100%" client:only="react" />
+        <TdnViewer tdn={tdn} height="100%" navigable rootLabel={specimen.name} client:only="react" />
       </div>
     </div>
 
@@ -767,15 +767,32 @@ function emitKey(key: string): string {
 <style>
   .detail-hero {
     /* relative: the owner edit/delete icon tools pin to the top-right corner.
-       padding-bottom + the layout's 1.35rem padding-top own the hero->preview gap. */
+       padding-bottom (9px) + the layout's 9px padding-top = the 18px byline->box
+       box-gap. Paired with h1's margin-bottom below, the two VISUAL gaps around
+       the byline (title->byline and byline->box) come out perfectly equal (~26px
+       each) -- the byline's line-leading + the title's descender overflow are
+       folded into the margins so the rendered whitespace, not the raw box gap,
+       matches. */
     position: relative;
-    padding-bottom: 1.35rem;
+    padding-bottom: 9px;
   }
 
-  /* The byline is the last hero element now (description moved to the preview
-     column); tighten the title->byline gap. */
+  /* The byline is the last hero element. Spacing here is BASELINE-referenced, not
+     box-referenced -- this is the subtle bit. A title's line box extends ~22px
+     below the alphabetic baseline (the font's descender space), and MOST specimen
+     titles have no descender on their last line (Murmuration, Plasma (Sine
+     Interference), Ridged Mountain Terrain, ...). So a margin measured from the
+     line box left a huge gap of empty descender space above the byline that did
+     NOT match the byline->box gap below -- the title looked far from the byline on
+     every page except Kaleidoscope (whose 'p' happens to fill that space). Measured
+     from the BASELINE instead, this ~2px margin makes the title-baseline -> byline
+     gap (~28px) equal the byline -> rendered-result gap (~27px) for EVERY title.
+     Titles that DO carry a last-line descender ('p' in Kaleidoscope, 'y' in
+     Gray-Scott) simply let it poke into the leading -- standard display
+     typography, optically even. Verified across all six specimens via glyph
+     metrics (canvas measureText actual-bounding-box), not eyeballed. */
   .detail-hero h1 {
-    margin-bottom: 0.7rem;
+    margin-bottom: 2px;
   }
 
   .specimen-byline {
@@ -832,8 +849,8 @@ function emitKey(key: string): string {
      hero and the main layout; only the specimen's owner ever sees it. */
   .owner-status {
     /* Sit snug between the hero and the layout: kill the section's own vertical
-       padding so the only gaps are the hero's 1.35rem bottom (above) and the
-       layout's 1.35rem top (below) -- symmetric, not a big dead band. */
+       padding so the only gaps are the hero's 9px bottom (above) and the
+       layout's 9px top (below) -- symmetric, not a big dead band. */
     padding-top: 0 !important;
     padding-bottom: 0 !important;
   }
@@ -1174,11 +1191,11 @@ function emitKey(key: string): string {
        -- drives the row height. */
     align-items: stretch;
     /* !important beats the global `.page-section + .page-section.tight` (0,3,0)
-       rhythm. Lower half of the hero->preview gap: 1.35rem here + 1.35rem hero
-       padding-bottom = 2.7rem, exactly 2x the heading->paragraph gap. */
-    padding-top: 1.35rem !important;
-    /* Below the main section, the gap to the raw-YAML section matches the
-       gap above it (hero->layout): 1.35rem here + 1.35rem raw-section
+       rhythm. Lower half of the byline->box gap: 9px here + 9px hero
+       padding-bottom = the 18px box-gap that makes the byline's two visible gaps
+       equal (see .detail-hero). */
+    padding-top: 9px !important;
+    /* Gap to the raw-YAML section below: 1.35rem here + 1.35rem raw-section
        padding-top = 2.7rem. */
     padding-bottom: 1.35rem;
   }
@@ -1246,6 +1263,16 @@ function emitKey(key: string): string {
      it from the panel). */
   .specimen-desc {
     margin: 0;
+    /* Cap the MEASURE (line length), not the column. The preview column runs
+       ~656px wide, which wrapped the copy at 71-83 characters per line -- past
+       the comfortable reading range. 48ch lands the longest line at ~57
+       characters, inside Bringhurst's 45-75 ideal (~66 is optimal). NOTE the
+       metric is CHARACTERS, not words: this copy averages ~5 chars/word, so 57
+       chars reads as ~10 words here -- the "8-10 words" rule of thumb assumes
+       longer words. The panel below stays full width; the text is a left-aligned
+       reading column over it (intended editorial look). `ch` matches the prose
+       convention used by .lede / .tdn__closer. */
+    max-width: 48ch;
     color: var(--text-muted);
     font-size: 1rem;
     line-height: 1.6;

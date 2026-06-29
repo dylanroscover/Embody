@@ -21,15 +21,33 @@ import {
   type ReactFlowInstance
 } from "@xyflow/react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { GraphAnnotation, GraphNode, NormalizedGraph, RGB } from "@embody/contracts";
-import { parseTDN } from "./parseTDN";
+import { parseTDN, parseTDNLevel } from "./parseTDN";
 
 export interface TdnViewerProps {
   tdn: Record<string, unknown>;
   className?: string;
   height?: number | string;
+  /**
+   * Enable COMP drill-down: a COMP that contains operators becomes clickable
+   * (single click enters its sub-network), and a breadcrumb "address bar" climbs
+   * back out to the root -- a 1:1, TD-faithful walk of the network. When false
+   * (the default), the whole network is flattened into one plane (the dense
+   * hero / card-cover thumbnail view).
+   */
+  navigable?: boolean;
+  /** Label for the root crumb in the breadcrumb bar (e.g. the specimen name). */
+  rootLabel?: string;
 }
+
+// "Enter sub-network" glyph (lucide log-in) shown on a COMP tile that can be
+// drilled into. SVG paths only -- no glyph text -- so the source stays ASCII.
+const enterIcon = (
+  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />
+  </svg>
+);
 
 type OperatorNodeData = {
   name: string;
@@ -46,6 +64,11 @@ type OperatorNodeData = {
       link arc over the tiles instead of running flat through the data wires. */
   isRefSource: boolean;
   isRefTarget: boolean;
+  /** True when this is a COMP with a sub-network to drill into (navigable view
+      only). Drives the clickable hover state and the "enter" badge. */
+  canEnter: boolean;
+  /** Operator count inside this COMP (0 when none / not navigable). */
+  childCount: number;
 };
 
 // Tile footprint used for the docked-row layout (matches tdnViewer.css).
@@ -189,8 +212,19 @@ function fitViewDuration(duration: number): number {
   return duration;
 }
 
-export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
-  const graph = useMemo(() => parseTDN(tdn), [tdn]);
+export function TdnViewer({ tdn, className, height = 520, navigable = false, rootLabel }: TdnViewerProps) {
+  // Drill-down path: each segment a COMP name, deepest last. Empty = root. Only
+  // meaningful when `navigable`; the flatten view ignores it.
+  const [path, setPath] = useState<string[]>([]);
+  // A different network entirely (e.g. switching specimens) resets to its root.
+  useEffect(() => {
+    setPath([]);
+  }, [tdn]);
+
+  const graph = useMemo(
+    () => (navigable ? parseTDNLevel(tdn, path) : parseTDN(tdn)),
+    [tdn, path, navigable]
+  );
   const { nodes, edges } = useMemo(() => toFlowElements(graph), [graph]);
 
   const style = useMemo<CSSProperties>(
@@ -207,6 +241,27 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
   const handleDoubleClick = useCallback(() => {
     rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(320) });
   }, []);
+
+  // Click a COMP-with-children to descend into its sub-network. `event.detail`
+  // gates out the 2nd click of a double-click so a quick double-tap can't push
+  // the same segment twice (which would point the path at a non-existent op).
+  const handleNodeClick = useCallback(
+    (event: ReactMouseEvent, node: TdnFlowNode) => {
+      if (event.detail > 1) return;
+      if (node.type !== "operator" || !node.data.canEnter) return;
+      setPath((prev) => [...prev, node.id]);
+    },
+    []
+  );
+  // Re-fit the view whenever the displayed network changes (entering/leaving a
+  // COMP), since React Flow only auto-fits on the initial mount.
+  useEffect(() => {
+    if (!navigable) return;
+    const id = window.setTimeout(() => {
+      rfRef.current?.fitView({ padding: 0.24, duration: fitViewDuration(300) });
+    }, 60);
+    return () => window.clearTimeout(id);
+  }, [navigable, path]);
 
   // Fullscreen modal: a single control opens the graph as a full-viewport
   // overlay (the same ReactFlow, resized via CSS), with Escape / a close button
@@ -250,6 +305,31 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
       style={style}
       onDoubleClick={handleDoubleClick}
     >
+      {navigable && (
+        <nav className="tdn-viewer__breadcrumb" aria-label="network path">
+          <button
+            type="button"
+            className="tdn-crumb"
+            onClick={() => setPath([])}
+            disabled={path.length === 0}
+          >
+            {rootLabel || "root"}
+          </button>
+          {path.map((segment, index) => (
+            <span className="tdn-crumb-group" key={`${segment}-${index}`}>
+              <span className="tdn-crumb__sep" aria-hidden="true">/</span>
+              <button
+                type="button"
+                className="tdn-crumb"
+                aria-current={index === path.length - 1 ? "page" : undefined}
+                onClick={() => setPath(path.slice(0, index + 1))}
+              >
+                {segment}
+              </button>
+            </span>
+          ))}
+        </nav>
+      )}
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -259,6 +339,7 @@ export function TdnViewer({ tdn, className, height = 520 }: TdnViewerProps) {
         onInit={(instance) => {
           rfRef.current = instance;
         }}
+        onNodeClick={navigable ? handleNodeClick : undefined}
         fitView
         fitViewOptions={{ padding: 0.24 }}
         minZoom={0.12}
@@ -307,8 +388,10 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
   const inputHandles = Array.from({ length: Math.max(data.inputCount, 1) }, (_, index) => index);
   const compHandles = Array.from({ length: data.compInputCount }, (_, index) => index);
 
+  const className = data.canEnter ? "tdn-operator tdn-operator--enterable" : "tdn-operator";
+
   return (
-    <div className="tdn-operator" style={{ "--family-color": data.familyColor } as CSSProperties}>
+    <div className={className} style={{ "--family-color": data.familyColor } as CSSProperties}>
       {inputHandles.map((index) => (
         <Handle
           className="tdn-handle tdn-handle--target"
@@ -372,6 +455,15 @@ function OperatorTile({ data }: NodeProps<OperatorNode>) {
         />
       )}
       <div className="tdn-operator__head" />
+      {data.canEnter && (
+        <div
+          className="tdn-operator__enter"
+          title={`Open ${data.name} (${data.childCount} operator${data.childCount === 1 ? "" : "s"} inside)`}
+          aria-hidden="true"
+        >
+          {enterIcon}
+        </div>
+      )}
       <div className="tdn-operator__body">
         <div className="tdn-operator__name" title={data.name}>
           {data.name}
@@ -479,7 +571,11 @@ function toFlowElements(graph: NormalizedGraph): { nodes: TdnFlowNode[]; edges: 
       isDockHost: dockedByHost.has(node.id),
       isDocked: dockedIds.has(node.id),
       isRefSource: refSources.has(node.id),
-      isRefTarget: refTargets.has(node.id)
+      isRefTarget: refTargets.has(node.id),
+      // childCount is only set by the single-level parse, so canEnter is
+      // naturally false in the flattened (non-navigable) view.
+      canEnter: (node.childCount ?? 0) > 0,
+      childCount: node.childCount ?? 0
     },
     draggable: false,
     selectable: false
