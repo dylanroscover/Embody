@@ -4,7 +4,7 @@ import { Picture } from "astro:assets";
 import { TdnViewer } from "@embody/tdn-viewer";
 import Base from "../layouts/Base.astro";
 import { sampleTdn } from "../fixtures/sample-tdn";
-import { specimenThumbnail } from "../lib/specimenThumb";
+import { resultImage } from "../lib/specimenThumb";
 import { fixtureSummaries } from "../lib/specimenFallback";
 import { listSpecimensForCollection } from "../server/db";
 import heroShot from "../assets/embody-screenshot.png";
@@ -116,16 +116,27 @@ const jsonLd = {
       </p>
 
       <div class="card-grid">
-        {featured.map((specimen) => (
+        {featured.map((specimen) => {
+          // Real rendered cover: author-uploaded R2 thumbnail > baked render for
+          // known slugs > procedural placeholder. Mirrors /collection and the
+          // detail pages (SpecimenCover) so the teaser never shows the generic
+          // placeholder when a real result exists.
+          const cover = resultImage({
+            slug: specimen.slug,
+            name: specimen.name,
+            category: specimen.category,
+            thumbnailKey: specimen.thumbnail_key,
+          });
+          return (
           <a class="specimen-card pillar" href={`/c/${specimen.slug}`}>
             <div class="thumb">
               <img
-                src={specimenThumbnail(specimen)}
+                src={cover.src}
                 width="640"
                 height="360"
                 loading="lazy"
                 decoding="async"
-                alt={`${specimen.name} node preview placeholder`}
+                alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
               />
             </div>
             <div class="specimen-card__body">
@@ -142,7 +153,8 @@ const jsonLd = {
               <p>{specimen.description}</p>
             </div>
           </a>
-        ))}
+          );
+        })}
       </div>
 
       <p class="start__cta">
