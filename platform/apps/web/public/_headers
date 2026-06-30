@@ -1,0 +1,12 @@
+# Cloudflare Workers static-asset headers (same mechanism as public/_redirects).
+# These paths are content-hashed or version-stable, so they can cache forever --
+# a rebuild changes the filename, which is the cache-bust. Without this, the
+# Cloudflare adapter serves them as `max-age=0, must-revalidate`, forcing a 304
+# revalidation round-trip for every JS/CSS/font on every navigation and return
+# visit. immutable tells the browser never to even revalidate.
+
+/_astro/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable

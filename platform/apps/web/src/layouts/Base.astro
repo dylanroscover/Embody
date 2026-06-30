@@ -560,7 +560,11 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
       // Scroll just offsets the texture sample (no re-snapshot), so it stays at
       // 60fps; we only re-snapshot on resize. WebGL behaves identically in
       // hardware and software GL, so what renders here renders for users.
-      import html2canvas from "html2canvas-pro";
+      // html2canvas-pro is imported DYNAMICALLY (see the idle-gated loader at the
+      // foot of this IIFE), so its ~238KB never downloads for reduced-motion /
+      // Data-Saver / no-WebGL visitors, and is deferred off the load path for
+      // everyone else. Until it resolves, the CSS clear-glass fallback stands.
+      type Html2Canvas = (el: HTMLElement, opts: Record<string, unknown>) => Promise<HTMLCanvasElement>;
 
       (() => {
         const canvas = document.querySelector("[data-nav-gl]");
@@ -680,6 +684,9 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
         const MAXTEX = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096;
         const SCALE = 44, GY = 0.6;         // lens knobs (magnify px, vertical softening)
         let docSize = { w: 1, h: 1 }, ready = false, snapping = false;
+        // Resolved lazily by the idle-gated dynamic import at the foot of this
+        // IIFE; snapshot() no-ops until it's set.
+        let html2canvas: Html2Canvas | null = null;
 
         const measure = () => {
           const r = navEl.getBoundingClientRect();
@@ -716,7 +723,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
         };
 
         const snapshot = async () => {
-          if (snapping) return;
+          if (snapping || !html2canvas) return;
           snapping = true;
           try {
             // CSS-resolution snapshot (scale 1), NOT devicePixelRatio. The
@@ -732,7 +739,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
               backgroundColor: "#181e1e", scale: 1, logging: false, removeContainer: true,
               x: 0, y: 0, width: capW, height: capH,
               windowWidth: docW, windowHeight: fullH, scrollX: 0, scrollY: 0,
-              ignoreElements: (el) =>
+              ignoreElements: (el: Element) =>
                 el === canvas || (el.hasAttribute && el.hasAttribute("data-site-header")) ||
                 (el.classList && (el.classList.contains("site-header") || el.classList.contains("skip-link") ||
                   // Skip the heavy specimen-page islands from the snapshot: the
@@ -778,11 +785,31 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
         canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); header.classList.remove("has-gl-glass"); ready = false; }, false);
         canvas.addEventListener("webglcontextrestored", () => { ready = false; snapshot(); }, false);
 
-        // First snapshot after the page is painted and fonts are settled.
-        const start = () => { measure(); snapshot(); };
-        if (document.readyState === "complete") start();
-        else window.addEventListener("load", start);
-        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => snapshot());
+        // Load html2canvas-pro lazily and OFF the critical path. The cheap WebGL
+        // setup above has already succeeded, so the lens WILL be used -- only now
+        // is the ~238KB library worth fetching. requestIdleCallback keeps it off
+        // the load-critical main thread; the first snapshot (and a re-snapshot
+        // once fonts settle) fire once it resolves. Failure leaves the CSS
+        // clear-glass in place.
+        const begin = () => {
+          import("html2canvas-pro")
+            .then((m) => {
+              html2canvas = (m.default ?? m) as unknown as Html2Canvas;
+              measure();
+              snapshot();
+              if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => snapshot());
+            })
+            .catch(() => { /* leave CSS clear-glass */ });
+        };
+        const schedule = () => {
+          const ric = (window as typeof window & {
+            requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number;
+          }).requestIdleCallback;
+          if (ric) ric(begin, { timeout: 3000 });
+          else window.setTimeout(begin, 1200);
+        };
+        if (document.readyState === "complete") schedule();
+        else window.addEventListener("load", schedule);
       })();
     </script>
   </body>
