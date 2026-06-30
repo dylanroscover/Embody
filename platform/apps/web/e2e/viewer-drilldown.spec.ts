@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
 
-// The specimen-page TdnViewer is `navigable`: COMPs render as single tiles you
-// can click to enter (drilling into their sub-network), with a breadcrumb
-// "address bar" to climb back out. noise-terrain is the seeded specimen with
+// The specimen-page TdnViewer is `navigable`: a single click selects an operator
+// (surfacing its parameters); a COMP tile is DOUBLE-clicked to enter (drilling
+// into its sub-network), with a breadcrumb "address bar" to climb back out.
+// noise-terrain is the seeded specimen with
 // nested COMPs (cam/geo/light), so it exercises the whole walk -- root level,
 // descend, and return. The cover-graph thumbnails stay flattened/non-navigable
 // (asserted in collection.spec.ts), so only this page-level viewer is checked.
@@ -29,8 +30,8 @@ test("specimen viewer drills into a COMP and climbs back out", async ({ page }) 
   expect(compName, "an enterable COMP must have a name").toBeTruthy();
   const rootOps = await opNames();
 
-  // Click the COMP -> descend into its sub-network.
-  await enterable.click();
+  // Double-click the COMP -> descend into its sub-network.
+  await enterable.dblclick();
 
   // Breadcrumb gains a second crumb naming the COMP we entered, and the visible
   // operator set is now that COMP's children (different from the root level).

@@ -37,6 +37,13 @@ const DEFAULT_SORT = "az" as const;
 const requestedCategory = (Astro.url.searchParams.get("category") ?? "").trim();
 const requestedAuthor = (Astro.url.searchParams.get("author") ?? "").trim();
 
+// A ?category / ?author param must be validated against the facet whitelist
+// BEFORE we filter the list by it, which forces facets -> list to run in series.
+// With no such param (the bare /collection -- by far the common case) the list
+// query needs no validated input, so the two D1 reads run CONCURRENTLY instead,
+// shaving a full round-trip off the critical SSR path.
+const hasFilterParam = Boolean(requestedCategory || requestedAuthor);
+
 let firstPage: SpecimenSummary[];
 let totalCount: number;
 let nextCursor: string | null;
@@ -46,18 +53,28 @@ let activeCategory = "";
 let activeAuthor = "";
 
 try {
-  // Facets double as a D1 health probe AND the whitelist that validates the
-  // requested category/author (an unknown value is ignored, falling back to
-  // "all").
-  facets = await getCollectionFacets(env.DB);
-  activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
-  activeAuthor = facets.authors.includes(requestedAuthor) ? requestedAuthor : "";
-  const response: ListResponse = await listSpecimensForCollection(env.DB, {
-    sort: DEFAULT_SORT,
-    pageSize: PAGE_SIZE,
-    category: activeCategory || undefined,
-    author: activeAuthor || undefined
-  });
+  let response: ListResponse;
+  if (hasFilterParam) {
+    // Facets double as a D1 health probe AND the whitelist that validates the
+    // requested category/author (an unknown value is ignored, falling back to
+    // "all"). Sequential: the list filter depends on the validated values.
+    facets = await getCollectionFacets(env.DB);
+    activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
+    activeAuthor = facets.authors.includes(requestedAuthor) ? requestedAuthor : "";
+    response = await listSpecimensForCollection(env.DB, {
+      sort: DEFAULT_SORT,
+      pageSize: PAGE_SIZE,
+      category: activeCategory || undefined,
+      author: activeAuthor || undefined
+    });
+  } else {
+    // No filter to validate -> fetch facets (still the D1 health probe) and the
+    // first page in parallel. activeCategory/activeAuthor stay "".
+    [facets, response] = await Promise.all([
+      getCollectionFacets(env.DB),
+      listSpecimensForCollection(env.DB, { sort: DEFAULT_SORT, pageSize: PAGE_SIZE })
+    ]);
+  }
   // An empty UNFILTERED result means the DB has no rows (e.g. dev without a
   // seed) -- degrade to fixtures. An empty FILTERED result is legitimate.
   if (response.specimens.length === 0 && !activeCategory && !activeAuthor) throw new Error("empty");

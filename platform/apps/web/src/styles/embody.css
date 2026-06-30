@@ -244,8 +244,8 @@ pre {
   /* The single source of truth for inner-item height. The wordmark, the
      auth buttons, every link, and the GitHub pill all resolve to this exact
      box height (min-height + matching vertical padding + line-height: 1). */
-  --nav-item-h: 36px;
-  --nav-item-pad-y: 0.5rem;
+  --nav-item-h: 30px;
+  --nav-item-pad-y: 0.38rem;
 }
 
 .navbar {
@@ -260,7 +260,7 @@ pre {
      item->item gap (the brand is just another block in the row). */
   gap: 0.3rem;
   max-width: calc(100vw - clamp(1.5rem, 6vw, 3rem));
-  padding: 0.4rem;
+  padding: 0.3rem;
   border: 1px solid var(--border);
   border-radius: 999px;
   /* Forest liquid glass. A LIGHT green-tinted translucent fill sits over the
@@ -346,10 +346,10 @@ pre {
 
 /* Wordmark: the brand anchor, same height as every other item. */
 .navbar__mark {
-  gap: 0.5rem;
-  padding-left: 0.85rem;
-  /* Symmetric, and equal to .navbar__item padding so the brand's gap to the
-     first nav item matches the item-to-item gaps (see .navbar gap). */
+  /* Tighter so the wordmark sits close to the 'e' glyph. */
+  gap: 0.34rem;
+  /* Smaller left inset shifts the whole wordmark slightly left. */
+  padding-left: 0.55rem;
   padding-right: 0.85rem;
   border: 1px solid transparent;
   border-radius: 999px;
@@ -932,7 +932,7 @@ main {
      gap stays EXACTLY equal to the eyebrow->heading gap at every viewport width,
      not just where the clamps happen to bottom out. Keep the first clamp in sync
      with .navbar `top` and 1.95rem in sync with .eyebrow `margin-bottom`. */
-  padding-top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem) + 59px + 1.95rem);
+  padding-top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem) + 52px + 1.95rem);
 }
 
 /* The first block in <main> no longer needs its own big top padding -- main's
@@ -1762,6 +1762,28 @@ pre {
 .manifesto__link { margin: 0; padding-left: 1.75rem; font-family: var(--font-mono); font-size: 0.9rem; }
 
 /* --- Footer (global: Base.astro renders .footer* on every page) --- */
+/* ============================================================
+   App shell (specimen pages): the page becomes a full-viewport
+   working canvas. The floating nav pill doubles as the slim top
+   bar; the footer and page scroll are suppressed so the network
+   graph + docked panels own the screen, TouchDesigner-style.
+   Opt in via <Base appShell> (sets body.is-app-shell). Page-level
+   layout lives in the specimen page's scoped styles; only these
+   body/main/footer overrides must be global (they target chrome
+   outside the page slot). */
+body.is-app-shell {
+  overflow: hidden;
+}
+body.is-app-shell main {
+  min-height: 0;
+  height: 100vh;
+  height: 100dvh;
+  padding-top: 0;
+}
+body.is-app-shell .footer {
+  display: none;
+}
+
 .footer { border-top: 1px solid var(--border-faint); padding: clamp(4rem, 7vw, 6rem) 0 2.5rem; margin-top: 0; }
 .footer__inner { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 3rem; margin-bottom: 4rem; }
 .footer__col h4,

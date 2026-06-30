@@ -9,13 +9,20 @@ interface Props {
   description?: string;
   ogImage?: string;
   ogUrl?: string;
+  /**
+   * App-shell mode: the page becomes a full-viewport working canvas. Suppresses
+   * the footer + page scroll and lets <main> fill the screen, so the floating
+   * nav pill doubles as a slim top bar. Used by the specimen detail page.
+   */
+  appShell?: boolean;
 }
 
 const {
   title = "embody.tools",
   description = "The transparent TouchDesigner network Collection.",
   ogImage,
-  ogUrl
+  ogUrl,
+  appShell = false
 } = Astro.props;
 
 // Active-nav highlight: mark the item whose href matches the current path.
@@ -108,7 +115,7 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
     )}
     <slot name="head" />
   </head>
-  <body>
+  <body class={appShell ? "is-app-shell" : undefined}>
     <a class="skip-link" href="#content">Skip to content</a>
     <header class="site-header" aria-label="embody" data-site-header>
       <!-- WebGL refraction layer. CSS backdrop-filter: url(#svg-displacement)
@@ -369,6 +376,25 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
       }
     </script>
     <script>
+      // Clicking a nav link that points to the CURRENT page (e.g. the embody
+      // logo while already on "/") smooth-scrolls to the top instead of doing a
+      // full reload.
+      const navEl = document.querySelector(".navbar");
+      if (navEl) {
+        navEl.addEventListener("click", (event) => {
+          const link =
+            event.target instanceof Element ? event.target.closest("a[href]") : null;
+          if (!(link instanceof HTMLAnchorElement)) return;
+          const url = new URL(link.href);
+          if (url.origin !== window.location.origin) return;
+          if (url.pathname !== window.location.pathname || url.hash) return;
+          event.preventDefault();
+          const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+        });
+      }
+    </script>
+    <script>
       // Account menu: toggle the signed-in user's dropdown + wire sign-out.
       import { authClient } from "../lib/authClient";
 
@@ -580,6 +606,11 @@ const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
           window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
           (navigator as { connection?: { saveData?: boolean } }).connection?.saveData === true
         ) return;
+
+        // App-shell pages (the specimen workspace) run a full-viewport React Flow
+        // graph; a perpetual WebGL rAF loop compositing over it tanks the frame
+        // rate. Skip the glass there -- the CSS clear-glass fallback stands.
+        if (document.body.classList.contains("is-app-shell")) return;
 
         // preserveDrawingBuffer keeps the last frame between composites (belt to
         // the rAF loop's suspenders; cheap insurance against transparent flashes).
