@@ -1,5 +1,17 @@
 # Changelog
 
+## v6.0.62
+
+A performance-rule expansion shipped in the `.tox`: a complete **Movie Export / Offline Rendering** playbook so an AI agent recording a movie never ships a juddered file. No core-code change -- this is agent guidance, delivered to user projects through the `performance.md` rule template baked into the build.
+
+### Agent rules
+
+- **Zero-dropped-frame movie export.** `rules/performance.md` (and its shipped template `text_rule_performance.md`) gains a "Movie Export / Offline Rendering" section built around the #1 cause of juddered exports: the **Realtime flag** (`project.realTime`, ON by default) silently **replicating** any frame TD can't cook within the `cookRate` budget, so a recording ends up the right LENGTH but full of duplicate frames. The rule now mandates capturing the prior flag and going non-realtime before a render; routing every exit path (last frame written, a force-cook exception, a drop-abort, and user cancel) through one `_finish(prior)` helper that restores the flag and stops recording, since there is no `try/finally` spanning the async `run(delayFrames=...)` driver; monitoring the Movie File Out Info CHOP `total_frames_dropped` **during** the render and aborting on the first drop instead of discovering it after minutes of GPU time; and proving the result with **two separate** checks -- length (`total_frames_written`, `ffprobe -count_frames`) and uniqueness (`total_frames_dropped == 0` plus `ffmpeg mpdecimate` / `framemd5` duplicate detection), because a juddered file still passes the length check. Includes a deterministic per-frame export recipe (`type='stopframemovie'`, `addframe.pulse()` stepped one frame per `run(delayFrames=1)`, force-cook-and-confirm before each pulse), a "let the encoder drain before verifying" caveat, and a correction that `performLongOperation` is not a documented API.
+
+### Tests
+
+- Test suite unchanged at **74 suites / 1,727 tests** -- this release is agent guidance shipped in the `.tox`, with no Python code change.
+
 ## v6.0.61
 
 An Embot polish pass aimed squarely at the spawn-time frame drops, plus more character. The mascot now assembles **off-view and swoops in whole** instead of stuttering together in the net you're watching, and he picks up an occasional happy squint and a cleaner shrug.
