@@ -612,7 +612,7 @@ function emitKey(key: string): string {
       <button type="button" class="panel-collapse panel-collapse--outline" data-panel-collapse="outline" aria-label="hide overview (o)" title="hide (o)">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
       </button>
-      <p class="eyebrow" data-drag-handle><span class="kbd" aria-hidden="true">o</span>Specimen / {specimen.categories.map((cat, i) => (
+      <p class="eyebrow" data-drag-handle><span class="kbd" aria-hidden="true">o</span><a class="eyebrow-cat" href="/collection" data-collection-link data-slug={specimen.slug}>Collection</a> / {specimen.categories.map((cat, i) => (
         <Fragment>{i > 0 && ", "}<a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(cat)}`}>{cat}</a></Fragment>
       ))}</p>
       <h1 class="specimen-app__title">{specimen.name}</h1>
@@ -786,6 +786,24 @@ function emitKey(key: string): string {
     const saveLayout = () => {
       try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch {}
     };
+
+    // ---- Breadcrumb: return to the collection AS THE USER LEFT IT --------------
+    // The collection mirrors its filter/sort/search into its own URL and, on a
+    // card-click, stashes {slug, url} in sessionStorage. Only when THIS specimen is
+    // the one that was opened from the collection (slug match) do we point the
+    // "Collection" crumb back at that exact filtered view; a specimen reached any
+    // other way keeps the canonical /collection (its href fallback). Browser Back
+    // restores the same view independently (the collection's history entry carries it).
+    try {
+      const raw = sessionStorage.getItem("embody:collection:return");
+      const crumb = document.querySelector<HTMLAnchorElement>("[data-collection-link]");
+      if (raw && crumb) {
+        const ret = JSON.parse(raw) as { slug?: string; url?: string };
+        if (ret && ret.slug === crumb.dataset.slug && typeof ret.url === "string" && ret.url.startsWith("/collection")) {
+          crumb.href = ret.url;
+        }
+      }
+    } catch {}
 
     // ---- Panel toggles + keyboard shortcuts -----------------------------------
     // o = overview (identity/description), p = properties, d = rendered result,
@@ -1197,7 +1215,8 @@ function emitKey(key: string): string {
     }
   }
 
-  /* The category in the breadcrumb links to the collection filtered to it. */
+  /* Breadcrumb links: "Collection" -> the collection (where the user left off),
+     each category -> the collection filtered to it. */
   .eyebrow-cat {
     color: inherit;
     text-decoration: none;
