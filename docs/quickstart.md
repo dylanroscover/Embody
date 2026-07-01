@@ -13,7 +13,7 @@ Embody itself is free, open source (MIT), and runs entirely on your own machine 
 You need two things installed before you start:
 
 - **TouchDesigner 2025.32280 or later** — Windows or macOS. [Download from Derivative](https://derivative.ca/download).
-- **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Cursor](https://www.cursor.com/), or [Windsurf](https://windsurf.com/).
+- **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or VS Code/Copilot.
 
 !!! note "Never used an AI coding tool?"
     Claude Code is the gentlest place to start — it runs as a desktop app, a VS Code extension, or a web app, not only in a terminal. The first time, you'll create or sign in to a Claude account and then open a folder; you won't be writing code, just describing what you want in plain language. (The five-minute estimate above assumes TouchDesigner and your AI assistant are already installed — first-time installs take a little longer.)
@@ -60,6 +60,9 @@ Clicked **Skip**, or want to turn Envoy off later? Toggle the **Envoy Enable** p
 
 - **Claude Code** (the fully auto-configured path): open that folder — `File → Open Folder` in the desktop or VS Code app, or `cd` into it and run `claude` in a terminal — then start a session. It detects the `.mcp.json` Envoy generated and connects on its own.
 - **Cursor or Windsurf**: open the same folder; you may need to point it at the generated `.mcp.json` yourself — see [Envoy Setup](envoy/setup.md#manual-configuration).
+
+!!! tip "One-click launch"
+    Set the **AI Client** menu on the Embody component to your assistant, then pulse the **Launch AI Client** parameter — Embody opens the client (an editor as a workspace, or a CLI in a new terminal) already pointed at your project root.
 
 Now just say what you want. Try this:
 

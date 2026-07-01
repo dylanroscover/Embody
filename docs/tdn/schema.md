@@ -1,6 +1,6 @@
 # JSON Schema
 
-The TDN format includes a JSON Schema that can be used for validation and IDE auto-completion. `.tdn` files are YAML in v2.0 (a strict JSON superset, so legacy JSON `.tdn` still validate against this schema); the schema validates the parsed structure, which is identical for YAML and JSON sources.
+`.tdn` files are YAML. The format ships a JSON Schema (the standard validation format from [json-schema.org](https://json-schema.org), used to validate YAML too) for structure checking and IDE auto-completion.
 
 ## Schema File
 
@@ -28,26 +28,13 @@ version: '2.0'
 
 ## Using with VS Code
 
-With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, add this to your VS Code `settings.json` to get auto-completion and validation for `.tdn` files (v2.0 YAML):
+With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, add this to your VS Code `settings.json` to get auto-completion and validation for `.tdn` files:
 
 ```json
 {
   "yaml.schemas": {
     "./docs/tdn.schema.json": ["*.tdn"]
   }
-}
-```
-
-For legacy JSON `.tdn` files (pre-2.0), use the built-in JSON schema mapping instead:
-
-```json
-{
-  "json.schemas": [
-    {
-      "fileMatch": ["*.tdn"],
-      "url": "./docs/tdn.schema.json"
-    }
-  ]
 }
 ```
 

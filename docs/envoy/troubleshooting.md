@@ -7,8 +7,9 @@
 1. **Check the Textport** (Alt+T) — Embody logs all startup messages there. Look for lines starting with `[Envoy]`.
 2. **Dependency install in progress:** On first enable (or after a version upgrade), Envoy builds its virtual environment and installs `mcp`, `uvicorn`, and other packages. This runs in a background thread — the status reads `Installing deps... (one-time)` and the port appears only when it finishes. A fresh install can take a minute or two; wait for it rather than re-toggling. If it **failed** (e.g., no internet, Python version mismatch), the status shows `Error: Python environment not ready`. Check for pip errors in the Textport and try installing manually:
    ```
-   pip install mcp uvicorn httpx pydantic
+   pip install "mcp>=1.26.0" "attrs<25" pyyaml
    ```
+   On Windows, also add `"pywin32>=306"`.
 3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871).
 4. **TD version too old:** Envoy requires TouchDesigner **2025.32280** or later.
 
@@ -17,8 +18,8 @@
 **Symptoms:** Claude Code says "MCP server not found" or tool calls time out.
 
 1. **Verify Envoy is running:** Check that the Embody toolbar shows a port number next to the Envoy toggle. If not, see "Server Won't Start" above.
-2. **Check `.mcp.json`:** Look for `.mcp.json` in your git repo root. It should contain a server entry for `envoy` with the correct port. If it's missing:
-    - Make sure your `.toe` project is inside a git repository
+2. **Check `.mcp.json`:** Look for `.mcp.json` at your AI Project Root — the git repo root by default, or the `.toe`'s folder / a custom path if you've changed the **AI Project Root** parameter. It should contain a server entry for `envoy` with the correct port. If it's missing:
+    - Confirm the **AI Project Root** parameter points where you expect (a non-git project still gets `.mcp.json` written to the project folder)
     - Re-enable Envoy (toggle off, then on) to regenerate it
     - Or create it manually — see [Manual Configuration](setup.md#manual-configuration)
 3. **Restart Claude Code:** After Envoy generates `.mcp.json`, you need to start a **new** Claude Code session for it to pick up the config. Run `claude` again in your project directory.
@@ -108,4 +109,4 @@ Envoy scans 10 ports (default: 9870–9879). If all are occupied, it can't start
 
 ## Log Files
 
-Embody writes detailed logs to `dev/logs/` in your project directory. Check the most recent `Embody-*.log` file for the full picture — the Textport ring buffer only holds 200 entries.
+Embody writes detailed logs to the log folder in your project directory (default `logs/`, set by the **Log Folder** parameter). Check the most recent `<project>_YYMMDD.log` file for the full picture — the Textport ring buffer only holds 200 entries.

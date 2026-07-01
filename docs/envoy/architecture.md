@@ -51,7 +51,7 @@ The bridge is regenerated from Embody's templates on each Envoy start. It uses o
 
 ### `.embody/envoy.json` Configuration
 
-The bridge reads project configuration from `.embody/envoy.json` at the git root. This file also serves as the **instance registry** when running multiple TouchDesigner instances.
+The bridge reads project configuration from `.embody/envoy.json`, co-located with `.mcp.json` at the AI Project Root (the git root by default, or the project folder / a custom path per Embody's **AI Project Root** parameter). This file also serves as the **instance registry** when running multiple TouchDesigner instances.
 
 ```json
 {

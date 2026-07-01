@@ -6,14 +6,15 @@ When Envoy starts, it generates a complete Claude Code configuration in your pro
 
 | File/Directory | Purpose | Regenerated on start? |
 |---|---|---|
+| `AGENTS.md` | Universal AI instructions (always written, any AI Client) | Yes |
 | `CLAUDE.md` | Project context and critical rules | Yes |
 | `.mcp.json` | MCP server connection config | Yes |
 | `.embody/envoy-bridge.py` | STDIO-to-HTTP bridge for MCP transport | Yes |
-| `.claude/settings.local.json` | Tool permissions and MCP server config | Yes |
+| `.claude/settings.local.json` | Tool permissions and MCP server config | No — written only if missing, never overwritten |
 | `.claude/rules/` | Always-loaded conventions (see below) | Yes (unless edited) |
 | `.claude/skills/` | On-demand workflow guides (see below) | Yes (unless edited) |
 
-All generated files except `CLAUDE.md` are automatically added to `.gitignore`.
+`AGENTS.md`, `CLAUDE.md`, `.claude/rules/`, and `.claude/skills/` are committed (not gitignored); the runtime files (`.mcp.json`, `.embody/`, `.claude/settings.local.json`) are automatically added to `.gitignore`.
 
 The `Yes (unless edited)` files are refreshed from their templates on start **only while pristine**. Embody records a content hash of every file it generates (in `.embody/generated-hashes.json`); once you edit a generated rule or skill, your version is preserved and not overwritten — delete the file to opt back into regeneration. See [How It Works](#how-it-works).
 
@@ -86,10 +87,18 @@ Embody stores master copies of all rules and skills as template DATs inside the 
 
 ## Live Build Visualization
 
-Turn on **Envoy Follow** (the `Envoyfollow` toggle on the Embody COMP's Envoy page, OFF by default) to *watch* Claude build in real time. While the agent works through Envoy:
+Two independent toggles on the Embody COMP's Envoy page control this, **both ON by default**:
+
+- **Envoy Follow** (`Envoyfollow`) — the camera follows the operator Envoy is working on, panning the network editor to it.
+- **Embot** (`Embotenable`) — the builder-bot mascot appears on each operator Envoy touches and narrates what it does.
+
+While the agent works through Envoy, with **Envoy Follow** on:
 
 - **Within the network you're viewing**, the editor smoothly **glides** to center on each operator just touched (ease-out, one step per frame).
 - **When the work moves to a COMP no pane is showing**, the editor **navigates** a network-editor pane into that COMP and snaps to frame the op — you can't glide across networks (different coordinate spaces), so it cuts.
+
+With **Embot** on:
+
 - A small **builder-bot** ("embot") — a figure made of minimal network-box annotations — **hops between the nodes** being worked on, hovers when idle, and throws an occasional gesture (a wave, a reach, a pump, the odd robot dance). Its color tracks "thinking time": cool cyan-green right after Envoy acts, warming toward red the longer the gap. The node Envoy just touched pulses the Envoy accent.
 
 It **yields the instant you pan, zoom, or navigate** the view yourself, and resumes only once you stop — it never yanks the view mid-interaction. The bot and pulse retire after a stretch of quiet.

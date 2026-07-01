@@ -22,7 +22,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 ## Three Tools, One Idea
 
-**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
+**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [VS Code](https://code.visualstudio.com/), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
 
 **Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
 
@@ -34,7 +34,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 |---|---|---|
 | 🤖 | **Envoy MCP Server** | 49 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
-| 📦 | **Automatic Restoration** | Externalized operators rebuild themselves from disk on every project open. The `.toe` is no longer the source of truth — your files are. |
+| 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDN-strategy COMPs from `.tdn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
 
 ---
@@ -58,8 +58,8 @@ my-project/              ← project folder (optionally a git repo)
 ### 2. Install and Tag
 
 1. **Download** the Embody `.tox` from [`/release`](release/) and drag it into your TouchDesigner project
-2. **Tag operators** — select any COMP or DAT and press `lctrl` twice to tag and externalize it
-3. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. On project open, Embody restores everything from disk automatically
+2. **Tag operators** — hover any COMP or DAT and press `lctrl` twice to open the tagger (pick a strategy for a COMP, a file format for a DAT)
+3. **Work normally** — press `ctrl + shift + u` to update all externalizations, or `ctrl + alt + u` to update only the current COMP. Externalized files are written on save; on open, the `.toe` stays authoritative by default (Export-on-Save), while Roundtrip mode also reconstructs TDN-strategy COMPs from disk
 
 > **Tip:** If no operators are tagged, Embody will externalize all eligible COMPs and DATs, which may slow down complex projects. Tagging selectively is recommended.
 
@@ -72,6 +72,7 @@ my-project/              ← project folder (optionally a git repo)
 | `ctrl + alt + u` | Update only the current COMP |
 | `ctrl + shift + r` | Refresh tracking state |
 | `ctrl + shift + o` | Open the Manager UI |
+| `ctrl + shift + c` | Copy the selected COMP to the clipboard as a portable TDN envelope |
 | `ctrl + shift + e` | Export entire project to `.tdn` file |
 | `ctrl + alt + e` | Export current COMP to `.tdn` file |
 
@@ -87,10 +88,10 @@ Embody includes **Envoy**, an embedded [MCP](https://modelcontextprotocol.io/) s
 
 1. **Enable Envoy** — toggle the `Envoyenable` parameter on the Embody COMP
 2. **Server starts** on `localhost:9870` (configurable via `Envoyport`)
-3. **Auto-configuration** — Envoy creates a `.mcp.json` in your git repo root
-4. **Connect** — open a Claude Code session (or restart your IDE) in the repo root — it picks up `.mcp.json` automatically
+3. **Auto-configuration** — Envoy creates a `.mcp.json` at your project root. By default this is the git repo root; set the `Aiprojectroot` parameter to `projectfolder` or a custom path to write it elsewhere. Projects without a git repo still get config generated in the `.toe` folder
+4. **Connect** — open a Claude Code session (or restart your IDE) at that root — it picks up `.mcp.json` automatically
 
-If your project isn't in a git repo, add `.mcp.json` manually to your project root:
+If you'd rather configure the client by hand, this is the `.mcp.json` Envoy writes:
 
 ```json
 {
@@ -115,15 +116,15 @@ If your project isn't in a git repo, add `.mcp.json` manually to your project ro
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 37 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
+...and 42 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
-When Envoy starts, it generates a `CLAUDE.md` file in your project root with TD development patterns, the complete MCP tool reference, and project-specific guidance.
+When Envoy starts, it always generates an `AGENTS.md` file in your project root with TD development patterns and project-specific guidance. It also writes a client-specific config for whichever assistant you select in the `Aiclient` parameter (`CLAUDE.md` + `.claude/` for Claude Code, Cursor/Windsurf rules, Copilot instructions, `GEMINI.md` for Gemini; Codex and VS Code read `AGENTS.md` directly).
 
 ---
 
 ## TDN Network Format
 
-TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable YAML file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it on the next project open.
+TDN (TouchDesigner Network) is the file format that makes the rest of Embody possible. It exports an entire operator network — operators, connections, parameters, layout, annotations, DAT content — as a single human-readable YAML file. Your AI agent can read it. You can read it. Any text tool can diff it. The network can rebuild itself from it.
 
 This is the substrate. Every other capability — AI-driven building, version control, automatic restoration — builds on top of it.
 

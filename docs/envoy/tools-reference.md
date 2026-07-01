@@ -103,7 +103,7 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDN-tagged COMPs instead of skipping their children (self-contained export) |
 | `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdn` file |
 | `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDN networks** -- the live in-memory network vs the on-disk `.tdn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDN COMP, which changed + counts); pass a COMP path OR a `.tdn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` -- Embody installs a `.tdn` diff driver that keeps those clean. Read-only, non-interactive |
 
@@ -111,7 +111,7 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?` | Capture a TOP's output as an image. Saves to temp file and returns the path. Small images (<20 KB) also include an inline MCP `ImageContent` preview. Default: JPEG at 80% quality, max 640px long edge. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?` | Capture a TOP's output as an image. Saves to a temp file and returns the path — Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. |
 
 ## Logging
 
@@ -121,7 +121,7 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 | `run_tests` | `suite_name?`, `test_name?` | Run test suites and return results |
 
 !!! info "Auto-piggybacked logs"
-    Every MCP tool response includes a `_logs` field with up to 20 log entries generated since the previous tool call. This lets you monitor operations in real-time without needing to call `get_logs` separately.
+    When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`.
 
 ## Bridge Meta-Tools
 
@@ -130,8 +130,8 @@ These tools run locally on the STDIO bridge script, not inside TouchDesigner. Th
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness, restart attempts remaining |
-| `launch_td` | `timeout?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s) |
-| `restart_td` | `timeout?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s) |
+| `launch_td` | `timeout?`, `project_path?` | Launch TD with the project's `.toe` file. Waits for Envoy to become reachable (default: 120s). Pass `project_path` (absolute, or relative to the git root) to open a different `.toe` |
+| `restart_td` | `timeout?`, `project_path?` | Gracefully quit TD and relaunch. Waits for exit before relaunching (default: 120s). Pass `project_path` to relaunch with a different `.toe` |
 | `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch to a different running instance. See [Multiple Instances](architecture.md#multiple-instances) |
 
 !!! info "Bridge architecture"

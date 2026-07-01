@@ -33,7 +33,7 @@ op('geo1').par.xord = 5       # by index
 
 ## Toggle Parameters
 
-Toggle parameters use `0`/`1`, not `"True"`/`"False"`:
+Prefer `0`/`1` for toggle parameters:
 
 ```python
 # Via MCP set_parameter:
@@ -43,6 +43,9 @@ set_parameter(op_path="/project1/base1", par_name="active", value="1")
 op('base1').par.active = True   # Works
 op('base1').par.active = 1      # Also works
 ```
+
+!!! note
+    Envoy's `set_parameter` also coerces the strings `"True"` / `"False"` for toggle parameters (anything other than `"0"`, `"false"`, `"False"`, or `""` becomes on). `"True"`/`"False"` are therefore not *invalid* — but `"0"`/`"1"` remain the clearer, preferred convention.
 
 ## Type Casting
 

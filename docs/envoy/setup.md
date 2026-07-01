@@ -13,7 +13,7 @@ Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, et
 
 1. **Enable Envoy**: Toggle the **Envoy Enable** parameter on the Embody COMP
 2. **Server starts**: Envoy runs on `localhost:9870` (configurable via **Envoy Port**)
-3. **Auto-configuration**: Envoy creates `.mcp.json` and AI client config files in your git repo root (if available) or project folder. If your project is in a git repo, Envoy also generates `.gitignore` and `.gitattributes` entries.
+3. **Auto-configuration**: Envoy creates `.mcp.json` and AI client config files at the root chosen by the **AI Project Root** parameter — the git repo root by default (`gitroot`), or the `.toe`'s own folder (`projectfolder`), or a custom path. When `gitroot` is selected but no git repo exists, Envoy falls back to the project folder and still writes the config. If your project is in a git repo, Envoy also generates `.gitignore` and `.gitattributes` entries.
 4. **Connect your MCP client**: Start a new Claude Code session (or restart your IDE) — it picks up the `.mcp.json` automatically
 
 ## Regenerating Config Files
@@ -59,7 +59,7 @@ If you prefer manual control, create `.mcp.json` in your project directory. You 
 }
 ```
 
-The STDIO bridge provides meta-tools (`get_td_status`, `launch_td`, `restart_td`) that work even when TouchDesigner is not running. See [Claude Code Integration](claude-code.md#stdio-bridge) for details.
+The STDIO bridge provides meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`) that work even when TouchDesigner is not running. See [Claude Code Integration](claude-code.md#stdio-bridge) for details.
 
 ## Changing the Port
 
@@ -84,6 +84,7 @@ To switch between instances from Claude Code, use the `switch_instance` bridge m
 
 When Envoy starts, it generates a full Claude Code configuration in your project root:
 
+- **`AGENTS.md`** — universal AI instructions, always written regardless of the selected AI Client
 - **`CLAUDE.md`** — project context and critical rules
 - **`.claude/rules/`** — always-loaded conventions (TD Python, network layout, MCP safety)
 - **`.claude/skills/`** — on-demand workflow guides (operator creation, debugging, externalization)
@@ -92,7 +93,7 @@ Pristine generated files are refreshed each time Envoy starts to stay up to date
 
 ## MCP Tool Permissions
 
-When Envoy is first enabled, it deploys a `.claude/settings.local.json` file that **auto-authorizes all Envoy MCP tools** — including write operations like `create_op`, `delete_op`, `execute_python`, and `set_dat_content`. This means your AI assistant can act without per-tool confirmation prompts.
+When Envoy is first enabled, it deploys a `.claude/settings.local.json` file that **auto-authorizes all Envoy MCP tools** — including write operations like `create_op`, `delete_op`, `execute_python`, and `set_dat_content`. This means your AI assistant can act without per-tool confirmation prompts. The file is written **only if it doesn't already exist** — Embody never overwrites or regenerates your customizations. This file is gitignored.
 
 If you prefer finer control, edit `.claude/settings.local.json` in your project root after setup. The `allow` array lists tool permission patterns — remove any tools you want Claude Code to prompt you for before executing.
 

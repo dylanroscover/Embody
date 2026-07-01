@@ -46,6 +46,7 @@ Use the `export_network` tool with these options:
 | `include_dat_content` | Toggle setting | Include DAT text/table content |
 | `output_file` | `null` | File path (use `"auto"` for automatic naming, `null` for dict-only) |
 | `max_depth` | `null` (unlimited) | Maximum recursion depth |
+| `embed_all` | `false` | Recurse into TDN-tagged COMPs instead of writing `tdn_ref` pointers, producing a self-contained export |
 
 ### What Gets Exported
 
@@ -53,7 +54,9 @@ Use the `export_network` tool with these options:
 - Only non-default parameter values
 - Connections between operators
 - Custom parameter definitions
+- Built-in parameter sequences with non-default block counts or values (`sequences`)
 - Flags, positions, sizes, colors, comments, tags
+- Serializable operator storage entries (unless disabled per-COMP or globally)
 - Annotations
 - Optionally: DAT text/table content
 
@@ -83,22 +86,28 @@ The import process runs in a pre-phase plus the ordered phases below. This order
 
 | Phase | Action | Details |
 |-------|--------|---------|
-| Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators |
+| Pre | **Resolve templates and defaults** | Expand `$t` references and merge `type_defaults` into operators. With `clear_first`, excluded COMPs (`exclude` tag) are preserved, not destroyed. |
 | 1 | **Create operators** | Depth-first creation. COMPs first so children can be placed inside. |
 | 2 | **Create custom parameters** | Pages, types, ranges, menu entries, defaults. |
 | 2.5 | **Expand sequences** | Resizable parameter blocks (sequences on ops like `mathmixPOP`, `glslPOP`, `constantCHOP`) have their sequence parameters created before any values are set. |
 | 3 | **Set parameter values** | Both built-in and custom. `=` prefix → expression, `~` prefix → bind. |
 | 4 | **Set flags** | Array entries without `-` → `true`; with `-` → `false`. |
+| 4a | **Warn about locked non-DATs** | Locked TOP/CHOP/SOP operators are flagged (lock preserved, frozen data is not). |
 | 5 | **Wire connections** | Resolve sources (sibling name first, then full path). |
 | 6 | **Set DAT content** | Text or table data loaded into DATs. |
-| 7 | **Set positions** | Positions, sizes, colors, comments applied last. |
+| 6a | **Restore storage** | Storage key-value pairs restored via `op.store()`; `$type` wrappers deserialized. |
+| 7 | **Set positions** | Positions, sizes, colors, comments applied (later phases still follow). |
+| 7b | **Set docking** | Docking relationships restored between operators. |
 | 7a | **Create annotations** | Annotations created with `utility=True`. |
+| 8 | **Restore file links** | File/syncfile parameters restored on externalized DATs. |
+| 8.5 | **Restore TOX content** | `.tox` content loaded into `tox_ref` shells. |
+| 9 | **Apply target COMP properties** | The target COMP's own type, parameters, flags, color, tags applied last. |
 
 ### Version Compatibility
 
 The importer checks metadata for compatibility:
 
-- **`version`**: Warning if format version differs
+- **`version`**: Warning **only when the file's version is newer** than the running build (the risky direction — the file may use schema this build does not understand). Equal or older versions import silently.
 - **`td_build`**: Info message if TD version differs (parameter defaults may vary)
 - **`build`**: Logged for informational purposes
 
@@ -113,7 +122,7 @@ These checks are non-blocking — import always proceeds.
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `target` | (optional) | A COMP path, or a `.tdn` file path / bare filename (e.g. `"mixer.tdn"`). **Omit it for a whole-project summary** across every live TDN COMP. |
-| `max_changed_ops` | `200` | Cap on the number of changed operators reported. |
+| `max_changed_ops` | `200` | Cap on the total changed entries returned (added + removed + modified combined, modified filled first). The reported `counts` always reflect the true totals; entries beyond the cap are dropped from the payload and counted in `dropped`. |
 | `max_bytes` | `60000` | Cap on the output size. |
 
 The comparison is **semantic, not byte-level**: both sides normalize through the same `type_defaults` / `par_templates` expansion, and the volatile export header (`build`, `generator`, `td_build`, `exported_at`, `source_file`) is ignored — so a no-op re-export shows nothing. Each change is `{old, new}` (old = disk, new = live), tagged `root`, `op`, or `annotation`.
@@ -131,12 +140,12 @@ TDN import is **best-effort** — individual failures don't abort the entire ope
 | Situation | Behavior |
 |-----------|----------|
 | Unknown field | Ignored (forward compatibility) |
-| Missing `name` or `type` | Skip operator, log error |
+| Missing `name` or `type` | Skip operator silently (no log) |
 | Missing connection source | Skip connection, log warning |
 | Unrecognized parameter style | Skip parameter, log warning |
 | Unrecognized flag | Ignored |
 | Invalid parameter value | Attempt type coercion; skip with warning if impossible |
-| Version mismatch | Log warning, proceed |
+| Version newer than build | Log warning, proceed (older/equal versions import silently) |
 | Unknown `$t` template reference | Log warning, skip page |
 
 !!! info "Design principle"

@@ -21,16 +21,17 @@ If your project is inside a git repository, Envoy automatically adds the followi
 
 | Entry | Purpose |
 |-------|---------|
+| `Backup/` | TouchDesigner versioned `.toe` backups |
+| `logs/` | Embody log files |
+| `CrashAutoSave*` | TouchDesigner crash auto-save files |
 | `.venv/` | Python virtual environment (auto-created for Envoy dependencies) |
 | `.mcp.json` | MCP client config (auto-generated per machine) |
+| `.embody/*` | Envoy runtime files (instance registry, bridge, cache) |
+| `!.embody/project.json` | Un-ignores the committed `td_build` pin so it stays tracked |
 | `.claude/settings.local.json` | Claude Code per-machine permissions |
 | `.claude/projects/` | Claude Code session data |
-| `.embody/envoy-bridge.py` | MCP transport bridge (auto-generated) |
 | `__pycache__/` | Python bytecode cache |
 | `.DS_Store` | macOS Finder metadata |
-
-!!! tip
-    You may also want to gitignore your `logs/` directory if you don't need log history in version control.
 
 ## Installation
 
@@ -48,7 +49,7 @@ After verification, if Envoy is not yet enabled, Embody prompts you to set it up
 
 - Install Python MCP dependencies (~30 MB via `uv`)
 - Start a local MCP server on the configured port
-- Generate AI config files in your project root: `CLAUDE.md`, `.mcp.json`, and a `.claude/` directory with [coding rules, skills, and slash commands](../envoy/claude-code.md)
+- Generate AI config files in your project root: `.mcp.json`, an always-written `AGENTS.md` (the universal standard read by all major AI tools), and client-specific config for the AI Client you select. For Claude Code that is `CLAUDE.md` plus a `.claude/` directory with [coding rules, skills, and slash commands](../envoy/claude-code.md); other clients get their own file (`.cursor/rules`, `.github/copilot-instructions.md`, `.windsurf/rules`, `GEMINI.md`, etc.)
 
 You can skip this and enable Envoy later from the **Envoy** tab.
 
@@ -56,11 +57,11 @@ Embody is a self-contained component — no external dependencies are needed for
 
 ## First Externalization
 
-1. **Externalize operators**: Select any COMP or DAT and press ++lctrl++ twice in a row. Embody tags the operator and externalizes it to disk in one step.
+1. **Externalize operators**: Hover any COMP or DAT and press ++lctrl++ twice in a row. Embody opens the tagger UI for the operator under your cursor. For an untagged operator it lets you pick how to externalize it — a strategy (TOX or TDN) for a COMP, or a file format for a DAT; for an already-tagged operator it lets you switch strategy, remove the tag, or save the externalization.
 
 2. **Update as you work**: Press ++ctrl+shift+u++ to update all dirty externalizations, or ++ctrl+alt+u++ to update just the COMP you're currently inside.
 
-3. **Work with confidence**: Your externalized files on disk are the source of truth. On project open, Embody automatically restores everything from disk — you never need to worry about losing externalized work.
+3. **Work with confidence**: Your externalizations are written to disk for diffs and AI context. On project open, TOX-strategy COMPs are always restored from `.tox` files and DATs sync from their externalized source files (`.py`, `.txt`, `.json`, ...). TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — in the default Export-on-Save mode the `.toe` remains authoritative and is not rebuilt from `.tdn` on open. See [TDN Mode](externalization.md#tdn-mode-master-switch) for the tradeoffs.
 
 !!! tip
     To externalize an entire project at once, enable the **Externalize Full Project** option on the Embody COMP. Otherwise, externalize operators selectively with ++lctrl+lctrl++.

@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **74 test suites** and **1,727 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **75 test suites** and **1,751 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -24,7 +24,7 @@ op.unit_tests.RunTestsDeferred()
 
 # Get results
 results = op.unit_tests.GetResults()
-# Returns: {'total': 1693, 'passed': 1693, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
+# Returns: {'total': 1751, 'passed': 1751, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
 ```
 
 ### Via MCP
@@ -121,17 +121,18 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_collection_pure` | 14 | Pure-value-expression preservation (live-if-clean) |
 | `test_clipboard_watch` | 8 | Clipboard watcher poll + gating (incl. outbound-copy suppression) |
 
-### Envoy Server & Bridge (8 suites, 334 tests)
+### Envoy Server & Bridge (9 suites, 358 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_envoy_bridge` | 156 | STDIO bridge: forwarding, reconciler, registry, meta-tools |
-| `test_claude_config` | 76 | AI client config generation (Claude/Cursor/Copilot/Windsurf) |
+| `test_claude_config` | 83 | AI client config generation (Claude/Cursor/Copilot/Windsurf/Gemini) |
 | `test_server_lifecycle` | 22 | Envoy MCP server start/stop |
 | `test_envoy_watchdog` | 21 | Envoy liveness watchdog (revive on dropped socket / save) |
 | `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |
 | `test_envoy_setup_environment` | 18 | MCP import verification (pydantic_core safety) |
 | `test_envoy_registry` | 17 | Instance registry and PID liveness |
+| `test_launch_aiclient` | 17 | Launch AI Client launcher (launch table, CLI resolution, `.command` generation, env sanitization) |
 | `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |
 
 ### Catalog & Release (3 suites, 49 tests)

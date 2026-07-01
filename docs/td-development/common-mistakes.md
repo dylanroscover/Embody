@@ -28,17 +28,19 @@ op('geo1').par.tx.val = 5
 op('geo1').par.tx = 5
 ```
 
-### 3. Toggle parameters with wrong types
+### 3. Toggle parameters: prefer `0`/`1`
 
-Toggle parameters use `0`/`1`, not `"True"`/`"False"` strings.
+Use `"0"`/`"1"` for toggle parameters — the clearest, unambiguous convention.
 
 ```python
-# WRONG:
-set_parameter(op_path="/base1", par_name="active", value="True")
-
-# CORRECT:
+# PREFERRED:
 set_parameter(op_path="/base1", par_name="active", value="1")
+
+# ALSO WORKS — Envoy coerces these to on/off, but "1"/"0" is clearer:
+set_parameter(op_path="/base1", par_name="active", value="True")
 ```
+
+Envoy's `set_parameter` coerces toggle values: anything other than `"0"`, `"false"`, `"False"`, or `""` turns the toggle on, so `"True"`/`"False"` are handled correctly — just less obvious than `"1"`/`"0"`.
 
 ## Module-Level Code
 

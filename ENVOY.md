@@ -5,7 +5,7 @@
 
 This is a TouchDesigner project using **Embody** for version-controlled externalization and **Envoy** as an MCP server for programmatic operator access.
 
-- **Embody** externalizes COMP and DAT operators to text files (.tox, .py, .json, .xml, etc.) so they can be diffed and merged in git
+- **Embody** externalizes COMP and DAT operators to version-controlled files (.py, .json, .xml, .tdn for text; .tox and .toe stay opaque binary) so they can be diffed and merged in git
 - **Envoy** lets you create, modify, connect, and query TouchDesigner operators via MCP tools — plus manage externalizations
 
 ## Critical Rules
@@ -59,9 +59,9 @@ Manual configuration if needed:
 
 ## Recommended Permissions
 
-To reduce tool-approval prompts, consider auto-allowing read-only Envoy tools in your Claude Code settings (`.claude/settings.local.json` → `alwaysAllow`). These tools only inspect — they never create, modify, or delete:
+To reduce tool-approval prompts, Embody deploys a `.claude/settings.local.json` that pre-allows the Envoy MCP tools (inspect tools like `get_op`/`query_network` AND write tools like `create_op`, `set_parameter`, `execute_python`, `import_network`, plus `Bash` and `WebFetch`). It is written only if the file is missing — Embody never overwrites or regenerates your customizations, so edit its `permissions.allow` list to tighten or loosen access:
 
-`get_op`, `get_parameter`, `get_connections`, `get_annotations`, `get_enclosed_ops`, `get_op_position`, `get_op_flags`, `get_op_performance`, `get_op_errors`, `get_dat_content`, `get_td_info`, `get_td_classes`, `get_td_class_details`, `get_logs`, `get_externalizations`, `get_externalization_status`, `get_module_help`, `query_network`, `find_children`
+`get_op`, `get_parameter`, `get_connections`, `get_annotations`, `get_enclosed_ops`, `get_op_position`, `get_op_flags`, `get_op_performance`, `get_op_errors`, `get_dat_content`, `get_td_info`, `get_td_classes`, `get_td_class_details`, `get_logs`, `get_externalizations`, `get_externalization_status`, `get_module_help`, `query_network`, `find_children`, `create_op`, `delete_op`, `connect_ops`, `set_parameter`, `execute_python`, `import_network`, `externalize_op`
 
 ## Extension Conventions
 

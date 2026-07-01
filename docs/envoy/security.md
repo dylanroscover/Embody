@@ -50,4 +50,4 @@ The `exec_op_method` tool can call any callable attribute on any operator, which
 
 ## Logging and Auditing
 
-All MCP operations are logged to Embody's ring buffer (200 entries) and to `dev/logs/` on disk. The `execute_python` tool logs a preview of each code snippet before execution. Use `get_logs` or review the log files to audit what operations have been performed.
+All MCP operations are logged to Embody's ring buffer (200 entries) and to the log folder on disk (default `logs/`, as `<project>_YYMMDD.log`). The `execute_python` tool logs a preview of each code snippet before execution. Use `get_logs` or review the log files to audit what operations have been performed.

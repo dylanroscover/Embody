@@ -38,11 +38,15 @@ The toolbar provides quick access to common operations. All buttons with keyboar
 | Refresh | Refresh tracking state | ++ctrl+shift+r++ |
 | Update All | Update all dirty externalizations | ++ctrl+shift+u++ |
 | Update Current | Update only the current COMP | ++ctrl+alt+u++ |
+| Perform | Toggle Perform Mode (suspends Embody compute) | — |
 | Save Folder | Open the externalization folder | — |
 | Import TDN | Import a `.tdn` file | — |
 | Export COMP | Export current COMP to `.tdn` | ++ctrl+alt+e++ |
 | Export Project | Export entire project to `.tdn` | ++ctrl+shift+e++ |
 | Envoy | Toggle Envoy MCP server | — |
+| Pars | Open the Embody COMP's parameter dialog | — |
+| Filter | Filter box — type to narrow the list (e.g. `changed`); clear it to show all rows | — |
+| Close | Close the Manager window | — |
 
 The toolbar is also visible in minimized mode with a compact subset of buttons.
 

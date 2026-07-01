@@ -80,6 +80,7 @@ nav:
     - Manager UI: embody/manager-ui.md
     - Supported Formats: embody/supported-formats.md
     - Configuration: embody/configuration.md
+    - Parameter Reference: embody/parameters.md
     - Troubleshooting: embody/troubleshooting.md
   - Envoy:
     - envoy/index.md

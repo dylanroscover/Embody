@@ -4,7 +4,7 @@
 
 | Shortcut | Action |
 |----------|--------|
-| ++lctrl+lctrl++ | Tag and externalize the selected operator (press left control twice) |
+| ++lctrl+lctrl++ | Open the tagger UI for the hovered operator (press left control twice) |
 | ++ctrl+shift+u++ | Update all dirty externalizations |
 | ++ctrl+alt+u++ | Update only the current COMP you're working inside |
 | ++ctrl+shift+r++ | Refresh tracking state |
@@ -15,10 +15,10 @@
 
 ## Tagging
 
-The double-tap ++lctrl++ shortcut works on the currently selected operator in the network editor. It tags the operator and externalizes it immediately:
+The double-tap ++lctrl++ shortcut works on the operator your cursor is hovering over in the network editor (not the current selection). It opens the tagger UI for that operator:
 
-- A visual tag appears on the operator and it is saved to disk in one step
-- Pressing ++lctrl+lctrl++ again on a tagged operator removes the tag
+- On an **untagged** operator, the tagger lets you pick how to externalize it — a strategy (TOX or TDN) for a COMP, or a file format for a DAT
+- On an **already-tagged** operator, the tagger lets you switch strategy, remove the tag, or save the externalization
 
 ## Update Operations
 
@@ -26,11 +26,11 @@ The double-tap ++lctrl++ shortcut works on the currently selected operator in th
 - **++ctrl+alt+u++** — Updates only the COMP you're currently inside. Useful for large projects where a full update takes too long.
 - **++ctrl+shift+r++** — Refreshes tracking state, re-scanning externalized operators for changes without writing files.
 
-!!! tip "Your externalized files are the source of truth"
-    You don't need to ++ctrl+s++ to preserve externalized work. Use ++ctrl+shift+u++ instead — it writes all dirty operators to files on disk. On project open, Embody restores everything automatically: TOX-strategy COMPs from `.tox` files and TDN-strategy COMPs from `.tdn` files.
+!!! tip "Keep your externalizations up to date"
+    Use ++ctrl+shift+u++ to write all dirty operators to files on disk. On project open, TOX-strategy COMPs are always restored from `.tox` files and DATs sync from their externalized source files (`.py`, `.txt`, `.json`, ...). TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — in the default Export-on-Save mode the `.toe` stays authoritative and is not rebuilt from `.tdn` on open. See [TDN Mode](externalization.md#tdn-mode-master-switch).
 
-!!! warning "Ctrl+S strips TDN containers"
-    When you do save the `.toe` with ++ctrl+s++, Embody **temporarily strips all children** from TDN-strategy COMPs to keep the `.toe` file small. They are restored immediately after the save completes — but if TD crashes during the save, those children will be missing from the `.toe`. This is fine: they'll be reconstructed from `.tdn` files the next time the project opens. Just make sure you've updated your externalizations with ++ctrl+shift+u++ first.
+!!! warning "Roundtrip mode strips TDN containers on Ctrl+S"
+    In **Roundtrip mode** (and only when strip-on-save is enabled), saving the `.toe` with ++ctrl+s++ makes Embody **temporarily strip all children** from TDN-strategy COMPs to keep the `.toe` file small. They are restored immediately after the save completes — but if TD crashes during the save, those children will be missing from the `.toe`. This is fine: they'll be reconstructed from `.tdn` files the next time the project opens. Just make sure you've updated your externalizations with ++ctrl+shift+u++ first. In the default **Export-on-Save mode**, Ctrl+S does **not** strip: the `.toe` keeps its children and remains the source of truth.
 
 ## TDN Export
 
