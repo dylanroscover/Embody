@@ -1,5 +1,24 @@
 # Changelog
 
+## v6.0.66
+
+A one-click **Launch AI Client** button on Embody's Envoy page: pick your assistant in the `Aiclient` menu, press the button, and Embody opens it at the project root -- editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the folder as a workspace, terminal CLIs (Claude Code, Codex, Gemini) open in a new terminal. Built to survive the real cross-platform traps and hardened by a 10-agent codex cross-platform review.
+
+### Embody core
+
+- **Launch AI Client button (`Launchaiclient`).** New Pulse parameter beside `Aiclient` that opens the selected client at `_findProjectRoot()` (honoring `Aiprojectroot`). One `_AICLIENT_LAUNCH` table drives it; two helpers (`_launchEditor`, `_launchTerminal`) hold all `sys.platform` branching. Editors resolve the REAL app/exe -- macOS via LaunchServices (`/usr/bin/open -b <bundle-id>`, then `-a "<Name>"`, then the app's own bundled CLI), Windows via the real `Code.exe`/`Cursor.exe`/`Windsurf.exe` from known install dirs -- never a hijackable `code` PATH shim (Cursor installs its own). CLIs run in a real terminal so its login shell rebuilds PATH, which defeats the Dock-truncated-PATH problem where a CLI in `~/.local/bin` is invisible to a Dock-launched TD (macOS writes a `.embody/launch_<cli>.command` handed to `open`; Windows uses `cmd /K`). A missing tool prints a verified per-tool install hint instead of a false "launched".
+- **Fixes the "dock icon bounces, then closes" launch bug.** TouchDesigner sets `ELECTRON_RUN_AS_NODE=1` (plus `LD_LIBRARY_PATH`/`DYLD_*`/`PYTHON*` into its own bundle), and macOS `open` forwards the caller's environment, so a freshly launched Electron editor (Cursor/VS Code/Windsurf) ran headless-as-Node and quit instantly. A new `_launchEnv()` strips those vars for every launch; verified live (Cursor stayed open).
+- **Gemini config generation.** Selecting Gemini writes a thin `GEMINI.md` that imports the always-written `AGENTS.md` via Gemini's `@AGENTS.md` syntax -- no duplication. The `Aiclient` menu gains `codex`, `gemini`, `vscode` (the five existing tokens preserved verbatim so persisted settings never break).
+- **`.gitignore`:** other AI clients' generated configs (`.cursor/`, `.windsurf/`, `.github/copilot-instructions.md`, `.github/instructions/`, `GEMINI.md`) are now ignored -- this repo's own client is Claude Code, whose `.claude/`/`CLAUDE.md`/`AGENTS.md` stay tracked.
+
+### Cross-platform review
+
+- A **10-agent codex cross-platform panel** (5 initial lenses + 3 verification, plus an orchestrator self-audit) drove the launcher to correctness: whole-body crash-safety in `LaunchAIClient`; helpers return `bool` so success logs only on a real launch; the Windows editor shim resolves via `shutil.which` then runs the `.cmd` through cmd's doubled-quote form (spaces + `&`/metachar safe); `/usr/bin/open` so launches work even if TD's PATH lacks `/usr/bin`; `${SHELL:-/bin/zsh}` used consistently in the generated `.command`. macOS is verified live; Windows is review-verified (bench-testing pending).
+
+### Tests
+
+- New `test_launch_aiclient` suite (17 tests: launch-table shape, CLI resolution, `.command` generation + quote-escaping, env sanitization, editor graceful failure) plus 7 new `test_claude_config` tests (Gemini `GEMINI.md` + `_clientFilesMissing`). Test suite **75 suites / 1,751 tests**, all green.
+
 ## v6.0.62
 
 A performance-rule expansion shipped in the `.tox`: a complete **Movie Export / Offline Rendering** playbook so an AI agent recording a movie never ships a juddered file. No core-code change -- this is agent guidance, delivered to user projects through the `performance.md` rule template baked into the build.

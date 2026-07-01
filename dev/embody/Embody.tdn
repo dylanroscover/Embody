@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 660
-generator: Embody/6.0.60
+build: 662
+generator: Embody/6.0.65
 td_build: 099.2025.32820
-source_file: Embody-6.61.toe
-exported_at: '2026-06-29T00:35:10Z'
+source_file: Embody-6.66.toe
+exported_at: '2026-07-01T02:27:32Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -332,7 +332,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 06:21:35 UTC
+    value: Saved 00:52:53 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -373,21 +373,32 @@ custom_pars:
     default: '0'
     menuNames:
     - claudecode
+    - codex
+    - gemini
+    - vscode
     - cursor
-    - copilot
     - windsurf
+    - copilot
     - none
     menuLabels:
     - Claude Code
+    - Codex
+    - Gemini
+    - VS Code
     - Cursor
-    - GitHub Copilot
     - Windsurf
+    - GitHub Copilot
     - None
     help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
     value: claudecode
+  - name: Launchaiclient
+    style: Pulse
+    label: Launch AI Client
+    help: 'Open the AI client selected above at the project root: editors (VS Code, Cursor, Windsurf, Copilot) open the folder as a workspace; CLI tools (Claude Code, Codex, Gemini) open in a new terminal at the root.'
   - name: Aiprojectroot
     style: Menu
     label: AI Project Root
+    startSection: true
     default: gitroot
     menuNames:
     - gitroot
@@ -568,7 +579,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.60
+    value: 6.0.65
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -585,7 +596,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 660
+    value: 662
   - name: Github
     style: Pulse
     label: GitHub
@@ -596,7 +607,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-06-29 00:35:10 UTC
+    value: 2026-07-01 02:27:32 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -646,8 +657,24 @@ storage:
   expand_order: []
   _start_in_progress: true
   git_status:
-    /embody/Embody/EnvoyExt: ' M'
-  _watchdog_gen: 441
+    /embody/externalizations: ' M'
+    /specimen_lab/waveform_stack: ' M'
+    /specimen_lab/vertical_fibers: ' M'
+    /specimen_lab/plasma_interference: ' M'
+    /specimen_lab/murmuration: ' M'
+    /specimen_lab/mandelbulb_march: ' M'
+    /specimen_lab/kaleidoscope: ' M'
+    /specimen_lab/essence_streams: ' M'
+    /specimen_lab/crosspoint_matrix: ' M'
+    /specimen_lab: ' M'
+    /embody/unit_tests/test_claude_config: ' M'
+    /embody/unit_tests: ' M'
+    /embody/Embody/parexec: ' M'
+    /embody/Embody/EmbodyExt: ' M'
+    /embody/Embody: ' M'
+    /embody: ' M'
+    /embody/unit_tests/test_launch_aiclient: ??
+  _watchdog_gen: 480
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -789,7 +816,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 205
+  _clip_watch_gen: 244
   _suppress_dialogs: true
 operators:
 - name: help

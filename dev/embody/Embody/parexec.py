@@ -128,6 +128,9 @@ def onPulse(par):
 	elif par.name == 'Closemanager':
 		parent.Embody.Manager('close')
 				
+	elif par.name == 'Launchaiclient':
+		parent.Embody.LaunchAIClient()
+
 	elif par.name == 'Github':
 		webbrowser.open('https://github.com/dylanroscover/Embody')
 

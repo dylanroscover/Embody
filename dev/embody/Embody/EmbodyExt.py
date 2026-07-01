@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import shlex
 import shutil
 import inspect
 import hashlib
@@ -78,6 +79,77 @@ class EmbodyExt:
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
+    })
+
+    # Aiclient token -> how the Launchaiclient button opens it at the project
+    # root (_findProjectRoot(), which honors Aiprojectroot).
+    #   kind 'editor'   -> GUI editor opened with the root as its workspace
+    #   kind 'terminal' -> new login-shell terminal at the root running the CLI
+    # Editors resolve the REAL app/exe, never a PATH shim -- a `code` shim can be
+    # hijacked (e.g. Cursor installs its own). CLIs run inside a real terminal so
+    # its login shell rebuilds PATH (defeats the Dock-truncated-PATH problem where
+    # a CLI in ~/.local/bin is invisible to a Dock-launched TD). Tokens absent
+    # here (e.g. 'none') -> Launchaiclient logs "no launcher".
+    _VSCODE_LAUNCH = {
+        'kind': 'editor', 'app': 'Visual Studio Code',
+        'bundle': 'com.microsoft.VSCode',
+        'mac_cli': '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code',
+        'win_exe': [
+            r'%LOCALAPPDATA%\Programs\Microsoft VS Code\Code.exe',
+            r'%ProgramFiles%\Microsoft VS Code\Code.exe',
+            r'%ProgramFiles(x86)%\Microsoft VS Code\Code.exe',
+        ],
+        'win_shim': 'code',
+        'install': 'https://code.visualstudio.com/download  (macOS: brew install --cask visual-studio-code)',
+    }
+    _AICLIENT_LAUNCH = {
+        'claudecode': {'kind': 'terminal', 'cli': 'claude',
+                       'install': 'curl -fsSL https://claude.ai/install.sh | bash  '
+                                  '(or npm i -g @anthropic-ai/claude-code)  '
+                                  'docs https://code.claude.com/docs/en/setup'},
+        'codex':      {'kind': 'terminal', 'cli': 'codex',
+                       'install': 'npm install -g @openai/codex  '
+                                  '(or brew install --cask codex)  '
+                                  'docs https://github.com/openai/codex'},
+        'gemini':     {'kind': 'terminal', 'cli': 'gemini',
+                       'install': 'npm install -g @google/gemini-cli  '
+                                  '(or brew install gemini-cli)  '
+                                  'docs https://github.com/google-gemini/gemini-cli'},
+        'vscode':     _VSCODE_LAUNCH,
+        'copilot':    _VSCODE_LAUNCH,   # Copilot lives inside VS Code
+        'cursor': {
+            'kind': 'editor', 'app': 'Cursor',
+            'bundle': 'com.todesktop.230313mzl4w4u92',
+            'mac_cli': '/Applications/Cursor.app/Contents/Resources/app/bin/cursor',
+            'win_exe': [r'%LOCALAPPDATA%\Programs\cursor\Cursor.exe'],
+            'win_shim': 'cursor',
+            'install': 'https://cursor.com/download  (macOS: brew install --cask cursor)',
+        },
+        'windsurf': {
+            'kind': 'editor', 'app': 'Windsurf',
+            'bundle': 'com.exafunction.windsurf',
+            'alt_names': ('Devin Desktop',),   # Windsurf rebrand
+            'win_exe': [r'%LOCALAPPDATA%\Programs\Windsurf\Windsurf.exe'],
+            'win_shim': 'windsurf',
+            'install': 'https://windsurf.com/editor/download  (macOS: brew install --cask windsurf)',
+        },
+        # 'none' -> not present -> "no launcher" log.
+    }
+
+    # TouchDesigner injects env vars that BREAK other apps launched as a fresh
+    # process: ELECTRON_RUN_AS_NODE=1 makes Electron editors (VS Code, Cursor,
+    # Windsurf) run headless-as-Node and quit instantly ("dock icon bounces,
+    # then closes"); LD_LIBRARY_PATH/DYLD_* and PYTHON* point into TD's bundle
+    # and can mis-link or mis-route other tools. _launchEnv() strips these so a
+    # launched app/terminal gets a clean environment (see _launchEnv).
+    _LAUNCH_ENV_STRIP = frozenset({
+        'ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS',
+        'LD_LIBRARY_PATH', 'LD_PRELOAD',
+        'DYLD_LIBRARY_PATH', 'DYLD_FRAMEWORK_PATH', 'DYLD_INSERT_LIBRARIES',
+        'PYTHONHOME', 'PYTHONPATH', 'PYTHONEXECUTABLE',
+        'PYTHONDONTWRITEBYTECODE', 'PYTHONNOUSERSITE', 'PYTHONSTARTUP',
+        'QT_PLUGIN_PATH', 'QT_QPA_PLATFORM_PLUGIN_PATH',
+        '__CFBundleIdentifier',
     })
 
     # Duplicate-path prompt: above this many operators in one group, a
@@ -1216,7 +1288,10 @@ class EmbodyExt:
             self._writeCopilotInstructions(target_dir)
         elif client == 'windsurf':
             self._writeWindsurfRules(target_dir)
-        # 'none': AGENTS.md only (already written above)
+        elif client == 'gemini':
+            self._writeGeminiConfig(target_dir)
+        # 'codex', 'vscode', 'none': AGENTS.md only (Codex reads AGENTS.md;
+        # VS Code has no native rules file -- Copilot config is its own token).
 
     def _writeAgentsMd(self, target_dir):
         """Write AGENTS.md -- universal AI instructions read by all major AI tools."""
@@ -1401,6 +1476,24 @@ class EmbodyExt:
         if written > 0:
             self.Log(f'Generated {written} .windsurf/rules/ files at {target_dir}', 'SUCCESS')
 
+    def _writeGeminiConfig(self, target_dir):
+        """Write Gemini CLI config: a thin GEMINI.md that imports AGENTS.md.
+
+        Gemini reads GEMINI.md (not AGENTS.md), so GEMINI.md pulls in the
+        always-written AGENTS.md via Gemini's @import syntax -- no content
+        duplication. See docs: gemini-cli/docs/cli/gemini-md.md (@file imports).
+        """
+        content = (
+            '<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n'
+            '# Project Context for Gemini CLI\n\n'
+            'This project uses Embody (TouchDesigner externalization) and Envoy\n'
+            '(MCP server for AI coding tools). The full instructions live in\n'
+            'AGENTS.md, imported below.\n\n'
+            '@AGENTS.md\n'
+        )
+        if self._writeTemplate(target_dir, 'GEMINI.md', content):
+            self.Log(f'Generated GEMINI.md at {target_dir}', 'SUCCESS')
+
     def _writeClaudeMd(self, target_dir):
         """Write CLAUDE.md from the text_claude template DAT."""
         templates_comp = self.my.op('templates')
@@ -1518,6 +1611,7 @@ class EmbodyExt:
             'cursor':     lambda d: not (d / '.cursor' / 'rules').exists(),
             'copilot':    lambda d: not (d / '.github' / 'copilot-instructions.md').exists(),
             'windsurf':   lambda d: not (d / '.windsurf' / 'rules').exists(),
+            'gemini':     lambda d: not (d / 'GEMINI.md').exists(),
             'none':       lambda d: False,
         }
         return checks.get(client, lambda d: False)(target_dir)
@@ -6894,7 +6988,7 @@ class EmbodyExt:
         self.my.par.Envoystatus = 'Perform Mode'
 
         # Grey out Envoy parameters so user sees they're frozen
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Launchaiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = False
@@ -6910,7 +7004,7 @@ class EmbodyExt:
         self.my.op('chopexec_exit_tagger').par.active = state.get('exit_tagger_active', True)
 
         # Restore Envoy parameter enable state
-        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
+        for p in ('Envoyenable', 'Envoyport', 'Aiclient', 'Launchaiclient', 'Aiprojectroot', 'Aiprojectrootcustom'):
             par = getattr(self.my.par, p, None)
             if par is not None:
                 par.enable = True
@@ -8278,6 +8372,216 @@ class EmbodyExt:
                 subprocess.Popen(['explorer', f'/select,{filepath}'])
         except Exception as e:
             self.Log(f'Failed to open file location: {e}', 'ERROR')
+
+    def LaunchAIClient(self) -> None:
+        """Open the AI client selected in the Aiclient menu at the project root.
+
+        Editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the root as
+        a workspace. CLI tools (Claude, Codex, Gemini) open in a new terminal at
+        the root. Driven by the _AICLIENT_LAUNCH table. Launch CWD is
+        _findProjectRoot() (honors Aiprojectroot). Fire-and-forget: opens a
+        window, does not block or confirm the tool actually ran.
+        """
+        # Whole body inside try: par eval and _findProjectRoot() can raise, and
+        # this is a button callback -- a launch problem must log, never crash TD.
+        try:
+            client = self.my.par.Aiclient.eval()
+            label = self.my.par.Aiclient.label
+            spec = self._AICLIENT_LAUNCH.get(client)
+            cwd = self._findProjectRoot()
+            if spec is None:
+                self.Log(f'No launcher for "{label}". Open it manually at {cwd}.', 'INFO')
+                return
+            if spec['kind'] == 'editor':
+                if self._launchEditor(
+                        cwd, spec['app'], bundle_id=spec.get('bundle'),
+                        win_exe_candidates=spec.get('win_exe', ()),
+                        win_shim=spec.get('win_shim'), mac_cli=spec.get('mac_cli'),
+                        mac_alt_names=spec.get('alt_names', ()),
+                        install=spec.get('install')):
+                    self.Log(f'Launched {label} at {cwd}', 'SUCCESS')
+            elif self._launchTerminal(cwd, spec['cli'], install=spec.get('install')):
+                self.Log(f'Opened a terminal for {label} at {cwd}', 'INFO')
+        except Exception as e:
+            self.Log(f'Failed to launch AI client: {e}', 'ERROR')
+
+    def _resolveCliAbs(self, cli: str) -> Optional[str]:
+        """Absolute path to a CLI via fast filesystem probes, or None.
+
+        No subprocess -- safe on the main thread. When None, the caller lets the
+        new terminal's own login shell resolve the CLI (which is what defeats the
+        Dock-truncated PATH on macOS, where ~/.local/bin is not on TD's PATH).
+        """
+        if sys.platform.startswith('win'):
+            cands = [
+                os.path.expandvars(rf'%APPDATA%\npm\{cli}.cmd'),
+                os.path.expandvars(rf'%USERPROFILE%\.bun\bin\{cli}.exe'),
+                os.path.expandvars(rf'%LOCALAPPDATA%\Programs\{cli}\{cli}.exe'),
+            ]
+        else:
+            home = Path.home()
+            cands = [
+                home / '.local' / 'bin' / cli,
+                Path('/opt/homebrew/bin') / cli,
+                Path('/usr/local/bin') / cli,
+                home / '.bun' / 'bin' / cli,
+            ]
+        for c in cands:
+            try:
+                if Path(c).exists():
+                    return str(c)
+            except OSError:
+                continue
+        return None
+
+    def _launchEnv(self) -> dict:
+        """A copy of the process environment with TouchDesigner's injected
+        variables removed, so externally launched apps/terminals get a clean env.
+
+        TD sets ELECTRON_RUN_AS_NODE=1 -- which makes a freshly launched Electron
+        editor (VS Code, Cursor, Windsurf) run headless-as-Node and quit instantly
+        (the "dock icon bounces, then closes" bug) -- plus LD_LIBRARY_PATH/DYLD_*
+        and PYTHON* pointing into TD's own bundle. `open` forwards the caller's
+        environment to the launched app, so these must be stripped here.
+        """
+        return {k: v for k, v in os.environ.items()
+                if k not in self._LAUNCH_ENV_STRIP and not k.startswith('DYLD_')}
+
+    def _launchEditor(self, cwd, app_name, bundle_id=None, win_exe_candidates=(),
+                      win_shim=None, mac_cli=None, mac_alt_names=(), install=None) -> bool:
+        """Open a GUI editor with cwd as its workspace. Returns True on a launched
+        window. macOS uses LaunchServices (PATH-independent); Windows launches the
+        real .exe from known install dirs. Never a hijackable PATH shim unless
+        nothing else resolves (logged). Mirrors OpenSaveFolder's OS split.
+        """
+        d = str(cwd)
+        # Clean env: TD's ELECTRON_RUN_AS_NODE would make a fresh Electron editor
+        # quit instantly ("bounce then close"); DYLD/PYTHON vars can mis-link it.
+        env = self._launchEnv()
+        if sys.platform.startswith('darwin'):
+            # /usr/bin/open: absolute path so it resolves even if TD's PATH lacks
+            # /usr/bin. -a/-b MANDATORY: a bare `open <dir>` opens Finder, not the
+            # editor. Each attempt returns non-zero WITHOUT launching if that app
+            # is absent, so exit-code gating (subprocess.call, ~ms since open hands
+            # off to LaunchServices and exits) doubles as install detection.
+            _open = '/usr/bin/open'
+            attempts = [[_open, '-a', app_name, d]]
+            if bundle_id:
+                attempts.append([_open, '-b', bundle_id, d])
+            attempts += [[_open, '-a', n, d] for n in mac_alt_names]
+            if mac_cli and Path(mac_cli).exists():
+                attempts.append([mac_cli, d])   # app-own CLI, not a hijackable shim
+            for cmd in attempts:
+                try:
+                    if subprocess.call(cmd, stdin=subprocess.DEVNULL, env=env) == 0:
+                        return True
+                except OSError:
+                    continue
+            msg = f'Could not open {app_name} at {d}; is it installed?'
+            if install:
+                msg += f' Install: {install}'
+            self.Log(msg, 'WARNING')
+            return False
+        if sys.platform.startswith('win'):
+            try:
+                for cand in win_exe_candidates:
+                    exe = os.path.expandvars(cand)
+                    if Path(exe).exists():
+                        # argv (no shell): spaces/&/trailing-sep in the dir are safe.
+                        subprocess.Popen([exe, d], stdin=subprocess.DEVNULL, env=env)
+                        return True
+                if win_shim:
+                    # Resolve FIRST so a missing shim returns False (no false SUCCESS
+                    # -- shell=True with a list could "succeed" launching cmd.exe
+                    # with the editor absent).
+                    resolved = shutil.which(win_shim)
+                    if resolved:
+                        self.Log(f'{app_name}: launching via PATH "{win_shim}" ({resolved}) '
+                                 '-- may resolve to a different editor build.', 'WARNING')
+                        # .cmd/.bat shims run through cmd; the doubled-quote form
+                        # (""prog" "arg"") keeps program+dir literally quoted so a
+                        # metachar (& | etc.) in the dir is not re-parsed by cmd.
+                        subprocess.Popen(f'cmd /c ""{resolved}" "{d}""',
+                                         stdin=subprocess.DEVNULL, env=env)
+                        return True
+            except OSError as e:
+                self.Log(f'{app_name}: launch failed ({e}).', 'WARNING')
+                return False
+            msg = f'Could not locate {app_name}.'
+            if install:
+                msg += f' Install: {install}'
+            self.Log(msg, 'WARNING')
+            return False
+        self.Log(f'Editor launch unsupported on {sys.platform}.', 'INFO')
+        return False
+
+    def _buildTerminalScript(self, cwd, cli, abs_cli, install=None) -> str:
+        """Return the macOS .command script text that cd's to cwd and runs <cli>.
+
+        Pure (no I/O) so the correctness-critical content is unit-testable.
+        abs_cli: the CLI's resolved absolute path, or None to defer to the new
+        terminal's own login-shell PATH (with a visible install guard if truly
+        absent). install: the how-to-install hint shown in that guard.
+        """
+        q = str(cwd).replace("'", "'\\''")        # single-quote-escape the dir
+        lines = ['#!/bin/zsh -l',
+                 f"cd '{q}' || {{ echo \"launch dir missing\"; exec \"${{SHELL:-/bin/zsh}}\" -il; }}"]
+        if abs_cli:
+            lines.append(f'exec {shlex.quote(abs_cli)}')
+        else:
+            # Not found by fast probe -- let the login shell resolve it. If truly
+            # absent, print install guidance and keep the window open.
+            hint = (install or 'see the tool website').replace('"', "'").replace('$', '').replace('`', '')
+            lines.append(f'if ! command -v {cli} >/dev/null 2>&1; then')
+            lines.append(f'  echo "{cli} not found on PATH."')
+            lines.append(f'  echo "Install:  {hint}"')
+            lines.append('  echo "Then close this window and press Launch AI Client again."')
+            lines.append('  exec "${SHELL:-/bin/zsh}" -i')
+            lines.append('fi')
+            lines.append(f'exec "${{SHELL:-/bin/zsh}}" -ilc {shlex.quote(cli)}')
+        return '\n'.join(lines) + '\n'
+
+    def _launchTerminal(self, cwd, cli, install=None) -> bool:
+        """Open a new terminal at cwd running <cli>. Returns True if a terminal was
+        launched, False on failure or an unsupported OS (so the caller only logs
+        success when a window actually opened).
+
+        macOS: write a .command and hand it to `open` -- the terminal app's login
+        shell rebuilds the real PATH. NEVER execute the script directly from TD
+        (that re-inherits TD's truncated PATH). Windows: `cmd /K` in a new console.
+        The CLI's absolute path is resolved first so it works even when the CLI
+        lives in ~/.local/bin, invisible to a Dock-launched TD.
+        """
+        d = str(cwd)
+        env = self._launchEnv()   # strip TD's injected vars from the terminal too
+        try:
+            if sys.platform.startswith('darwin'):
+                body = self._buildTerminalScript(cwd, cli, self._resolveCliAbs(cli), install)
+                scripts_dir = Path(cwd) / '.embody'
+                scripts_dir.mkdir(parents=True, exist_ok=True)
+                script = scripts_dir / f'launch_{cli}.command'
+                script.write_text(body, encoding='utf-8')
+                script.chmod(0o755)
+                # Do NOT delete: `open` returns before the terminal reads the file.
+                # /usr/bin/open: absolute so it resolves even if PATH lacks /usr/bin.
+                if subprocess.call(['/usr/bin/open', str(script)],
+                                   stdin=subprocess.DEVNULL, env=env) != 0:
+                    self.Log(f'Failed to open a terminal for {cli}.', 'WARNING')
+                    return False
+                return True
+            if sys.platform.startswith('win'):
+                target = self._resolveCliAbs(cli) or cli
+                # Doubled-quote form keeps a resolved .cmd path literally quoted
+                # through cmd /K so a metachar (& | etc.) is not re-parsed; a
+                # bareword cli resolves via PATH the same.
+                subprocess.Popen(f'cmd /K ""{target}""', cwd=d, stdin=subprocess.DEVNULL,
+                                 creationflags=subprocess.CREATE_NEW_CONSOLE, env=env)
+                return True
+        except OSError as e:
+            self.Log(f'Failed to open a terminal for {cli}: {e}', 'WARNING')
+            return False
+        self.Log(f'Terminal launch unsupported on {sys.platform}.', 'INFO')
+        return False
 
     def OpenTable(self) -> None:
         """Open externalizations table viewer."""

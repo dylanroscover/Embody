@@ -34,6 +34,16 @@ logs/
 !.embody/project.json
 .envoy-tools-cache.json
 
+# Other AI clients' generated configs. This repo's own AI client is Claude Code
+# (.claude/, CLAUDE.md, AGENTS.md are committed -- .claude/ is the source of
+# truth for the shipped template DATs). Selecting a different Aiclient in Embody
+# regenerates the configs below, so keep them out of git.
+.cursor/
+.windsurf/
+.github/copilot-instructions.md
+.github/instructions/
+GEMINI.md
+
 # Promotion
 SUBMISSIONS.md
 

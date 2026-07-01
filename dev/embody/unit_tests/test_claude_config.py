@@ -3,8 +3,8 @@ Test suite: AI config generation pipeline in EmbodyExt.
 
 Tests _TEMPLATE_MAP_RULES / _TEMPLATE_MAP_SKILLS integrity, _writeTemplate,
 _writeClaudeMd, _writeAgentsMd, _writeClaudeCodeConfig, _writeCursorRules,
-_writeCopilotInstructions, _writeWindsurfRules, _clientFilesMissing,
-and _upgradeEnvoy condition logic.
+_writeCopilotInstructions, _writeWindsurfRules, _writeGeminiConfig,
+_clientFilesMissing, and _upgradeEnvoy condition logic.
 """
 
 import tempfile
@@ -546,6 +546,35 @@ class TestClaudeConfig(EmbodyTestCase):
 				f'Content mismatch for {slug}.md')
 
 	# ------------------------------------------------------------------
+	# Group Dg: _writeGeminiConfig()
+	# ------------------------------------------------------------------
+
+	def test_Dg01_gemini_md_created(self):
+		"""_writeGeminiConfig should create GEMINI.md."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		self.assertTrue((self._temp_dir / 'GEMINI.md').exists())
+
+	def test_Dg02_gemini_md_has_marker(self):
+		"""Generated GEMINI.md should contain the Embody/Envoy marker."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		content = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.assertIn(self.MARKER, content)
+
+	def test_Dg03_gemini_md_imports_agents(self):
+		"""GEMINI.md should import AGENTS.md via Gemini @import syntax (no duplication)."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		content = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.assertIn('@AGENTS.md', content)
+
+	def test_Dg04_gemini_md_idempotent(self):
+		"""Running _writeGeminiConfig twice should produce identical output."""
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		first = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.embody_ext._writeGeminiConfig(self._temp_dir)
+		second = (self._temp_dir / 'GEMINI.md').read_text(encoding='utf-8')
+		self.assertEqual(first, second)
+
+	# ------------------------------------------------------------------
 	# Group E: _clientFilesMissing() logic
 	# ------------------------------------------------------------------
 
@@ -617,6 +646,24 @@ class TestClaudeConfig(EmbodyTestCase):
 		"""Unknown client string: _clientFilesMissing returns False (safe default)."""
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'unknowntool'))
+
+	def test_E13_gemini_missing_when_no_file(self):
+		"""gemini: missing when GEMINI.md does not exist."""
+		self.assertTrue(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
+
+	def test_E14_gemini_not_missing_when_file_exists(self):
+		"""gemini: not missing when GEMINI.md exists."""
+		(self._temp_dir / 'GEMINI.md').write_text('x', encoding='utf-8')
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
+
+	def test_E15_codex_and_vscode_never_missing(self):
+		"""codex/vscode: covered by the always-written AGENTS.md, so never 'missing'."""
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'codex'))
+		self.assertFalse(
+			self.embody_ext._clientFilesMissing(self._temp_dir, 'vscode'))
 
 	# ------------------------------------------------------------------
 	# Group F: _findProjectRoot()

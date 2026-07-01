@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 39
-generator: Embody/6.0.43
+generator: Embody/6.0.62
 td_build: 099.2025.32820
-source_file: Embody-6.44.toe
-exported_at: '2026-06-24T17:39:38Z'
+source_file: Embody-6.62.toe
+exported_at: '2026-07-01T00:52:53Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -2087,6 +2087,11 @@ operators:
   flags:
   - viewer
   position: [400, -400]
+- name: test_launch_aiclient
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_launch_aiclient.py
+  position: [0, -3400]
 - name: test_mcp_annotations
   type: textDAT
   parameters:
