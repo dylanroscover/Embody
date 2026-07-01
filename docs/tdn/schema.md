@@ -23,15 +23,18 @@ version: '2.0'
 - **Type defaults**: Per-type shared properties (parameters, flags, size, color, tags)
 - **Parameter templates**: Reusable custom parameter page definitions
 - **Annotations**: Mode, title, text, position, size, color, opacity
-- **Value types**: Proper typing for constants, expressions (`=` prefix), and binds (`~` prefix)
+- **Value types**: Constants (string, number, or boolean), plus expression (`=` prefix) and bind (`~` prefix) string shorthands
 - **DAT content**: Both text and table formats
 
 ## Using with VS Code
 
-With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, add this to your VS Code `settings.json` to get auto-completion and validation for `.tdn` files:
+With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) installed, add this to your VS Code `settings.json`. The `files.associations` entry is what makes VS Code treat `.tdn` files as YAML (they are not a built-in YAML extension) -- without it the YAML extension never activates on your `.tdn` files and the schema does nothing:
 
 ```json
 {
+  "files.associations": {
+    "*.tdn": "yaml"
+  },
   "yaml.schemas": {
     "./docs/tdn.schema.yaml": ["*.tdn"]
   }
@@ -51,15 +54,19 @@ tdn
 ├── build: integer | null
 ├── generator: string
 ├── td_build: string
+├── source_file: string
 ├── exported_at: date-time
 ├── network_path: string
 ├── options
-│   └── include_dat_content: boolean
+│   ├── include_dat_content: boolean
+│   └── include_storage: boolean
 ├── type_defaults: { type → properties }
 ├── par_templates: { name → [definitions] }
 ├── operators: [operator]
 └── annotations: [annotation]
 ```
+
+When the document represents a single COMP (not a whole project), that COMP's own properties also appear at the root -- `type`, `custom_pars`, `parameters`, `flags`, `color`, `tags`, `comment`, and `storage` (same shapes as on an operator).
 
 ### Operator Object
 
@@ -72,19 +79,26 @@ operator
 ├── color: [r, g, b]
 ├── comment: string
 ├── tags: [string]
+├── dock: string  (name of the op this one is docked to)
 ├── parameters: { name → value }
 ├── custom_pars: { page → [definition] | {$t, ...values} }
 ├── flags: [string]
+├── storage: object
+├── startup_storage: object
 ├── inputs: [string | null]
 ├── comp_inputs: [string | null]
-├── dat_content: string | [[string]]
+├── dat_content: string | [string] | [[string]]
 ├── dat_content_format: "text" | "table"
 ├── children: [operator]
 ├── annotations: [annotation]
-├── palette_clone: boolean
+├── sequences: { name → [blocks] }
+├── dat_read_only: true
+├── palette_clone: true
 ├── tdn_ref: string  (mutually exclusive with children — points to child .tdn)
 └── tox_ref: string  (mutually exclusive with children — points to child .tox)
 ```
+
+A few fields also accept a legacy shape for back-compatibility (e.g. `inputs`/`comp_inputs` as `[{index, source}]`, `flags` as `{flag: boolean}`, a flat `custom_pars` array); the [Specification](specification.md) lists these with their inclusion conditions.
 
 ### Annotation Object
 
