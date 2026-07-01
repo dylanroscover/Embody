@@ -93,7 +93,7 @@ nav:
   - TDN:
     - tdn/index.md
     - Specification: tdn/specification.md
-    - JSON Schema: tdn/schema.md
+    - YAML Schema: tdn/schema.md
     - Import & Export: tdn/import-export.md
     - Examples: tdn/examples.md
   - embody.tools:

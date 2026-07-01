@@ -1,6 +1,6 @@
-# JSON Schema
+# YAML Schema
 
-`.tdn` files are YAML. The format ships a JSON Schema (the standard validation format from [json-schema.org](https://json-schema.org), used to validate YAML too) for structure checking and IDE auto-completion.
+`.tdn` files are YAML. This page documents the schema that validates them and drives editor auto-completion. (The schema file is written in [JSON Schema](https://json-schema.org) -- the standard schema language, which validates YAML just as well.)
 
 ## Schema File
 
