@@ -10,7 +10,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 
 ## Critical Rules
 
-1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) or call `get_externalizations` to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
+1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) or call `get_externalizations` to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
 2. **Use Envoy MCP tools for live TD state and non-TDN operators** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." For operators not externalized as TDN, use MCP tools to inspect and modify them. The filesystem holds externalized files (`.py`, `.tox`, `.tdn`, `.json`, `.xml`, etc.); MCP is for interacting with live operator state inside TD.
 3. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure.
 4. **Default to the current network** — use `execute_python` with `result = ui.panes.current.owner.path` to find the active pane.
@@ -27,6 +27,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
     - Before `create_extension`: load `/create-extension`
     - Before `externalize_op` or `save_externalization`: load `/externalize-operator`
     - Before writing TD Python (`execute_python`, `set_dat_content`, `edit_dat_content`): load `/td-api-reference`
+    - Before fetching data over HTTP, or building any background / long-running / blocking task: load `/td-api-reference` (use a Web Client DAT, not hand-rolled threading)
     - When diagnosing operator errors: load `/debug-operator`
     - Before first MCP call in a new session: load `/mcp-tools-reference`
 

@@ -80,7 +80,7 @@ op.Embody.Update()
 op.Embody.Save()
 
 # Non-promoted (lowercase) — through ext:
-op.Embody.ext.Embody.getExternalizedOps()
+op.Embody.ext.Embody.getExternalizedOps(COMP)
 op.Embody.ext.Envoy.Start()
 ```
 
