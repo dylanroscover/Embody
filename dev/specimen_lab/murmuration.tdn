@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.38
+generator: Embody/6.0.62
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:38Z'
+source_file: Embody-6.63.toe
+exported_at: '2026-07-01T00:54:32Z'
 network_path: /specimen_lab/murmuration
 options:
   include_dat_content: false
@@ -122,6 +122,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+    value: 1080
   - name: Resh
     style: Int
     default: 2160
@@ -132,6 +133,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render height (px). 4K landscape = 2160.
+    value: 1350
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn

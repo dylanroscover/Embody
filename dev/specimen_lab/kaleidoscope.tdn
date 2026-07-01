@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.38
+generator: Embody/6.0.62
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:38Z'
+source_file: Embody-6.63.toe
+exported_at: '2026-07-01T00:54:33Z'
 network_path: /specimen_lab/kaleidoscope
 options:
   include_dat_content: false
@@ -63,12 +63,14 @@ custom_pars:
     clampMin: true
     normMax: 3.0
     help: Speed of the tumble / twist / rotation animation. 0 freezes it.
+    value: 0.35
   - name: Palette
     style: Float
     label: Palette Hue
     clampMin: true
     clampMax: true
     help: Rotates the color palette through the full hue range. 0 = fiery.
+    value: 0.33
   - name: Source
     style: Menu
     startSection: true
@@ -91,6 +93,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+    value: 1080
   - name: Resh
     style: Int
     default: 2160
@@ -101,6 +104,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+    value: 1350
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
@@ -132,6 +136,34 @@ operators:
     vec:
     - name: uPal
       valuex: =parent().par.Palette.eval()
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [0, -300]
 - name: glsl_kaleido
   type: glslTOP
@@ -145,6 +177,34 @@ operators:
       valuey: =parent().par.Rotation.eval()
       valuez: =parent().par.Zoom.eval()
       valuew: =absTime.seconds*parent().par.Flowspeed.eval()
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [1300, -150]
   inputs:
   - switch_source

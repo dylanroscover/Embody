@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 6
-generator: Embody/6.0.38
+generator: Embody/6.0.62
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:36Z'
+source_file: Embody-6.63.toe
+exported_at: '2026-07-01T00:54:29Z'
 network_path: /specimen_lab
 options:
   include_dat_content: false
@@ -240,6 +240,8 @@ operators:
       help: Particles born per second.
     Output:
       $t: output_2
+      Resw: 1080
+      Resh: 1350
   position: [0, -800]
   tdn_ref: specimen_lab/murmuration.tdn
 - name: kaleidoscope
@@ -276,12 +278,14 @@ operators:
       clampMin: true
       normMax: 3.0
       help: Speed of the tumble / twist / rotation animation. 0 freezes it.
+      value: 0.35
     - name: Palette
       style: Float
       label: Palette Hue
       clampMin: true
       clampMax: true
       help: Rotates the color palette through the full hue range. 0 = fiery.
+      value: 0.33
     - name: Source
       style: Menu
       startSection: true
@@ -295,6 +299,8 @@ operators:
       help: Demo = built-in animated source. External = kaleidoscope whatever TOP is wired into this COMP.
     Output:
       $t: output
+      Resw: 1080
+      Resh: 1350
   position: [800, -400]
   tdn_ref: specimen_lab/kaleidoscope.tdn
 - name: noise_terrain
@@ -531,6 +537,7 @@ operators:
       normMin: 256.0
       normMax: 7680.0
       help: Render width (px), 4K landscape.
+      value: 1080
     - name: Resh
       style: Int
       default: 2160
@@ -541,6 +548,7 @@ operators:
       normMin: 256.0
       normMax: 7680.0
       help: Render height (px), 4K landscape.
+      value: 1350
     Controls:
     - name: Lanes
       style: Int
@@ -802,6 +810,8 @@ operators:
       normMax: 1.5
     Output:
       $t: output
+      Resw: 1080
+      Resh: 1350
   tdn_ref: specimen_lab/essence_streams.tdn
 - name: vertical_fibers
   type: baseCOMP
@@ -930,6 +940,8 @@ operators:
       help: edge darkening so the curtain sits on a premium dark stage.
     Output:
       $t: output
+      Resw: 1080
+      Resh: 1350
   position: [400, 0]
   tdn_ref: specimen_lab/vertical_fibers.tdn
 - name: mandelbulb_march
@@ -1003,6 +1015,8 @@ operators:
       help: Elevation (degrees) of the key light. High = top-down soft light with short shadows; low = dramatic raking light with long soft shadows.
     Output:
       $t: output_2
+      Resw: 1080
+      Resh: 1350
   position: [800, -800]
   tdn_ref: specimen_lab/mandelbulb_march.tdn
 - name: crosspoint_matrix
@@ -1173,6 +1187,7 @@ operators:
       normMin: 1.0
       normMax: 20.0
       help: Spatial frequency of the sine fields. Low = broad lava-lamp blobs; high = dense fine plasma.
+      value: 4.5
     - name: Speed
       style: Float
       default: 1
@@ -1189,6 +1204,7 @@ operators:
       clampMax: true
       normMax: 3.0
       help: Domain-warp amount. 0 = flat sliding stripes; higher bends the coords into a flowing liquid swirl.
+      value: 1.4
     - name: Complexity
       style: Float
       label: Interference
@@ -1205,13 +1221,17 @@ operators:
       clampMin: true
       clampMax: true
       help: Rotates the cyclic cosine palette through the full hue ring. Loops seamlessly 1.0 -> 0.0.
+      value: 0.33
     - name: Contrast
       style: Float
       default: 0.4
       clampMin: true
       clampMax: true
       help: Palette saturation/contrast (onto a 0.6 base in the shader). Low = pastel; high = punchy neon.
+      value: 0.55
     Output:
       $t: output_2
+      Resw: 1080
+      Resh: 1350
   position: [1200, -800]
   tdn_ref: specimen_lab/plasma_interference.tdn

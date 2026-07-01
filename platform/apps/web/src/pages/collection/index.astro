@@ -81,7 +81,12 @@ try {
   firstPage = response.specimens;
   totalCount = response.count;
   nextCursor = response.nextCursor ?? null;
-} catch {
+} catch (err) {
+  // A live-query failure must never blank the page -- degrade to the bundled
+  // fixture set. But log it: this silent fallback previously masked a single
+  // malformed-`requires` row that replaced the ENTIRE live Collection with
+  // fixtures, which was invisible until someone read the DB directly.
+  console.error("[collection] live query failed; showing fixtures:", err);
   usingFixtures = true;
   facets = {
     categories: [...new Set(fixtureSummaries.map((s) => s.category))].sort(),
@@ -312,6 +317,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
                 name={specimen.name}
                 category={specimen.category}
                 thumbnailKey={specimen.thumbnail_key}
+                videoKey={specimen.video_key}
                 tdn={usingFixtures ? (specimenGraph(specimen.slug) ?? sampleTdn) : specimenGraph(specimen.slug)}
               />
             </div>
@@ -375,7 +381,11 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
                   aria-label={`View ${specimen.author_handle}'s profile`}
                 >
                   <span class="specimen-card__author-by">by</span>
-                  <span class="specimen-card__author-avatar" aria-hidden="true">{specimen.author_handle.charAt(0).toUpperCase()}</span>
+                  <span class="specimen-card__author-avatar" aria-hidden="true">
+                    {specimen.author_avatar_url
+                      ? <img src={specimen.author_avatar_url} alt="" loading="lazy" />
+                      : specimen.author_handle.charAt(0).toUpperCase()}
+                  </span>
                   <span class="specimen-card__author-handle">@{specimen.author_handle}</span>
                 </a>
               </div>
@@ -418,6 +428,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     import { specimenThumbnail } from "../../lib/specimenThumb";
     import { reactionsClusterHtml } from "../../lib/reactions";
     import { initReactions } from "../../lib/reactionsClient";
+    import { initCoverVideoHover } from "../../lib/coverVideoHover";
 
     interface CopyResponse {
       envelope: unknown;
@@ -437,6 +448,11 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     // Emoji reactions: one delegated listener over the whole document covers SSR
     // cards AND client-appended ones. Anonymous visitors are bounced to /signin.
     initReactions({ signedIn: shell?.getAttribute("data-signed-in") === "1" });
+
+    // Cover-video hover-play: one delegated pair of listeners over the grid
+    // covers SSR AND appended cards (no per-card binding to leak). No-op on a
+    // coarse pointer or with reduced motion -- those keep the static poster.
+    if (grid) initCoverVideoHover({ scope: grid });
     const viewButtons = Array.from(
       document.querySelectorAll<HTMLElement>("[data-view-option]")
     );
@@ -679,7 +695,18 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
         : BAKED_THUMBS.has(s.slug)
           ? `/specimens/${s.slug}.jpg`
           : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
+      // Cover video route when the cover carries one (mirrors resultVideo in
+      // lib/specimenThumb). Poster + hover-play <video> live in the result layer;
+      // keep this branch in sync with SpecimenCover.astro's result layer.
+      const videoUrl = s.video_key ? `/api/specimens/${encodeURIComponent(s.slug)}/video` : "";
+      const videoEl = videoUrl
+        ? `<video class="cover__video" data-cover-video="${esc(videoUrl)}" poster="${esc(thumb)}" muted loop playsinline preload="none" aria-hidden="true"></video>`
+        : "";
       const initial = (s.author_handle || "?").charAt(0).toUpperCase();
+      // Uploaded/author avatar fills the chip; no avatar -> the letter-initial chip.
+      const avatarInner = s.author_avatar_url
+        ? `<img src="${esc(s.author_avatar_url)}" alt="" loading="lazy" />`
+        : esc(initial);
 
       const article = document.createElement("article");
       article.className = "specimen-card";
@@ -702,6 +729,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
             </div>
             <div class="cover__layer cover__layer--result" aria-hidden="${baked ? 'false' : 'true'}">
               <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} ${baked ? 'rendered result' : 'preview placeholder'}" />
+              ${videoEl}
               ${baked ? "" : '<span class="cover__soon mono">preview coming soon</span>'}
             </div>
             <div class="cover__flip" role="group" aria-label="${esc(s.name)} cover view">
@@ -726,7 +754,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
             <h3 class="specimen-card__name">${esc(s.name)}</h3>
             <a class="specimen-card__author mono" href="/u/${esc(s.author_handle)}" aria-label="View ${esc(s.author_handle)}'s profile">
               <span class="specimen-card__author-by">by</span>
-              <span class="specimen-card__author-avatar" aria-hidden="true">${esc(initial)}</span>
+              <span class="specimen-card__author-avatar" aria-hidden="true">${avatarInner}</span>
               <span class="specimen-card__author-handle">@${esc(s.author_handle)}</span>
             </a>
           </div>
@@ -1596,6 +1624,20 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     font-size: 0.72rem;
     font-weight: 700;
     line-height: 1;
+    overflow: hidden; /* clip an author image to the round chip */
+  }
+
+  /* When the author has an avatar image, it fills the chip; drop the green
+     letter-chip background so a transparent PNG doesn't show a green ring. */
+  .specimen-card__author-avatar:has(img) {
+    background: none;
+  }
+  .specimen-card__author-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+    display: block;
   }
 
   .specimen-card__author-handle {
@@ -1618,6 +1660,16 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     color: var(--text-muted);
     font-size: 0.84rem;
     line-height: 1.5;
+    /* Clamp to 2 lines so a long description (Mandelbulb March) truncates with an
+       ellipsis instead of stretching its list row far taller than a short one
+       (Kaleidoscope). Standardizes row heights and keeps the list lean. Only the
+       list view shows the desc -- gallery hides it via a higher-specificity
+       display:none, which still wins over this display:-webkit-box. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
   }
 
   /* Badges share the top row with the "embody it" button, which floats to the far
@@ -1786,16 +1838,34 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     padding: 0.8rem 1.15rem;
   }
 
+  /* Keep the title + author on ONE line. The row never wraps to a second line;
+     instead the title ellipsizes. The author -- who made this, the thing that
+     matters most in the collection -- is protected: it never shrinks, so it
+     stays fully readable while the title gives up width first. The max-width cap
+     is the only thing that can truncate the author, and only in the pathological
+     case of a very long handle -- which also keeps the title from ever being
+     starved to nothing (both truncate only if truly needed). */
+  .collection-shell[data-view="list"] .specimen-card__name-row {
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
   /* List rows have room -- enlarge the title so it's the clear visual anchor. */
   .collection-shell[data-view="list"] .specimen-card__name {
-    flex: 0 1 auto;
+    flex: 0 1 auto; /* the only shrinkable item -- the title absorbs all overflow */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-size: 1.4rem;
     line-height: 1.2;
   }
 
   .collection-shell[data-view="list"] .specimen-card__name-row .specimen-card__author {
     order: 1;
-    flex: 0 1 auto;
+    flex: 0 0 auto; /* never shrinks: the author stays whole until the title has fully collapsed */
+    max-width: 60%; /* ... except a pathological handle is capped here (its handle then ellipsizes) */
+    min-width: 0;
   }
 
   @media (max-width: 640px) {

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.38
+generator: Embody/6.0.62
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:39Z'
+source_file: Embody-6.63.toe
+exported_at: '2026-07-01T00:54:34Z'
 network_path: /specimen_lab/crosspoint_matrix
 options:
   include_dat_content: false
@@ -229,6 +229,34 @@ operators:
       valuey: 0.5
       valuez: =parent().par.Glitch.eval()
       valuew: =absTime.seconds
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [2400, 0]
   inputs:
   - comp_bloom
@@ -256,6 +284,26 @@ operators:
       valuey: =parent().par.Reconfigrate.eval()
       valuez: =parent().par.Lockindicators.eval()
       valuew: =absTime.seconds
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
 - name: glsl_bloomblur
   type: glslTOP
   parameters:
@@ -269,6 +317,34 @@ operators:
       valuex: =parent().par.Bloom.eval()
       valuey: 0.45
       valuez: 2.2
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
+    - valuex: 1
+      valuey: 1
+      valuez: 1
+      valuew: 1
   position: [1200, 0]
   inputs:
   - res_down

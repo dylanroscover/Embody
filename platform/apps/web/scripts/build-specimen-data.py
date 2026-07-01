@@ -40,10 +40,14 @@ GRAPHS_TS_PATH = WEB_DIR / "src" / "fixtures" / "specimen-graphs.ts"
 BLOB_MANIFEST_PATH = WEB_DIR / "scripts" / ".seed-blobs.manifest.json"
 FIXTURES_PATH = WEB_DIR / "src" / "fixtures" / "specimens.json"
 
-# First-party author. The handle is 'embody.tools' (NOT 'embody') so the public
-# page resolves at /u/embody.tools and matches the fallback author_handle in
-# src/lib/specimenFallback.ts. Used in users_profile and the FTS mirror.
-AUTHOR_HANDLE = "embody.tools"
+# First-party author. The handle is 'envoy' -- the Envoy MCP server is what
+# actually authored these networks -- so the public page resolves at /u/envoy and
+# matches the fallback author_handle in src/lib/specimenFallback.ts. Used in
+# users_profile and the FTS mirror.
+AUTHOR_HANDLE = "envoy"
+
+# Avatar for the first-party author: the Embody brand mark (public/embody-mark.svg).
+AUTHOR_AVATAR_URL = "/embody-mark.svg"
 
 # Fictional placeholder + stray test rows to purge from local D1 so the page
 # shows only the six real first-party specimens.
@@ -186,7 +190,19 @@ def main() -> int:
                 "description": spec["description"],
                 "category": spec["category"],
                 "difficulty": spec["difficulty"],
-                "requires": spec.get("requires", "none"),
+                # requires is a JSON array in D1 (post-0009_requires_multi). Keep
+                # it a clean list here; the legacy scalar 'none'/'' -> []. The SQL
+                # emitter json.dumps it so json_each(requires) never sees invalid
+                # JSON (which crashed the collection facet query).
+                "requires": [
+                    x
+                    for x in (
+                        spec.get("requires")
+                        if isinstance(spec.get("requires"), list)
+                        else [spec.get("requires")]
+                    )
+                    if x and x != "none"
+                ],
                 "op_count": spec["operator_count"],
                 "family_summary": family_summary(spec.get("key_ops", [])),
                 "license": spec.get("license", "CC-BY-4.0"),
@@ -222,10 +238,10 @@ def write_seed_sql(rows: list[dict]) -> None:
     a("-- ASCII only.")
     a("")
     a("-- Dev auth-stub user (kept; specimens reference it as author_id).")
-    a("-- Handle is 'embody.tools' so the public user page resolves at /u/embody.tools and")
+    a("-- Handle is 'envoy' so the public user page resolves at /u/envoy and")
     a("-- matches the fallback author_handle in src/lib/specimenFallback.ts.")
     a("INSERT OR REPLACE INTO users_profile (id, handle, avatar_url, bio, trust_level)")
-    a(f"VALUES ('dev-user', '{AUTHOR_HANDLE}', NULL, 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');")
+    a(f"VALUES ('dev-user', '{AUTHOR_HANDLE}', '{AUTHOR_AVATAR_URL}', 'First-party Embody specimen author. Curating the transparent TDN Collection.', 'curator');")
     a("")
 
     # specimens_fts is a contentless FTS5 mirror. Recreate it in migration 0005's
@@ -305,7 +321,7 @@ def write_seed_sql(rows: list[dict]) -> None:
             f"    {sql_str(r['description'])},\n"
             f"    {sql_str(r['category'])},\n"
             f"    {sql_str(r['difficulty'])},\n"
-            f"    {sql_str(r['requires'])},\n"
+            f"    {sql_str(json.dumps(r['requires']))},\n"
             f"    {r['op_count']},\n"
             f"    {sql_str(r['family_summary'])},\n"
             f"    {sql_str('ver-' + r['slug'])},\n"

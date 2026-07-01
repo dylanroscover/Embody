@@ -11,7 +11,7 @@ import {
   type FixtureSpecimen
 } from "../../lib/specimenFallback";
 import { reactionsClusterHtml } from "../../lib/reactions";
-import { resultImage } from "../../lib/specimenThumb";
+import { resultImage, resultVideo } from "../../lib/specimenThumb";
 import { SITE_ORIGIN, absoluteUrl } from "../../lib/site";
 import { sampleTdn } from "../../fixtures/sample-tdn";
 import { specimenGraph } from "../../fixtures/specimen-graphs";
@@ -30,6 +30,9 @@ type DisplaySpecimen = {
   description: string;
   requires: string[];
   thumbnail_key: string;
+  /** R2 cover-video key, or empty when the cover is image-only. Additive: a video
+   * cover ALSO has a poster in thumbnail_key, so the sidebar always has an image. */
+  video_key: string;
   operator_count: number;
   key_ops: string[];
   current_version?: number;
@@ -130,6 +133,10 @@ const tdnSummary = {
 // Rendered RESULT cover for the sidebar thumbnail: baked render when available,
 // otherwise the procedural placeholder (shared with the collection card covers).
 const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: specimen.category, thumbnailKey: specimen.thumbnail_key });
+// Cover video route for the sidebar, when this cover carries one. The poster
+// (cover.src) always renders as the video's poster, so an image-only cover keeps
+// its plain <img>. og:image still uses the poster (video is never an OG image).
+const coverVideo = resultVideo({ slug: specimen.slug, videoKey: specimen.video_key });
 
 // Social card: use the specimen's REAL rendered result as og:image when one
 // exists (cover.baked == author-uploaded thumbnail or a baked .jpg). The
@@ -149,6 +156,8 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     description: fixture.description,
     requires: fixture.requires && fixture.requires !== "none" ? [fixture.requires] : [],
     thumbnail_key: "",
+    // Fixtures never carry a cover video (image-only), so the sidebar keeps its img.
+    video_key: "",
     operator_count: fixture.operator_count,
     key_ops: fixture.key_ops,
     reactions: {},
@@ -179,6 +188,7 @@ function specimenFromLive(
     description: live.description,
     requires: live.requires,
     thumbnail_key: live.thumbnail_key,
+    video_key: live.video_key ?? "",
     operator_count: live.op_count,
     key_ops: authored?.key_ops ?? [],
     current_version: live.current_version,
@@ -654,19 +664,19 @@ function emitKey(key: string): string {
 
       {isOwner && (
         <div class={`owner-status__card ${isPublic ? "is-public" : "is-private"}`} data-owner-status data-slug={specimen.slug}>
-          <span class="owner-status__icon" aria-hidden="true">
-            {isPublic ? (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-            )}
-          </span>
-          <div class="owner-status__text">
+          <div class="owner-status__head">
+            <span class="owner-status__icon" aria-hidden="true">
+              {isPublic ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+              )}
+            </span>
             <strong>{isPublic ? "Public" : "Private draft"}</strong>
-            <span>{isPublic
-              ? "Live in the Collection. You can pull it back to private anytime."
-              : "Only you can see this. Tweak it, then publish to add it to the Collection."}</span>
           </div>
+          <span class="owner-status__desc">{isPublic
+            ? "Live in the Collection. You can pull it back to private anytime."
+            : "Only you can see this. Tweak it, then publish to add it to the Collection."}</span>
           <span class="owner-status__msg" data-visibility-msg role="status" aria-live="polite"></span>
           <button
             type="button"
@@ -707,6 +717,10 @@ function emitKey(key: string): string {
         </button>
       </div>
       <figure class="thumb-figure">
+        {/* The poster <img> ALWAYS renders (unchanged for image-only covers). A
+            video cover layers a <video> on top of it, so if the video fails to
+            load the poster underneath stays visible -- never a broken media
+            element. This mirrors the grid cover's poster + layered <video>. */}
         <img
           src={cover.src}
           alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
@@ -714,7 +728,30 @@ function emitKey(key: string): string {
           height="360"
           loading="lazy"
         />
-        {!cover.baked && <figcaption class="thumb-soon mono">preview coming soon</figcaption>}
+        {coverVideo && (
+          // Video cover: an ambient autoplaying loop layered over the poster.
+          // Muted + loop + playsinline so browsers allow autoplay; native
+          // controls are HIDDEN by default and revealed on hover / keyboard
+          // focus by the script below, so the clean loop is not cluttered.
+          // reduced-motion users get a paused poster with controls shown (see
+          // the script). On a load error the poster underneath shows through.
+          // Video is purely additive; image-only covers never render this.
+          <video
+            class="thumb-video"
+            src={coverVideo}
+            poster={cover.src}
+            autoplay
+            muted
+            loop
+            playsinline
+            width="640"
+            height="360"
+            preload="auto"
+            aria-label={`${specimen.name} rendered result`}
+            data-cover-video-detail
+          ></video>
+        )}
+        {!cover.baked && !coverVideo && <figcaption class="thumb-soon mono">preview coming soon</figcaption>}
       </figure>
     </aside>
 
@@ -1093,6 +1130,38 @@ function emitKey(key: string): string {
       });
     }
   </script>
+
+  <script>
+    // ---- Cover-video error fallback -------------------------------------------
+    // The rendered-result panel layers a <video> over an always-present poster
+    // <img>. If the video fails to load (bad blob / unsupported codec / network),
+    // hide it so the poster underneath shows through -- never a broken media
+    // element. Mirrors the "never a broken img" ethos of the grid covers.
+    {
+      const video = document.querySelector<HTMLVideoElement>("[data-cover-video-detail]");
+      if (video) {
+        video.addEventListener("error", () => {
+          video.classList.add("is-error");
+        });
+        // Controls are hidden by default (a clean ambient loop) and revealed on
+        // hover / keyboard focus.
+        const showControls = () => { video.controls = true; };
+        const hideControls = () => { video.controls = false; };
+        video.addEventListener("pointerenter", showControls);
+        video.addEventListener("pointerleave", hideControls);
+        video.addEventListener("focus", showControls);
+        video.addEventListener("blur", hideControls);
+        // Respect reduced-motion: do not autoplay. Pause to the first frame and
+        // keep controls visible so the viewer can start it themselves.
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          video.autoplay = false;
+          video.controls = true;
+          video.pause();
+          video.currentTime = 0;
+        }
+      }
+    }
+  </script>
 </Base>
 
 <style>
@@ -1153,11 +1222,15 @@ function emitKey(key: string): string {
     padding-top: 0 !important;
     padding-bottom: 0 !important;
   }
+  /* Vertical stack: this card lives in the narrow inspector aside now, so a
+     horizontal row squeezed the description to one word per line. Stacking it
+     (label row, description, then a full-width action) fits any column width. */
   .owner-status__card {
     display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 14px 18px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 14px 16px;
     border: 1px solid var(--border-faint);
     border-radius: var(--radius);
     background: var(--bg-elevated);
@@ -1170,55 +1243,38 @@ function emitKey(key: string): string {
     border-color: rgba(110, 230, 104, 0.4);
     background: rgba(110, 230, 104, 0.07);
   }
+  .owner-status__head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   .owner-status__icon {
     display: inline-flex;
     flex: none;
   }
   .is-private .owner-status__icon { color: #e0c068; }
   .is-public .owner-status__icon { color: var(--accent); }
-  .owner-status__text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-  .owner-status__text strong {
+  .owner-status__head strong {
     font-family: var(--font-mono);
     font-size: 0.72rem;
     letter-spacing: 0.1em;
     text-transform: uppercase;
   }
-  .is-private .owner-status__text strong { color: #e0c068; }
-  .is-public .owner-status__text strong { color: var(--accent); }
-  .owner-status__text span {
+  .is-private .owner-status__head strong { color: #e0c068; }
+  .is-public .owner-status__head strong { color: var(--accent); }
+  .owner-status__desc {
     color: var(--text-muted);
     font-size: 0.9rem;
     line-height: 1.45;
   }
   .owner-status__msg {
-    margin-left: auto;
     color: var(--text-faint);
     font: 12px/1.4 var(--font-mono);
   }
+  .owner-status__msg:empty { display: none; }
   .owner-status__btn {
-    flex: none;
-    /* When there's no status message, the button still hugs the right edge. */
-    margin-left: 0;
-  }
-  .owner-status__msg:empty + .owner-status__btn {
-    margin-left: auto;
-  }
-  @media (max-width: 620px) {
-    .owner-status__card {
-      flex-wrap: wrap;
-    }
-    .owner-status__msg,
-    .owner-status__btn {
-      margin-left: 0;
-    }
-    .owner-status__btn {
-      width: 100%;
-    }
+    width: 100%;
+    justify-content: center;
   }
 
   /* Breadcrumb links: "Collection" -> the collection (where the user left off),
@@ -1272,6 +1328,7 @@ function emitKey(key: string): string {
 
   .report-link:hover {
     color: var(--text-muted);
+    text-decoration: underline;
   }
 
   .report-link:disabled {
@@ -1786,7 +1843,19 @@ function emitKey(key: string): string {
     border-radius: var(--radius-sm);
     background: var(--bg-code);
   }
-  .thumb-figure img { width: 100%; height: 100%; object-fit: cover; }
+  .thumb-figure img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* The video layers ON TOP of the always-present poster img, filling the figure.
+     If it errors, the controller hides it (is-error) and the poster shows through
+     underneath -- never a broken media element. */
+  .thumb-figure .thumb-video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .thumb-figure .thumb-video.is-error { display: none; }
   .thumb-soon {
     position: absolute;
     left: 50%;

@@ -1,0 +1,12 @@
+-- Repair legacy `requires` values.
+--
+-- Pre-0009 rows and the dev seed stored the scalar 'none' instead of a JSON
+-- array. That is invalid JSON, so json_each(requires) in the collection facet
+-- and filter queries threw "malformed JSON: SQLITE_ERROR" -- crashing the whole
+-- collection listing into its fixtures fallback (so newly published specimens
+-- never appeared, and authors read as the seed author).
+--
+-- Normalize any non-JSON requires (including 'none' and NULL) to an empty array.
+-- The listing queries are also hardened (json_valid guard) so a future bad row
+-- degrades gracefully instead of taking down the page; this repairs the data.
+UPDATE specimens SET requires = '[]' WHERE requires IS NULL OR NOT json_valid(requires);

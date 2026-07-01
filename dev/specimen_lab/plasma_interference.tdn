@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.38
+generator: Embody/6.0.62
 td_build: 099.2025.32820
-source_file: Embody-6.39.toe
-exported_at: '2026-06-22T03:49:37Z'
+source_file: Embody-6.63.toe
+exported_at: '2026-07-01T00:54:31Z'
 network_path: /specimen_lab/plasma_interference
 options:
   include_dat_content: false
@@ -34,6 +34,7 @@ custom_pars:
     normMin: 1.0
     normMax: 20.0
     help: Spatial frequency of the sine fields. Low = broad lava-lamp blobs; high = dense fine plasma.
+    value: 4.5
   - name: Speed
     style: Float
     default: 1
@@ -50,6 +51,7 @@ custom_pars:
     clampMax: true
     normMax: 3.0
     help: Domain-warp amount. 0 = flat sliding stripes; higher bends the coords into a flowing liquid swirl.
+    value: 1.4
   - name: Complexity
     style: Float
     label: Interference
@@ -66,12 +68,14 @@ custom_pars:
     clampMin: true
     clampMax: true
     help: Rotates the cyclic cosine palette through the full hue ring. Loops seamlessly 1.0 -> 0.0.
+    value: 0.33
   - name: Contrast
     style: Float
     default: 0.4
     clampMin: true
     clampMax: true
     help: Palette saturation/contrast (onto a 0.6 base in the shader). Low = pastel; high = punchy neon.
+    value: 0.55
   Output:
   - name: Resw
     style: Int
@@ -83,6 +87,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+    value: 1080
   - name: Resh
     style: Int
     default: 2160
@@ -93,6 +98,7 @@ custom_pars:
     normMin: 256.0
     normMax: 7680.0
     help: Render height (px). 4K landscape = 2160.
+    value: 1350
 color: [0.3, 0.5, 0.9]
 tags:
 - tdn
