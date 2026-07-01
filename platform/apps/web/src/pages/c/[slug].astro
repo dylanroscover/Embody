@@ -154,7 +154,7 @@ function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
     reactions: {},
     // Fixtures are all first-party; mirror the hardcode in toFixtureSummary
     // (FixtureSpecimen carries no author_handle field).
-    author_handle: "embody.tools",
+    author_handle: "envoy",
     author_display_name: null,
     visibility: "public",
     license: "CC-BY-4.0"
@@ -845,10 +845,16 @@ function emitKey(key: string): string {
       });
 
       // Restore persisted collapse/open states (no re-save during restore).
+      // Guard with `no-anim` so a previously-collapsed panel snaps to its saved
+      // state instead of animating from the SSR-open first paint; a forced reflow
+      // commits it, then the next frame re-enables transitions for user toggles.
+      app?.classList.add("no-anim");
       for (const p of PANELS) {
         const open = layout.open[p.id];
         if (typeof open === "boolean") setPanel(p.id, open, false);
       }
+      if (app) void app.offsetWidth;
+      requestAnimationFrame(() => app?.classList.remove("no-anim"));
 
       document.addEventListener("keydown", (e) => {
         if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1475,6 +1481,10 @@ function emitKey(key: string): string {
     /* Vertical space the bottom-right thumbnail reserves, so the properties panel
        above it stops short instead of overlapping. */
     --app-thumb-h: 252px;
+    /* Height the owner action cluster (edit/delete) adds below the nav on owner
+       views. Tokenized so the properties panel + tab offsets that clear it can't
+       drift apart the way a repeated literal would (same lesson as --nav-h). */
+    --app-owner-h: 50px;
     position: relative;
     height: 100%;
     overflow: hidden;
@@ -1545,6 +1555,11 @@ function emitKey(key: string): string {
     --panel-scale: 1;
     --collapse-x: calc(-100% - 32px);
   }
+  /* During the initial localStorage layout restore (the script applies each
+     panel's saved collapsed/open state on load), suppress the transition so a
+     previously-collapsed panel snaps to its saved state instead of painting open
+     and then visibly scaling away. Removed on the next frame for user toggles. */
+  .specimen-app.no-anim .app-panel { transition: none; }
   @media (prefers-reduced-motion: reduce) {
     .app-panel { transition: none; }
   }
@@ -1588,6 +1603,14 @@ function emitKey(key: string): string {
     margin: 0;
     font-size: clamp(1.5rem, 2.3vw, 2.05rem);
     line-height: 1.08;
+    /* Cap the title at 2 lines so a long name ellipsizes instead of pushing the
+       byline + description down the panel. Two lines is fine here (unlike the
+       collection list's single line) -- this page has the vertical room. */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
   }
   .specimen-app__desc {
     margin: 0;
@@ -1635,15 +1658,15 @@ function emitKey(key: string): string {
   }
   /* When the owner edit/delete cluster is shown, drop the panel below it. */
   .specimen-app.is-owner .specimen-app__props {
-    top: calc(var(--app-top) + 50px);
-    max-height: calc(100% - var(--app-top) - 50px - var(--app-bottom) - var(--app-thumb-h));
+    top: calc(var(--app-top) + var(--app-owner-h));
+    max-height: calc(100% - var(--app-top) - var(--app-owner-h) - var(--app-bottom) - var(--app-thumb-h));
   }
   /* Thumbnail collapsed -> the properties panel reclaims the full height. */
   .specimen-app.is-thumbnail-collapsed .specimen-app__props {
     max-height: calc(100% - var(--app-top) - var(--app-bottom));
   }
   .specimen-app.is-owner.is-thumbnail-collapsed .specimen-app__props {
-    max-height: calc(100% - var(--app-top) - 50px - var(--app-bottom));
+    max-height: calc(100% - var(--app-top) - var(--app-owner-h) - var(--app-bottom));
   }
 
   /* Panel header row: eyebrow caption + a collapse control. */
@@ -1797,7 +1820,7 @@ function emitKey(key: string): string {
   .panel-tab[hidden] { display: none; }
   .panel-tab--outline { top: var(--app-top); left: var(--app-side); }
   .panel-tab--props { top: var(--app-top); right: var(--app-side); }
-  .specimen-app.is-owner .panel-tab--props { top: calc(var(--app-top) + 50px); }
+  .specimen-app.is-owner .panel-tab--props { top: calc(var(--app-top) + var(--app-owner-h)); }
   .panel-tab--thumb { bottom: var(--app-bottom); right: var(--app-side); }
 
   .specimen-app__tdn {

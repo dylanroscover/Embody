@@ -128,6 +128,19 @@ const defaultView = hasBaked ? "result" : "network";
     border-radius: 0;
   }
 
+  /* Collection's JS-appended cards (infinite scroll, and every card after a
+     search/facet/sort rebuild) mount the React viewer INTO this .cover-mount
+     wrapper, whereas SSR cards mount the astro-island directly (display:contents,
+     so the layer's box passes straight through). Without a box of its own the
+     wrapper is 0-height, so the viewer's `height:100%` (above) resolves to 0 and
+     the network cover collapses the instant the graph replaces the skeleton. Pin
+     it to the layer so appended covers match the SSR ones. Reaches appended cards
+     via the copied data-astro-cid scope stamps (buildCard -> applyScope). */
+  .cover__layer--network :global(.cover-mount) {
+    position: absolute;
+    inset: 0;
+  }
+
   /* Light skeleton shown while the cover island lazy-fetches its graph (and the
      resting state if that fetch fails -- never a broken viewer). Rendered by the
      SpecimenCoverGraph React island, so the selectors are :global. */

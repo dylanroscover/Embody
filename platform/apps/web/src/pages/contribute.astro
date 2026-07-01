@@ -1053,6 +1053,11 @@ const defaultLicense = licenseOptions[0] ?? { value: "CC-BY-4.0", label: "CC-BY-
 
   .submit-turnstile .cf-turnstile {
     margin-top: 0.25rem;
+    /* Reserve the managed widget's box (~300x65) so the async Cloudflare iframe
+       lands into pre-sized space instead of expanding 0 -> 65px and shoving the
+       submit footer down after paint. Production-only widget, so DEV never sees
+       the shift -- the reserve just makes the first paint match the mounted size. */
+    min-height: 65px;
   }
 
   /* ---- App-native file picker ----
