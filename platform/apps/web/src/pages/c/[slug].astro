@@ -785,7 +785,7 @@ function emitKey(key: string): string {
     </button>
     <aside class="specimen-app__tdn app-panel is-collapsed" id="tdn-panel" data-panel="tdn" data-draggable aria-label="tdn source">
       <header class="specimen-app__tdn-head" data-drag-handle>
-        <p class="eyebrow"><span class="kbd" aria-hidden="true">t</span>dn source</p>
+        <p class="eyebrow"><span class="kbd" aria-hidden="true">t</span><span class="tdn-acr">dn</span> source</p>
         <CopyTdnEnvelopeButton
           tdn={tdn}
           slug={specimen.slug}
@@ -1689,7 +1689,7 @@ function emitKey(key: string): string {
     place-items: center;
     width: 1.5em;
     height: 1.5em;
-    margin-right: 0.45em;
+    margin-right: 0.1em;
     border: 1px solid var(--border);
     border-radius: 4px;
     background: rgba(40, 48, 40, 0.55);
@@ -1700,6 +1700,11 @@ function emitKey(key: string): string {
     line-height: 1;
     vertical-align: middle;
   }
+  /* Every keycap label is word-initial (the boxed letter starts the word that
+     follows: [O]verview, [P]roperties, [T]DN), so the key hugs its word. The one
+     exception is the breadcrumb, where [O] is a standalone nav hint before the
+     "Collection" link -- keep that one spaced apart so it doesn't read "oCollection". */
+  .kbd:has(+ .eyebrow-cat) { margin-right: 0.45em; }
 
   /* Docked properties panel, pinned top-right (stops above the thumbnail). */
   .specimen-app__props {
@@ -1914,6 +1919,9 @@ function emitKey(key: string): string {
     margin: 0;
     color: var(--text-muted);
   }
+  /* "dn" completes the "tdn" acronym the keycap starts -- uppercase it so the
+     label reads as one wordmark: [T]DN source. (Kerning is uniform via .kbd.) */
+  .specimen-app__tdn-head .tdn-acr { text-transform: uppercase; }
   .specimen-app__tdn-head .copy-button { margin-left: auto; }
   .tdn-close {
     display: grid;
