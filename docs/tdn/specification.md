@@ -9,7 +9,7 @@ TDN (TouchDesigner Network) is a YAML-based file format for representing TouchDe
 - File extension: `.tdn`
 - MIME type: `application/yaml`
 - Encoding: UTF-8
-- Schema: [`tdn.schema.json`](../tdn.schema.json) — validates the parsed structure.
+- Schema: [`tdn.schema.yaml`](../tdn.schema.yaml) — validates the parsed structure.
 
 ---
 

@@ -184,7 +184,7 @@ A real leaf-component file like `envoy_toggle.tdn` is ~1.3 KB — 38 readable li
 
 **Cross-version portability.** `.toe` and `.tox` are coupled to the exact TD build that wrote them. `.tdn` files are format-versioned and self-describing — every export stamps its own `version`, `td_build`, and `generator`. As long as the referenced operator types exist in the current TD build, the network rebuilds cleanly.
 
-**CI/CD integration.** The `docs/tdn.schema.json` JSON Schema (draft 2020-12) validates every `.tdn` file in CI. You can compute diff stats (operators added/removed, parameters changed), lint for forbidden patterns (absolute paths, missing help text, orphan ops), and gate merges — none of which is possible with binary `.toe`.
+**CI/CD integration.** The `docs/tdn.schema.yaml` schema (draft 2020-12) validates every `.tdn` file in CI. You can compute diff stats (operators added/removed, parameters changed), lint for forbidden patterns (absolute paths, missing help text, orphan ops), and gate merges — none of which is possible with binary `.toe`.
 
 **Dramatically lower token cost for LLM / MCP workflows.** Reading a network via `read_tdn` (MCP tool) uses **~20-90× fewer tokens** than walking the same subtree via `get_op`+`query_network`:
 

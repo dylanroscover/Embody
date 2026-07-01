@@ -1,15 +1,15 @@
 # YAML Schema
 
-`.tdn` files are YAML. This page documents the schema that validates them and drives editor auto-completion. (The schema file is written in [JSON Schema](https://json-schema.org) -- the standard schema language, which validates YAML just as well.)
+`.tdn` files are YAML -- and so is this schema. `tdn.schema.yaml` follows the [draft 2020-12 schema standard](https://json-schema.org) for validating structure and driving editor auto-completion.
 
 ## Schema File
 
-The schema is available at [`tdn.schema.json`](../tdn.schema.json) in the repository.
+The schema is available at [`tdn.schema.yaml`](../tdn.schema.yaml) in the repository.
 
 You can reference it from the top of your `.tdn` files for editor support:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/dylanroscover/Embody/main/docs/tdn.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/dylanroscover/Embody/main/docs/tdn.schema.yaml
 format: tdn
 version: '2.0'
 # ...
@@ -33,7 +33,7 @@ With the [YAML extension](https://marketplace.visualstudio.com/items?itemName=re
 ```json
 {
   "yaml.schemas": {
-    "./docs/tdn.schema.json": ["*.tdn"]
+    "./docs/tdn.schema.yaml": ["*.tdn"]
   }
 }
 ```
