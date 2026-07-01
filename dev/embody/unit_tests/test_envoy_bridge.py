@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: Envoy STDIO bridge (envoy_bridge.py).
 
 Comprehensive tests for the STDIO-to-HTTP proxy including:
@@ -66,7 +66,7 @@ class TestBridgeParseArgs(EmbodyTestCase):
             self.assertEqual(port, 9999)
 
     def test_port_flag_at_end_without_value(self):
-        """--port as last arg with no value — uses default."""
+        """--port as last arg with no value - uses default."""
         with patch.object(sys, 'argv', ['envoy_bridge.py', '--port']):
             port, config = bridge.parse_args()
             self.assertEqual(port, bridge.DEFAULT_PORT)
@@ -100,58 +100,41 @@ class TestBridgeParseArgs(EmbodyTestCase):
 
 class TestBridgeForwardToHttp(EmbodyTestCase):
     """
-    v2 forward_to_http uses a pooled ``http.client.HTTPConnection`` per
-    URL (see bridge._http_pool) instead of ``urllib.request.urlopen``.
-    Tests mock the pooled connection directly via
-    ``_get_http_connection`` so they exercise the real code path
+    forward_to_http calls ``urllib.request.urlopen`` once per message.
+    Tests mock urlopen directly so they exercise the real parsing path
     without opening real sockets.
     """
 
-    def setUp(self):
-        # Clear the pool between tests so mocks don't leak state and
-        # unreachable connections from earlier tests don't linger.
-        with bridge._http_pool_lock:
-            bridge._http_pool.clear()
-
-    def _make_conn(self, body, status=200, reason='OK'):
-        """Build a mock HTTPConnection that returns ``body`` as the response."""
+    def _make_response(self, body):
+        """Build a mock response object that urlopen would return."""
         resp = MagicMock()
         resp.read.return_value = body.encode('utf-8')
-        resp.status = status
-        resp.reason = reason
-        conn = MagicMock()
-        conn.sock = None
-        conn.getresponse.return_value = resp
-        return conn
+        return resp
 
     # --- SSE format ---
 
     def test_sse_format_single_event(self):
         body = 'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertTrue(result['result']['ok'])
 
     def test_sse_data_only_no_event_line(self):
         """SSE with just data: line, no event: prefix."""
         body = 'data: {"id":1,"result":"bare"}\n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'bare')
 
     def test_sse_multiple_events_returns_first(self):
         body = 'data: {"first":true}\n\ndata: {"second":true}\n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertTrue(result.get('first'))
 
     def test_sse_with_extra_whitespace(self):
         body = '  data: {"id":1}  \n\n'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['id'], 1)
 
@@ -159,45 +142,42 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
 
     def test_plain_json_response(self):
         body = '{"jsonrpc":"2.0","id":1,"result":"hello"}'
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'hello')
 
     def test_plain_json_with_surrounding_whitespace(self):
         body = '  \n  {"jsonrpc":"2.0","id":1,"result":"padded"}  \n  '
-        conn = self._make_conn(body)
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response(body)):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertEqual(result['result'], 'padded')
 
     # --- Empty / malformed responses ---
 
     def test_empty_response_body(self):
-        conn = self._make_conn('')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response('')):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     def test_whitespace_only_response(self):
-        conn = self._make_conn('   \n  ')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response('   \n  ')):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     def test_malformed_json_in_plain_body(self):
         """Garbled non-JSON body returns None, doesn't crash."""
-        conn = self._make_conn('not json at all')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen', return_value=self._make_response('not json at all')):
             result = bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
         self.assertIsNone(result)
 
     # --- Error propagation ---
 
     def test_http_error_raises_oserror(self):
-        """HTTP status >= 400 raises OSError so the retry path catches it."""
-        conn = self._make_conn('error body', status=500, reason='Internal Server Error')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        """HTTP status >= 400 raises HTTPError (an OSError subclass)."""
+        import urllib.error
+        err = urllib.error.HTTPError(
+            'http://localhost:9870/mcp', 500, 'Internal Server Error', {}, None)
+        with patch('urllib.request.urlopen', side_effect=err):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
@@ -207,10 +187,8 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
 
     def test_connection_error_propagates(self):
         """ConnectionRefusedError (subclass of OSError) propagates."""
-        conn = MagicMock()
-        conn.sock = None
-        conn.request.side_effect = ConnectionRefusedError('refused')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   side_effect=ConnectionRefusedError('refused')):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
@@ -221,10 +199,8 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
     def test_timeout_propagates(self):
         """Socket timeout (OSError subclass) propagates."""
         import socket
-        conn = MagicMock()
-        conn.sock = None
-        conn.request.side_effect = socket.timeout('timed out')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   side_effect=socket.timeout('timed out')):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
@@ -232,60 +208,50 @@ class TestBridgeForwardToHttp(EmbodyTestCase):
                 raised = True
             self.assertTrue(raised, 'socket.timeout should propagate as OSError')
 
-    def test_http_exception_wrapped_as_oserror(self):
-        """http.client.HTTPException is wrapped so retry path catches it."""
-        import http.client
-        conn = MagicMock()
-        conn.sock = None
-        conn.request.side_effect = http.client.BadStatusLine('oops')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+    def test_url_error_propagates_as_oserror(self):
+        """urllib.error.URLError (OSError subclass) propagates so the main
+        loop's connection-lost handler can catch it."""
+        import urllib.error
+        with patch('urllib.request.urlopen',
+                   side_effect=urllib.error.URLError('bad url')):
             raised = False
             try:
                 bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
             except OSError:
                 raised = True
-            self.assertTrue(raised, 'HTTPException should be wrapped as OSError')
+            self.assertTrue(raised, 'URLError should propagate as OSError')
 
     # --- Request correctness ---
 
     def test_request_content_type_header(self):
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        call_kwargs = conn.request.call_args
-        headers = call_kwargs[1].get('headers') if call_kwargs[1] else None
-        if headers is None and len(call_kwargs[0]) >= 4:
-            headers = call_kwargs[0][3]
-        self.assertEqual(headers.get('Content-Type'), 'application/json')
+        req = mock_urlopen.call_args[0][0]
+        # urllib lowercases header names internally; use get_header for safe lookup.
+        self.assertEqual(req.get_header('Content-type'), 'application/json')
 
     def test_request_accept_header(self):
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1})
-        call_kwargs = conn.request.call_args
-        headers = call_kwargs[1].get('headers') if call_kwargs[1] else None
-        if headers is None and len(call_kwargs[0]) >= 4:
-            headers = call_kwargs[0][3]
-        self.assertIn('text/event-stream', headers.get('Accept', ''))
+        req = mock_urlopen.call_args[0][0]
+        self.assertIn('text/event-stream', req.get_header('Accept', ''))
 
     def test_request_body_is_valid_json(self):
         msg = {'jsonrpc': '2.0', 'id': 42, 'method': 'tools/call'}
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', msg)
-        call_args = conn.request.call_args
-        body = call_args[1].get('body') if call_args[1] else None
-        if body is None and len(call_args[0]) >= 3:
-            body = call_args[0][2]
-        self.assertDictEqual(json.loads(body), msg)
+        req = mock_urlopen.call_args[0][0]
+        self.assertDictEqual(json.loads(req.data.decode('utf-8')), msg)
 
     def test_custom_timeout_passed(self):
-        conn = self._make_conn('{}')
-        with patch.object(bridge, '_get_http_connection', return_value=conn):
+        with patch('urllib.request.urlopen',
+                   return_value=self._make_response('{}')) as mock_urlopen:
             bridge.forward_to_http('http://localhost:9870/mcp', {'id': 1}, timeout=5)
-        # Timeout is applied to conn.timeout; conn.sock is None so no settimeout call.
-        # conn is a MagicMock so conn.timeout = 5 was set via attribute assignment.
-        self.assertEqual(conn.timeout, 5)
+        # urlopen(req, timeout=5) - timeout passed as kwarg.
+        self.assertEqual(mock_urlopen.call_args[1].get('timeout'), 5)
 
 
 # =====================================================================
@@ -342,7 +308,8 @@ class TestBridgeLog(EmbodyTestCase):
         err = io.StringIO()
         with patch.object(sys, 'stderr', err):
             bridge.log('test message')
-        self.assertIn('[envoy-bridge]', err.getvalue())
+        # Format is "[envoy-bridge:<pid>] <ts> <msg>" -- check the stable prefix.
+        self.assertIn('[envoy-bridge:', err.getvalue())
 
     def test_log_flushes_stderr(self):
         err = MagicMock()
@@ -352,13 +319,13 @@ class TestBridgeLog(EmbodyTestCase):
 
 
 # =====================================================================
-# wait_for_envoy — Retry / Reconnection Logic
+# wait_for_envoy - Retry / Reconnection Logic
 # =====================================================================
 
 class TestBridgeWaitForEnvoy(EmbodyTestCase):
 
     def test_server_up_immediately(self):
-        """Server responds on first probe — instant success."""
+        """Server responds on first probe - instant success."""
         with patch('urllib.request.urlopen'):
             result = bridge.wait_for_envoy(
                 'http://localhost:9870/mcp', time.monotonic() + 10)
@@ -497,7 +464,7 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
         sleeps = []
 
         fake_time = [0.0]
-        deadline = 0.3  # Very tight — less than RETRY_INTERVALS[0]=0.5
+        deadline = 0.3  # Very tight - less than RETRY_INTERVALS[0]=0.5
 
         def mock_monotonic():
             return fake_time[0]
@@ -552,7 +519,7 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
 
 
 # =====================================================================
-# Main Event Loop — Disconnection & Reconnection Scenarios
+# Main Event Loop - Disconnection & Reconnection Scenarios
 # =====================================================================
 
 class TestBridgeMainLoop(EmbodyTestCase):
@@ -625,17 +592,27 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Initial connection failure ---
 
     def test_initial_connection_timeout_sends_error(self):
-        """Non-protocol method gets error when Envoy is unreachable."""
+        """Non-protocol method gets error when forward_to_http fails.
+
+        v2 bridge does not block on initial connect for arbitrary methods --
+        it tries to forward and only errors out when the forward call itself
+        raises (which is what happens when Envoy is unreachable).
+        """
+        def fail(url, msg, **kw):
+            raise OSError('Connection refused')
         msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}
-        responses = self._run_main([msg], wait_result=False)
+        responses = self._run_main(
+            [msg], wait_result=False, forward_side_effect=fail)
         self.assertLen(responses, 1)
         self.assertDictHasKey(responses[0], 'error')
         self.assertIn('connection lost', responses[0]['error']['message'].lower())
 
     def test_initial_timeout_includes_actionable_hint(self):
+        def fail(url, msg, **kw):
+            raise OSError('Connection refused')
         msg = {'jsonrpc': '2.0', 'id': 1, 'method': 'resources/list'}
         responses = self._run_main(
-            [msg], wait_result=False,
+            [msg], wait_result=False, forward_side_effect=fail,
             port_args=['envoy_bridge.py', '--port', '1234'])
         self.assertIn('launch_td', responses[0]['error']['message'])
 
@@ -671,7 +648,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('get_td_status', names)
 
     def test_full_mcp_handshake_when_td_down(self):
-        """Full init → tools/list → launch_td works without Envoy."""
+        """Full init -> tools/list -> launch_td works without Envoy."""
         msgs = [
             {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize'},
             {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
@@ -688,37 +665,54 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('launch_td',
                       {t['name'] for t in responses[1]['result']['tools']})
 
+    def test_local_ping_request_returns_empty_result(self):
+        """Ping request is handled locally with empty result, no Envoy call.
+
+        Implementation: envoy_bridge.py ping handler responds with
+        {result: {}} for requests, regardless of connection state.
+        """
+        msg = {'jsonrpc': '2.0', 'id': 42, 'method': 'ping'}
+        responses = self._run_main([msg], wait_result=False)
+        self.assertLen(responses, 1)
+        self.assertEqual(responses[0],
+            {'jsonrpc': '2.0', 'id': 42, 'result': {}})
+
+    def test_local_ping_notification_produces_no_response(self):
+        """Ping without id is a notification; handler must produce no output.
+
+        Implementation: ping handler short-circuits via `continue` after
+        the notification check, so neither a response nor an error is sent.
+        """
+        msg = {'jsonrpc': '2.0', 'method': 'ping'}
+        responses = self._run_main([msg], wait_result=False)
+        self.assertLen(responses, 0)
+
     def test_initial_timeout_then_next_message_retries_connect(self):
-        """After initial timeout, the next message triggers wait_for_envoy again."""
+        """After a forward failure, the next message keeps trying.
+
+        v2 bridge does not block on wait_for_envoy for arbitrary methods.
+        Recovery is per-message: each request calls forward_to_http directly,
+        and if it fails, the bridge marks disconnected but continues serving
+        subsequent messages (which try forward_to_http again).
+        """
         msgs = [
             {'jsonrpc': '2.0', 'id': 1, 'method': 'first'},
             {'jsonrpc': '2.0', 'id': 2, 'method': 'second'},
         ]
-        stdin = self._make_stdin(msgs)
-        stdout = io.StringIO()
-        stderr = io.StringIO()
+        forward_calls = [0]
+        def fwd(url, msg, **kw):
+            forward_calls[0] += 1
+            if forward_calls[0] == 1:
+                raise OSError('Connection refused')
+            return {'jsonrpc': '2.0', 'id': msg['id'], 'result': 'ok'}
 
-        wait_calls = [0]
-        def mock_wait(url, deadline):
-            wait_calls[0] += 1
-            return wait_calls[0] >= 2  # Fail first, succeed second
+        responses = self._run_main(
+            msgs, wait_result=False, forward_side_effect=fwd)
 
-        with patch.object(sys, 'stdin', stdin), \
-             patch.object(sys, 'stdout', stdout), \
-             patch.object(sys, 'stderr', stderr), \
-             patch.object(sys, 'argv', ['envoy_bridge.py']), \
-             patch.object(bridge, 'wait_for_envoy', side_effect=mock_wait), \
-             patch.object(bridge, 'forward_to_http',
-                          return_value={'jsonrpc': '2.0', 'id': 2, 'result': 'ok'}), \
-             patch.object(bridge, 'find_td_pid', return_value=None), \
-             patch.object(bridge, 'kill_stale_bridges'), \
-             patch('time.sleep'):
-            bridge.main()
-
-        self.assertEqual(wait_calls[0], 2)
-        lines = [l for l in stdout.getvalue().strip().split('\n') if l.strip()]
-        responses = [json.loads(l) for l in lines]
-        # First: error (connection failed), Second: success
+        # Both messages get forwarded -- the second one because the bridge
+        # keeps trying after a failure.
+        self.assertEqual(forward_calls[0], 2)
+        # First: error (forward failed), Second: success.
         self.assertLen(responses, 2)
         self.assertDictHasKey(responses[0], 'error')
         self.assertEqual(responses[1]['result'], 'ok')
@@ -726,7 +720,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Single-attempt forwarding (v2: no per-request retries) ---
 
     def test_single_failure_sends_error(self):
-        """Single URLError immediately returns error — no retries."""
+        """Single URLError immediately returns error - no retries."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -739,7 +733,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('connection lost', responses[0]['error']['message'].lower())
 
     def test_failure_notification_no_response(self):
-        """Notification with forward failure — no error sent."""
+        """Notification with forward failure - no error sent."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -750,7 +744,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 0)
 
     def test_single_attempt_only(self):
-        """forward_to_http is called exactly once per request — no retries."""
+        """forward_to_http is called exactly once per request - no retries."""
         import urllib.error
         call_count = [0]
 
@@ -861,7 +855,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertEqual(responses[1]['result'], 'back')  # Retry succeeded
 
     def test_reconnect_fails_sends_error_again(self):
-        """Disconnect, reconnect attempt fails — second error sent."""
+        """Disconnect, reconnect attempt fails - second error sent."""
         import urllib.error
 
         def always_fail(url, msg, **kw):
@@ -1009,7 +1003,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 0)
 
     def test_notification_between_requests(self):
-        """Notification sandwiched between requests — only requests get responses."""
+        """Notification sandwiched between requests - only requests get responses."""
         call_count = [0]
 
         def forward(url, msg, **kw):
@@ -1025,7 +1019,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 2)
 
     def test_notification_forward_failure_no_error_sent(self):
-        """Notification that fails forwarding — no error response."""
+        """Notification that fails forwarding - no error response."""
         import urllib.error
 
         def forward(url, msg, **kw):
@@ -1092,7 +1086,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
     # --- Edge cases ---
 
     def test_request_id_zero_is_valid(self):
-        """JSON-RPC allows id=0 — must NOT be treated as notification."""
+        """JSON-RPC allows id=0 - must NOT be treated as notification."""
         msg = {'jsonrpc': '2.0', 'id': 0, 'method': 'test'}
         responses = self._run_main([msg])
         self.assertLen(responses, 1)
@@ -1116,7 +1110,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertLen(responses, 1)
 
     def test_stdin_close_exits_gracefully(self):
-        """Empty stdin (immediate EOF) — main() exits without error."""
+        """Empty stdin (immediate EOF) - main() exits without error."""
         stdin = io.StringIO('')
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -1130,7 +1124,7 @@ class TestBridgeMainLoop(EmbodyTestCase):
         self.assertIn('stdin closed', stderr.getvalue())
 
     def test_only_empty_lines_exits_gracefully(self):
-        """stdin with only whitespace/empty lines — exits without error."""
+        """stdin with only whitespace/empty lines - exits without error."""
         stdin = io.StringIO('\n\n\n')
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -1152,12 +1146,12 @@ class TestBridgeMainLoop(EmbodyTestCase):
 class TestBridgeEntrypoint(EmbodyTestCase):
     """Test the if __name__ == '__main__' exception handlers.
 
-    These don't go through main() — they wrap it at the top level.
+    These don't go through main() - they wrap it at the top level.
     We test the exception handling logic directly.
     """
 
     def test_keyboard_interrupt_suppressed(self):
-        """KeyboardInterrupt during main() — logged, not propagated."""
+        """KeyboardInterrupt during main() - logged, not propagated."""
         stderr = io.StringIO()
 
         with patch.object(bridge, 'main', side_effect=KeyboardInterrupt), \
@@ -1171,7 +1165,7 @@ class TestBridgeEntrypoint(EmbodyTestCase):
         self.assertIn('Interrupted', stderr.getvalue())
 
     def test_broken_pipe_suppressed(self):
-        """BrokenPipeError (client closed stdout) — silently suppressed."""
+        """BrokenPipeError (client closed stdout) - silently suppressed."""
         with patch.object(bridge, 'main', side_effect=BrokenPipeError):
             # Simulate the __main__ block behavior
             try:
@@ -1234,6 +1228,146 @@ class TestBridgeConfig(EmbodyTestCase):
 
 
 # =====================================================================
+# project.json + TD install discovery
+# =====================================================================
+
+class TestBridgeProjectJsonAndDiscovery(EmbodyTestCase):
+    """Covers load_project_config(), build parsing, and select_td_install()
+    matching policy. find_td_installs() itself is platform-dependent, so
+    select_td_install is tested via the ``installs=`` injection point."""
+
+    # --- load_project_config -------------------------------------------
+
+    def test_load_project_config_missing(self):
+        self.assertEqual(bridge.load_project_config(None), {})
+        self.assertEqual(
+            bridge.load_project_config('/nonexistent/.embody/envoy.json'), {})
+
+    def test_load_project_config_valid(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            project_json = os.path.join(embody, 'project.json')
+            with open(project_json, 'w') as f:
+                json.dump({'td_build': '2025.32660'}, f)
+            envoy_json = os.path.join(embody, 'envoy.json')
+            result = bridge.load_project_config(envoy_json)
+            self.assertEqual(result, {'td_build': '2025.32660'})
+
+    def test_load_project_config_malformed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                f.write('not json {{{')
+            envoy_json = os.path.join(embody, 'envoy.json')
+            self.assertEqual(bridge.load_project_config(envoy_json), {})
+
+    def test_load_project_config_non_dict(self):
+        """A JSON list/scalar at top level should yield {}."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            embody = os.path.join(td, '.embody')
+            os.makedirs(embody)
+            with open(os.path.join(embody, 'project.json'), 'w') as f:
+                json.dump(['not', 'a', 'dict'], f)
+            envoy_json = os.path.join(embody, 'envoy.json')
+            self.assertEqual(bridge.load_project_config(envoy_json), {})
+
+    # --- _parse_build --------------------------------------------------
+
+    def test_parse_build_valid(self):
+        self.assertEqual(bridge._parse_build('2025.32660'), (2025, 32660))
+        self.assertEqual(bridge._parse_build('2023.11340'), (2023, 11340))
+
+    def test_parse_build_embedded(self):
+        """Should still parse when surrounded by directory/version text."""
+        self.assertEqual(
+            bridge._parse_build('TouchDesigner.2025.32660'),
+            (2025, 32660))
+
+    def test_parse_build_invalid(self):
+        self.assertIsNone(bridge._parse_build(None))
+        self.assertIsNone(bridge._parse_build(''))
+        self.assertIsNone(bridge._parse_build('not-a-build'))
+
+    # --- select_td_install ---------------------------------------------
+
+    def test_select_exact_match(self):
+        installs = [
+            ('2025.32660', '/Applications/TD2025.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        exe, warn = bridge.select_td_install('2025.32660', None, installs)
+        self.assertEqual(exe, '/Applications/TD2025.app')
+        self.assertIsNone(warn)
+
+    def test_select_same_year_closest(self):
+        installs = [
+            ('2025.32700', '/Applications/TD2025-newer.app'),
+            ('2025.32500', '/Applications/TD2025-older.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        exe, warn = bridge.select_td_install('2025.32660', None, installs)
+        # 32700 is closer to 32660 (delta 40) than 32500 (delta 160)
+        self.assertEqual(exe, '/Applications/TD2025-newer.app')
+        self.assertIsNotNone(warn)
+        self.assertIn('2025.32660', warn)
+        self.assertIn('2025.32700', warn)
+
+    def test_select_falls_back_to_envoy_json_when_no_year_match(self):
+        installs = [('2023.11340', '/Applications/TD2023.app')]
+        # Use a real existing path so os.path.exists() returns True.
+        fallback = sys.executable
+        exe, warn = bridge.select_td_install('2025.32660', fallback, installs)
+        self.assertEqual(exe, fallback)
+        self.assertIsNotNone(warn)
+        self.assertIn('falling back', warn.lower())
+
+    def test_select_falls_back_to_newest_when_no_envoy_json(self):
+        installs = [
+            ('2025.32700', '/Applications/TD2025.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        # No fallback, no year match
+        exe, warn = bridge.select_td_install('2023.11340', None, installs)
+        self.assertEqual(exe, '/Applications/TD2025.app')
+        self.assertIsNotNone(warn)
+        self.assertIn('newest', warn.lower())
+
+    def test_select_no_pin_uses_fallback(self):
+        """No td_build -> use fallback verbatim, no warning."""
+        installs = [('2025.32660', '/Applications/TD2025.app')]
+        fallback = sys.executable
+        exe, warn = bridge.select_td_install(None, fallback, installs)
+        self.assertEqual(exe, fallback)
+        self.assertIsNone(warn)
+
+    def test_select_no_pin_no_fallback_returns_newest(self):
+        """No pin and no fallback -> newest install, no warning."""
+        installs = [
+            ('2025.32700', '/Applications/TD2025.app'),
+            ('2024.30000', '/Applications/TD2024.app'),
+        ]
+        exe, warn = bridge.select_td_install(None, None, installs)
+        self.assertEqual(exe, '/Applications/TD2025.app')
+        self.assertIsNone(warn)
+
+    def test_select_nothing_found(self):
+        exe, warn = bridge.select_td_install('2025.32660', None, [])
+        self.assertIsNone(exe)
+        self.assertIn('No TouchDesigner', warn)
+        self.assertIn('2025.32660', warn)
+
+    def test_select_nothing_found_no_pin(self):
+        exe, warn = bridge.select_td_install(None, None, [])
+        self.assertIsNone(exe)
+        self.assertIn('No TouchDesigner', warn)
+
+
+# =====================================================================
 # Process Management
 # =====================================================================
 
@@ -1273,6 +1407,108 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         with patch.dict('sys.modules', {'ctypes': mock_ctypes}):
             self.assertFalse(bridge.is_process_alive(9999))
         mock_kernel32.CloseHandle.assert_not_called()
+
+    # --- find_all_td_pids: pgrep filtering on macOS/Linux ---
+
+    @patch.object(bridge, '_is_bridge_process')
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_filters_self_and_bridges(
+            self, mock_run, mock_is_bridge):
+        """find_all_td_pids excludes own PID and bridge processes from
+        pgrep output. Without filtering, pgrep -f 'TouchDesigner' would
+        match the bridge process running TD's bundled Python."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        my_pid = os.getpid()
+        fake = MagicMock()
+        fake.returncode = 0
+        fake.stdout = f'{my_pid}\n12345\n67890\n11111\n'
+        mock_run.return_value = fake
+        # Simulate one of the candidate PIDs being a bridge process
+        mock_is_bridge.side_effect = lambda pid: pid == 67890
+
+        pids = bridge.find_all_td_pids()
+
+        self.assertNotIn(my_pid, pids,
+            'Own PID must be excluded')
+        self.assertNotIn(67890, pids,
+            'Bridge process PID must be excluded')
+        self.assertIn(12345, pids)
+        self.assertIn(11111, pids)
+
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_returns_empty_on_timeout(self, mock_run):
+        """find_all_td_pids returns [] when subprocess times out."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        import subprocess as sp
+        mock_run.side_effect = sp.TimeoutExpired(cmd=['pgrep'], timeout=5)
+        self.assertEqual(bridge.find_all_td_pids(), [])
+
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_returns_empty_when_pgrep_missing(self, mock_run):
+        """find_all_td_pids returns [] when pgrep binary is not found."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        mock_run.side_effect = FileNotFoundError()
+        self.assertEqual(bridge.find_all_td_pids(), [])
+
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_returns_empty_on_pgrep_no_match(self, mock_run):
+        """pgrep returncode != 0 (no TD processes found) yields []."""
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        fake = MagicMock()
+        fake.returncode = 1  # pgrep returns 1 when no matches
+        fake.stdout = ''
+        mock_run.return_value = fake
+        self.assertEqual(bridge.find_all_td_pids(), [])
+
+    @patch.object(bridge, '_is_bridge_process', return_value=False)
+    @patch.object(bridge, '_process_cmdline')
+    @patch('envoy_bridge.subprocess.run')
+    def test_find_all_td_pids_filters_helper_processes(
+            self, mock_run, mock_cmdline, _mock_bridge):
+        """find_all_td_pids excludes bundled TD helper / CEF subprocesses.
+
+        `pgrep -f TouchDesigner` also matches the Web Render helper
+        ("TouchDesigner Web Render.app/.../TouchDesigner") and CEF
+        GPU/renderer children -- they share the executable name but are
+        not TD instances, and CEF recycles them every few seconds.
+        """
+        if bridge.sys.platform == 'win32':
+            self.skipTest('macOS/Linux pgrep path')
+        fake = MagicMock()
+        fake.returncode = 0
+        fake.stdout = '100\n200\n300\n'
+        mock_run.return_value = fake
+        cmdlines = {
+            100: '/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner',
+            200: '/Applications/TouchDesigner.app/Contents/MacOS/'
+                 'TouchDesigner Web Render.app/Contents/MacOS/TouchDesigner',
+            300: '/Applications/TouchDesigner.app/Contents/MacOS/'
+                 'TouchDesigner Web Render Helper (GPU).app/Contents/MacOS/'
+                 'TouchDesigner --type=gpu-process',
+        }
+        mock_cmdline.side_effect = lambda pid: cmdlines.get(pid, '')
+
+        pids = bridge.find_all_td_pids()
+
+        self.assertEqual(pids, [100],
+            'Only the real TD process survives; Web Render helper and CEF '
+            'child are filtered out')
+
+    @patch.object(bridge, '_process_cmdline')
+    def test_is_td_helper_process_markers(self, mock_cmdline):
+        """_is_td_helper_process matches Web Render and CEF --type= cmdlines."""
+        mock_cmdline.return_value = '.../TouchDesigner Web Render.app/.../TouchDesigner'
+        self.assertTrue(bridge._is_td_helper_process(1))
+        mock_cmdline.return_value = '.../TouchDesigner --type=renderer'
+        self.assertTrue(bridge._is_td_helper_process(2))
+        mock_cmdline.return_value = '/Applications/TouchDesigner.app/Contents/MacOS/TouchDesigner'
+        self.assertFalse(bridge._is_td_helper_process(3))
+        mock_cmdline.return_value = ''
+        self.assertFalse(bridge._is_td_helper_process(4))
 
 
 # =====================================================================
@@ -1336,7 +1572,7 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertEqual(result['restart_attempts_remaining'], 0)
 
     def test_launch_td_no_executable(self):
-        # Mock find_td_pid → None so the "already running" guard doesn't
+        # Mock find_td_pid -> None so the "already running" guard doesn't
         # short-circuit before we reach the missing-config check.  Without
         # this the test fails on any machine actually running TD (e.g. the
         # Embody dev project itself).
@@ -1347,11 +1583,21 @@ class TestBridgeMetaTools(EmbodyTestCase):
         self.assertIn('envoy.json', result['message'])
 
     def test_launch_td_already_running(self):
-        """Refuses to launch if TD is already running."""
-        with patch.object(bridge, 'find_td_pid', return_value=os.getpid()):
-            state = self._make_state(
-                config={'td_executable': '/usr/bin/td', 'toe_path': 'test.toe'})
-            result = bridge.handle_launch_td({}, state)
+        """Refuses to launch if THIS instance is already running.
+
+        The guard is registry-based (v5.0.402): handle_launch_td resolves
+        the target .toe basename and refuses if an instance registered under
+        that name has a live td_pid. Seed the registry with this test
+        process's own PID so is_process_alive() returns True deterministically.
+        """
+        state = self._make_state(config={
+            'td_executable': '/usr/bin/td',
+            'active': 'test',
+            'instances': {
+                'test': {'td_pid': os.getpid(), 'toe_path': 'test.toe'},
+            },
+        })
+        result = bridge.handle_launch_td({}, state)
         self.assertEqual(result['status'], 'error')
         self.assertIn('already running', result['message'])
 
@@ -1691,7 +1937,7 @@ class TestBridgeConnectionLostMessage(EmbodyTestCase):
 
 
 # =====================================================================
-# Bridge v2 — BridgeState, notify_stdout, reconciler, caching, hashing
+# Bridge v2 - BridgeState, notify_stdout, reconciler, caching, hashing
 # =====================================================================
 #
 # These tests cover the v2 upgrade described in
@@ -1770,7 +2016,7 @@ def _make_v2_state(**overrides):
         try:
             inst = BS(**ctor_kwargs)
         except TypeError:
-            # Implementation may differ — try constructing with just url.
+            # Implementation may differ - try constructing with just url.
             inst = BS(url=defaults.get('url', 'http://localhost:9870/mcp'))
         for k, v in defaults.items():
             if k in ctor_keys:
@@ -1781,7 +2027,7 @@ def _make_v2_state(**overrides):
                 pass
         return inst
 
-    # v1 fallback — plain object with lock-compatible context manager
+    # v1 fallback - plain object with lock-compatible context manager
     class _FauxState:
         def __init__(self, d):
             self.__dict__.update(d)
@@ -1817,7 +2063,7 @@ class _StdoutCapture:
 
 
 # =====================================================================
-# Test case 1 — BridgeState locking under contention
+# Test case 1 - BridgeState locking under contention
 # =====================================================================
 
 class TestBridgeStateLocking(EmbodyTestCase):
@@ -1829,7 +2075,7 @@ class TestBridgeStateLocking(EmbodyTestCase):
     def test_concurrent_increment_no_corruption(self):
         state = _make_v2_state()
         # Seed a counter field. BridgeState may not declare this attribute
-        # by default — setattr should succeed either way.
+        # by default - setattr should succeed either way.
         setattr(state, 'counter', 0)
 
         iterations = 10_000
@@ -1857,11 +2103,11 @@ class TestBridgeStateLocking(EmbodyTestCase):
             f'Threads raised: {[type(e).__name__ + ": " + str(e) for e in errors]}')
         self.assertEqual(
             state.counter, 2 * iterations,
-            f'Expected {2 * iterations}, got {state.counter} — lock did not serialize writes')
+            f'Expected {2 * iterations}, got {state.counter} - lock did not serialize writes')
 
 
 # =====================================================================
-# Test case 2 — Tool hash diff detection
+# Test case 2 - Tool hash diff detection
 # =====================================================================
 
 class TestBridgeHashTools(EmbodyTestCase):
@@ -1882,7 +2128,7 @@ class TestBridgeHashTools(EmbodyTestCase):
         self.assertEqual(self.hash_tools(a), self.hash_tools(b))
 
     def test_reordered_lists_same_hash(self):
-        """Order must not affect the hash — plan says 'sort by name first'."""
+        """Order must not affect the hash - plan says 'sort by name first'."""
         a = [self._tool('create_op', 'Create an operator'),
              self._tool('delete_op', 'Delete an operator'),
              self._tool('cook_op', 'Cook an operator')]
@@ -1913,7 +2159,7 @@ class TestBridgeHashTools(EmbodyTestCase):
             'Renamed tool must produce a different hash')
 
     def test_description_change_changes_hash(self):
-        """Description is part of the hash per the plan — any change matters."""
+        """Description is part of the hash per the plan - any change matters."""
         a = [self._tool('create_op', 'Create an operator')]
         b = [self._tool('create_op', 'Create an op')]
         self.assertNotEqual(self.hash_tools(a), self.hash_tools(b))
@@ -1923,14 +2169,14 @@ class TestBridgeHashTools(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 3 — Reconciler state transitions
+# Test case 3 - Reconciler state transitions
 # =====================================================================
 
 class TestBridgeReconcilerTransitions(EmbodyTestCase):
     """
     Verify that reconcile() fires the on_tools_change callback only
-    on connection transitions (False→True and True→False), never on
-    steady-state ticks (True→True).
+    on connection transitions (False->True and True->False), never on
+    steady-state ticks (True->True).
 
     Mock ping sequence: False, True, True, False.
     Expected notifications: 0, 1 (became connected), 1 (unchanged), 2 (became disconnected).
@@ -1955,7 +2201,7 @@ class TestBridgeReconcilerTransitions(EmbodyTestCase):
             ping_idx[0] = i + 1
             return ping_sequence[i]
 
-        # Mock tool fetch to return a stable list — avoids hash-mismatch noise.
+        # Mock tool fetch to return a stable list - avoids hash-mismatch noise.
         # Using ONE stable list means on_tools_change fires only on transitions,
         # not on in-place tool-list changes.
         stable_tools = [{'name': 't1', 'description': 'd1'}]
@@ -1965,7 +2211,7 @@ class TestBridgeReconcilerTransitions(EmbodyTestCase):
         def on_tools_change():
             notify_count[0] += 1
 
-        # Patch only the functions that actually exist on the module —
+        # Patch only the functions that actually exist on the module -
         # the reconciler may use any subset depending on implementation.
         patches_spec = {
             'ping_backend_mcp': fake_ping,
@@ -2002,7 +2248,7 @@ class TestBridgeReconcilerTransitions(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 5 — listChanged: true in initialize response
+# Test case 5 - listChanged: true in initialize response
 # =====================================================================
 
 class TestBridgeListChangedCapability(EmbodyTestCase):
@@ -2058,7 +2304,7 @@ class TestBridgeListChangedCapability(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 7 — tools/list cache hit within 5s
+# Test case 7 - tools/list cache hit within 5s
 # =====================================================================
 
 class TestBridgeToolsListCache(EmbodyTestCase):
@@ -2140,12 +2386,12 @@ class TestBridgeToolsListCache(EmbodyTestCase):
 
 
 # =====================================================================
-# Test case 9 — Stdout serialization under concurrent writers
+# Test case 9 - Stdout serialization under concurrent writers
 # =====================================================================
 
 class TestBridgeStdoutSerialization(EmbodyTestCase):
     """
-    10 threads × 100 concurrent calls to notify_stdout must produce
+    10 threads x 100 concurrent calls to notify_stdout must produce
     only valid newline-delimited JSON (no interleaved bytes).
     """
 
@@ -2192,8 +2438,8 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
         raw = capture.getvalue()
         lines = [l for l in raw.split('\n') if l.strip()]
 
-        # Expect exactly 10 × 100 = 1000 lines (unless notify_stdout was
-        # called with fewer args due to TypeError fallback — still should
+        # Expect exactly 10 x 100 = 1000 lines (unless notify_stdout was
+        # called with fewer args due to TypeError fallback - still should
         # be 1000).
         self.assertEqual(
             len(lines), 1000,
@@ -2204,7 +2450,7 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
         for idx, line in enumerate(lines):
             try:
                 obj = json.loads(line)
-                # Must be a notification — no id, has method
+                # Must be a notification - no id, has method
                 if not isinstance(obj, dict) or 'method' not in obj:
                     bad_lines.append((idx, f'not a notification: {line[:80]}'))
                 if obj.get('jsonrpc') != '2.0':
@@ -2218,26 +2464,3 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
             f'{bad_lines[:5]}')
 
 
-# =====================================================================
-# Stubs for tests that depend on implementation steps 7-9
-# (deferred to a later bridge v2 pass)
-# =====================================================================
-
-class TestBridgeV2DeferredStubs(EmbodyTestCase):
-    """
-    Stubs for plan test cases 4, 6, 8 — left intentionally as SkipTest
-    so they show up in the runner as a visible reminder that the next
-    bridge v2 phase still needs coverage.
-    """
-
-    def test_local_ping_handler_stub(self):
-        """Plan case 4 — depends on bridge v2 step 4 (local ping handling)."""
-        raise SkipTest('depends on bridge v2 step 4: local ping handler')
-
-    def test_find_all_td_pids_stub(self):
-        """Plan case 6 — depends on bridge v2 step 8 (find_all_td_pids)."""
-        raise SkipTest('depends on bridge v2 step 8: find_all_td_pids')
-
-    def test_initial_probe_3s_stub(self):
-        """Plan case 8 — depends on bridge v2 step 7 (3s initial probe)."""
-        raise SkipTest('depends on bridge v2 step 7: 3s initial probe + bridge-only fallback')

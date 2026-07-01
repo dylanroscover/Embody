@@ -62,6 +62,14 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 			parent.Embody.ext.TDN.ExportNetworkAsync(
 				root_path=pane.owner.path, output_file='auto')
 
+	# Copy the selected COMP's network to the clipboard as portable TDN
+	# (copy special; PASTE is now an automatic clipboard prompt -- no shortcut,
+	# since TD's native Cmd/Ctrl+V paste can't be suppressed. See TDNExt
+	# _clipboardWatchPoll.)
+	elif state and key == 'c' and ctrl_or_cmd and lShift:
+		parent.Embody.ext.TDN.CopySelectedToClipboard()
+
+
 	return
 
 # shortcutName is the name of the shortcut

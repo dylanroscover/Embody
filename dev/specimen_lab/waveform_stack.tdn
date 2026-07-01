@@ -1,0 +1,385 @@
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.38
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:37Z'
+network_path: /specimen_lab/waveform_stack
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  resolutionTOP:
+    parameters:
+      outputresolution: custom
+      format: rgba16float
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  compositeTOP:
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  glslTOP:
+    parameters:
+      outputresolution: custom
+      format: rgba16float
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+type: baseCOMP
+custom_pars:
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px), 4K landscape.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px), 4K landscape.
+  Controls:
+  - name: Lanes
+    style: Int
+    default: 96
+    min: 1.0
+    max: 512.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 512.0
+    help: number of vertically-stacked scope lanes (1=green audio only; more add cyan video, magenta chroma, amber...). The ST2110 separated essences, one lane each. The row-fold costs nothing per pixel regardl
+  - name: Frequency
+    style: Float
+    default: 8
+    min: 1.0
+    max: 30.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 30.0
+    help: base spatial frequency of the waveforms. Low = slow rolling signal; high = dense rapid oscillation across the lane.
+  - name: Amplitude
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: vertical swing of each trace within its lane. 0 = flat baselines; higher = tall dramatic waveforms (clamped to stay in-lane).
+  - name: Speed
+    style: Float
+    default: 1
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMax: 4.0
+    help: how fast the waveform content evolves. 0 freezes the shape (the sweep still moves).
+  - name: Sweeprate
+    style: Float
+    default: 0.4
+    min: 0.05
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMin: 0.05
+    normMax: 2.0
+    help: how fast the white-hot playhead sweeps left-to-right across all lanes (Hz). The scope refresh feel.
+  - name: Afterglow
+    style: Float
+    default: 0.85
+    min: 0.5
+    max: 0.97
+    clampMin: true
+    clampMax: true
+    normMin: 0.5
+    normMax: 0.97
+    help: uSweep.y (in-shader persistence) AND level_decay.opacity (the low-res Feedback TOP decay). Higher = a longer CRT phosphor tail. Below 1 keeps the feedback bounded.
+  - name: Linewidth
+    style: Float
+    default: 0.006
+    min: 0.002
+    max: 0.02
+    clampMin: true
+    clampMax: true
+    normMin: 0.002
+    normMax: 0.02
+    help: thickness of the trace core (within-lane UV). Thin = a crisp precise scope line; thicker = a heavier glowing beam. Crisp at any res via fwidth().
+  - name: Graticule
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: brightness of the gold graticule grid + lane dividers. 0 hides the grid; higher makes the engineering scope frame prominent.
+  - name: Harmonics
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: amount of high harmonic detail in the signal. 0 = a clean fundamental sine; higher = a rich complex broadcast waveform.
+  - name: Glow
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: width of the soft halo around each trace before bloom. The signature scope-beam glow.
+  - name: Ptprate
+    style: Float
+    default: 0.5
+    min: 0.1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMin: 0.1
+    normMax: 2.0
+    help: frequency of the PTP sync pulse the whole stack breathes to.
+  - name: Bloom
+    style: Float
+    default: 1.2
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: intensity of the bloom added back. The booth-scale glow knob.
+  - name: Bloomwidth
+    style: Float
+    default: 2.2
+    min: 1.0
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 4.0
+    help: blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res).
+  - name: Scanlines
+    style: Float
+    default: 0.6
+    max: 1.5
+    clampMin: true
+    clampMax: true
+    normMax: 1.5
+    help: strength of the CRT scanline overlay in the finish pass. 0 = clean digital; higher = a heavier broadcast-CRT texture.
+  - name: Rgbsplit
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [4800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_finish
+- name: res_fb
+  type: resolutionTOP
+  parameters:
+    resolutionw: 640
+    resolutionh: 360
+  position: [600, -320]
+  inputs:
+  - glsl_scope
+- name: res_down
+  type: resolutionTOP
+  parameters:
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+  position: [3000, 0]
+  inputs:
+  - comp_scope
+- name: comp_scope
+  type: compositeTOP
+  parameters:
+    operand: over
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+    format: rgba16float
+  position: [2400, 0]
+  inputs:
+  - glsl_scope
+  - comp_trail
+- name: comp_trail
+  type: compositeTOP
+  parameters:
+    operand: maximum
+  position: [1800, 0]
+  inputs:
+  - res_fb
+  - level_decay
+- name: glsl_scope
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_scope_pixel
+    computedat: glsl_scope_compute
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uWave
+      valuex: =parent().par.Lanes.eval()
+      valuey: =parent().par.Frequency.eval()
+      valuez: =parent().par.Amplitude.eval()
+      valuew: =absTime.seconds*parent().par.Speed.eval()
+    - name: uSweep
+      valuex: =parent().par.Sweeprate.eval()
+      valuey: =parent().par.Afterglow.eval()
+      valuez: =parent().par.Ptprate.eval()
+      valuew: =parent().par.Linewidth.eval()
+    - name: uLook
+      valuex: =parent().par.Graticule.eval()
+      valuey: =parent().par.Harmonics.eval()
+      valuez: =parent().par.Glow.eval()
+      valuew: =absTime.seconds
+- name: glsl_finish
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_finish_pixel
+    computedat: glsl_finish_compute
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uFin
+      valuex: =parent().par.Scanlines.eval()
+      valuey: =parent().par.Rgbsplit.eval()
+      valuez: =absTime.seconds
+      valuew: =parent().par.Ptprate.eval()
+  position: [4200, 0]
+  inputs:
+  - comp_scope
+  - glsl_bloomblur
+- name: level_decay
+  type: levelTOP
+  parameters:
+    opacity: =parent().par.Afterglow.eval()
+  position: [1200, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - feedback_glow
+- name: feedback_glow
+  type: feedbackTOP
+  parameters:
+    top: comp_trail
+    format: rgba16float
+  position: [600, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - res_fb
+- name: glsl_bloomblur
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_bloomblur_pixel
+    computedat: glsl_bloomblur_compute
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+  sequences:
+    vec:
+    - name: uBloom
+      valuex: =parent().par.Bloom.eval()
+      valuey: 0.45
+      valuez: =parent().par.Bloomwidth.eval()
+  position: [3600, 0]
+  inputs:
+  - res_down
+- name: glsl_scope_info
+  type: infoDAT
+  parameters:
+    op: glsl_scope
+  position: [300, -120]
+  dock: glsl_scope
+- name: glsl_finish_info
+  type: infoDAT
+  parameters:
+    op: glsl_finish
+  position: [4500, -120]
+  dock: glsl_finish
+- name: glsl_scope_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_scope_pixel.glsl
+    extension: frag
+  position: [150, -120]
+  dock: glsl_scope
+- name: glsl_finish_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_finish_pixel.glsl
+    extension: frag
+  position: [4350, -120]
+  dock: glsl_finish
+- name: glsl_scope_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_scope_compute.glsl
+  position: [0, -120]
+  dock: glsl_scope
+- name: glsl_bloomblur_info
+  type: infoDAT
+  parameters:
+    op: glsl_bloomblur
+  position: [3900, -120]
+  dock: glsl_bloomblur
+- name: glsl_finish_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_finish_compute.glsl
+  position: [4200, -120]
+  dock: glsl_finish
+- name: glsl_bloomblur_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_bloomblur_pixel.glsl
+    extension: frag
+  position: [3750, -120]
+  dock: glsl_bloomblur
+- name: glsl_bloomblur_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/waveform_stack/glsl_bloomblur_compute.glsl
+  position: [3600, -120]
+  dock: glsl_bloomblur

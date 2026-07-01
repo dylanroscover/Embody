@@ -1,0 +1,292 @@
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.38
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:38Z'
+network_path: /specimen_lab/hyper_ntsc
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  glslTOP:
+    parameters:
+      format: rgba16float
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+type: baseCOMP
+custom_pars:
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+  Controls:
+  - name: Bandcount
+    style: Int
+    default: 10
+    min: 2.0
+    max: 40.0
+    clampMin: true
+    clampMax: true
+    normMin: 2.0
+    normMax: 40.0
+  - name: Hue
+    style: Float
+    clampMin: true
+    clampMax: true
+  - name: Speed
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+  - name: Bleed
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+  - name: Dotcrawl
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+  - name: Jitter
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+  - name: Noise
+    style: Float
+    default: 0.5
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+  - name: Scanlines
+    style: Float
+    default: 0.6
+    max: 1.5
+    clampMin: true
+    clampMax: true
+    normMax: 1.5
+  - name: Bloom
+    style: Float
+    default: 1.6
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+  - name: Bloomwidth
+    style: Float
+    default: 2.2
+    min: 1.0
+    max: 4.0
+    clampMin: true
+    clampMax: true
+    normMin: 1.0
+    normMax: 4.0
+  - name: Grain
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+  - name: Vignette
+    style: Float
+    default: 0.7
+    max: 1.5
+    clampMin: true
+    clampMax: true
+    normMax: 1.5
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - viewer
+  position: [1500, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_finish
+- name: res_down
+  type: resolutionTOP
+  parameters:
+    outputresolution: custom
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+    format: rgba16float
+  position: [300, -400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_ntsc
+- name: glsl_ntsc
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_ntsc_pixel
+    computedat: glsl_ntsc_compute
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uNtsc
+      valuex: =parent().par.Bleed.eval()
+      valuey: =parent().par.Dotcrawl.eval()
+      valuez: =parent().par.Noise.eval()
+      valuew: =parent().par.Jitter.eval()
+    - name: uScan
+      valuex: =parent().par.Scanlines.eval()
+      valuey: =parent().par.Bandcount.eval()
+      valuez: =parent().par.Hue.eval()
+      valuew: =parent().par.Speed.eval()
+    - name: uTime
+      valuex: =absTime.seconds
+- name: comp_bloom
+  type: compositeTOP
+  parameters:
+    operand: add
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+    format: rgba16float
+  position: [900, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_ntsc
+  - glsl_bloomblur
+- name: glsl_finish
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_finish_pixel
+    computedat: glsl_finish_compute
+  sequences:
+    vec:
+    - name: uFin
+      valuex: =parent().par.Grain.eval()
+      valuey: =parent().par.Vignette.eval()
+      valuew: =absTime.seconds
+  position: [1200, 0]
+  inputs:
+  - comp_bloom
+- name: glsl_bloomblur
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_bloomblur_pixel
+    computedat: glsl_bloomblur_compute
+    outputresolution: custom
+    resolutionw: =int(parent().par.Resw.eval()/4)
+    resolutionh: =int(parent().par.Resh.eval()/4)
+  sequences:
+    vec:
+    - name: uBloom
+      valuex: =parent().par.Bloom.eval()
+      valuey: 0.55
+      valuez: =parent().par.Bloomwidth.eval()
+  position: [600, -400]
+  inputs:
+  - res_down
+- name: glsl_ntsc_info
+  type: infoDAT
+  parameters:
+    op: glsl_streams
+  position: [0, -120]
+  dock: glsl_ntsc
+- name: glsl_ntsc_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/hyper_ntsc/glsl_ntsc_pixel.glsl
+    extension: frag
+  position: [150, -120]
+  dock: glsl_ntsc
+- name: glsl_finish_info
+  type: infoDAT
+  parameters:
+    op: glsl_finish
+  position: [1200, -120]
+  dock: glsl_finish
+- name: glsl_finish_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/hyper_ntsc/glsl_finish_pixel.glsl
+    extension: frag
+  position: [1350, -120]
+  dock: glsl_finish
+- name: glsl_ntsc_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/hyper_ntsc/glsl_ntsc_compute.glsl
+  position: [-150, -120]
+  dock: glsl_ntsc
+- name: glsl_bloomblur_info
+  type: infoDAT
+  parameters:
+    op: glsl_bloomblur
+  position: [600, -520]
+  dock: glsl_bloomblur
+- name: glsl_finish_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/hyper_ntsc/glsl_finish_compute.glsl
+  position: [1050, -120]
+  dock: glsl_finish
+- name: glsl_bloomblur_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/hyper_ntsc/glsl_bloomblur_pixel.glsl
+    extension: frag
+  position: [750, -520]
+  dock: glsl_bloomblur
+- name: glsl_bloomblur_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/hyper_ntsc/glsl_bloomblur_compute.glsl
+  position: [450, -520]
+  dock: glsl_bloomblur

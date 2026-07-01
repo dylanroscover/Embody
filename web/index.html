@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Embody — create at the speed of thought.</title>
-  <meta name="description" content="An AI that builds inside your live TouchDesigner session. A file format that makes every version diffable. Open source, MIT, TouchDesigner 2025+." />
+  <meta name="description" content="Say what you want, watch operators appear in your live TouchDesigner session — every version saved as readable text. Open source, MIT." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Embody — create at the speed of thought." />
-  <meta property="og:description" content="An AI that builds inside your live TouchDesigner session. A file format that makes every version diffable. That's the whole pitch." />
+  <meta property="og:description" content="Say what you want, watch the operators appear in your live TouchDesigner session. Every version saved as readable text — visual work, real version control." />
   <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
   <meta property="og:url" content="https://embody.tools/" />
   <meta property="og:site_name" content="Embody" />
@@ -17,24 +17,48 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Embody — create at the speed of thought." />
-  <meta name="twitter:description" content="An AI that builds inside your live TouchDesigner session. A file format that makes every version diffable. That's the whole pitch." />
+  <meta name="twitter:description" content="Say what you want, watch the operators appear in your live TouchDesigner session. Every version saved as readable text — visual work, real version control." />
   <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
 
   <!-- Theme -->
   <meta name="theme-color" content="#181e1e" />
   <meta name="color-scheme" content="dark" />
 
-  <!-- Favicon: inline SVG green dot -->
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23181e1e'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%236ee668'/%3E%3C/svg%3E" />
+  <!-- Favicon: inline SVG 'e' mark (OK-hand pinch grasping a glowing orb) -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23181e1e'/%3E%3Ccircle cx='45' cy='45' r='4.7' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='8.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 33 L 47.5 33'/%3E%3C/g%3E%3C/svg%3E" />
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600&display=swap" rel="stylesheet" />
 
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Embody",
+  "alternateName": "Embody + Envoy",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Windows, macOS",
+  "description": "Open-source TouchDesigner toolkit. Envoy is an MCP server with 49 tools that lets AI assistants build, wire, parameterize, and debug a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable YAML network format that makes both possible.",
+  "url": "https://embody.tools/",
+  "downloadUrl": "https://github.com/dylanroscover/Embody/releases/latest",
+  "softwareHelp": "https://dylanroscover.github.io/Embody/",
+  "codeRepository": "https://github.com/dylanroscover/Embody",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Dylan Roscover" },
+  "publisher": { "@type": "Organization", "name": "TEC", "url": "https://tec.design" },
+  "softwareRequirements": "TouchDesigner 2025.32280 or later",
+  "keywords": "TouchDesigner, MCP, Model Context Protocol, AI agent, externalization, version control, TDN, generative art, creative coding, Claude Code, Cursor, Windsurf"
+}
+</script>
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <!-- AI agents: structured info at /for-ai - /for-ai.json - /llms.txt - /llms-full.txt -->
 
   <!-- ============================================================
        STICKY MARK (top-left only — no nav)
@@ -63,6 +87,9 @@
         <div class="hero__ctas">
           <a class="btn btn--primary" href="https://github.com/dylanroscover/Embody/releases/latest">
             Download the .tox <span aria-hidden="true">→</span>
+          </a>
+          <a class="btn btn--outline" href="https://dylanroscover.github.io/Embody/quickstart/">
+            Quickstart <span aria-hidden="true">→</span>
           </a>
           <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/manifesto/">
             Read the manifesto
@@ -101,7 +128,7 @@
             <h3 class="pillar__name">Envoy</h3>
             <p class="pillar__claim">forward velocity.</p>
             <p class="pillar__body">
-              46 MCP tools that plug Claude, Cursor, or Windsurf straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
+              49 MCP tools that plug Claude, Cursor, or Windsurf straight into your live session. Say what you want. Watch it happen. Idea to network in seconds.
             </p>
             <span class="pillar__arrow" aria-hidden="true">&rarr;</span>
           </a>
@@ -173,50 +200,40 @@
         <h2 class="section__title">meet TDN.</h2>
 
         <p class="lede">
-          TDN exports any TouchDesigner network as a single human-readable JSON file — operators, parameters, connections, layout, annotations, DAT content — all of it, in text. Every change becomes a clean diff. Every version is a file your AI agent can read, your team can review, and git can meaningfully compare.
+          TDN exports any TouchDesigner network as a single human-readable YAML file — operators, parameters, connections, layout, annotations, DAT content — all of it, in text. Every change becomes a clean diff. Every version is a file your AI agent can read, your team can review, and git can meaningfully compare.
         </p>
 
         <div class="tdn__grid">
-          <pre class="code" aria-label="Sample TDN file"><code><span class="c-p">{</span>
-  <span class="c-k">"format"</span><span class="c-p">:</span> <span class="c-s">"tdn"</span><span class="c-p">,</span>
-  <span class="c-k">"version"</span><span class="c-p">:</span> <span class="c-s">"1.3"</span><span class="c-p">,</span>
-  <span class="c-k">"generator"</span><span class="c-p">:</span> <span class="c-s">"Embody/5.0.372"</span><span class="c-p">,</span>
-  <span class="c-k">"td_build"</span><span class="c-p">:</span> <span class="c-s">"2025.33020"</span><span class="c-p">,</span>
-  <span class="c-k">"exported_at"</span><span class="c-p">:</span> <span class="c-s">"2026-04-10T08:15:00Z"</span><span class="c-p">,</span>
-  <span class="c-k">"network_path"</span><span class="c-p">:</span> <span class="c-s">"/project1"</span><span class="c-p">,</span>
-  <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"containerCOMP"</span><span class="c-p">,</span>
-  <span class="c-k">"options"</span><span class="c-p">:</span> <span class="c-p">{</span> <span class="c-k">"include_dat_content"</span><span class="c-p">:</span> <span class="c-n">true</span> <span class="c-p">},</span>
-  <span class="c-k">"operators"</span><span class="c-p">:</span> <span class="c-p">[</span>
-    <span class="c-p">{</span>
-      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"noise1"</span><span class="c-p">,</span>
-      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"noiseTOP"</span><span class="c-p">,</span>
-      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span>
-        <span class="c-k">"amp"</span><span class="c-p">:</span> <span class="c-n">0.8</span><span class="c-p">,</span>
-        <span class="c-k">"period"</span><span class="c-p">:</span> <span class="c-s">"=absTime.frame * 0.1"</span>
-      <span class="c-p">},</span>
-      <span class="c-k">"flags"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"viewer"</span><span class="c-p">]</span>
-    <span class="c-p">},</span>
-    <span class="c-p">{</span>
-      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"level1"</span><span class="c-p">,</span>
-      <span class="c-k">"type"</span><span class="c-p">:</span> <span class="c-s">"levelTOP"</span><span class="c-p">,</span>
-      <span class="c-k">"parameters"</span><span class="c-p">:</span> <span class="c-p">{</span>
-        <span class="c-k">"opacity"</span><span class="c-p">:</span> <span class="c-s">"~op('ctrl').par.Fade"</span>
-      <span class="c-p">},</span>
-      <span class="c-k">"inputs"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"noise1"</span><span class="c-p">],</span>
-      <span class="c-k">"flags"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">"display"</span><span class="c-p">,</span> <span class="c-s">"render"</span><span class="c-p">],</span>
-      <span class="c-k">"position"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">400</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">]</span>
-    <span class="c-p">}</span>
-  <span class="c-p">],</span>
-  <span class="c-k">"annotations"</span><span class="c-p">:</span> <span class="c-p">[</span>
-    <span class="c-p">{</span>
-      <span class="c-k">"name"</span><span class="c-p">:</span> <span class="c-s">"annot1"</span><span class="c-p">,</span>
-      <span class="c-k">"mode"</span><span class="c-p">:</span> <span class="c-s">"annotate"</span><span class="c-p">,</span>
-      <span class="c-k">"title"</span><span class="c-p">:</span> <span class="c-s">"noise pipeline"</span><span class="c-p">,</span>
-      <span class="c-k">"position"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">-100</span><span class="c-p">,</span> <span class="c-n">-200</span><span class="c-p">],</span>
-      <span class="c-k">"size"</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">700</span><span class="c-p">,</span> <span class="c-n">400</span><span class="c-p">]</span>
-    <span class="c-p">}</span>
-  <span class="c-p">]</span>
-<span class="c-p">}</span></code></pre>
+          <pre class="code" aria-label="Sample TDN file"><code><span class="c-k">format</span><span class="c-p">:</span> <span class="c-s">tdn</span>
+<span class="c-k">version</span><span class="c-p">:</span> <span class="c-s">'2.0'</span>
+<span class="c-k">generator</span><span class="c-p">:</span> <span class="c-s">Embody/6.0.16</span>
+<span class="c-k">td_build</span><span class="c-p">:</span> <span class="c-s">099.2025.32820</span>
+<span class="c-k">source_file</span><span class="c-p">:</span> <span class="c-s">MyProject.toe</span>
+<span class="c-k">exported_at</span><span class="c-p">:</span> <span class="c-s">'2026-04-10T08:15:00Z'</span>
+<span class="c-k">network_path</span><span class="c-p">:</span> <span class="c-s">/project1</span>
+<span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">containerCOMP</span>
+<span class="c-k">options</span><span class="c-p">:</span>
+  <span class="c-k">include_dat_content</span><span class="c-p">:</span> <span class="c-n">true</span>
+<span class="c-k">operators</span><span class="c-p">:</span>
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">noise1</span>
+  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">noiseTOP</span>
+  <span class="c-k">parameters</span><span class="c-p">:</span>
+    <span class="c-k">amp</span><span class="c-p">:</span> <span class="c-n">0.8</span>
+    <span class="c-k">period</span><span class="c-p">:</span> <span class="c-s">=absTime.frame * 0.1</span>
+  <span class="c-k">flags</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">viewer</span><span class="c-p">]</span>
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">level1</span>
+  <span class="c-k">type</span><span class="c-p">:</span> <span class="c-s">levelTOP</span>
+  <span class="c-k">parameters</span><span class="c-p">:</span>
+    <span class="c-k">opacity</span><span class="c-p">:</span> <span class="c-s">"~op('ctrl').par.Fade"</span>
+  <span class="c-k">inputs</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">noise1</span><span class="c-p">]</span>
+  <span class="c-k">flags</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-s">display</span><span class="c-p">,</span> <span class="c-s">render</span><span class="c-p">]</span>
+  <span class="c-k">position</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">400</span><span class="c-p">,</span> <span class="c-n">0</span><span class="c-p">]</span>
+<span class="c-k">annotations</span><span class="c-p">:</span>
+<span class="c-p">-</span> <span class="c-k">name</span><span class="c-p">:</span> <span class="c-s">annot1</span>
+  <span class="c-k">mode</span><span class="c-p">:</span> <span class="c-s">annotate</span>
+  <span class="c-k">title</span><span class="c-p">:</span> <span class="c-s">noise pipeline</span>
+  <span class="c-k">position</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">-100</span><span class="c-p">,</span> <span class="c-n">-200</span><span class="c-p">]</span>
+  <span class="c-k">size</span><span class="c-p">:</span> <span class="c-p">[</span><span class="c-n">700</span><span class="c-p">,</span> <span class="c-n">400</span><span class="c-p">]</span></code></pre>
 
           <ul class="tdn__bullets">
             <li><strong>Non-default-only</strong> — only what you actually changed gets written.</li>
@@ -278,6 +295,12 @@
           </li>
         </ol>
 
+        <p class="start__cta">
+          <a class="btn btn--outline" href="https://dylanroscover.github.io/Embody/quickstart/">
+            Read the full Quickstart <span aria-hidden="true">→</span>
+          </a>
+        </p>
+
         <p class="start__meta">Requires TouchDesigner 2025.32280 or later. Works on macOS and Windows.</p>
       </div>
     </section>
@@ -333,7 +356,8 @@
         <ul>
           <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/envoy/">Envoy setup</a></li>
-          <li><a href="https://dylanroscover.github.io/Embody/#getting-started">get started</a></li>
+          <li><a href="https://dylanroscover.github.io/Embody/quickstart/">quickstart</a></li>
+          <li><a href="/for-ai">for AI agents</a></li>
         </ul>
       </nav>
 
@@ -341,7 +365,7 @@
 
     <div class="container footer__bottom">
       <p>© 2026 <a href="https://tec.design">TEC</a> <span class="dot">·</span> MIT License</p>
-      <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+      <p class="footer__sig">made with <span class="footer__emoji" data-emoji role="img" aria-label="made with love" title="roll again">&#10084;&#65039;</span> in <span class="footer__city">idyllwild california</span></p>
     </div>
   </footer>
 
@@ -363,6 +387,33 @@
       });
     }
   })();
+  </script>
+  <script>
+    // Footer signature: random emoji each visit, re-rolls on click. Stored as
+    // code points (ASCII source per the repo rule); entity heart is the no-JS
+    // fallback.
+    (function () {
+      var el = document.querySelector("[data-emoji]");
+      if (!el) return;
+      var EMOJI = [
+        [[0x2764, 0xfe0f], "love"], [[0x1f49a], "love"], [[0x1f49c], "love"],
+        [[0x2728], "sparkle"], [[0x1f31f], "a spark"], [[0x1f525], "fire"],
+        [[0x2615], "caffeine"], [[0x1f375], "tea"], [[0x26a1], "a jolt"],
+        [[0x1f308], "a rainbow"], [[0x1f680], "liftoff"], [[0x1f3a8], "paint"],
+        [[0x1f300], "a swirl"], [[0x1fa84], "magic"], [[0x1f9e0], "brains"],
+        [[0x1f4a1], "an idea"], [[0x1f389], "joy"], [[0x1f6e0, 0xfe0f], "tools"],
+        [[0x1f39b, 0xfe0f], "knobs"], [[0x1f579, 0xfe0f], "a joystick"],
+        [[0x1f319], "moonlight"], [[0x1f33f], "fresh air"],
+        [[0x1f3d4, 0xfe0f], "mountain air"], [[0x1f332], "pine"]
+      ];
+      function roll() {
+        var e = EMOJI[Math.floor(Math.random() * EMOJI.length)];
+        el.textContent = String.fromCodePoint.apply(String, e[0]);
+        el.setAttribute("aria-label", "made with " + e[1]);
+      }
+      roll();
+      el.addEventListener("click", roll);
+    })();
   </script>
 </body>
 </html>

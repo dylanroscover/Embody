@@ -54,7 +54,7 @@ def onInitTD(self):
 
 ### Why this happens
 
-Embody uses TDN (TouchDesigner Network) files to externalize COMP contents as diffable JSON. On project open and after every save, Embody reconstructs TDN COMPs by calling `ImportNetwork` with `clear_first=True` — this deletes all children inside the COMP and recreates them from the `.tdn` file.
+Embody uses TDN (TouchDesigner Network) files to externalize COMP contents as diffable YAML. On project open and after every save, Embody reconstructs TDN COMPs by calling `ImportNetwork` with `clear_first=True` — this deletes all children inside the COMP and recreates them from the `.tdn` file.
 
 The timing sequence on project open:
 
@@ -111,7 +111,7 @@ op.Embody.Update()
 op.Embody.Save()
 
 # Non-promoted methods (lowercase) — through ext:
-op.Embody.ext.Embody.getExternalizedOps()
+op.Embody.ext.Embody.getExternalizedOps(COMP)
 
 # Check if extension exists:
 if hasattr(op.myComp.ext, 'MyExtension'):

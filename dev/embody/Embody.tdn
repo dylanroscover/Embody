@@ -1,1684 +1,1305 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 398,
-	"generator": "Embody/5.0.379",
-	"td_build": "099.2025.32460",
-	"source_file": "Embody-5.380.toe",
-	"exported_at": "2026-04-18T19:43:49Z",
-	"network_path": "/embody/Embody",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type_defaults": {
-		"containerCOMP": {
-			"parameters": {
-				"resizecomp": "=me",
-				"repocomp": "=me"
-			},
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
-		},
-		"textDAT": {
-			"parameters": {
-				"syncfile": true,
-				"language": "python"
-			},
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4]
-		},
-		"annotateCOMP": {
-			"parameters": {
-				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
-			},
-			"flags": ["display"]
-		},
-		"windowCOMP": {
-			"parameters": {
-				"title": "=me",
-				"borders": false,
-				"includedialog": false,
-				"reloadbuiltin": false
-			},
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
-		},
-		"tableDAT": {
-			"parameters": {
-				"syncfile": true
-			},
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["tsv"]
-		}
-	},
-	"par_templates": {
-		"about": [
-			{
-				"default": "1.0",
-				"help": "Annotate COMP default setup version.",
-				"name": "Version",
-				"readOnly": true,
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"help": "Click to open help page.",
-				"name": "Help",
-				"style": "Pulse"
-			}
-		],
-		"text": [
-			{
-				"default": "Annotate",
-				"help": "Text in the title bar.",
-				"label": "Title Text",
-				"name": "Titletext",
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"clampMin": true,
-				"default": 30,
-				"help": "Height of the title bar. Title font height adjusts automatically to fill.",
-				"label": "Title Height",
-				"name": "Titleheight",
-				"normMax": 100.0,
-				"normMin": 5.0,
-				"style": "Int"
-			},
-			{
-				"default": "left",
-				"help": "Alignment of title text.",
-				"label": "Title Align",
-				"menuLabels": ["Left", "Center", "Right"],
-				"menuNames": ["left", "center", "right"],
-				"name": "Titlealign",
-				"style": "Menu"
-			},
-			{
-				"help": "Text in the body area. Use an expression for newlines etc.",
-				"label": "Body Text",
-				"name": "Bodytext",
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"clampMin": true,
-				"default": 10,
-				"help": "Size of text in the body area.",
-				"label": "Body Font Size",
-				"name": "Bodyfontsize",
-				"normMax": 100.0,
-				"normMin": 8.0,
-				"style": "Int"
-			},
-			{
-				"help": "Limit the width of the text area.",
-				"label": "Limit Body Text Width",
-				"name": "Bodylimitwidth",
-				"style": "Toggle"
-			},
-			{
-				"clampMin": true,
-				"default": 1000,
-				"help": "Width limit that will cause wraparound or cut-off. Measured in Panel units.",
-				"label": "Max Body Text Width",
-				"name": "Bodymaxwidth",
-				"normMax": 2000.0,
-				"normMin": 100.0,
-				"style": "Int"
-			}
-		],
-		"settings": [
-			{
-				"default": "comment",
-				"help": "Switch between Comment, Network Box, and Annotate Modes. ",
-				"menuLabels": ["Comment", "Network Box", "Annotate"],
-				"menuNames": ["comment", "networkbox", "annotate"],
-				"name": "Mode",
-				"style": "Menu"
-			},
-			{
-				"help": "Converts quotes, ellipsis, and dashes to more typographically nice unicode versions.",
-				"label": "Smart Quote",
-				"name": "Smartquote",
-				"startSection": true,
-				"style": "Toggle"
-			},
-			{
-				"default": true,
-				"help": "Wrap body text when it extends past right bound.",
-				"label": "Body Word Wrap",
-				"name": "Bodywordwrap",
-				"style": "Toggle"
-			},
-			{
-				"default": 1,
-				"help": "Background color base.",
-				"label": "Back Color",
-				"name": "Backcolorr",
-				"startSection": true,
-				"style": "RGBA"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Back color alpha.",
-				"label": "Back Color Alpha",
-				"name": "Backcoloralpha",
-				"style": "Float"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Opacity of the entire Annotate.",
-				"label": "Annotate Opacity",
-				"name": "Opacity",
-				"style": "Float"
-			}
-		],
-		"op_viewer": [
-			{
-				"help": "Turn the visibility of the viewer specified in the OP parameter below on or off.",
-				"label": "Viewer Display",
-				"name": "Opviewerdisplay",
-				"style": "Toggle"
-			},
-			{
-				"help": "The operator whose viewer is displayed in the Annotate.",
-				"label": "OP",
-				"name": "Opviewer",
-				"style": "OP"
-			},
-			{
-				"help": "Allow interaction with the OP viewer.",
-				"label": "OP Viewer Interactive",
-				"name": "Opviewerinteractive",
-				"style": "Toggle"
-			},
-			{
-				"default": "False",
-				"help": "Use the Size/Aspect Override to control viewer's size in the background.",
-				"label": "Size/Aspect Override",
-				"menuLabels": ["Natural", "Specify", "Auto-Fit"],
-				"menuNames": ["natural", "specify", "autofit"],
-				"name": "Opvieweroversize",
-				"startSection": true,
-				"style": "Menu"
-			},
-			{
-				"clampMin": true,
-				"default": 800,
-				"help": "Diplay viewer as-if it were being displayed at this resolution. This is particularly useful for zooming into operators that don't have a built-in resolution, like CHOPs, SOPs, and DATs.",
-				"label": "Size/Aspect",
-				"name": "Opviewersize",
-				"normMax": 1000.0,
-				"normMin": 1.0,
-				"style": "WH"
-			},
-			{
-				"default": 1,
-				"help": "Scale the viewer by this factor.",
-				"label": "Scale",
-				"name": "Opviewerscale",
-				"normMax": 2.0,
-				"startSection": true,
-				"style": "Float"
-			},
-			{
-				"help": "Move the border of the viewer towards left edge of Annotate when negative or towards right edge when positive.",
-				"label": "Justify X",
-				"name": "Opviewerjustifyx",
-				"normMin": -1.0,
-				"style": "Float"
-			},
-			{
-				"label": "Justify Y",
-				"name": "Opviewerjustifyy",
-				"normMin": -1.0,
-				"style": "Float"
-			},
-			{
-				"help": "When True, allow viewer to display in the Annotate title area as well as body.",
-				"label": "Cover Body and Title",
-				"name": "Opviewerfillbodytitle",
-				"style": "Toggle"
-			},
-			{
-				"clampMin": true,
-				"default": 1,
-				"help": "Zoom the viewer by this scale factor without increasing the size of its display area in the Annotate.",
-				"label": "OP Viewer Zoom",
-				"min": 0.001,
-				"name": "Opviewerzoom",
-				"normMax": 5.0,
-				"normMin": 1.0,
-				"startSection": true,
-				"style": "Float"
-			},
-			{
-				"help": "Offsets the displayed area within the viewer. Combined with OP Viewer Zoom, this lets you display a specific area of a viewer, such as a CHOP channel or table cell.",
-				"label": "OP Viewer Offset",
-				"name": "Opvieweroffsetx",
-				"style": "XYZW"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Alpha value of the background area in the OP Viewer.",
-				"label": "Fill Alpha",
-				"name": "Opviewerfillalpha",
-				"startSection": true,
-				"style": "Float"
-			}
-		]
-	},
-	"type": "containerCOMP",
-	"custom_pars": {
-		"Embody": [
-			{
-				"name": "Status",
-				"style": "Str",
-				"readOnly": true,
-				"help": "Current Embody status (read-only). Shows whether Embody is initialized and running.",
-				"value": "Enabled"
-			},
-			{
-				"name": "Performmode",
-				"style": "Toggle",
-				"label": "Perform Mode"
-			},
-			{
-				"name": "Createexternalizationstable",
-				"style": "Pulse",
-				"label": "Create Externalizations Table",
-				"startSection": true,
-				"help": "Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade."
-			},
-			{
-				"name": "Externalizations",
-				"style": "DAT",
-				"label": "Externalizations Table",
-				"help": "Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.",
-				"value": "/embody/externalizations"
-			},
-			{
-				"name": "Openexternalizationstable",
-				"style": "Pulse",
-				"label": "Open Externalizations Table",
-				"help": "Opens the externalizations tracking table in a floating viewer window."
-			},
-			{
-				"name": "Folder",
-				"style": "Folder",
-				"label": "Externalizations Folder",
-				"startSection": true,
-				"help": "Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder."
-			},
-			{
-				"name": "Disable",
-				"style": "Pulse",
-				"startSection": true,
-				"help": "Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable."
-			},
-			{
-				"name": "Update",
-				"style": "Pulse",
-				"label": "Enable/Update",
-				"help": "Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table."
-			},
-			{
-				"name": "Refresh",
-				"style": "Pulse",
-				"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
-			},
-			{
-				"name": "Externalizeproject",
-				"style": "Pulse",
-				"label": "Externalize Full Project",
-				"startSection": true,
-				"help": "Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content."
-			},
-			{
-				"name": "Detectduplicatepaths",
-				"style": "Toggle",
-				"label": "Detect Duplicate Paths",
-				"help": "When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.",
-				"value": true
-			},
-			{
-				"name": "Localtimestamps",
-				"style": "Toggle",
-				"label": "Local Timestamps",
-				"default": true,
-				"help": "When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC."
-			},
-			{
-				"name": "Toxrestoreonstart",
-				"style": "Toggle",
-				"label": "Restore toxes on Start",
-				"help": "When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.",
-				"value": true
-			},
-			{
-				"name": "Datrestoreonstart",
-				"style": "Toggle",
-				"label": "Restore DATs on Start",
-				"default": true,
-				"help": "When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs."
-			},
-			{
-				"name": "Filecleanup",
-				"style": "Menu",
-				"label": "File Cleanup",
-				"startSection": true,
-				"default": "ask",
-				"menuNames": ["ask", "keep", "delete"],
-				"menuLabels": ["Ask", "Always Keep Files", "Always Delete Files"],
-				"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.",
-				"value": "delete"
-			},
-			{
-				"name": "Tdndatsafety",
-				"style": "Menu",
-				"label": "Content Safety",
-				"default": "ask",
-				"menuNames": ["ask", "externalize", "ignore"],
-				"menuLabels": ["Ask Each Save", "Always Externalize", "Never Ask"],
-				"help": "What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk."
-			},
-			{
-				"name": "Openmanager",
-				"style": "Pulse",
-				"label": "Open Manager",
-				"startSection": true,
-				"help": "Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management."
-			},
-			{
-				"name": "Closemanager",
-				"style": "Pulse",
-				"label": "Close Manager",
-				"help": "Closes the Embody Manager window."
-			}
-		],
-		"Tags": [
-			{
-				"name": "Toxtags",
-				"style": "Header",
-				"label": "tox Tags",
-				"help": "Tag strings and operator colors for TOX externalization. COMPs tagged with the Tox tag are externalized as .tox files."
-			},
-			{
-				"name": "Toxtagcolorr",
-				"style": "RGBA",
-				"label": "tox Tag Color",
-				"help": "Color applied to tox-tagged COMP operators in the network editor. Makes externalized COMPs visually identifiable.",
-				"values": [0.325, 0.8, 0.3]
-			},
-			{
-				"name": "Toxtag",
-				"style": "Str",
-				"label": ".tox Tag",
-				"help": "Tag string applied to COMP operators for .tox externalization. Operators with this tag are externalized as .tox files.",
-				"value": "tox"
-			},
-			{
-				"name": "Dattags",
-				"style": "Header",
-				"label": "DAT Tags",
-				"startSection": true,
-				"help": "Tag strings and operator colors for DAT externalization. DATs are tagged with format-specific tags (py, json, xml, etc.) and externalized to matching file types."
-			},
-			{
-				"name": "Dattagcolorr",
-				"style": "RGBA",
-				"label": "DAT Tag Color",
-				"help": "Color applied to DAT-tagged operators in the network editor. Makes externalized DATs visually identifiable.",
-				"values": [0.9, 0.3, 0.4]
-			},
-			{
-				"name": "Clonetagcolorr",
-				"style": "RGBA",
-				"label": "Clone Tag Color",
-				"help": "Color applied to clone-tagged operators in the network editor. Distinguishes cloned externalized operators from originals.",
-				"values": [1, 0.7, 0.1]
-			},
-			{
-				"name": "Pytag",
-				"style": "Str",
-				"label": ".py Tag",
-				"help": "Tag string for .py (Python) externalization. Applied to text DATs containing Python code.",
-				"value": "py"
-			},
-			{
-				"name": "Jsontag",
-				"style": "Str",
-				"label": ".json Tag",
-				"startSection": true,
-				"help": "Tag string for .json externalization. Applied to text DATs containing JSON data.",
-				"value": "json"
-			},
-			{
-				"name": "Xmltag",
-				"style": "Str",
-				"label": ".xml Tag",
-				"help": "Tag string for .xml externalization. Applied to text DATs containing XML data.",
-				"value": "xml"
-			},
-			{
-				"name": "Htmltag",
-				"style": "Str",
-				"label": ".html Tag",
-				"help": "Tag string for .html externalization. Applied to text DATs containing HTML content.",
-				"value": "html"
-			},
-			{
-				"name": "Glsltag",
-				"style": "Str",
-				"label": ".glsl Tag",
-				"startSection": true,
-				"help": "Tag string for .glsl externalization. Applied to text DATs containing GLSL shader code.",
-				"value": "glsl"
-			},
-			{
-				"name": "Fragtag",
-				"style": "Str",
-				"label": ".frag Tag",
-				"help": "Tag string for .frag externalization. Applied to text DATs containing fragment shader code.",
-				"value": "frag"
-			},
-			{
-				"name": "Verttag",
-				"style": "Str",
-				"label": ".vert Tag",
-				"help": "Tag string for .vert externalization. Applied to text DATs containing vertex shader code.",
-				"value": "vert"
-			},
-			{
-				"name": "Txttag",
-				"style": "Str",
-				"label": ".txt Tag",
-				"startSection": true,
-				"help": "Tag string for .txt externalization. Applied to text DATs containing plain text.",
-				"value": "txt"
-			},
-			{
-				"name": "Mdtag",
-				"style": "Str",
-				"label": ".md Tag",
-				"help": "Tag string for .md externalization. Applied to text DATs containing Markdown content.",
-				"value": "md"
-			},
-			{
-				"name": "Rtftag",
-				"style": "Str",
-				"label": ".rtf Tag",
-				"help": "Tag string for .rtf externalization. Applied to text DATs containing rich text format content.",
-				"value": "rtf"
-			},
-			{
-				"name": "Csvtag",
-				"style": "Str",
-				"label": ".csv Tag",
-				"startSection": true,
-				"help": "Tag string for .csv externalization. Applied to table DATs with comma-separated values.",
-				"value": "csv"
-			},
-			{
-				"name": "Tsvtag",
-				"style": "Str",
-				"label": ".tsv Tag",
-				"help": "Tag string for .tsv externalization. Applied to table DATs with tab-separated values.",
-				"value": "tsv"
-			},
-			{
-				"name": "Dattag",
-				"style": "Str",
-				"label": ".dat Tag",
-				"help": "Tag string for .dat externalization. Generic DAT externalization format.",
-				"value": "dat"
-			},
-			{
-				"name": "Tdntags",
-				"style": "Header",
-				"label": "TDN Tags",
-				"startSection": true,
-				"help": "Tag strings and operator colors for TDN externalization. COMPs tagged with the TDN tag have their children exported as human-readable .tdn JSON network files."
-			},
-			{
-				"name": "Tdntagcolor",
-				"style": "RGBA",
-				"label": "TDN Tag Color",
-				"default": 0.3,
-				"help": "Color applied to TDN-tagged COMP operators in the network editor. Makes TDN-strategy COMPs visually identifiable."
-			},
-			{
-				"name": "Tdntag",
-				"style": "Str",
-				"label": ".tdn Tag",
-				"help": "Tag string for .tdn externalization. Applied to COMPs whose children are exported as human-readable JSON network files.",
-				"value": "tdn"
-			}
-		],
-		"TDN": [
-			{
-				"name": "Tdnmode",
-				"style": "Menu",
-				"label": "TDN Mode",
-				"startSection": true,
-				"default": "export",
-				"menuNames": ["off", "export", "full"],
-				"menuLabels": ["Off", "Export-on-Save", "Roundtrip (Experimental)"],
-				"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs."
-			},
-			{
-				"name": "Tdncascade",
-				"style": "Toggle",
-				"label": "Cascade to Children",
-				"startSection": true,
-				"help": "When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file."
-			},
-			{
-				"name": "Tdncascadewarn",
-				"style": "Menu",
-				"label": "Large TDN Warning",
-				"default": "ask",
-				"menuNames": ["ask", "quiet"],
-				"menuLabels": ["Ask", "Quiet"],
-				"help": "Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed."
-			},
-			{
-				"name": "Embeddatsintdns",
-				"style": "Toggle",
-				"label": "Embed DATs (default)",
-				"startSection": true,
-				"help": "When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content."
-			},
-			{
-				"name": "Embedstorageintdns",
-				"style": "Toggle",
-				"label": "Embed Storage (default)",
-				"default": true,
-				"help": "Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu."
-			},
-			{
-				"name": "Tdncreateonstart",
-				"style": "Toggle",
-				"label": "TDN Create on Start",
-				"startSection": true,
-				"default": true,
-				"help": "When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save."
-			},
-			{
-				"name": "Tdnstriponsave",
-				"style": "Toggle",
-				"label": "Strip on Save",
-				"default": true,
-				"help": "When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal."
-			},
-			{
-				"name": "Tdnpalettehandling",
-				"style": "Menu",
-				"label": "Palette Handling",
-				"startSection": true,
-				"default": "ask",
-				"menuNames": ["ask", "blackbox", "fullexport"],
-				"menuLabels": ["Ask", "Black Box", "Full Export"],
-				"help": "How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.",
-				"value": "blackbox"
-			},
-			{
-				"name": "Tdnfile",
-				"style": "File",
-				"label": "TDN File",
-				"startSection": true,
-				"help": "Path to a .tdn file to import. Select a file, set the Network Path target, then pulse Import TDN."
-			},
-			{
-				"name": "Networkpath",
-				"style": "COMP",
-				"label": "Network Path",
-				"help": "Target COMP where the TDN file will be imported. Operators from the .tdn are created as children of this COMP."
-			},
-			{
-				"name": "Importtdn",
-				"style": "Pulse",
-				"label": "Import TDN",
-				"help": "Imports the specified TDN File into the Network Path target. Creates all operators, sets parameters, connections, and positions."
-			}
-		],
-		"Envoy": [
-			{
-				"name": "Aiclient",
-				"style": "Menu",
-				"label": "AI Client",
-				"default": "0",
-				"menuNames": ["claudecode", "cursor", "copilot", "windsurf", "none"],
-				"menuLabels": ["Claude Code", "Cursor", "GitHub Copilot", "Windsurf", "None"],
-				"help": "Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).",
-				"value": "claudecode"
-			},
-			{
-				"name": "Envoyenable",
-				"style": "Toggle",
-				"label": "Envoy Enable",
-				"help": "Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.",
-				"value": true
-			},
-			{
-				"name": "Envoyport",
-				"style": "Int",
-				"label": "Envoy Port",
-				"default": 9876,
-				"help": "Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.",
-				"value": 9870
-			},
-			{
-				"name": "Envoystatus",
-				"style": "Str",
-				"label": "Envoy Status",
-				"readOnly": true,
-				"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-				"value": "Running on port 9870"
-			}
-		],
-		"Logs": [
-			{
-				"name": "Verbose",
-				"style": "Toggle",
-				"label": "Verbose (Debug)",
-				"help": "Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues."
-			},
-			{
-				"name": "Print",
-				"style": "Toggle",
-				"label": "Print to Textport",
-				"help": "Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time.",
-				"value": true
-			},
-			{
-				"name": "Logtofile",
-				"style": "Toggle",
-				"label": "Log to File",
-				"help": "Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB.",
-				"value": true
-			},
-			{
-				"name": "Logfolder",
-				"style": "Folder",
-				"label": "Log Folder",
-				"help": "Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.",
-				"value": "logs"
-			}
-		],
-		"UI": [
-			{
-				"name": "Enablekeyboardshortcuts",
-				"style": "Toggle",
-				"label": "Enable Keyboard Shortcuts",
-				"help": "Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.",
-				"value": true
-			},
-			{
-				"name": "Addtagshort",
-				"style": "Str",
-				"label": "Add Externalization Tag",
-				"startSection": true,
-				"readOnly": true,
-				"help": "Keyboard shortcut for adding an externalization tag to the selected operator(s). Default: double-press Left Ctrl.",
-				"value": "lctrl-lctrl (lclick op & press 2x)"
-			},
-			{
-				"name": "Openmanagershort",
-				"style": "Str",
-				"label": "Open Manager",
-				"readOnly": true,
-				"help": "Keyboard shortcut for opening the Embody Manager window.",
-				"value": "ctrl/cmd + lshift + o"
-			},
-			{
-				"name": "Initializeupdateshort",
-				"style": "Str",
-				"label": "Initialize/Update All",
-				"readOnly": true,
-				"help": "Keyboard shortcut for triggering Initialize/Update All (Ctrl+Shift+U). Saves all dirty externalized operators to disk.",
-				"value": "ctrl/cmd + lshift + u"
-			},
-			{
-				"name": "Saveshort",
-				"style": "Str",
-				"label": "Update Current COMP",
-				"readOnly": true,
-				"help": "Keyboard shortcut for updating/saving the current COMP to its externalized file.",
-				"value": "ctrl/cmd + alt + u"
-			},
-			{
-				"name": "Exportprojecttdn",
-				"style": "Str",
-				"label": "Export Project to TDN",
-				"startSection": true,
-				"default": "ctrl/cmd + lshift + e",
-				"readOnly": true,
-				"help": "Export the entire project network to a single .tdn file at your project root."
-			},
-			{
-				"name": "Exportcomptdn",
-				"style": "Str",
-				"label": "Export Current COMP to TDN",
-				"default": "ctrl/cmd + alt + e",
-				"readOnly": true,
-				"help": "Export the current COMP network to a .tdn file."
-			},
-			{
-				"name": "Textcolor",
-				"style": "RGBA",
-				"label": "Text Color",
-				"startSection": true,
-				"help": "Text color used throughout the Embody UI (toolbar, manager, dialogs).",
-				"values": [0.59472, 0.63, 0.599424, 1]
-			},
-			{
-				"name": "Backgroundcolor",
-				"style": "RGBA",
-				"label": "Background Color",
-				"help": "Background color for the Embody UI panels and windows.",
-				"values": [0.0968, 0.121, 0.121, 0.8]
-			},
-			{
-				"name": "Buttonbackgroundcolor",
-				"style": "RGBA",
-				"label": "Button Background Color",
-				"help": "Background color for buttons in the Embody UI.",
-				"values": [0.1246, 0.14, 0.13, 1]
-			},
-			{
-				"name": "Listheadercolor",
-				"style": "RGBA",
-				"label": "List Header Color",
-				"help": "Header row color in the Manager list view.",
-				"values": [0.089419, 0.121, 0.103104, 1]
-			},
-			{
-				"name": "Listrowcolor",
-				"style": "RGBA",
-				"label": "List Row Color",
-				"help": "Default row color in the Manager list view.",
-				"values": [0.1246, 0.14, 0.13, 1]
-			},
-			{
-				"name": "Listrowselectcolor",
-				"style": "RGBA",
-				"label": "List Row Select Color",
-				"help": "Selected row highlight color in the Manager list view.",
-				"values": [0.220088, 0.244, 0.221283, 1]
-			},
-			{
-				"name": "Savedcolor",
-				"style": "RGBA",
-				"label": "Saved Color",
-				"help": "Color indicator for operators that are saved and up-to-date (not dirty).",
-				"values": [0.227574, 0.423, 0.289133, 0.5]
-			},
-			{
-				"name": "Dirtycolor",
-				"style": "RGBA",
-				"label": "Dirty Color",
-				"help": "Color indicator for operators that have unsaved changes (dirty state).",
-				"values": [0.675, 0.25668, 0.2268, 1]
-			},
-			{
-				"name": "Dirtyparcolor",
-				"style": "RGBA",
-				"label": "Dirty Par Color",
-				"help": "Color indicator for parameters that have been modified since last save.",
-				"values": [0.49, 0.321897, 0.16464, 1]
-			},
-			{
-				"name": "Taggingmenucolor",
-				"style": "RGBA",
-				"label": "Tagging Menu Color",
-				"help": "Background color for the tagging menu popup.",
-				"values": [0.2, 0.2, 0.2, 1]
-			},
-			{
-				"name": "Highlightcolor",
-				"style": "RGBA",
-				"label": "Highlight Color",
-				"help": "Accent/highlight color used for interactive elements in the Embody UI.",
-				"values": [1, 1, 1, 1]
-			},
-			{
-				"name": "Tdnsavedcolor",
-				"style": "RGBA",
-				"label": "TDN Saved Color",
-				"help": "Color indicator for TDN-strategy operators that are saved and up-to-date.",
-				"values": [0.153552, 0.376081, 0.457, 1]
-			}
-		],
-		"About": [
-			{
-				"name": "Version",
-				"style": "Str",
-				"startSection": true,
-				"readOnly": true,
-				"help": "Embody version string (read-only).",
-				"value": "5.0.379"
-			},
-			{
-				"name": "Touchbuild",
-				"style": "Str",
-				"label": "Touch Build",
-				"readOnly": true,
-				"help": "TouchDesigner build number this version was developed on (read-only).",
-				"value": "2025.32460"
-			},
-			{
-				"name": "Author",
-				"style": "Str",
-				"readOnly": true,
-				"help": "Embody author (read-only).",
-				"value": "Dylan Roscover"
-			},
-			{
-				"name": "Build",
-				"style": "Int",
-				"label": "Build Number",
-				"readOnly": true,
-				"help": "Embody build number (read-only). Incremented with each release.",
-				"value": 398
-			},
-			{
-				"name": "Github",
-				"style": "Pulse",
-				"label": "GitHub",
-				"startSection": true,
-				"help": "Opens the Embody GitHub repository in your web browser."
-			},
-			{
-				"name": "Date",
-				"style": "Str",
-				"label": "Build Date",
-				"readOnly": true,
-				"help": "Date of this Embody build (read-only).",
-				"value": "2026-04-18 19:43:48 UTC"
-			},
-			{
-				"name": "Help",
-				"style": "Pulse",
-				"help": "Opens the Embody help documentation."
-			}
-		]
-	},
-	"parameters": {
-		"w": "~op('./manager').par.w",
-		"h": "~op('./manager').par.h",
-		"display": false,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"borderover": false,
-		"align": "horizlr",
-		"parentshortcut": "Embody",
-		"opshortcut": "Embody",
-		"opviewer": "./text_bg",
-		"reloadbuiltin": false
-	},
-	"sequences": {
-		"ext": [
-			{
-				"object": "op('./EmbodyExt').module.EmbodyExt(me)",
-				"name": "Embody",
-				"promote": true
-			},
-			{
-				"object": "op('./EnvoyExt').module.EnvoyExt(me)",
-				"name": "Envoy",
-				"promote": true
-			},
-			{
-				"object": "op('./TDNExt').module.TDNExt(me)",
-				"name": "TDN",
-				"promote": true
-			},
-			{
-				"object": "op('./CatalogManagerExt').module.CatalogManagerExt(me)",
-				"name": "CatalogManager",
-				"promote": true
-			},
-			{},
-			{},
-			{},
-			{},
-			{},
-			{},
-			{}
-		]
-	},
-	"flags": ["display", "viewer"],
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"storage": {
-		"claudius_running": false,
-		"_tdn_restore_failures": ["/embody/base1"],
-		"expand_order": ["/embody"],
-		"_start_in_progress": true
-	},
-	"operators": [
-		{
-			"name": "help",
-			"type": "opviewerCOMP",
-			"parameters": {
-				"opviewer": "./text_help",
-				"w": 500,
-				"h": 600,
-				"display": false,
-				"resizecomp": "=me",
-				"repocomp": "=me",
-				"topsmoothness": "mipmap",
-				"borderover": false,
-				"reloadbuiltin": false
-			},
-			"position": [196, 675],
-			"size": [142, 155],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/help.tdn"
-		},
-		{
-			"name": "list",
-			"type": "containerCOMP",
-			"parameters": {
-				"w": 996,
-				"h": 40,
-				"hmode": "fill",
-				"vmode": "fill",
-				"alignorder": 1,
-				"resizeb": true,
-				"resizewmin": 400,
-				"resizewmax": 3840,
-				"resizehmin": 40,
-				"resizehmax": 2160,
-				"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-				"bgalpha": "=parent.Embody.par.Backgroundcolora",
-				"borderover": false,
-				"marginl": 5,
-				"marginr": 5,
-				"reloadbuiltin": false
-			},
-			"position": [250, 50],
-			"size": [257, 250],
-			"comp_inputs": ["manager"],
-			"tdn_ref": "embody/Embody/list.tdn"
-		},
-		{
-			"name": "fifo1",
-			"type": "fifoDAT",
-			"parameters": {
-				"callbacks": "fifo1_callbacks",
-				"fromop": "=parent()",
-				"maxlines": 100
-			},
-			"position": [-700, 400],
-			"size": [130, 90],
-			"color": [0.67, 0.67, 0.67]
-		},
-		{
-			"name": "null2",
-			"type": "nullCHOP",
-			"parameters": {
-				"cooktype": "selective",
-				"autoexportroot": "=parent()"
-			},
-			"position": [-325, -525],
-			"size": [130, 90],
-			"inputs": ["select1"]
-		},
-		{
-			"name": "TDNExt",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/TDNExt.py"
-			},
-			"position": [-300, 400],
-			"tags": ["py"]
-		},
-		{
-			"name": "tagger",
-			"type": "containerCOMP",
-			"parameters": {
-				"w": 180,
-				"h": "=28 * me.fetch('visible_count', op('./tags').numRows) + 2",
-				"display": false,
-				"bgcolorr": "=parent.Embody.par.Listrowcolorr",
-				"bgcolorg": "=parent.Embody.par.Listrowcolorg",
-				"bgcolorb": "=parent.Embody.par.Listrowcolorb",
-				"bgalpha": 1,
-				"borderar": 0.26426,
-				"borderag": 0.298469,
-				"borderab": 0.362,
-				"align": "verttb",
-				"parentshortcut": "menu",
-				"reloadbuiltin": false
-			},
-			"position": [900, 225],
-			"size": [108, 155],
-			"tdn_ref": "embody/Embody/tagger.tdn"
-		},
-		{
-			"name": "timer1",
-			"type": "timerCHOP",
-			"parameters": {
-				"active": "never",
-				"deferpars": true,
-				"length": 30,
-				"lengthunits": "frames",
-				"delayunits": "samples",
-				"maxcycles": 2,
-				"callbacks": "timer_callbacks",
-				"outfraction": false,
-				"outready": false,
-				"outdone": false,
-				"exttcop": "=tdu.Timecode()",
-				"rate": "=me.time.rate",
-				"autoexportroot": "=parent()"
-			},
-			"position": [-625, -275],
-			"size": [130, 90]
-		},
-		{
-			"name": "execute",
-			"type": "executeDAT",
-			"parameters": {
-				"fromop": "=parent()",
-				"start": true,
-				"create": true,
-				"projectpresave": true,
-				"projectpostsave": true,
-				"file": "embody/Embody/execute.py",
-				"defaultreadencoding": "cp1252",
-				"syncfile": true,
-				"language": "input"
-			},
-			"flags": ["display"],
-			"position": [-300, 200],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
-		},
-		{
-			"name": "manager",
-			"type": "containerCOMP",
-			"parameters": {
-				"y": 13,
-				"w": 1080,
-				"h": 440,
-				"resizer": true,
-				"resizeb": true,
-				"resizewmin": 250,
-				"resizewmax": 3840,
-				"resizehmin": 50,
-				"resizehmax": 2160,
-				"topsmoothness": "mipmap",
-				"borderar": "=parent.Embody.par.Textcolorr * 0.5",
-				"borderag": "=parent.Embody.par.Textcolorg * 0.5",
-				"borderab": "=parent.Embody.par.Textcolorb * 0.5",
-				"borderaalpha": "=parent.Embody.par.Textcolora",
-				"leftborder": "bordera",
-				"rightborder": "bordera",
-				"bottomborder": "bordera",
-				"topborder": "bordera",
-				"align": "verttb",
-				"reloadbuiltin": false
-			},
-			"position": [650, 250],
-			"size": [160, 92],
-			"tdn_ref": "embody/Embody/manager.tdn"
-		},
-		{
-			"name": "parexec",
-			"type": "parameterexecuteDAT",
-			"parameters": {
-				"fromop": "=parent()",
-				"op": "..",
-				"pars": "*",
-				"file": "embody/Embody/parexec.py",
-				"defaultreadencoding": "cp1252",
-				"syncfile": true,
-				"language": "input"
-			},
-			"position": [-300, 100],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
-		},
-		{
-			"name": "select1",
-			"type": "selectCHOP",
-			"parameters": {
-				"channames": "click",
-				"autoexportroot": "=parent()"
-			},
-			"position": [-475, -525],
-			"size": [130, 90],
-			"inputs": ["mousein1"]
-		},
-		{
-			"name": "toolbar",
-			"type": "containerCOMP",
-			"parameters": {
-				"y": 368,
-				"w": 996,
-				"h": 40,
-				"layer": 1000,
-				"hmode": "fill",
-				"resizewmin": 400,
-				"resizewmax": 3840,
-				"resizehmin": 40,
-				"resizehmax": 2160,
-				"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-				"bgalpha": "=parent.Embody.par.Backgroundcolora",
-				"topsmoothness": "mipmap",
-				"borderover": false,
-				"justifyv": "center",
-				"reloadbuiltin": false
-			},
-			"sequences": {
-				"ext": [
-					{
-						"object": "op('./ToolbarExt').module.ToolbarExt(me)",
-						"name": "ToolbarExt",
-						"promote": true
-					}
-				]
-			},
-			"position": [300, 350],
-			"size": [160, 76],
-			"storage": {
-				"_tip_trace": {
-					"btn": "close",
-					"text": "Clear filter",
-					"text_width": 60.3,
-					"tip_w": 80,
-					"container_x": 726,
-					"container_w": 270,
-					"btn_x": 244,
-					"btn_w": 26,
-					"tip_x": 914,
-					"toolbar_w": 996,
-					"btn_center": 983,
-					"tip_center": 954,
-					"offset": -29
-				}
-			},
-			"comp_inputs": ["manager"],
-			"tdn_ref": "embody/Embody/toolbar.tdn"
-		},
-		{
-			"name": "EnvoyExt",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/EnvoyExt.py"
-			},
-			"position": [-300, 500],
-			"tags": ["TDExtension", "py"]
-		},
-		{
-			"name": "mousein1",
-			"type": "mouseinCHOP",
-			"parameters": {
-				"output": "normal",
-				"lbuttonname": "click",
-				"rate": "=me.time.rate",
-				"autoexportroot": "=parent()"
-			},
-			"position": [-625, -525],
-			"size": [130, 90]
-		},
-		{
-			"name": "EmbodyExt",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/EmbodyExt.py",
-				"defaultreadencoding": "cp1252",
-				"extension": "py"
-			},
-			"position": [-300, 600],
-			"tags": ["py"]
-		},
-		{
-			"name": "annotate1",
-			"type": "annotateCOMP",
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Claude Config",
-					"Bodytext": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation."
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": ["=me.color[0] # node color [r]", "=me.color[1]", "=me.color[2] "]
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-770, -1270],
-			"size": [600, 370],
-			"color": [0.45, 0.45, 0.45],
-			"palette_clone": true
-		},
-		{
-			"name": "templates",
-			"type": "baseCOMP",
-			"position": [-400, -1200],
-			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/templates.tdn"
-		},
-		{
-			"name": "keyboardin1",
-			"type": "keyboardinDAT",
-			"parameters": {
-				"active": "~parent.Embody.par.Enablekeyboardshortcuts",
-				"callbacks": "keyboardin_callbacks",
-				"fromop": "=parent()"
-			},
-			"position": [-325, -275],
-			"size": [130, 90]
-		},
-		{
-			"name": "windowHeader",
-			"type": "containerCOMP",
-			"parameters": {
-				"h": 26,
-				"hmode": "fill",
-				"alignorder": -1,
-				"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-				"bgalpha": "=parent.Embody.par.Backgroundcolora",
-				"align": "horizlr",
-				"marginl": 8,
-				"justifyh": "left",
-				"justifyv": "top"
-			},
-			"sequences": {
-				"ext": [
-					{
-						"object": "op('./WindowHeaderExt').module.WindowHeaderExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Header": [
-					{
-						"name": "Headerlabel",
-						"style": "Str",
-						"label": "Label",
-						"value": "=f'Embody v{parent.Embody.par.Version}'"
-					}
-				],
-				"Controls": [
-					{
-						"name": "Windowcomp",
-						"style": "COMP",
-						"label": "Window COMP",
-						"value": "/embody/Embody/window_manager"
-					}
-				]
-			},
-			"position": [300, 475],
-			"size": [160, 130],
-			"comp_inputs": ["manager"],
-			"tdn_ref": "embody/Embody/windowHeader.tdn"
-		},
-		{
-			"name": "annotation_ui",
-			"type": "annotateCOMP",
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "UI",
-					"Bodytext": "All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows."
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": ["=me.color[0] # node color [r]", "=me.color[1]", "=me.color[2] "],
-					"Opacity": 0.9
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"size": [1300, 1000],
-			"color": [0.45, 0.45, 0.45],
-			"palette_clone": true
-		},
-		{
-			"name": "_envoy_perform",
-			"type": "performCHOP",
-			"parameters": {
-				"msec": true,
-				"cook": true,
-				"droppedframes": true,
-				"gpumemused": true,
-				"totalgpumem": true,
-				"activeops": true,
-				"totalops": true,
-				"cpumemused": true,
-				"cookrealtime": true,
-				"cookrate": true,
-				"timeslicestep": true,
-				"timeslicemsec": true,
-				"performmode": true,
-				"gputemp": true,
-				"autoexportroot": "=parent()"
-			},
-			"position": [-625, -650],
-			"size": [130, 90],
-			"color": [0.67, 0.67, 0.67],
-			"comment": "Envoy project performance monitor",
-			"tags": ["embody_internal"]
-		},
-		{
-			"name": "window_manager",
-			"type": "windowCOMP",
-			"parameters": {
-				"winop": "manager",
-				"ignoretaskbar": false,
-				"justifyh": "center",
-				"justifyv": "center",
-				"winoffsetx": -12,
-				"cursorvisible": "alwaysvisible"
-			},
-			"position": [500, 675],
-			"size": [154, 89],
-			"tdn_ref": "embody/Embody/window_manager.tdn"
-		},
-		{
-			"name": "fifo1_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/fifo1_callbacks.py"
-			},
-			"position": [-700, 300],
-			"tags": ["py"],
-			"dock": "fifo1"
-		},
-		{
-			"name": "palette_catalog",
-			"type": "tableDAT",
-			"parameters": {
-				"file": "embody/Embody/palette_catalog.tsv",
-				"rows": 526
-			},
-			"position": [-500, 200]
-		},
-		{
-			"name": "timer_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/timer_callbacks.py"
-			},
-			"position": [-625, -375],
-			"tags": ["py"],
-			"dock": "timer1"
-		},
-		{
-			"name": "annotation_logic",
-			"type": "annotateCOMP",
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Logic",
-					"Bodytext": "Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template."
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": [0.485, 0, 0.274833],
-					"Opacity": 0.9
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-770, 30],
-			"size": [670, 830],
-			"color": [0.45, 0.45, 0.45],
-			"palette_clone": true
-		},
-		{
-			"name": "CatalogManagerExt",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/CatalogManagerExt.py"
-			},
-			"position": [-300, 300],
-			"tags": ["py"]
-		},
-		{
-			"name": "annotation_tagging",
-			"type": "annotateCOMP",
-			"parameters": {
-				"reloadbuiltin": false
-			},
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Tagging",
-					"Bodytext": "Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection)."
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": [0.198067, 0.5, 0.1765],
-					"Opacity": 0.9
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-800, -700],
-			"size": [700, 600],
-			"palette_clone": true
-		},
-		{
-			"name": "annotation_windows",
-			"type": "annotateCOMP",
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Windows",
-					"Bodytext": "Popup windows for the tagging menu and externalization manager UI."
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": [0.574, 0.574, 0.574],
-					"Opacity": 0.9
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [100, 600],
-			"size": [1140, 310],
-			"color": [0.45, 0.45, 0.45],
-			"palette_clone": true
-		},
-		{
-			"name": "divergent_defaults",
-			"type": "tableDAT",
-			"parameters": {
-				"file": "embody/Embody/divergent_defaults.tsv",
-				"rows": 502
-			},
-			"position": [-500, 300]
-		},
-		{
-			"name": "window_tagging_menu",
-			"type": "windowCOMP",
-			"parameters": {
-				"winop": "tagger",
-				"justifyh": "mouse",
-				"justifyv": "mouse",
-				"winoffsetx": 110
-			},
-			"position": [900, 675],
-			"size": [110, 157],
-			"tdn_ref": "embody/Embody/window_tagging_menu.tdn"
-		},
-		{
-			"name": "chopexec_exit_tagger",
-			"type": "chopexecuteDAT",
-			"parameters": {
-				"fromop": "=parent()",
-				"chop": "null2",
-				"channel": "click",
-				"offtoon": true,
-				"valuechange": false,
-				"file": "embody/Embody/chopexec_exit_tagger.py",
-				"syncfile": true
-			},
-			"position": [-325, -650],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "null2"
-		},
-		{
-			"name": "keyboardin_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/keyboardin_callbacks.py"
-			},
-			"position": [-325, -375],
-			"tags": ["py"],
-			"dock": "keyboardin1"
-		}
-	],
-	"annotations": [
-		{
-			"name": "annotate1",
-			"mode": "annotate",
-			"title": "Claude Config",
-			"text": "CLAUDE.md template and .claude/ rule/skill templates for user-project generation.",
-			"position": [-770, -1270],
-			"size": [600, 370],
-			"color": [0.45, 0.45, 0.45]
-		},
-		{
-			"name": "annotation_logic",
-			"mode": "annotate",
-			"title": "Logic",
-			"text": "Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.",
-			"position": [-770, 30],
-			"size": [670, 830],
-			"color": [0.485, 0.0, 0.2748],
-			"opacity": 0.9
-		},
-		{
-			"name": "annotation_tagging",
-			"mode": "annotate",
-			"title": "Tagging",
-			"text": "Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection).",
-			"position": [-800, -700],
-			"size": [700, 600],
-			"color": [0.1981, 0.5, 0.1765],
-			"opacity": 0.9
-		},
-		{
-			"name": "annotation_ui",
-			"mode": "annotate",
-			"title": "UI",
-			"text": "All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.",
-			"size": [1300, 1000],
-			"color": [0.45, 0.45, 0.45],
-			"opacity": 0.9
-		},
-		{
-			"name": "annotation_windows",
-			"mode": "annotate",
-			"title": "Windows",
-			"text": "Popup windows for the tagging menu and externalization manager UI.",
-			"position": [100, 600],
-			"size": [1140, 310],
-			"color": [0.574, 0.574, 0.574],
-			"opacity": 0.9
-		}
-	]
-}
+format: tdn
+version: '2.0'
+build: 660
+generator: Embody/6.0.60
+td_build: 099.2025.32820
+source_file: Embody-6.61.toe
+exported_at: '2026-06-29T00:35:10Z'
+network_path: /embody/Embody
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  containerCOMP:
+    parameters:
+      resizecomp: =me
+      repocomp: =me
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+  textDAT:
+    parameters:
+      syncfile: true
+      language: python
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+  baseCOMP:
+    size: [160, 130]
+  windowCOMP:
+    parameters:
+      title: =me
+      borders: false
+      includedialog: false
+      reloadbuiltin: false
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+  tableDAT:
+    parameters:
+      syncfile: true
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - tsv
+type: containerCOMP
+custom_pars:
+  Embody:
+  - name: Status
+    style: Str
+    readOnly: true
+    help: Current Embody status (read-only). Shows whether Embody is initialized and running.
+    value: Enabled
+  - name: Disable
+    style: Pulse
+    help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
+  - name: Update
+    style: Pulse
+    label: Enable/Update
+    help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
+  - name: Refresh
+    style: Pulse
+    help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
+  - name: Performmode
+    style: Toggle
+    label: Perform Mode
+  - name: Createexternalizationstable
+    style: Pulse
+    label: Create Externalizations Table
+    startSection: true
+    help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
+  - name: Externalizations
+    style: DAT
+    label: Externalizations Table
+    help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
+    value: /embody/externalizations
+  - name: Openexternalizationstable
+    style: Pulse
+    label: Open Externalizations Table
+    help: Opens the externalizations tracking table in a floating viewer window.
+  - name: Folder
+    style: Folder
+    label: Externalizations Folder
+    startSection: true
+    help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
+  - name: Externalizeproject
+    style: Pulse
+    label: Externalize Full Project
+    startSection: true
+    help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
+  - name: Detectduplicatepaths
+    style: Toggle
+    label: Detect Duplicate Paths
+    help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
+    value: true
+  - name: Templatemaster
+    style: Str
+    label: Template Master Name
+    default: __template__
+    help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
+  - name: Localtimestamps
+    style: Toggle
+    label: Local Timestamps
+    default: true
+    help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
+  - name: Toxrestoreonstart
+    style: Toggle
+    label: Restore toxes on Start
+    help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
+    value: true
+  - name: Datrestoreonstart
+    style: Toggle
+    label: Restore DATs on Start
+    default: true
+    help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
+  - name: Filecleanup
+    style: Menu
+    label: File Cleanup
+    startSection: true
+    default: ask
+    menuNames:
+    - ask
+    - keep
+    - delete
+    menuLabels:
+    - Ask
+    - Always Keep Files
+    - Always Delete Files
+    help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
+    value: delete
+  - name: Tdndatsafety
+    style: Menu
+    label: Content Safety
+    default: ask
+    menuNames:
+    - ask
+    - externalize
+    - ignore
+    menuLabels:
+    - Ask Each Save
+    - Always Externalize
+    - Never Ask
+    help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+  - name: Openmanager
+    style: Pulse
+    label: Open Manager
+    startSection: true
+    help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
+  - name: Closemanager
+    style: Pulse
+    label: Close Manager
+    help: Closes the Embody Manager window.
+  Tags:
+  - name: Toxtags
+    style: Header
+    label: tox Tags
+    help: Tag strings and operator colors for TOX externalization. COMPs tagged with the Tox tag are externalized as .tox files.
+  - name: Toxtagcolorr
+    style: RGBA
+    label: tox Tag Color
+    help: Color applied to tox-tagged COMP operators in the network editor. Makes externalized COMPs visually identifiable.
+    values: [0.325, 0.8, 0.3]
+  - name: Toxtag
+    style: Str
+    label: .tox Tag
+    help: Tag string applied to COMP operators for .tox externalization. Operators with this tag are externalized as .tox files.
+    value: tox
+  - name: Dattags
+    style: Header
+    label: DAT Tags
+    startSection: true
+    help: Tag strings and operator colors for DAT externalization. DATs are tagged with format-specific tags (py, json, xml, etc.) and externalized to matching file types.
+  - name: Dattagcolorr
+    style: RGBA
+    label: DAT Tag Color
+    help: Color applied to DAT-tagged operators in the network editor. Makes externalized DATs visually identifiable.
+    values: [0.9, 0.3, 0.4]
+  - name: Clonetagcolorr
+    style: RGBA
+    label: Clone Tag Color
+    help: Color applied to clone-tagged operators in the network editor. Distinguishes cloned externalized operators from originals.
+    values: [1, 0.7, 0.1]
+  - name: Pytag
+    style: Str
+    label: .py Tag
+    help: Tag string for .py (Python) externalization. Applied to text DATs containing Python code.
+    value: py
+  - name: Jsontag
+    style: Str
+    label: .json Tag
+    startSection: true
+    help: Tag string for .json externalization. Applied to text DATs containing JSON data.
+    value: json
+  - name: Xmltag
+    style: Str
+    label: .xml Tag
+    help: Tag string for .xml externalization. Applied to text DATs containing XML data.
+    value: xml
+  - name: Htmltag
+    style: Str
+    label: .html Tag
+    help: Tag string for .html externalization. Applied to text DATs containing HTML content.
+    value: html
+  - name: Glsltag
+    style: Str
+    label: .glsl Tag
+    startSection: true
+    help: Tag string for .glsl externalization. Applied to text DATs containing GLSL shader code.
+    value: glsl
+  - name: Fragtag
+    style: Str
+    label: .frag Tag
+    help: Tag string for .frag externalization. Applied to text DATs containing fragment shader code.
+    value: frag
+  - name: Verttag
+    style: Str
+    label: .vert Tag
+    help: Tag string for .vert externalization. Applied to text DATs containing vertex shader code.
+    value: vert
+  - name: Txttag
+    style: Str
+    label: .txt Tag
+    startSection: true
+    help: Tag string for .txt externalization. Applied to text DATs containing plain text.
+    value: txt
+  - name: Mdtag
+    style: Str
+    label: .md Tag
+    help: Tag string for .md externalization. Applied to text DATs containing Markdown content.
+    value: md
+  - name: Rtftag
+    style: Str
+    label: .rtf Tag
+    help: Tag string for .rtf externalization. Applied to text DATs containing rich text format content.
+    value: rtf
+  - name: Csvtag
+    style: Str
+    label: .csv Tag
+    startSection: true
+    help: Tag string for .csv externalization. Applied to table DATs with comma-separated values.
+    value: csv
+  - name: Tsvtag
+    style: Str
+    label: .tsv Tag
+    help: Tag string for .tsv externalization. Applied to table DATs with tab-separated values.
+    value: tsv
+  - name: Dattag
+    style: Str
+    label: .dat Tag
+    help: Tag string for .dat externalization. Generic DAT externalization format.
+    value: dat
+  - name: Tdntags
+    style: Header
+    label: TDN Tags
+    startSection: true
+    help: Tag strings and operator colors for TDN externalization. COMPs tagged with the TDN tag have their children exported as human-readable .tdn JSON network files.
+  - name: Tdntagcolor
+    style: RGBA
+    label: TDN Tag Color
+    default: 0.3
+    help: Color applied to TDN-tagged COMP operators in the network editor. Makes TDN-strategy COMPs visually identifiable.
+  - name: Tdntag
+    style: Str
+    label: .tdn Tag
+    help: Tag string for .tdn externalization. Applied to COMPs whose children are exported as human-readable JSON network files.
+    value: tdn
+  - name: Tdnexcludetag
+    style: Str
+    label: .tdn Exclude Tag
+    startSection: true
+    default: tdn_exclude
+    help: 'Tag name (default ''tdn_exclude'') that opts a COMP out of the entire TDN system. Primary use: opt a single child out of cascade autotag (when Tdncascade is on, the tdn tag normally propagates from a tdn-tagged parent to all its children -- apply this tag to a child to keep it excluded). Also useful for app-managed COMPs (e.g. spawned via .copy() at runtime) that the application is responsible for. Excluded COMPs are invisible to TDN: never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction.'
+  TDN:
+  - name: Tdnmode
+    style: Menu
+    label: TDN Mode
+    startSection: true
+    default: export
+    menuNames:
+    - 'off'
+    - export
+    - full
+    menuLabels:
+    - 'Off'
+    - Export-on-Save
+    - Roundtrip (Experimental)
+    help: Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs.
+  - name: Clipboardautopaste
+    style: Toggle
+    label: Clipboard Auto-Paste
+    startSection: true
+    default: true
+    help: When on, Embody watches the OS clipboard and prompts to paste an Embody network the moment one is copied (e.g. the web "embody it" button) -- no keyboard shortcut needed. Turn off to disable the automatic prompt.
+  - name: Tdncascade
+    style: Toggle
+    label: Cascade to Children
+    startSection: true
+    help: When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file.
+  - name: Tdncascadewarn
+    style: Menu
+    label: Large TDN Warning
+    default: ask
+    menuNames:
+    - ask
+    - quiet
+    menuLabels:
+    - Ask
+    - Quiet
+    help: Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed.
+  - name: Embeddatsintdns
+    style: Toggle
+    label: Embed DATs (default)
+    startSection: true
+    help: When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content.
+  - name: Embedstorageintdns
+    style: Toggle
+    label: Embed Storage (default)
+    default: true
+    help: Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu.
+  - name: Autosave
+    style: Toggle
+    label: Auto-Save Checkpoints
+    startSection: true
+    default: true
+    help: When on, after the agent (or you) goes idle Embody writes changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves.
+  - name: Tdncreateonstart
+    style: Toggle
+    label: TDN Create on Start
+    startSection: true
+    default: true
+    help: When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save.
+  - name: Autosavestatus
+    style: Str
+    label: Auto-Save Status
+    readOnly: true
+    help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
+    value: Saved 06:21:35 UTC
+  - name: Tdnstriponsave
+    style: Toggle
+    label: Strip on Save
+    default: true
+    help: When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal.
+  - name: Tdnpalettehandling
+    style: Menu
+    label: Palette Handling
+    startSection: true
+    default: ask
+    menuNames:
+    - ask
+    - blackbox
+    - fullexport
+    menuLabels:
+    - Ask
+    - Black Box
+    - Full Export
+    help: 'How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.'
+    value: blackbox
+  - name: Tdnfile
+    style: File
+    label: TDN File
+    startSection: true
+    help: Path to a .tdn file to import. Select a file, set the Network Path target, then pulse Import TDN.
+  - name: Networkpath
+    style: COMP
+    label: Network Path
+    help: Target COMP where the TDN file will be imported. Operators from the .tdn are created as children of this COMP.
+  - name: Importtdn
+    style: Pulse
+    label: Import TDN
+    help: Imports the specified TDN File into the Network Path target. Creates all operators, sets parameters, connections, and positions.
+  Envoy:
+  - name: Aiclient
+    style: Menu
+    label: AI Client
+    default: '0'
+    menuNames:
+    - claudecode
+    - cursor
+    - copilot
+    - windsurf
+    - none
+    menuLabels:
+    - Claude Code
+    - Cursor
+    - GitHub Copilot
+    - Windsurf
+    - None
+    help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
+    value: claudecode
+  - name: Aiprojectroot
+    style: Menu
+    label: AI Project Root
+    default: gitroot
+    menuNames:
+    - gitroot
+    - projectfolder
+    - custom
+    menuLabels:
+    - Git root
+    - Project folder (.toe directory)
+    - Custom
+    help: Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). "Git root" (default) writes at the top of the git repo. "Project folder" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace.
+  - name: Aiprojectrootcustom
+    style: Folder
+    label: AI Project Root (Custom)
+    help: Custom directory for AI/MCP config when "AI Project Root" is set to "Custom". Relative paths are resolved against the .toe directory (e.g. "../" places config one level above the .toe -- useful when multiple TouchDesigner projects share a parent folder in a monorepo). Absolute paths are used as-is. Changing this path migrates Embody state and AI config to the new location.
+  - name: Envoyenable
+    style: Toggle
+    label: Envoy Enable
+    startSection: true
+    help: Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.
+    value: true
+  - name: Envoyport
+    style: Int
+    label: Envoy Port
+    default: 9876
+    help: 'Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.'
+    value: 9870
+  - name: Embotenable
+    style: Toggle
+    label: Embot
+    startSection: true
+    default: true
+    help: Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. Off hides him entirely (no character, no camera movement).
+  - name: Envoyfollow
+    style: Toggle
+    label: Envoy Follow
+    default: true
+    help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
+  - name: Envoystatus
+    style: Str
+    label: Envoy Status
+    startSection: true
+    readOnly: true
+    help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
+    value: Running on port 9870
+  Logs:
+  - name: Verbose
+    style: Toggle
+    label: Verbose (Debug)
+    help: Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues.
+  - name: Print
+    style: Toggle
+    label: Print to Textport
+    help: Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time.
+    value: true
+  - name: Logtofile
+    style: Toggle
+    label: Log to File
+    help: Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB.
+    value: true
+  - name: Logfolder
+    style: Folder
+    label: Log Folder
+    help: Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.
+    value: logs
+  UI:
+  - name: Enablekeyboardshortcuts
+    style: Toggle
+    label: Enable Keyboard Shortcuts
+    help: Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.
+    value: true
+  - name: Addtagshort
+    style: Str
+    label: Add Externalization Tag
+    startSection: true
+    readOnly: true
+    help: 'Keyboard shortcut for adding an externalization tag to the selected operator(s). Default: double-press Left Ctrl.'
+    value: lctrl-lctrl (lclick op & press 2x)
+  - name: Openmanagershort
+    style: Str
+    label: Open Manager
+    readOnly: true
+    help: Keyboard shortcut for opening the Embody Manager window.
+    value: ctrl/cmd + lshift + o
+  - name: Initializeupdateshort
+    style: Str
+    label: Initialize/Update All
+    readOnly: true
+    help: Keyboard shortcut for triggering Initialize/Update All (Ctrl+Shift+U). Saves all dirty externalized operators to disk.
+    value: ctrl/cmd + lshift + u
+  - name: Saveshort
+    style: Str
+    label: Update Current COMP
+    readOnly: true
+    help: Keyboard shortcut for updating/saving the current COMP to its externalized file.
+    value: ctrl/cmd + alt + u
+  - name: Exportprojecttdn
+    style: Str
+    label: Export Project to TDN
+    startSection: true
+    default: ctrl/cmd + lshift + e
+    readOnly: true
+    help: Export the entire project network to a single .tdn file at your project root.
+  - name: Exportcomptdn
+    style: Str
+    label: Export Current COMP to TDN
+    default: ctrl/cmd + alt + e
+    readOnly: true
+    help: Export the current COMP network to a .tdn file.
+  - name: Textcolor
+    style: RGBA
+    label: Text Color
+    startSection: true
+    help: Text color used throughout the Embody UI (toolbar, manager, dialogs).
+    values: [0.59472, 0.63, 0.599424, 1]
+  - name: Backgroundcolor
+    style: RGBA
+    label: Background Color
+    help: Background color for the Embody UI panels and windows.
+    values: [0.0968, 0.121, 0.121, 0.8]
+  - name: Buttonbackgroundcolor
+    style: RGBA
+    label: Button Background Color
+    help: Background color for buttons in the Embody UI.
+    values: [0.1246, 0.14, 0.13, 1]
+  - name: Listheadercolor
+    style: RGBA
+    label: List Header Color
+    help: Header row color in the Manager list view.
+    values: [0.089419, 0.121, 0.103104, 1]
+  - name: Listrowcolor
+    style: RGBA
+    label: List Row Color
+    help: Default row color in the Manager list view.
+    values: [0.1246, 0.14, 0.13, 1]
+  - name: Listrowselectcolor
+    style: RGBA
+    label: List Row Select Color
+    help: Selected row highlight color in the Manager list view.
+    values: [0.220088, 0.244, 0.221283, 1]
+  - name: Savedcolor
+    style: RGBA
+    label: Saved Color
+    help: Color indicator for operators that are saved and up-to-date (not dirty).
+    values: [0.227574, 0.423, 0.289133, 0.5]
+  - name: Dirtycolor
+    style: RGBA
+    label: Dirty Color
+    help: Color indicator for operators that have unsaved changes (dirty state).
+    values: [0.675, 0.25668, 0.2268, 1]
+  - name: Dirtyparcolor
+    style: RGBA
+    label: Dirty Par Color
+    help: Color indicator for parameters that have been modified since last save.
+    values: [0.49, 0.321897, 0.16464, 1]
+  - name: Uncommittedcolor
+    style: RGBA
+    label: Uncommitted Color
+    default: 0.6
+    help: Color indicator for externalized files that are saved to disk but not yet committed to git (uncommitted). Distinct from the red unsaved color and the amber par-change color.
+  - name: Taggingmenucolor
+    style: RGBA
+    label: Tagging Menu Color
+    help: Background color for the tagging menu popup.
+    values: [0.2, 0.2, 0.2, 1]
+  - name: Highlightcolor
+    style: RGBA
+    label: Highlight Color
+    help: Accent/highlight color used for interactive elements in the Embody UI.
+    values: [1, 1, 1, 1]
+  - name: Tdnsavedcolor
+    style: RGBA
+    label: TDN Saved Color
+    help: Color indicator for TDN-strategy operators that are saved and up-to-date.
+    values: [0.153552, 0.376081, 0.457, 1]
+  About:
+  - name: Version
+    style: Str
+    startSection: true
+    readOnly: true
+    help: Embody version string (read-only).
+    value: 6.0.60
+  - name: Touchbuild
+    style: Str
+    label: Touch Build
+    readOnly: true
+    help: TouchDesigner build number this version was developed on (read-only).
+    value: '2025.32820'
+  - name: Author
+    style: Str
+    readOnly: true
+    help: Embody author (read-only).
+    value: Dylan Roscover
+  - name: Build
+    style: Int
+    label: Build Number
+    readOnly: true
+    help: Embody build number (read-only). Incremented with each release.
+    value: 660
+  - name: Github
+    style: Pulse
+    label: GitHub
+    startSection: true
+    help: Opens the Embody GitHub repository in your web browser.
+  - name: Date
+    style: Str
+    label: Build Date
+    readOnly: true
+    help: Date of this Embody build (read-only).
+    value: 2026-06-29 00:35:10 UTC
+  - name: Help
+    style: Pulse
+    help: Opens the Embody help documentation.
+parameters:
+  w: ~op('./manager').par.w
+  h: ~op('./manager').par.h
+  display: false
+  resizecomp: =me
+  repocomp: =me
+  borderover: false
+  align: horizlr
+  parentshortcut: Embody
+  opshortcut: Embody
+  opviewer: ./text_bg
+  reloadbuiltin: false
+sequences:
+  ext:
+  - object: op('./EmbodyExt').module.EmbodyExt(me)
+    name: Embody
+    promote: true
+  - object: op('./EnvoyExt').module.EnvoyExt(me)
+    name: Envoy
+    promote: true
+  - object: op('./TDNExt').module.TDNExt(me)
+    name: TDN
+    promote: true
+  - object: op('./CatalogManagerExt').module.CatalogManagerExt(me)
+    name: CatalogManager
+    promote: true
+  - {}
+  - {}
+  - {}
+  - {}
+  - {}
+  - {}
+  - {}
+flags:
+- display
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+storage:
+  claudius_running: false
+  _tdn_restore_failures:
+  - /embody/base1
+  expand_order: []
+  _start_in_progress: true
+  git_status:
+    /embody/Embody/EnvoyExt: ' M'
+  _watchdog_gen: 441
+  _suite_proof_progress:
+    todo:
+    - test_ancestor_rename
+    - test_catalog_bootstrap_palette
+    - test_catalog_palette_scan
+    - test_claude_config
+    - test_clipboard_paste
+    - test_collection_safe_import
+    - test_collection_scanner
+    - test_crud_operators
+    - test_dat_restoration
+    - test_delete_cleanup
+    - test_duplicate_handling
+    - test_envoy_bridge
+    - test_envoy_lifecycle_hardening
+    - test_envoy_registry
+    - test_envoy_setup_environment
+    - test_envoy_thread_comm
+    - test_envoy_watchdog
+    - test_externalization
+    - test_file_management
+    - test_glsl_externalize
+    - test_issue21_safe_cell
+    - test_layout_lint
+    - test_logging
+    - test_mcp_annotations
+    - test_mcp_batch
+    - test_mcp_code_execution
+    - test_mcp_connections
+    - test_mcp_dat_content
+    - test_mcp_diagnostics
+    - test_mcp_extensions
+    - test_mcp_externalization
+    - test_mcp_flags_position
+    - test_mcp_operators
+    - test_mcp_parameters
+    - test_mcp_performance
+    - test_mcp_project_performance
+    - test_mcp_tdn_tools
+    - test_mcp_top_capture
+    - test_operator_queries
+    - test_os_label
+    - test_param_tracker
+    - test_path_utils
+    - test_rename_move_lifecycle
+    - test_server_lifecycle
+    - test_settings_persistence
+    - test_smoke_release
+    - test_specimen_publish
+    - test_strategy_handlers
+    - test_tag_lifecycle
+    - test_tag_management
+    - test_tdn_crash_safety
+    - test_tdn_exclude
+    - test_tdn_export_import
+    - test_tdn_external_connections
+    - test_tdn_file_io
+    - test_tdn_fingerprint
+    - test_tdn_helpers
+    - test_tdn_mode
+    - test_tdn_palette_catalog
+    - test_tdn_reconstruction
+    - test_tdn_safety_guards
+    - test_tdn_sequences
+    - test_tdn_yaml
+    - test_update_sync
+    - test_v6_hardening
+    done: []
+  _suite_proof_result:
+    agg:
+      total: 1576
+      passed: 1573
+      failed: 2
+      errors: 0
+      skipped: 1
+    fails:
+    - $type: tuple
+      $value:
+      - test_envoy_thread_comm
+      - null
+      - FAIL
+    - $type: tuple
+      $value:
+      - test_envoy_thread_comm
+      - null
+      - FAIL
+    n: 65
+  _e2e_result:
+    pre_seed_is_none: true
+    results:
+      test_envoy_setup_environment:
+        pass: 17
+        tot: 17
+        fail: 0
+        err: 0
+      test_envoy_lifecycle_hardening:
+        pass: 4
+        tot: 4
+        fail: 0
+        err: 0
+      test_smoke_release:
+        pass: 33
+        tot: 33
+        fail: 0
+        err: 0
+  _setgate_test:
+    results:
+      test_envoy_setup_environment:
+        pass: 17
+        tot: 17
+      test_envoy_lifecycle_hardening:
+        pass: 4
+        tot: 4
+      test_smoke_release:
+        pass: 33
+        tot: 33
+    onboarding_seed_before: 40
+    onboarding_seed_after: 0
+    onboarding_prompts_fired: 40
+  _noseed_test:
+    seed_cleared: true
+    smoke:
+      pass: 32
+      tot: 33
+    pending_prompt_right_after_run: absent
+  _final_noseed_test:
+    seed_was_clear: true
+    results:
+      test_envoy_setup_environment:
+        pass: 17
+        tot: 17
+        fail: 0
+      test_envoy_lifecycle_hardening:
+        pass: 4
+        tot: 4
+        fail: 0
+      test_smoke_release:
+        pass: 32
+        tot: 33
+        fail: 1
+    pending_after: absent
+  _clip_watch_gen: 205
+  _suppress_dialogs: true
+operators:
+- name: help
+  type: opviewerCOMP
+  parameters:
+    opviewer: ./text_help
+    w: 500
+    h: 600
+    display: false
+    resizecomp: =me
+    repocomp: =me
+    topsmoothness: mipmap
+    borderover: false
+    reloadbuiltin: false
+  position: [196, 675]
+  size: [142, 155]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/help.tdn
+- name: list
+  type: containerCOMP
+  parameters:
+    w: 996
+    h: 40
+    hmode: fill
+    vmode: fill
+    alignorder: 1
+    resizeb: true
+    resizewmin: 400
+    resizewmax: 3840
+    resizehmin: 40
+    resizehmax: 2160
+    bgcolorr: =parent.Embody.par.Backgroundcolorr
+    bgcolorg: =parent.Embody.par.Backgroundcolorg
+    bgcolorb: =parent.Embody.par.Backgroundcolorb
+    bgalpha: =parent.Embody.par.Backgroundcolora
+    borderover: false
+    marginl: 5
+    marginr: 5
+    reloadbuiltin: false
+  position: [250, 50]
+  size: [257, 250]
+  comp_inputs:
+  - manager
+  tdn_ref: embody/Embody/list.tdn
+- name: fifo1
+  type: fifoDAT
+  parameters:
+    callbacks: fifo1_callbacks
+    fromop: =parent()
+    maxlines: 100
+  position: [-700, 400]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: null2
+  type: nullCHOP
+  parameters:
+    cooktype: selective
+    autoexportroot: =parent()
+  position: [-325, -525]
+  size: [130, 90]
+  inputs:
+  - select1
+- name: TDNExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/TDNExt.py
+  position: [-300, 400]
+  tags:
+  - py
+- name: tagger
+  type: containerCOMP
+  parameters:
+    w: 180
+    h: =28 * (me.fetch('visible_count', op('./tags').numRows) + (2 if (op('./btn_copy_tdn') and op('./btn_copy_tdn').par.display.eval()) else 0)) + 2
+    display: false
+    bgcolorr: =parent.Embody.par.Listrowcolorr
+    bgcolorg: =parent.Embody.par.Listrowcolorg
+    bgcolorb: =parent.Embody.par.Listrowcolorb
+    bgalpha: 1
+    borderar: 0.26426
+    borderag: 0.298469
+    borderab: 0.362
+    align: verttb
+    parentshortcut: menu
+    reloadbuiltin: false
+  position: [900, 225]
+  size: [108, 155]
+  tdn_ref: embody/Embody/tagger.tdn
+- name: timer1
+  type: timerCHOP
+  parameters:
+    active: never
+    deferpars: true
+    length: 30
+    lengthunits: frames
+    delayunits: samples
+    maxcycles: 2
+    callbacks: timer_callbacks
+    outfraction: false
+    outready: false
+    outdone: false
+    exttcop: =tdu.Timecode()
+    rate: =me.time.rate
+    autoexportroot: =parent()
+  position: [-625, -275]
+  size: [130, 90]
+- name: execute
+  type: executeDAT
+  parameters:
+    fromop: =parent()
+    start: true
+    create: true
+    projectpresave: true
+    projectpostsave: true
+    file: embody/Embody/execute.py
+    defaultreadencoding: cp1252
+    syncfile: true
+    language: input
+  flags:
+  - display
+  position: [-300, 200]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: manager
+  type: containerCOMP
+  parameters:
+    y: 13
+    w: 1080
+    h: 440
+    resizer: true
+    resizeb: true
+    resizewmin: 250
+    resizewmax: 3840
+    resizehmin: 50
+    resizehmax: 2160
+    topsmoothness: mipmap
+    borderar: =parent.Embody.par.Textcolorr * 0.5
+    borderag: =parent.Embody.par.Textcolorg * 0.5
+    borderab: =parent.Embody.par.Textcolorb * 0.5
+    borderaalpha: =parent.Embody.par.Textcolora
+    leftborder: bordera
+    rightborder: bordera
+    bottomborder: bordera
+    topborder: bordera
+    align: verttb
+    reloadbuiltin: false
+  position: [650, 250]
+  size: [160, 92]
+  tdn_ref: embody/Embody/manager.tdn
+- name: parexec
+  type: parameterexecuteDAT
+  parameters:
+    fromop: =parent()
+    op: ..
+    pars: '*'
+    file: embody/Embody/parexec.py
+    defaultreadencoding: cp1252
+    syncfile: true
+    language: input
+  position: [-300, 100]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: select1
+  type: selectCHOP
+  parameters:
+    channames: click
+    autoexportroot: =parent()
+  position: [-475, -525]
+  size: [130, 90]
+  inputs:
+  - mousein1
+- name: toolbar
+  type: containerCOMP
+  parameters:
+    y: 368
+    w: 996
+    h: 40
+    layer: 1000
+    hmode: fill
+    resizewmin: 400
+    resizewmax: 3840
+    resizehmin: 40
+    resizehmax: 2160
+    bgcolorr: =parent.Embody.par.Backgroundcolorr
+    bgcolorg: =parent.Embody.par.Backgroundcolorg
+    bgcolorb: =parent.Embody.par.Backgroundcolorb
+    bgalpha: =parent.Embody.par.Backgroundcolora
+    topsmoothness: mipmap
+    borderover: false
+    justifyv: center
+    reloadbuiltin: false
+  sequences:
+    ext:
+    - object: op('./ToolbarExt').module.ToolbarExt(me)
+      name: ToolbarExt
+      promote: true
+  position: [300, 350]
+  size: [160, 76]
+  storage:
+    _tip_trace:
+      btn: close
+      text: Clear filter
+      text_width: 60.3
+      tip_w: 80
+      container_x: 726
+      container_w: 270
+      btn_x: 244
+      btn_w: 26
+      tip_x: 914
+      toolbar_w: 996
+      btn_center: 983
+      tip_center: 954
+      offset: -29
+  comp_inputs:
+  - manager
+  tdn_ref: embody/Embody/toolbar.tdn
+- name: EnvoyExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/EnvoyExt.py
+  position: [-300, 500]
+  tags:
+  - TDExtension
+  - py
+- name: mousein1
+  type: mouseinCHOP
+  parameters:
+    output: normal
+    lbuttonname: click
+    rate: =me.time.rate
+    autoexportroot: =parent()
+  position: [-625, -525]
+  size: [130, 90]
+- name: EmbodyExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/EmbodyExt.py
+    defaultreadencoding: cp1252
+    extension: py
+  position: [-300, 600]
+  tags:
+  - py
+- name: templates
+  type: baseCOMP
+  position: [-400, -1200]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/templates.tdn
+- name: Collection
+  type: baseCOMP
+  sequences:
+    ext:
+    - object: op('./CollectionExt').module.CollectionExt(me)
+      name: Collection
+      promote: true
+  position: [200, -550]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: embody/Embody/Collection.tdn
+- name: keyboardin1
+  type: keyboardinDAT
+  parameters:
+    active: ~parent.Embody.par.Enablekeyboardshortcuts
+    callbacks: keyboardin_callbacks
+    fromop: =parent()
+  position: [-325, -275]
+  size: [130, 90]
+- name: windowHeader
+  type: containerCOMP
+  parameters:
+    h: 26
+    hmode: fill
+    alignorder: -1
+    bgcolorr: =parent.Embody.par.Backgroundcolorr
+    bgcolorg: =parent.Embody.par.Backgroundcolorg
+    bgcolorb: =parent.Embody.par.Backgroundcolorb
+    bgalpha: =parent.Embody.par.Backgroundcolora
+    align: horizlr
+    marginl: 8
+    justifyh: left
+    justifyv: top
+  sequences:
+    ext:
+    - object: op('./WindowHeaderExt').module.WindowHeaderExt(me)
+      promote: true
+  custom_pars:
+    Header:
+    - name: Headerlabel
+      style: Str
+      label: Label
+      value: =f'Embody v{parent.Embody.par.Version}'
+    Controls:
+    - name: Windowcomp
+      style: COMP
+      label: Window COMP
+      value: /embody/Embody/window_manager
+  position: [300, 475]
+  size: [160, 130]
+  comp_inputs:
+  - manager
+  tdn_ref: embody/Embody/windowHeader.tdn
+- name: _envoy_perform
+  type: performCHOP
+  parameters:
+    msec: true
+    cook: true
+    droppedframes: true
+    gpumemused: true
+    totalgpumem: true
+    activeops: true
+    totalops: true
+    cpumemused: true
+    cookrealtime: true
+    cookrate: true
+    timeslicestep: true
+    timeslicemsec: true
+    performmode: true
+    gputemp: true
+    autoexportroot: =parent()
+  position: [-625, -650]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  comment: Envoy project performance monitor
+  tags:
+  - embody_internal
+- name: embot_template
+  type: baseCOMP
+  position: [-1400, -1400]
+  color: [0.67, 0.67, 0.67]
+  annotations:
+  - name: envoy_bot_arm_l
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 26]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_arm_r
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 26]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_body
+    mode: networkbox
+    position: [1594, 131]
+    size: [30, 34]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_eye_l
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 10]
+    color: [0.0, 0.0, 0.0]
+  - name: envoy_bot_eye_r
+    mode: networkbox
+    position: [1594, 131]
+    size: [10, 10]
+    color: [0.0, 0.0, 0.0]
+  - name: envoy_bot_head
+    mode: networkbox
+    position: [1594, 131]
+    size: [34, 26]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_leg_l
+    mode: networkbox
+    position: [1594, 131]
+    size: [11, 24]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_leg_r
+    mode: networkbox
+    position: [1594, 131]
+    size: [11, 24]
+    color: [0.05, 0.544, 1.0]
+  - name: envoy_bot_speech
+    mode: annotate
+    title: Embot
+    position: [1594, 131]
+    size: [185, 74]
+    color: [0.12, 0.12, 0.17]
+    backAlpha: 0.95
+    bodyFontSize: 11
+- name: window_manager
+  type: windowCOMP
+  parameters:
+    winop: manager
+    ignoretaskbar: false
+    justifyh: center
+    justifyv: center
+    winoffsetx: -12
+    cursorvisible: alwaysvisible
+  position: [500, 675]
+  size: [154, 89]
+  tdn_ref: embody/Embody/window_manager.tdn
+- name: fifo1_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/fifo1_callbacks.py
+  position: [-700, 300]
+  tags:
+  - py
+  dock: fifo1
+- name: palette_catalog
+  type: tableDAT
+  parameters:
+    file: embody/Embody/palette_catalog.tsv
+    rows: 787
+  position: [-500, 200]
+- name: timer_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/timer_callbacks.py
+  position: [-625, -375]
+  tags:
+  - py
+  dock: timer1
+- name: CatalogManagerExt
+  type: textDAT
+  parameters:
+    file: embody/Embody/CatalogManagerExt.py
+  position: [-300, 300]
+  tags:
+  - py
+- name: divergent_defaults
+  type: tableDAT
+  parameters:
+    file: embody/Embody/divergent_defaults.tsv
+    rows: 502
+  position: [-500, 300]
+- name: window_tagging_menu
+  type: windowCOMP
+  parameters:
+    winop: tagger
+    justifyh: mouse
+    justifyv: mouse
+    winoffsetx: 110
+  position: [900, 675]
+  size: [110, 157]
+  tdn_ref: embody/Embody/window_tagging_menu.tdn
+- name: chopexec_exit_tagger
+  type: chopexecuteDAT
+  parameters:
+    fromop: =parent()
+    chop: null2
+    channel: click
+    offtoon: true
+    valuechange: false
+    file: embody/Embody/chopexec_exit_tagger.py
+    syncfile: true
+  position: [-325, -650]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+  dock: null2
+- name: keyboardin_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/keyboardin_callbacks.py
+  position: [-325, -375]
+  tags:
+  - py
+  dock: keyboardin1
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Claude Config
+  text: CLAUDE.md template and .claude/ rule/skill templates for user-project generation.
+  position: [-770, -1270]
+  size: [600, 370]
+  color: [0.45, 0.45, 0.45]
+- name: annotate2
+  mode: annotate
+  title: Collection -- community / embody.tools client
+  text: 'Untrusted-content layer: scans + default-inerts community TDN on paste. TDNExt delegates source==''embody.tools'' here.'
+  position: [130, -620]
+  size: [300, 370]
+  color: [0.45, 0.45, 0.45]
+- name: annotation_logic
+  mode: annotate
+  title: Logic
+  text: Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.
+  position: [-770, 30]
+  size: [670, 830]
+  color: [0.485, 0.0, 0.2748]
+  opacity: 0.9
+- name: annotation_tagging
+  mode: annotate
+  title: Tagging
+  text: Keyboard/mouse input handlers and timer logic for the externalization tagging workflow (Ctrl+Shift+T double-press detection).
+  position: [-800, -700]
+  size: [700, 600]
+  color: [0.1981, 0.5, 0.1765]
+  opacity: 0.9
+- name: annotation_ui
+  mode: annotate
+  title: UI
+  text: 'All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.'
+  size: [1300, 1000]
+  color: [0.45, 0.45, 0.45]
+  opacity: 0.9
+- name: annotation_windows
+  mode: annotate
+  title: Windows
+  text: Popup windows for the tagging menu and externalization manager UI.
+  position: [100, 600]
+  size: [1140, 310]
+  color: [0.574, 0.574, 0.574]
+  opacity: 0.9

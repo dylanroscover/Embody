@@ -1,5 +1,5 @@
 """
-Smoke test bootstrap — execute DAT callbacks for the template .toe.
+Smoke test bootstrap - execute DAT callbacks for the template .toe.
 
 This script goes into a text DAT (named 'execute', extension .py, callbacks
 enabled) inside the smoke test template project. When the template .toe opens:
@@ -7,18 +7,18 @@ enabled) inside the smoke test template project. When the template .toe opens:
   1. onStart() fires at frame 0
   2. Frame 1: load the release .tox into the project root
   3. Frame 3: seed _smoke_test_responses on the new Embody COMP
-  4. Embody's onCreate() sequence runs (frames 0–75 relative to loadTox)
+  4. Embody's onCreate() sequence runs (frames 0-75 relative to loadTox)
   5. Dialogs at frame ~30 are auto-responded by _messageBox
-  6. Envoy starts → bridge reconnects → MCP tools become available
+  6. Envoy starts -> bridge reconnects -> MCP tools become available
   7. Verification checks run via MCP from the orchestrator
 
 Bootstrap timing (relative to onStart at frame 0):
-  - Frame 1:  _load_release_tox() — creates Embody COMP, triggers onCreate
-  - Frame 3:  _seed_responses() — before Verify() dialog at frame ~31
-  - Frame 31: Verify() fires — auto-responded via _messageBox
-  - Frame 41+: _promptEnvoy() fires — auto-responded via _messageBox
+  - Frame 1:  _load_release_tox() - creates Embody COMP, triggers onCreate
+  - Frame 3:  _seed_responses() - before Verify() dialog at frame ~31
+  - Frame 31: Verify() fires - auto-responded via _messageBox
+  - Frame 41+: _promptEnvoy() fires - auto-responded via _messageBox
   - Frame 60+: Envoy starts, bridge reconnects
-  - Frame 80:  _write_ready_flag() — signals orchestrator that init is done
+  - Frame 80:  _write_ready_flag() - signals orchestrator that init is done
 """
 
 # me - this DAT
@@ -27,14 +27,14 @@ Bootstrap timing (relative to onStart at frame 0):
 
 
 def onStart():
-    """Project opened — kick off the smoke test bootstrap sequence."""
+    """Project opened - kick off the smoke test bootstrap sequence."""
     import os, shutil
     # Discover repo root: template .toe lives in dev/release_testing/
     # so repo root is two levels up from project.folder
     repo_root = os.path.normpath(os.path.join(project.folder, '..', '..'))
     me.store('repo_root', repo_root)
 
-    # Clean up artifacts from previous runs — keep only the .toe and .py
+    # Clean up artifacts from previous runs - keep only the .toe and .py
     keep = {'.toe', '.py'}
     for entry in os.listdir(project.folder):
         if any(entry.endswith(ext) for ext in keep):
@@ -122,7 +122,7 @@ def _load_release_tox(tox_path=None):
         _log(f'Destroying stale Embody at {existing.path}')
         existing.destroy()
 
-    # Load the .tox — creates the Embody COMP and triggers onCreate()
+    # Load the .tox - creates the Embody COMP and triggers onCreate()
     embody = op('/').loadTox(tox_path)
     if not embody:
         _log('ERROR: loadTox returned None')
@@ -134,7 +134,7 @@ def _load_release_tox(tox_path=None):
     # Frame 3: seed auto-responses (before Verify dialog at ~frame 31)
     run("args[0]()", _seed_responses, delayFrames=2)
 
-    # Frame 120: write ready flag — after Envoy has started (~frame 65)
+    # Frame 120: write ready flag - after Envoy has started (~frame 65)
     run("args[0]()", _write_ready_flag, delayFrames=119)
 
 
@@ -147,8 +147,8 @@ def _seed_responses():
         return
 
     # Auto-respond to all init dialogs:
-    #   - Duplicate instance check: 'Ok' (button 0) — shouldn't fire in fresh project
-    #   - Re-scan prompt: 'Skip' (button 0) — shouldn't fire in fresh install
+    #   - Duplicate instance check: 'Ok' (button 0) - shouldn't fire in fresh project
+    #   - Re-scan prompt: 'Skip' (button 0) - shouldn't fire in fresh install
     #   - Envoy opt-in: 'Enable Envoy' (button 1)
     responses = {
         'Embody': 0,

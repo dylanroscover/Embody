@@ -26,7 +26,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
     - Before `create_annotation` or `set_annotation`: load `/manage-annotations`
     - Before `create_extension`: load `/create-extension`
     - Before `externalize_op` or `save_externalization`: load `/externalize-operator`
-    - Before writing TD Python (`execute_python`, `set_dat_content`): load `/td-api-reference`
+    - Before writing TD Python (`execute_python`, `set_dat_content`, `edit_dat_content`): load `/td-api-reference`
     - When diagnosing operator errors: load `/debug-operator`
     - Before first MCP call in a new session: load `/mcp-tools-reference`
 
@@ -35,6 +35,10 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 - Before editing a file, verify it is the ACTUAL file responsible. Grep and trace the render path before making changes.
 - Avoid over-engineering. Prefer minimal, targeted changes.
 - When debugging, state your hypothesis, verify with evidence, then fix.
+- Define success criteria before you start, then loop until you've verified them — don't just run steps and declare done.
+- Checkpoint after each significant step: what changed, what's verified, what's left. Don't continue from a state you can't describe.
+- Fail loud — "done" is wrong if anything was skipped silently, "tests pass" is wrong if any were skipped. Surface uncertainty; don't bury it.
+- Surface conflicts, don't average them: when two patterns or rules contradict, pick one (more recent / more tested), say why, flag the other for cleanup — never silently reconcile.
 
 ## Envoy MCP Server
 

@@ -1,0 +1,167 @@
+{
+  "slug": "crosspoint-matrix",
+  "name": "Crosspoint Matrix",
+  "category": "transmission",
+  "difficulty": "advanced",
+  "one_liner": "transmission.video's signature NxN crosspoint routing grid brought to life: inputs cross outputs, crosspoints ignite as routes activate, and glowing packets race down the lit row-then-column paths to their destinations -- 'Routing Redefined' as living light.",
+  "visual_description": "A precise, grid-aligned schematic on a near-black engineering stage: a row of input ports down the left edge and a column of output ports across the top, with a faint cool-gray NxN lattice between them -- the crosspoint matrix, exactly the UI transmission.video is known for. As routes activate, individual crosspoint cells IGNITE: a cyan node lights at the intersection, the input row lights up to it and the output column lights down from it, drawing a clean right-angle path. Then glowing packets stream along those lit L-shaped paths -- racing right along the active row, turning at the lit crosspoint, racing up the active column to the output -- quantized dots you can count, in cyan/green/amber for the separated essences. Routes activate and deactivate on a steady PTP beat, so the matrix reconfigures live like a real running router, with a faint 1Hz port-stat counter feel and PTP-lock indicators glowing at the corners. Heavy bloom on the lit crosspoints and packets; the unlit lattice stays disciplined and dim. It reads instantly as a live signal router -- the most direct, on-brand homage to the brand and the most legible 'routing' statement on the floor.",
+  "technique": "Single self-contained GLSL TOP generator (no input). The shader draws the matrix analytically: a dim grid lattice + input/output port markers, then for a deterministic time-varying set of active routes (input i -> output j chosen by a hashed schedule that cycles on the PTP beat) it lights the crosspoint cell, the row segment from input i to column j, and the column segment from row i to the output. Glowing packets are bright Gaussian dashes whose parametric position advances along the L-shaped (row-then-column) path with time and wraps. Active routes fade in/out on the PTP beat (live reconfiguration). Corner PTP-lock indicators + a faint counter texture. Bounded constant loops over routes. Bloom + scanline/grain finish. No feedback, no input -- drops in anywhere.",
+  "network_plan": [
+    {
+      "name": "glsl_matrix",
+      "type": "glslTOP",
+      "role": "The whole piece. Generator (no input): grid lattice + ports + active crosspoints + lit L-paths + traveling packets + PTP reconfiguration + lock indicators. Generator MUST use uTDOutputInfo.res; NEVER uTD2DInfos on a no-input generator. outputresolution custom 1280x720, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 400, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_matrix_pixel",
+        "computedat": "glsl_matrix_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uGrid", "type": "vec4", "valuex": "=parent().par.Gridsize.eval()", "valuey": "=parent().par.Activeroutes.eval()", "valuez": "=parent().par.Latticeglow.eval()", "valuew": "=parent().par.Crosspointglow.eval()" },
+          { "name": "uPacket", "type": "vec4", "valuex": "=parent().par.Packetspeed.eval()", "valuey": "=parent().par.Packetdensity.eval()", "valuez": "=parent().par.Streams.eval()", "valuew": "=absTime.seconds*parent().par.Packetspeed.eval()" },
+          { "name": "uClock", "type": "vec4", "valuex": "=parent().par.Ptprate.eval()", "valuey": "=parent().par.Reconfigrate.eval()", "valuez": "=parent().par.Lockindicators.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom",
+      "type": "glslTOP",
+      "role": "Bloom + finish. Input0 = glsl_matrix. Bright-pass + bounded blur added back so lit crosspoints and packets bloom while the dim lattice stays disciplined; faint scanline + grain. outputresolution custom 1280x720, rgba16float. Place nodeX 800, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_bloom_pixel",
+        "computedat": "glsl_bloom_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.5, "valuez": 0, "valuew": 0 }
+        ]
+      },
+      "inputs": ["glsl_matrix"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named out1. Viewer flagged. Place nodeX 1200, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_bloom"]
+    },
+    {
+      "name": "glsl_matrix_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_matrix. See glsl[0]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_matrix_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_matrix.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_matrix_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_matrix.",
+      "params": { "op": "glsl_matrix" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_bloom. See glsl[1]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_bloom.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_bloom.",
+      "params": { "op": "glsl_bloom" },
+      "inputs": []
+    },
+    {
+      "name": "annotate_matrix",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the matrix generator (glsl_matrix). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Crosspoint Routing Matrix",
+        "Bodytext": "One generator GLSL TOP draws transmission.video's signature NxN crosspoint grid. A hashed, PTP-beat schedule picks active routes (input i -> output j); for each, the crosspoint cell ignites, the row lights from the input to that column, and the column lights up to the output. Glowing packets then race the L-shaped (row-then-column) path -- right along the row, turn at the lit crosspoint, up the column -- to their destination. Routes reconfigure live on the beat, like a real running router. 'Routing Redefined.'",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over bloom + out (glsl_bloom, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Bloom & Schematic Finish",
+        "Bodytext": "Bloom lights the active crosspoints and packets while the unlit lattice stays disciplined and dim -- the brand's premium engineering restraint. A faint scanline + grain + corner PTP-lock indicators add the live-telemetry feel. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_matrix_pixel",
+      "stage": "pixel",
+      "code": "// Crosspoint Matrix -- NxN routing grid with igniting crosspoints + L-path packets.\nuniform vec4 uGrid;    // x=gridSize(N), y=activeRoutes, z=latticeGlow, w=crosspointGlow\nuniform vec4 uPacket;  // x=packetSpeed, y=packetDensity, z=streams, w=time(=absTime*packetSpeed)\nuniform vec4 uClock;   // x=ptpRate, y=reconfigRate, z=lockIndicators, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\nfloat hash11(float p){ return fract(sin(p*127.1)*43758.5453); }\n\n// matrix lives in a centered square region of the frame; map uv -> matrix space [0,1]^2\n// returns matrix coords; the .xy in [0,1] over the grid area\nvec2 toMatrix(vec2 uv, float aspect, out float inside){\n    // place a square matrix in the middle, with margins for ports/labels\n    vec2 m = (uv - vec2(0.12, 0.10)) / vec2(0.76, 0.80);  // map to [0,1]\n    inside = step(0.0, m.x)*step(m.x,1.0)*step(0.0,m.y)*step(m.y,1.0);\n    return m;\n}\n\nfloat segDistAxis(float p, float a, float b, float half){\n    // distance to a 1D segment [a,b] -- returns 0 inside, grows outside\n    float lo = min(a,b)-half, hi=max(a,b)+half;\n    return max(max(lo - p, p - hi), 0.0);\n}\n\nvoid main(){\n    vec2 uv = vUV.st;\n    float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;\n\n    vec3 col = vec3(0.010, 0.012, 0.016);   // near-black engineering ground\n\n    float inside;\n    vec2 m = toMatrix(uv, aspect, inside);\n\n    float N    = clamp(uGrid.x, 4.0, 16.0);\n    float nR   = clamp(uGrid.y, 1.0, 8.0);\n    float lat  = uGrid.z;\n    float cpg  = uGrid.w;\n    float t    = uPacket.w;\n    float pdens= uPacket.y;\n    float streams = max(1.0, uPacket.z);\n\n    // cell coordinates within the matrix\n    vec2 cell = m * N;                       // 0..N\n    vec2 cellId = floor(cell);\n    vec2 cellF = fract(cell);\n\n    // --- dim disciplined lattice (cool gray) ---\n    vec2 lines = abs(cellF - 0.5);\n    float grid = smoothstep(0.5, 0.47, max(lines.x, lines.y));\n    col += vec3(0.10, 0.13, 0.17) * grid * 0.12 * lat * inside;\n\n    // --- input ports (left edge) + output ports (top edge) ---\n    float portL = smoothstep(0.02, 0.0, abs(uv.x - 0.10)) * step(0.10, uv.y) * step(uv.y, 0.90);\n    float portT = smoothstep(0.02, 0.0, abs(uv.y - 0.90)) * step(0.12, uv.x) * step(uv.x, 0.88);\n    col += vec3(0.12, 0.16, 0.20) * (portL + portT) * 0.5;\n\n    // essence stream colors\n    vec3 streamCol[3];\n    streamCol[0] = vec3(0.00, 0.90, 1.00);   // cyan video\n    streamCol[1] = vec3(0.22, 1.00, 0.42);   // green audio\n    streamCol[2] = vec3(1.00, 0.69, 0.00);   // amber ancillary\n\n    // --- active routes: hashed schedule, cycling on the reconfig beat ---\n    float epoch = floor(uClock.w * uClock.y);          // route schedule epoch (changes on beat)\n    float reconf = fract(uClock.w * uClock.y);\n    float fade = smoothstep(0.0, 0.12, reconf) * (1.0 - smoothstep(0.85, 1.0, reconf)); // fade in/out\n\n    const int MAXR = 8;\n    for(int r=0; r<MAXR; r++){\n        if(float(r) >= nR) break;\n        float fr = float(r);\n        // pick input row i and output col j deterministically for this epoch\n        float i = floor(hash11(epoch*7.0 + fr*3.1) * N);   // input row index (0..N-1)\n        float j = floor(hash11(epoch*5.0 + fr*9.7) * N);   // output col index\n        vec3 sc = streamCol[int(mod(fr, streams))];\n\n        // crosspoint cell center in matrix space\n        vec2 cp = (vec2(j, i) + 0.5) / N;   // x follows column j, y follows row i\n\n        if(inside > 0.5){\n            // row segment: along x at row i, from input edge (x=0) to column j\n            float rowY = (i + 0.5)/N;\n            float dRow = max(abs(m.y - rowY) - 0.004, 0.0) + segDistAxis(m.x, 0.0, cp.x, 0.0);\n            float litRow = smoothstep(0.012, 0.0, dRow);\n            // column segment: along y at column j, from row i up to output edge (y=1)\n            float colX = (j + 0.5)/N;\n            float dCol = max(abs(m.x - colX) - 0.004, 0.0) + segDistAxis(m.y, cp.y, 1.0, 0.0);\n            float litCol = smoothstep(0.012, 0.0, dCol);\n            // crosspoint node ignite\n            float node = smoothstep(0.03, 0.0, length(m - cp));\n\n            float lit = (litRow + litCol + node*2.0) * fade;\n            col += sc * lit * 0.5 * cpg;\n            col += vec3(1.0) * node * fade * cpg * 0.8;   // white-hot crosspoint core\n\n            // --- packets travel the L-path: along the row to the crosspoint, then up the column ---\n            float rowLen = cp.x;            // length of row segment (x distance)\n            float colLen = 1.0 - cp.y;      // length of column segment (y distance)\n            float total = rowLen + colLen + 1e-4;\n            for(int k=0;k<6;k++){\n                if(float(k) >= pdens) break;\n                float fk = float(k);\n                float s = fract(hash11(fr*4.0+fk*2.7) + t*(0.6+0.4*hash11(fr+fk)));\n                float along = s * total;    // arc length traveled\n                vec2 pp;\n                if(along < rowLen){ pp = vec2(along, rowY); }                 // on the row\n                else { pp = vec2(cp.x, rowY + (along - rowLen)); }            // on the column (upward)\n                // note rowY==cp.y so the turn is continuous\n                float dpk = length(m - pp);\n                float pk = exp(-dpk*dpk*4000.0);\n                vec3 core = mix(sc, vec3(1.0), 0.6);\n                col += core * pk * fade * 1.8;\n            }\n        }\n    }\n\n    // --- corner PTP-lock indicators (live telemetry feel) ---\n    float beat = fract(uClock.w * uClock.x);\n    float lockPulse = 0.5 + 0.5*pow(max(0.0,1.0-beat*4.0),2.0);\n    float lock = smoothstep(0.015,0.0,length(uv-vec2(0.05,0.95)))\n               + smoothstep(0.015,0.0,length(uv-vec2(0.95,0.95)));\n    col += vec3(0.20,1.0,0.45) * lock * lockPulse * uClock.z;   // green PTP-lock dots\n\n    // edge falloff so the matrix sits on a premium dark stage\n    col *= mix(1.0, 0.7, smoothstep(0.5, 1.0, length(uv-0.5)));\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloom_pixel",
+      "stage": "pixel",
+      "code": "// Bloom + scanline + grain (disciplined: dim lattice stays dark, lit cells bloom).\nuniform vec4 uBloom;   // x=strength, y=threshold\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;\n    vec3 src = texture(sTD2DInputs[0], uv).rgb;\n    float thr = uBloom.y;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/18.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*2.0).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    vec3 col = src + (sum/max(wsum,1e-4)) * uBloom.x;\n    float scan = 0.975 + 0.025*sin(uv.y * uTDOutputInfo.res.w * 3.14159);\n    col *= scan;\n    col += (hash21(uv*uTDOutputInfo.res.zw)-0.5) * 0.011;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Gridsize", "label": "Matrix Size (N)", "style": "Int", "default": 8, "range": [4, 16], "drives": "uGrid.x -- the NxN crosspoint matrix dimension (inputs x outputs). Smaller = a bold readable router; larger = a dense schematic with many ports." },
+    { "name": "Activeroutes", "label": "Active Routes", "style": "Int", "default": 5, "range": [1, 8], "drives": "uGrid.y -- how many routes are lit simultaneously. More = a busier router with multiple signals flowing at once. Each route runs a constant-bounded packet loop; cap 8." },
+    { "name": "Latticeglow", "label": "Lattice Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uGrid.z -- brightness of the dim unlit grid lattice + ports. Low = the disciplined dark schematic the brand favors; 0 hides the grid entirely." },
+    { "name": "Crosspointglow", "label": "Crosspoint Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uGrid.w -- brightness of the lit crosspoint nodes and their row/column paths. The ignite intensity when a route activates." },
+    { "name": "Packetspeed", "label": "Packet Speed", "style": "Float", "default": 0.5, "range": [0.0, 2.0], "drives": "uPacket.x and the time term uPacket.w -- how fast packets race the L-path from input to output. 0 freezes them (and drops that time-dependence); higher = near-light-speed." },
+    { "name": "Packetdensity", "label": "Packet Density", "style": "Int", "default": 4, "range": [1, 6], "drives": "uPacket.y -- how many packets travel each active route at once (1-6). More = a denser data flow along the lit paths." },
+    { "name": "Streams", "label": "Essence Streams", "style": "Int", "default": 3, "range": [1, 3], "drives": "uPacket.z -- number of separated essence colors assigned to routes (1=cyan video, 2=+green audio, 3=+amber ancillary). The ST2110 separated flows through the router." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uClock.x -- frequency of the PTP sync pulse the corner lock indicators beat to. The router's live PTP-lock heartbeat." },
+    { "name": "Reconfigrate", "label": "Reconfigure Rate", "style": "Float", "default": 0.25, "range": [0.05, 1.0], "drives": "uClock.y -- how often the active route set reconfigures (new input->output assignments fade in/out). The live-router reconfiguration cadence. Lower = routes hold longer; higher = rapid re-routing." },
+    { "name": "Lockindicators", "label": "Lock Indicators", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uClock.z -- brightness of the green PTP-lock indicator dots in the corners. 0 hides them; higher emphasizes the live-telemetry feel." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.2, "range": [0.0, 3.0], "drives": "uBloom.x -- intensity of the bloom over lit crosspoints and packets. The booth-scale glow knob; the dim lattice stays disciplined below the bright-pass threshold." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "lattice_gray": ["#20242A", "#2E3440"],
+    "signal_cyan": ["#00E5FF", "#18FFE0"],
+    "essence_triplet": { "video_cyan": "#00E5FF", "audio_green": "#39FF6A", "ancillary_amber": "#FFB000" },
+    "ptp_lock_green": "#39FF6A",
+    "white_hot_crosspoint": ["#FFFFFF", "#EAFBFF"],
+    "ratio": "~85% dark ground + disciplined cool-gray lattice (the brand's monochrome restraint), ~15% saturated lit routes/packets; cyan leads, green/amber differentiate essences, color appears ONLY as the active signal."
+  },
+  "wow_factor": 5,
+  "conference_fit": "The most direct homage to transmission.video -- their actual signature UI is an interactive NxN crosspoint routing matrix, and the tagline is 'Routing Redefined.' This piece literally enacts routing: inputs cross outputs, crosspoints ignite, packets race the routed L-path to their destination, and the matrix reconfigures live like the real product (sub-second updates, PTP-lock indicators, port-stat feel). It honors the brand's monochrome engineering discipline (dim disciplined lattice, color only as signal) while erupting into controlled signal color -- exactly the brief's strategy. The most legible 'this is what the company does' statement on the floor, on-brand and on-theme at once.",
+  "prompt": {
+    "one_liner": "A self-contained crosspoint-routing-matrix generator: an NxN grid where active routes ignite the crosspoint and its row/column path, glowing essence-colored packets race the L-shaped input->output route, and the matrix reconfigures live on a PTP beat with corner lock indicators -- transmission.video's 'Routing Redefined' as living light.",
+    "evolve": "Raise Matrix Size for a denser schematic; raise Active Routes + Packet Density for a busier router; raise Packet Speed for fast routing (0 freezes). Lower Reconfigure Rate to hold routes longer (study a single route) or raise it for rapid live re-routing. Lower Lattice Glow for the brand's darkest disciplined look, raise Crosspoint Glow + Bloom for dramatic ignition. Drop Streams to 1 for a single cyan signal. Feed out1 into the kaleidoscope for a routed mandala, or composite the packet-fabric streams ENTERING this matrix. Drive Reconfigure / PTP from real router telemetry (an OSC/WebSocket DAT into the uniforms) for a genuine live-router visualization.",
+    "compose_with": ["packet-fabric", "transmission-lines"]
+  },
+  "warmup_frames": 90,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_matrix has NO input -- MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h)); uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h or it renders 1x1. glsl_bloom HAS an input so sTD2DInputs[0] + uTDOutputInfo.res are valid.\\n\\nLOOP BOUNDS (GPU crash safety): nested constant-bounded loops -- outer routes (MAXR=8), inner packets per route (k<6), plus the bloom tap loop (R=6). The param counts only early-out via break against the CONSTANT bounds, so no unbounded GPU loop. Cheap: at most 8*6 packet evals + a few segment evals per pixel. GATE PERFORMANCE per performance.md (baseline before, re-check after) but this is comfortably under budget at 1280x720.\\n\\nUNIFORMS: glslTOP declares uniforms MANUALLY. vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nCOOK DEMAND: time-dependent via absTime in uPacket.w (packet travel) and uClock.w (PTP + reconfig epoch). Cooks every frame only when out1 demanded; add a temp Execute DAT OUTSIDE the COMP; verify with two captures separated by a real sleep -- AND verify the route set actually RECONFIGURES (the epoch changes on the Reconfigure beat: capture before/after a beat boundary and confirm different crosspoints are lit). Packet Speed=0 freezes packets but uClock.w still references absTime, so the TOP keeps cooking -- correct.\\n\\nGEOMETRY NOTE: the L-path turn relies on rowY == cp.y; the matrix maps row index i to y via (i+0.5)/N and the crosspoint cp.y is set to the same, so the row->column turn is continuous. Verify in a capture that packets turn cleanly at the crosspoint and do not jump. The toMatrix() margins (0.12/0.10 origin, 0.76/0.80 span) leave room for the input/output ports; confirm the matrix sits centered with port edges visible.\\n\\nDOCKED DATS: glsl_matrix + glsl_bloom each dock pixel+compute+info; HUG all six under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source.\\n\\nLOOK CHECK: judge by an actual capture (load visual-aesthetics). Verify the lattice reads as a disciplined dim grid (brand restraint), lit crosspoints clearly ignite, the row-then-column L-paths are legible, packets are countable along them, and the reconfiguration reads as a live router (not random flicker). Tune Reconfigure Rate so routes hold long enough to read.\\n\\nTDN ROUND-TRIP: all 11 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~9."
+}

@@ -1,0 +1,316 @@
+.tdn-viewer {
+  --tdn-bg: var(--bg, #181e1e);
+  --tdn-panel: var(--bg-elevated, #1f2321);
+  --tdn-panel-strong: var(--bg-elevated-2, #283028);
+  --tdn-code: var(--bg-code, #161e1a);
+  --tdn-line: var(--border, #2a4a42);
+  --tdn-line-faint: var(--border-faint, #283028);
+  --tdn-text: var(--text, #c8d0c9);
+  --tdn-muted: var(--text-muted, #97a098);
+  --tdn-faint: var(--text-faint, #6b756c);
+  --tdn-accent: var(--accent, #6ee668);
+  /* Positioning context for the absolutely-placed breadcrumb (and the fullscreen
+     close button). Without this, the breadcrumb escapes to the viewport. The
+     fullscreen rule below overrides with position: fixed, which is also a valid
+     containing block, so the breadcrumb stays pinned to the viewer either way. */
+  position: relative;
+  width: 100%;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--tdn-line);
+  border-radius: var(--radius, 14px);
+  background:
+    linear-gradient(rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    var(--tdn-bg);
+  background-size: 32px 32px;
+}
+
+.tdn-viewer .react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--tdn-line);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--tdn-panel) 86%, transparent);
+  box-shadow: none;
+}
+
+.tdn-viewer .react-flow__controls-button {
+  width: 30px;
+  height: 30px;
+  border-bottom: 1px solid var(--tdn-line-faint);
+  background: transparent;
+  color: var(--tdn-text);
+}
+
+.tdn-viewer .react-flow__controls-button:hover {
+  background: var(--tdn-panel-strong);
+  color: var(--tdn-accent);
+}
+
+/* Touch devices need >=44px hit targets; the 30px default is too small to tap
+   reliably. Bump only on coarse pointers so mouse/trackpad keep the compact UI. */
+@media (pointer: coarse) {
+  .tdn-viewer .react-flow__controls-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.tdn-operator {
+  position: relative;
+  width: 168px;
+  min-height: 74px;
+  overflow: hidden;
+  border: 1px solid var(--tdn-line-faint);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--family-color) 14%, var(--tdn-panel) 86%);
+  box-shadow: 0 18px 46px rgba(0, 0, 0, 0.28);
+  color: var(--tdn-text);
+}
+
+/* A COMP that can be drilled into: pointer cursor + a lift on hover so it reads
+   as openable, and a brightened family-color outline echoing the head bar. */
+.tdn-operator--enterable {
+  cursor: pointer;
+  transition: border-color 130ms ease, box-shadow 130ms ease;
+}
+
+.tdn-operator--enterable:hover {
+  border-color: color-mix(in srgb, var(--family-color) 64%, var(--tdn-line));
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.28),
+    0 0 0 1px color-mix(in srgb, var(--family-color) 52%, transparent),
+    0 0 20px color-mix(in srgb, var(--family-color) 26%, transparent);
+}
+
+.tdn-operator__head {
+  height: 12px;
+  background: var(--family-color);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--family-color) 42%, transparent);
+}
+
+.tdn-operator__body {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px 13px;
+}
+
+.tdn-operator__name {
+  overflow: hidden;
+  color: var(--tdn-text);
+  font: 700 14px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tdn-operator__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--tdn-muted);
+  font: 600 12px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  /* Keep TouchDesigner's native camelCase op types (textDAT, glslTOP) -- not
+     uppercased -- for readability and correctness. */
+  text-transform: none;
+}
+
+.tdn-handle {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--tdn-bg);
+  background: var(--tdn-accent);
+}
+
+.tdn-handle--target {
+  left: -5px;
+}
+
+.tdn-handle--source {
+  right: -5px;
+}
+
+.tdn-handle--comp {
+  bottom: -5px;
+}
+
+/* Dock connector: smaller and muted vs the accent data-flow handles, so a docked
+   op reads as "attached to" its host, not wired into the signal chain. */
+.tdn-handle.tdn-handle--dock {
+  width: 7px;
+  height: 7px;
+  background: rgba(150, 162, 154, 0.7);
+}
+
+/* Ref-edge endpoints (e.g. a Feedback TOP's Target): invisible top connectors --
+   the dotted arc over the tiles conveys the parameter reference, so the handle
+   dot itself stays hidden. */
+.tdn-handle.tdn-handle--ref {
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  background: transparent;
+  border: 0;
+  opacity: 0;
+}
+
+.tdn-annotation {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid var(--annotation-color);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--annotation-color) 18%, transparent);
+  padding: 12px 14px;
+  color: color-mix(in srgb, var(--tdn-text) 66%, transparent);
+  font: 600 13px/1.3 var(--font-mono, ui-monospace, "SF Mono", Menlo, Consolas, monospace);
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.tdn-annotation span {
+  color: color-mix(in srgb, var(--tdn-text) 82%, transparent);
+}
+
+.tdn-annotation p {
+  max-width: 48ch;
+  margin: 0;
+  color: color-mix(in srgb, var(--tdn-text) 52%, transparent);
+  line-height: 1.35;
+}
+
+/* Keep edge strokes a constant on-screen width regardless of zoom. fitView on a
+   wide network zooms out far enough (~0.23x on the kaleidoscope graph) that a
+   1.5px stroke would render sub-pixel and the wires vanish; non-scaling-stroke
+   pins the rendered width so they stay visible at any zoom. */
+.tdn-viewer .react-flow__edge-path {
+  vector-effect: non-scaling-stroke;
+}
+
+/* The host site's global `img, svg { max-width: 100% }` reset collapses React
+   Flow's edge SVGs to 0 width (their wrapper is 0-wide), so the path overflows a
+   0-width root and Chromium never paints it -- the wires vanish. Opt every React
+   Flow SVG in the viewer out of that reset. */
+.tdn-viewer .react-flow svg {
+  max-width: none;
+}
+
+/* Fullscreen modal: the "view fullscreen" control lifts the whole viewer to a
+   full-viewport overlay (same ReactFlow, resized) so the graph can be inspected
+   large; Escape or the close button exits. !important beats the inline height
+   the host passes via the `height` prop. */
+.tdn-viewer.is-fullscreen {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  height: 100dvh !important;
+  z-index: 9999;
+  border-radius: 0;
+  /* Keep the inline viewer's dot-grid background instead of flattening to a
+     solid fill, so fullscreen matches the main-page view. (The base .tdn-viewer
+     background layers the grid over an opaque var(--tdn-bg), so the overlay
+     still fully covers the page.) */
+  background:
+    linear-gradient(rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 208, 201, 0.035) 1px, transparent 1px),
+    var(--tdn-bg);
+  background-size: 32px 32px;
+}
+.tdn-viewer__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--tdn-line);
+  border-radius: 10px;
+  background: var(--tdn-panel);
+  color: var(--tdn-text);
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+.tdn-viewer__close:hover {
+  border-color: var(--accent, #6ee668);
+  color: var(--accent, #6ee668);
+}
+
+/* Breadcrumb "address bar": a simplified network path overlaid top-left, showing
+   where in the COMP hierarchy you are. Each crumb is a button that jumps to that
+   level; the leading crumb is the root network. Kept clear of the top-right
+   fullscreen control via max-width. */
+.tdn-viewer__breadcrumb {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px;
+  max-width: calc(100% - 84px);
+  padding: 4px 6px;
+  border: 1px solid var(--tdn-line);
+  border-radius: var(--radius-sm, 8px);
+  background: color-mix(in srgb, var(--tdn-panel) 84%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+}
+
+.tdn-crumb-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+}
+
+.tdn-crumb {
+  max-width: 22ch;
+  overflow: hidden;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--tdn-muted);
+  cursor: pointer;
+  font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.tdn-crumb:hover:not(:disabled):not([aria-current="page"]) {
+  color: var(--tdn-accent);
+  background: var(--tdn-panel-strong);
+}
+
+/* The current (deepest) level: emphasized, not a live target. */
+.tdn-crumb[aria-current="page"] {
+  color: var(--tdn-text);
+  cursor: default;
+}
+
+/* The root crumb is disabled while already at root -- still legible, just inert. */
+.tdn-crumb:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.tdn-crumb__sep {
+  color: var(--tdn-faint);
+  font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  user-select: none;
+}
+
+@media (pointer: coarse) {
+  .tdn-crumb {
+    padding: 7px 10px;
+  }
+}

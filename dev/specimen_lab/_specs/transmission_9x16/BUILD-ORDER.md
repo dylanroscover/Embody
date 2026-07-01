@@ -1,0 +1,54 @@
+# Transmission 9:16 -- Build Order
+
+Five re-architected conference specimens for transmission.video at InfoComm. All are NATIVE 9:16 portrait (dev 720x1280, render up to 2160x3840 on a powerful media server) and 4K-PERFORMANT by construction: low, roughly-constant per-pixel cost, with all glow moved into a SEPARATE downsampled bloom chain (downsample to 1/4 -> bright-pass + blur at low res -> Composite-ADD back). No piece carries a full-resolution NxN bloom tap loop, and no piece loops per-pixel over many elements.
+
+Ranking is booth wow x buildability (how reliably it lands a great frame fast in live TD). Build top-to-bottom: each earlier piece de-risks a technique the later ones reuse, and the cheapest/most-certain pieces ship first so there is always a great loop on the wall.
+
+## Recommended build order
+
+### 1. essence-streams  (wow 4, build: easiest, cheapest)
+**Three vertical rivers -- cyan video, green audio, amber ancillary -- flowing down the portrait frame; the clearest single statement of ST2110's separated essences.**
+
+- **Why first.** Lowest risk and lowest cost in the set: the generator has ZERO loops (an O(1) band-fold in x + a few fixed-frequency noise/trig terms). It is almost impossible to make it cook slowly, so it proves the shared scaffold -- the vec-sequence uniforms, the 720x1280 generator, AND the downsampled bloom chain (res_down -> glsl_bloomblur -> comp_bloom) -- against the cheapest possible shader. Every later piece reuses that exact bloom chain; debug it here.
+- **Must get right.** The three channels must read as DISTINCT colored rivers with crisp hairline gutters between them (fwidth-based, so they stay 1px at 4K), the data-cells must be countable (not mush), and the horizontal PTP sync line must sweep cleanly across all three at once (the "one grandmaster clock" proof). Tune Brightness so the additive bloom does not wash to flat white.
+- **4K budget.** Generator: ~4-5 hash/noise + ~6 trig ops per pixel, no loops -- a fixed constant identical at 720x1280 and 2160x3840. Stream Count adds NO pixel cost (index math). Only loop is the 1/4-res bloom blur, pinned at 1/16-scale. The safe always-on backdrop; large 4K headroom.
+
+### 2. raster-descent  (wow 4, build: easy)
+**A tall video frame painting itself line-by-line DOWN the wall, dissolving into IP packets and reassembling -- SDI-to-IP made literal.**
+
+- **Why second.** Also loop-free in the generator (pure per-pixel math), so it is cheap and certain -- but it has more blending modes (raster reveal, phosphor afterglow, packetization, RGB chroma tear) than essence-streams, so it benefits from the bloom chain already being proven in step 1. The top-to-bottom CRT sweep is the most natural composition a 9:16 wall can carry.
+- **Must get right.** The white-hot scanline must read clearly sweeping DOWN with a real phosphor afterglow trailing below it; the packetization must be legible as DISCRETE blocks with gaps (not a smear); the chroma tear must visibly re-register away from the active line. The chroma offset is VERTICAL here (matching the vertical sweep) -- confirm it tears along y, not x. Judge by an actual capture; this piece is easy to push into mush.
+- **4K budget.** Generator: 2 sourceImage evals (each a hash + 2 sins) + ~6 cheap ops per pixel, NO loops -- the smallest constant in the set after essence-streams. The only fix vs the old video-raster was removing its fatal full-res 13x13 bloom loop; that glow is now the 1/16-scale downsampled chain. Very comfortable at 4K.
+
+### 3. vertical-fibers  (wow 4, build: moderate)
+**A full-height curtain of fiber-optic glass strands rising into haze, light pulses racing UP each core -- light in glass, composed tall.**
+
+- **Why third.** Introduces the spec's headline 4K trick -- the COLUMN-FOLD (map each pixel directly to its nearest strand with floor/fract, NO loop over all N strands) -- which is the exact move that kills the old transmission-lines O(pixels*N) cost. Build it after the two loop-free pieces so the bloom chain and uniform scaffold are not also in question. It also brings fwidth-crisp hairline geometry, which the later waveform-stack reuses.
+- **Must get right.** Hairline strand crispness at 4K (fwidth, NOT a hardcoded pixel width -- verify in a real 4K capture, not just dev), the upward convergence reading as genuine vertical depth into haze, and the pulses being countable Gaussian dashes racing UP and wrapping (not a continuous streak). The column-fold must place strand centers on the periodic lattice with no seams between columns -- check for a visible vertical seam where fract() wraps.
+- **4K budget.** Per pixel: 1 column-fold + 1 analytic tube SDF + a CONSTANT pulse loop (MAXP=4) + a few trig terms -- fixed and small; Strand Count raises detail with ZERO added pixel cost. Bloom is the 1/16-scale chain. The one per-pixel loop is constant and resolution-independent.
+
+### 4. waveform-stack  (wow 4, build: moderate -- has a bounded feedback loop)
+**A tall stack of glowing scope lanes, one essence per lane, a single white playhead sweeping them all -- a multi-channel signal monitor turned vertical.**
+
+- **Why fourth.** Reuses the row-fold (the column-fold's sibling, O(1) lane selection) and fwidth hairlines from vertical-fibers, then adds the one genuinely stateful element in the set: a phosphor-afterglow FEEDBACK loop. Build it after the analytic pieces are solid so the feedback is the only new variable. The feedback runs at a FIXED low resolution (360x640), independent of the 4K output, which is the key safety design -- prove that here.
+- **Must get right.** The lanes must read as distinct stacked channels with crisp dividers; the single playhead must sweep cleanly across ALL lanes with a real persistence tail; traces must stay crisp hairlines at 4K. FEEDBACK SAFETY: bypass feedback_glow while wiring; level_decay opacity < 1 (default 0.85); comp_trail operand=max; watch feedback_glow gpuCookTime/gpuMemUsedMB do NOT climb every frame (that means decay >= 1). Set the Target (feedback_glow.top='comp_trail') LAST -- the Target, not a wire, closes the loop.
+- **4K budget.** Generator: a graticule eval + a row-fold + one ~7-term signal eval + smoothsteps per pixel, NO trace loop. The feedback is PINNED at 360x640 (the afterglow does not need 4K) so it is cheap and bounded regardless of output size; its soft tail is upscaled behind the sharp full-res traces. Bloom is the 1/16-scale chain.
+
+### 5. packet-fabric-vertical  (wow 5, build: hardest -- POP particle sim)
+**Thousands of glowing GPU packets raining DOWN the wall from senders to receivers, snapping to a PTP pulse -- the headline ST2110 fabric, falling.**
+
+- **Why last (but the showcase anchor).** Highest wow and the most literal ST2110 enactment, but the most moving parts: a full POP feedback sim (gridPOP -> particlePOP -> glslPOP advect -> nullPOP, closed by targetpop), a glslPOP color/scale branch, a Point Sprite MAT + sprite texture, a Render Simple TOP framed 9:16, a static fabric background, a composite, AND the downsampled bloom. Build it last so the bloom chain, the 9:16 framing, and the PTP-beat language are all already proven on the cheaper pieces; the only genuinely new risk here is the POP transport.
+- **Must get right.** POP TRANSPORT: after wiring targetpop=null_sim (RELATIVE ref), pulse initializepulse THEN startpulse, confirm play=True, and verify the packet COUNT stabilizes at ~Maxpackets over REAL frames (a synchronous cook loop will NOT advance births -- use the temp frame-driver). The cascade must clearly descend (sender row near the TOP, receivers near the BOTTOM -- check the render framing). Keep per-sprite Color brightness LOW (0.45*) so dense additive moments do not clip flat-white before bloom carries the glow.
+- **4K budget.** Structurally the CHEAPEST to scale: the heavy work is a GPU particle sim whose cost scales with PACKET COUNT, not the 8.3M output pixels -- raise the output to 4K and the advect/color compute cost does not change at all. Packets are GEOMETRY (resolution-independent additive sprites). The old packet-fabric's only 4K killer was its full-res 13x13 bloom loop; that is removed (the 1/16-scale chain). Watch GPU headroom as Packet Count climbs (default 5000 safe, cap 16000).
+
+## Shared invariants (apply to every build)
+
+- **Generators have NO input** -> use `uTDOutputInfo.res` (res = 1/w,1/h,w,h), NEVER `uTD2DInfos`; set `outputresolution='custom'` + `resolutionw/h` (720x1280) or they render 1x1. (essence-streams + raster-descent generators are purely UV-space and need no resolution lookup, but still require the custom output resolution.)
+- **Uniforms** on every glslTOP are declared MANUALLY and set via the vec parameter SEQUENCE (`op.seq.vec.numBlocks=N`, `vecNname`, `vecNtype='vec4'`, `vecNvaluex..w` expressions), NOT `op.par.vec`. glslPOP compute uniforms (packet-fabric) are AUTO-declared from the Vectors page -- do NOT redeclare them in the compute DAT.
+- **The bloom is ALWAYS a separate downsampled chain**, never a full-res tap loop: `res_down` (Resolution TOP to int(Outw/4) x int(Outh/4)) -> `glsl_bloomblur` (bright-pass + blur at that 1/4 res, R=6) -> Composite-ADD the bilinearly-upscaled glow back over the SHARP full-res source. Equivalent TD-native alternative: a Blur TOP (large Filter Size + Pre-Shrink=1/4) + a Level bright-pass feeding the same add. Either way the blur touches ~1/16 the pixels and that ratio is FIXED as the output scales to 4K.
+- **4K is one switch.** Every piece exposes `Outw`/`Outh` Int params that drive the generator/render size, the composites (`resolutionmenu='input'`), and the bloom buffer at 1/4 via `int(Outw/4)`/`int(Outh/4)`. Dev = 720x1280; 4K portrait = set Outw=2160, Outh=3840 and the bloom auto-stays at 540x960 so glow cost is constant.
+- **Crisp at any resolution** comes from `fwidth()`-based smoothstep on hairline edges, NOT super-sampling. Verify hairline crispness in a real 4K capture, not just dev.
+- **Cook demand**: every piece is time-dependent and only cooks when `out1` is demanded -- in the sandbox add a temp Execute DAT OUTSIDE the COMP (`onFrameStart` cooks out1) and verify animation with two captures separated by a real sleep. The shipped specimen needs no driver.
+- **Docked DATs**: each glslTOP docks pixel+compute+info; each glslPOP docks compute+info. HUG them under their host in the SAME execute_python that creates the op, then `get_network_layout` -- never defer.
+- **TDN round-trip**: all exposed params are single-component (Int/Float) so default->value seeding works on re-import (verified v6.0.26). Re-import the exported `.tdn` into a throwaway COMP, confirm a couple `.val`s + that out1 renders, destroy it.
+- **Gate performance** (performance.md): baseline `get_project_performance` before each build, re-check after. Take the 4K reading on the target media server, or at least at Outw=2160/Outh=3840 locally, before declaring a piece 4K-ready.

@@ -1,0 +1,277 @@
+---
+import { env } from "cloudflare:workers";
+import { Picture } from "astro:assets";
+import { TdnViewer } from "@embody/tdn-viewer";
+import Base from "../layouts/Base.astro";
+import { sampleTdn } from "../fixtures/sample-tdn";
+import { specimenThumbnail } from "../lib/specimenThumb";
+import { fixtureSummaries } from "../lib/specimenFallback";
+import { listSpecimensForCollection } from "../server/db";
+import heroShot from "../assets/embody-screenshot.png";
+import Pillars from "../components/landing/Pillars.astro";
+import PracticeSection from "../components/landing/PracticeSection.astro";
+import TdnShowcase from "../components/landing/TdnShowcase.astro";
+import QuickstartSteps from "../components/landing/QuickstartSteps.astro";
+import ManifestoSection from "../components/landing/ManifestoSection.astro";
+
+// The teaser shows the 3 most recently contributed specimens straight from D1
+// (sort: newest). Mirrors /collection's degrade-to-fixtures pattern: an empty
+// unfiltered result means no DB rows (dev without a seed) and a thrown query
+// means no DB at all -- both fall back to the bundled fixtures so the landing
+// never renders an empty section.
+let featured = fixtureSummaries.slice(0, 3);
+try {
+  const recent = await listSpecimensForCollection(env.DB, { sort: "newest", pageSize: 3 });
+  if (recent.specimens.length > 0) featured = recent.specimens;
+} catch {
+  // keep the fixture fallback
+}
+
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Embody",
+  alternateName: "Embody + Envoy",
+  applicationCategory: "DeveloperApplication",
+  operatingSystem: "Windows, macOS",
+  description:
+    "Open-source TouchDesigner toolkit. Envoy is an MCP server with 48 tools that lets AI assistants build, wire, parameterize, and debug a live TouchDesigner session; Embody externalizes the network to version-control-friendly text; TDN is the diffable YAML network format that makes both possible.",
+  url: "https://embody.tools/",
+  downloadUrl: "https://github.com/dylanroscover/Embody/releases/latest",
+  softwareHelp: "https://dylanroscover.github.io/Embody/",
+  codeRepository: "https://github.com/dylanroscover/Embody",
+  license: "https://opensource.org/licenses/MIT",
+  isAccessibleForFree: true,
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+  author: { "@type": "Person", name: "Dylan Roscover" },
+  publisher: { "@type": "Organization", name: "TEC", url: "https://tec.design" },
+  softwareRequirements: "TouchDesigner 2025.32280 or later",
+  keywords:
+    "TouchDesigner, MCP, Model Context Protocol, AI agent, externalization, version control, TDN, generative art, creative coding, Claude Code, Cursor, Windsurf"
+};
+---
+
+<Base
+  title="Embody - create at the speed of thought."
+  description="Say what you want, watch operators appear in your live TouchDesigner session - every version saved as readable text. Open source, MIT."
+>
+  <script type="application/ld+json" slot="head" set:html={JSON.stringify(jsonLd)} />
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-graph" aria-hidden="true">
+      <TdnViewer tdn={sampleTdn} height="100%" client:only="react" />
+    </div>
+    <div class="container hero__inner">
+      <p class="eyebrow">open source &middot; MIT &middot; TouchDesigner 2025+</p>
+      <h1 class="hero__headline">create at the<br />speed of&nbsp;thought.</h1>
+
+      <div class="hero__ctas">
+        <a
+          class="btn btn--primary btn--download"
+          href="https://github.com/dylanroscover/Embody/releases/latest"
+          aria-label="Download the .tox"
+        >
+          <svg class="btn__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          .tox
+        </a>
+        <a class="btn btn--outline" href="https://dylanroscover.github.io/Embody/quickstart/">
+          Quickstart <span aria-hidden="true">&rarr;</span>
+        </a>
+      </div>
+
+      <figure class="hero__shot">
+        <Picture
+          src={heroShot}
+          formats={["avif", "webp"]}
+          widths={[640, 960, 1280, 1800, 2252]}
+          sizes="(max-width: 760px) calc(100vw - 3rem), min(900px, calc(100vw - 6rem))"
+          alt="Embody running inside TouchDesigner - the extension's manager panel."
+          loading="eager"
+          fetchpriority="high"
+          decoding="async"
+        />
+        <figcaption class="hero__shot__caption">The Embody manager panel &mdash; every operator externalized to readable text.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <Pillars />
+  <PracticeSection />
+  <TdnShowcase />
+  <QuickstartSteps />
+  <ManifestoSection />
+
+  <!-- COLLECTION TEASER -->
+  <section class="section section--collection">
+    <div class="container">
+      <p class="eyebrow">the collection</p>
+      <h2 class="section__title">browse the Collection.</h2>
+      <p class="lede">
+        Transparent TDN networks you can inspect node-for-node, copy to your clipboard, and evolve in your own project.
+      </p>
+
+      <div class="card-grid">
+        {featured.map((specimen) => (
+          <a class="specimen-card pillar" href={`/c/${specimen.slug}`}>
+            <div class="thumb">
+              <img
+                src={specimenThumbnail(specimen)}
+                width="640"
+                height="360"
+                loading="lazy"
+                decoding="async"
+                alt={`${specimen.name} node preview placeholder`}
+              />
+            </div>
+            <div class="specimen-card__body">
+              <div class="badge-row">
+                <span class="badge">{specimen.category}</span>
+                {specimen.categories.length > 1 && (
+                  <span class="badge" title={specimen.categories.slice(1).join(", ")}>+{specimen.categories.length - 1}</span>
+                )}
+                {specimen.requires.map((req) => (
+                  <span class="badge needs">needs {req}</span>
+                ))}
+              </div>
+              <h3>{specimen.name}</h3>
+              <p>{specimen.description}</p>
+            </div>
+          </a>
+        ))}
+      </div>
+
+      <p class="start__cta">
+        <a class="btn btn--outline" href="/collection">Enter the Collection <span aria-hidden="true">&rarr;</span></a>
+      </p>
+    </div>
+  </section>
+
+  <script>
+    // Fade the node-graph backdrop in once the ReactFlow island has actually
+    // rendered nodes, so it no longer pops in at the end of load. Decorative, so
+    // a safety-net timeout reveals it regardless; reduced-motion users get an
+    // instant reveal via the global prefers-reduced-motion rule.
+    const heroGraph = document.querySelector(".hero-graph");
+    if (heroGraph) {
+      const reveal = () => heroGraph.classList.add("is-ready");
+      if (heroGraph.querySelector(".react-flow__node")) {
+        reveal();
+      } else {
+        const obs = new MutationObserver(() => {
+          if (heroGraph.querySelector(".react-flow__node")) {
+            reveal();
+            obs.disconnect();
+          }
+        });
+        obs.observe(heroGraph, { childList: true, subtree: true });
+        window.setTimeout(reveal, 2500);
+      }
+    }
+  </script>
+</Base>
+
+<style>
+  /* Hero -- the node-graph motif sits behind the headline as faint texture,
+     not a chart (per the unify plan: reuse the graph instead of a radial glow). */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    /* top padding tuned so the mark -> eyebrow gap matches the eyebrow ->
+       headline gap below (.hero__inner gap), for an even vertical rhythm. */
+    padding: clamp(5.5rem, 9vw, 7rem) 0 clamp(3rem, 6vw, 5rem);
+  }
+
+  .hero-graph {
+    position: absolute;
+    /* Spans the full hero width (symmetric overhang left and right) so the
+       network reads edge to edge rather than only in the upper-right; raised up
+       so it sits in the upper band rather than sinking into the bottom fade;
+       blur kept light so it stays a soft backdrop. */
+    inset: -150px -130px 38% -130px;
+    z-index: 0;
+    /* Starts hidden and fades in only once the ReactFlow island has rendered
+       (the .is-ready class is added by the script below), instead of popping in
+       at the end of load. Decorative, so if the script never fires it simply
+       stays as backdrop-less -- no content is hidden. */
+    opacity: 0;
+    transition: opacity 450ms ease;
+    filter: blur(2px);
+    pointer-events: none;
+  }
+  .hero-graph.is-ready { opacity: 0.3; }
+
+  .hero-graph :global(.tdn-viewer) {
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+  }
+
+  .hero::before {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    content: "";
+    /* A gentle left-to-right veil: enough to keep the headline legible over the
+       network on the left, easing to fully transparent on the right so the graph
+       reads at full strength there. No longer paints opaque --bg over the left,
+       which is what used to erase the network on that side. */
+    background: linear-gradient(102deg, rgba(24, 30, 30, 0.48) 0%, rgba(24, 30, 30, 0.22) 50%, transparent 84%);
+    pointer-events: none;
+  }
+
+  .hero::after {
+    position: absolute;
+    inset: auto 0 0;
+    height: 42%;
+    z-index: 1;
+    content: "";
+    background: linear-gradient(transparent, var(--bg));
+    pointer-events: none;
+  }
+
+  .hero__inner {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 3rem;
+  }
+
+  .hero__inner .eyebrow {
+    margin: 0;
+  }
+
+  .hero__shot {
+    max-width: 900px;
+  }
+
+  .section--collection .card-grid {
+    margin-top: 2.25rem;
+  }
+
+  /* The 3-card teaser uses the global auto-fit grid, which lands a lone third
+     card on its own half-row at tablet widths (the 2+1 orphan). Force a single
+     column at/below the nav breakpoint so the teaser stacks cleanly instead. */
+  @media (max-width: 860px) {
+    .section--collection .card-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .hero {
+      padding-top: 5.5rem;
+    }
+
+    .hero-graph {
+      inset: -60px -220px 120px 0;
+    }
+    .hero-graph.is-ready { opacity: 0.16; }
+  }
+</style>

@@ -20,7 +20,7 @@
 | 4 | 0:35–0:38 | Fully cooked. The particle system runs. Audio reactivity visible on screen. Hold beat. | Embody collapses it. |
 | 5 | 0:38–0:43 | Cut back to the chat: *"Actually, try a different approach — make it more chaotic."* | One sentence. |
 | 6 | 0:43–0:55 | Sped up: the existing network rebuilds itself. Operators rearrange. Different parameters. The new version is visibly wilder than the first. | A different network. |
-| 7 | 0:55–1:00 | Cut to a terminal beside the network. `git diff` of the `.tdn` file — human-readable JSON, additions in green, removals in red. Pause 2 seconds on the diff. | A diff you can read. |
+| 7 | 0:55–1:00 | Cut to a terminal beside the network. `git diff` of the `.tdn` file — human-readable YAML, additions in green, removals in red. Pause 2 seconds on the diff. | A diff you can read. |
 | 8 | 1:00–1:08 | Back to chat: *"Show me the previous version."* The terminal runs `git checkout` and the network rebuilds itself back to the first version. | A revert in seconds. |
 | 9 | 1:08–1:15 | Chat: *"Save this and start a new variant."* The terminal runs `git checkout -b variant-2`. Network unchanged. The user starts typing the next prompt — but we cut before they hit enter. | Branch off the one that works. |
 | 10 | 1:15–1:25 | Black. Brand mark fades in. Soft. | **Embody. Create at the speed of thought.** |
@@ -44,7 +44,7 @@ The whole video lives or dies on whether the build sequence *feels alive*. Thing
 
 ### The diff (beat 7)
 
-This is the visceral proof. Most viewers have never seen a TouchDesigner network as text. If the diff looks like JSON soup, the moment dies. Things to do:
+This is the visceral proof. Most viewers have never seen a TouchDesigner network as text. If the diff looks like YAML soup, the moment dies. Things to do:
 
 - **Pre-stage the terminal** with a font size large enough to read at 720p (16pt minimum, 18pt preferred).
 - **Pick a `.tdn` section that diffs cleanly** — not the entire file. Maybe a single annotation group or a single operator's parameter changes. Quality over quantity.
@@ -72,7 +72,7 @@ Things that would feel natural to include but should not appear in this video:
 - **A logo intro.** No. Cold open into the empty network. Trust the viewer.
 - **"What is TouchDesigner?"** No. The audience for this video already knows.
 - **"What is MCP?"** No. Same reason.
-- **Stats.** No "45 MCP tools" or "30 test suites." That's README copy. The video is emotional, not technical.
+- **Stats.** No "49 MCP tools" or "72 test suites." That's README copy. The video is emotional, not technical.
 - **Comparison to TWOZERO or any other tool.** Naming a competitor in the demo dignifies them. Win on your own terms.
 - **A "team collaboration" beat.** The plan is explicit on this — solo creator in flow is the audience. Don't dilute.
 - **A second prompt that fails and gets fixed.** Tempting because it shows recovery, but it adds 20 seconds and undercuts the speed promise. Save the failure-recovery story for a different video.

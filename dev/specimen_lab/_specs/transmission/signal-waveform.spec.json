@@ -1,0 +1,202 @@
+{
+  "slug": "signal-waveform",
+  "name": "Signal Waveform",
+  "category": "transmission",
+  "difficulty": "intermediate",
+  "one_liner": "A glowing phosphor oscilloscope: stacked broadcast signal traces sweep left-to-right with afterglow decay, a gold graticule grid behind them, and a synced playhead -- the audio/video essence rendered as live scope lines.",
+  "visual_description": "A near-black scope screen carries a faint gold graticule (the classic vectorscope/waveform-monitor grid -- IRE-style horizontal divisions and a center crosshair). Across it, three stacked glowing traces sweep continuously left-to-right: a phosphor-green primary waveform (the audio essence) that wobbles and beats with harmonic detail, a dimmer cyan trace above it (the video luma), and a thin magenta trace below (chroma). Each trace has a bright white-hot leading edge -- the sweep playhead -- with a long phosphor afterglow tail decaying behind it, exactly like a real CRT scope. The whole thing breathes on a steady PTP-style beat: every couple of seconds the traces flash brighter and a thin vertical sync bar wipes across. Heavy bloom blooms the white playhead and trace cores into green/cyan/magenta halos. A faint scanline + grain overlay and an occasional micro RGB-split at the brightest peak sell the broadcast-engineering authenticity. It reads instantly as 'a signal on a scope' -- the most literal video-engineering motif on the floor.",
+  "technique": "Single self-contained GLSL TOP generator (no input), plus a Feedback TOP for the phosphor afterglow trail. The shader computes, per pixel, the distance to N analytic signal traces (summed detuned sines = a rich broadcast-like waveform), draws a thin bright line with a soft glow, layers a gold graticule grid, a sweeping white playhead with exponential afterglow, and a PTP sync flash. The afterglow is doubled by a light Feedback TOP (decay < 1, bounded) so the playhead leaves a real persistence trail like a CRT. Cheap per-pixel math; the only stateful element is the bounded feedback. Finished with bloom + scanline/grain in the same or a follow-on pass.",
+  "network_plan": [
+    {
+      "name": "glsl_scope",
+      "type": "glslTOP",
+      "role": "The whole scope. Generator (no input): graticule + N analytic traces + sweeping playhead + PTP flash. Generator MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h)); NEVER uTD2DInfos on a no-input generator. outputresolution custom 1280x720, rgba16float for HDR glow. Three vec4 uniforms via the vec SEQUENCE (declared manually in this glslTOP). Place nodeX 400, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_scope_pixel",
+        "computedat": "glsl_scope_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uWave", "type": "vec4", "valuex": "=parent().par.Traces.eval()", "valuey": "=parent().par.Frequency.eval()", "valuez": "=parent().par.Amplitude.eval()", "valuew": "=absTime.seconds*parent().par.Speed.eval()" },
+          { "name": "uSweep", "type": "vec4", "valuex": "=parent().par.Sweeprate.eval()", "valuey": "=parent().par.Afterglow.eval()", "valuez": "=parent().par.Ptprate.eval()", "valuew": "=parent().par.Linewidth.eval()" },
+          { "name": "uLook", "type": "vec4", "valuex": "=parent().par.Graticule.eval()", "valuey": "=parent().par.Harmonics.eval()", "valuez": "=parent().par.Glow.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "level_decay",
+      "type": "levelTOP",
+      "role": "Decay stage for the phosphor afterglow feedback loop. opacity = Afterglow param (< 1) so the previous frame's trace fades. A small blacklevel keeps it from settling on noise. This bounds the feedback. Place nodeX 800, nodeY 200.",
+      "params": { "opacity": "=parent().par.Afterglow.eval()", "blacklevel": 0.0 },
+      "inputs": ["feedback_glow"]
+    },
+    {
+      "name": "comp_trail",
+      "type": "compTOP",
+      "role": "Combine the fresh scope frame with the decayed previous frame (additive max-ish) so the playhead leaves a CRT persistence tail. Input0 = glsl_scope (fresh), Input1 = level_decay (decayed history). operand = max (or add) so old trace glow persists but never runs away. Place nodeX 1100, nodeY 0.",
+      "params": { "operand": "max" },
+      "inputs": ["glsl_scope", "level_decay"]
+    },
+    {
+      "name": "feedback_glow",
+      "type": "feedbackTOP",
+      "role": "Holds the previous combined frame for the afterglow. top = comp_trail (closes the loop). Fixed 1280x720 rgba16float so it never grows. The decay in level_decay (opacity < 1) keeps it bounded. Place nodeX 800, nodeY 0.",
+      "params": { "top": "comp_trail", "format": "rgba16float" },
+      "inputs": ["comp_trail"]
+    },
+    {
+      "name": "glsl_finish",
+      "type": "glslTOP",
+      "role": "Bloom + broadcast finish. Input0 = comp_trail. Bright-pass + bounded blur bloom added back; faint scanline overlay; film grain; an occasional micro RGB-split at the brightest peaks on the PTP tick. outputresolution custom 1280x720, rgba16float. Place nodeX 1500, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_finish_pixel",
+        "computedat": "glsl_finish_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uFinish", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.5, "valuez": "=parent().par.Rgbsplit.eval()", "valuew": "=absTime.seconds*parent().par.Ptprate.eval()" }
+        ]
+      },
+      "inputs": ["comp_trail"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named exactly out1. Viewer flagged. Place nodeX 1900, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_finish"]
+    },
+    {
+      "name": "glsl_scope_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_scope. See glsl[0]. extension frag. Hug under host.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_scope_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_scope.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_scope_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_scope.",
+      "params": { "op": "glsl_scope" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_finish_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_finish. See glsl[1]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_finish_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_finish.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_finish_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_finish.",
+      "params": { "op": "glsl_finish" },
+      "inputs": []
+    },
+    {
+      "name": "annotate_scope",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the scope generator (glsl_scope). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Analytic Scope Traces",
+        "Bodytext": "One generator GLSL TOP draws everything: a gold graticule grid, then per pixel the distance to N analytic signal traces (summed detuned sines = a rich broadcast waveform), a thin bright line with soft glow, and a sweeping white-hot playhead. Green = audio essence, cyan = video luma, magenta = chroma -- the ST2110 separated streams, on a scope.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_glow",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the phosphor feedback loop (level_decay, comp_trail, feedback_glow). Mode annotate.",
+      "params": {
+        "Titletext": "Phosphor Afterglow (Feedback)",
+        "Bodytext": "A bounded Feedback TOP gives the playhead a real CRT persistence tail: comp_trail maxes the fresh frame with the decayed previous frame, feedback_glow holds it (Target = comp_trail), and level_decay (opacity < 1) fades old trace energy so it can never run away.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over finish + out (glsl_finish, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Bloom & Broadcast Finish",
+        "Bodytext": "Bloom blows the white playhead and trace cores into colored halos; a faint scanline + grain overlay and an occasional micro RGB-split on the PTP beat sell the broadcast-engineering authenticity. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_scope_pixel",
+      "stage": "pixel",
+      "code": "// Signal Waveform -- glowing phosphor oscilloscope on a gold graticule.\nuniform vec4 uWave;    // x=traces, y=frequency, z=amplitude, w=time(=absTime*Speed)\nuniform vec4 uSweep;   // x=sweepRate, y=afterglow, z=ptpRate, w=lineWidth\nuniform vec4 uLook;    // x=graticule, y=harmonics, z=glow, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\n// a rich broadcast-like signal: summed detuned harmonics, per-trace seeded\nfloat signal(float x, float seed, float freq, float harm, float t){\n    float v = 0.0;\n    v += sin(x*freq + t + seed);\n    v += 0.5  * sin(x*freq*2.03 + t*1.3 + seed*1.7);\n    v += 0.33 * sin(x*freq*3.97 + t*0.8 + seed*2.3) * harm;\n    v += 0.22 * sin(x*freq*7.1  - t*1.1 + seed*0.5) * harm;\n    return v / 2.0;   // ~[-1,1]\n}\n\nvoid main(){\n    vec2 uv = vUV.st;\n    float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;\n    vec2 p = uv;\n\n    vec3 col = vec3(0.010, 0.012, 0.016);   // near-black scope ground\n\n    // --- gold graticule grid (vectorscope/waveform-monitor look) ---\n    float grat = uLook.x;\n    vec2 g = abs(fract(uv * vec2(16.0, 9.0)) - 0.5);\n    float grid = smoothstep(0.49, 0.5, max(g.x, g.y));\n    // brighter center crosshair\n    float cross = smoothstep(0.004, 0.0, abs(uv.y-0.5)) + smoothstep(0.004,0.0,abs(uv.x-0.5));\n    col += vec3(0.20, 0.16, 0.05) * grid * 0.18 * grat;\n    col += vec3(0.35, 0.28, 0.08) * cross * 0.25 * grat;\n\n    // --- traces: green audio, cyan video, magenta chroma ---\n    float nT = clamp(uWave.x, 1.0, 3.0);\n    float freq = uWave.y;\n    float amp  = uWave.z;\n    float harm = uLook.y;\n    float t    = uWave.w;\n    float lw   = uSweep.w;\n    float glow = uLook.z;\n\n    vec3 traceCols[3];\n    traceCols[0] = vec3(0.18, 1.00, 0.40);   // phosphor green (audio)\n    traceCols[1] = vec3(0.00, 0.85, 1.00);   // cyan (video luma)\n    traceCols[2] = vec3(1.00, 0.18, 0.60);   // magenta (chroma)\n    float yCenters[3]; yCenters[0]=0.5; yCenters[1]=0.72; yCenters[2]=0.30;\n    float seeds[3];    seeds[0]=0.0;  seeds[1]=2.1;  seeds[2]=4.7;\n    float amps[3];     amps[0]=1.0;   amps[1]=0.55;  amps[2]=0.45;\n\n    // sweeping playhead position (wraps 0..1), white-hot leading edge\n    float head = fract(uLook.w * uSweep.x);\n    float ageBehind = head - uv.x;                 // distance behind the head along x\n    if(ageBehind < 0.0) ageBehind += 1.0;          // wrap\n    float persistence = exp(-ageBehind * mix(8.0, 1.5, uSweep.y));  // afterglow falloff\n\n    const int MAXT = 3;\n    for(int i=0;i<MAXT;i++){\n        if(float(i) >= nT) break;\n        float yc = yCenters[i];\n        float s  = signal((uv.x*2.0-1.0)*aspect, seeds[i], freq, harm, t);\n        float y  = yc + s * amp * amps[i] * 0.16;\n        float d  = abs(uv.y - y);\n        float line = smoothstep(lw, 0.0, d);                 // crisp core\n        float halo = smoothstep(lw*8.0*glow, 0.0, d) * 0.35; // soft glow\n        float bright = (line + halo) * persistence;\n        // white-hot at the playhead, color in the tail\n        vec3 c = mix(traceCols[i], vec3(1.0), line * smoothstep(0.06, 0.0, ageBehind));\n        col += c * bright;\n    }\n\n    // --- PTP sync flash: a steady beat + a thin vertical sync bar wipe ---\n    float beat = fract(uLook.w * uSweep.z);\n    float flash = pow(max(0.0, 1.0 - beat*4.0), 3.0);\n    col += vec3(0.05, 0.08, 0.10) * flash;                  // whole-screen breath\n    float bar = smoothstep(0.006, 0.0, abs(uv.x - beat));   // sync bar wipes l->r\n    col += vec3(0.10, 0.20, 0.24) * bar * 0.6;\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_finish_pixel",
+      "stage": "pixel",
+      "code": "// Bloom + scanline + grain + occasional PTP-synced RGB-split finish.\nuniform vec4 uFinish;   // x=bloom, y=threshold, z=rgbSplit, w=ptpTime\nout vec4 fragColor;\n\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\n\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;   // 1/w,1/h\n\n    // RGB chromatic separation, pulsed on the PTP beat (broadcast authenticity)\n    float beat = fract(uFinish.w);\n    float ev = pow(max(0.0, 1.0 - beat*6.0), 4.0);          // brief event right on the tick\n    float sp = uFinish.z * (0.0015 + 0.004*ev);\n    vec3 src;\n    src.r = texture(sTD2DInputs[0], uv + vec2(sp, 0.0)).r;\n    src.g = texture(sTD2DInputs[0], uv).g;\n    src.b = texture(sTD2DInputs[0], uv - vec2(sp, 0.0)).b;\n\n    // bright-pass bloom, bounded taps\n    float thr = uFinish.y;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/16.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*2.2).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    vec3 col = src + (sum/max(wsum,1e-4)) * uFinish.x;\n\n    // scanlines + grain\n    float scan = 0.94 + 0.06*sin(uv.y * uTDOutputInfo.res.w * 3.14159);\n    col *= scan;\n    col += (hash21(uv*uTDOutputInfo.res.zw + beat*97.0)-0.5) * 0.015;\n\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Traces", "label": "Trace Count", "style": "Int", "default": 3, "range": [1, 3], "drives": "uWave.x -- number of stacked signal traces (1=green audio only, 2=+cyan video, 3=+magenta chroma). The ST2110 separated essences as scope lines." },
+    { "name": "Frequency", "label": "Frequency", "style": "Float", "default": 8.0, "range": [1.0, 30.0], "drives": "uWave.y -- base spatial frequency of the waveform. Low = slow rolling signal; high = dense rapid oscillation packed across the screen." },
+    { "name": "Amplitude", "label": "Amplitude", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uWave.z -- vertical swing of the traces. 0 = flat baselines; higher = tall dramatic waveforms (clamped so they stay on screen)." },
+    { "name": "Speed", "label": "Signal Speed", "style": "Float", "default": 1.0, "range": [0.0, 4.0], "drives": "Multiplies absTime into uWave.w -- how fast the waveform content evolves (the signal changing over time). 0 freezes the waveform shape (the sweep still moves)." },
+    { "name": "Sweeprate", "label": "Sweep Rate", "style": "Float", "default": 0.4, "range": [0.05, 2.0], "drives": "uSweep.x -- how fast the white-hot playhead sweeps left-to-right across the screen (Hz). The scope refresh feel." },
+    { "name": "Afterglow", "label": "Afterglow", "style": "Float", "default": 0.85, "range": [0.5, 0.97], "drives": "uSweep.y (in-shader persistence falloff) AND level_decay.opacity (the Feedback TOP decay). Higher = longer CRT phosphor persistence tail behind the playhead. Below 1 keeps the feedback bounded." },
+    { "name": "Linewidth", "label": "Line Width", "style": "Float", "default": 0.004, "range": [0.001, 0.02], "drives": "uSweep.w -- thickness of the trace core. Thin = a crisp precise scope line; thicker = a heavier glowing beam." },
+    { "name": "Graticule", "label": "Graticule", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.x -- brightness of the gold graticule grid + center crosshair behind the traces. 0 hides the grid; higher makes the engineering scope frame prominent." },
+    { "name": "Harmonics", "label": "Harmonics", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.y -- amount of high harmonic detail summed into the signal. 0 = a clean fundamental sine; higher = a rich, complex broadcast-like waveform." },
+    { "name": "Glow", "label": "Trace Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.z -- width of the soft halo around each trace before bloom. The signature scope-beam glow." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uSweep.z (scope flash + sync bar) and uFinish.w (RGB-split event timing) -- frequency of the PTP sync pulse the whole scope breathes to." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.2, "range": [0.0, 3.0], "drives": "uFinish.x -- intensity of the bloom added back over the traces. The booth-scale glow knob." },
+    { "name": "Rgbsplit", "label": "RGB Split", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFinish.z -- strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "graticule_gold": "#FFB000",
+    "trace_green_audio": ["#39FF6A", "#00FF66"],
+    "trace_cyan_video": "#00E5FF",
+    "trace_magenta_chroma": "#FF2E9A",
+    "white_hot_playhead": ["#FFFFFF", "#EAFBFF"],
+    "ratio": "~85% dark scope ground + gold graticule restraint, ~15% saturated phosphor traces; green leads (the engineering signature), cyan/magenta differentiate the essences."
+  },
+  "wow_factor": 4,
+  "conference_fit": "The single most legible 'video engineering' motif on the floor -- a phosphor-green oscilloscope trace reads as broadcast/signal louder than anything. On-brand: gold graticule + green trace is the literal vectorscope/waveform-monitor palette every broadcast engineer recognizes, on a dark premium stage. The PTP sync breath ties it to ST2110 timing; the three stacked traces (green/cyan/magenta) show the separated essences. Self-contained, cheap, and unmistakably on-theme; a perfect quieter counterpoint to the dense packet pieces.",
+  "prompt": {
+    "one_liner": "A glowing phosphor oscilloscope generator: stacked broadcast traces (green audio / cyan video / magenta chroma) sweeping left-to-right with a bounded-feedback CRT afterglow, a gold graticule, a PTP sync breath, and a bloom + scanline + RGB-split broadcast finish.",
+    "evolve": "Raise Harmonics + Frequency for a busier signal; raise Afterglow for long phosphor smears; drop Speed to 0 to freeze the waveform while the sweep keeps running. Lower Trace Count to 1 for a pure audio scope. Sweep RGB Split + PTP Beat for stronger broadcast tears. Feed out1 into the kaleidoscope specimen, or drive Amplitude/Frequency from a real Audio File In + Analyze CHOP into the uniforms for a genuine reactive scope. Replace the analytic signal() with a sampled CHOP-to-texture for a true input-driven waveform monitor.",
+    "compose_with": ["packet-fabric", "video-raster"]
+  },
+  "warmup_frames": 90,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_scope has NO input -- it MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h); .zw = pixel w,h) for resolution/aspect; using uTD2DInfos[0] on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h or it renders 1x1. glsl_finish HAS an input so sTD2DInputs[0] + uTDOutputInfo.res are both valid there.\\n\\nUNIFORMS: both glslTOPs declare their uniforms MANUALLY (a glslTOP auto-declares nothing -- unlike a glslPOP). Set via the vec parameter SEQUENCE: op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w as expressions. NOT op.par.vec (whose .eval() reads 0 and misleads).\\n\\nFEEDBACK SAFETY (performance.md): the afterglow loop is bounded -- fixed 1280x720 rgba16float on BOTH comp_trail-feeding feedback_glow and the loop, level_decay opacity = Afterglow (<1, default 0.85), comp_trail uses operand=max so glow persists but cannot exceed the fresh frame's peak. While wiring, BYPASS feedback_glow until the chain is complete. Watch feedback_glow gpuCookTime / gpuMemUsedMB across checks; if either climbs every frame with no param change the decay went >=1. 16f not 32f -- this is a light persistence trail, not a precision sim.\\n\\nWIRING ORDER (the loop is a cycle): create glsl_scope, level_decay, comp_trail, feedback_glow, glsl_finish, out1; wire glsl_scope->comp_trail(in0), level_decay->comp_trail(in1); comp_trail->feedback_glow; feedback_glow->level_decay; comp_trail->glsl_finish->out1. THEN set feedback_glow.top='comp_trail' (the Target closes the loop, not a wire).\\n\\nCOOK DEMAND: time-dependent through absTime in the uniforms and the feedback. Cooks every frame only when out1 is demanded. In the sandbox add a temp Execute DAT OUTSIDE the COMP (onFrameStart cooks out1); verify animation with two captures separated by a real sleep. Speed=0 freezes the waveform shape but the sweep/PTP still reference absTime so the TOP keeps cooking (a moving playhead over a frozen signal) -- correct, not a bug.\\n\\nDOCKED DATS: glsl_scope and glsl_finish each dock pixel+compute+info; HUG all six under their hosts in the SAME execute_python that creates each op, then get_network_layout. Keep shader source LF/space-indented (no tabs) for a clean YAML literal block.\\n\\nTDN ROUND-TRIP: all 13 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import the exported .tdn into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count counts all ops incl docked DATs (annotations not counted): ~12."
+}

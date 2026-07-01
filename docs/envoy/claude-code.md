@@ -10,10 +10,12 @@ When Envoy starts, it generates a complete Claude Code configuration in your pro
 | `.mcp.json` | MCP server connection config | Yes |
 | `.embody/envoy-bridge.py` | STDIO-to-HTTP bridge for MCP transport | Yes |
 | `.claude/settings.local.json` | Tool permissions and MCP server config | Yes |
-| `.claude/rules/` | Always-loaded conventions (see below) | Yes |
-| `.claude/skills/` | On-demand workflow guides (see below) | Yes |
+| `.claude/rules/` | Always-loaded conventions (see below) | Yes (unless edited) |
+| `.claude/skills/` | On-demand workflow guides (see below) | Yes (unless edited) |
 
 All generated files except `CLAUDE.md` are automatically added to `.gitignore`.
+
+The `Yes (unless edited)` files are refreshed from their templates on start **only while pristine**. Embody records a content hash of every file it generates (in `.embody/generated-hashes.json`); once you edit a generated rule or skill, your version is preserved and not overwritten — delete the file to opt back into regeneration. See [How It Works](#how-it-works).
 
 ## Rules (Always-Loaded)
 
@@ -24,7 +26,9 @@ Rules are loaded into every Claude Code conversation automatically. They provide
 | `network-layout.md` | Grid spacing (200-unit grid), signal flow direction, annotation placement, operator positioning |
 | `td-python.md` | Parameter access (`.eval()` vs `.val`), operator path portability, threading, cook model |
 | `mcp-safety.md` | Thread boundary (never access TD from background thread), localhost binding, 30s timeout |
-| `skill-prerequisites.md` | Which skills must be loaded before calling specific MCP tools |
+| `parameters.md` | Custom parameter design: value access, required help text, section breaks, ordering, pages, naming, and styles |
+| `performance.md` | Performance gating protocol, stop conditions, crash/freeze avoidance, and safe-default resolution/feedback/GLSL caps |
+| `td-connectivity.md` | Session-start connectivity checks, the bridge reconciler and Envoy liveness watchdog, and manual recovery steps |
 
 ## Skills (On-Demand)
 
@@ -39,44 +43,9 @@ Skills are loaded only when needed, keeping the context window lean. Claude Code
 | `/manage-annotations` | Before creating or modifying annotations |
 | `/td-api-reference` | Before writing TD Python code |
 | `/mcp-tools-reference` | Before the first MCP call in a session |
+| `/visual-aesthetics` | Before building or refining any rendered visual output (generative art, VJ visuals, shaders, scenes, renders) |
 
 Each skill contains step-by-step workflows, API details, and common pitfalls specific to that operation.
-
-## Slash Commands
-
-Slash commands are shortcuts you can type directly in Claude Code to trigger common workflows.
-
-### `/run-tests`
-
-Runs the Embody test suite via MCP and reports results.
-
-```
-/run-tests                              # Run all 30 test suites
-/run-tests test_path_utils              # Run a specific suite
-/run-tests test_path_utils test_name    # Run a specific test
-```
-
-Reports pass/fail counts per suite. On failure, automatically reads log files for full error context.
-
-### `/status`
-
-Performs a quick health check of the Embody project:
-
-- Confirms Envoy is connected (TD version, Envoy status)
-- Reports any dirty (unsaved) externalizations
-- Scans for operator errors in the network
-- Checks recent log entries for errors or warnings
-
-### `/explore-network`
-
-Discovers and reports the structure of a TouchDesigner network:
-
-```
-/explore-network                        # Explore the current network
-/explore-network /project1/base1        # Explore a specific path
-```
-
-Returns operators organized by annotation groups, signal flow direction, and any errors found.
 
 ## STDIO Bridge
 
@@ -85,7 +54,7 @@ Claude Code connects to Envoy through a STDIO bridge script (`.embody/envoy-brid
 | Tool | Description |
 |------|-------------|
 | `get_td_status` | Check if TD is running, whether Envoy is reachable, crash detection, restart attempts remaining, and instance registry status |
-| `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable |
+| `launch_td` | Launch TD with the project's `.toe` file and wait for Envoy to become reachable. On fresh clones (where `.embody/envoy.json`'s `td_executable` path doesn't exist locally), the bridge reads `td_build` from the committed `.embody/project.json` and auto-picks the matching TouchDesigner install — see [Architecture](architecture.md#embodyprojectjson-build-pin-committed). |
 | `restart_td` | Gracefully quit TD, then relaunch and wait for Envoy |
 | `switch_instance` | List all registered TD instances or switch the bridge to a different running instance |
 
@@ -112,8 +81,20 @@ See [Architecture](architecture.md#multiple-instances) for technical details.
 Embody stores master copies of all rules and skills as template DATs inside the `templates` baseCOMP. When Envoy starts in a user project, `_extractClaudeConfig()` reads these templates and writes them to the project's `.claude/` directory. This means:
 
 - **Updates are automatic** — upgrading Embody gives you the latest rules and skills
-- **Templates are the source of truth** — the generated `.claude/` files are overwritten on each Envoy start
+- **Templates are the source of truth for pristine files** — an unedited generated `.claude/` file is refreshed from its template on Envoy start, but Embody records a content hash of each file it generates (`.embody/generated-hashes.json`) and will not overwrite one you've since edited (delete the file to opt back into regeneration)
 - **Project-specific customization** — add your own rules or skills to `.claude/` alongside the generated ones (they won't be overwritten)
+
+## Live Build Visualization
+
+Turn on **Envoy Follow** (the `Envoyfollow` toggle on the Embody COMP's Envoy page, OFF by default) to *watch* Claude build in real time. While the agent works through Envoy:
+
+- **Within the network you're viewing**, the editor smoothly **glides** to center on each operator just touched (ease-out, one step per frame).
+- **When the work moves to a COMP no pane is showing**, the editor **navigates** a network-editor pane into that COMP and snaps to frame the op — you can't glide across networks (different coordinate spaces), so it cuts.
+- A small **builder-bot** ("embot") — a figure made of minimal network-box annotations — **hops between the nodes** being worked on, hovers when idle, and throws an occasional gesture (a wave, a reach, a pump, the odd robot dance). Its color tracks "thinking time": cool cyan-green right after Envoy acts, warming toward red the longer the gap. The node Envoy just touched pulses the Envoy accent.
+
+It **yields the instant you pan, zoom, or navigate** the view yourself, and resumes only once you stop — it never yanks the view mid-interaction. The bot and pulse retire after a stretch of quiet.
+
+This is purely a viewing aid: it writes only pane/view state (which TouchDesigner never externalizes), the bot is destroyed before every save, and it runs entirely on the main thread, so it adds nothing to your saved files and never affects a build. Leave it off if you'd rather your view never move on its own.
 
 ## Customization
 
@@ -123,5 +104,5 @@ You can extend the generated configuration:
 - **Add custom commands**: Create `.md` files in `.claude/commands/` with prompt instructions
 - **Modify permissions**: Edit `.claude/settings.local.json` to allow or restrict specific tools
 
-!!! warning
-    Don't modify the Envoy-generated rules or skills — they'll be overwritten when Envoy restarts. Add your own files alongside them instead.
+!!! tip
+    You can edit the Envoy-generated rules and skills directly — Embody records a content hash of each generated file (`.embody/generated-hashes.json`) and won't overwrite one you've changed (it logs that it kept your edits). Pristine generated files still refresh on regeneration; delete a file to discard your changes and pull the latest template.

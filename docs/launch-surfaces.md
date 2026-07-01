@@ -43,7 +43,7 @@ Three to evaluate:
 
 **Why it matters:** This is the audience that *finds* tools by browsing registries. They're our second buyer profile after working TD artists — the technical artist who already lives in Cursor.
 
-**Framing:** Different from the forum. Lead with capability and tool count: *"45 MCP tools for TouchDesigner. Build, wire, parameterize, and debug live networks from your AI assistant."* The video is supporting evidence, not the lede.
+**Framing:** Different from the forum. Lead with capability and tool count: *"49 MCP tools for TouchDesigner. Build, wire, parameterize, and debug live networks from your AI assistant."* The video is supporting evidence, not the lede.
 
 **Risk:** Easy to submit and forget. The registries are noisy — without a real description and a working install path, the listing is invisible.
 

@@ -1,0 +1,789 @@
+---
+import "../styles/embody.css";
+import { env } from "cloudflare:workers";
+import { isAdmin } from "../server/admin";
+import { SITE_ORIGIN, DEFAULT_OG_IMAGE } from "../lib/site";
+
+interface Props {
+  title?: string;
+  description?: string;
+  ogImage?: string;
+  ogUrl?: string;
+}
+
+const {
+  title = "embody.tools",
+  description = "The transparent TouchDesigner network Collection.",
+  ogImage,
+  ogUrl
+} = Astro.props;
+
+// Active-nav highlight: mark the item whose href matches the current path.
+const path = Astro.url.pathname.replace(/\/+$/, "") || "/";
+const isActive = (href: string) =>
+  href !== "/" &&
+  (path === href ||
+    path.startsWith(href + "/") ||
+    // Specimen pages (/c/<slug>, /c/<slug>/edit) belong to the collection, so
+    // highlight "Collection" while viewing one.
+    (href === "/collection" && path.startsWith("/c/")));
+
+// Signed-in user (or null). When present the auth button becomes "account"
+// (-> their profile) instead of the redundant "sign in".
+const user = Astro.locals.user;
+
+// Admin link: rendered only for admins (trust_level='admin' OR ADMIN_EMAILS).
+// isAdmin short-circuits to false for a null user, so it never dereferences env
+// on anonymous requests. Keeps /admin invisible to non-admins.
+const showAdmin = isAdmin(user, env);
+
+// Display name + initials for the signed-in account menu (name, else handle).
+const displayName = user ? (user.name.trim() || user.handle) : "";
+// Navbar trigger shows just the first word of the name (full name stays in the
+// aria-label and the dropdown), so a long name doesn't get ellipsis-truncated.
+// When even the first name is long, drop the label and show the avatar only --
+// the chip stays compact instead of stretching the nav.
+const firstName = displayName.split(/\s+/)[0] || displayName;
+const showFirstName = firstName.length <= 12;
+const userInitials =
+  displayName
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("") || "?";
+
+// Cloudflare Web Analytics: cookieless, privacy-first page-traffic beacon.
+// The beacon is rendered ONLY when PUBLIC_CF_BEACON_TOKEN is set, so dev and
+// build stay clean when the token is absent. See README / docs for the var.
+const cfBeaconToken = import.meta.env.PUBLIC_CF_BEACON_TOKEN as string | undefined;
+
+// Canonical URL + social image, with site-wide defaults so EVERY page emits a
+// proper og:url and a rich preview image -- not just the ones that pass props.
+// ogUrl defaults to this page's canonical URL on the production origin (query
+// stripped via `path`); ogImage defaults to the brand screenshot.
+const canonicalUrl = ogUrl ?? `${SITE_ORIGIN}${path}`;
+const resolvedOgImage = ogImage ?? DEFAULT_OG_IMAGE;
+---
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Swap no-js -> js before paint so the nav (and other JS-gated UI) render
+         in their enhanced state with no flash; without JS the .no-js fallbacks
+         (e.g. a static, toggle-less nav) stand. -->
+    <script is:inline>document.documentElement.classList.remove("no-js");document.documentElement.classList.add("js");</script>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <meta name="theme-color" content="#181e1e" />
+    <meta name="color-scheme" content="dark" />
+    <title>{title}</title>
+    <link rel="canonical" href={canonicalUrl} />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23181e1e'/%3E%3Ccircle cx='45' cy='45' r='4.7' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='8.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 33 L 47.5 33'/%3E%3C/g%3E%3C/svg%3E" />
+    <!-- Inter is self-hosted (see @font-face in embody.css) so no request goes
+         to Google's font CDN -- that fetch would leak every visitor's IP to a
+         third party. Preload the primary face (latin 600, used by every page's
+         heading) for fast first paint; the rest load on demand from /fonts. -->
+    <link rel="preload" href="/fonts/inter-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:site_name" content="embody.tools" />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={resolvedOgImage} />
+    <meta property="og:image:alt" content={description} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={resolvedOgImage} />
+    <meta name="twitter:image:alt" content={description} />
+    {cfBeaconToken && (
+      <script
+        is:inline
+        defer
+        src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon={JSON.stringify({ token: cfBeaconToken })}
+      />
+    )}
+    <slot name="head" />
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <header class="site-header" aria-label="embody" data-site-header>
+      <!-- WebGL refraction layer. CSS backdrop-filter: url(#svg-displacement)
+           does NOT render in the GPU compositor path of Chromium/WebKit (WebKit
+           bug 245510) -- only in the software path -- so it cannot bend the live
+           page on real hardware. Instead, a WebGL canvas snapshots the page
+           (html2canvas-pro, untainted -> usable as a GL texture) and BENDS it
+           through a beveled-edge lens in a fragment shader. WebGL runs the same in
+           hardware and software GL, so this actually renders for users. The
+           controller is the [data-nav-gl] script near </body>. MUST be a child
+           of the header: the reveal rule is `.has-gl-glass .nav-gl-glass` and
+           .has-gl-glass goes on this header -- a sibling canvas stays
+           display:none (the bug that made it perfectly see-through). It sits
+           behind the pill, shown only once WebGL + the snapshot succeed; else
+           the CSS clear-glass in .navbar stands. -->
+      <canvas class="nav-gl-glass" data-nav-gl aria-hidden="true"></canvas>
+      <nav class="navbar" aria-label="Primary">
+        <a class="navbar__mark" href="/" aria-label="embody home">
+          <span class="mark__dot" aria-hidden="true"></span>
+          <span class="navbar__word">embody</span>
+        </a>
+        <div class="navbar__items" id="primary-nav" data-nav-collapse>
+          <a
+            class:list={["navbar__item", { "is-active": isActive("/collection") }]}
+            href="/collection"
+            aria-current={isActive("/collection") ? "page" : undefined}
+          >
+            <span class="navbar__label">collection</span>
+            <span class="nav-item__desc">transparent TDN networks to inspect, copy, and remix.</span>
+          </a>
+          <a
+            class:list={["navbar__item", { "is-active": isActive("/manifesto") }]}
+            href="/manifesto"
+            aria-current={isActive("/manifesto") ? "page" : undefined}
+          >
+            <span class="navbar__label">manifesto</span>
+            <span class="nav-item__desc">why TouchDesigner should be transparent and diffable.</span>
+          </a>
+          <a class="navbar__item" href="https://dylanroscover.github.io/Embody/">
+            <span class="navbar__label">docs</span>
+            <span class="nav-item__desc">guides and API reference for Embody and Envoy.</span>
+          </a>
+          <a
+            class:list={["navbar__item", { "is-active": isActive("/contribute") }]}
+            href="/contribute"
+            aria-current={isActive("/contribute") ? "page" : undefined}
+          >
+            <span class="navbar__label">contribute</span>
+            <span class="nav-item__desc">add your own TDN network to the Collection.</span>
+          </a>
+          {user ? (
+            <div class="navbar__user" data-user-menu>
+              <button
+                type="button"
+                class="navbar__item navbar__user-trigger"
+                data-user-menu-toggle
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-label={`Account menu for ${displayName}`}
+              >
+                {user.avatarUrl ? (
+                  <img class="navbar__user-avatar navbar__user-avatar--img" src={user.avatarUrl} alt="" aria-hidden="true" />
+                ) : (
+                  <span class="navbar__user-avatar" aria-hidden="true">{userInitials}</span>
+                )}
+                {showFirstName && <span class="navbar__user-name">{firstName}</span>}
+              </button>
+              <div class="navbar__user-menu" data-user-menu-list role="menu" hidden>
+                <a class="navbar__user-link" role="menuitem" href={`/u/${user.handle}`}>
+                  <span class="navbar__user-link-label">my profile</span>
+                  <span class="navbar__user-link-sub">@{user.handle}</span>
+                </a>
+                {showAdmin && (
+                  <a class="navbar__user-link" role="menuitem" href="/admin">admin</a>
+                )}
+                <button
+                  type="button"
+                  class="navbar__user-link navbar__user-signout"
+                  role="menuitem"
+                  data-user-signout
+                >sign out</button>
+              </div>
+            </div>
+          ) : (
+            <a class="navbar__item navbar__item--signin" href="/signin">sign in</a>
+          )}
+          <a class="navbar__item navbar__item--github" href="https://github.com/dylanroscover/Embody" aria-label="GitHub repository">
+            <svg class="navbar__github-icon" viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.66 7.66 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+          </a>
+          <!-- Desktop overflow control. Hidden by default; the measure script
+               shows it only when items must collapse into it (in-between widths,
+               above the 860px hamburger breakpoint). Items move in/out live. -->
+          <div class="navbar__more" data-nav-more hidden>
+            <button class="navbar__item navbar__more-btn" type="button" data-nav-more-toggle aria-haspopup="true" aria-expanded="false" aria-label="More navigation items">
+              <span class="navbar__more-dots" aria-hidden="true"><b></b><b></b><b></b></span>
+            </button>
+            <div class="navbar__more-menu" data-nav-more-menu role="menu" aria-label="More navigation items" hidden></div>
+          </div>
+        </div>
+        <button class="nav-toggle" type="button" data-nav-toggle aria-controls="primary-nav" aria-label="Toggle navigation" aria-expanded="false">
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+          <span class="nav-toggle__bar" aria-hidden="true"></span>
+        </button>
+      </nav>
+    </header>
+    <main id="content">
+      <slot />
+    </main>
+    <footer class="footer">
+      <div class="container footer__inner">
+        <div class="footer__col footer__col--brand">
+          <div class="footer__mark">
+            <span class="mark__dot" aria-hidden="true"></span>
+            <span class="footer__word">embody</span>
+          </div>
+          <p class="footer__tag">natural language tools for <a href="https://derivative.ca">TouchDesigner</a></p>
+        </div>
+        <nav class="footer__col" aria-label="Explore">
+          <h4 class="footer__h">Explore</h4>
+          <ul>
+            <li><a href="/collection">collection</a></li>
+            <li><a href="/contribute">contribute</a></li>
+            <li><a href="https://github.com/dylanroscover/Embody">github</a></li>
+            <li><a href="/for-ai">for AI agents</a></li>
+          </ul>
+        </nav>
+        <nav class="footer__col" aria-label="Reference">
+          <h4 class="footer__h">Reference</h4>
+          <ul>
+            <li><a href="https://dylanroscover.github.io/Embody/">documentation</a></li>
+            <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
+            <li><a href="/manifesto">manifesto</a></li>
+            <li><a href="https://dylanroscover.github.io/Embody/changelog/">changelog</a></li>
+            <li><a href="/privacy">privacy</a></li>
+            <li><a href="/terms">terms</a></li>
+            <li><a href="/cookies">cookies</a></li>
+            <li><a href="/dmca">copyright</a></li>
+          </ul>
+        </nav>
+      </div>
+      <div class="container footer__bottom">
+        <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
+        <p class="footer__sig">made with <button type="button" class="footer__emoji" aria-label="made with love (roll the emoji again)" title="roll again">&#10084;&#65039;</button> in <span class="footer__city">idyllwild california</span></p>
+      </div>
+    </footer>
+    <script>
+      // Footer signature: a random emoji each visit, re-rolls on click. Emojis
+      // are stored as code points (ASCII source per the repo's ASCII rule) and
+      // rendered at runtime; the markup's entity heart is the no-JS fallback.
+      (() => {
+        // Target the footer button by its OWN class -- NOT [data-emoji], which is
+        // the reactions feature's hook (reaction chips carry data-emoji too). A
+        // bare [data-emoji] selector grabbed the first reaction chip on specimen
+        // pages and overwrote it with a random emoji every load.
+        const el = document.querySelector(".footer__emoji");
+        if (!el) return;
+        const EMOJI: [number[], string][] = [
+          [[0x2764, 0xfe0f], "love"], [[0x1f49a], "love"], [[0x1f49c], "love"],
+          [[0x2728], "sparkle"], [[0x1f31f], "a spark"], [[0x1f525], "fire"],
+          [[0x2615], "caffeine"], [[0x1f375], "tea"], [[0x26a1], "a jolt"],
+          [[0x1f308], "a rainbow"], [[0x1f680], "liftoff"], [[0x1f3a8], "paint"],
+          [[0x1f300], "a swirl"], [[0x1fa84], "magic"], [[0x1f9e0], "brains"],
+          [[0x1f4a1], "an idea"], [[0x1f389], "joy"], [[0x1f6e0, 0xfe0f], "tools"],
+          [[0x1f39b, 0xfe0f], "knobs"], [[0x1f579, 0xfe0f], "a joystick"],
+          [[0x1f319], "moonlight"], [[0x1f33f], "fresh air"],
+          [[0x1f3d4, 0xfe0f], "mountain air"], [[0x1f332], "pine"],
+        ];
+        const roll = () => {
+          const pick = EMOJI[Math.floor(Math.random() * EMOJI.length)]!;
+          el.textContent = String.fromCodePoint(...pick[0]);
+          el.setAttribute("aria-label", "made with " + pick[1]);
+        };
+        roll();
+        el.addEventListener("click", roll);
+      })();
+    </script>
+    <script>
+      const COPY_RESET_MS = 1500;
+
+      document.addEventListener("click", async (event) => {
+        const trigger = event.target instanceof Element
+          ? event.target.closest("[data-copy], [data-copy-target]")
+          : null;
+
+        if (!(trigger instanceof HTMLButtonElement)) return;
+
+        const copyTarget = trigger.getAttribute("data-copy-target");
+        const text = copyTarget
+          ? document.getElementById(copyTarget)?.textContent
+          : trigger.getAttribute("data-copy");
+        if (!text) return;
+
+        const resetAria = trigger.dataset.copyAria || "Copy to clipboard";
+
+        try {
+          await navigator.clipboard.writeText(text);
+          trigger.classList.remove("is-failed");
+          trigger.classList.add("is-copied");
+          trigger.setAttribute("aria-label", "Copied to clipboard");
+          window.clearTimeout(Number(trigger.dataset.copyTimer || 0));
+          trigger.dataset.copyTimer = String(window.setTimeout(() => {
+            trigger.classList.remove("is-copied");
+            trigger.setAttribute("aria-label", resetAria);
+          }, COPY_RESET_MS));
+        } catch {
+          trigger.classList.add("is-failed");
+          window.clearTimeout(Number(trigger.dataset.copyTimer || 0));
+          trigger.dataset.copyTimer = String(window.setTimeout(() => {
+            trigger.classList.remove("is-failed");
+          }, COPY_RESET_MS));
+        }
+      });
+    </script>
+    <script>
+      const siteHeader = document.querySelector("[data-site-header]");
+      const navToggle = document.querySelector("[data-nav-toggle]");
+
+      if (siteHeader && navToggle) {
+        const closeNav = () => {
+          siteHeader.classList.remove("is-open");
+          navToggle.setAttribute("aria-expanded", "false");
+        };
+
+        navToggle.addEventListener("click", () => {
+          const open = siteHeader.classList.toggle("is-open");
+          navToggle.setAttribute("aria-expanded", String(open));
+          // On mobile the collapsed menu precedes the toggle in DOM order, so
+          // move focus into it on open for keyboard users (Escape/outside-click
+          // close handlers below restore the flow).
+          if (open && window.matchMedia("(max-width: 860px)").matches) {
+            const first = siteHeader.querySelector(
+              "[data-nav-collapse] a, [data-nav-collapse] button"
+            );
+            (first as HTMLElement | null)?.focus();
+          }
+        });
+
+        siteHeader.querySelectorAll("[data-nav-collapse] a").forEach((link) => {
+          link.addEventListener("click", closeNav);
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeNav();
+        });
+
+        document.addEventListener("click", (event) => {
+          const target = event.target as Node | null;
+          if (
+            siteHeader.classList.contains("is-open") &&
+            (target === null || !siteHeader.contains(target))
+          ) {
+            closeNav();
+          }
+        });
+      }
+    </script>
+    <script>
+      // Account menu: toggle the signed-in user's dropdown + wire sign-out.
+      import { authClient } from "../lib/authClient";
+
+      const userMenu = document.querySelector("[data-user-menu]");
+      if (userMenu) {
+        const toggle = userMenu.querySelector("[data-user-menu-toggle]") as HTMLElement | null;
+        const list = userMenu.querySelector("[data-user-menu-list]") as HTMLElement | null;
+        const closeMenu = () => {
+          toggle?.setAttribute("aria-expanded", "false");
+          if (list) list.hidden = true;
+        };
+        const openMenu = () => {
+          toggle?.setAttribute("aria-expanded", "true");
+          if (list) list.hidden = false;
+        };
+        toggle?.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (list?.hidden) openMenu();
+          else closeMenu();
+        });
+        document.addEventListener("click", (event) => {
+          const target = event.target as Node | null;
+          if (target && !userMenu.contains(target)) closeMenu();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeMenu();
+        });
+        const signout = userMenu.querySelector("[data-user-signout]") as HTMLElement | null;
+        signout?.addEventListener("click", async () => {
+          try {
+            await authClient.signOut();
+          } finally {
+            window.location.assign("/");
+          }
+        });
+      }
+    </script>
+    <script>
+      // Desktop overflow ("...") for the inline nav bar. When the viewport is
+      // too narrow to fit every item at full size -- but still wide enough that
+      // the hamburger has not taken over -- the lowest-priority items collapse
+      // into a "..." button at the end of the bar that opens a small blurred
+      // menu. The account chip and sign in (plus the wordmark) are never
+      // overflowed; the rightmost low-priority items go first (github, then
+      // contribute, then manifesto, then collection).
+      const moreNav = document.querySelector("[data-nav-more]");
+      const moreBtn = document.querySelector("[data-nav-more-toggle]");
+      const moreMenu = document.querySelector("[data-nav-more-menu]");
+      const itemsRow = document.querySelector("[data-nav-collapse]");
+      const navEl = document.querySelector(".navbar");
+
+      if (
+        moreNav instanceof HTMLElement &&
+        moreBtn instanceof HTMLButtonElement &&
+        moreMenu instanceof HTMLElement &&
+        itemsRow instanceof HTMLElement &&
+        navEl instanceof HTMLElement
+      ) {
+        // Items eligible to overflow, captured in DOM order. The account chip
+        // (--user-trigger) and the sign-in button are excluded so they always
+        // stay inline.
+        // Reverse priority = last-to-first removal order (github first).
+        const overflowable: HTMLElement[] = Array.from(
+          itemsRow.querySelectorAll(
+            ".navbar__item:not(.navbar__item--signin):not(.navbar__more-btn):not(.navbar__user-trigger)"
+          )
+        ).filter((el): el is HTMLElement => el instanceof HTMLElement);
+
+        const closeMore = () => {
+          moreNav.classList.remove("is-open");
+          moreBtn.setAttribute("aria-expanded", "false");
+          moreMenu.hidden = true;
+        };
+        const openMore = () => {
+          moreNav.classList.add("is-open");
+          moreBtn.setAttribute("aria-expanded", "true");
+          moreMenu.hidden = false;
+        };
+
+        // Whether the inline overflow layer is active at all. Below the
+        // hamburger breakpoint the dropdown takes over, so everything lives in
+        // the items row and the "..." stays hidden.
+        const inlineActive = () =>
+          window.matchMedia("(min-width: 861px)").matches;
+
+        let measuring = false;
+        const layout = () => {
+          if (measuring) return;
+          measuring = true;
+
+          // Start from a clean slate: pull every overflowed item back inline
+          // (just before the "..." control) so widths measure at full size.
+          overflowable.forEach((el) => {
+            if (el.parentElement === moreMenu) {
+              el.classList.remove("navbar__more-item");
+              el.removeAttribute("role");
+              itemsRow.insertBefore(el, moreNav);
+            }
+          });
+
+          if (!inlineActive()) {
+            // Hamburger regime owns layout below the breakpoint.
+            moreNav.hidden = true;
+            closeMore();
+            measuring = false;
+            return;
+          }
+
+          // Does the full bar fit? The navbar is a flex row capped at
+          // max-width: calc(100vw - ...); when its content (wordmark + items +
+          // toggle) exceeds that cap the bar's own content overflows its
+          // clientWidth. Measuring the navbar -- not just the items row --
+          // catches the real overflow no matter which flex child grows.
+          const overflows = () => navEl.scrollWidth > navEl.clientWidth + 1;
+
+          if (!overflows()) {
+            // Everything fits -- no "..." needed.
+            moreNav.hidden = true;
+            closeMore();
+            measuring = false;
+            return;
+          }
+
+          // Reveal "..." first so its width is reserved while we measure, then
+          // move items into it from the end until the bar no longer overflows.
+          moreNav.hidden = false;
+          const hidden: HTMLElement[] = [];
+
+          // Move from the end of the overflowable list (github, manifesto,
+          // submit, ...) into the menu until it fits or we run out.
+          for (let i = overflowable.length - 1; i >= 0 && overflows(); i--) {
+            const el = overflowable[i];
+            if (!el || el.parentElement === moreMenu) continue;
+            el.classList.add("navbar__more-item");
+            el.setAttribute("role", "menuitem");
+            // Prepend so menu order mirrors the bar's left-to-right order.
+            moreMenu.insertBefore(el, moreMenu.firstChild);
+            hidden.push(el);
+          }
+
+          if (hidden.length === 0) {
+            moreNav.hidden = true;
+            closeMore();
+          }
+          measuring = false;
+        };
+
+        moreBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (moreNav.classList.contains("is-open")) {
+            closeMore();
+          } else {
+            openMore();
+          }
+        });
+
+        // Keyboard: Escape closes; closing menu via a click on an item too.
+        moreMenu.addEventListener("click", (event) => {
+          const target = event.target;
+          if (target instanceof Element && target.closest("a")) closeMore();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape") closeMore();
+        });
+        document.addEventListener("click", (event) => {
+          const target = event.target;
+          if (
+            moreNav.classList.contains("is-open") &&
+            (target === null || !(target instanceof Node) || !moreNav.contains(target))
+          ) {
+            closeMore();
+          }
+        });
+
+        // Re-measure on load, on resize, and whenever the bar's box changes.
+        const ro = new ResizeObserver(() => layout());
+        ro.observe(navEl);
+        ro.observe(itemsRow);
+        window.addEventListener("resize", layout);
+        window.addEventListener("load", layout);
+        layout();
+      }
+    </script>
+    <script>
+      // --- Nav glass: WebGL refraction ---------------------------------------
+      // backdrop-filter: url(#displacement) does not render in Chromium/WebKit's
+      // GPU path, so we bend the page ourselves: snapshot it to a texture, then
+      // displace that texture through a convex-dome lens in a fragment shader.
+      // Scroll just offsets the texture sample (no re-snapshot), so it stays at
+      // 60fps; we only re-snapshot on resize. WebGL behaves identically in
+      // hardware and software GL, so what renders here renders for users.
+      import html2canvas from "html2canvas-pro";
+
+      (() => {
+        const canvas = document.querySelector("[data-nav-gl]");
+        const navEl = document.querySelector(".navbar");
+        const header = document.querySelector("[data-site-header]");
+        if (!(canvas instanceof HTMLCanvasElement) || !(navEl instanceof HTMLElement) || !(header instanceof HTMLElement)) return;
+
+        // Respect reduced-motion and Data Saver: skip the continuous-rAF WebGL
+        // lens entirely (never add .has-gl-glass) so the CSS clear-glass stands.
+        // Avoids a perpetual GPU loop for users who opted out of motion or are
+        // conserving data/battery.
+        if (
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
+          (navigator as { connection?: { saveData?: boolean } }).connection?.saveData === true
+        ) return;
+
+        // preserveDrawingBuffer keeps the last frame between composites (belt to
+        // the rAF loop's suspenders; cheap insurance against transparent flashes).
+        const glOpts = { alpha: true, premultipliedAlpha: false, antialias: true, preserveDrawingBuffer: true };
+        const gl =
+          canvas.getContext("webgl", glOpts) ||
+          canvas.getContext("experimental-webgl", glOpts);
+        if (!(gl instanceof WebGLRenderingContext)) return; // -> CSS clear-glass fallback
+
+        const VERT = `attribute vec2 aPos; varying vec2 vUv;
+          void main(){ vUv = vec2(aPos.x*0.5+0.5, 0.5 - aPos.y*0.5); gl_Position = vec4(aPos,0.0,1.0); }`;
+
+        // Lens knobs: SCALE = magnify strength (px), GY = vertical softening
+        // (thin bar), TINT = glass color mix, all tunable.
+        const FRAG = `precision highp float;
+          varying vec2 vUv;
+          uniform vec2 uCanvasPx, uOffset, uDocSize, uPill2; // uPill2 = pill w,h
+          uniform vec2 uPillXY;                              // pill x,y in canvas
+          uniform float uScroll, uRadius, uScale, uGy;
+          uniform sampler2D uSnap;
+          #define PI 3.14159265
+          #define BEVEL 18.0   // px band at the rounded ENDS where the horizontal bend lives
+          #define VFLOOR 0.16  // residual vertical bend at the center (0 = perfectly flat middle, never quite reached)
+          float sdRR(vec2 p, vec2 b, float r){ vec2 q = abs(p)-b+r; return min(max(q.x,q.y),0.0)+length(max(q,0.0))-r; }
+          void main(){
+            vec2 px = vUv * uCanvasPx;
+            vec2 c  = uPillXY + uPill2*0.5;
+            vec2 hb = uPill2*0.5;
+            vec2 rel = px - c;
+            float d = sdRR(rel, hb, uRadius);
+            float mask = 1.0 - smoothstep(0.0, 1.5, d);
+            if (mask <= 0.001) discard;
+            // Bevel lens: the bend is concentrated within BEVEL px of the rim,
+            // so the readable CENTER stays flat and the refraction lives at the
+            // edges (top/bottom + the rounded ends) -- a glass slab with a
+            // curved bevel, not a whole dome. -d is depth inside the pill (0 at
+            // the rim); edge ramps from 1 at the rim to 0 once BEVEL deep.
+            vec2 pn = rel / hb;                            // normalized, -1..1
+            float L = length(pn);
+            vec2 dir = L > 1e-3 ? pn / L : vec2(0.0);      // outward (~= edge normal)
+            // Horizontal: the rounded ENDS keep a rim bevel (bend within BEVEL px).
+            float edge = 1.0 - smoothstep(0.0, BEVEL, -d);
+            edge *= edge;
+            // Vertical: ONE seamless curve over the FULL height -- not a narrow rim
+            // bevel with a flat center band (which read as curve->straighten->curve).
+            // sign(y)*smoothstep(|y|) is C1-smooth through the center (value 0,
+            // slope 0 -> readable middle) and rounds off at the top/bottom edges
+            // (slope 0 at |y|=1); VFLOOR*y keeps the middle gently bending --
+            // "almost flattening, but not quite".
+            float vy = pn.y;
+            float vbend = sign(vy) * smoothstep(0.0, 1.0, abs(vy)) + VFLOOR * vy;
+            vec2 grad = vec2((-0.5 * PI) * edge * dir.x, (-0.5 * PI) * vbend);
+            grad.y *= uGy;                                  // soften vertical (thin bar)
+            vec2 offset = -uScale * grad;                   // magnify = sample inward
+            vec2 screen = uOffset + px;
+            vec2 docPos = vec2(screen.x + offset.x, screen.y + offset.y + uScroll);
+            vec2 uv = docPos / uDocSize;
+            vec3 col = texture2D(uSnap, uv).rgb;
+            // light glass tint + a whisper of rim (no top specular hairline --
+            // it read as a baked highlight; left out per design)
+            col = mix(col, vec3(0.078,0.102,0.094), 0.16);
+            col += vec3(0.42,0.85,0.46)*(1.0-smoothstep(0.0,2.5,abs(d)))*0.08;
+            gl_FragColor = vec4(col, mask);
+          }`;
+
+        const sh = (t: number, s: string): WebGLShader | null => {
+          const o = gl.createShader(t);
+          if (!o) return null;
+          gl.shaderSource(o, s); gl.compileShader(o);
+          if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) { console.warn("nav-gl shader", gl.getShaderInfoLog(o)); return null; }
+          return o;
+        };
+        const vs = sh(gl.VERTEX_SHADER, VERT), fs = sh(gl.FRAGMENT_SHADER, FRAG), prog = gl.createProgram();
+        if (!vs || !fs || !prog) return;
+        gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
+        if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn("nav-gl link", gl.getProgramInfoLog(prog)); return; }
+        gl.useProgram(prog);
+
+        const buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 3,-1, -1,3]), gl.STATIC_DRAW);
+        const aPos = gl.getAttribLocation(prog, "aPos");
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+        const U = (n: string) => gl.getUniformLocation(prog, n);
+        const u = { canvasPx:U("uCanvasPx"), offset:U("uOffset"), docSize:U("uDocSize"),
+          pillXY:U("uPillXY"), pill2:U("uPill2"), scroll:U("uScroll"), radius:U("uRadius"),
+          scale:U("uScale"), gy:U("uGy"), snap:U("uSnap") };
+
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+        const PAD = 12;
+        const MAXTEX = gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096;
+        const SCALE = 44, GY = 0.6;         // lens knobs (magnify px, vertical softening)
+        let docSize = { w: 1, h: 1 }, ready = false, snapping = false;
+
+        const measure = () => {
+          const r = navEl.getBoundingClientRect();
+          if (r.width < 1 || r.height < 1) return false;
+          const cw = r.width + PAD*2, ch = r.height + PAD*2;
+          const dpr = Math.min(window.devicePixelRatio || 1, 2);
+          canvas.style.left = `${r.left - PAD}px`;
+          canvas.style.top = `${r.top - PAD}px`;
+          canvas.style.width = `${cw}px`;
+          canvas.style.height = `${ch}px`;
+          // Resize the backing store ONLY when it changes -- setting canvas.width
+          // every frame clears the drawing buffer (the "renders then reverts"
+          // bug). The continuous render loop redraws each frame regardless.
+          const bw = Math.round(cw*dpr), bh = Math.round(ch*dpr);
+          if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
+          gl.viewport(0, 0, canvas.width, canvas.height);
+          gl.uniform2f(u.canvasPx, cw, ch);
+          gl.uniform2f(u.offset, r.left - PAD, r.top - PAD);
+          gl.uniform2f(u.pillXY, PAD, PAD);
+          gl.uniform2f(u.pill2, r.width, r.height);
+          gl.uniform1f(u.radius, r.height/2);
+          gl.uniform1f(u.scale, SCALE);
+          gl.uniform1f(u.gy, GY);
+          gl.uniform1i(u.snap, 0);
+          return true;
+        };
+
+        const render = () => {
+          if (!ready) return;
+          gl.uniform2f(u.docSize, docSize.w, docSize.h);
+          gl.uniform1f(u.scroll, window.scrollY || window.pageYOffset || 0);
+          gl.clearColor(0,0,0,0); gl.clear(gl.COLOR_BUFFER_BIT);
+          gl.drawArrays(gl.TRIANGLES, 0, 3);
+        };
+
+        const snapshot = async () => {
+          if (snapping) return;
+          snapping = true;
+          try {
+            // CSS-resolution snapshot (scale 1), NOT devicePixelRatio. The
+            // refraction is a small displaced strip behind a thin bar, so retina
+            // detail is wasted -- and a retina snapshot of a tall page produced a
+            // ~15000px / ~200MB texture near the GPU's 16384 limit (eviction =
+            // blank). Scale 1 keeps it ~4x smaller and safe.
+            const docW = document.documentElement.clientWidth;
+            const fullH = document.documentElement.scrollHeight;
+            const capH = Math.min(fullH, MAXTEX);
+            const capW = Math.min(docW, MAXTEX);
+            const snap = await html2canvas(document.body, {
+              backgroundColor: "#181e1e", scale: 1, logging: false, removeContainer: true,
+              x: 0, y: 0, width: capW, height: capH,
+              windowWidth: docW, windowHeight: fullH, scrollX: 0, scrollY: 0,
+              ignoreElements: (el) =>
+                el === canvas || (el.hasAttribute && el.hasAttribute("data-site-header")) ||
+                (el.classList && (el.classList.contains("site-header") || el.classList.contains("skip-link") ||
+                  // Skip the heavy specimen-page islands from the snapshot: the
+                  // raw-TDN YAML viewer (.tdn-yaml) renders ~3600 tokenized spans
+                  // even while collapsed, and the React Flow graph (.tdn-viewer)
+                  // is hundreds of SVG nodes. Together they were ~4800 of ~5000
+                  // page elements and cost html2canvas ~2.3s -- a main-thread
+                  // freeze that also delayed THIS glass from appearing. The glass
+                  // is a thin top strip, so excluding them only blanks the
+                  // refraction where those (below-fold) panels scroll behind the
+                  // nav -- a fair trade for keeping the main thread free.
+                  el.classList.contains("tdn-viewer") || el.classList.contains("tdn-yaml"))),
+            });
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, snap);
+            docSize = { w: capW, h: capH };
+            ready = true;
+            header.classList.add("has-gl-glass");
+            measure();
+          } catch {
+            // Snapshot/upload failed -> leave the CSS clear-glass in place.
+          } finally {
+            snapping = false;
+          }
+        };
+
+        // Render in a continuous rAF loop. An on-demand WebGL overlay blanks the
+        // instant the compositor reclaims the buffer, so it "renders then
+        // reverts". One quad per frame is negligible and keeps the lens
+        // permanently on screen; render() reads window.scrollY each frame, so
+        // scrolling updates for free. The pill is position:fixed, so its on-
+        // screen box only changes on resize -- handled below.
+        const loop = () => { render(); requestAnimationFrame(loop); };
+        requestAnimationFrame(loop);
+
+        let resizeT = 0;
+        const onResize = () => { measure(); window.clearTimeout(resizeT);
+          resizeT = window.setTimeout(() => { snapshot(); }, 250); };
+        window.addEventListener("resize", onResize, { passive: true });
+        new ResizeObserver(() => measure()).observe(navEl);
+        // GPU context dropped -> fall back to CSS glass; re-snapshot on restore.
+        canvas.addEventListener("webglcontextlost", (e) => { e.preventDefault(); header.classList.remove("has-gl-glass"); ready = false; }, false);
+        canvas.addEventListener("webglcontextrestored", () => { ready = false; snapshot(); }, false);
+
+        // First snapshot after the page is painted and fonts are settled.
+        const start = () => { measure(); snapshot(); };
+        if (document.readyState === "complete") start();
+        else window.addEventListener("load", start);
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => snapshot());
+      })();
+    </script>
+  </body>
+</html>

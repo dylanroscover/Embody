@@ -1,0 +1,182 @@
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.38
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:38Z'
+network_path: /specimen_lab/mandelbulb_march
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+type: baseCOMP
+custom_pars:
+  Mandelbulb:
+  - name: Power
+    style: Float
+    startSection: true
+    default: 8
+    min: 2.0
+    max: 12.0
+    clampMin: true
+    clampMax: true
+    normMin: 2.0
+    normMax: 12.0
+    help: Mandelbulb exponent in z=z^Power+c. 8 is the classic bulb; 2-4 = blobby organic forms; 10-12 = more lobes and finer detail.
+  - name: Detail
+    style: Float
+    label: Surface Detail
+    default: 0.6
+    clampMin: true
+    clampMax: true
+    help: Raymarch hit threshold, remapped to a 0.0015->0.0004 epsilon. Higher resolves finer fractal crenellation at more cost near grazing rays.
+  - name: Glow
+    style: Float
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: Proximity/iteration glow added along every ray. Close-but-miss rays accumulate an exponential halo. 0 = matte; 3 = ethereal bloom.
+  - name: Orbitspeed
+    style: Float
+    label: Orbit Speed
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    clampMax: true
+    normMax: 3.0
+    help: Multiplies absTime.seconds into the camera orbit. 0 freezes a still; 1 is a slow cinematic orbit. Only the camera moves -- the fractal math is identical each frame.
+  - name: Hue
+    style: Float
+    default: 0.55
+    clampMin: true
+    clampMax: true
+    help: Base hue offset of the orbit-trap cosine palette. Rotates the whole color identity (surface, glow, rim, background sun) through the spectrum.
+  - name: Sunazim
+    style: Float
+    label: Sun Azimuth
+    startSection: true
+    default: 35
+    min: -180.0
+    max: 180.0
+    clampMin: true
+    clampMax: true
+    normMin: -180.0
+    normMax: 180.0
+    help: Azimuth (degrees) of the key light, converted with elevation into a unit direction so normalize() never sees a zero vector. Rotates where the soft key light and shadow fall.
+  - name: Sunelev
+    style: Float
+    label: Sun Elevation
+    default: 45
+    min: -10.0
+    max: 90.0
+    clampMin: true
+    clampMax: true
+    normMin: -10.0
+    normMax: 90.0
+    help: Elevation (degrees) of the key light. High = top-down soft light with short shadows; low = dramatic raking light with long soft shadows.
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [800, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_mandelbulb
+- name: glsl_mandelbulb
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_mandelbulb_pixel
+    computedat: glsl_mandelbulb_compute
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+    format: rgba16float
+  sequences:
+    vec:
+    - name: uParams
+      valuex: =parent().par.Power.eval()
+      valuey: =parent().par.Detail.eval()
+      valuez: =parent().par.Glow.eval()
+      valuew: =absTime.seconds*parent().par.Orbitspeed.eval()
+    - name: uLight
+      valuex: =math.cos(math.radians(parent().par.Sunelev.eval()))*math.sin(math.radians(parent().par.Sunazim.eval()))
+      valuey: =math.sin(math.radians(parent().par.Sunelev.eval()))
+      valuez: =math.cos(math.radians(parent().par.Sunelev.eval()))*math.cos(math.radians(parent().par.Sunazim.eval()))
+      valuew: =parent().par.Hue.eval()
+  position: [400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_mandelbulb_info
+  type: infoDAT
+  parameters:
+    op: glsl_mandelbulb
+  flags:
+  - viewer
+  position: [400, -120]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  dock: glsl_mandelbulb
+- name: glsl_mandelbulb_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/mandelbulb_march/glsl_mandelbulb_pixel.glsl
+    extension: frag
+  position: [550, -120]
+  dock: glsl_mandelbulb
+- name: glsl_mandelbulb_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/mandelbulb_march/glsl_mandelbulb_compute.glsl
+  flags:
+  - viewer
+  position: [250, -120]
+  dock: glsl_mandelbulb
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Mandelbulb Raymarcher
+  text: 'One GLSL TOP raymarches the Mandelbulb SDF. The distance estimator iterates z = z^Power + c in spherical form, tracking the running derivative (dr) for a true distance bound and the closest approach to the axes (an orbit trap) for color. An orbiting camera marches rays toward the surface; soft shadows, a fresnel rim, and a proximity glow finish it. Every loop is bounded by a constant (DE_ITER / MARCH_STEPS / SHADOW_STEPS) so the GPU stays safe. No input, no feedback. Params: Power, Surface Detail, Glow, Orbit Speed, Hue, Sun Azimuth, Sun Elevation.'
+  position: [180, -190]
+  size: [820, 450]
+  color: [0.16, 0.13, 0.22]
+  opacity: 0.3

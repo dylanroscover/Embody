@@ -1,0 +1,113 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../components/AdminLayout.astro";
+import { EMAIL_TEMPLATES, isAdmin } from "../../server/admin";
+
+export const prerender = false;
+
+if (!isAdmin(Astro.locals.user, env)) return Astro.redirect("/");
+
+const myEmail = Astro.locals.user?.email ?? "";
+// When RESEND_API_KEY is unset, sends are skipped (no delivery). Surface that so
+// a "skipped" result reads as expected rather than a failure.
+const resendConfigured = Boolean((env as unknown as CloudflareEnv).RESEND_API_KEY);
+---
+
+<AdminLayout title="email" active="email">
+  <p class="admin-intro">
+    Send yourself (or any address) a real copy of each branded email so you can
+    confirm rendering across clients. Templates use the same shell as the live
+    emails.
+  </p>
+
+  {!resendConfigured && (
+    <p class="admin-status" data-kind="error">
+      RESEND_API_KEY is not set -- sends are skipped (no email delivered). Set it
+      as a Worker secret to test real delivery.
+    </p>
+  )}
+
+  <form class="admin-email-form" data-email-form>
+    <label>template
+      <div class="dd" data-dd>
+        <button type="button" class="dd__btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Template">
+          <span class="dd__val">{EMAIL_TEMPLATES[0]}</span>
+          <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+        </button>
+        <ul class="dd__menu" role="listbox" aria-label="Template" hidden>
+          {EMAIL_TEMPLATES.map((t, i) => (
+            <li class="dd__opt" role="option" data-value={t} aria-selected={i === 0 ? "true" : "false"}>{t}</li>
+          ))}
+        </ul>
+        <select name="template" class="dd__native" aria-hidden="true" tabindex="-1" aria-label="Template">
+          {EMAIL_TEMPLATES.map((t) => (<option value={t}>{t}</option>))}
+        </select>
+      </div>
+    </label>
+    <label>send to
+      <input type="email" name="to" value={myEmail} class="admin-input" placeholder="you@example.com" />
+    </label>
+    <button type="submit" class="admin-btn" data-send>send test</button>
+  </form>
+
+  <p class="admin-status" data-status role="status"></p>
+</AdminLayout>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("[data-email-form]");
+  const sendBtn = document.querySelector<HTMLButtonElement>("[data-send]");
+  const statusBox = document.querySelector<HTMLParagraphElement>("[data-status]");
+
+  function setStatus(message: string, kind: "ok" | "error" | "info") {
+    if (!statusBox) return;
+    statusBox.textContent = message;
+    statusBox.dataset.kind = kind;
+  }
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!sendBtn) return;
+    const data = new FormData(form);
+    const template = String(data.get("template") || "");
+    const to = String(data.get("to") || "").trim();
+
+    sendBtn.disabled = true;
+    const original = sendBtn.textContent;
+    sendBtn.textContent = "sending...";
+    try {
+      const res = await fetch("/api/admin/email/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template, to: to || undefined })
+      });
+      const body: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setStatus(body.detail || body.error || `Failed (${res.status}).`, "error");
+        return;
+      }
+      if (body.skipped) {
+        setStatus(`Skipped (no RESEND_API_KEY). Would send "${template}" to ${body.to}.`, "info");
+      } else if (body.sent) {
+        setStatus(`Sent "${template}" to ${body.to}. Check that inbox.`, "ok");
+      } else if (body.error) {
+        setStatus(`Resend error: ${body.error}`, "error");
+      } else {
+        setStatus(`Done.`, "ok");
+      }
+    } catch {
+      setStatus("Something went wrong. Please try again.", "error");
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = original;
+    }
+  });
+</script>
+
+<style>
+  .admin-intro {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    max-width: 40rem;
+    margin-bottom: 1.5rem;
+  }
+</style>

@@ -1,0 +1,2574 @@
+:root {
+  --bg:#181e1e;
+  --bg-elevated:#1f2321;
+  --bg-elevated-2:#283028;
+  --bg-code:#161e1a;
+  --text:#c8d0c9;
+  --text-muted:#97a098;
+  /* Raised from #6b756c (3.53:1 on --bg, failed WCAG AA) to #909990 (5.75:1)
+     so the small text that uses it -- nav descriptions, footer copy, collection
+     labels/placeholders -- meets AA. Reserve even fainter tones for non-text
+     decoration only. */
+  --text-faint:#909990;
+  --accent:#6ee668;
+  --accent-hover:#a0f09c;
+  --accent-dim:#6ee66833;
+  --border:#2a4a42;
+  --border-faint:#283028;
+  --font-display:'Inter',system-ui,sans-serif;
+  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --radius:14px;
+  --radius-sm:8px;
+  --content-max:1100px;
+  --content-narrow:760px;
+  --section-pad:clamp(5rem, 10vw, 9rem);
+  --gutter:clamp(1.5rem, 4vw, 3rem);
+}
+
+/* ------------------------------------------------------------------------
+   Self-hosted Inter (display weights 600 + 700 only -- body is system-ui and
+   the mono stack falls back to the OS, so these are the only faces actually
+   rendered). Served from /public/fonts so NO request ever leaves for Google's
+   font CDN; that third-party fetch would otherwise hand every visitor's IP to
+   Google (a documented EU/GDPR problem) and is the reason the <link> to
+   fonts.googleapis.com was removed from Base.astro. font-display: swap keeps
+   text visible immediately, matching the old &display=swap behaviour.
+   ------------------------------------------------------------------------ */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/inter-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/inter-latin-ext-700-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ------------------------------------------------------------------------
+   Responsive breakpoint scale (max-width). Most layout reflows happen at
+   one of these; a few component values are deliberately NOT on the scale
+   because that component needs the room (noted inline where they live):
+
+     480   compact phone        (collection dropdown labels)
+     540   phone                (landing mobile rhythm, footer 1-col)
+     640   phone / small tablet
+     760   mobile <-> content   (global page-section, h1 mobile clamp)
+     860   nav hamburger boundary (paired with 861 for the inline nav);
+           landing tablet reflow aligns here too
+     1024  tablet               (pillars 2-col, landing gaps)
+
+   Intentional off-scale values (do NOT fold into the above -- folding them
+   regresses the named range):
+     920   specimen detail keeps its 2-col body down to 920 before stacking
+     1000  collection search collapses to an icon to protect the toolbar row
+   ------------------------------------------------------------------------ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* No hard min-width: a 320px floor hides any sub-320 overflow instead of
+     letting us catch it. overflow-x:clip on body contains stray children
+     without disabling programmatic scroll the way overflow:hidden does. */
+  min-width: 0;
+  background: var(--bg);
+  color-scheme: dark;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  /* hidden is the fallback; clip wins where supported (contains overflow
+     without creating a scroll container or breaking sticky ancestors). */
+  overflow-x: hidden;
+  overflow-x: clip;
+  background:
+    radial-gradient(circle at 78% -12%, rgba(110, 230, 104, 0.06), transparent 34rem),
+    linear-gradient(rgba(200, 208, 201, 0.024) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 208, 201, 0.024) 1px, transparent 1px),
+    var(--bg);
+  background-size: auto, 38px 38px, 38px 38px, auto;
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: 17px;
+  line-height: 1.65;
+  font-feature-settings: "kern", "liga";
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* No orphans, ANYWHERE -- baseline for every element via inheritance, not an
+     enumerated list (which always misses one, e.g. <small>). text-wrap is an
+     inherited property, so this reaches any text node; headings override to
+     `balance` below. */
+  text-wrap: pretty;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.btn:focus-visible,
+.copy-button:focus-visible,
+.view-toggle__button:focus-visible {
+  border-radius: 999px;
+}
+
+p,
+h1,
+h2,
+h3 {
+  margin-top: 0;
+}
+
+p {
+  margin: 0 0 1em;
+  text-wrap: pretty;
+}
+
+/* No orphans, anywhere. `body` sets `text-wrap: pretty` as the inherited baseline
+   (above), so EVERY text element pretty-wraps by default and no paragraph strands
+   its final word -- even elements not listed here (e.g. <small>). Headings instead
+   `balance` so a short last line is never a lone word. The pretty list below is
+   redundant with the body baseline but kept as explicit documentation of intent. */
+h1, h2, h3, h4, h5, h6,
+.section__title, .eyebrow, .lede {
+  text-wrap: balance;
+}
+
+p, li, dd, dt, blockquote, figcaption, summary, label, small, th, td {
+  text-wrap: pretty;
+}
+
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+::selection {
+  background: var(--accent-dim);
+  color: var(--accent-hover);
+}
+
+.skip-link {
+  position: fixed;
+  top: calc(14px + var(--safe-top, 0px));
+  left: calc(14px + var(--safe-left, 0px));
+  z-index: 200;
+  transform: translateY(-160%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  padding: 0.6rem 0.75rem;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.site-header {
+  position: relative;
+  z-index: 100;
+}
+
+/* --- Consolidated nav bar -----------------------------------------------
+   ONE super-wide pill floating over the page. The wordmark AND every nav
+   item (collection, manifesto, contribute, account / sign in,
+   github) live inside this single container. A translucent dark fill plus a
+   backdrop blur keep the bar legible over ANY content behind it, including
+   the page H1. Every inner item shares one height rule (--nav-item-h) so no
+   item is ever taller, circular, or wrapped. */
+:root {
+  /* The single source of truth for inner-item height. The wordmark, the
+     auth buttons, every link, and the GitHub pill all resolve to this exact
+     box height (min-height + matching vertical padding + line-height: 1). */
+  --nav-item-h: 36px;
+  --nav-item-pad-y: 0.5rem;
+}
+
+.navbar {
+  position: fixed;
+  top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem));
+  left: 50%;
+  z-index: 100;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  /* Match .navbar__items gap so the brand->first-item gap equals every
+     item->item gap (the brand is just another block in the row). */
+  gap: 0.3rem;
+  max-width: calc(100vw - clamp(1.5rem, 6vw, 3rem));
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  /* Forest liquid glass. A LIGHT green-tinted translucent fill sits over the
+     refracted backdrop -- kept low-opacity so the lens (below) shows through;
+     the inset shadows add a bright specular hairline along the TOP inner edge
+     plus a faint darker chromatic-ish edge below. */
+  background:
+    linear-gradient(180deg, rgba(110, 230, 104, 0.05), rgba(40, 60, 48, 0.02) 38%),
+    rgba(20, 26, 24, 0.32);
+  box-shadow:
+    0 18px 44px -22px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(220, 255, 220, 0.22),
+    inset 0 -1px 0 rgba(110, 230, 104, 0.08),
+    inset 0 0 0 1px rgba(110, 230, 104, 0.04);
+  /* CLEAR glass -- deliberately NO blur. This is the immediate first-paint look
+     and the fallback when the WebGL refraction lens (Base.astro [data-nav-gl])
+     hasn't loaded yet or isn't supported. It must MATCH the lens (which bends,
+     never blurs), so the fallback->lens swap is invisible: saturate/brightness/
+     contrast give the optical pop, while the specular border + translucent fill
+     above sell the glass. (A real CSS refraction -- backdrop-filter:
+     url(#svg-feDisplacementMap) -- only renders in Chromium/WebKit's software
+     filter path, not the GPU compositor; WebKit bug 245510 -- hence the WebGL
+     lens for the actual bend.) */
+  -webkit-backdrop-filter: saturate(180%) brightness(1.05) contrast(1.04);
+  backdrop-filter: saturate(180%) brightness(1.05) contrast(1.04);
+}
+
+/* WebGL refraction canvas (Base.astro [data-nav-gl]). Fixed, behind the pill,
+   geometry set inline by the controller to track the pill's box. Hidden until
+   the controller confirms WebGL + a page snapshot succeed and adds
+   .has-gl-glass to the header; otherwise the CSS clear-glass above stands. */
+.nav-gl-glass {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 99;
+  display: none;
+  pointer-events: none;
+}
+
+/* Reveal = display:none -> block. A keyframe (not a transition) plays on that
+   display flip, so the WebGL lens FADES in over the clear-glass fallback instead
+   of popping. The navbar's own tint fades out in step (transition below) -> a
+   smooth crossfade from fallback to shader. */
+.has-gl-glass .nav-gl-glass {
+  display: block;
+  animation: nav-gl-fade-in 360ms ease-out both;
+}
+
+@keyframes nav-gl-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .has-gl-glass .nav-gl-glass { animation: none; }
+}
+
+/* When the GL lens is live it provides the glass body, so drop the CSS
+   backdrop-filter (no double treatment) and let the canvas show through. The
+   border + inset specular shadows stay and layer on top of the canvas. */
+.has-gl-glass .navbar {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Shared height + centering for every inner item. ONE rule guarantees
+   uniform height: same min-height, same vertical padding, line-height 1,
+   vertically centered, never wrapping. */
+.navbar__mark,
+.navbar__item {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--nav-item-h);
+  padding-top: var(--nav-item-pad-y);
+  padding-bottom: var(--nav-item-pad-y);
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+/* Wordmark: the brand anchor, same height as every other item. */
+.navbar__mark {
+  gap: 0.5rem;
+  padding-left: 0.85rem;
+  /* Symmetric, and equal to .navbar__item padding so the brand's gap to the
+     first nav item matches the item-to-item gaps (see .navbar gap). */
+  padding-right: 0.85rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+}
+
+.navbar__mark:hover {
+  border-color: var(--accent);
+  background: rgba(30, 40, 30, 0.6);
+  color: var(--accent);
+}
+
+.navbar__word {
+  line-height: 1;
+}
+
+/* Brand glyph: the lowercase 'e' (an OK-hand pinch grasping a glowing orb).
+   Single SVG data-uri so it renders identically in the navbar, footer, and
+   any other .mark__dot host. Keeps the legacy class name. */
+.mark__dot {
+  width: 26px;
+  height: 26px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='45' cy='45' r='4.7' fill='%23c9f5c4'/%3E%3Cg fill='none' stroke='%236ee668' stroke-width='8.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M 36.57 49.38 A 17 17 0 1 1 48.69 36.24'/%3E%3Cpath d='M 16 33 L 47.5 33'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat;
+  flex-shrink: 0;
+}
+
+/* Filled circle behind the brand glyph so it stays legible over the refracted
+   glass nav -- same page-colored fill as the .navbar__item pills. Scoped to the
+   navbar (the footer mark sits on a solid background and needs no plate). The
+   glyph is inset within the disc so the fill reads as a deliberate badge. */
+.navbar__mark .mark__dot {
+  background-color: var(--bg);
+  background-size: 20px 20px;
+  border-radius: 50%;
+}
+
+/* The inner item row -- a centered flex group with consistent gaps. */
+.navbar__items {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Generic nav link/button: identical height to the wordmark and to each
+   other; uppercase mono labels in brand tokens. */
+.navbar__item {
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  /* Solid page-colored pill behind each link so the label stays readable over
+     the refracted glass (the bent content shows in the gaps around the pills).
+     The auth CTA (--register), github, active, and hover states all set their
+     own background in later/more-specific rules, so they override this. */
+  background: var(--bg);
+  padding-left: 0.85rem;
+  padding-right: 0.85rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.navbar__item:hover {
+  border-color: var(--border);
+  background: rgba(30, 40, 30, 0.6);
+  color: var(--accent);
+}
+
+/* Active page -- the SINGLE selection style for the whole nav, on desktop and in
+   the mobile dropdown: an accent border + a green tint + a bright accent label.
+   This is the ONLY green-highlighted item; every other item (brand, nav links,
+   contribute, account, github) stays neutral and only lights up on hover. One
+   green = "the page you're on", so selection is never confused with a callout.
+   OPAQUE (tint layered over the page bg) so the refracted glass doesn't show
+   through and make it read more transparent than its neighbors. */
+.navbar__item.is-active,
+.navbar__item.is-active:hover {
+  border-color: var(--accent);
+  background: linear-gradient(rgba(110, 230, 104, 0.13), rgba(110, 230, 104, 0.13)), var(--bg);
+  color: var(--accent);
+}
+
+/* SIGN IN -- outline emphasis, SAME height as the rest; never a circle, never
+   wrapped (white-space: nowrap is inherited from the shared rule). */
+.navbar__item--signin {
+  border-color: var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
+.navbar__item--signin:hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* Brand-native GitHub item: just the GitHub mark, in dark-green brand tokens.
+   A square icon button -- no label, no star count. */
+.navbar__item--github {
+  justify-content: center;
+  padding-left: var(--nav-item-pad-y);
+  padding-right: var(--nav-item-pad-y);
+  /* This pill renders shorter than the nav row (the wordmark sets the row
+     height), so it centers with ~4px extra above and below. Nothing adds that
+     on the right, where it's just the nav's 0.4rem padding -- so mirror the 4px
+     here, making the right gap to the nav edge match the top/bottom gap exactly. */
+  margin-right: 4px;
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+.navbar__item--github:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated-2);
+  color: var(--accent);
+}
+
+.navbar__github-icon {
+  flex: none;
+}
+
+/* --- Desktop overflow "..." control --------------------------------------
+   Lives at the right end of the inline bar. The button matches every other
+   item's height/style; its menu is a small blurred panel echoing the mobile
+   dropdown. Hidden until the measure script reveals it (and via [hidden]). */
+.navbar__more {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.navbar__more[hidden] {
+  display: none;
+}
+
+/* The "..." button: same shared item box (height, radius, font), centered
+   dots, a touch wider on the horizontal so the glyph breathes. */
+.navbar__more-btn {
+  gap: 0;
+  justify-content: center;
+  letter-spacing: 0;
+  padding-left: var(--nav-item-pad-y);
+  padding-right: var(--nav-item-pad-y);
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.navbar__more-btn:hover,
+.navbar__more.is-open .navbar__more-btn {
+  border-color: var(--accent);
+  background: var(--bg-elevated-2);
+  color: var(--accent);
+}
+
+.navbar__more-dots {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.navbar__more-dots b {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+/* The overflow menu: a small blurred panel dropping from the "..." button,
+   styled like the mobile dropdown so the bar reads as one glass system. */
+.navbar__more-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+  min-width: 220px;
+  max-width: 300px;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* Near-opaque frosted panel. The nav pill's own lens (backdrop-filter on
+     .navbar) makes it a "backdrop root", so this nested panel's own
+     backdrop-filter can't sample the page behind it -- readability has to come
+     from the fill, not the blur. Keep it high-opacity so menu text stays
+     legible over any hero/content behind it. */
+  background: rgba(18, 23, 21, 0.95);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+}
+
+.navbar__more-menu[hidden] {
+  display: none;
+}
+
+/* Signed-in account chip: a QUIET neutral utility pill (matching the github
+   item), NOT a CTA. Identity belongs in the right-hand utility cluster and only
+   lights up (accent) on hover -- the filled-accent emphasis is reserved for the
+   primary CTA (--register / contribute). Toggles a dropdown (profile / admin /
+   sign out) that mirrors the overflow menu panel. */
+.navbar__user {
+  position: relative;
+  display: inline-flex;
+}
+
+.navbar__user-trigger {
+  gap: 0.4rem;
+  /* A touch wider than the base nav item, with matched left/right padding so the
+     avatar and name sit with equal breathing room on both ends. */
+  padding-left: 1rem;
+  padding-right: 1rem;
+  border-color: var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.navbar__user-trigger:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated-2);
+  color: var(--accent);
+}
+
+/* A small contained dot of identity -- accent initials on an accent-dim disc --
+   so the chip still reads as "you" without the whole pill shouting. */
+.navbar__user-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* Uploaded / GitHub avatar image variant: fill the same circular chip. */
+.navbar__user-avatar--img {
+  object-fit: cover;
+  background: var(--bg-code);
+}
+
+.navbar__user-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 200px;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(18, 23, 21, 0.97);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+  box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+}
+
+.navbar__user-menu[hidden] {
+  display: none;
+}
+
+.navbar__user-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navbar__user-link:hover {
+  border-color: var(--border);
+  background: rgba(30, 40, 30, 0.6);
+  color: var(--accent);
+}
+
+.navbar__user-link-sub {
+  margin-top: 0.15rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text-faint);
+}
+
+.navbar__user-signout:hover {
+  border-color: rgba(220, 80, 80, 0.4);
+  background: rgba(220, 80, 80, 0.1);
+  color: #ff9b9b;
+}
+
+/* Items moved into the overflow menu: full-width left-aligned rows (overriding
+   the inline centered pill layout) while keeping the brand item look. */
+.navbar__more-item.navbar__item {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 0;
+  padding: 0.55rem 0.65rem;
+  border-radius: 12px;
+  text-align: left;
+}
+
+.navbar__more-item.navbar__item--github {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Per-item description: hidden in the desktop pill bar, revealed in the
+   dropdown panel (below the breakpoint) where there is room to orient new
+   visitors on what each destination is. */
+.nav-item__desc {
+  display: none;
+  /* Override the .navbar__item nowrap so multi-word descriptions wrap inside
+     the dropdown panel instead of overflowing its right edge. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Hamburger -- hidden on desktop, shown below the nav breakpoint. It rides
+   inside the pill so the consolidated container stays a single element. */
+.nav-toggle {
+  display: none;
+  width: 38px;
+  height: var(--nav-item-h);
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.nav-toggle:hover {
+  border-color: var(--border);
+  background: rgba(30, 40, 30, 0.6);
+}
+
+.nav-toggle__bar {
+  width: 16px;
+  height: 1.5px;
+  background: var(--text);
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+/* Below this width the inline item row would overflow the pill; collapse it
+   into a dropdown panel that drops from the (still single) pill. The panel
+   keeps the same one-pill discipline: rounded, blurred, uniform-height rows. */
+@media (max-width: 860px) {
+  .navbar {
+    gap: 0.3rem;
+  }
+
+  .nav-toggle { display: inline-flex; }
+
+  /* Hamburger regime owns layout here; the desktop "..." control never shows.
+     (The measure script also force-hides it, but this guards the CSS layer.) */
+  .navbar__more { display: none; }
+
+  .navbar__items {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    /* Center on the viewport, not the pill's right edge: at <=360px a 300px
+       panel anchored right would push off the left edge (was clipping ~29px at
+       320px). Width is viewport-bounded so it never overflows a small phone. */
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    /* Row-wrap so the last two items can share a row: the description items are
+       forced full-width (own rows), while the sign-in button and the github icon
+       wrap onto one line together (github beside sign-in, like the desktop bar). */
+    flex-flow: row wrap;
+    align-items: stretch;
+    gap: 0.2rem;
+    width: min(340px, calc(100vw - 1.5rem));
+    min-width: 0;
+    max-width: none;
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    /* Near-opaque: the parent pill's lens makes .navbar a backdrop root, so
+       this dropdown's backdrop blur can't see the page -- the solid fill is
+       what guarantees the menu text is readable over content behind it. */
+    background: rgba(16, 21, 19, 0.98);
+    -webkit-backdrop-filter: blur(26px) saturate(150%);
+    backdrop-filter: blur(26px) saturate(150%);
+    box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.9);
+  }
+
+  .site-header.is-open .navbar__items { display: flex; }
+
+  /* No-JS fallback: the toggle does nothing without JS, so hide it and show the
+     nav items statically (wrapped under the wordmark) instead of a menu that can
+     never open. The js->no-js class is swapped before paint, so JS users never
+     see this. */
+  .no-js .nav-toggle { display: none; }
+  .no-js .navbar { flex-wrap: wrap; }
+  .no-js .navbar__items {
+    display: flex;
+    position: static;
+    transform: none;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+    justify-content: center;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  /* Dropdown rows: full-width, left-aligned, with an optional description
+     stacked below the label (collection, manifesto, contribute). SIGN IN and
+     the account chip carry no description, so they stay centered single rows. */
+  .navbar__items .navbar__item {
+    justify-content: flex-start;
+    min-height: 0;
+    padding: 0.6rem 0.7rem;
+    border-radius: 12px;
+    text-align: left;
+  }
+
+  .navbar__items .navbar__item--signin,
+  .navbar__items .navbar__user-trigger {
+    justify-content: center;
+  }
+
+  .navbar__item .navbar__label {
+    line-height: 1;
+  }
+
+  .navbar__item .nav-item__desc {
+    display: block;
+    margin-top: 0.25rem;
+    max-width: 32ch;
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.45;
+    color: var(--text-faint);
+  }
+
+  /* In the dropdown, items that show a description stack label + desc, so let
+     them grow past the single-row height. Auth + github stay single-row. */
+  .navbar__items .navbar__item:not(.navbar__item--signin):not(.navbar__item--github):not(.navbar__user-trigger) {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  /* Final row: the auth element (sign-in link or account wrapper) grows to fill
+     while the github icon stays a compact button beside it. */
+  .navbar__items .navbar__item--signin,
+  .navbar__items .navbar__user {
+    flex: 1 1 auto;
+  }
+
+  /* Signed in: let the account chip fill its grown wrapper. */
+  .navbar__items .navbar__user-trigger {
+    width: 100%;
+  }
+
+  /* Group gap: set the auth + github row apart from the nav items above. Both
+     carry the SAME margin-top so the row sits lower AND the two stay vertically
+     aligned with each other on the shared line. */
+  .navbar__items .navbar__item--signin,
+  .navbar__items .navbar__user,
+  .navbar__items .navbar__item--github {
+    margin-top: 0.45rem;
+  }
+
+  /* Github: a compact icon button on the right end of the final row (neutral
+     fill + border, matching the desktop github pill), not a full-width stub. */
+  .navbar__items .navbar__item--github {
+    flex: 0 0 auto;
+    justify-content: center;
+    border-color: var(--border);
+    background: var(--bg-elevated);
+  }
+
+  .site-header.is-open .nav-toggle__bar:nth-child(1) { transform: translateY(6.5px) rotate(45deg); }
+  .site-header.is-open .nav-toggle__bar:nth-child(2) { opacity: 0; }
+  .site-header.is-open .nav-toggle__bar:nth-child(3) { transform: translateY(-6.5px) rotate(-45deg); }
+}
+
+/* Desktop nav tooltips: the inline pill bar has no room for descriptions, so
+   surface the SAME orientation copy from the mobile dropdown as a small glass
+   panel below each item on hover/focus. Only items that carry a .nav-item__desc
+   (collection, manifesto, contribute) get one; sign in / account / github have
+   none, so nothing shows. The panel echoes the overflow + account menus so the
+   bar reads as one glass system. */
+@media (min-width: 861px) {
+  /* Positioning context for the absolutely-placed tooltip. (The account and
+     "..." dropdowns anchor to their own wrappers, so this is inert for them.) */
+  .navbar__item {
+    position: relative;
+  }
+
+  /* The desc stays display:none (base rule) while idle -- so it never enters
+     the bar's width measurement and trips the "..." overflow collapse -- and is
+     promoted to a floating panel ONLY while its item is hovered or focused. */
+  .navbar__item:hover .nav-item__desc,
+  .navbar__item:focus-visible .nav-item__desc {
+    display: block;
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 130;
+    width: max-content;
+    max-width: 230px;
+    padding: 0.5rem 0.65rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(18, 23, 21, 0.97);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    /* The tooltip never captures the cursor; it just rides the item's hover. */
+    pointer-events: none;
+  }
+}
+
+main {
+  min-height: calc(100vh - 150px);
+  min-height: calc(100dvh - 150px);
+  /* Reserve clear space below the floating consolidated bar so it never sits
+     on top of the page H1 / hero text. This is the SINGLE owner of top
+     clearance: the first section of every page drops its own large top
+     padding (below) so the totals stay tasteful instead of double-stacking.
+     Paired with the smaller .eyebrow bottom margin below: more breathing room
+     between the nav and the eyebrow, less between the eyebrow and its heading,
+     so the heading itself stays put. The value TRACKS the nav's own vertical
+     position -- the first clamp is a mirror of .navbar's `top` offset, +59px is
+     the nav's fixed rendered height, + the eyebrow gap -- so the nav->eyebrow
+     gap stays EXACTLY equal to the eyebrow->heading gap at every viewport width,
+     not just where the clamps happen to bottom out. Keep the first clamp in sync
+     with .navbar `top` and 1.95rem in sync with .eyebrow `margin-bottom`. */
+  padding-top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem) + 59px + 1.95rem);
+}
+
+/* The first block in <main> no longer needs its own big top padding -- main's
+   padding-top already clears the floating bar. Neutralize the top padding of
+   whichever section type leads the page so nothing double-stacks, while the
+   inter-section rhythm (.page-section + .page-section) is left untouched. */
+main > .page-section:first-child,
+main > .hero:first-child,
+main > .collection-hero:first-child {
+  padding-top: 0;
+}
+
+.container,
+.page-section {
+  width: 100%;
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding-right: var(--gutter);
+  padding-left: var(--gutter);
+}
+
+.page-section {
+  padding-top: var(--section-pad);
+  padding-bottom: var(--section-pad);
+}
+
+.page-section.tight {
+  padding-top: clamp(2.75rem, 5vw, 4.25rem);
+}
+
+.page-section + .page-section.tight {
+  padding-top: clamp(2.25rem, 4vw, 3.25rem);
+}
+
+.eyebrow {
+  /* An eyebrow is a kicker label FOR its heading, so it sits close to it. The
+     nav->eyebrow breathing room is owned by main's padding-top (above), not a
+     big gap here. Global: applies to every page (the landing hero overrides
+     this to margin:0 and uses its own flex gap, so it is unaffected). Matches
+     the nav->eyebrow gap above (main padding-top) for a balanced rhythm. */
+  margin: 0 0 1.95rem;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: lowercase;
+}
+
+h1,
+h2,
+h3,
+.section__title {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+h1 {
+  max-width: 900px;
+  margin-bottom: 1.35rem;
+  font-size: clamp(2.7rem, 7vw, 5.9rem);
+  line-height: 1;
+}
+
+h2,
+.section__title {
+  margin-bottom: 1rem;
+  font-size: clamp(2rem, 4.5vw, 3.25rem);
+  line-height: 1.05;
+}
+
+h3 {
+  margin-bottom: 0.55rem;
+  font-size: 1.4rem;
+  line-height: 1.15;
+}
+
+.lede {
+  max-width: 70ch;
+  margin: 0 0 3rem;
+  color: var(--text-muted);
+  font-size: clamp(1.05rem, 1.6vw, 1.25rem);
+  line-height: 1.6;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 2rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55em;
+  min-height: 46px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.8rem 1.3rem;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: #0e1612;
+}
+
+.btn--primary:hover {
+  background: var(--accent-hover);
+  color: #0e1612;
+}
+
+.btn--ghost {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.btn--ghost:hover {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+  color: var(--accent);
+}
+
+.btn--outline {
+  border-color: var(--accent);
+  background: transparent;
+  color: var(--accent);
+}
+
+.btn--outline:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0e1612;
+}
+
+/* Compact download CTA: a download glyph + the ".tox" label in a tight pill. */
+.btn--download {
+  gap: 0.45em;
+  padding-left: 1.05rem;
+  padding-right: 1.2rem;
+}
+
+.btn--download .btn__icon {
+  flex: none;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  border: 1px solid var(--border-faint);
+  border-radius: 999px;
+  background: rgba(40, 48, 40, 0.52);
+  padding: 0 0.65rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.badge.stock {
+  border-color: rgba(110, 230, 104, 0.34);
+  color: var(--accent);
+}
+
+.badge.needs {
+  border-color: rgba(205, 160, 90, 0.48);
+  color: #cda05a;
+}
+
+.pillars,
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1.5rem;
+}
+
+.pillar {
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  transition: border-color 200ms ease, background 200ms ease, transform 200ms ease;
+}
+
+.pillar:hover {
+  border-color: var(--border);
+  background: var(--bg-elevated-2);
+}
+
+.specimen-card {
+  display: grid;
+  min-height: 100%;
+  overflow: hidden;
+  color: inherit;
+}
+
+.specimen-card:hover {
+  color: inherit;
+  transform: translateY(-2px);
+}
+
+.specimen-card:hover h3 {
+  color: var(--accent);
+}
+
+.thumb {
+  position: relative;
+  overflow: hidden;
+  /* True aspect-ratio box (was relying on the img's min-height) so the slot
+     reserves space before the image loads -> no layout shift. 16:9 matches the
+     640x360 thumbnails. */
+  aspect-ratio: 16 / 9;
+  border-bottom: 1px solid var(--border-faint);
+  background: var(--bg-code);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  display: block;
+}
+
+.specimen-card__body {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1.25rem;
+}
+
+.specimen-card p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.96rem;
+  line-height: 1.55;
+}
+
+.card-link {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+}
+
+.copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  flex-shrink: 0;
+  min-width: 26px;
+  min-height: 26px;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  padding: 0.32rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 0;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.copy-button:hover {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #0e1612;
+}
+
+.copy-icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
+.copy-icon--check {
+  display: none;
+}
+
+.copy-button.is-copied {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.copy-button.is-copied:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.copy-button.is-copied .copy-icon--copy {
+  display: none;
+}
+
+.copy-button.is-copied .copy-icon--check {
+  display: block;
+}
+
+.copy-button.is-failed {
+  color: #e07a6a;
+  border-color: #e07a6a;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.copy-button--corner {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 1;
+}
+
+/* In the "show/hide tdn yaml" disclosure summary: pinned to the right of the row
+   so the copy button is visible whether the disclosure is collapsed or expanded.
+   (A script on the summary stops a click here from toggling the disclosure.) */
+.copy-button--summary {
+  flex: none;
+  margin-left: auto;
+}
+
+/* Branded "Embody" call-to-action -- the copy button, labelled and prominent so
+   the action teaches itself (copy this specimen's TDN for your agent). */
+.copy-button--cta {
+  gap: 8px;
+  padding: 8px 14px;
+  line-height: 1;
+  border-color: var(--accent);
+  background: rgba(110, 230, 104, 0.12);
+  color: var(--accent);
+}
+
+.copy-button--cta:hover {
+  background: var(--accent);
+  color: #0e1612;
+}
+
+.copy-button__label {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ---- Emoji reactions (shared by collection cards + specimen detail) ---- */
+/* Reaction tally chips and the smiley picker trigger share one pill style. */
+.reactions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.reaction-chip,
+.reaction-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border-faint);
+  border-radius: 999px;
+  background: rgba(24, 30, 30, 0.72);
+  padding: 2px 8px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.reaction-chip:hover,
+.reaction-add:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.reaction-chip:focus-visible,
+.reaction-add:focus-visible,
+.reaction-popover__emoji:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* On cards, match the "embody it" button + badge pill height (22px) for a
+   consistent family. (Card reaction markup is injected via set:html, so this must
+   be a global rule -- a scoped one would miss the SSR cluster.) */
+.specimen-card .reaction-chip,
+.specimen-card .reaction-add {
+  min-height: 22px;
+  padding: 0 0.5rem;
+}
+
+/* On the specimen detail engagement row the reaction pill sits beside the
+   "Embody it" CTA button (32px); match that height so the row's controls read
+   as one family instead of a short pill next to a tall button. Injected via
+   set:html, so this must be a global rule (a scoped one would miss it). */
+.engagement .reaction-chip,
+.engagement .reaction-add {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.reaction-chip__emoji {
+  font-size: 0.82rem;
+}
+
+.reaction-chip__count {
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  opacity: 0.8;
+}
+
+/* The signed-in viewer's own reactions read as active. */
+.reaction-chip.is-mine {
+  border-color: var(--accent);
+  background: rgba(110, 230, 104, 0.14);
+  color: var(--accent);
+}
+
+.reaction-add__face {
+  font-size: 0.9rem;
+}
+
+.reaction-add__plus {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.reactions.is-busy {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.reactions.is-failed .reaction-add {
+  border-color: #c46b6b;
+  color: #c46b6b;
+}
+
+/* ---- Themed emoji picker popover (anchored to the trigger, app-styled) ---- */
+.reaction-popover {
+  position: fixed;
+  z-index: 60;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated-2);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  padding: 8px;
+}
+
+.reaction-popover[hidden] {
+  display: none;
+}
+
+.reaction-popover__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+
+.reaction-popover__emoji {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.reaction-popover__emoji:hover {
+  background: var(--bg-elevated);
+  transform: scale(1.12);
+}
+
+.code,
+pre {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+@media (max-width: 760px) {
+  .page-section {
+    padding-top: clamp(5.5rem, 18vw, 7rem);
+    padding-bottom: clamp(4rem, 12vw, 5.5rem);
+  }
+
+  .page-section.tight {
+    padding-top: 0;
+  }
+
+  h1 {
+    /* Cap lowered 4.25rem -> 3.35rem so the mobile headline meets the global
+       >760px size (clamp(2.7rem,7vw,5.9rem) ~= 53px at 761) instead of jumping
+       down from 68px. 390px and below are unchanged (still 13vw-driven). */
+    font-size: clamp(2.6rem, 13vw, 3.35rem);
+  }
+
+  .thumb img {
+    /* aspect-ratio on .thumb now owns the height; keep min-height cleared so it
+       doesn't override the ratio box on mobile. */
+    min-height: 0;
+  }
+}
+
+/* ============================================================
+   Landing (home route) -- ported from web/styles.css during the
+   embody.tools unify migration. Brand tokens already lived in this
+   file; these are the section + component classes the landing markup
+   uses. The hero LAYOUT lives scoped in src/pages/index.astro (it
+   reuses the TdnViewer node-graph motif instead of a radial glow).
+   ============================================================ */
+
+.container--narrow { max-width: var(--content-narrow); }
+
+.section { padding: var(--section-pad) 0; }
+
+/* Hero inner bits (consumed by the scoped hero in index.astro) */
+.hero__headline {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(2.5rem, 7vw, 6rem);
+  line-height: 1.0;
+  letter-spacing: -0.035em;
+  color: var(--text);
+  margin: 0;
+  text-transform: lowercase;
+  max-width: 18ch;
+  text-shadow: 0 2px 30px rgba(8, 12, 8, 0.6);
+}
+.hero__ctas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin: 0;
+}
+.hero__shot { margin: 0; position: relative; }
+.hero__shot img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 30px 80px -25px rgba(0, 0, 0, 0.7);
+  /* Gentle reveal so the screenshot eases in rather than popping when it
+     decodes. CSS-only (works with no JS); the global prefers-reduced-motion
+     rule collapses it to an instant show. `both` holds the from-state so it
+     never flashes at full opacity first. */
+  animation: heroShotReveal 450ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes heroShotReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.hero__shot__caption {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  margin-top: 1rem;
+  text-align: center;
+}
+
+/* --- Pillars: landing uses a fixed 3-col of padded text cards.
+   Scoped to .section--pillars so the app's auto-fit .pillar stays intact. --- */
+.section--pillars .pillars { grid-template-columns: repeat(3, 1fr); }
+.section--pillars .pillar { padding: 2rem 1.85rem 2.1rem; }
+.pillar__name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.4rem;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  margin: 0 0 0.4rem;
+}
+.pillar__claim {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+  margin: 0 0 1.25rem;
+  letter-spacing: 0.005em;
+}
+.pillar__body {
+  font-size: 0.97rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0;
+}
+.pillar--link {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+  position: relative;
+  cursor: pointer;
+}
+.pillar--link:hover { border-color: var(--accent); color: inherit; }
+.pillar--link:hover .pillar__name { color: var(--accent); }
+.pillar__arrow {
+  display: block;
+  margin-top: auto;
+  padding-top: 1rem;
+  color: var(--accent);
+  font-size: 1.1rem;
+  transition: transform 180ms ease;
+}
+.pillar--link:hover .pillar__arrow { transform: translateX(4px); }
+.pillar--link code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+
+/* --- Practice (chat-style capability list) --- */
+.practice {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-top: 1px solid var(--border-faint);
+}
+.practice__row {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 2.5rem;
+  align-items: baseline;
+  padding: 1.4rem 0;
+  border-bottom: 1px solid var(--border-faint);
+  transition: background 160ms ease;
+}
+.practice__row:hover { background: rgba(40, 48, 40, 0.3); }
+.practice__what { color: var(--text); font-size: 1rem; font-weight: 500; }
+.practice__say {
+  color: var(--text);
+  font-style: italic;
+  font-size: 1rem;
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+.practice__say::before { content: '\203A '; color: var(--accent); margin-right: 0.5em; }
+
+/* --- TDN section --- */
+.tdn__grid {
+  display: grid;
+  /* minmax(0, ...) instead of bare fr so a long unbroken line in the code
+     sample can't blow out the column's min-content width and force the page
+     wider; the code box keeps its own overflow-x scroll. */
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 2.5rem;
+  align-items: start;
+  margin-bottom: 3rem;
+}
+.tdn__grid > * { min-width: 0; }
+/* TDN sample needs the scrollable code-box look; scoped so the app's
+   minimal .code shell elsewhere is untouched. */
+.section--tdn .code {
+  padding: 1.6rem 1.8rem;
+  overflow-x: auto;
+  white-space: pre;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  -webkit-overflow-scrolling: touch;
+}
+.code code { font-size: inherit; color: inherit; background: none; border: none; padding: 0; }
+.c-k { color: var(--text); }
+.c-s { color: var(--text); }
+.c-n { color: #6ee668; }
+.c-p { color: var(--text-faint); }
+.tdn__callout {
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  color: var(--text);
+  text-align: left;
+  margin: 3rem 0;
+  border-left: 3px solid var(--accent);
+  padding-left: 1.75rem;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+.tdn__callout-lead { color: var(--accent); font-weight: 600; }
+.tdn__bullets { display: flex; flex-direction: column; gap: 1.1rem; }
+.tdn__bullets li {
+  position: relative;
+  padding-left: 1.4rem;
+  color: var(--text-muted);
+  font-size: 0.97rem;
+  line-height: 1.55;
+}
+.tdn__bullets li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.tdn__bullets strong { color: var(--text); font-weight: 600; }
+.tdn__bullets code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+.tdn__closer {
+  font-size: clamp(1.05rem, 1.6vw, 1.2rem);
+  color: var(--text-muted);
+  max-width: 60ch;
+  margin: 3rem 0 1.5rem;
+  line-height: 1.55;
+}
+.tdn__link { margin: 0; font-family: var(--font-mono); font-size: 0.9rem; letter-spacing: 0.005em; }
+
+/* --- Steps (get started) --- */
+.steps { display: flex; flex-direction: column; gap: 1.25rem; max-width: 760px; }
+.step {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.75rem;
+  align-items: start;
+  padding: 1.5rem 1.75rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius);
+  transition: border-color 180ms ease, background 180ms ease;
+}
+.step:hover { border-color: var(--border); background: var(--bg-elevated-2); }
+.step__num {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  padding-top: 0.15rem;
+}
+.step__body { min-width: 0; }
+.step__title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: var(--text);
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.01em;
+}
+.step__body p { color: var(--text-muted); margin: 0; font-size: 0.97rem; line-height: 1.55; }
+.step__body code {
+  background: var(--bg-code);
+  border: 1px solid var(--border-faint);
+  padding: 0.05em 0.4em;
+  border-radius: 4px;
+  color: var(--text);
+}
+.step__body kbd {
+  background: var(--bg-code);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  padding: 0.1em 0.5em;
+  border-radius: 5px;
+  color: var(--text);
+  font-size: 0.8em;
+}
+.start__cta { margin-top: 2.5rem; }
+.start__meta {
+  margin-top: 2rem;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  letter-spacing: 0.01em;
+}
+
+/* --- Manifesto pull quote --- */
+.pullquote { margin: 0 0 2rem; padding: 0; border-left: 2px solid var(--accent); padding-left: 1.75rem; }
+.pullquote p {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+  line-height: 1.45;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  margin: 0;
+}
+.manifesto__link { margin: 0; padding-left: 1.75rem; font-family: var(--font-mono); font-size: 0.9rem; }
+
+/* --- Footer (global: Base.astro renders .footer* on every page) --- */
+.footer { border-top: 1px solid var(--border-faint); padding: clamp(4rem, 7vw, 6rem) 0 2.5rem; margin-top: 0; }
+.footer__inner { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 3rem; margin-bottom: 4rem; }
+.footer__col h4,
+.footer__h {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 0 0 1.25rem;
+  font-weight: 500;
+}
+.footer__col ul { display: flex; flex-direction: column; gap: 0.6rem; }
+.footer__col a { color: var(--text-muted); font-size: 0.95rem; }
+.footer__col a:hover { color: var(--accent); }
+.footer__mark { display: inline-flex; align-items: center; gap: 0.55rem; color: var(--text); margin-bottom: 1rem; }
+.footer__mark .mark__dot { width: 22px; height: 22px; }
+.footer__word {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.05rem;
+  text-transform: lowercase;
+  letter-spacing: -0.01em;
+}
+.footer__tag { color: var(--text-muted); font-size: 0.95rem; margin: 0 0 0.5rem; }
+.footer__bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border-faint);
+}
+.footer__bottom p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+}
+.footer__sig { font-style: italic; }
+.footer__city { color: var(--text-muted); }
+/* Real <button> now (was a clickable span) for keyboard + semantics; reset the
+   button chrome so it stays an inline emoji in the sentence. Decorative
+   easter-egg, so no 44px floor (it lives mid-line in body text). */
+.footer__emoji { display: inline-block; padding: 0 0.1em; border: 0; background: none; color: inherit; font: inherit; font-style: normal; line-height: 1; cursor: pointer; user-select: none; transition: transform 140ms ease; }
+.footer__emoji:hover { transform: scale(1.3) rotate(-8deg); }
+.footer__emoji:active { transform: scale(0.85); }
+.mark__word { line-height: 1; }
+
+/* --- Responsive (landing classes; hero handled in index.astro scoped) --- */
+@media (max-width: 1024px) {
+  /* Tablet: 3 narrow columns crammed at 768-1024 (the worst pillars state).
+     Drop to 2 columns and span the lone third card full-width so it never
+     orphans, then collapse to 1 column at <=640px. */
+  .section--pillars .pillars {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+  .section--pillars .pillar:last-child { grid-column: 1 / -1; }
+  .tdn__grid { gap: 2rem; }
+}
+/* Landing tablet reflow, aligned to the nav hamburger boundary (was 820). */
+@media (max-width: 860px) {
+  .tdn__grid { grid-template-columns: 1fr; gap: 2rem; }
+  .practice__row { grid-template-columns: 1fr; gap: 0.5rem; padding: 1.2rem 0; }
+  .footer__inner { grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+  .footer__col--brand { grid-column: 1 / -1; }
+}
+@media (max-width: 540px) {
+  .section { padding: clamp(4rem, 12vw, 6rem) 0; }
+  .section--pillars .pillars { grid-template-columns: 1fr; gap: 1rem; }
+  .section--pillars .pillar:last-child { grid-column: auto; }
+  .section--pillars .pillar { padding: 1.65rem 1.5rem 1.85rem; }
+  .step { padding: 1.25rem 1.4rem; gap: 1rem; }
+  .section--tdn .code { padding: 1.25rem 1.35rem; font-size: 0.76rem; }
+  .footer__inner { grid-template-columns: 1fr; gap: 2.25rem; margin-bottom: 3rem; }
+  .footer__col--brand { grid-column: auto; }
+  .footer__bottom { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+}
+
+/* ============================================================
+   Responsive audit hardening (P0-B touch targets, G2 reduced-motion,
+   H2 safe-area). Appended so it overrides earlier declarations.
+   ============================================================ */
+
+/* H2 - notch / safe-area insets (0px on non-notched devices). Consumed by
+   .skip-link, .navbar, main padding-top, and .footer above/below. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+.footer { padding-bottom: calc(2.5rem + var(--safe-bottom, 0px)); }
+
+/* B-global - touch-target floors (>=44px) on COARSE pointers only, so
+   fine-pointer desktop density is untouched. Globally-styled controls only;
+   page-scoped controls get matching rules in their own <style> blocks. */
+@media (pointer: coarse) {
+  .copy-button { min-width: 44px; min-height: 44px; }
+  .copy-button--cta { min-height: 46px; }
+  /* These three controls carry a 22px base height set by HIGHER-specificity
+     scoped/compound selectors (`.card-copy[data-astro-cid]`,
+     `.specimen-card .reaction-chip`), and the collection page also rebuilds
+     cards via innerHTML. A plain global rule (0,1,0) can't beat those, so this
+     coarse-pointer a11y FLOOR uses !important deliberately -- it only widens the
+     tap target on touch devices, never shrinks anything. */
+  .card-copy { min-height: 44px !important; }
+  .reaction-chip,
+  .reaction-add { min-height: 44px !important; min-width: 44px; padding-inline: 0.7rem; }
+  .reaction-popover__emoji { width: 44px; height: 44px; }
+  .footer__col a,
+  .tdn__link a,
+  .manifesto__link a { display: inline-flex; align-items: center; min-height: 44px; }
+}
+
+/* B1 - mobile nav (hamburger regime). The toggle and the single-line menu rows
+   (sign-in, account, github icon) were 36-40px; floor them at 44px. The
+   description rows are already ~68px and are unaffected by a 44px floor. */
+@media (max-width: 860px) {
+  .nav-toggle { width: 44px; height: 44px; }
+  .navbar__items .navbar__item { min-height: 44px; }
+  .navbar__items .navbar__item--github { min-width: 44px; }
+  .navbar__items .navbar__user-trigger { min-height: 44px; }
+}
+
+/* G2 - honor prefers-reduced-motion globally (only the cover skeleton was
+   gated before). Kills smooth-scroll, CSS transitions/animations, and the
+   React Flow animated-edge dash. fitView duration is handled in JS. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .tdn-viewer .react-flow__edge.animated .react-flow__edge-path {
+    animation: none !important;
+    stroke-dasharray: none !important;
+  }
+}
+
+/* G5 - keep the muted uppercase nav labels legible where the WebGL lens
+   refracts bright page content behind the pill. A faint shadow lifts them off
+   busy backdrops without darkening the muted tone. */
+.navbar__label { text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+
+/* J1 - a signed-in account name is user-derived and was excluded from the
+   desktop overflow collapse with white-space:nowrap, so a long display name
+   could defeat the nav fit. Truncate it with an ellipsis. */
+.navbar__user-trigger { min-width: 0; }
+.navbar__user-name {
+  display: inline-block;
+  /* Only a first name now, so don't let flex squish it to "D...". Keep it from
+     shrinking below its content; the max-width still caps an unusually long
+     single name with an ellipsis. */
+  flex: 0 0 auto;
+  max-width: clamp(6rem, 16vw, 11rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* The uppercase label carries trailing letter-spacing (0.12em) on its last
+     glyph, which otherwise makes the right padding look larger than the left.
+     Pull that trailing space back so the chip reads as evenly padded. */
+  margin-right: -0.12em;
+}
+
+/* ============================================================
+   Legal pages (privacy, terms) - shared rules. These .legal-* classes are used
+   ONLY by the legal templates, so they live here once instead of being
+   duplicated in each page's scoped <style> (L3 dedupe). privacy adds h3 +
+   keep-case; terms has no h3, so those rules are simply inert there.
+   ============================================================ */
+.legal-hero .lede { max-width: 70ch; margin-bottom: 1rem; }
+.legal-hero h1 { text-transform: lowercase; }
+.legal-updated { margin: 0; color: var(--text-faint); font-size: 0.85rem; letter-spacing: 0.02em; }
+.legal-body { max-width: 70ch; padding-top: clamp(1.75rem, 3vw, 2.5rem); }
+.legal-body p { margin: 0 0 1.35rem; color: var(--text); font-size: 1.05rem; line-height: 1.7; }
+.legal-body h2 {
+  margin: 2.5rem 0 1rem;
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+}
+.legal-body h3 { margin: 1.9rem 0 0.6rem; color: var(--text); font-size: 1.15rem; text-transform: lowercase; }
+.legal-body h3.keep-case { text-transform: none; }
+.legal-body ul { list-style: disc; padding-left: 1.25rem; margin: 0 0 1.35rem; }
+.legal-body ol { list-style: decimal; padding-left: 1.25rem; margin: 0 0 1.35rem; }
+.legal-body li { margin: 0 0 0.4rem; }
+.legal-body strong { color: var(--text); font-weight: 600; }
+.legal-body a { color: var(--accent); }
+.legal-body a:hover { color: var(--accent-hover); }
+.legal-sign { margin-top: 2.4rem; color: var(--text-faint); font-size: 0.9rem; letter-spacing: 0.02em; }
+.legal-sign a { color: var(--accent); }
+
+/* ============================================================
+   TDN YAML viewer (specimen "raw TDN" block, TdnYamlViewer.tsx)
+   ============================================================ */
+.tdn-yaml {
+  /* Syntax palette tuned to the dark-green theme. TDN =expressions reuse the
+     brand accent so live expressions glow. */
+  --tdn-key: #9fc6b3;
+  --tdn-str: #cbb892;
+  --tdn-num: #d79a73;
+  --tdn-kw: #c79bd1;
+  /* Inset to align with the summary/hint (18px) so the summary bar, toolbar,
+     search, and code box never touch the panel edges. */
+  padding: 0 18px 18px;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.tdn-yaml__summary {
+  margin: 0 0 0.75rem;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+}
+.tdn-yaml__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.7rem;
+}
+.tdn-yaml__search { display: inline-flex; align-items: center; gap: 0.4rem; }
+.tdn-yaml__search-input {
+  min-height: 34px;
+  width: min(260px, 50vw);
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(24, 30, 30, 0.72);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+}
+.tdn-yaml__search-input::placeholder { color: var(--text-faint); }
+.tdn-yaml__search-input:focus { outline: none; border-color: var(--accent); }
+.tdn-yaml__search-nav { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--text-muted); }
+.tdn-yaml__count { min-width: 3em; text-align: right; font-size: 0.72rem; }
+.tdn-yaml__tools { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.tdn-yaml__search-nav button,
+.tdn-yaml__btn,
+.tdn-yaml__jump-btn {
+  min-height: 30px;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(24, 30, 30, 0.5);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+/* collapse-all / expand-all carry a -/+ glyph before the label. */
+.tdn-yaml__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+.tdn-yaml__btn-icon {
+  flex: none;
+  opacity: 0.85;
+}
+.tdn-yaml__search-nav button { min-width: 30px; padding: 0.2rem 0.4rem; }
+.tdn-yaml__search-nav button:hover:not(:disabled),
+.tdn-yaml__btn:hover,
+.tdn-yaml__jump-btn:hover { color: var(--text); border-color: var(--accent); }
+.tdn-yaml__search-nav button:disabled { opacity: 0.4; cursor: default; }
+.tdn-yaml__btn.is-on { color: var(--accent); border-color: var(--accent); }
+
+/* App-native "jump to" dropdown (replaces a browser-native <select>): a styled
+   trigger + an absolutely-positioned listbox, matching the collection/contribute
+   .dd dropdowns. */
+.tdn-yaml__jump { position: relative; display: inline-flex; }
+.tdn-yaml__jump-btn { display: inline-flex; align-items: center; gap: 0.4rem; }
+.tdn-yaml__jump-btn[aria-expanded="true"] { color: var(--text); border-color: var(--accent); }
+.tdn-yaml__chev { flex: none; opacity: 0.8; }
+.tdn-yaml__jump-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  max-height: 16rem;
+  margin: 0;
+  padding: 0.25rem;
+  list-style: none;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(18, 23, 21, 0.98);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 22px 55px -20px rgba(0, 0, 0, 0.85);
+  outline: none;
+}
+.tdn-yaml__jump-opt {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.32rem 0.6rem;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tdn-yaml__jump-name { overflow: hidden; text-overflow: ellipsis; }
+.tdn-yaml__jump-kind {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 0.66rem;
+}
+.tdn-yaml__jump-opt.is-active,
+.tdn-yaml__jump-opt[aria-selected="true"] { background: rgba(110, 230, 104, 0.12); color: var(--text); }
+
+.tdn-yaml__code {
+  max-height: 540px;
+  overflow: auto;
+  padding: 0.55rem 0;
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  background: var(--bg-code);
+  line-height: 1.55;
+  -webkit-overflow-scrolling: touch;
+}
+.tdn-yaml__line { display: flex; align-items: flex-start; padding: 0 0.7rem; white-space: pre; }
+.tdn-yaml__code.is-wrap .tdn-yaml__line { white-space: pre-wrap; }
+.tdn-yaml__code.is-wrap .tdn-yaml__text { overflow-wrap: anywhere; word-break: break-word; }
+.tdn-yaml__line.is-active { background: rgba(110, 230, 104, 0.09); }
+.tdn-yaml__gutter { flex: none; display: inline-flex; align-items: baseline; gap: 0.15rem; user-select: none; }
+.tdn-yaml__fold {
+  width: 1.2em;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-size: 0.7rem;
+  line-height: 1.55;
+  cursor: pointer;
+}
+.tdn-yaml__fold:hover { color: var(--accent); }
+.tdn-yaml__fold--none { cursor: default; }
+.tdn-yaml__ln {
+  display: inline-block;
+  /* content-box so the digit width (min-width) excludes the padding -- with the
+     global border-box, 3ch min-width was eaten by the 0.85rem padding, so 2-digit
+     numbers overflowed and shifted the code right. Sized to the file's widest
+     line number via --tdn-ln-digits so every row's code aligns. */
+  box-sizing: content-box;
+  min-width: calc(var(--tdn-ln-digits, 3) * 1ch);
+  padding-right: 0.85rem;
+  text-align: right;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  user-select: none;
+}
+.tdn-yaml__text { white-space: inherit; color: var(--text); }
+.tdn-yaml__ellipsis { color: var(--text-faint); }
+
+.tdn-yaml__key { color: var(--tdn-key); }
+.tdn-yaml__str { color: var(--tdn-str); }
+.tdn-yaml__num { color: var(--tdn-num); }
+.tdn-yaml__kw { color: var(--tdn-kw); }
+.tdn-yaml__expr { color: var(--accent); }
+.tdn-yaml__com { color: var(--text-faint); font-style: italic; }
+.tdn-yaml__punct { color: var(--text-muted); }
+.tdn-yaml__plain { color: var(--text); }
+.tdn-yaml__hit { background: rgba(110, 230, 104, 0.28); color: var(--text); border-radius: 2px; }
+
+/* ---- Editable TDN editor (contribute + edit forms) ----
+   Built to look like the read-only .tdn-yaml viewer: a pinned line-number gutter,
+   a transparent <textarea> over a syntax-highlighted <pre> backdrop, and the SAME
+   font / size / line-height / palette as the viewer. The backdrop + textarea must
+   share identical text metrics or the colored backdrop drifts from the caret; the
+   gutter shares the per-line box height so numbers line up with code rows. The
+   --tdn-* palette is redefined here so the shared .tdn-yaml__<token> color classes
+   resolve outside a .tdn-yaml ancestor. */
+.tdn-editor {
+  /* Match the viewer's palette (.tdn-yaml). */
+  --tdn-key: #9fc6b3;
+  --tdn-str: #cbb892;
+  --tdn-num: #d79a73;
+  --tdn-kw: #c79bd1;
+  /* Shared text metrics (viewer-matched): font-size 0.82rem, line-height 1.55. */
+  --tdn-fs: 0.82rem;
+  --tdn-lh: 1.55;
+  --tdn-pad-y: 0.7rem;
+  --tdn-pad-x: 0.85rem;
+  --tdn-line-h: calc(var(--tdn-fs) * var(--tdn-lh));
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+  flex: 1;
+}
+
+/* CodeMirror-based editor: a compact one-row toolbar (search + fold -/+ + wrap)
+   above a CM instance themed (in TdnYamlEditor.tsx) to match the read-only viewer. */
+.tdn-editor__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+}
+/* Composite search field: a pill containing the magnifier, the text input, and
+   (when a query is present) the match counter + prev/next/clear controls. */
+.tdn-editor__searchbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 340px;
+  min-height: 30px;
+  padding: 0.2rem 0.45rem 0.2rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(24, 30, 30, 0.72);
+  transition: border-color 140ms ease;
+}
+.tdn-editor__searchbox:focus-within { border-color: var(--accent); }
+.tdn-editor__search-icon { flex: none; color: var(--text-faint); }
+.tdn-editor__search {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+.tdn-editor__search:focus { outline: none; }
+.tdn-editor__search::placeholder { color: var(--text-faint); }
+.tdn-editor__search-nav { flex: none; display: inline-flex; align-items: center; gap: 0.1rem; }
+.tdn-editor__search-count {
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  color: var(--text-faint);
+  white-space: nowrap;
+  padding: 0 0.2rem;
+  font-variant-numeric: tabular-nums;
+}
+.tdn-editor__search-navbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+.tdn-editor__search-navbtn:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.06); }
+.tdn-editor__search-navbtn:disabled { opacity: 0.35; cursor: default; }
+.tdn-editor__search-navbtn--clear:hover:not(:disabled) { color: var(--accent); }
+
+/* Go-to-line popover: a small native-styled line-number input below the button. */
+.tdn-editor__goto { position: relative; display: inline-flex; }
+.tdn-editor__goto-pop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated-2, #1f2321);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+.tdn-editor__goto-input {
+  width: 76px;
+  min-height: 26px;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+.tdn-editor__goto-input:focus { outline: none; border-color: var(--accent); }
+.tdn-editor__goto-go {
+  min-height: 26px;
+  padding: 0.25rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: rgba(24, 30, 30, 0.5);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.tdn-editor__goto-go:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Custom clear ("x") button for the remaining native type=search fields:
+   -webkit-appearance:none guarantees the pointer cursor (the default native
+   cancel button ignores `cursor`) and gives it a hover brighten. Covers the TDN
+   viewer search and the form category/requires search pickers. */
+.tdn-yaml__search-input::-webkit-search-cancel-button,
+.dd__search::-webkit-search-cancel-button,
+.msdd__search::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  background-color: var(--text-muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M6%206L18%2018M18%206L6%2018'%20stroke='%23000'%20stroke-width='3'%20stroke-linecap='round'/%3E%3C/svg%3E") center / 13px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M6%206L18%2018M18%206L6%2018'%20stroke='%23000'%20stroke-width='3'%20stroke-linecap='round'/%3E%3C/svg%3E") center / 13px no-repeat;
+}
+.tdn-yaml__search-input::-webkit-search-cancel-button:hover,
+.dd__search::-webkit-search-cancel-button:hover,
+.msdd__search::-webkit-search-cancel-button:hover { background-color: var(--text); }
+.tdn-editor__tools { display: inline-flex; align-items: center; gap: 0.35rem; flex: none; }
+.tdn-editor__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  min-width: 30px;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(24, 30, 30, 0.5);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease, border-color 140ms ease;
+}
+.tdn-editor__btn:hover { color: var(--text); border-color: var(--accent); }
+.tdn-editor__btn.is-on { color: var(--accent); border-color: var(--accent); }
+.tdn-editor__cm {
+  position: relative;
+  /* DEFINITE height (not flex:1 + min-height) so CodeMirror's .cm-editor
+     height:100% resolves and .cm-scroller (overflow:auto) scrolls a long TDN
+     INTERNALLY. With only a min-height the box grew to fit every line, so a
+     several-thousand-line paste stretched the page instead of scrolling.
+     Viewport-relative so it stays a sensible size on any screen. */
+  height: clamp(320px, 52vh, 680px);
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  background: var(--bg-code);
+  overflow: hidden;
+  transition: border-color 140ms ease;
+}
+.tdn-editor__cm:focus-within { border-color: var(--accent); }
+.tdn-editor__cm .cm-editor { height: 100%; }
+
+.tdn-editor__scroll {
+  /* Width of the line-number gutter, sized to the widest line number. The mono
+     font + size below are LOAD-BEARING: `1ch` must resolve against the SAME font
+     here as in the textarea's padding-left, or the gutter ends up wider than the
+     padding and tucks the first character under it. */
+  font-family: var(--font-mono);
+  font-size: var(--tdn-fs);
+  --tdn-gutter-w: calc(var(--tdn-ln-digits, 2) * 1ch + 1.5rem);
+  position: relative;
+  flex: 1;
+  min-height: clamp(320px, 52vh, 680px);
+  border: 1px solid var(--border-faint);
+  border-radius: 10px;
+  background: var(--bg-code);
+  overflow: hidden;
+  transition: border-color 140ms ease;
+}
+.tdn-editor__scroll:focus-within { border-color: var(--accent); }
+
+/* Pinned gutter column: scrolls vertically (transform synced in JS), never
+   horizontally. Opaque so horizontally-scrolled code tucks behind it. */
+.tdn-editor__gutter {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: var(--tdn-gutter-w);
+  overflow: hidden;
+  z-index: 2;
+  background: var(--bg-code);
+  border-right: 1px solid var(--border-faint);
+  pointer-events: none;
+}
+.tdn-editor__gutter-inner {
+  padding-top: var(--tdn-pad-y);
+  will-change: transform;
+}
+.tdn-editor__ln {
+  display: block;
+  height: var(--tdn-line-h);
+  line-height: var(--tdn-line-h);
+  padding-right: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-align: right;
+  color: var(--text-faint);
+}
+
+.tdn-editor__backdrop,
+.tdn-editor__textarea {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 0;
+  /* Left padding clears the gutter (+ a small gap) so code starts just right of
+     the numbers and never tucks under the opaque gutter. */
+  padding: var(--tdn-pad-y) var(--tdn-pad-x) var(--tdn-pad-y) calc(var(--tdn-gutter-w) + 0.4rem);
+  font-family: var(--font-mono);
+  font-size: var(--tdn-fs);
+  /* Integer px (set in JS from font-size * --tdn-lh, snapped) so every row is the
+     SAME whole-pixel height in the textarea, backdrop, and gutter. calc() fallback
+     pre-hydration. */
+  line-height: var(--tdn-line-h);
+  letter-spacing: 0;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  box-sizing: border-box;
+}
+.tdn-editor__backdrop {
+  overflow: hidden;
+  pointer-events: none;
+  color: var(--text);
+  z-index: 0;
+}
+.tdn-editor__backdrop code {
+  font: inherit;
+  white-space: inherit;
+}
+/* The windowed slab: only the visible line range lives here; JS translates it to
+   glue it to the scrolled textarea. Each row is a fixed-height block so empty
+   lines still occupy a row. */
+.tdn-editor__slab {
+  display: block;
+  will-change: transform;
+}
+.tdn-editor__bline {
+  display: block;
+  height: var(--tdn-line-h);
+  line-height: var(--tdn-line-h);
+}
+.tdn-editor__textarea {
+  overflow: auto;
+  resize: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text);
+  z-index: 1;
+  -webkit-overflow-scrolling: touch;
+}
+.tdn-editor__textarea::placeholder { color: var(--text-faint); }
+.tdn-editor__textarea:focus { outline: none; }
+.tdn-editor__error {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #ff9b9b;
+}
+
+@media (pointer: coarse) {
+  .tdn-yaml__search-nav button,
+  .tdn-yaml__btn,
+  .tdn-yaml__jump-btn { min-height: 40px; }
+  .tdn-yaml__jump-opt { padding: 0.6rem; }
+  .tdn-yaml__fold { width: 1.6em; min-height: 28px; }
+}
+
+/* Multi-select grouped dropdown (the "requires" picker on the submit + edit
+   forms). A trigger button shows a summary; the panel overlays with grouped
+   checkboxes and scrolls when the full requirement taxonomy exceeds its height.
+   Checkboxes carry name="requires" so the form's FormData.getAll collects them. */
+.msdd {
+  position: relative;
+  /* Content-width like the sibling .dd dropdowns so it stays in-line with the
+     level/category fields instead of stretching to fill its grid cell. */
+  display: inline-flex;
+  align-self: flex-start;
+  max-width: 100%;
+}
+.msdd__btn {
+  max-width: 100%;
+}
+.msdd__summary {
+  min-width: 0;
+  /* Cap the summary width so a long single value (e.g. "Virtual audio
+     (BlackHole/VB-Cable)") truncates with an ellipsis instead of spilling out
+     of the form frame. */
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.msdd__panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  /* The trigger is narrow (content-width); give the panel a comfortable fixed
+     width that opens rightward rather than tracking the button. */
+  width: 280px;
+  max-width: min(90vw, 340px);
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated-2, #1f2321);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+}
+/* Sticky search field at the top of the requires panel. */
+.msdd__search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  width: 100%;
+  margin-bottom: 0.4rem;
+  padding: 0.4rem 0.6rem 0.4rem 1.9rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg)
+    url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='14'%20height='14'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23889'%20stroke-width='2'%20stroke-linecap='round'%3E%3Ccircle%20cx='11'%20cy='11'%20r='7'/%3E%3Cpath%20d='M21%2021l-4.3-4.3'/%3E%3C/svg%3E")
+    no-repeat left 0.6rem center;
+  background-size: 14px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+.msdd__search::placeholder { color: var(--text-faint); }
+.msdd__search:focus { outline: none; border-color: var(--accent); }
+.msdd__search::-webkit-search-cancel-button { cursor: pointer; }
+.msdd__group[hidden],
+.msdd__opt[hidden] { display: none; }
+.msdd__empty {
+  padding: 0.5rem 0.4rem;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+}
+.msdd__empty[hidden] { display: none; }
+.msdd__group {
+  padding: 0.25rem 0;
+}
+.msdd__group + .msdd__group {
+  border-top: 1px solid var(--border-faint);
+  margin-top: 0.25rem;
+  padding-top: 0.4rem;
+}
+.msdd__group-label {
+  margin: 0 0 0.25rem;
+  padding: 0 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.msdd__opt {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.32rem 0.4rem;
+  border-radius: 7px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.msdd__opt:hover {
+  background: rgba(110, 230, 104, 0.08);
+  color: var(--text);
+}
+.msdd__opt input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+  flex: none;
+  cursor: pointer;
+  /* border-radius makes the focus outline follow rounded corners instead of a
+     hard square. */
+  border-radius: 4px;
+}
+.msdd__opt input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 5px;
+}
+.msdd__opt:has(input:checked) {
+  color: var(--accent);
+}

@@ -1,0 +1,317 @@
+format: tdn
+version: '2.0'
+build: 3
+generator: Embody/6.0.38
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:38Z'
+network_path: /specimen_lab/noise_terrain
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+type: baseCOMP
+custom_pars:
+  Terrain:
+  - name: Height
+    style: Float
+    startSection: true
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Overall vertical scale of the terrain. Master multiplier on all three noise displacement amplitudes, preserving their 2.9 / 1.0 / 0.25 ratio so peaks and fine relief grow in proportion. 1.0 = the shipped look; 0 = a flat plane; 2 = double-height alpine peaks.
+  - name: Ridge
+    style: Float
+    default: 1.6
+    min: 1.0
+    max: 3.0
+    clampMin: true
+    normMin: 1.0
+    normMax: 3.0
+    help: Ridge sharpness of the mountains. Higher values carve sharper, more knife-edged ridgelines and deeper valleys; lower values give rounder, more eroded hills. 1.6 = the shipped look.
+  - name: Warp
+    style: Float
+    default: 1.2
+    max: 2.5
+    clampMin: true
+    normMax: 2.5
+    help: Domain warp amount. Bends the noise domain so ridgelines flow organically instead of aligning to a grid. 0 = regular and repetitive; 1.2 = the shipped look; higher = more chaotic, swirling ridges.
+  - name: Detail
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Surface micro-detail and ruggedness, applied cheaply in the shader as normal-map bump strength (no mesh change, so no triangulation cost or facet artifacts). Scales the shipped bump strength of 0.17. 1.0 = the shipped look; 0 = smooth shading; 2 = heavily rugged rock.
+  - name: Snowline
+    style: Float
+    label: Snow Line
+    startSection: true
+    default: 1.6
+    max: 4.0
+    clampMin: true
+    normMax: 4.0
+    help: World-Y elevation where snow begins to cover the rock. Peaks reach roughly 0 to 4 at Height 1.0, so 1.6 sits mid-slope (the shipped look). Lower the value to blanket the terrain in snow; the slider covers 0 to 4, but you can type higher to clear taller peaks at high Height, leaving only bare rock.
+  - name: Sundiraz
+    style: Float
+    label: Sun Azimuth
+    startSection: true
+    default: -41.6335
+    min: -180.0
+    max: 180.0
+    normMin: -180.0
+    normMax: 180.0
+    help: Compass direction of the sunlight, in degrees in the horizontal plane. 0 points toward +Z (into the scene), +90 toward +X (right), -90 toward -X (left). Combined with Sun Elevation it is converted to a guaranteed unit light direction, so it can never produce a zero-length (NaN) vector. Controls which side of the ridges is lit.
+  - name: Sundirel
+    style: Float
+    label: Sun Elevation
+    default: 49.3007
+    max: 90.0
+    clampMin: true
+    clampMax: true
+    normMax: 90.0
+    help: Height of the sun above the horizon, in degrees. 0 = sun on the horizon (long raking shadows, warm grazing light); 90 = directly overhead (flat, even light). Controls shadow length and contrast. The default matches the shipped sun direction.
+  - name: Haze
+    style: Float
+    startSection: true
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Atmospheric haze amount, a multiplier on the computed distance fog and valley mist. 0 = perfectly clear air; 1.0 = the shipped atmosphere; up to 2 = thick, hazy depth that washes out distant peaks. The blend is re-clamped in the shader so it can never fully erase the scene.
+  - name: Morphspeed
+    style: Float
+    label: Morph Speed
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Rate at which the terrain shape evolves over time, driving the 4D-noise time coordinate of all three layers while preserving their 0.04 / 0.085 / 0.15 speed ratio. 0 = frozen on a fixed, deterministic frame; 1.0 = the shipped pace; 3 = rapid morphing.
+  - name: Seed
+    style: Int
+    startSection: true
+    default: 1
+    max: 9999.0
+    clampMin: true
+    normMax: 100.0
+    help: Random seed for the terrain shape. Each value produces a completely different but equally plausible mountain. The three noise layers receive this value plus a fixed per-layer offset (+0, +1, +2) so they stay decorrelated. Default 1 reproduces the shipped seeds 1 / 2 / 3.
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: cam
+  type: cameraCOMP
+  parameters:
+    ty: 6.2
+    tz: 16
+    rx: -13
+  flags:
+  - display
+  position: [500, -330]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: specimen_lab/noise_terrain/cam.tdn
+- name: geo
+  type: geometryCOMP
+  parameters:
+    material: glsl_snow
+  flags:
+  - display
+  - render
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: specimen_lab/noise_terrain/geo.tdn
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1700, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - comp_sky
+- name: light
+  type: lightCOMP
+  parameters:
+    ty: 10
+    tz: 0
+    rx: -22
+    ry: -45
+    lighttype: distant
+  flags:
+  - display
+  position: [500, -580]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  tdn_ref: specimen_lab/noise_terrain/light.tdn
+- name: comp_sky
+  type: compositeTOP
+  parameters:
+    operand: over
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - render_scene
+  - glsl_sky
+- name: glsl_sky
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_sky_pixel
+    computedat: glsl_sky_compute
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  flags:
+  - viewer
+  position: [900, -330]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_snow
+  type: glslMAT
+  parameters:
+    vdat: glsl_snow_vertex
+    pdat: glsl_snow_pixel
+    skelrootpath: =parent()
+  sequences:
+    mattr:
+    - comps: 2
+      cols: 2
+    vec:
+    - name: uTerrain
+      valuex: =parent().par.Snowline.eval()
+      valuey: =0.17*parent().par.Detail.eval()
+      valuez: =parent().par.Haze.eval()
+      valuew: 0
+    - name: uSunDir
+      valuex: =math.cos(math.radians(parent().par.Sundirel.eval()))*math.sin(math.radians(parent().par.Sundiraz.eval()))
+      valuey: =math.sin(math.radians(parent().par.Sundirel.eval()))
+      valuez: =math.cos(math.radians(parent().par.Sundirel.eval()))*math.cos(math.radians(parent().par.Sundiraz.eval()))
+      valuew: 0
+  position: [0, -330]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: render_scene
+  type: renderTOP
+  parameters:
+    camera: cam
+    geometry: geo
+    lights: light
+    antialias: aa2
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  flags:
+  - viewer
+  position: [500, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_sky_info
+  type: infoDAT
+  parameters:
+    op: glsl_sky
+  position: [900, -450]
+  dock: glsl_sky
+- name: glsl_sky_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_sky_pixel.glsl
+    extension: frag
+  position: [1050, -450]
+  dock: glsl_sky
+- name: glsl_snow_info
+  type: infoDAT
+  parameters:
+    op: glsl_snow
+  position: [-150, -450]
+  dock: glsl_snow
+- name: glsl_snow_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_snow_pixel.glsl
+    extension: frag
+  position: [0, -450]
+  dock: glsl_snow
+- name: glsl_sky_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_sky_compute.glsl
+  position: [750, -450]
+  dock: glsl_sky
+- name: glsl_snow_vertex
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_snow_vertex.glsl
+    extension: vert
+  position: [150, -450]
+  dock: glsl_snow
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Terrain + Snow Shader
+  text: Ridged-multifractal terrain in a GLSL POP (inside geo), shaded by a snow/rock GLSL MAT. Height / Ridge / Warp / Seed / Morph Speed drive the POP; Detail / Snow Line / Sun / Haze drive the material.
+  position: [-220, -520]
+  size: [570, 820]
+  color: [0.45, 0.45, 0.45]
+- name: annotate2
+  mode: annotate
+  title: 3D Scene + Sky
+  text: A camera and a distant sun light render the displaced geometry (render_scene). A bright procedural sky is generated separately in glsl_sky.
+  position: [430, -650]
+  size: [820, 910]
+  color: [0.45, 0.45, 0.45]
+- name: annotate3
+  mode: annotate
+  title: Composite + Output
+  text: The sky is composited under the rendered terrain (comp_sky) and sent to out1 -- the specimen's output.
+  position: [1330, -70]
+  size: [570, 370]
+  color: [0.45, 0.45, 0.45]

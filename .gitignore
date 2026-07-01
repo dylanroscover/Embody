@@ -24,12 +24,14 @@ extglob.FullName
 *.heartbeat
 CrashAutoSave*
 .plan.md
+plan-*.md
 dev/_test_pars_temp/
 site/
 Backup/
 logs/
 .tdn_backup/
-.embody/
+.embody/*
+!.embody/project.json
 .envoy-tools-cache.json
 
 # Promotion
@@ -37,3 +39,13 @@ SUBMISSIONS.md
 
 # User sandboxes
 sandbox/
+.release-drafts/
+
+# TouchDesigner-generated (TDPyEnvManager, 2025.32280+)
+dev/TDPyEnvManagerContext.yaml
+
+# One-off diagnostic dumps from users -- don't commit other people's project data
+tmp/
+
+# Cloudflare Wrangler local state (web platform dev/deploy)
+.wrangler/

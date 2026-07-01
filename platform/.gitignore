@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+.dev.vars
+.env
+*.local
+.DS_Store
+
+# Per-project Cloudflare DEPLOY credentials (account-scoped API token).
+# The .example template is committed; the real .cloudflare.env with the token is not.
+.cloudflare.env
+
+# Playwright E2E output
+test-results/
+playwright-report/

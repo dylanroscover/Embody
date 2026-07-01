@@ -1,38 +1,35 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 1,
-	"generator": "Embody/5.0.363",
-	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.363.toe",
-	"exported_at": "2026-04-14T01:35:08Z",
-	"network_path": "/embody/Embody/toolbar/container_left/export_comp_tdn",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "textCOMP",
-	"parameters": {
-		"text": "󰈝",
-		"callbacks": "new_export_comp_tdn_callbacks",
-		"font": "Material Design Icons",
-		"fontsize": 11,
-		"fontsizeunits": "points",
-		"fontcolorr": "=parent.Embody.par.Textcolorr",
-		"fontcolorg": "=parent.Embody.par.Textcolorg",
-		"fontcolorb": "=parent.Embody.par.Textcolorb",
-		"w": 36,
-		"vmode": "fill",
-		"alignorder": 950,
-		"clickthrough": true,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-		"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-		"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-		"bgalpha": 1
-	},
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": []
-}
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:36Z'
+network_path: /embody/Embody/toolbar/container_left/export_comp_tdn
+options:
+  include_dat_content: false
+  include_storage: true
+type: textCOMP
+parameters:
+  text: "\U000F021D"
+  callbacks: new_export_comp_tdn_callbacks
+  font: Material Design Icons
+  fontsize: 11
+  fontsizeunits: points
+  fontcolorr: =parent.Embody.par.Textcolorr
+  fontcolorg: =parent.Embody.par.Textcolorg
+  fontcolorb: =parent.Embody.par.Textcolorb
+  w: 36
+  vmode: fill
+  alignorder: 950
+  clickthrough: true
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+  bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+  bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+  bgalpha: 1
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

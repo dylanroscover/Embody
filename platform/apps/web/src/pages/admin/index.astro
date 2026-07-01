@@ -1,0 +1,35 @@
+---
+import { env } from "cloudflare:workers";
+import AdminLayout from "../../components/AdminLayout.astro";
+import { isAdmin } from "../../server/admin";
+import { dashboardCounts } from "../../server/db";
+
+export const prerender = false;
+
+// Page guard: non-admins (and anonymous) are redirected to home -- not a 403 --
+// so the panel's existence isn't advertised. Mirrors the contribute.astro gate.
+if (!isAdmin(Astro.locals.user, env)) return Astro.redirect("/");
+
+const counts = await dashboardCounts(env.DB);
+---
+
+<AdminLayout title="dashboard" active="index">
+  <div class="admin-cards">
+    <div class="admin-card">
+      <div class="admin-card__num">{counts.openReports}</div>
+      <div class="admin-card__label">open reports</div>
+    </div>
+    <div class="admin-card">
+      <div class="admin-card__num">{counts.totalSpecimens}</div>
+      <div class="admin-card__label">specimens</div>
+    </div>
+    <div class="admin-card">
+      <div class="admin-card__num">{counts.totalUsers}</div>
+      <div class="admin-card__label">users</div>
+    </div>
+    <div class="admin-card">
+      <div class="admin-card__num">{counts.recentSignups}</div>
+      <div class="admin-card__label">signups (7d)</div>
+    </div>
+  </div>
+</AdminLayout>

@@ -1,39 +1,37 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 6,
-	"generator": "Embody/5.0.363",
-	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.363.toe",
-	"exported_at": "2026-04-14T01:35:12Z",
-	"network_path": "/embody/Embody/tagger/header/text1",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "textCOMP",
-	"parameters": {
-		"text": "Actions",
-		"callbacks": "text1_callbacks",
-		"legacyfontselection": true,
-		"fontsize": 12,
-		"fontcolorr": "=parent.Embody.par.Textcolorr",
-		"fontcolorg": "=parent.Embody.par.Textcolorg",
-		"fontcolorb": "=parent.Embody.par.Textcolorb",
-		"fontalpha": "=parent.Embody.par.Textcolora",
-		"h": 30,
-		"hmode": "fill",
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"bgcolorr": "=parent.Embody.par.Backgroundcolorr",
-		"bgcolorg": "=parent.Embody.par.Backgroundcolorg",
-		"bgcolorb": "=parent.Embody.par.Backgroundcolorb",
-		"bgalpha": "=parent.Embody.par.Backgroundcolora",
-		"borderover": false,
-		"reloadbuiltin": false
-	},
-	"flags": ["viewer"],
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": []
-}
+format: tdn
+version: '2.0'
+build: 6
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:37Z'
+network_path: /embody/Embody/tagger/header/text1
+options:
+  include_dat_content: false
+  include_storage: true
+type: textCOMP
+parameters:
+  text: Actions
+  callbacks: text1_callbacks
+  legacyfontselection: true
+  fontsize: 12
+  fontcolorr: =parent.Embody.par.Textcolorr
+  fontcolorg: =parent.Embody.par.Textcolorg
+  fontcolorb: =parent.Embody.par.Textcolorb
+  fontalpha: =parent.Embody.par.Textcolora
+  h: 30
+  hmode: fill
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: =parent.Embody.par.Backgroundcolorr
+  bgcolorg: =parent.Embody.par.Backgroundcolorg
+  bgcolorb: =parent.Embody.par.Backgroundcolorb
+  bgalpha: =parent.Embody.par.Backgroundcolora
+  borderover: false
+  reloadbuiltin: false
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

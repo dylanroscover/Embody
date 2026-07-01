@@ -1,478 +1,324 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 8,
-	"generator": "Embody/5.0.377",
-	"td_build": "099.2025.32460",
-	"source_file": "Embody-5.378.toe",
-	"exported_at": "2026-04-18T19:13:12Z",
-	"network_path": "/embody/Embody/toolbar/container_left",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type_defaults": {
-		"textCOMP": {
-			"parameters": {
-				"fontsizeunits": "points",
-				"fontcolorr": "=parent.Embody.par.Textcolorr",
-				"fontcolorg": "=parent.Embody.par.Textcolorg",
-				"fontcolorb": "=parent.Embody.par.Textcolorb",
-				"vmode": "fill",
-				"resizecomp": "=me",
-				"repocomp": "=me"
-			},
-			"size": [160, 130]
-		},
-		"containerCOMP": {
-			"parameters": {
-				"w": 10,
-				"vmode": "fill",
-				"clickthrough": true,
-				"resizecomp": "=me",
-				"repocomp": "=me"
-			},
-			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
-		},
-		"textDAT": {
-			"parameters": {
-				"language": "python"
-			},
-			"flags": ["viewer"],
-			"size": [160, 130]
-		}
-	},
-	"type": "containerCOMP",
-	"parameters": {
-		"w": 852,
-		"h": 26,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"borderover": false,
-		"align": "horizlr",
-		"reloadbuiltin": false
-	},
-	"flags": ["viewer"],
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": [
-		{
-			"name": "status",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "=str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''",
-				"callbacks": "new_status_callbacks",
-				"font": "Open Sans",
-				"fontsize": 9,
-				"w": 80,
-				"alignorder": -100,
-				"display": false,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
-				"marginl": 3
-			},
-			"position": [800, -200],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_left/status.tdn"
-		},
-		{
-			"name": "disable",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰐥",
-				"callbacks": "new_disable_callbacks",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"clickthrough": true,
-				"bgcolorr": "=(0.13 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=(0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=(0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_left/disable.tdn"
-		},
-		{
-			"name": "perform",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰓅",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"alignorder": -50,
-				"clickthrough": true,
-				"bgcolorr": "=(0.50 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=(0.25 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=(0.05 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"color": [0.67, 0.67, 0.67]
-		},
-		{
-			"name": "refresh",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰑐",
-				"callbacks": "new_refresh_callbacks",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"alignorder": 400,
-				"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
-				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [200, 0],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"storage": {
-				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_left/refresh.tdn"
-		},
-		{
-			"name": "save_comp",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰆓",
-				"callbacks": "new_save_comp_callbacks",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"alignorder": 650,
-				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [1400, 0],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"storage": {
-				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_left/save_comp.tdn"
-		},
-		{
-			"name": "export_tdn",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰈇",
-				"callbacks": "new_export_tdn_callbacks",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"alignorder": 1000,
-				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [0, -200],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_left/export_tdn.tdn"
-		},
-		{
-			"name": "import_tdn",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰋺",
-				"callbacks": "new_import_tdn_callbacks",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"alignorder": 925,
-				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [400, -200],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"storage": {
-				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_left/import_tdn.tdn"
-		},
-		{
-			"name": "initialize",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰓦",
-				"callbacks": "new_initialize_callbacks",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"alignorder": 600,
-				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [600, 0],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"storage": {
-				"pressed": false
-			},
-			"tdn_ref": "embody/Embody/toolbar/container_left/initialize.tdn"
-		},
-		{
-			"name": "spacer_tdn",
-			"type": "containerCOMP",
-			"parameters": {
-				"alignorder": 800
-			},
-			"position": [600, -200],
-			"tdn_ref": "embody/Embody/toolbar/container_left/spacer_tdn.tdn"
-		},
-		{
-			"name": "save_folder",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "=f'/{parent.Embody.par.Folder}'",
-				"callbacks": "new_save_folder_callbacks",
-				"font": "Open Sans",
-				"fontsize": 9,
-				"w": 100,
-				"alignorder": 700,
-				"display": "=1 if parent.Embody.par.Status == 'Enabled' else 0",
-				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [400, 0],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_left/save_folder.tdn"
-		},
-		{
-			"name": "envoy_status",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "=parent.Embody.par.Envoystatus.eval()",
-				"callbacks": "new_envoy_status_callbacks",
-				"font": "Open Sans",
-				"fontsize": 9,
-				"w": 160,
-				"alignorder": 1100,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb",
-				"marginl": 3
-			},
-			"position": [1000, 0],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_left/envoy_status.tdn"
-		},
-		{
-			"name": "envoy_toggle",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "Envoy",
-				"callbacks": "new_envoy_toggle_callbacks",
-				"font": "Open Sans",
-				"fontsize": 9,
-				"w": 65,
-				"alignorder": 1050,
-				"clickthrough": true,
-				"bgcolorr": "=(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [800, 0],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_left/envoy_toggle.tdn"
-		},
-		{
-			"name": "spacer_envoy",
-			"type": "containerCOMP",
-			"parameters": {
-				"alignorder": 1025
-			},
-			"position": [1200, 0],
-			"tdn_ref": "embody/Embody/toolbar/container_left/spacer_envoy.tdn"
-		},
-		{
-			"name": "export_comp_tdn",
-			"type": "textCOMP",
-			"parameters": {
-				"text": "󰈝",
-				"callbacks": "new_export_comp_tdn_callbacks",
-				"font": "Material Design Icons",
-				"fontsize": 11,
-				"w": 36,
-				"alignorder": 950,
-				"clickthrough": true,
-				"bgcolorr": "=parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorg": "=parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgcolorb": "=parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)",
-				"bgalpha": 1
-			},
-			"position": [200, -200],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"tdn_ref": "embody/Embody/toolbar/container_left/export_comp_tdn.tdn"
-		},
-		{
-			"name": "status_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/status_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "status"
-		},
-		{
-			"name": "disable_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/disable_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "disable"
-		},
-		{
-			"name": "perform_callbacks",
-			"type": "textDAT",
-			"position": [0, -160],
-			"color": [0.67, 0.67, 0.67],
-			"dock": "perform"
-		},
-		{
-			"name": "refresh_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/refresh_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "refresh"
-		},
-		{
-			"name": "save_comp_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/save_comp_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "save_comp"
-		},
-		{
-			"name": "export_tdn_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/export_tdn_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "export_tdn"
-		},
-		{
-			"name": "import_tdn_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/import_tdn_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "import_tdn"
-		},
-		{
-			"name": "initialize_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/initialize_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "initialize"
-		},
-		{
-			"name": "save_folder_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/save_folder_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "save_folder"
-		},
-		{
-			"name": "envoy_status_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/envoy_status_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "envoy_status"
-		},
-		{
-			"name": "envoy_toggle_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/envoy_toggle_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "envoy_toggle"
-		},
-		{
-			"name": "export_comp_tdn_callbacks",
-			"type": "textDAT",
-			"parameters": {
-				"file": "embody/Embody/toolbar/container_left/export_comp_tdn_callbacks.py",
-				"syncfile": true
-			},
-			"position": [0, -160],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"],
-			"dock": "export_comp_tdn"
-		}
-	]
-}
+format: tdn
+version: '2.0'
+build: 16
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:37Z'
+network_path: /embody/Embody/toolbar/container_left
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textCOMP:
+    parameters:
+      fontsizeunits: points
+      fontcolorr: =parent.Embody.par.Textcolorr
+      fontcolorg: =parent.Embody.par.Textcolorg
+      fontcolorb: =parent.Embody.par.Textcolorb
+      vmode: fill
+      resizecomp: =me
+      repocomp: =me
+    size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+  containerCOMP:
+    parameters:
+      w: 10
+      vmode: fill
+      clickthrough: true
+      resizecomp: =me
+      repocomp: =me
+    size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+  textDAT:
+    parameters:
+      syncfile: true
+      language: python
+    flags:
+    - viewer
+    size: [160, 130]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - py
+type: containerCOMP
+parameters:
+  w: 852
+  h: 26
+  resizecomp: =me
+  repocomp: =me
+  borderover: false
+  align: horizlr
+  reloadbuiltin: false
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: status
+  type: textCOMP
+  parameters:
+    text: =str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''
+    callbacks: new_status_callbacks
+    font: Open Sans
+    fontsize: 9
+    w: 80
+    alignorder: -100
+    display: false
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb
+    marginl: 3
+  position: [800, -200]
+  tdn_ref: embody/Embody/toolbar/container_left/status.tdn
+- name: disable
+  type: textCOMP
+  parameters:
+    text: "\U000F0425"
+    callbacks: new_disable_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    clickthrough: true
+    bgcolorr: =(0.13 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgcolorg: =(0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgcolorb: =(0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  tdn_ref: embody/Embody/toolbar/container_left/disable.tdn
+- name: perform
+  type: textCOMP
+  parameters:
+    text: "\U000F04C5"
+    callbacks: perform_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: -50
+    clickthrough: true
+    bgcolorr: =(0.50 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgcolorg: =(0.25 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgcolorb: =(0.05 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  tdn_ref: embody/Embody/toolbar/container_left/perform.tdn
+- name: refresh
+  type: textCOMP
+  parameters:
+    text: "\U000F0450"
+    callbacks: new_refresh_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 400
+    display: =1 if parent.Embody.par.Status == 'Enabled' else 0
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [200, 0]
+  storage:
+    pressed: false
+  tdn_ref: embody/Embody/toolbar/container_left/refresh.tdn
+- name: save_comp
+  type: textCOMP
+  parameters:
+    text: "\U000F0193"
+    callbacks: new_save_comp_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 650
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [1400, 0]
+  storage:
+    pressed: false
+  tdn_ref: embody/Embody/toolbar/container_left/save_comp.tdn
+- name: export_tdn
+  type: textCOMP
+  parameters:
+    text: "\U000F0207"
+    callbacks: new_export_tdn_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 1000
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [0, -200]
+  tdn_ref: embody/Embody/toolbar/container_left/export_tdn.tdn
+- name: import_tdn
+  type: textCOMP
+  parameters:
+    text: "\U000F02FA"
+    callbacks: new_import_tdn_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 925
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [400, -200]
+  storage:
+    pressed: false
+  tdn_ref: embody/Embody/toolbar/container_left/import_tdn.tdn
+- name: initialize
+  type: textCOMP
+  parameters:
+    text: "\U000F04E6"
+    callbacks: new_initialize_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 600
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [600, 0]
+  storage:
+    pressed: false
+  tdn_ref: embody/Embody/toolbar/container_left/initialize.tdn
+- name: spacer_tdn
+  type: containerCOMP
+  parameters:
+    alignorder: 800
+  position: [600, -200]
+  tdn_ref: embody/Embody/toolbar/container_left/spacer_tdn.tdn
+- name: save_folder
+  type: textCOMP
+  parameters:
+    text: =f'/{parent.Embody.par.Folder}'
+    callbacks: new_save_folder_callbacks
+    font: Open Sans
+    fontsize: 9
+    w: 100
+    alignorder: 700
+    display: =1 if parent.Embody.par.Status == 'Enabled' else 0
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [400, 0]
+  tdn_ref: embody/Embody/toolbar/container_left/save_folder.tdn
+- name: envoy_toggle
+  type: textCOMP
+  parameters:
+    text: Envoy
+    callbacks: new_envoy_toggle_callbacks
+    font: Open Sans
+    fontsize: 9
+    w: 65
+    alignorder: 1050
+    clickthrough: true
+    bgcolorr: =(0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgcolorg: =(0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgcolorb: =(0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()) + (0.08 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [800, 0]
+  storage:
+    pressed: false
+  tdn_ref: embody/Embody/toolbar/container_left/envoy_toggle.tdn
+- name: spacer_envoy
+  type: containerCOMP
+  parameters:
+    alignorder: 1025
+  position: [1200, 0]
+  tdn_ref: embody/Embody/toolbar/container_left/spacer_envoy.tdn
+- name: export_comp_tdn
+  type: textCOMP
+  parameters:
+    text: "\U000F021D"
+    callbacks: new_export_comp_tdn_callbacks
+    font: Material Design Icons
+    fontsize: 11
+    w: 36
+    alignorder: 950
+    clickthrough: true
+    bgcolorr: =parent.Embody.par.Buttonbackgroundcolorr.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorg: =parent.Embody.par.Buttonbackgroundcolorg.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgcolorb: =parent.Embody.par.Buttonbackgroundcolorb.eval() + (0.06 if me.fetch('hover', False) else 0)
+    bgalpha: 1
+  position: [200, -200]
+  tdn_ref: embody/Embody/toolbar/container_left/export_comp_tdn.tdn
+- name: status_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/status_callbacks.py
+  position: [0, -160]
+  dock: status
+- name: disable_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/disable_callbacks.py
+  position: [0, -160]
+  dock: disable
+- name: perform_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/perform_callbacks.py
+  position: [0, -160]
+  dock: perform
+- name: refresh_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/refresh_callbacks.py
+  position: [0, -160]
+  dock: refresh
+- name: save_comp_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/save_comp_callbacks.py
+  position: [0, -160]
+  dock: save_comp
+- name: export_tdn_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/export_tdn_callbacks.py
+  position: [0, -160]
+  dock: export_tdn
+- name: import_tdn_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/import_tdn_callbacks.py
+  position: [0, -160]
+  dock: import_tdn
+- name: initialize_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/initialize_callbacks.py
+  position: [0, -160]
+  dock: initialize
+- name: save_folder_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/save_folder_callbacks.py
+  position: [0, -160]
+  dock: save_folder
+- name: envoy_toggle_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/envoy_toggle_callbacks.py
+  position: [0, -160]
+  dock: envoy_toggle
+- name: export_comp_tdn_callbacks
+  type: textDAT
+  parameters:
+    file: embody/Embody/toolbar/container_left/export_comp_tdn_callbacks.py
+  position: [0, -160]
+  dock: export_comp_tdn

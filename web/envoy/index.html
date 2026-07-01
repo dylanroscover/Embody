@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Envoy — talk to your network.</title>
-  <meta name="description" content="An MCP server embedded inside TouchDesigner. 47 tools that let Claude, Cursor, and Windsurf build directly inside your live session." />
+  <meta name="description" content="An MCP server embedded inside TouchDesigner. 49 tools that let Claude, Cursor, and Windsurf build directly inside your live session." />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="Envoy — talk to your network." />
-  <meta property="og:description" content="An MCP server embedded inside TouchDesigner. 47 tools. Say what you want. Watch it build." />
+  <meta property="og:description" content="An MCP server embedded inside TouchDesigner. 49 tools. Say what you want. Watch it build." />
   <meta property="og:image" content="https://embody.tools/assets/embody-screenshot.png" />
   <meta property="og:url" content="https://embody.tools/envoy" />
   <meta property="og:site_name" content="Embody" />
@@ -17,7 +17,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="Envoy — talk to your network." />
-  <meta name="twitter:description" content="An MCP server embedded inside TouchDesigner. 47 tools. Say what you want. Watch it build." />
+  <meta name="twitter:description" content="An MCP server embedded inside TouchDesigner. 49 tools. Say what you want. Watch it build." />
   <meta name="twitter:image" content="https://embody.tools/assets/embody-screenshot.png" />
 
   <!-- Theme -->
@@ -55,7 +55,7 @@
     <ul class="toc__list">
       <li><a class="toc__link" href="#top">overview</a></li>
       <li><a class="toc__link" href="#gap">blind vs. live</a></li>
-      <li><a class="toc__link" href="#tools">47 tools</a></li>
+      <li><a class="toc__link" href="#tools">49 tools</a></li>
       <li><a class="toc__link" href="#capture">see the pixels</a></li>
       <li><a class="toc__link" href="#works">how it works</a></li>
       <li><a class="toc__link" href="#safety">runs in your project</a></li>
@@ -87,7 +87,7 @@
             Setup Envoy <span aria-hidden="true">&rarr;</span>
           </a>
           <a class="btn btn--ghost" href="https://dylanroscover.github.io/Embody/envoy/tools-reference/">
-            See all 47 tools
+            See all 49 tools
           </a>
         </div>
       </div>
@@ -122,7 +122,7 @@
             <h3 class="compare__heading">with Envoy</h3>
             <ul class="compare__list">
               <li>AI connects directly to your live session</li>
-              <li>47 tools expose every aspect of the running project</li>
+              <li>49 tools expose every aspect of the running project</li>
               <li>Say what you want — operators appear, connect, tune</li>
               <li>AI reads the actual network, not a description of it</li>
               <li><code>capture_top</code> returns real pixel output as an image</li>
@@ -135,12 +135,12 @@
 
 
     <!-- ============================================================
-         46 TOOLS
+         48 TOOLS
          ============================================================ -->
     <section id="tools" class="section section--captured">
       <div class="container">
         <p class="eyebrow">CAPABILITIES</p>
-        <h2 class="section__title">47 tools.</h2>
+        <h2 class="section__title">49 tools.</h2>
 
         <p class="lede">
           Every aspect of a TouchDesigner session — operators, parameters, connections, scripts, layout, performance, visual output — exposed as MCP tools the AI can call directly.
@@ -525,6 +525,7 @@
           <li><a href="https://dylanroscover.github.io/Embody/tdn/specification/">TDN spec</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/envoy/tools-reference/">tools reference</a></li>
           <li><a href="https://dylanroscover.github.io/Embody/envoy/setup/">setup guide</a></li>
+          <li><a href="/for-ai">for AI agents</a></li>
         </ul>
       </nav>
 
@@ -532,7 +533,7 @@
 
     <div class="container footer__bottom">
       <p>&copy; 2026 <a href="https://tec.design">TEC</a> <span class="dot">&middot;</span> MIT License</p>
-      <p class="footer__sig">made with too much caffeine in <span class="footer__city">idyllwild california</span></p>
+      <p class="footer__sig">made with <span class="footer__emoji" data-emoji role="img" aria-label="made with love" title="roll again">&#10084;&#65039;</span> in <span class="footer__city">idyllwild california</span></p>
     </div>
   </footer>
 
@@ -600,5 +601,32 @@
   })();
   </script>
 
+  <script>
+    // Footer signature: random emoji each visit, re-rolls on click. Stored as
+    // code points (ASCII source per the repo rule); entity heart is the no-JS
+    // fallback.
+    (function () {
+      var el = document.querySelector("[data-emoji]");
+      if (!el) return;
+      var EMOJI = [
+        [[0x2764, 0xfe0f], "love"], [[0x1f49a], "love"], [[0x1f49c], "love"],
+        [[0x2728], "sparkle"], [[0x1f31f], "a spark"], [[0x1f525], "fire"],
+        [[0x2615], "caffeine"], [[0x1f375], "tea"], [[0x26a1], "a jolt"],
+        [[0x1f308], "a rainbow"], [[0x1f680], "liftoff"], [[0x1f3a8], "paint"],
+        [[0x1f300], "a swirl"], [[0x1fa84], "magic"], [[0x1f9e0], "brains"],
+        [[0x1f4a1], "an idea"], [[0x1f389], "joy"], [[0x1f6e0, 0xfe0f], "tools"],
+        [[0x1f39b, 0xfe0f], "knobs"], [[0x1f579, 0xfe0f], "a joystick"],
+        [[0x1f319], "moonlight"], [[0x1f33f], "fresh air"],
+        [[0x1f3d4, 0xfe0f], "mountain air"], [[0x1f332], "pine"]
+      ];
+      function roll() {
+        var e = EMOJI[Math.floor(Math.random() * EMOJI.length)];
+        el.textContent = String.fromCodePoint.apply(String, e[0]);
+        el.setAttribute("aria-label", "made with " + e[1]);
+      }
+      roll();
+      el.addEventListener("click", roll);
+    })();
+  </script>
 </body>
 </html>

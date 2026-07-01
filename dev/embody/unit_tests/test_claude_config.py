@@ -38,9 +38,9 @@ class TestClaudeConfig(EmbodyTestCase):
 		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
 		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)
 
-	def test_A02_skills_map_has_7_entries(self):
-		"""_TEMPLATE_MAP_SKILLS should have exactly 7 skill entries."""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 7)
+	def test_A02_skills_map_has_8_entries(self):
+		"""_TEMPLATE_MAP_SKILLS should have exactly 8 skill entries."""
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 8)
 
 	def test_A03_templates_comp_exists(self):
 		"""The templates COMP should exist inside Embody."""
@@ -203,6 +203,57 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertEqual(
 			(self._temp_dir / 'empty.md').read_text(encoding='utf-8'), '')
 
+	def test_B08_preserves_user_edits_to_generated_file(self):
+		"""A generated file edited by the user (marker kept) is preserved on rewrite."""
+		# First generation records the file's hash in the sidecar manifest.
+		self.embody_ext._writeTemplate(
+			self._temp_dir, 'gen.md', self.MARKER + ' v1 -->\nbody\n')
+		target = self._temp_dir / 'gen.md'
+		# User edits the body but leaves the marker in place.
+		target.write_text(self.MARKER + ' v1 -->\nbody EDITED\n', encoding='utf-8')
+		result = self.embody_ext._writeTemplate(
+			self._temp_dir, 'gen.md', self.MARKER + ' v2 -->\nnew body\n')
+		self.assertFalse(result, 'should skip a user-edited generated file')
+		self.assertIn('EDITED', target.read_text(encoding='utf-8'),
+			'user edit should be preserved')
+
+	def test_B09_regenerates_untouched_generated_file(self):
+		"""A generated file untouched since generation is regenerated on rewrite."""
+		self.embody_ext._writeTemplate(
+			self._temp_dir, 'gen.md', self.MARKER + ' v1 -->\nbody\n')
+		new = self.MARKER + ' v2 -->\nnew body\n'
+		result = self.embody_ext._writeTemplate(self._temp_dir, 'gen.md', new)
+		self.assertTrue(result, 'should regenerate an untouched generated file')
+		self.assertEqual(
+			(self._temp_dir / 'gen.md').read_text(encoding='utf-8'), new)
+
+	def test_B10_legacy_marker_without_tracked_hash_regenerates(self):
+		"""A pre-existing marker file with no tracked hash (legacy) is regenerated."""
+		target = self._temp_dir / 'legacy.md'
+		target.write_text(self.MARKER + ' v5 legacy -->\nold\n', encoding='utf-8')
+		# No manifest entry exists (simulates a file from before hash tracking).
+		result = self.embody_ext._writeTemplate(
+			self._temp_dir, 'legacy.md', self.MARKER + ' v6 -->\nnew\n')
+		self.assertTrue(result,
+			'legacy marker file with no tracked hash should regenerate')
+
+	def test_B11_generated_files_stay_byte_identical(self):
+		"""The sidecar approach must NOT mutate generated content (no embedded hash)."""
+		content = self.MARKER + ' v1 -->\n# Rules\nexact body\n'
+		self.embody_ext._writeTemplate(self._temp_dir, 'exact2.md', content)
+		self.assertEqual(
+			(self._temp_dir / 'exact2.md').read_text(encoding='utf-8'), content)
+
+	def test_B12_manifest_records_generated_file(self):
+		"""Generating a file records its hash in the sidecar manifest."""
+		self.embody_ext._writeTemplate(
+			self._temp_dir, 'gen.md', self.MARKER + ' v1 -->\nbody\n')
+		manifest = self._temp_dir / '.embody' / 'generated-hashes.json'
+		self.assertTrue(manifest.exists(), 'hash manifest should be written')
+		import json as _json
+		data = _json.loads(manifest.read_text(encoding='utf-8'))
+		self.assertIn('gen.md', data, 'manifest should record the generated file')
+
 	# ------------------------------------------------------------------
 	# Group C: _writeClaudeMd() behavior
 	# ------------------------------------------------------------------
@@ -301,11 +352,11 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertLen(rule_files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_D05_skills_directories_count(self):
-		"""Seven skill directories should be created in .claude/skills/."""
+		"""Eight skill directories should be created in .claude/skills/."""
 		self._run_claude_pipeline()
 		skills_dir = self._temp_dir / '.claude' / 'skills'
 		skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
-		self.assertLen(skill_dirs, 7)
+		self.assertLen(skill_dirs, 8)
 
 	def test_D06_idempotent_rerun(self):
 		"""Running the Claude pipeline twice should produce identical files."""

@@ -125,8 +125,9 @@ You can regenerate Envoy config files at any time:
 TDN Network Format
 ------------------
 Embody can export and import TouchDesigner networks as human-
-readable .tdn JSON files. This captures operators, parameters,
-connections, and layout in a diffable format.
+readable .tdn YAML files (a JSON superset; legacy JSON .tdn still
+load). This captures operators, parameters, connections, and
+layout in a diffable format.
 
 Use ctrl-shift-e to export the full project, or ctrl-alt-e
 to export just the current network.

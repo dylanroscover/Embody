@@ -1,0 +1,1470 @@
+---
+import { env } from "cloudflare:workers";
+import type { SpecimenDetail } from "@embody/contracts";
+import { TdnViewer } from "@embody/tdn-viewer";
+import CopyTdnEnvelopeButton from "../../components/CopyTdnEnvelopeButton";
+import TdnYamlViewer from "../../components/TdnYamlViewer";
+import Base from "../../layouts/Base.astro";
+import {
+  findFixtureSpecimen,
+  firstFixtureSpecimen,
+  type FixtureSpecimen
+} from "../../lib/specimenFallback";
+import { reactionsClusterHtml } from "../../lib/reactions";
+import { resultImage } from "../../lib/specimenThumb";
+import { SITE_ORIGIN, absoluteUrl } from "../../lib/site";
+import { sampleTdn } from "../../fixtures/sample-tdn";
+import { specimenGraph } from "../../fixtures/specimen-graphs";
+import { getSpecimenBySlug } from "../../server/db";
+import { getParsedTdnForSlug } from "../../server/tdn";
+import { getSpecimenIdBySlug, getUserReactions, REPORT_REASONS } from "../../server/engagement";
+
+export const prerender = false;
+
+type DisplaySpecimen = {
+  slug: string;
+  name: string;
+  category: string;
+  categories: string[];
+  level: string;
+  description: string;
+  requires: string[];
+  thumbnail_key: string;
+  operator_count: number;
+  key_ops: string[];
+  current_version?: number;
+  reactions: Record<string, number>;
+  author_handle: string;
+  author_display_name: string | null;
+  visibility: string;
+  license: string;
+};
+
+const fallback = firstFixtureSpecimen();
+const slug = Astro.params.slug ?? fallback.slug;
+const fixtureSpecimen = findFixtureSpecimen(slug) ?? fallback;
+let specimen = specimenFromFixture(fixtureSpecimen);
+
+try {
+  // Pass the viewer id so an author can load their OWN private/unlisted draft
+  // (to verify it before publishing); other viewers still only get public ones.
+  const liveSpecimen = await getSpecimenBySlug(env.DB, slug, Astro.locals.user?.id);
+  if (liveSpecimen) {
+    specimen = specimenFromLive(liveSpecimen, fixtureSpecimen);
+  }
+} catch {
+  specimen = specimenFromFixture(fixtureSpecimen);
+}
+
+// Engagement SSR state. The signed-in user (populated by middleware on locals)
+// determines whether the Like button starts active and whether interactions hit
+// the API or bounce to sign-in. Anonymous visitors get a sign-in link instead.
+// D1 lookups are best-effort: in dev with an empty/unreachable D1 they fail
+// silently and the button renders in its anonymous default state.
+const sessionUser = Astro.locals.user;
+const isSignedIn = Boolean(sessionUser);
+// Owner-only controls (edit/delete). Gated by handle for the UI; the API
+// re-checks by author_id, so this is presentation only, never the auth boundary.
+const isOwner = isSignedIn && sessionUser?.handle === specimen.author_handle;
+// Publish state for the owner-only status banner. Anything other than 'public'
+// (private / unlisted) reads as "not live in the Collection".
+const isPublic = specimen.visibility === "public";
+const signInHref = `/signin?next=${encodeURIComponent(`/c/${specimen.slug}`)}`;
+
+let myReactions: string[] = [];
+if (sessionUser) {
+  try {
+    const specimenId = await getSpecimenIdBySlug(env.DB, specimen.slug);
+    if (specimenId) {
+      myReactions = await getUserReactions(env.DB, specimenId, sessionUser.id);
+    }
+  } catch {
+    myReactions = [];
+  }
+}
+
+const reportReasons = REPORT_REASONS;
+
+// Resolve the real specimen network for the viewer + copy + raw view.
+// Fallback chain: parsed R2 .tdn YAML -> bundled stripped graph -> sampleTdn.
+// Raw view prefers the real blob YAML; tdnToYaml is only a fallback.
+let tdn: Record<string, unknown>;
+let rawTdn: string;
+
+try {
+  const parsed = await getParsedTdnForSlug(env.DB, env.BLOBS, specimen.slug, Astro.locals.user?.id);
+  if (parsed) {
+    tdn = parsed.tdn;
+    rawTdn = parsed.raw;
+  } else {
+    tdn = specimenGraph(specimen.slug) ?? sampleTdn;
+    rawTdn = tdnToYaml(tdn);
+  }
+} catch {
+  tdn = specimenGraph(specimen.slug) ?? sampleTdn;
+  rawTdn = tdnToYaml(tdn);
+}
+
+// Quick counts for the raw-YAML viewer's summary bar.
+const countOf = (k: string): number => (Array.isArray(tdn[k]) ? (tdn[k] as unknown[]).length : 0);
+// Connections aren't a top-level array in TDN -- they're each operator's data
+// `inputs` (the wires the graph draws). Sum those (recursing into nested COMPs);
+// dock links (comp_inputs) are structural, not counted as connections.
+const countConnections = (ops: unknown): number => {
+  if (!Array.isArray(ops)) return 0;
+  let n = 0;
+  for (const op of ops) {
+    const o = op as Record<string, unknown>;
+    if (Array.isArray(o.inputs)) n += o.inputs.length;
+    if (Array.isArray(o.operators)) n += countConnections(o.operators);
+  }
+  return n;
+};
+const tdnSummary = {
+  operators: countOf("operators"),
+  connections: countOf("connections") || countConnections(tdn.operators),
+  annotations: countOf("annotations"),
+  lines: rawTdn.replace(/\n+$/, "").split("\n").length,
+};
+
+const keyOps = specimen.key_ops.length > 0 ? specimen.key_ops : collectOperatorTypes(tdn);
+
+// Rendered RESULT cover for the sidebar thumbnail: baked render when available,
+// otherwise the procedural placeholder (shared with the collection card covers).
+const cover = resultImage({ slug: specimen.slug, name: specimen.name, category: specimen.category, thumbnailKey: specimen.thumbnail_key });
+
+// Social card: use the specimen's REAL rendered result as og:image when one
+// exists (cover.baked == author-uploaded thumbnail or a baked .jpg). The
+// procedural placeholder is a client-rendered SVG data URI -- invalid for OG
+// scrapers -- so in that case pass undefined and let Base fall back to the brand
+// screenshot. og:url is the canonical specimen page.
+const ogImage = cover.baked ? absoluteUrl(cover.src) : undefined;
+const ogUrl = `${SITE_ORIGIN}/c/${specimen.slug}`;
+
+function specimenFromFixture(fixture: FixtureSpecimen): DisplaySpecimen {
+  return {
+    slug: fixture.slug,
+    name: fixture.name,
+    category: fixture.category,
+    categories: [fixture.category],
+    level: fixture.level,
+    description: fixture.description,
+    requires: fixture.requires && fixture.requires !== "none" ? [fixture.requires] : [],
+    thumbnail_key: "",
+    operator_count: fixture.operator_count,
+    key_ops: fixture.key_ops,
+    reactions: {},
+    // Fixtures are all first-party; mirror the hardcode in toFixtureSummary
+    // (FixtureSpecimen carries no author_handle field).
+    author_handle: "embody.tools",
+    author_display_name: null,
+    visibility: "public",
+    license: "CC-BY-4.0"
+  };
+}
+
+function specimenFromLive(
+  live: SpecimenDetail & { author_display_name: string | null },
+  fixture: FixtureSpecimen | undefined
+): DisplaySpecimen {
+  // Only borrow fixture-authored copy (key_ops) when the fixture actually IS this
+  // specimen. The caller falls back to the first fixture for any unknown slug, so
+  // an unguarded read would bleed that fixture's text onto every community
+  // specimen. No match -> empty key_ops (derived from the TDN graph below).
+  const authored = fixture?.slug === live.slug ? fixture : undefined;
+  return {
+    slug: live.slug,
+    name: live.name,
+    category: live.category,
+    categories: live.categories,
+    level: live.level,
+    description: live.description,
+    requires: live.requires,
+    thumbnail_key: live.thumbnail_key,
+    operator_count: live.op_count,
+    key_ops: authored?.key_ops ?? [],
+    current_version: live.current_version,
+    reactions: live.reactions ?? {},
+    author_handle: live.author_handle,
+    author_display_name: live.author_display_name,
+    visibility: live.visibility ?? "public",
+    license: live.license || "CC-BY-4.0"
+  };
+}
+
+function collectOperatorTypes(value: unknown): string[] {
+  const seen = new Set<string>();
+  collectOperatorTypesInto(value, seen);
+  return [...seen].slice(0, 6);
+}
+
+function collectOperatorTypesInto(value: unknown, seen: Set<string>): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+  const record = value as Record<string, unknown>;
+  if (typeof record.type === "string" && record.type.trim()) {
+    seen.add(record.type);
+  }
+
+  for (const key of ["operators", "children"] as const) {
+    const children = record[key];
+    if (!Array.isArray(children)) continue;
+    for (const child of children) {
+      collectOperatorTypesInto(child, seen);
+    }
+  }
+}
+
+// Render a parsed TDN object as faithful TDN v2.0 YAML for the raw view.
+// Matches Embody's writer: 2-space indent, flow style for short numeric
+// vectors, literal block scalar (|, |-, |+) for multi-line strings, and
+// expression/bind prefixes (=, ~) carried through untouched in the values.
+function tdnToYaml(value: unknown): string {
+  if (value === null || value === undefined) return "{}\n";
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return `${emitScalar(value)}\n`;
+  }
+  const body = emitMapping(value as Record<string, unknown>, 0);
+  return body.length > 0 ? `${body}\n` : "{}\n";
+}
+
+function isShortNumericVector(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= 4 &&
+    value.every((item) => typeof item === "number")
+  );
+}
+
+function needsQuoting(value: string): boolean {
+  if (value === "") return true;
+  // Reserved YAML scalars and indicators that must be quoted as plain text.
+  if (/^[\s]|[\s]$/.test(value)) return true;
+  if (/^(true|false|null|yes|no|on|off|~)$/i.test(value)) return true;
+  if (/^[-+]?(\d|\.\d)/.test(value) && /^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(value)) {
+    return true;
+  }
+  // ISO-8601 dates/timestamps -- quote so they stay strings, not YAML !!timestamp.
+  if (/^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2})?([.,]\d+)?(Z|[-+]\d{2}:?\d{2})?)?$/.test(value)) {
+    return true;
+  }
+  if (/^[!&*?|>%@`"'#,\[\]{}]/.test(value)) return true;
+  if (/[:#]\s/.test(value) || /:$/.test(value) || /\s#/.test(value)) return true;
+  if (value.includes(": ")) return true;
+  return false;
+}
+
+function emitScalar(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return Number.isFinite(value) ? String(value) : "null";
+  const text = String(value);
+  if (text.includes("\n")) {
+    // Single-line emitter never receives newlines; guarded by emitValue.
+    return JSON.stringify(text);
+  }
+  return needsQuoting(text) ? `'${text.replace(/'/g, "''")}'` : text;
+}
+
+function emitBlockScalar(text: string, indent: string): string {
+  const trailing = text.match(/\n*$/)?.[0].length ?? 0;
+  const chomp = trailing === 0 ? "|-" : trailing === 1 ? "|" : "|+";
+  const lines = text.replace(/\n+$/, "").split("\n");
+  const child = `${indent}  `;
+  const rendered = lines
+    .map((line) => (line.length > 0 ? `${child}${line}` : ""))
+    .join("\n");
+  return `${chomp}\n${rendered}`;
+}
+
+function emitValue(value: unknown, indent: string): string {
+  if (value === null || value === undefined) return " null";
+  if (Array.isArray(value)) {
+    if (value.length === 0) return " []";
+    if (isShortNumericVector(value)) {
+      return ` [${value.map((item) => emitScalar(item)).join(", ")}]`;
+    }
+    return `\n${emitSequence(value, indent)}`;
+  }
+  if (typeof value === "object") {
+    const mapping = emitMapping(value as Record<string, unknown>, indent.length + 2);
+    return mapping.length > 0 ? `\n${mapping}` : " {}";
+  }
+  if (typeof value === "string" && value.includes("\n")) {
+    return ` ${emitBlockScalar(value, indent)}`;
+  }
+  return ` ${emitScalar(value)}`;
+}
+
+function emitMapping(obj: Record<string, unknown>, indentSize: number): string {
+  const indent = " ".repeat(indentSize);
+  const lines: string[] = [];
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === undefined) continue;
+    lines.push(`${indent}${emitKey(key)}:${emitValue(val, indent)}`);
+  }
+  return lines.join("\n");
+}
+
+function emitSequence(items: unknown[], indent: string): string {
+  const lines: string[] = [];
+  for (const item of items) {
+    if (item !== null && typeof item === "object" && !Array.isArray(item)) {
+      const mapping = emitMapping(item as Record<string, unknown>, indent.length + 2);
+      if (mapping.length === 0) {
+        lines.push(`${indent}- {}`);
+      } else {
+        // Inline the first key on the dash line, dedent the rest under it.
+        const trimmed = mapping.slice(indent.length + 2);
+        lines.push(`${indent}- ${trimmed}`);
+      }
+    } else if (isShortNumericVector(item)) {
+      lines.push(`${indent}- [${item.map((sub) => emitScalar(sub)).join(", ")}]`);
+    } else if (Array.isArray(item)) {
+      lines.push(`${indent}-${emitValue(item, `${indent}  `)}`);
+    } else if (typeof item === "string" && item.includes("\n")) {
+      lines.push(`${indent}- ${emitBlockScalar(item, `${indent}  `)}`);
+    } else {
+      lines.push(`${indent}- ${emitScalar(item)}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function emitKey(key: string): string {
+  return needsQuoting(key) ? `'${key.replace(/'/g, "''")}'` : key;
+}
+---
+
+<Base
+  title={`${specimen.name} - embody.tools`}
+  description={specimen.description}
+  ogImage={ogImage}
+  ogUrl={ogUrl}
+>
+  <section class="page-section detail-hero">
+    {isOwner && (
+      <div class="owner-tools" data-owner-actions data-slug={specimen.slug} data-owner-handle={specimen.author_handle}>
+        <a class="owner-tools__btn" href={`/c/${specimen.slug}/edit`} aria-label="edit this specimen" title="edit specimen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+            <path d="M13.5 6.5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </a>
+        <button type="button" class="owner-tools__btn owner-tools__btn--danger" data-delete-specimen aria-label="delete this specimen" title="delete specimen">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7h16M9 7V5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5v2m2 0v12a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 7 19V7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="M10 11v5M14 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+    )}
+    <p class="eyebrow">Specimen / {specimen.categories.map((cat, i) => (
+      <Fragment>{i > 0 && ", "}<a class="eyebrow-cat" href={`/collection?category=${encodeURIComponent(cat)}`}>{cat}</a></Fragment>
+    ))}</p>
+    <h1>{specimen.name}</h1>
+    <p class="specimen-byline">by <a class="specimen-byline__link" href={`/u/${encodeURIComponent(specimen.author_handle)}`}>{specimen.author_display_name ?? `@${specimen.author_handle}`}</a></p>
+  </section>
+
+  {isOwner && (
+    <section class="page-section tight owner-status">
+      <div class={`owner-status__card ${isPublic ? "is-public" : "is-private"}`} data-owner-status data-slug={specimen.slug}>
+        <span class="owner-status__icon" aria-hidden="true">
+          {isPublic ? (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></svg>
+          ) : (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+          )}
+        </span>
+        <div class="owner-status__text">
+          <strong>{isPublic ? "Public" : "Private draft"}</strong>
+          <span>{isPublic
+            ? "This specimen is live in the Collection. You can pull it back to private anytime."
+            : "Only you can see this. Tweak it until it looks right, then publish to add it to the Collection."}</span>
+        </div>
+        <span class="owner-status__msg" data-visibility-msg role="status" aria-live="polite"></span>
+        <button
+          type="button"
+          class={`btn owner-status__btn ${isPublic ? "btn--ghost" : "btn--primary"}`}
+          data-visibility-toggle
+          data-target={isPublic ? "private" : "public"}
+        >
+          {isPublic ? "make private" : "publish to collection"}
+        </button>
+      </div>
+    </section>
+  )}
+
+  {isSignedIn && (
+    <dialog class="report-dialog" data-report-dialog aria-labelledby="report-dialog-title">
+      <form class="report-dialog__form" data-report-form>
+        <h2 class="report-dialog__title" id="report-dialog-title">report specimen</h2>
+        <p class="report-dialog__lede">
+          Tell us why. Your report goes to the moderators for review.
+        </p>
+        <div class="report-dialog__reasons" role="radiogroup" aria-labelledby="report-dialog-title">
+          {reportReasons.map((reason, i) => (
+            <label class="report-reason">
+              <input type="radio" name="report-reason" value={reason} checked={i === 0} />
+              <span>{reason}</span>
+            </label>
+          ))}
+        </div>
+        <label class="report-dialog__note" data-report-note-field hidden>
+          <span>Tell us more <em>(required for "other")</em></span>
+          <textarea data-report-note rows="3" maxlength="2000" placeholder="Briefly, what's wrong with this specimen?"></textarea>
+        </label>
+        <p class="report-dialog__status" data-report-status role="status" aria-live="polite"></p>
+        <div class="report-dialog__actions">
+          <button type="button" class="btn btn--ghost" data-report-cancel>cancel</button>
+          <button type="submit" class="btn btn--primary" data-report-submit>submit report</button>
+        </div>
+      </form>
+      <div class="report-dialog__done" data-report-done hidden>
+        <p class="report-dialog__done-icon" aria-hidden="true">&#10003;</p>
+        <h2 class="report-dialog__title">report submitted</h2>
+        <p class="report-dialog__lede">Thanks &mdash; the moderators will review this specimen.</p>
+        <div class="report-dialog__actions report-dialog__actions--end">
+          <button type="button" class="btn btn--primary" data-report-close>done</button>
+        </div>
+      </div>
+    </dialog>
+  )}
+
+  {isOwner && (
+    <dialog class="confirm-dialog" data-delete-dialog aria-labelledby="delete-dialog-title">
+      <div class="confirm-dialog__body">
+        <h2 class="confirm-dialog__title" id="delete-dialog-title">delete this specimen?</h2>
+        <p class="confirm-dialog__lede">
+          This permanently removes &ldquo;{specimen.name}&rdquo; from the Collection. This cannot be undone.
+        </p>
+        <p class="confirm-dialog__status" data-delete-dialog-status role="status" aria-live="polite"></p>
+        <div class="confirm-dialog__actions">
+          <button type="button" class="btn btn--ghost" data-delete-cancel>cancel</button>
+          <button type="button" class="btn confirm-dialog__danger" data-delete-confirm>delete permanently</button>
+        </div>
+      </div>
+    </dialog>
+  )}
+
+  <script
+    type="application/json"
+    id="report-reasons"
+    set:html={JSON.stringify(reportReasons)}
+  />
+  <script>
+    import { initReactions } from "../../lib/reactionsClient";
+
+    const root = document.querySelector(".engagement") as HTMLElement | null;
+    if (root) {
+      const slug = root.dataset.slug ?? "";
+      const statusEl = root.querySelector("[data-engagement-status]") as HTMLElement | null;
+      const reasonsScript = document.getElementById("report-reasons");
+      let reasons: string[] = [];
+      try {
+        reasons = JSON.parse(reasonsScript?.textContent ?? "[]") as string[];
+      } catch {
+        reasons = [];
+      }
+
+      const setStatus = (message: string) => {
+        if (statusEl) statusEl.textContent = message;
+      };
+
+      // Emoji reactions: the picker popover + chip toggling live in the shared
+      // client. Anonymous visitors who react are bounced to /signin.
+      initReactions({ scope: root, signedIn: root.dataset.signedIn === "true" });
+
+      // Report: an app-native <dialog> reason picker replaces the OS prompt().
+      // The dialog renders only for signed-in users (same gate as the button).
+      const reportButton = root.querySelector("[data-report]") as HTMLButtonElement | null;
+      const dialog = document.querySelector("[data-report-dialog]") as HTMLDialogElement | null;
+      if (reportButton && dialog) {
+        const form = dialog.querySelector("[data-report-form]") as HTMLFormElement | null;
+        const cancelBtn = dialog.querySelector("[data-report-cancel]") as HTMLButtonElement | null;
+        const submitBtn = dialog.querySelector("[data-report-submit]") as HTMLButtonElement | null;
+        const dialogStatus = dialog.querySelector("[data-report-status]") as HTMLElement | null;
+        const noteField = dialog.querySelector("[data-report-note-field]") as HTMLElement | null;
+        const noteInput = dialog.querySelector("[data-report-note]") as HTMLTextAreaElement | null;
+        const donePanel = dialog.querySelector("[data-report-done]") as HTMLElement | null;
+        const closeBtn = dialog.querySelector("[data-report-close]") as HTMLButtonElement | null;
+        const setDialogStatus = (message: string) => {
+          if (dialogStatus) dialogStatus.textContent = message;
+        };
+        const selectedReason = (): string => {
+          const checked = form?.querySelector(
+            'input[name="report-reason"]:checked'
+          ) as HTMLInputElement | null;
+          return checked?.value ?? "";
+        };
+        // The free-text note shows (and is required) only for the "other" reason.
+        const syncNote = () => {
+          const isOther = selectedReason() === "other";
+          if (noteField) noteField.hidden = !isOther;
+          if (isOther) noteInput?.focus();
+        };
+        const showForm = () => {
+          if (form) form.hidden = false;
+          if (donePanel) donePanel.hidden = true;
+        };
+        const showDone = () => {
+          if (form) form.hidden = true;
+          if (donePanel) donePanel.hidden = false;
+          closeBtn?.focus();
+        };
+
+        reportButton.addEventListener("click", () => {
+          if (reportButton.disabled) return;
+          setDialogStatus("");
+          if (noteInput) noteInput.value = "";
+          showForm();
+          syncNote();
+          dialog.showModal();
+        });
+
+        // Reveal/hide the note as the reason changes.
+        form?.addEventListener("change", (event) => {
+          const t = event.target;
+          if (t instanceof HTMLInputElement && t.name === "report-reason") syncNote();
+        });
+
+        cancelBtn?.addEventListener("click", () => dialog.close());
+        closeBtn?.addEventListener("click", () => dialog.close());
+
+        form?.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const reason = selectedReason();
+          if (!reason || (reasons.length && !reasons.includes(reason))) {
+            setDialogStatus("Pick a reason to continue.");
+            return;
+          }
+          const details = noteInput?.value.trim() ?? "";
+          if (reason === "other" && !details) {
+            setDialogStatus("Add a short note describing the issue.");
+            noteInput?.focus();
+            return;
+          }
+
+          if (submitBtn) submitBtn.disabled = true;
+          setDialogStatus("Submitting...");
+          try {
+            const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}/report`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(details ? { reason, details } : { reason })
+            });
+            if (res.status === 401) {
+              window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
+              return;
+            }
+            if (res.status === 201) {
+              showDone();
+              setStatus("Thanks -- this specimen has been reported for review.");
+              return;
+            }
+            setDialogStatus("Could not submit your report. Please try again.");
+          } catch {
+            setDialogStatus("Could not submit your report. Please try again.");
+          } finally {
+            if (submitBtn) submitBtn.disabled = false;
+          }
+        });
+      }
+    }
+  </script>
+
+  <script>
+    // Owner-only delete. Opens an app-native <dialog> confirm (no window.confirm),
+    // then calls DELETE /api/specimens/:slug and sends the owner to their profile.
+    // The API re-checks ownership by author_id.
+    const ownerActions = document.querySelector("[data-owner-actions]") as HTMLElement | null;
+    const deleteBtn = ownerActions?.querySelector("[data-delete-specimen]") as HTMLButtonElement | null;
+    const deleteDialog = document.querySelector("[data-delete-dialog]") as HTMLDialogElement | null;
+    if (ownerActions && deleteBtn && deleteDialog) {
+      const slug = ownerActions.dataset.slug ?? "";
+      const handle = ownerActions.dataset.ownerHandle ?? "";
+      const confirmBtn = deleteDialog.querySelector("[data-delete-confirm]") as HTMLButtonElement | null;
+      const cancelBtn = deleteDialog.querySelector("[data-delete-cancel]") as HTMLButtonElement | null;
+      const statusEl = deleteDialog.querySelector("[data-delete-dialog-status]") as HTMLElement | null;
+      const setStatus = (message: string) => {
+        if (statusEl) statusEl.textContent = message;
+      };
+
+      deleteBtn.addEventListener("click", () => {
+        if (deleteBtn.disabled) return;
+        setStatus("");
+        if (confirmBtn) confirmBtn.disabled = false;
+        deleteDialog.showModal();
+      });
+      cancelBtn?.addEventListener("click", () => deleteDialog.close());
+
+      confirmBtn?.addEventListener("click", async () => {
+        if (confirmBtn.disabled) return;
+        confirmBtn.disabled = true;
+        setStatus("deleting...");
+        try {
+          const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}`, {
+            method: "DELETE"
+          });
+          if (res.status === 401) {
+            window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
+            return;
+          }
+          if (!res.ok) {
+            setStatus("could not delete this specimen. please try again.");
+            confirmBtn.disabled = false;
+            return;
+          }
+          setStatus("deleted. redirecting...");
+          window.location.assign(handle ? `/u/${handle}` : "/collection");
+        } catch {
+          setStatus("could not delete this specimen. please try again.");
+          confirmBtn.disabled = false;
+        }
+      });
+    }
+  </script>
+
+  <script>
+    // Owner-only publish toggle. PATCHes /api/specimens/:slug with the target
+    // visibility, then reloads so the page (and its public/private chrome) re-renders
+    // from the new state. The API re-checks ownership by author_id.
+    const ownerStatus = document.querySelector("[data-owner-status]") as HTMLElement | null;
+    const toggleBtn = ownerStatus?.querySelector("[data-visibility-toggle]") as HTMLButtonElement | null;
+    if (ownerStatus && toggleBtn) {
+      const slug = ownerStatus.dataset.slug ?? "";
+      const msgEl = ownerStatus.querySelector("[data-visibility-msg]") as HTMLElement | null;
+      const setMsg = (message: string) => {
+        if (msgEl) msgEl.textContent = message;
+      };
+      toggleBtn.addEventListener("click", async () => {
+        if (toggleBtn.disabled) return;
+        const target = toggleBtn.dataset.target === "public" ? "public" : "private";
+        toggleBtn.disabled = true;
+        setMsg(target === "public" ? "publishing..." : "making private...");
+        try {
+          const res = await fetch(`/api/specimens/${encodeURIComponent(slug)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ visibility: target })
+          });
+          if (res.status === 401) {
+            window.location.href = `/signin?next=${encodeURIComponent(window.location.pathname)}`;
+            return;
+          }
+          if (!res.ok) {
+            setMsg("could not update. please try again.");
+            toggleBtn.disabled = false;
+            return;
+          }
+          setMsg(target === "public" ? "published. refreshing..." : "set to private. refreshing...");
+          window.location.reload();
+        } catch {
+          setMsg("could not update. please try again.");
+          toggleBtn.disabled = false;
+        }
+      });
+    }
+  </script>
+
+  <section class="page-section tight specimen-layout">
+    <div class="specimen-main">
+      {specimen.description && <p class="specimen-desc">{specimen.description}</p>}
+      <div class="viewer-panel pillar">
+        <p class="eyebrow">network preview</p>
+        <TdnViewer tdn={tdn} height="100%" navigable rootLabel={specimen.name} client:only="react" />
+      </div>
+    </div>
+
+    <aside class="specimen-sidebar">
+      <section class="side-block pillar">
+        <p class="eyebrow">rendered result</p>
+        <figure class="cover-thumb">
+          <img
+            src={cover.src}
+            alt={cover.baked ? `${specimen.name} rendered result` : `${specimen.name} preview placeholder`}
+            width="640"
+            height="360"
+            loading="lazy"
+          />
+          {!cover.baked && <figcaption class="cover-thumb__soon mono">preview coming soon</figcaption>}
+        </figure>
+      </section>
+
+      <section class="side-block pillar specimen-actions">
+        <div class="badge-row">
+          <span class="badge">{specimen.level}</span>
+          {specimen.requires.map((req) => (
+            <span class="badge needs">needs {req}</span>
+          ))}
+          <span class="badge">{specimen.operator_count} operators</span>
+          <span class="badge license">{specimen.license}</span>
+        </div>
+
+        <div class="engagement" data-slug={specimen.slug} data-signed-in={String(isSignedIn)}>
+          <CopyTdnEnvelopeButton
+            tdn={tdn}
+            slug={specimen.slug}
+            version={specimen.current_version}
+            label="embody it"
+            className="copy-button--cta"
+            client:load
+          />
+
+          <Fragment set:html={reactionsClusterHtml({ slug: specimen.slug, reactions: specimen.reactions, mine: myReactions })} />
+
+          {isSignedIn ? (
+            <button type="button" class="report-link" data-report>report</button>
+          ) : (
+            <a class="report-link" href={signInHref}>report</a>
+          )}
+          <span class="engagement-status" data-engagement-status role="status" aria-live="polite"></span>
+        </div>
+      </section>
+
+      <section class="side-block pillar">
+        <p class="eyebrow">key ops</p>
+        <div class="op-list">
+          {keyOps.map((opName) => <span>{opName}</span>)}
+        </div>
+      </section>
+    </aside>
+  </section>
+
+  <section class="page-section tight raw-section">
+    <details class="raw-details pillar">
+      <summary>
+        <span class="raw-label raw-label--show">show tdn</span>
+        <span class="raw-label raw-label--hide">hide tdn</span>
+        <CopyTdnEnvelopeButton
+          tdn={tdn}
+          slug={specimen.slug}
+          version={specimen.current_version}
+          className="copy-button--summary"
+          client:load
+        />
+      </summary>
+      <p class="raw-copy-hint">copy to your clipboard &mdash; Embody auto-detects it in TouchDesigner and adds it for you.</p>
+      <TdnYamlViewer raw={rawTdn} summary={tdnSummary} client:visible />
+    </details>
+  </section>
+
+  <script>
+    // The copy button now lives inside the "show/hide tdn yaml" <summary> so it is
+    // visible whether the disclosure is collapsed or expanded. A click inside it must
+    // copy, NOT toggle the disclosure -- cancel the summary's default toggle action
+    // for clicks that originate within the copy button.
+    for (const summary of document.querySelectorAll(".raw-details > summary")) {
+      summary.addEventListener("click", (e) => {
+        const tgt = e.target;
+        if (tgt instanceof Element && tgt.closest(".copy-button")) e.preventDefault();
+      });
+    }
+  </script>
+</Base>
+
+<style>
+  .detail-hero {
+    /* relative: the owner edit/delete icon tools pin to the top-right corner.
+       padding-bottom (13px) + the layout's 13px padding-top = the 26px byline->box
+       box-gap. Paired with h1's margin-bottom below, the two VISUAL gaps around
+       the byline (title->byline and byline->box) come out perfectly equal (~34px
+       each) -- the byline's line-leading + the title's descender overflow are
+       folded into the margins so the rendered whitespace, not the raw box gap,
+       matches. */
+    position: relative;
+    padding-bottom: 13px;
+  }
+
+  /* The byline is the last hero element. Spacing here is BASELINE-referenced, not
+     box-referenced -- this is the subtle bit. A title's line box extends ~22px
+     below the alphabetic baseline (the font's descender space), and MOST specimen
+     titles have no descender on their last line (Murmuration, Plasma (Sine
+     Interference), Ridged Mountain Terrain, ...). So a margin measured from the
+     line box left a huge gap of empty descender space above the byline that did
+     NOT match the byline->box gap below -- the title looked far from the byline on
+     every page except Kaleidoscope (whose 'p' happens to fill that space). Measured
+     from the BASELINE instead, this ~10px margin makes the title-baseline -> byline
+     gap (~36px) equal the byline -> rendered-result gap (~35px) for EVERY title.
+     Titles that DO carry a last-line descender ('p' in Kaleidoscope, 'y' in
+     Gray-Scott) simply let it poke into the leading -- standard display
+     typography, optically even. Verified across all six specimens via glyph
+     metrics (canvas measureText actual-bounding-box), not eyeballed. */
+  .detail-hero h1 {
+    margin-bottom: 10px;
+  }
+
+  .specimen-byline {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 1.9rem;
+  }
+  .specimen-byline__link {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+  .specimen-byline__link:hover {
+    text-decoration: underline;
+  }
+
+  /* Owner tools: edit + delete icon buttons, pinned to the hero's top-right.
+     Shown only for the specimen's owner. */
+  .owner-tools {
+    position: absolute;
+    top: 0;
+    /* The page-section insets its content by --gutter; match that so the tools'
+       right edge is flush with the content (title / panels) right edge, not the
+       section's outer padding edge. */
+    right: var(--gutter);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .owner-tools__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .owner-tools__btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .owner-tools__btn--danger:hover {
+    border-color: #d65555;
+    color: #ff9b9b;
+    background: rgba(220, 80, 80, 0.12);
+  }
+
+  /* Owner-only publish-state banner (private draft vs public). Sits between the
+     hero and the main layout; only the specimen's owner ever sees it. */
+  .owner-status {
+    /* Sit snug between the hero and the layout: kill the section's own vertical
+       padding so the only gaps are the hero's 9px bottom (above) and the
+       layout's 9px top (below) -- symmetric, not a big dead band. */
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .owner-status__card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+  .owner-status__card.is-private {
+    border-color: rgba(214, 180, 90, 0.5);
+    background: rgba(214, 180, 90, 0.08);
+  }
+  .owner-status__card.is-public {
+    border-color: rgba(110, 230, 104, 0.4);
+    background: rgba(110, 230, 104, 0.07);
+  }
+  .owner-status__icon {
+    display: inline-flex;
+    flex: none;
+  }
+  .is-private .owner-status__icon { color: #e0c068; }
+  .is-public .owner-status__icon { color: var(--accent); }
+  .owner-status__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .owner-status__text strong {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .is-private .owner-status__text strong { color: #e0c068; }
+  .is-public .owner-status__text strong { color: var(--accent); }
+  .owner-status__text span {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.45;
+  }
+  .owner-status__msg {
+    margin-left: auto;
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
+  }
+  .owner-status__btn {
+    flex: none;
+    /* When there's no status message, the button still hugs the right edge. */
+    margin-left: 0;
+  }
+  .owner-status__msg:empty + .owner-status__btn {
+    margin-left: auto;
+  }
+  @media (max-width: 620px) {
+    .owner-status__card {
+      flex-wrap: wrap;
+    }
+    .owner-status__msg,
+    .owner-status__btn {
+      margin-left: 0;
+    }
+    .owner-status__btn {
+      width: 100%;
+    }
+  }
+
+  /* The category in the breadcrumb links to the collection filtered to it. */
+  .eyebrow-cat {
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+  .eyebrow-cat:hover,
+  .eyebrow-cat:focus-visible {
+    border-bottom-color: currentColor;
+    outline: none;
+  }
+
+  .engagement {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 22px;
+  }
+
+  /* Actions block in the sidebar (below "key ops"): the badges + embody-it /
+     reaction / report. They're CTAs, not "read first", so moving them out of the
+     hero keeps it compact and lets the network preview rise toward the fold.
+     Stack them with even gaps; the block's own spacing replaces the hero margin. */
+  .specimen-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .specimen-actions .engagement {
+    margin-top: 0;
+  }
+
+  /* License pill -- matches the collection card's CC-BY badge. */
+  .badge.license {
+    border-color: rgba(178, 145, 176, 0.45);
+    color: #b291b0;
+  }
+
+
+  .report-link {
+    border: 0;
+    background: none;
+    padding: 0;
+    color: var(--text-faint);
+    font: 600 12px/1 var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .report-link:hover {
+    color: var(--text-muted);
+  }
+
+  .report-link:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .engagement-status {
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
+  }
+
+  /* App-native report dialog -- replaces the browser prompt(). Tokens and the
+     shared .btn classes keep it of a piece with the rest of the app. */
+  .report-dialog {
+    width: min(420px, calc(100vw - 2rem));
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text);
+    padding: 0;
+  }
+
+  .report-dialog::backdrop {
+    background: rgba(10, 14, 12, 0.62);
+  }
+
+  .report-dialog__form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+
+  .report-dialog__title {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+
+  .report-dialog__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .report-dialog__reasons {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .report-reason {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    text-transform: capitalize;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+  }
+
+  .report-reason:hover {
+    border-color: var(--border);
+  }
+
+  .report-reason:has(input:checked) {
+    border-color: var(--accent);
+    background: rgba(110, 230, 104, 0.08);
+  }
+
+  .report-reason input {
+    accent-color: var(--accent);
+  }
+
+  .report-dialog__status {
+    margin: 0;
+    min-height: 1.05rem;
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
+  }
+
+  .report-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+
+  .report-dialog__actions .btn {
+    min-height: 40px;
+    padding: 0.55rem 1.1rem;
+    font-size: 0.9rem;
+  }
+
+  /* "Other" free-text note (shown only when "other" is picked). */
+  .report-dialog__note {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font: 0.8rem/1.4 var(--font-mono);
+    color: var(--text-muted);
+  }
+  .report-dialog__note em { color: var(--text-faint); font-style: normal; }
+  .report-dialog__note textarea {
+    width: 100%;
+    min-height: 4.5rem;
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(16, 21, 19, 0.7);
+    color: var(--text);
+    font: 0.9rem/1.5 var(--font-mono);
+    resize: vertical;
+  }
+  .report-dialog__note textarea:focus { outline: none; border-color: var(--accent); }
+
+  /* Success confirmation shown in place of the form after a report is filed. */
+  .report-dialog__done {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    text-align: center;
+    padding: 0.4rem 0;
+  }
+  .report-dialog__done-icon {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    margin: 0;
+    border-radius: 999px;
+    background: rgba(110, 230, 104, 0.14);
+    color: var(--accent);
+    font-size: 1.25rem;
+    line-height: 1;
+  }
+  .report-dialog__actions--end { justify-content: center; margin-top: 0.3rem; }
+
+  /* Delete-confirm dialog: an app-native <dialog> (replaces window.confirm),
+     styled to match the report dialog. */
+  .confirm-dialog {
+    width: min(440px, calc(100vw - 2rem));
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text);
+    padding: 0;
+  }
+  .confirm-dialog::backdrop {
+    background: rgba(10, 14, 12, 0.62);
+  }
+  .confirm-dialog__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .confirm-dialog__title {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .confirm-dialog__lede {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .confirm-dialog__status {
+    margin: 0;
+    min-height: 1em;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  .confirm-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+  }
+  .confirm-dialog__danger {
+    background: rgba(220, 80, 80, 0.14);
+    border: 1px solid #d65555;
+    color: #ff9b9b;
+  }
+  .confirm-dialog__danger:hover {
+    background: rgba(220, 80, 80, 0.22);
+    border-color: #e06a6a;
+    color: #ffb3b3;
+  }
+
+  .specimen-layout {
+    display: grid;
+    /* Sidebar (rendered result / pills / key ops) 330px on the LEFT, network
+       preview flexible on the RIGHT. The DOM keeps the viewer first (so it
+       stacks first on mobile); explicit grid columns swap the visual order on
+       desktop. */
+    grid-template-columns: 330px minmax(0, 1fr);
+    /* 18px to match the sidebar gap + the panel padding, so the spacing between
+       every panel (horizontal AND vertical) is one consistent rhythm. */
+    gap: 18px;
+    /* stretch (not start): the network-preview panel grows to match the taller
+       sidebar column so the two columns are exactly equal height. The viewer
+       fills the panel (rules below), so the sidebar -- not a fixed viewer height
+       -- drives the row height. */
+    align-items: stretch;
+    /* !important beats the global `.page-section + .page-section.tight` (0,3,0)
+       rhythm. Lower half of the byline->box gap: 13px here + 13px hero
+       padding-bottom = the 26px box-gap that makes the byline's two visible gaps
+       equal (see .detail-hero). */
+    padding-top: 13px !important;
+    /* Gap to the raw-YAML section below: 1.35rem here + 1.35rem raw-section
+       padding-top = 2.7rem. */
+    padding-bottom: 1.35rem;
+  }
+  .specimen-sidebar { grid-column: 1; grid-row: 1; }
+  /* Column 2: the description sits ABOVE the network-preview panel (not inside
+     it); the panel then fills the rest of the column's stretched height. */
+  .specimen-main {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+  }
+  .specimen-main .viewer-panel {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .raw-section {
+    padding-top: 1.35rem !important;
+  }
+
+  .viewer-panel,
+  .side-block,
+  details {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+
+  .viewer-panel {
+    padding: 18px;
+    /* Flex column so the viewer fills the panel below the "network preview"
+       label -- lets the panel stretch to the sidebar height (above) with the
+       graph occupying the freed space instead of a fixed 520px. */
+    display: flex;
+    flex-direction: column;
+  }
+  /* The TdnViewer mounts inside an <astro-island>; make it a growing flex item
+     and let the viewer fill it (override the standalone 320px min-height). */
+  .viewer-panel > astro-island {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
+  .viewer-panel :global(.tdn-viewer) {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* The panel section labels read as muted captions, not accent eyebrows, and
+     sit vertically centered in the header zone -- equal space above (the panel's
+     18px top padding) and below, instead of the default 1.95rem eyebrow margin
+     that left them top-heavy. */
+  .viewer-panel .eyebrow,
+  .side-block .eyebrow {
+    color: var(--text-muted);
+    margin-bottom: 18px;
+  }
+
+  /* Specimen description: moved out of the hero to the top of the preview
+     column, ABOVE the network-preview panel (the .specimen-main flex gap spaces
+     it from the panel). */
+  .specimen-desc {
+    margin: 0;
+    /* Cap the MEASURE (line length), not the column. The preview column runs
+       ~656px wide, which wrapped the copy at 71-83 characters per line -- past
+       the comfortable reading range. 48ch lands the longest line at ~57
+       characters, inside Bringhurst's 45-75 ideal (~66 is optimal). NOTE the
+       metric is CHARACTERS, not words: this copy averages ~5 chars/word, so 57
+       chars reads as ~10 words here -- the "8-10 words" rule of thumb assumes
+       longer words. The panel below stays full width; the text is a left-aligned
+       reading column over it (intended editorial look). `ch` matches the prose
+       convention used by .lede / .tdn__closer. */
+    max-width: 48ch;
+    color: var(--text-muted);
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+
+  .specimen-sidebar {
+    display: grid;
+    gap: 18px;
+  }
+
+  .side-block {
+    padding: 18px;
+  }
+
+  .side-block p {
+    color: var(--text-muted);
+    line-height: 1.45;
+  }
+
+  .cover-thumb {
+    position: relative;
+    margin: 14px 0 0;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    background: var(--bg-code);
+  }
+
+  .cover-thumb img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .cover-thumb__soon {
+    position: absolute;
+    left: 50%;
+    bottom: 0.6rem;
+    transform: translateX(-50%);
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  .op-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .op-list span {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    background: rgba(40, 48, 40, 0.54);
+    padding: 8px 10px;
+    color: var(--text);
+    font: 600 12px/1 var(--font-mono);
+  }
+
+  details {
+    position: relative;
+    overflow: hidden;
+  }
+
+  summary {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    /* Breathing room between the disclosure triangle and the label. */
+    gap: 0.55rem;
+    /* Match the rounded container so the focus ring (below) nests cleanly;
+       reset to top-only when open since content continues beneath. */
+    border-radius: var(--radius);
+    /* The copy button now lives in the summary (right-aligned), so the row no
+       longer reserves space for an absolutely-positioned corner button. */
+    padding: 10px 14px 10px 18px;
+    color: var(--accent);
+    /* Match the .eyebrow labels on the sibling sections (network preview /
+       rendered result) so all three section titles read consistently. */
+    font: 500 0.72rem/1.2 var(--font-mono);
+    letter-spacing: 0.12em;
+    text-transform: lowercase;
+  }
+  /* Replace the native marker with a custom triangle so the gap to the label is
+     controllable (flex `gap` above) and consistent across browsers. */
+  summary {
+    list-style: none;
+  }
+  summary::-webkit-details-marker {
+    display: none;
+  }
+  summary::before {
+    content: "\25B8";
+    /* Absolute size: the 0.72rem label is tiny, so an em-relative marker reads
+       too small -- size the triangle independently so it stays legible. */
+    font-size: 0.95rem;
+    line-height: 1;
+    transition: transform 140ms ease;
+  }
+  details[open] summary {
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+  details[open] summary::before {
+    transform: rotate(90deg);
+  }
+  /* `details { overflow: hidden }` clips the default offset focus ring into a
+     stray green line; inset it AND give the summary a matching border-radius
+     (above) so the ring is a rounded rectangle concentric with the container. */
+  summary:focus-visible {
+    outline-offset: -2px;
+  }
+
+  /* The summary label toggles "show" (collapsed) <-> "hide" (expanded). */
+  .raw-details:not([open]) .raw-label--hide,
+  .raw-details[open] .raw-label--show {
+    display: none;
+  }
+
+  .raw-copy-hint {
+    /* Top gap (summary padding 10px + 4px) matches the 14px bottom gap, so the
+       toggle / copy-hint / summary lines are evenly spaced. */
+    margin: 4px 18px 14px;
+    color: var(--text-faint);
+    font: 12px/1.4 var(--font-mono);
+  }
+
+  pre {
+    max-height: 520px;
+    margin: 0;
+    overflow: auto;
+    border: 0;
+    border-top: 1px solid var(--border-faint);
+    border-radius: 0;
+    background: var(--bg-code);
+    padding: 18px;
+    color: var(--text);
+    font: 12px/1.55 var(--font-mono);
+  }
+
+  /* Touch devices: the engagement-row controls are mouse-sized (12px text,
+     near-zero padding). Pad them out to a >=44px hit target. Keyed on
+     pointer:coarse, not viewport width, so a touch laptop also benefits. The
+     report dialog .btn overrides the global .btn down to 40px, so bump it back.
+     The reaction chips/add and the CTA copy-button are already covered by the
+     global pointer:coarse block in styles/embody.css (their markup is injected
+     via set:html / lives in a component, so scoped selectors here would not
+     reach it anyway) -- not duplicated here. */
+  @media (pointer: coarse) {
+    .report-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding-inline: 0.6rem;
+    }
+
+    .owner-tools__btn {
+      width: 44px;
+      height: 44px;
+    }
+
+    .report-dialog__actions .btn {
+      min-height: 44px;
+    }
+
+    .report-reason {
+      min-height: 44px;
+    }
+  }
+
+  @media (max-width: 920px) {
+    .specimen-layout {
+      grid-template-columns: 1fr;
+    }
+
+    /* Single column: clear the desktop column swap so the panels stack in DOM
+       order (description + network preview first). */
+    .specimen-sidebar,
+    .specimen-main {
+      grid-column: auto;
+      grid-row: auto;
+    }
+
+    /* One-column stack: let the rendered-result image span the full column
+       width instead of sitting small with dead space beside it. */
+    .cover-thumb {
+      width: 100%;
+      max-width: none;
+    }
+  }
+</style>

@@ -1,30 +1,27 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 12,
-	"generator": "Embody/5.0.363",
-	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.363.toe",
-	"exported_at": "2026-04-14T01:35:02Z",
-	"network_path": "/embody/Embody/window_manager",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "windowCOMP",
-	"parameters": {
-		"winop": "manager",
-		"title": "=me",
-		"ignoretaskbar": false,
-		"justifyh": "center",
-		"justifyv": "center",
-		"winoffsetx": -12,
-		"borders": false,
-		"cursorvisible": "alwaysvisible",
-		"includedialog": false,
-		"reloadbuiltin": false
-	},
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": []
-}
+format: tdn
+version: '2.0'
+build: 13
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:34Z'
+network_path: /embody/Embody/window_manager
+options:
+  include_dat_content: false
+  include_storage: true
+type: windowCOMP
+parameters:
+  winop: manager
+  title: =me
+  ignoretaskbar: false
+  justifyh: center
+  justifyv: center
+  winoffsetx: -12
+  borders: false
+  cursorvisible: alwaysvisible
+  includedialog: false
+  reloadbuiltin: false
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

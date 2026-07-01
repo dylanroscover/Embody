@@ -17,7 +17,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **46 tools** that lets Claude Code, Cursor, and Windsurf talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen. Idea → network in seconds.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **49 tools** that lets Claude Code, Cursor, and Windsurf talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen. Idea → network in seconds.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
@@ -33,7 +33,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    TouchDesigner networks exported as human-readable JSON. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. TDN is what makes the rest of this possible.
+    TouchDesigner networks exported as human-readable YAML. The format is what lets your AI agent see what's on screen, what lets you diff one attempt against another, and what lets a network rebuild itself from text. TDN is what makes the rest of this possible.
 
     [:octicons-arrow-right-24: Learn about TDN](tdn/index.md)
 
@@ -68,11 +68,11 @@ You describe what you want. The AI works with your live network — operators, c
 | | Feature | Description |
 |---|---------|-------------|
 | :material-sync: | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores from disk on project open |
-| :material-robot: | **Envoy MCP Server** | 46 tools connect AI assistants to your live TD session |
-| :material-file-document: | **TDN Format** | Export/import operator networks as diffable JSON for code review and snapshots |
+| :material-robot: | **Envoy MCP Server** | 49 tools connect AI assistants to your live TD session |
+| :material-file-document: | **TDN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — minimal friction |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |
-| :material-test-tube: | **41 Test Suites** | Comprehensive automated testing framework |
+| :material-test-tube: | **72 Test Suites** | Comprehensive automated testing framework (1,693 tests) |
 | :material-note-text: | **Structured Logging** | Multi-destination logging with file rotation, ring buffer, and MCP access |
 
 ---
@@ -92,4 +92,5 @@ You describe what you want. The AI works with your live network — operators, c
 4. **Tag operators** by pressing ++lctrl++ twice on any COMP or DAT
 5. **Save** with ++ctrl+shift+u++ — on next project open, everything restores from disk automatically
 
-[:octicons-arrow-right-24: Full setup guide](embody/getting-started.md)
+[:octicons-arrow-right-24: Five-minute Quickstart](quickstart.md){ .md-button .md-button--primary }
+[:octicons-arrow-right-24: Full setup guide](embody/getting-started.md){ .md-button }

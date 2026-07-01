@@ -1,0 +1,167 @@
+{
+  "slug": "video-raster",
+  "name": "Video Raster",
+  "category": "transmission",
+  "difficulty": "intermediate",
+  "one_liner": "A video frame being drawn line-by-line: glowing horizontal scanlines sweep down resolving a raster of pixels, then dissolve into a stream of discrete IP packets and reassemble -- SDI-to-IP made literal, with chroma separation.",
+  "visual_description": "A near-black panel where a bright scanline sweeps top-to-bottom, drawing the image line by line like a CRT raster. Above the active line the picture is resolved (a shimmering field of fine cyan/green pixels with a subtle moving pattern); below it the panel is dark, waiting to be painted, with a faint phosphor afterglow trailing the sweep. The active scanline is white-hot and blooms. Then, on a steady PTP beat, the left portion of each resolved row PACKETIZES: the solid video bar breaks into a marching train of discrete glowing packet-blocks (quantized cells with gaps) that drift right -- the act of putting essence into RTP packets -- and on the right they reassemble back into a clean line. At the moving boundary where the picture is freshly drawn, the three color channels tear apart by a few pixels (RGB chromatic separation) then re-register into clean white. A gold field-rate counter feel, faint scanline/CRT overlay, and film grain finish the broadcast look. It reads instantly as 'the video in video-over-IP,' caught mid-transmission between a solid frame and a packet stream.",
+  "technique": "Single self-contained GLSL TOP generator (no input). The shader synthesizes a procedural 'image' (a cheap moving pattern of fine cells in the signal palette), then applies a raster reveal: a sweeping scanline whose position advances with time gates which rows are 'drawn,' with a phosphor afterglow below the active line. A horizontal packetization function quantizes each drawn row into discrete packet-blocks (cell + gap) that drift and reassemble, mixed in by a Packetize amount on the PTP beat. RGB chromatic separation is applied at the active scanline boundary. Scanline/CRT overlay + grain + bloom finish. Cheap per-pixel math, no feedback, no input -- drops in anywhere.",
+  "network_plan": [
+    {
+      "name": "glsl_raster",
+      "type": "glslTOP",
+      "role": "The whole piece. Generator (no input): procedural cell image, raster reveal scanline + phosphor afterglow, horizontal packetization, RGB chroma separation at the active line, PTP beat. Generator MUST use uTDOutputInfo.res; NEVER uTD2DInfos on a no-input generator. outputresolution custom 1280x720, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 400, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_raster_pixel",
+        "computedat": "glsl_raster_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uRaster", "type": "vec4", "valuex": "=parent().par.Scanrate.eval()", "valuey": "=parent().par.Linecount.eval()", "valuez": "=parent().par.Afterglow.eval()", "valuew": "=absTime.seconds*parent().par.Scanrate.eval()" },
+          { "name": "uPacket", "type": "vec4", "valuex": "=parent().par.Packetize.eval()", "valuey": "=parent().par.Packetsize.eval()", "valuez": "=parent().par.Driftspeed.eval()", "valuew": "=parent().par.Chromasplit.eval()" },
+          { "name": "uLook", "type": "vec4", "valuex": "=parent().par.Detail.eval()", "valuey": "=parent().par.Ptprate.eval()", "valuez": "=parent().par.Palette.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom",
+      "type": "glslTOP",
+      "role": "Bloom + finish. Input0 = glsl_raster. Bright-pass + bounded blur added back for the scanline/packet glow; a heavier scanline/CRT overlay; film grain. outputresolution custom 1280x720, rgba16float. Place nodeX 800, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_bloom_pixel",
+        "computedat": "glsl_bloom_compute",
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.5, "valuez": "=parent().par.Scanlines.eval()", "valuew": "=parent().par.Linecount.eval()" }
+        ]
+      },
+      "inputs": ["glsl_raster"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named out1. Viewer flagged. Place nodeX 1200, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_bloom"]
+    },
+    {
+      "name": "glsl_raster_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_raster. See glsl[0]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_raster_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_raster.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_raster_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_raster.",
+      "params": { "op": "glsl_raster" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel shader for glsl_bloom. See glsl[1]. extension frag.",
+      "params": { "extension": "frag" },
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_compute",
+      "type": "textDAT",
+      "role": "Docked empty compute companion for glsl_bloom.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_bloom_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_bloom.",
+      "params": { "op": "glsl_bloom" },
+      "inputs": []
+    },
+    {
+      "name": "annotate_raster",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the raster generator (glsl_raster). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Raster Reveal & Packetization",
+        "Bodytext": "One generator GLSL TOP. A scanline sweeps top-to-bottom drawing the image line by line (CRT raster) with a phosphor afterglow below the active line. On the PTP beat each drawn row PACKETIZES -- the solid video bar quantizes into discrete glowing packet-blocks that drift right and reassemble (essence into RTP packets). RGB chroma tears at the active line then re-registers. This is the 'video' in video-over-IP, made literal.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over bloom + out (glsl_bloom, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Bloom & CRT Finish",
+        "Bodytext": "Bloom blows the white-hot scanline and packet-blocks into halos; a CRT scanline overlay + film grain sell the broadcast look. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_raster_pixel",
+      "stage": "pixel",
+      "code": "// Video Raster -- line-by-line reveal + packetization + chroma separation.\nuniform vec4 uRaster;   // x=scanRate, y=lineCount, z=afterglow, w=time(=absTime*scanRate)\nuniform vec4 uPacket;   // x=packetize, y=packetSize, z=driftSpeed, w=chromaSplit\nuniform vec4 uLook;     // x=detail, y=ptpRate, z=palette, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\n\n// cyclic signal palette: cyan -> green -> magenta-ish, hue rotated by uLook.z\nvec3 sigPalette(float v, float hue){\n    vec3 a = vec3(0.45, 0.55, 0.6);\n    vec3 b = vec3(0.45, 0.55, 0.6);\n    vec3 c = vec3(1.0, 1.0, 0.6);\n    vec3 d = vec3(0.55, 0.35, 0.15) + hue;\n    return a + b*cos(6.28318*(c*v + d));\n}\n\n// the procedural 'image': fine moving cells in the signal palette\nvec3 sourceImage(vec2 uv, float detail, float hue, float t){\n    vec2 g = uv * mix(20.0, 90.0, detail*0.5);\n    float cell = hash21(floor(g) + floor(t*0.6));\n    float fine = 0.5 + 0.5*sin(uv.x*60.0*detail + t) * sin(uv.y*34.0*detail - t*0.7);\n    float v = mix(cell, fine, 0.5);\n    return sigPalette(v, hue) * (0.35 + 0.5*v);\n}\n\nvoid main(){\n    vec2 uv = vUV.st;\n    float t = uLook.w;\n\n    float lines  = clamp(uRaster.y, 90.0, 720.0);\n    float row    = floor((1.0 - uv.y) * lines) / lines;   // 0 at top, increasing downward\n    float scan   = fract(uRaster.w);                       // active scan position (0..1 top->bottom)\n    float hue    = uLook.z;\n    float detail = uLook.x;\n\n    vec3 img = sourceImage(uv, detail, hue, t);\n\n    // --- raster reveal: only rows above/at the sweep are 'drawn' ---\n    float drawn = step(row, scan);\n    // phosphor afterglow just below the active line\n    float below = row - scan;\n    float afterglow = exp(-max(below,0.0) * mix(40.0, 6.0, uRaster.z)) * step(scan, row);\n\n    vec3 col = img * drawn;\n    col += vec3(0.10, 0.55, 0.7) * afterglow * 0.6;        // cyan-green phosphor trail\n\n    // white-hot active scanline\n    float lineGlow = smoothstep(2.0/lines, 0.0, abs(row - scan));\n    col += vec3(1.0) * lineGlow * 1.2;\n\n    // --- RGB chroma separation at the active boundary, re-registers away from it ---\n    float boundary = exp(-abs(row - scan) * 30.0);\n    float sp = uPacket.w * 0.004 * boundary;\n    // approximate by sampling the source image shifted (cheap, no input texture)\n    vec3 chroma;\n    chroma.r = sourceImage(uv + vec2(sp,0.0), detail, hue, t).r * drawn;\n    chroma.g = img.g * drawn;\n    chroma.b = sourceImage(uv - vec2(sp,0.0), detail, hue, t).b * drawn;\n    col = mix(col, chroma + vec3(1.0)*lineGlow*1.2 + vec3(0.10,0.55,0.7)*afterglow*0.6, boundary);\n\n    // --- packetization on the PTP beat: quantize the left half of each drawn row ---\n    float beat   = fract(uLook.w * uLook.y);\n    float pktAmt = uPacket.x * smoothstep(0.0, 0.3, beat) * (1.0 - smoothstep(0.6, 1.0, beat));\n    float psize  = uPacket.y;                              // packet block width in uv\n    float drift  = t * uPacket.z;\n    float x = uv.x + drift;\n    float cellId = floor(x / psize);\n    float inCell = fract(x / psize);\n    float gap = smoothstep(0.82, 0.86, inCell);            // gap between packets -> discrete blocks\n    float pktBright = 0.6 + 0.4*hash21(vec2(cellId, row*lines));\n    // only on the left portion (mid-transmission); right side stays a clean reassembled line\n    float region = smoothstep(0.55, 0.45, uv.x);\n    vec3 packed = col * (1.0 - gap) * pktBright;\n    col = mix(col, packed, pktAmt * region * drawn);\n\n    // near-black ground for undrawn rows\n    col += vec3(0.010, 0.012, 0.016) * (1.0 - drawn);\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloom_pixel",
+      "stage": "pixel",
+      "code": "// Bloom + CRT scanline overlay + grain.\nuniform vec4 uBloom;   // x=strength, y=threshold, z=scanlines, w=lineCount\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;\n    vec3 src = texture(sTD2DInputs[0], uv).rgb;\n    float thr = uBloom.y;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/18.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*2.0).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    vec3 col = src + (sum/max(wsum,1e-4)) * uBloom.x;\n    // CRT scanline darkening tied to line count\n    float lc = clamp(uBloom.w, 90.0, 720.0);\n    float scan = 1.0 - uBloom.z * 0.35 * (0.5 + 0.5*sin(uv.y * lc * 6.28318));\n    col *= scan;\n    col += (hash21(uv*uTDOutputInfo.res.zw)-0.5) * 0.014;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Scanrate", "label": "Scan Rate", "style": "Float", "default": 0.3, "range": [0.0, 2.0], "drives": "uRaster.x + the time term uRaster.w -- how fast the raster scanline sweeps top-to-bottom (frame draw rate). 0 freezes the sweep (and drops that time-dependence); higher = a fast refresh." },
+    { "name": "Linecount", "label": "Line Count", "style": "Int", "default": 240, "range": [90, 720], "drives": "uRaster.y (row quantization) and uBloom.w (CRT scanline frequency) -- number of horizontal raster lines. Low = chunky retro scanlines; high = a fine modern raster." },
+    { "name": "Afterglow", "label": "Phosphor Afterglow", "style": "Float", "default": 0.6, "range": [0.0, 1.0], "drives": "uRaster.z -- length of the phosphor trail below the active scanline. 0 = a hard edge; higher = a long glowing CRT persistence tail." },
+    { "name": "Packetize", "label": "Packetize", "style": "Float", "default": 0.8, "range": [0.0, 1.0], "drives": "uPacket.x -- how strongly the left portion of each drawn row breaks into discrete packet-blocks on the PTP beat (SDI->IP dissolve). 0 = a solid frame; 1 = full packetization." },
+    { "name": "Packetsize", "label": "Packet Size", "style": "Float", "default": 0.04, "range": [0.01, 0.15], "drives": "uPacket.y -- width of each packet-block (in screen UV). Small = many fine packets; large = chunky blocks. The granularity of the IP packet stream." },
+    { "name": "Driftspeed", "label": "Packet Drift", "style": "Float", "default": 0.15, "range": [0.0, 1.0], "drives": "uPacket.z -- how fast the packet-blocks drift rightward (toward reassembly). The transport motion of the packets across the row." },
+    { "name": "Chromasplit", "label": "Chroma Split", "style": "Float", "default": 1.0, "range": [0.0, 3.0], "drives": "uPacket.w -- strength of the RGB chromatic separation at the active scanline boundary. 0 = clean; higher = a pronounced broadcast color tear that re-registers away from the line." },
+    { "name": "Detail", "label": "Image Detail", "style": "Float", "default": 0.6, "range": [0.0, 1.5], "drives": "uLook.x -- fineness of the procedural source image cells. Low = broad shapes; high = a dense fine-pixel field." },
+    { "name": "Palette", "label": "Palette Hue", "style": "Float", "default": 0.0, "range": [0.0, 1.0], "drives": "uLook.z -- rotates the cyclic signal palette of the source image through the hue ring. 0 = cyan/green signal look; sweeping shifts the chroma." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uLook.y -- frequency of the PTP sync pulse that triggers each packetization burst. The transmission heartbeat." },
+    { "name": "Scanlines", "label": "CRT Scanlines", "style": "Float", "default": 0.8, "range": [0.0, 1.5], "drives": "uBloom.z -- strength of the CRT scanline darkening overlay in the finish pass. 0 = clean digital; higher = a heavier broadcast-CRT texture." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.1, "range": [0.0, 3.0], "drives": "uBloom.x -- intensity of the bloom over the scanline and packet-blocks. The booth-scale glow knob." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "image_signal": ["#00E5FF", "#39FF6A"],
+    "rgb_split": { "red": "#FF0033", "green": "#00FF66", "blue": "#2A6BFF" },
+    "white_hot_scanline": ["#FFFFFF", "#EAFBFF"],
+    "phosphor_trail": "#0E8CB3",
+    "ratio": "~85% dark ground + undrawn rows, ~15% saturated image signal + white-hot scanline; cyan/green lead, RGB-split is an accent event at the active line, not constant."
+  },
+  "wow_factor": 4,
+  "conference_fit": "The literal 'video' motif -- a frame drawn line by line as a CRT raster, caught mid-transmission dissolving into IP packets and reassembling. It directly stages SDI->IP packetization (essence into RTP packets), the core of why ST2110 exists, plus the broadcast-authentic CRT scanline + RGB chroma-tear language every video engineer knows. Dark, premium, on-brand restraint with color appearing only as the signal. Self-contained and cheap; reads as a recognizable 'this is the video being transmitted' beat that complements the abstract packet/fiber pieces.",
+  "prompt": {
+    "one_liner": "A self-contained video-raster generator: a scanline sweeps down drawing the image line by line with phosphor afterglow, then on a PTP beat each row packetizes into drifting glowing blocks and reassembles, with RGB chroma separation at the active line and a CRT bloom finish.",
+    "evolve": "Raise Scan Rate for a faster frame draw; lower Line Count for chunky retro scanlines; raise Afterglow for long CRT persistence. Push Packetize + Packet Drift for a stronger SDI->IP dissolve; shrink Packet Size for finer packets. Raise Chroma Split + CRT Scanlines for a heavier broadcast tear. Sweep Palette Hue for a different signal color. Feed out1 into the kaleidoscope, or composite under the packet-fabric swarm so packets exit the raster INTO the fabric. To extend: replace sourceImage() with a sampled input (a Movie File In into a real input) for an actual SDI->IP demo of any footage.",
+    "compose_with": ["packet-fabric", "signal-waveform"]
+  },
+  "warmup_frames": 60,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_raster has NO input -- MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h)); uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h or it renders 1x1. glsl_bloom HAS an input so sTD2DInputs[0] + uTDOutputInfo.res are valid. NOTE: glsl_raster has NO loops at all (it is pure per-pixel math, sourceImage called a few times); glsl_bloom has the only loops, bounded by constant R=6.\\n\\nUNIFORMS: glslTOP declares uniforms MANUALLY. vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nCOOK DEMAND: time-dependent via absTime in uRaster.w, uLook.w. Cooks every frame only when out1 demanded; add a temp Execute DAT OUTSIDE the COMP in the sandbox; verify with two captures separated by a real sleep. Scan Rate=0 freezes the sweep but uLook.w still references absTime (PTP beat + image motion), so the TOP keeps cooking -- correct.\\n\\nPERFORMANCE: cheap -- a handful of sourceImage() evals + the bloom tap loop, no feedback, no big loops. Keep TOPs <=1280x720 rgba16float. Gate before/after per performance.md; a concurrent capture_top/numpyArray dips the fps reading, so take a clean reading.\\n\\nDOCKED DATS: glsl_raster + glsl_bloom each dock pixel+compute+info; HUG all six under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source.\\n\\nLOOK CHECK: this piece has several blending modes (raster reveal, afterglow, packetize, chroma) -- it MUST be judged by an actual capture (load visual-aesthetics). Verify the scanline reads clearly, the packetization is legible as discrete blocks (not mush), and the chroma tear re-registers. Tune Packet Size / Packetize defaults against a real frame before persisting.\\n\\nTDN ROUND-TRIP: all 12 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~9."
+}

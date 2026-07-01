@@ -18,10 +18,11 @@ Follow these steps every time you create operators via MCP:
 8. **Set OP-reference parameters with relative paths**: If the operator has parameters referencing other operators (Camera, Geometry, Lights, TOP, CHOP, etc.), use sibling names (`cam`) or relative paths (`../shared/lut`) — NEVER absolute paths (`/project1/scene/cam`). See `parameters.md` § OP-Reference Parameter Values.
 9. **Verify layout**: Call `get_network_layout` again. Confirm no overlaps, grid alignment is intact, and signal flows left-to-right.
 10. **Verify errors**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete
+11. **Visual verification**: For any renderable result (a TOP chain or a render), capture the output TOP with `capture_top` and confirm it actually renders (not black) and matches intent; for a 3D render, confirm a camera, a light, and geometry display/render flags are present. For anything but a trivial op, load the `/visual-aesthetics` skill to judge composition/value/color/contrast.
 
 ## Operator Type Preferences
 
-- **Prefer POPs over SOPs** for geometry and particle work. POPs (Particle operators) are GPU-accelerated and significantly more performant than SOPs (Surface operators). Only use SOPs when POP equivalents don't exist or when CPU-side geometry manipulation is specifically required.
+- **Prefer POPs over SOPs** for geometry and particle work. POPs (Point Operators) are GPU-accelerated and significantly more performant than SOPs (Surface operators). Only use SOPs when POP equivalents don't exist or when CPU-side geometry manipulation is specifically required.
 
 ## Positioning Rules
 

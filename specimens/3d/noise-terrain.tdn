@@ -1,0 +1,819 @@
+format: tdn
+version: '2.0'
+build: 3
+generator: Embody/6.0.39
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:43Z'
+network_path: /specimen_lab/noise_terrain
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+  mergePOP:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  circlePOP:
+    parameters:
+      connectivity: surface
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  primitivePOP:
+    parameters:
+      addpts: true
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  tubePOP:
+    parameters:
+      orient: z
+      rows: 2
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+par_templates:
+  points:
+  - label: Point
+    name: pt
+    style: Sequence
+  - label: Position
+    name: Posx
+    sequence: pt
+    style: XYZW
+type: baseCOMP
+custom_pars:
+  Terrain:
+  - name: Height
+    style: Float
+    startSection: true
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Overall vertical scale of the terrain. Master multiplier on all three noise displacement amplitudes, preserving their 2.9 / 1.0 / 0.25 ratio so peaks and fine relief grow in proportion. 1.0 = the shipped look; 0 = a flat plane; 2 = double-height alpine peaks.
+  - name: Ridge
+    style: Float
+    default: 1.6
+    min: 1.0
+    max: 3.0
+    clampMin: true
+    normMin: 1.0
+    normMax: 3.0
+    help: Ridge sharpness of the mountains. Higher values carve sharper, more knife-edged ridgelines and deeper valleys; lower values give rounder, more eroded hills. 1.6 = the shipped look.
+  - name: Warp
+    style: Float
+    default: 1.2
+    max: 2.5
+    clampMin: true
+    normMax: 2.5
+    help: Domain warp amount. Bends the noise domain so ridgelines flow organically instead of aligning to a grid. 0 = regular and repetitive; 1.2 = the shipped look; higher = more chaotic, swirling ridges.
+  - name: Detail
+    style: Float
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Surface micro-detail and ruggedness, applied cheaply in the shader as normal-map bump strength (no mesh change, so no triangulation cost or facet artifacts). Scales the shipped bump strength of 0.17. 1.0 = the shipped look; 0 = smooth shading; 2 = heavily rugged rock.
+  - name: Snowline
+    style: Float
+    label: Snow Line
+    startSection: true
+    default: 1.6
+    max: 4.0
+    clampMin: true
+    normMax: 4.0
+    help: World-Y elevation where snow begins to cover the rock. Peaks reach roughly 0 to 4 at Height 1.0, so 1.6 sits mid-slope (the shipped look). Lower the value to blanket the terrain in snow; the slider covers 0 to 4, but you can type higher to clear taller peaks at high Height, leaving only bare rock.
+  - name: Sundiraz
+    style: Float
+    label: Sun Azimuth
+    startSection: true
+    default: -41.6335
+    min: -180.0
+    max: 180.0
+    normMin: -180.0
+    normMax: 180.0
+    help: Compass direction of the sunlight, in degrees in the horizontal plane. 0 points toward +Z (into the scene), +90 toward +X (right), -90 toward -X (left). Combined with Sun Elevation it is converted to a guaranteed unit light direction, so it can never produce a zero-length (NaN) vector. Controls which side of the ridges is lit.
+  - name: Sundirel
+    style: Float
+    label: Sun Elevation
+    default: 49.3007
+    max: 90.0
+    clampMin: true
+    clampMax: true
+    normMax: 90.0
+    help: Height of the sun above the horizon, in degrees. 0 = sun on the horizon (long raking shadows, warm grazing light); 90 = directly overhead (flat, even light). Controls shadow length and contrast. The default matches the shipped sun direction.
+  - name: Haze
+    style: Float
+    startSection: true
+    default: 1
+    max: 2.0
+    clampMin: true
+    clampMax: true
+    normMax: 2.0
+    help: Atmospheric haze amount, a multiplier on the computed distance fog and valley mist. 0 = perfectly clear air; 1.0 = the shipped atmosphere; up to 2 = thick, hazy depth that washes out distant peaks. The blend is re-clamped in the shader so it can never fully erase the scene.
+  - name: Morphspeed
+    style: Float
+    label: Morph Speed
+    startSection: true
+    default: 1
+    max: 3.0
+    clampMin: true
+    normMax: 3.0
+    help: Rate at which the terrain shape evolves over time, driving the 4D-noise time coordinate of all three layers while preserving their 0.04 / 0.085 / 0.15 speed ratio. 0 = frozen on a fixed, deterministic frame; 1.0 = the shipped pace; 3 = rapid morphing.
+  - name: Seed
+    style: Int
+    startSection: true
+    default: 1
+    max: 9999.0
+    clampMin: true
+    normMax: 100.0
+    help: Random seed for the terrain shape. Each value produces a completely different but equally plausible mountain. The three noise layers receive this value plus a fixed per-layer offset (+0, +1, +2) so they stay decorrelated. Default 1 reproduces the shipped seeds 1 / 2 / 3.
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 4K landscape = 2160.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: cam
+  type: cameraCOMP
+  parameters:
+    ty: 6.2
+    tz: 16
+    rx: -13
+  flags:
+  - display
+  position: [500, -330]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  children:
+  - name: file1
+    type: fileinPOP
+    parameters:
+      file: =app.samplesFolder + '/Geo/defcam.tog'
+    flags:
+    - display
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+- name: geo
+  type: geometryCOMP
+  parameters:
+    material: glsl_snow
+  flags:
+  - display
+  - render
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  children:
+  - name: null_geo
+    type: nullPOP
+    flags:
+    - render
+    position: [1200, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - facet_normals
+  - name: glsl_terrain
+    type: glslPOP
+    parameters:
+      computedat: glsl_terrain_compute
+      outputattrs: '*'
+    sequences:
+      vec:
+      - name: uShape
+        type: vec4
+        valuex: =parent(2).par.Height.eval()
+        valuey: =parent(2).par.Ridge.eval()
+        valuez: =parent(2).par.Warp.eval()
+        valuew: =parent(2).par.Seed.eval()
+      - name: uTime
+        type: vec4
+        valuex: =absTime.seconds*parent(2).par.Morphspeed.eval()
+    position: [400, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - grid_terrain
+  - name: grid_terrain
+    type: gridPOP
+    parameters:
+      sizex: 20
+      sizey: 20
+      cols: 128
+      rows: 128
+      rx: -90
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: facet_normals
+    type: facetPOP
+    parameters:
+      operation: cusp
+      angle: 160
+    position: [800, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - glsl_terrain
+  - name: glsl_terrain_info
+    type: infoDAT
+    parameters:
+      op: glsl_terrain
+    position: [485, -120]
+    dock: glsl_terrain
+    dat_read_only: true
+  - name: glsl_terrain_compute
+    type: textDAT
+    parameters:
+      file: specimen_lab/noise_terrain/geo/glsl_terrain_compute.glsl
+    position: [335, -120]
+    dock: glsl_terrain
+    dat_content: |-
+      // Ridged multifractal terrain -- GPU geometry generator (replaces fbm noisePOPs).
+      // Uniforms auto-declared from the Vectors page: uShape=(Height,Ridge,Warp,Seed), uTime=(time,..).
+      // 3D value noise: the 3rd coord = time -> terrain morphs IN PLACE (not a pan); per-octave rate = multi-scale.
+      float hash3(vec3 p){ p=fract(p*0.3183099+vec3(0.1,0.2,0.3)); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
+      float vnoise3(vec3 p){
+        vec3 i=floor(p), f=fract(p); vec3 u=f*f*(3.0-2.0*f);
+        return mix(mix(mix(hash3(i+vec3(0,0,0)),hash3(i+vec3(1,0,0)),u.x),
+                       mix(hash3(i+vec3(0,1,0)),hash3(i+vec3(1,1,0)),u.x),u.y),
+                   mix(mix(hash3(i+vec3(0,0,1)),hash3(i+vec3(1,0,1)),u.x),
+                       mix(hash3(i+vec3(0,1,1)),hash3(i+vec3(1,1,1)),u.x),u.y),u.z);
+      }
+      float ridged(vec2 p, float sharp, vec2 so, float t){
+        float sum=0.0, freq=1.0, amp=0.62, prev=1.0;
+        for(int i=0;i<3;i++){
+          float tz = t*(0.05+0.045*float(i));            // per-octave morph rate -> earthquake undercurrents
+          float n=vnoise3(vec3(p*freq+so, tz));
+          n=1.0-abs(2.0*n-1.0);                           // ridge transform -> creases
+          n=pow(n,sharp);                                 // sharpen ridgelines
+          sum+=n*amp*clamp(prev,0.0,1.0);                 // multifractal: rough peaks, smooth valleys
+          prev=n; freq*=2.0; amp*=0.45;
+        }
+        return sum;
+      }
+      void main(){
+        const uint id=TDIndex();
+        if(id>=TDNumElements()) return;
+        vec3 pos=TDIn_P(0, id);
+        float Height=uShape.x, Ridge=uShape.y, Warp=uShape.z, Seed=uShape.w;
+        float t=uTime.x;
+        vec2 so=vec2(Seed*19.3, Seed*7.7);               // seed -> a different mountain
+        vec2 xz=pos.xz*0.18;                             // domain scale
+        vec2 w=vec2(vnoise3(vec3(xz*0.6+so, t*0.03)), vnoise3(vec3(xz*0.6+so+5.2, t*0.03+2.0)));
+        xz+=(w-0.5)*Warp;                               // domain warp -> organic, non-griddy
+        float h=ridged(xz, Ridge, so, t);
+        pos.y+=(h-0.35)*4.6*Height;                     // offset down for rock/snow contrast, then scale
+        P[id]=pos;
+      }
+    dat_content_format: text
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  flags:
+  - display
+  position: [1700, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - comp_sky
+- name: light
+  type: lightCOMP
+  parameters:
+    ty: 10
+    tz: 0
+    rx: -22
+    ry: -45
+    lighttype: distant
+  flags:
+  - display
+  position: [500, -580]
+  size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  children:
+  - name: copy1
+    type: copyPOP
+    parameters:
+      ncy: 2
+      rx: 90
+    flags:
+    - viewer
+    position: [520, 670]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - tube_attenuated
+  - name: merge1
+    type: mergePOP
+    sequences:
+      input:
+      - {}
+      - {}
+      - {}
+      - {}
+      - {}
+      - {}
+      - {}
+    position: [250, 500]
+    inputs:
+    - rectangle1
+    - tube_cone1
+    - tube_cone2
+    - primitive1
+    - line_atten
+    - circle_attenStart
+    - circle_attenEnd
+  - name: merge2
+    type: mergePOP
+    sequences:
+      input:
+      - {}
+      - {}
+    position: [950, 230]
+    inputs:
+    - connectivity1
+    - circle1
+  - name: merge3
+    type: mergePOP
+    sequences:
+      input:
+      - {}
+      - {}
+    position: [620, 290]
+    inputs:
+    - pointgen1
+    - transform1
+  - name: circle1
+    type: circlePOP
+    parameters:
+      scale: 0.2
+    position: [780, 170]
+  - name: sphere1
+    type: spherePOP
+    parameters:
+      radx: 0.05
+      rady: 0.05
+      radz: 0.05
+      freq: 3
+    flags:
+    - viewer
+    position: [520, 890]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: pointgen1
+    type: pointgeneratorPOP
+    parameters:
+      shape: circle
+      numpoints: 17
+      sx: 0.2
+      sy: 0.2
+      sz: 0.2
+    flags:
+    - viewer
+    position: [270, 290]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: line_atten
+    type: linePOP
+    parameters:
+      divs: 1
+      bypass: =not parent().par.attenuated
+    sequences:
+      pt:
+      - posz: =-parent().par.attenuationstart
+      - posz: =-parent().par.attenuationend
+    custom_pars:
+      Points:
+        $t: points
+    flags:
+    - viewer
+    position: [0, 230]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: primitive1
+    type: primitivePOP
+    parameters:
+      method: pattern
+    sequences:
+      prim:
+      - type: lines
+        pattern: 0 1 0 2 0 3 0 4
+      pt:
+      - {}
+      - posx: =mod.math.sin(mod.math.radians(parent().par.coneangle/2)) + mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+        posz: =-op('tube_cone1').par.height
+      - posx: =mod.math.sin(-mod.math.radians(parent().par.coneangle/2)) - mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+        posz: =0-op('tube_cone1').par.height
+      - posy: =-mod.math.sin(-mod.math.radians(parent().par.coneangle/2)) - mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+        posz: =-op('tube_cone1').par.height
+      - posy: =mod.math.sin(-mod.math.radians(parent().par.coneangle/2)) - mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+        posz: =-op('tube_cone1').par.height
+    custom_pars:
+      Points:
+        $t: points
+    flags:
+    - viewer
+    position: [0, 390]
+  - name: rectangle1
+    type: rectanglePOP
+    parameters:
+      sizeu: 0.02
+      sizev: 0.5
+      anchorv: 0
+    flags:
+    - viewer
+    position: [0, 730]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: transform1
+    type: transformPOP
+    parameters:
+      tz: 0.8
+    flags:
+    - viewer
+    position: [450, 370]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - pointgen1
+  - name: tube_cone1
+    type: tubePOP
+    parameters:
+      radx: =mod.math.sin(mod.math.radians(parent().par.coneangle/2))
+      rady: 0.01
+      height: =mod.math.cos(mod.math.radians(parent().par.coneangle/2))
+      tz: =-me.par.height*0.5
+    position: [0, 620]
+  - name: tube_cone2
+    type: tubePOP
+    parameters:
+      radx: =mod.math.sin(mod.math.radians(parent().par.coneangle/2)) + mod.math.sin(mod.math.radians(parent().par.conedelta/2))
+      rady: =mod.math.sin(mod.math.radians(parent().par.coneangle/2))
+      height: 0
+      tz: =-op('tube_cone1').par.height
+    position: [0, 500]
+  - name: connectivity1
+    type: connectivityPOP
+    parameters:
+      surftype: lines
+    flags:
+    - viewer
+    position: [780, 290]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - merge3
+  - name: circle_attenEnd
+    type: circlePOP
+    parameters:
+      radx: 0.1
+      rady: 0.1
+      tz: =-parent().par.attenuationend
+      bypass: =not parent().par.attenuated
+  - name: primitive_cross
+    type: primitivePOP
+    parameters:
+      method: set
+      setprimtype: lines
+    sequences:
+      pt:
+      - posx: -0.2
+      - posx: 0.2
+      - posy: -0.2
+      - posy: 0.2
+      - posz: -0.2
+      - posz: 0.2
+    custom_pars:
+      Points:
+        $t: points
+    flags:
+    - display
+    - render
+    - viewer
+    position: [520, 1000]
+  - name: tube_attenuated
+    type: tubePOP
+    parameters:
+      surftype: rows
+      radx: =parent().par.attenuationend
+      rady: =parent().par.attenuationstart
+      height: 0
+      bypass: =not parent().par.attenuated
+    position: [368, 673]
+  - name: merge_pointLight
+    type: mergePOP
+    sequences:
+      input:
+      - {}
+      - {}
+      - {}
+      - {}
+    position: [760, 820]
+    inputs:
+    - sphere1
+    - primitive_quadrants
+    - copy1
+  - name: switch_lightType
+    type: switchPOP
+    parameters:
+      index: =parent().par.lighttype.menuIndex
+    flags:
+    - display
+    - render
+    - viewer
+    position: [1140, 500]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+    inputs:
+    - merge_pointLight
+    - merge1
+    - merge2
+  - name: circle_attenStart
+    type: circlePOP
+    parameters:
+      radx: 0.1
+      rady: 0.1
+      tz: =-parent().par.attenuationstart
+      bypass: =not parent().par.attenuated
+    position: [0, 120]
+  - name: primitive_quadrants
+    type: primitivePOP
+    parameters:
+      method: set
+      setprimtype: lines
+    sequences:
+      pt:
+      - posx: 0.07
+        posy: 0.07
+        posz: 0.07
+      - posx: -0.07
+        posy: -0.07
+        posz: -0.07
+      - posx: -0.07
+        posy: 0.07
+        posz: 0.07
+      - posx: 0.07
+        posy: -0.07
+        posz: -0.07
+      - posx: 0.07
+        posy: 0.07
+        posz: -0.07
+      - posx: -0.07
+        posy: -0.07
+        posz: 0.07
+      - posx: -0.07
+        posy: 0.07
+        posz: -0.07
+      - posx: 0.07
+        posy: -0.07
+        posz: 0.07
+    custom_pars:
+      Points:
+        $t: points
+    flags:
+    - viewer
+    position: [520, 780]
+- name: comp_sky
+  type: compositeTOP
+  parameters:
+    operand: over
+  position: [1400, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - render_scene
+  - glsl_sky
+- name: glsl_sky
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_sky_pixel
+    computedat: glsl_sky_compute
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  flags:
+  - viewer
+  position: [900, -330]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_snow
+  type: glslMAT
+  parameters:
+    vdat: glsl_snow_vertex
+    pdat: glsl_snow_pixel
+    skelrootpath: =parent()
+  sequences:
+    mattr:
+    - comps: 2
+      cols: 2
+    vec:
+    - name: uTerrain
+      valuex: =parent().par.Snowline.eval()
+      valuey: =0.17*parent().par.Detail.eval()
+      valuez: =parent().par.Haze.eval()
+      valuew: 0
+    - name: uSunDir
+      valuex: =math.cos(math.radians(parent().par.Sundirel.eval()))*math.sin(math.radians(parent().par.Sundiraz.eval()))
+      valuey: =math.sin(math.radians(parent().par.Sundirel.eval()))
+      valuez: =math.cos(math.radians(parent().par.Sundirel.eval()))*math.cos(math.radians(parent().par.Sundiraz.eval()))
+      valuew: 0
+  position: [0, -330]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: render_scene
+  type: renderTOP
+  parameters:
+    camera: cam
+    geometry: geo
+    lights: light
+    antialias: aa2
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  flags:
+  - viewer
+  position: [500, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: glsl_sky_info
+  type: infoDAT
+  parameters:
+    op: glsl_sky
+  position: [900, -450]
+  dock: glsl_sky
+  dat_read_only: true
+- name: glsl_sky_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_sky_pixel.glsl
+    extension: frag
+  position: [1050, -450]
+  dock: glsl_sky
+  dat_content: |-
+    out vec4 fragColor;
+    float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+    float n2(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+      return mix(mix(h2(i),h2(i+vec2(1,0)),f.x),mix(h2(i+vec2(0,1)),h2(i+vec2(1,1)),f.x),f.y); }
+    float fbm2(vec2 p){ float v=0.0,a=0.5; for(int i=0;i<4;i++){v+=a*n2(p); p*=2.0; a*=0.5;} return v; }
+    void main(){
+        vec2 uv=vUV.st; float y=uv.t;
+        vec3 zenith=vec3(0.17,0.42,0.83); vec3 horizon=vec3(0.74,0.84,0.93);
+        vec3 col=mix(horizon,zenith,smoothstep(0.0,0.95,y));
+        float cl=fbm2(vec2(uv.x*3.5,uv.y*6.0));
+        col=mix(col,vec3(0.97,0.98,1.0),smoothstep(0.6,0.85,cl)*0.45);
+        fragColor=vec4(col,1.0);
+    }
+  dat_content_format: text
+- name: glsl_snow_info
+  type: infoDAT
+  parameters:
+    op: glsl_snow
+  position: [-150, -450]
+  dock: glsl_snow
+  dat_read_only: true
+- name: glsl_snow_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_snow_pixel.glsl
+    extension: frag
+  position: [0, -450]
+  dock: glsl_snow
+  dat_content: |-
+    uniform vec4 uTerrain;   // x = snow line base (was 1.6), y = bump strength (was 0.17), z = haze multiplier, w = unused
+    uniform vec4 uSunDir;    // xyz = sun light direction (unit, from az/el binding), w = unused
+    in vec3 iWorldPos;
+    in vec3 iWorldNorm;
+    out vec4 oFragColor;
+    float hash(vec3 p){ return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453); }
+    float vnoise(vec3 p){ vec3 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+      return mix(mix(mix(hash(i+vec3(0,0,0)),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),
+                 mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z); }
+    float fbm(vec3 p){ float v=0.0,a=0.5; for(int i=0;i<4;i++){v+=a*vnoise(p); p=p*2.03+vec3(1.7); a*=0.5;} return v; }
+    float fbm3(vec3 p){ float v=0.0,a=0.5; for(int i=0;i<3;i++){v+=a*vnoise(p); p=p*2.05+vec3(1.7); a*=0.5;} return v; }
+    vec3 bumpN(vec3 P,vec3 N,float fr,float st){ float e=0.03;
+      float h=fbm3(P*fr),hx=fbm3((P+vec3(e,0,0))*fr),hz=fbm3((P+vec3(0,0,e))*fr);
+      return normalize(N+vec3((h-hx),0.0,(h-hz))/e*st); }
+    void main(){
+        TDCheckDiscard();
+        vec3 P=iWorldPos; vec3 Ng=normalize(iWorldNorm);
+        float slopeG=clamp(Ng.y,0.0,1.0);
+        float snowLine=uTerrain.x+(fbm(P*0.4)-0.5)*1.1;
+        float snowMask=clamp(smoothstep(snowLine-0.5,snowLine+0.5,P.y),0.0,1.0);
+        vec3 N=bumpN(P,Ng,9.0,uTerrain.y*(1.0-0.85*snowMask));
+        float slope=clamp(N.y,0.0,1.0);
+        float c1=fbm(P*1.3), c2=fbm(P*3.2+5.0), c3=fbm(P*0.7-3.0); float fine=fbm(P*4.0);
+        vec3 rock=vec3(0.46,0.34,0.24);
+        rock=mix(rock,vec3(0.34,0.37,0.40),smoothstep(0.35,0.75,c1));
+        rock=mix(rock,vec3(0.44,0.22,0.16),smoothstep(0.55,0.85,c2)*0.6);
+        rock=mix(rock,vec3(0.28,0.34,0.20),smoothstep(0.58,0.88,c3)*0.4);
+        rock*=0.72+0.28*fine;
+        vec3 snow=vec3(0.88,0.90,0.95);
+        vec3 albedo=mix(rock,snow,snowMask);
+        vec3 L=normalize(uSunDir.xyz);
+        float ndl=max(dot(N,L),0.0);
+        vec3 sun=vec3(1.55,1.5,1.35)*ndl*(1.0-0.55*snowMask);  // expose snow below clipping, keep shading
+        vec3 sky=vec3(0.40,0.52,0.74)*(0.42+0.58*slope);
+        vec3 col=albedo*(sun+sky);
+        col+=pow(ndl,60.0)*snowMask*0.18;
+        col=(col-0.45)*1.12+0.45;
+        float dist=length(P-vec3(0.0,6.2,16.0));
+        float depth=clamp((dist-9.0)/19.0,0.0,1.0);                                    // 0 = foreground (clear), 1 = far
+        float distFog=pow(depth,1.7)*0.82;                                             // power curve: clear fg, builds with depth
+        float valleyMist=exp(-max(P.y-0.2,0.0)*0.7)*0.18*smoothstep(0.25,0.75,depth);  // mist only in distant valleys
+        float atmo=clamp((distFog+valleyMist)*uTerrain.z,0.0,0.88);
+        col=mix(col,vec3(0.66,0.78,0.92),atmo);
+        oFragColor=TDOutputSwizzle(vec4(clamp(col,0.0,2.0),1.0));
+    }
+  dat_content_format: text
+- name: glsl_sky_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_sky_compute.glsl
+  position: [750, -450]
+  dock: glsl_sky
+- name: glsl_snow_vertex
+  type: textDAT
+  parameters:
+    file: specimen_lab/noise_terrain/glsl_snow_vertex.glsl
+    extension: vert
+  position: [150, -450]
+  dock: glsl_snow
+  dat_content: |-
+    out vec3 iWorldPos;
+    out vec3 iWorldNorm;
+    void main(){
+        vec3 pos = TDPos();
+        vec4 worldSpacePos = TDDeform(pos);
+        iWorldPos = worldSpacePos.xyz;
+        iWorldNorm = TDDeformNorm(TDNormal());
+        gl_Position = TDWorldToProj(worldSpacePos);
+    }
+  dat_content_format: text
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Terrain + Snow Shader
+  text: Ridged-multifractal terrain in a GLSL POP (inside geo), shaded by a snow/rock GLSL MAT. Height / Ridge / Warp / Seed / Morph Speed drive the POP; Detail / Snow Line / Sun / Haze drive the material.
+  position: [-220, -520]
+  size: [570, 820]
+  color: [0.45, 0.45, 0.45]
+- name: annotate2
+  mode: annotate
+  title: 3D Scene + Sky
+  text: A camera and a distant sun light render the displaced geometry (render_scene). A bright procedural sky is generated separately in glsl_sky.
+  position: [430, -650]
+  size: [820, 910]
+  color: [0.45, 0.45, 0.45]
+- name: annotate3
+  mode: annotate
+  title: Composite + Output
+  text: The sky is composited under the rendered terrain (comp_sky) and sent to out1 -- the specimen's output.
+  position: [1330, -70]
+  size: [570, 370]
+  color: [0.45, 0.45, 0.45]

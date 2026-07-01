@@ -27,6 +27,8 @@ The following DAT types can be externalized:
 | COMPs | `.tox`, `.tdn` |
 | DATs | `.py`, `.json`, `.xml`, `.html`, `.glsl`, `.frag`, `.vert`, `.txt`, `.md`, `.rtf`, `.csv`, `.tsv`, `.dat` |
 
+`.tdn` is a YAML document as of v2.0 (a strict JSON superset; legacy JSON `.tdn` still import). See the [TDN Specification](../tdn/specification.md).
+
 ## Excluded Operators
 
 The following cannot be externalized:

@@ -1,10 +1,10 @@
-﻿"""
-Test suite: Strategy handlers — _removeExternalization, HandleStrategySwitch,
+"""
+Test suite: Strategy handlers - _removeExternalization, HandleStrategySwitch,
 _dispatchTaggerButton, and manage-mode button dispatch logic.
 
 Covers the manage-mode UI code paths that were missing test coverage:
   - _removeExternalization removes TOX/TDN without converting
-  - HandleStrategySwitch converts TOX↔TDN
+  - HandleStrategySwitch converts TOX<->TDN
   - _dispatchTaggerButton routes by label text
   - Regression: Remove does NOT convert to the other strategy
 """
@@ -29,7 +29,7 @@ class TestRemoveExternalization(EmbodyTestCase):
         super().tearDown()
 
     # =========================================================================
-    # _removeExternalization — TOX
+    # _removeExternalization - TOX
     # =========================================================================
 
     def test_remove_tox_removes_tag(self):
@@ -88,7 +88,7 @@ class TestRemoveExternalization(EmbodyTestCase):
         self.assertNotIn(tdn_tag, comp.tags)
 
     # =========================================================================
-    # _removeExternalization — TDN
+    # _removeExternalization - TDN
     # =========================================================================
 
     def test_remove_tdn_removes_tag(self):
@@ -163,7 +163,7 @@ class TestDispatchTaggerButton(EmbodyTestCase):
 
     These tests verify that the dispatch correctly identifies Remove vs
     Convert vs Switch actions based on the button label text, including
-    labels with Unicode prefix characters (×, ⇄).
+    labels with Unicode prefix characters (x, <->).
     """
 
     def setUp(self):
@@ -195,21 +195,21 @@ class TestDispatchTaggerButton(EmbodyTestCase):
         self.embody_ext.TagExiter = lambda: None
 
     def test_dispatch_remove_tox_label(self):
-        """Label '×  Remove tox' should route to HandleStrategyRemove."""
+        """Label 'x  Remove tox' should route to HandleStrategyRemove."""
         self._mock_handlers()
         comp = self.workspace.create(baseCOMP, 'disp_rem_tox')
         self.embody_ext._dispatchTaggerButton(comp, 'tox', '\u00d7  Remove tox')
         self.assertEqual(self._called, 'remove')
 
     def test_dispatch_remove_tdn_label(self):
-        """Label '×  Remove tdn' should route to HandleStrategyRemove."""
+        """Label 'x  Remove tdn' should route to HandleStrategyRemove."""
         self._mock_handlers()
         comp = self.workspace.create(baseCOMP, 'disp_rem_tdn')
         self.embody_ext._dispatchTaggerButton(comp, 'tdn', '\u00d7  Remove tdn')
         self.assertEqual(self._called, 'remove')
 
     def test_dispatch_convert_label(self):
-        """Label '⇄  Convert to py' should route to HandleDATConvert."""
+        """Label '<->  Convert to py' should route to HandleDATConvert."""
         self._mock_handlers()
         dat = self.workspace.create(textDAT, 'disp_convert')
         self.embody_ext._dispatchTaggerButton(dat, 'py', '\u21c4  Convert to py')

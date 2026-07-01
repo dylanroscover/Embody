@@ -27,8 +27,16 @@ When Embody detects multiple operators pointing to the same external file, it gr
 
 **Automatic resolution (COMPs):** If the operators are COMPs with TouchDesigner clone relationships (`enablecloning` / `clone` parameter), Embody automatically identifies the clone master and tags the others with a `clone` tag — no dialog needed.
 
-**Manual resolution:** For DATs or COMPs without TD clone relationships, Embody shows a single dialog listing all operators that share the path. You select which operator is the **master**; the others receive a `clone` tag.
+**Automatic resolution (naming convention):** Embody also resolves a group without prompting when exactly one operator's path contains the name set in the **Template Master Name** parameter (`Templatemaster`, default `__template__`). That operator is kept as the master and the rest are tagged as clones. This targets the common app-generated pattern of one template (e.g. a `__template__` COMP) plus many runtime copies that share its externalized files.
 
+- The match is on a whole path segment, not a substring — a COMP named `__template__` matches; one named `mytemplate` does not.
+- It only fires when **exactly one** operator in the group matches. Zero or 2+ matches are ambiguous, so Embody falls back to the manual prompt.
+- This is opt-in by convention: if none of your operators are named `__template__`, nothing changes and you keep choosing manually. Set the parameter to your own convention (e.g. `_master`) to use a different name, or clear it to always pick the master by hand.
+
+**Manual resolution:** For groups that none of the automatic resolvers handle, Embody shows a single dialog listing all operators that share the path. You select which operator is the **master**; the others receive a `clone` tag.
+
+- Operators in a group usually share a name, so each selection button is labeled by the path segment that **differs** between them (e.g. `1: __template__`, `2: scene_1exalohf`), numbered to match the list in the dialog body.
+- For large groups (more than five operators), a button per operator becomes unreadable, so the dialog instead offers a strategy choice: **Keep first as master** (tags the first-listed operator as master, the rest as clones) or **Dismiss**. The dialog points you at the Template Master Name convention for hands-off resolution next time.
 - Selecting a master tags all other operators as clones. Changes to the shared file affect all of them.
 - **Dismiss** skips the group for now. Embody will re-prompt on the next Update cycle.
 
@@ -61,9 +69,29 @@ This table serves as the source of truth for what files Embody manages. Only fil
 
 ## TDN Strategy
 
-COMPs can also be externalized using the **TDN strategy** instead of `.tox`. This exports the COMP's network as human-readable JSON (`.tdn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
+COMPs can also be externalized using the **TDN strategy** instead of `.tox`. This exports the COMP's network as human-readable YAML (`.tdn` files) instead of binary `.tox` files, enabling meaningful git diffs, code review, three-way merges, and schema-validated CI.
 
 See [TDN Format](../tdn/index.md) for format details, and ["Why TDN"](#why-tdn) below for the concrete wins.
+
+### TOX vs TDN: pick by what you want from the file
+
+Both strategies externalize a COMP to its own file on disk. The difference is **what's in the file**, not whether the parent embeds it:
+
+| | TOX | TDN |
+|---|---|---|
+| File format | Binary `.tox` | YAML `.tdn` |
+| Git-diffable | No | Yes |
+| Load speed | Fast (native TD format) | Slower (parsed and rebuilt) |
+| PR review | None — binary blob | Line-by-line parameter diffs |
+| Cross-build portable | TD-build-coupled | Format-versioned, portable |
+| Best for | Palette widgets, third-party COMPs, anything you don't review at the parameter level | Anything you want code-reviewed, anything edited in a text editor, MCP/LLM workflows |
+
+**Both receive the same ownership treatment in parent `.tdn` files.** When the parent of an externalized child is exported as TDN, the parent emits a reference (`tdn_ref` or `tox_ref`) and **does not embed the child's internals**. The child's own file is the source of truth. This applies symmetrically — externalizing as TOX does not mean "embed me in the parent."
+
+If you want a parent `.tdn` that's fully self-contained (snapshot mode), pass `embed_all=True` on export. Otherwise, externalized children stay encapsulated and the parent stays small.
+
+!!! info "If a COMP carries both tags"
+    A COMP with both the TDN tag and the TOX tag is an unusual configuration — strategies are normally mutually exclusive. If it does happen (e.g. tag added by hand), **the TDN tag wins**: the parent emits `tdn_ref` and the COMP is treated as TDN-externalized. To switch a COMP between strategies, remove the old tag first.
 
 ### TDN Mode (master switch)
 
@@ -80,12 +108,30 @@ You can switch modes at any time — existing `.tdn` files on disk and tracked C
 !!! note "Opt-in per COMP"
     Regardless of mode, only COMPs you've explicitly tagged with Embody's TDN tag are touched. A fresh `baseCOMP` you just created is invisible to Embody until you tag it.
 
+### Excluding a COMP from TDN (the `tdn_exclude` tag)
+
+The `Tdnexcludetag` parameter on the Embody COMP (default value: `tdn_exclude`) defines a tag that **opts a single COMP out of the entire TDN system**. Tagged COMPs are invisible to TDN: never exported, never inlined in a parent's `.tdn`, never stripped on save, never destroyed by reconstruction.
+
+**Primary use case: cascade-autotag bypass.** With cascade autotag enabled (`Tdncascade` parameter), tagging a parent COMP `tdn` propagates the `tdn` tag to every child in the subtree. If a specific child should *not* be externalized — typically because it's app-managed (spawned via `op.copy()` at runtime, populated from user data, or otherwise has a lifecycle outside Embody's control) — apply `tdn_exclude` to that child to keep it opted out.
+
+**Why not just leave the tag off?** With cascade autotag on, you can't — the cascade would re-apply `tdn` on the next scan. `tdn_exclude` is the only durable opt-out.
+
+**For app-managed copies**: when a runtime `.copy()` clones a COMP that has `tdn_exclude`, the clone inherits the tag and stays invisible to Embody. This is the recommended pattern for app-spawned content (Moonshine's `proj_<id>` projector chains, for example) — Embody won't track or interfere with the copies.
+
+**Constraints:**
+
+- Only COMPs are excludable. Annotation COMPs are explicitly ineligible.
+- If you nest an excluded COMP under a *non-excluded* TDN COMP, Embody warns at export time that the excluded child will be lost when the non-excluded parent is reconstructed or stripped. The warning names the intervening COMP to tag.
+- Exclusion governs the automatic/cascade pipeline. An explicit user export call (`SaveTDN()` directly on an excluded COMP) currently still writes the `.tdn` — the opt-out applies to cascade, parent inlining, strip, and reconstruction, not to deliberate direct invocation.
+
 ### Content Safety (save-time check)
 
 When you save a project (++ctrl+s++), Embody checks for **unprotected content** inside TDN-managed COMPs:
 
 - **At-risk DATs** — DATs that contain content but are neither externalized (no Embody tag) nor embedded (the **Embed DATs in TDNs** parameter is OFF).
 - **At-risk storage** — `comp.storage` entries on the TDN COMP or its descendants that won't be preserved when **Embed Storage in TDNs** is OFF.
+
+DATs whose content is generated by TouchDesigner — Info DATs, Folder DAT, WebRTC DAT, Monitors DAT, device-discovery DATs, Error/Perform/Examine DATs, and similar read-only outputs — are excluded from the at-risk check. Their content is regenerated from inputs and parameters on cook, so warning that it will be lost is noise the user cannot act on. Callback DATs (Execute, CHOP Execute, DAT Execute, Panel Execute, Parameter Execute, etc.) hold user-authored Python and **continue to surface** in the warning — losing a callback silently is exactly what the check exists to prevent.
 
 If at-risk content is found, Embody prompts you with three options:
 
@@ -115,16 +161,16 @@ TDN isn't just a different file format — it unlocks workflows that binary `.to
 
 A real leaf-component file like `envoy_toggle.tdn` is ~1.3 KB — 38 readable lines including only the ~15 parameters whose values actually differ from a `textCOMP`'s defaults.
 
-**Git three-way merge on real conflicts.** `.toe` is binary, so git can't three-way merge it — one side wins, the other loses. `.tdn` is JSON; git merges it like any other text file, and conflicts show up as readable diffs you can resolve by reading intent:
+**Git three-way merge on real conflicts.** `.toe` is binary, so git can't three-way merge it — one side wins, the other loses. `.tdn` is YAML; git merges it like any other text file, and conflicts show up as readable diffs you can resolve by reading intent:
 
-```
-"Speed": {
+```yaml
+- name: Speed
+  style: Float
 <<<<<<< HEAD
-    "value": 1.5
+  default: 1.5
 =======
-    "value": 2.0
+  default: 2.0
 >>>>>>> feature/faster-playback
-}
 ```
 
 **PR review humans can actually do.** A `.toe` diff is literally `Binary files differ`. A `.tdn` parameter change is a one-line delta. Reviewers comment on specific lines, request changes, and approve — the same workflow as any other text code review.
@@ -147,10 +193,20 @@ Embody automatically restores all externalized operators when a project is opene
 | Strategy | Restoration Method | Toggle |
 |----------|-------------------|--------|
 | **TOX** | Missing COMPs are restored from `.tox` files on disk | `Toxrestoreonstart` (ON by default) |
-| **TDN** | Children are reconstructed from `.tdn` JSON files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
+| **TDN** | Children are reconstructed from `.tdn` YAML files — **Roundtrip mode only** | `Tdnmode = Roundtrip` + `Tdncreateonstart` |
 | **DAT** | Synced from external files via TouchDesigner's native `file` parameter | Always active |
 
 In **Roundtrip** mode the `.toe` is kept small (children are stripped on save) and rebuilt from `.tdn` on open, so the files on disk are the source of truth. In **Export-on-Save** mode the `.toe` keeps a complete copy of every COMP, so there's nothing to reconstruct — the `.toe` is the source of truth, and `.tdn` files exist purely for git diff / MCP reads.
+
+### Crash Recovery
+
+The restoration above covers a *clean* reopen, where your last `.toe` is on disk. A **crash** is different: TouchDesigner exits before you saved, so the `.toe` rolls back to its last save and any work since is gone from it. The **Auto-Save Checkpoints** engine (ON by default) closes that gap.
+
+A beat after the agent (or you) goes idle, Embody writes each changed TDN COMP to disk as a frame-cheap `.tdn` checkpoint — **~3-6 ms, with no full project save, no TDN strip/restore, and no frame freeze**. It also fires a synchronous pre-checkpoint just before a destructive `delete_op` inside a tracked COMP. The engine is bypassed in Perform Mode and during saves, and perf-gated so a checkpoint never lands on a hot frame. `execute_python` is deliberately not a trigger (its effects are unbounded and opaque).
+
+On the next open after a crash, recovery runs even in Export-on-Save mode: any TDN COMP that has a `.tdn` file and a row in `externalizations.tsv` but is **missing from the recovered `.toe`** is rebuilt from its `.tdn`. This works because `externalizations.tsv` is a `syncfile` DAT, so checkpoint rows reach disk within a frame *without* a project save. Nested TDN children rebuild with their own content (no empty shells), and a COMP you deleted is not resurrected (its tracking row is purged on delete).
+
+So with auto-save on, a crash costs you at most the handful of operations since the last idle settle — not the whole session. The toggle and a read-only status readout live on the Embody COMP's TDN page; see [Configuration](configuration.md#tdn).
 
 ## Export Portable Tox
 

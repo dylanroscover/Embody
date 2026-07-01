@@ -11,6 +11,7 @@
 | ++ctrl+shift+o++ | Open the Manager UI |
 | ++ctrl+shift+e++ | Export entire project network to `.tdn` file |
 | ++ctrl+alt+e++ | Export current COMP network to `.tdn` file |
+| ++ctrl+shift+c++ | Copy the selected COMP to the clipboard as a portable TDN envelope |
 
 ## Tagging
 
@@ -40,3 +41,8 @@ The double-tap ++lctrl++ shortcut works on the currently selected operator in th
     The **Update** shortcuts (++ctrl+shift+u++ / ++ctrl+alt+u++) update operators that are **already tagged and tracked** by Embody. They write files, increment build numbers, and clear dirty state — this is your daily workflow.
 
     The **Export** shortcuts (++ctrl+shift+e++ / ++ctrl+alt+e++) create a standalone `.tdn` snapshot of **any** network, whether or not it's externalized. No tracking, no build increment, no side effects. Use these when you want to grab a snapshot of a network you haven't tagged — like exporting someone else's component, creating a one-off backup, or sharing a network as a `.tdn` file.
+
+## Clipboard (TDN copy / paste)
+
+- **++ctrl+shift+c++** — Copy the selected COMP to the OS clipboard as a portable TDN envelope. Paste it into another Embody project, or share it; the web Collection's "embody it" button writes the same envelope.
+- **There is no paste shortcut — pasting is automatic.** With **Clipboard Auto-Paste** on (default), Embody watches the clipboard and, when an **inbound** TDN network appears (e.g. the web "embody it" button), prompts to paste it as a new COMP in the current network. Your own ++ctrl+shift+c++ **outbound** copy is recognized and does **not** trigger the prompt — you copied it to share or paste elsewhere, not to re-import it. The old ++ctrl+shift+v++ binding was removed: TouchDesigner's native operator-paste fires on the same key, so it pasted stray nodes alongside the TDN. See [Clipboard Auto-Paste](configuration.md).

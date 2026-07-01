@@ -25,6 +25,19 @@ class TestAncestorRename(EmbodyTestCase):
         self._test_dir.mkdir(parents=True, exist_ok=True)
         self._added_paths = []
 
+        # Snapshot top-level dirs under dev/embody/ so tearDown can remove
+        # any test-created prefix dirs (retval/, tblupd/, cancel_test/, etc.)
+        # AND their renamed siblings (the rename happens inside the same prefix,
+        # so removing the prefix kills both source and renamed-to dirs).
+        # Without this, a successful rename leaves the renamed-to dir on disk;
+        # the next run hits the (correct) "Target directory already exists"
+        # guard in _handleAncestorRename and fails.
+        embody_root = Path(project.folder) / 'embody'
+        self._embody_snapshot = (
+            {p.name for p in embody_root.iterdir() if p.is_dir()}
+            if embody_root.exists() else set()
+        )
+
         # Intercept _messageBox so tests never block on UI
         self._captured_dialogs = []
         self._orig_messageBox = self.embody_ext._messageBox
@@ -51,8 +64,22 @@ class TestAncestorRename(EmbodyTestCase):
             path = table[i, 'path'].val
             if path.startswith(self.sandbox.path):
                 table.deleteRow(i)
-        # Clean up temp dirs
+        # Clean up filesystem
         import shutil
+        # 1. Any new top-level dirs under dev/embody/ that the test created
+        #    (retval/, tblupd/, cancel_test/, conflict/, phaseA/, tdntest/, ...)
+        #    Includes renamed-to subdirs since they live inside the same prefix.
+        embody_root = Path(project.folder) / 'embody'
+        if embody_root.exists():
+            for p in embody_root.iterdir():
+                if p.is_dir() and p.name not in self._embody_snapshot:
+                    shutil.rmtree(p, ignore_errors=True)
+        # 2. The workspace dir under the sandbox -- the no-ext-folder test
+        #    writes bare_parent/ and renames to bare_renamed/ here.
+        workspace_disk = Path(project.folder) / self.workspace.path.lstrip('/')
+        if workspace_disk.exists():
+            shutil.rmtree(workspace_disk, ignore_errors=True)
+        # 3. Legacy _test_dir (kept for backwards compat)
         if self._test_dir.exists():
             shutil.rmtree(self._test_dir, ignore_errors=True)
         super().tearDown()
@@ -126,11 +153,11 @@ class TestAncestorRename(EmbodyTestCase):
         return [(p, rf, 'baseCOMP', s) for p, rf, s in paths_and_files]
 
     # =========================================================================
-    # _detectAncestorRename — threshold behavior
+    # _detectAncestorRename - threshold behavior
     # =========================================================================
 
     def test_detect_returns_none_with_two_missing(self):
-        """Two missing operators is below the 3-op threshold — returns None."""
+        """Two missing operators is below the 3-op threshold - returns None."""
         parent_comp = self.workspace.create(baseCOMP, 'parent')
         c1, _, _ = self._externalize_comp(parent_comp, 'child1')
         c2, _, _ = self._externalize_comp(parent_comp, 'child2')
@@ -182,7 +209,7 @@ class TestAncestorRename(EmbodyTestCase):
             (base + '/fake2', 'embody' + base + '/fake2/fake2.tox', 'baseCOMP', ''),
             (base + '/fake3', 'embody' + base + '/fake3/fake3.tox', 'baseCOMP', ''),
         ]
-        # Parent still exists at old path — detection should fail
+        # Parent still exists at old path - detection should fail
         result = self.embody_ext._detectAncestorRename(rows)
         self.assertIsNone(result, 'Should return None when ancestor still exists')
 
@@ -204,7 +231,7 @@ class TestAncestorRename(EmbodyTestCase):
         self.assertIsNone(result, 'Should return None with only 1 missing op')
 
     # =========================================================================
-    # _handleAncestorRename — disk segment computation (issue #16 core fix)
+    # _handleAncestorRename - disk segment computation (issue #16 core fix)
     # =========================================================================
 
     def test_disk_segment_includes_ext_folder(self):
@@ -283,7 +310,7 @@ class TestAncestorRename(EmbodyTestCase):
         self.assertTrue(result, 'Should succeed with empty ExternalizationsFolder')
 
     # =========================================================================
-    # _handleAncestorRename — Phase A rel_file matching
+    # _handleAncestorRename - Phase A rel_file matching
     # =========================================================================
 
     def test_phase_a_matches_rel_files_with_folder_prefix(self):
@@ -323,7 +350,7 @@ class TestAncestorRename(EmbodyTestCase):
         self.assertIn('newgroup', new_rel, 'New rel_file should contain renamed segment')
 
     def test_phase_a_empty_affected_returns_false(self):
-        """If no rows match the prefix, Phase A produces empty affected list → False."""
+        """If no rows match the prefix, Phase A produces empty affected list -> False."""
         # Rows with paths that don't match old_prefix
         rows = [('/unrelated/op1', 'embody/unrelated/op1.tox', 'baseCOMP', '')]
 
@@ -333,7 +360,7 @@ class TestAncestorRename(EmbodyTestCase):
         self.assertFalse(result, 'Should return False when no rows match prefix')
 
     # =========================================================================
-    # _handleAncestorRename — user cancellation
+    # _handleAncestorRename - user cancellation
     # =========================================================================
 
     def test_user_cancel_returns_false(self):
@@ -359,7 +386,7 @@ class TestAncestorRename(EmbodyTestCase):
         self.assertTrue(old_dir.exists(), 'Directory should not be renamed on cancel')
 
     # =========================================================================
-    # _handleAncestorRename — Phase C error cases
+    # _handleAncestorRename - Phase C error cases
     # =========================================================================
 
     def test_source_dir_not_found_returns_false(self):
@@ -404,7 +431,7 @@ class TestAncestorRename(EmbodyTestCase):
         self.assertFalse(result, 'Should return False when target dir exists')
 
     # =========================================================================
-    # _handleAncestorRename — Phase D table updates
+    # _handleAncestorRename - Phase D table updates
     # =========================================================================
 
     def test_table_entries_updated_after_rename(self):
@@ -458,7 +485,7 @@ class TestAncestorRename(EmbodyTestCase):
                          'rel_file should not contain old segment')
 
     # =========================================================================
-    # _handleAncestorRename — TDN strategy
+    # _handleAncestorRename - TDN strategy
     # =========================================================================
 
     def test_tdn_strategy_skips_param_update_but_updates_table(self):
@@ -489,7 +516,7 @@ class TestAncestorRename(EmbodyTestCase):
                         'Table should have new path for TDN op')
 
     # =========================================================================
-    # _handleAncestorRename — return value semantics
+    # _handleAncestorRename - return value semantics
     # =========================================================================
 
     def test_returns_true_on_success(self):
@@ -527,7 +554,7 @@ class TestAncestorRename(EmbodyTestCase):
         self.assertFalse(result, '_handleAncestorRename should return False on failure')
 
     # =========================================================================
-    # checkOpsForContinuity — fallback on batch failure
+    # checkOpsForContinuity - fallback on batch failure
     # =========================================================================
 
     def test_continuity_falls_back_on_ancestor_failure(self):
@@ -557,7 +584,7 @@ class TestAncestorRename(EmbodyTestCase):
         if disk_dir.exists():
             shutil.rmtree(disk_dir)
 
-        # Run full continuity check — should detect ancestor rename,
+        # Run full continuity check - should detect ancestor rename,
         # fail on it, then fall back to per-operator handling.
         self.embody_ext.checkOpsForContinuity(ext_folder)
 
@@ -579,7 +606,7 @@ class TestAncestorRename(EmbodyTestCase):
     # =========================================================================
 
     def test_full_ancestor_rename_with_externalized_ops(self):
-        """End-to-end: rename parent COMP → continuity check updates everything."""
+        """End-to-end: rename parent COMP -> continuity check updates everything."""
         parent = self.workspace.create(baseCOMP, 'full_parent')
         c1, old_p1, old_r1 = self._externalize_comp(parent, 'full_c1')
         c2, old_p2, old_r2 = self._externalize_comp(parent, 'full_c2')

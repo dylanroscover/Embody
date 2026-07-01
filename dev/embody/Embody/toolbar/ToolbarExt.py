@@ -1,4 +1,4 @@
-﻿"""Toolbar extension: centralized click dispatch, tooltip management, filter handling."""
+"""Toolbar extension: centralized click dispatch, tooltip management, filter handling."""
 
 
 class ToolbarExt:
@@ -24,7 +24,7 @@ class ToolbarExt:
 	def embody(self):
 		return self.ownerComp.parent.Embody
 
-	# ── Click dispatch ──────────────────────────────────────────────
+	# -- Click dispatch ----------------------------------------------
 
 	def OnContainerClick(self, container):
 		"""Called by panelexec_left/right on lselect offToOn."""
@@ -54,7 +54,7 @@ class ToolbarExt:
 		except Exception as e:
 			debug(f'ToolbarExt error calling {action}: {e}')
 
-	# ── Press / Release ─────────────────────────────────────────────
+	# -- Press / Release ---------------------------------------------
 
 	def OnContainerPress(self, container):
 		"""Called by panelexec on lselect offToOn -- set pressed visual."""
@@ -82,7 +82,7 @@ class ToolbarExt:
 				self._lastPressed.store('hover', True)
 		self._lastPressed = None
 
-	# ── Rollover / Hover ────────────────────────────────────────────
+	# -- Rollover / Hover --------------------------------------------
 
 	def OnContainerRollover(self, container, state):
 		"""Called by panelexec on rollover/insideu valueChange."""
@@ -117,7 +117,7 @@ class ToolbarExt:
 		self._lastHovered = None
 		self._clearPressed(restore_hover=False)
 
-	# ── Tooltip ──────────────────────────────────────────────────────
+	# -- Tooltip ------------------------------------------------------
 
 	def _measureTextWidth(self, text):
 		"""Measure text pixel width using a textTOP with matching font."""
@@ -175,14 +175,14 @@ class ToolbarExt:
 		comp_w = comp.width
 		return anchor * parent_w + offset - origin * comp_w
 
-	# ── Filter handling ─────────────────────────────────────────────
+	# -- Filter handling ---------------------------------------------
 
 	def OnFilterChanged(self):
 		"""Called when filter text changes. Refresh the externalization list."""
 		self.ownerComp.parent.Embody.op('list/inject_parents').cook(force=True)
 		self.ownerComp.parent.Embody.op('list/list1').par.reset.pulse()
 
-	# ── Action handlers ─────────────────────────────────────────────
+	# -- Action handlers ---------------------------------------------
 
 	def _action_toggle_disable(self):
 		emb = self.ownerComp.parent.Embody
@@ -220,7 +220,7 @@ class ToolbarExt:
 			f.par.text = ''
 			self.OnFilterChanged()
 
-	# ── Helpers ─────────────────────────────────────────────────────
+	# -- Helpers -----------------------------------------------------
 
 	def _findClickedButton(self, container):
 		"""Find clicked button using lradioname, fallback to position."""

@@ -1,0 +1,188 @@
+{
+  "slug": "vertical-fibers",
+  "name": "Vertical Fibers",
+  "category": "transmission",
+  "aspect": "9:16",
+  "dev_resolution": [720, 1280],
+  "difficulty": "intermediate",
+  "one_liner": "A tall curtain of glowing fiber-optic strands rising the full height of a portrait frame, each glass core carrying bright light pulses that race upward at near-light speed -- uncompressed video as light in glass, composed natively vertical.",
+  "visual_description": "A 9:16 portrait frame, near-black charcoal ground. Filling the full height: a dense curtain of thin vertical fiber-optic strands, each a faintly lit glass tube. The strands fan slightly -- wider at the bottom (near the camera), gently converging toward the top where the bundle recedes into atmospheric haze, so the eye reads real depth flowing upward. Inside each glass core, discrete bright dashes of light -- the light pulses carrying data -- race UP the strand and wrap, leaving short streaking trails and an internal-reflection shimmer that bounces along the glass. The bundle is cyan-dominant (the hero fiber color), with a few strands in phosphor-green, magenta, and amber to read as separated essence channels. Foreground strands are thick, bright, and slightly soft; far strands dim into haze near the top. Pulses are quantized -- you can count them -- and all brighten a touch on a steady PTP beat. A controlled lush bloom blooms each white-hot pulse into a colored halo. It reads instantly as light travelling up through glass: video over fiber, made tall.",
+  "technique": "Single self-contained GLSL TOP generator (no input) finished by a SEPARATE downsampled bloom chain. The 4K-cheap re-architecture: instead of the old per-pixel loop over ALL strands (O(pixels*N), fatal at 4K), each pixel maps DIRECTLY to its nearest vertical strand via a column-fold -- the strand grid is a periodic lattice in x, so the strand index, its center, and its analytic horizontal distance are computed in O(1) with floor()/fract(), no strand loop at all. Per-pixel cost is then a tiny CONSTANT: one column-fold, an analytic tube SDF (crisp via fwidth), and a SMALL bounded pulse loop (4 dashes) on that one strand. Curvature/convergence is a cheap closed-form bow of the column center as a function of y. Depth (width, brightness, haze) is a function of the strand index parity + y -- no extra cost. Time-dependence via absTime in the pulse-phase uniform. The bloom is its OWN op chain (downsample to 1/4 -> GLSL bright-pass + small separable blur at low res -> Composite-add back at full res), so glow cost is ~1/16 of full-res and constant as the output scales to 4K.",
+  "network_plan": [
+    {
+      "name": "glsl_fibers",
+      "type": "glslTOP",
+      "role": "The generator. NO input -- MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h)); NEVER uTD2DInfos on a no-input generator. Draws the full-height vertical strand curtain via an O(1) column-fold (NO strand loop), analytic crisp tube SDF (fwidth for 1px edges at any res), a constant-bounded pulse loop (4), depth haze upward, PTP beat. outputresolution custom 720x1280, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 0, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_fibers_pixel",
+        "computedat": "glsl_fibers_compute",
+        "outputresolution": "custom",
+        "resolutionw": 720,
+        "resolutionh": 1280,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uFiber", "type": "vec4", "valuex": "=parent().par.Strands.eval()", "valuey": "=parent().par.Converge.eval()", "valuez": "=parent().par.Bow.eval()", "valuew": "=parent().par.Glassglow.eval()" },
+          { "name": "uPulse", "type": "vec4", "valuex": "=parent().par.Pulsespeed.eval()", "valuey": "=parent().par.Pulsedensity.eval()", "valuez": "=parent().par.Pulselength.eval()", "valuew": "=absTime.seconds*parent().par.Pulsespeed.eval()" },
+          { "name": "uLook", "type": "vec4", "valuex": "=parent().par.Haze.eval()", "valuey": "=parent().par.Linewidth.eval()", "valuez": "=parent().par.Ptprate.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "res_down",
+      "type": "resolutionTOP",
+      "role": "Downsample stage for the cheap bloom. Input0 = glsl_fibers. outputresolution custom, fixed at 1/4 of the OUTPUT res via expressions so it tracks 720x1280 dev AND 2160x3840 at 4K (the whole point: blur cost stays ~1/16 of full-res). Place nodeX 300, nodeY -400.",
+      "params": {
+        "outputresolution": "custom",
+        "resolutionw": "=int(parent().par.Outw.eval()/4)",
+        "resolutionh": "=int(parent().par.Outh.eval()/4)",
+        "format": "rgba16float"
+      },
+      "inputs": ["glsl_fibers"]
+    },
+    {
+      "name": "glsl_bloomblur",
+      "type": "glslTOP",
+      "role": "Bright-pass + separable-ish gaussian blur, run ONLY at the downsampled 1/4 res (so the NxN tap loop is cheap and constant regardless of final 4K size). Input0 = res_down. uTDOutputInfo.res is the LOW res here; texel steps are large in screen terms because the buffer is small -- a wide bloom for a fraction of the cost. outputresolution custom = same as res_down (track 1/4). rgba16float. Place nodeX 600, nodeY -400.",
+      "params": {
+        "pixeldat": "glsl_bloomblur_pixel",
+        "computedat": "glsl_bloomblur_compute",
+        "outputresolution": "custom",
+        "resolutionw": "=int(parent().par.Outw.eval()/4)",
+        "resolutionh": "=int(parent().par.Outh.eval()/4)",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.55, "valuez": "=parent().par.Bloomwidth.eval()", "valuew": 0 }
+        ]
+      },
+      "inputs": ["res_down"]
+    },
+    {
+      "name": "comp_bloom",
+      "type": "compTOP",
+      "role": "Composite-add the upscaled low-res bloom back over the full-res generator. Input0 = glsl_fibers (full-res sharp), Input1 = glsl_bloomblur (1/4-res blurred glow, auto-upscaled to match). operand = add. The bilinear upscale of the small bloom buffer IS the cheap wide glow; the sharp generator keeps hairline strands crisp at 4K. outputresolution = input (full output res). rgba16float. Place nodeX 900, nodeY 0.",
+      "params": { "operand": "add", "resolutionmenu": "input", "format": "rgba16float" },
+      "inputs": ["glsl_fibers", "glsl_bloomblur"]
+    },
+    {
+      "name": "glsl_finish",
+      "type": "glslTOP",
+      "role": "Cheap finish (NO blur loops): faint vertical scanline + film grain + edge vignette, on the composited frame. Input0 = comp_bloom. Pure per-pixel math, O(1). outputresolution = input. rgba16float. Place nodeX 1200, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_finish_pixel",
+        "computedat": "glsl_finish_compute",
+        "outputresolutionmenu": "input",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uFin", "type": "vec4", "valuex": "=parent().par.Grain.eval()", "valuey": "=parent().par.Vignette.eval()", "valuez": "=absTime.seconds", "valuew": 0 }
+        ]
+      },
+      "inputs": ["comp_bloom"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named exactly out1. Viewer flagged. Place nodeX 1500, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_finish"]
+    },
+    { "name": "glsl_fibers_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_fibers. See glsl[0]. extension frag. HUG under host.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_fibers_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_fibers.", "params": {}, "inputs": [] },
+    { "name": "glsl_fibers_info", "type": "infoDAT", "role": "Docked info DAT for glsl_fibers.", "params": { "op": "glsl_fibers" }, "inputs": [] },
+    { "name": "glsl_bloomblur_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_bloomblur. See glsl[1]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_bloomblur_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_bloomblur.", "params": {}, "inputs": [] },
+    { "name": "glsl_bloomblur_info", "type": "infoDAT", "role": "Docked info DAT for glsl_bloomblur.", "params": { "op": "glsl_bloomblur" }, "inputs": [] },
+    { "name": "glsl_finish_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_finish. See glsl[2]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_finish_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_finish.", "params": {}, "inputs": [] },
+    { "name": "glsl_finish_info", "type": "infoDAT", "role": "Docked info DAT for glsl_finish.", "params": { "op": "glsl_finish" }, "inputs": [] },
+    {
+      "name": "annotate_fibers",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the generator (glsl_fibers). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Column-Fold Fiber Curtain (O(1)/pixel)",
+        "Bodytext": "One generator GLSL TOP. The strand grid is a PERIODIC lattice in x, so each pixel maps DIRECTLY to its nearest vertical strand with floor()/fract() -- there is NO loop over all strands (the old per-pixel strand loop was O(pixels*N) and died at 4K). The analytic glass-tube SDF is crisp at any resolution via fwidth(); light pulses are a tiny constant-bounded loop racing UP the core and wrapping. Per-pixel cost is low and constant, so it scales to 4K.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_bloom",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the cheap bloom chain (res_down, glsl_bloomblur, comp_bloom). Mode annotate.",
+      "params": {
+        "Titletext": "Downsampled Bloom (1/16 cost at 4K)",
+        "Bodytext": "The glow is a SEPARATE chain, not a full-res tap loop: downsample to 1/4 res, run the bright-pass + blur there (so the blur touches ~1/16 the pixels), then Composite-ADD the bilinearly-upscaled glow back over the sharp full-res strands. Wide lush bloom for a fraction of the cost -- and the cost stays constant as the output grows to 2160x3840.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over finish + out (glsl_finish, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Finish & Out",
+        "Bodytext": "A cheap O(1) finish pass adds a faint vertical scanline, film grain to kill banding on the dark gradient at booth scale, and an edge vignette. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_fibers_pixel",
+      "stage": "pixel",
+      "code": "// Vertical Fibers -- a full-height curtain of glass strands with light pulses racing UP.\n// 4K-cheap: NO strand loop. Each pixel maps to its nearest strand via a periodic column-fold.\nuniform vec4 uFiber;   // x=strands, y=converge, z=bow, w=glassGlow\nuniform vec4 uPulse;   // x=pulseSpeed, y=pulseDensity, z=pulseLength, w=time(=absTime*Speed)\nuniform vec4 uLook;    // x=haze, y=lineWidth, z=ptpRate, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\nfloat hash11(float p){ return fract(sin(p*127.1)*43758.5453); }\n\n// per-strand color: mostly cyan, a few green/magenta/amber essence channels\nvec3 strandColor(float i){\n    float k = mod(i, 7.0);\n    if(k < 4.0) return vec3(0.00, 0.85, 1.00);   // cyan hero\n    if(k < 5.0) return vec3(0.22, 1.00, 0.42);   // green\n    if(k < 6.0) return vec3(1.00, 0.20, 0.62);   // magenta\n    return vec3(1.00, 0.70, 0.10);               // amber\n}\n\nvoid main(){\n    vec2 uv = vUV.st;                                  // 0..1, y up\n    float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w; // ~0.5625 for 9:16\n    // work in a frame where x is scaled by aspect so strands are evenly spaced\n    float x = (uv.x - 0.5) * aspect;\n    float y = uv.y;                                    // 0 bottom .. 1 top\n\n    vec3 col = mix(vec3(0.012,0.014,0.018), vec3(0.006,0.007,0.010), y); // charcoal, darker at top\n\n    float nS    = clamp(uFiber.x, 4.0, 64.0);\n    float conv  = uFiber.y;        // how strongly the bundle converges toward the top\n    float bowA  = uFiber.z;        // gentle cable bow\n    float gglow = uFiber.w;\n    float lw    = uLook.y;\n    float haze  = uLook.x;\n    float t     = uPulse.w;\n    float pdens = uPulse.y;\n    float plen  = uPulse.z;\n\n    // --- convergence: strands fan wider at the bottom, tighter toward the top (depth up) ---\n    // spread() maps a normalized strand slot to an x position; it shrinks with y.\n    float spreadHalf = mix(0.62*aspect, 0.62*aspect*(1.0-0.55*conv), y);\n\n    // place strands in a periodic lattice across [-spreadHalf, spreadHalf]\n    // column-fold: xn in 0..nS gives the strand index and the local offset, O(1).\n    float xn   = (x + spreadHalf) / (2.0*spreadHalf) * nS;   // 0..nS across the bundle\n    float idx  = floor(xn);\n    float idxC = clamp(idx, 0.0, nS-1.0);\n    float fi   = idxC;\n    float sd   = hash11(fi*3.1);\n\n    // strand center x as a function of y: lattice slot + a slow per-strand bow\n    float slotX = (idxC + 0.5)/nS * (2.0*spreadHalf) - spreadHalf;\n    float bow   = sin(y*PI*1.3 + sd*6.28) * 0.04 * bowA * (1.0 - 0.6*y);\n    float cx    = slotX + bow;\n\n    // analytic horizontal distance to THIS strand center (crisp via fwidth)\n    float d  = abs(x - cx);\n    float depth = sd;                                  // per-strand pseudo-depth 0..1\n    float w  = lw * mix(1.4, 0.5, y) * mix(1.3, 0.8, depth); // thinner toward top + far strands\n    float aa = fwidth(x) * 1.5;                        // resolution-independent edge\n    float tube = smoothstep(w+aa, w-aa, d);            // crisp 1px-ish core at any res\n    float refl = smoothstep(w*3.0, 0.0, d) * (0.5 + 0.5*sin(y*42.0 + sd*10.0 + t*2.0));\n    float dim  = mix(1.0, 0.35, y);                    // far (top) strands dim into haze\n\n    vec3 sc = strandColor(fi);\n    col += sc * (tube*0.22 + refl*0.10*gglow) * dim;\n\n    // --- traveling light pulses: bright Gaussian dashes racing UP this strand, wrapping ---\n    float onStrand = smoothstep(w*2.5, 0.0, d);\n    float speedJ = 0.6 + 0.6*hash11(fi*4.2);\n    const int MAXP = 4;                                // CONSTANT bound\n    for(int k=0;k<MAXP;k++){\n        if(float(k) >= pdens) break;\n        float fk = float(k);\n        float phase = fract(hash11(fi*9.0+fk*2.3) + t*speedJ);\n        float along = y - phase;                       // travel up (y increases)\n        float pulse = exp(-pow(along/plen, 2.0)*30.0) * onStrand;\n        vec3 core = mix(sc, vec3(1.0), 0.6);           // white-hot core\n        col += core * pulse * dim * 1.7;\n    }\n\n    // PTP beat: all pulses breathe brighter in lockstep\n    float beat = fract(uLook.w * uLook.z);\n    float flash = pow(max(0.0, 1.0 - beat*4.0), 3.0);\n    col *= 1.0 + 0.35*flash;\n\n    // atmospheric haze building toward the top (the vanishing direction)\n    col += vec3(0.018,0.026,0.034) * haze * smoothstep(0.4, 1.0, y);\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloomblur_pixel",
+      "stage": "pixel",
+      "code": "// Bright-pass + gaussian blur, run at 1/4 resolution (cheap, constant cost at 4K).\n// Because this buffer is small, a modest tap radius covers a WIDE area of the final image.\nuniform vec4 uBloom;   // x=strength, y=threshold, z=blurWidth\nout vec4 fragColor;\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;   // 1/lowW, 1/lowH (large in screen terms)\n    float thr = uBloom.y;\n    float bw  = uBloom.z;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;                     // constant; 13x13 taps but only on ~1/16 the pixels\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/22.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*bw).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    vec3 bloom = (sum/max(wsum,1e-4)) * uBloom.x;\n    fragColor = vec4(bloom, 1.0);        // bloom-only; comp_bloom adds it back over the sharp src\n}\n"
+    },
+    {
+      "op": "glsl_finish_pixel",
+      "stage": "pixel",
+      "code": "// Cheap O(1) finish: vertical scanline + grain + vignette. No loops.\nuniform vec4 uFin;   // x=grain, y=vignette, z=absTime\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    vec3 col = texture(sTD2DInputs[0], uv).rgb;\n    // faint vertical scanline (columns of fiber) -- subtle structure, not a CRT\n    float scan = 0.985 + 0.015*sin(uv.x * uTDOutputInfo.res.z * 0.5);\n    col *= scan;\n    // vignette toward the frame edges (premium dark stage)\n    vec2 p = uv - 0.5;\n    float vig = 1.0 - uFin.y * smoothstep(0.35, 0.85, length(vec2(p.x*0.6, p.y)));\n    col *= vig;\n    // grain (kills banding on the dark gradient at booth scale)\n    col += (hash21(uv*uTDOutputInfo.res.zw + uFin.z*60.0)-0.5) * 0.012 * uFin.x;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Strands", "label": "Strand Count", "style": "Int", "default": 28, "range": [4, 64], "drives": "uFiber.x -- number of fiber strands in the curtain. Because of the column-fold this costs NOTHING per pixel (no strand loop), so a dense premium bundle is free; raise it freely for a fuller curtain." },
+    { "name": "Converge", "label": "Convergence", "style": "Float", "default": 0.6, "range": [0.0, 1.0], "drives": "uFiber.y -- how strongly the bundle narrows toward the top. 0 = parallel strands (a flat curtain); higher = strong upward perspective into the haze." },
+    { "name": "Bow", "label": "Cable Bow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFiber.z -- amount of gentle per-strand bow so the strands read as relaxed cable, not laser-straight. 0 = dead-straight fibers." },
+    { "name": "Glassglow", "label": "Glass Glow", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFiber.w -- strength of the internal-reflection shimmer gradient along each glass tube. The light-bouncing-in-glass look." },
+    { "name": "Pulsespeed", "label": "Pulse Speed", "style": "Float", "default": 0.6, "range": [0.0, 2.0], "drives": "uPulse.x and the time term uPulse.w -- how fast the light pulses race UP the strands. 0 freezes them (and drops that time-dependence); higher = near-light-speed streaks." },
+    { "name": "Pulsedensity", "label": "Pulse Density", "style": "Int", "default": 3, "range": [1, 4], "drives": "uPulse.y -- how many light pulses travel up each strand at once (1-4, the constant loop bound). More = a busier data stream." },
+    { "name": "Pulselength", "label": "Pulse Length", "style": "Float", "default": 0.05, "range": [0.02, 0.2], "drives": "uPulse.z -- length of each Gaussian light dash (in vertical UV). Short = crisp countable packets; long = streaking light trails." },
+    { "name": "Haze", "label": "Atmospheric Haze", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uLook.x -- volumetric haze building toward the top of the frame so distant strands dim into fog. Adds vertical depth." },
+    { "name": "Linewidth", "label": "Line Width", "style": "Float", "default": 0.006, "range": [0.002, 0.02], "drives": "uLook.y -- base thickness of the glass tube core. Thin = crisp hairline fibers; thicker = heavier glowing tubes. Crisp at any resolution via fwidth()." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uLook.z -- frequency of the PTP sync pulse all light pulses breathe brighter to in lockstep." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.4, "range": [0.0, 3.0], "drives": "uBloom.x in glsl_bloomblur -- intensity of the downsampled bloom glow added back over the pulses. The booth-scale wow knob." },
+    { "name": "Bloomwidth", "label": "Bloom Width", "style": "Float", "default": 2.2, "range": [1.0, 4.0], "drives": "uBloom.z -- the blur step in the 1/4-res bloom pass. Wider = a softer, more atmospheric glow halo (still cheap, since it runs at low res)." },
+    { "name": "Grain", "label": "Grain", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFin.x -- film-grain amount in the finish pass. Kills banding on the dark gradient at large scale." },
+    { "name": "Vignette", "label": "Vignette", "style": "Float", "default": 0.6, "range": [0.0, 1.5], "drives": "uFin.y -- edge darkening so the curtain sits on a premium dark stage." },
+    { "name": "Outw", "label": "Output Width", "style": "Int", "default": 720, "range": [256, 3840], "drives": "Render width. Drives glsl_fibers/comp_bloom output width and the /4 bloom-buffer width. Set 720 for dev, 2160 for 4K portrait. The bloom buffer auto-tracks 1/4 of this so glow cost stays constant." },
+    { "name": "Outh", "label": "Output Height", "style": "Int", "default": 1280, "range": [256, 3840], "drives": "Render height. Set 1280 for dev, 3840 for 4K portrait. The /4 bloom buffer auto-tracks this." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "fiber_cyan": ["#00E5FF", "#18FFE0"],
+    "essence_channels": { "green": "#39FF6A", "magenta": "#FF2E9A", "amber": "#FFB000" },
+    "white_hot_pulse": ["#FFFFFF", "#EAFBFF"],
+    "ratio": "~85% dark charcoal + dim glass tubes, ~15% saturated pulse/glow; cyan dominant (fiber hero color), green/magenta/amber as a few essence strands."
+  },
+  "performance_notes": "WHY IT STAYS CHEAP AT 4K: (1) NO strand loop -- the old transmission-lines shader looped over ALL N strands per pixel AND did an inner 24-step curve-projection (840 iters/pixel), which is O(pixels*N) and fatal at 8.3M pixels. Here each pixel does a single column-fold (floor/fract) to find ONLY its nearest strand, then one analytic tube SDF -- a fixed, small per-pixel budget independent of strand count, so Strand Count can be raised freely with zero pixel cost. (2) The only per-pixel loop is the pulse loop bounded by a CONSTANT (MAXP=4) and independent of resolution. (3) The bloom is the classic killer; here it is moved OUT of the generator into a separate downsampled chain (Resolution TOP to 1/4 -> blur at 1/4 -> Composite-add back). The 13x13 blur touches only ~1/16 of the pixels, and that ratio is FIXED as the output grows to 4K, so bloom cost is bounded and constant. (4) Crisp edges come from fwidth() (resolution-independent), not from super-sampling. BUDGET: per-pixel cost ~= 1 column-fold + 1 SDF + 4 pulse evals + a couple of trig terms; constant. The blur is the dominant cost and is pinned at 1/16-scale. Gate get_project_performance before/after; this should sit far under budget even at 2160x3840.",
+  "wow_factor": 4,
+  "conference_fit": "The most direct visualization of the medium itself -- light pulses travelling through fiber-optic glass -- now composed NATIVELY for a tall 9:16 portrait wall: a full-height curtain of fiber rising from the floor into haze, with pulses racing UPWARD. Cyan-dominant on a dark premium stage; the vertical flow suits a tower/totem LED orientation perfectly. Pulses are quantized and countable (close-inspection payoff) and snap to a PTP beat (ST2110 timing). A clean, self-contained looping backdrop -- ideal behind the denser pieces, and it scales to 4K without breaking a sweat.",
+  "warmup_frames": 60,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_fibers has NO input -- MUST use uTDOutputInfo.res (res=(1/w,1/h,w,h)); uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h (720x1280) or it renders 1x1. res_down/glsl_bloomblur/comp_bloom/glsl_finish all HAVE inputs so sTD2DInputs[0] + uTDOutputInfo.res are valid there.\\n\\nUNIFORMS: every glslTOP declares uniforms MANUALLY via the vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nRESOLUTION TRACKING (the 4K story): Outw/Outh params drive the generator size, the comp output (resolutionmenu='input' so it follows glsl_fibers), and CRUCIALLY the bloom buffer at 1/4 via int(Outw/4)/int(Outh/4) expressions on res_down and glsl_bloomblur. To render 4K portrait, set Outw=2160, Outh=3840 -- the bloom auto-stays at 540x960, keeping glow cost constant. Verify res_down actually reports 1/4 the generator size after a param change.\\n\\nCHEAP-BLOOM WIRING: glsl_fibers -> res_down -> glsl_bloomblur (bloom-only output) ; comp_bloom takes glsl_fibers on in0 (sharp full-res) and glsl_bloomblur on in1 (TD bilinearly upscales the small buffer to match) with operand=add ; comp_bloom -> glsl_finish -> out1. ALTERNATIVE if a Blur TOP is preferred over the GLSL blur: replace res_down+glsl_bloomblur with a single Blur TOP (large Filter Size + Pre-Shrink=1/4) feeding a Level TOP bright-pass, then the same comp_bloom add -- TD's Blur TOP internally downsamples and is GPU-optimized. The GLSL path is specified here for explicit control + teaching value.\\n\\nCRISP EDGES: tube SDF uses fwidth(x) for a resolution-independent ~1px edge; do NOT hardcode a pixel width or strands blur at 4K. Verify hairline crispness in a 4K capture, not just dev.\\n\\nCOOK DEMAND: time-dependent via absTime in uPulse.w + uLook.w (+ uFin.z grain). Cooks every frame only when out1 demanded; add a temp Execute DAT OUTSIDE the COMP (onFrameStart cooks out1); verify animation with two captures separated by a real sleep. Pulse Speed=0 freezes pulses but uLook.w (PTP beat) + grain still reference absTime so the TOP keeps cooking -- correct.\\n\\nDOCKED DATS: glsl_fibers + glsl_bloomblur + glsl_finish each dock pixel+compute+info; HUG all nine under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source for a clean YAML literal block.\\n\\nTDN ROUND-TRIP: all 16 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import the exported .tdn into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~15."
+}

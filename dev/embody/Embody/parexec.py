@@ -31,6 +31,31 @@ def onValueChange(par, prev):
 		if parent.Embody.par.Envoyenable.eval():
 			op.Embody.ext.Embody._extractAIConfig()
 
+	elif par.name == 'Aiprojectroot':
+		# Move Embody's own state (.embody/config.json, project.json) to the
+		# new root first so _saveSettings (triggered by _deferSaveSettings
+		# below) writes alongside the migrated file rather than next to a
+		# stale copy. Then regenerate AI/MCP config at the new root.
+		new_mode = par.eval()
+		parent.Embody.ext.Embody._migrateRootFiles(prev, new_mode)
+		# Toggle enable on the custom-path sibling param so it greys out
+		# when the menu isn't on 'custom'.
+		custom_par = getattr(parent.Embody.par, 'Aiprojectrootcustom', None)
+		if custom_par is not None:
+			custom_par.enable = (new_mode == 'custom')
+		if parent.Embody.par.Envoyenable.eval():
+			parent.Embody.InitEnvoy()
+
+	elif par.name == 'Aiprojectrootcustom':
+		# Custom path changed within 'custom' mode -- migrate from old path
+		# to new path. No-op if Aiprojectroot isn't currently 'custom'
+		# (the value is preserved but inactive until the menu flips back).
+		if parent.Embody.par.Aiprojectroot.eval() == 'custom':
+			parent.Embody.ext.Embody._migrateRootFiles(
+				'custom', 'custom', old_custom=prev, new_custom=par.eval())
+			if parent.Embody.par.Envoyenable.eval():
+				parent.Embody.InitEnvoy()
+
 	elif par.name == 'Envoyenable':
 		if par.eval():
 			# Defer Start and re-check -- gives init() time to suppress

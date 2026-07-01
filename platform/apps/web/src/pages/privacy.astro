@@ -1,0 +1,233 @@
+---
+import Base from "../layouts/Base.astro";
+
+const updated = "June 28, 2026";
+---
+
+<Base
+  title="privacy policy - embody.tools"
+  description="What embody.tools collects, why, the legal basis for it, and the rights you have over your data. A plain-language privacy policy for a small open-source project."
+>
+  <section class="page-section legal-hero">
+    <p class="eyebrow">privacy</p>
+    <h1>privacy policy</h1>
+    <p class="lede">
+      embody.tools is a small, open-source project. We collect as little as we can
+      get away with, we don&rsquo;t sell anything, and there are no advertising
+      trackers anywhere on this site. This page explains exactly what we keep, why
+      we&rsquo;re allowed to keep it, and the rights you have over it.
+    </p>
+    <p class="legal-updated mono">Last updated: {updated}</p>
+  </section>
+
+  <article class="page-section tight legal-body">
+    <h2>Who we are</h2>
+    <p>
+      embody.tools is operated by <strong>The Experiential Company, LLC</strong>
+      (&ldquo;TEC,&rdquo; &ldquo;we,&rdquo; &ldquo;us&rdquo;), a California limited
+      liability company, for the Embody &amp; Envoy open-source project. For
+      data-protection purposes TEC is the <strong>data controller</strong> for this site. The site hosts
+      the Collection &mdash; a gallery of transparent TouchDesigner networks (TDN)
+      that anyone can inspect, copy, and remix. Questions about this policy, or any
+      request about your data, can go to
+      <a href="mailto:rosco@tec.design">rosco@tec.design</a>.
+    </p>
+
+    <h2>What we collect</h2>
+
+    <h3>Account information</h3>
+    <p>
+      If you create an account, we store your email address, a display handle, an
+      optional display name and bio, and a <strong>salted hash</strong> of your
+      password &mdash; never the password itself. Authentication is handled by
+      <a href="https://www.better-auth.com/">Better Auth</a>. If you instead sign in
+      with GitHub, we receive only the basic profile fields GitHub returns (your
+      account id, name, avatar URL, and the tokens needed to keep the session valid);
+      we do not request access to your repositories or private data.
+    </p>
+
+    <h3>Sessions and cookies</h3>
+    <p>
+      When you sign in we set a strictly-functional session cookie so the site can
+      recognize you on the next request. We record the session token, its
+      expiry, and the IP address and user-agent string of the request that created
+      it &mdash; standard fields used to keep sessions secure and let you sign out.
+      We set <strong>no</strong> advertising or cross-site tracking cookies, and if
+      you never sign in, no account or session data is created. The full breakdown is
+      on the <a href="/cookies">cookie page</a>.
+    </p>
+
+    <h3>Content you contribute</h3>
+    <p>
+      When you publish a specimen, we store the TDN network you upload, a generated
+      thumbnail, and the metadata you provide (title, description, category, license,
+      and changelog notes). Contributed networks are scanned for capabilities and unsafe
+      operators before they go live. Your handle is shown publicly as the
+      <strong>attribution</strong> for anything you publish, and each version is kept
+      as an immutable record so the history of a specimen stays diffable. Don&rsquo;t
+      upload anything you wouldn&rsquo;t want public.
+    </p>
+
+    <h3 class="keep-case">Anti-abuse (Cloudflare Turnstile)</h3>
+    <p>
+      Contributing a specimen is protected by
+      <a href="https://www.cloudflare.com/products/turnstile/">Cloudflare Turnstile</a>,
+      a privacy-respecting CAPTCHA alternative that confirms you&rsquo;re a human
+      without the puzzle grids. Turnstile runs a challenge in your browser and returns
+      a token we verify server-side. Per Cloudflare, it is designed not to profile
+      users or track them across sites. Sign-in and sign-up are rate-limited to
+      deter automated abuse.
+    </p>
+
+    <h3>Analytics</h3>
+    <p>
+      We keep one kind of aggregate, non-identifying count: each specimen has a
+      <strong>copy count</strong> that increments when anyone copies it &mdash; a
+      total attached to the specimen, not to you. Beyond that, this site uses
+      <a href="https://www.cloudflare.com/web-analytics/">Cloudflare Web Analytics</a>,
+      a cookieless, privacy-first analytics tool that reports page-level traffic in
+      aggregate. It does not fingerprint visitors, does not use client-side state, and
+      collects no personal data. If the analytics token isn&rsquo;t configured for a
+      given deployment, the beacon simply isn&rsquo;t loaded.
+    </p>
+
+    <h2>Where your data lives</h2>
+    <p>
+      The site runs on <a href="https://www.cloudflare.com/">Cloudflare</a>. Account
+      and specimen metadata live in Cloudflare D1; uploaded TDN files and thumbnails
+      live in Cloudflare R2; short-lived anti-abuse counters live in Cloudflare KV.
+      Cloudflare acts as our infrastructure processor and may process request data
+      (such as IP addresses) to deliver and protect the service. Optional account
+      emails &mdash; verification and password resets &mdash; are sent through
+      <a href="https://resend.com/">Resend</a> only when that service is configured
+      for a deployment.
+    </p>
+    <p>
+      TEC is based in the United States and Cloudflare is a global network, so your
+      data may be <strong>stored or processed outside your own country</strong>,
+      including in the United States. Where data is transferred out of the EU, UK, or
+      Switzerland, our providers rely on recognized safeguards such as the Standard
+      Contractual Clauses and the EU&ndash;U.S. Data Privacy Framework.
+    </p>
+
+    <h2>How we use it</h2>
+    <p>
+      We use the data above only to operate the service: to sign you in, to attribute
+      and display the work you publish, to keep the site secure and free of spam and
+      abuse, and to understand aggregate traffic so we can improve the project. We do
+      <strong>not</strong> sell your data, and we don&rsquo;t share it with third
+      parties except the infrastructure providers named here who process it on our
+      behalf.
+    </p>
+
+    <h2>Why we&rsquo;re allowed to (legal basis)</h2>
+    <p>
+      Under the GDPR and similar laws we only process your data when we have a lawful
+      basis for it. In plain terms:
+    </p>
+    <ul>
+      <li>
+        <strong>To run your account and publish your work</strong> &mdash; because
+        it&rsquo;s necessary to provide the service you asked for. That&rsquo;s the
+        contract formed by our <a href="/terms">Terms of Service</a>.
+      </li>
+      <li>
+        <strong>To keep the site secure and free of abuse</strong>, and to understand
+        aggregate traffic &mdash; because it&rsquo;s in our legitimate interest to run
+        a safe, working service, weighed against your rights and freedoms.
+      </li>
+      <li>
+        <strong>To meet legal obligations</strong> &mdash; for example, responding to a
+        valid legal request or a copyright notice under our
+        <a href="/dmca">DMCA policy</a>.
+      </li>
+    </ul>
+    <p>
+      We don&rsquo;t rely on consent for tracking, because there isn&rsquo;t any
+      tracking &mdash; the only cookie we set is strictly necessary to sign you in.
+    </p>
+
+    <h2>How long we keep it</h2>
+    <ul>
+      <li>
+        <strong>Account data</strong> &mdash; until you delete your account, after
+        which we remove it.
+      </li>
+      <li>
+        <strong>Sessions</strong> &mdash; until they expire or you sign out.
+      </li>
+      <li>
+        <strong>Published specimens</strong> &mdash; kept as an immutable, diffable
+        history while published, and removed from the Collection on request (copies
+        others already made under your chosen license stay theirs).
+      </li>
+      <li>
+        <strong>Anti-abuse counters and IP-based rate-limit keys</strong> &mdash;
+        ephemeral; they expire automatically within minutes.
+      </li>
+      <li>
+        <strong>Moderation reports</strong> &mdash; kept while we review them and for a
+        reasonable period afterward as a record.
+      </li>
+    </ul>
+
+    <h2>Your choices and your rights</h2>
+    <p>
+      You can browse the entire Collection without an account, and you can sign out at
+      any time to end a session. If you do have an account, you have the right to:
+    </p>
+    <ul>
+      <li><strong>Access</strong> a copy of the personal data we hold about you.</li>
+      <li>
+        <strong>Correct</strong> anything inaccurate &mdash; most profile fields you
+        can edit yourself.
+      </li>
+      <li>
+        <strong>Delete</strong> your account and personal data (the &ldquo;right to
+        erasure&rdquo;).
+      </li>
+      <li><strong>Export</strong> your data in a portable form.</li>
+      <li>
+        <strong>Restrict or object</strong> to processing, including anything we do on
+        the basis of legitimate interest.
+      </li>
+    </ul>
+    <p>
+      To exercise any of these, email
+      <a href="mailto:rosco@tec.design">rosco@tec.design</a> and we&rsquo;ll respond
+      within 30 days. Note that published specimens may carry an open license (for
+      example CC-BY-4.0) &mdash; copies others have already made under that license
+      remain theirs to keep, but we will remove your authored entries on request.
+    </p>
+    <p>
+      <strong>If you&rsquo;re in the EU, UK, or Switzerland</strong>, you also have the
+      right to lodge a complaint with your local data-protection supervisory authority
+      &mdash; though we&rsquo;d appreciate the chance to put things right first.
+      <strong>If you&rsquo;re in California</strong>, you can ask us to access or delete
+      your data, and for the record: we do not, and never will, sell or
+      &ldquo;share&rdquo; your personal information.
+    </p>
+
+    <h2>Children</h2>
+    <p>
+      This site is not directed at children. You must be at least 13 to create an
+      account, and where local law sets a higher age for consenting to online services
+      (16 in parts of the EU), you must meet that age or have a parent or
+      guardian&rsquo;s permission. We don&rsquo;t knowingly collect data from children
+      below these ages; if you believe a child has created an account, contact us and
+      we&rsquo;ll remove it.
+    </p>
+
+    <h2>Changes</h2>
+    <p>
+      We may update this policy as the project evolves. When we do, we&rsquo;ll change
+      the &ldquo;last updated&rdquo; date above. Material changes will be noted in the
+      project changelog.
+    </p>
+
+    <p class="legal-sign mono">
+      See also the <a href="/terms">Terms of Service</a> and the
+      <a href="/cookies">cookie page</a>.
+    </p>
+  </article>
+</Base>

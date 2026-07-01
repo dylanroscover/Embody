@@ -1,0 +1,18 @@
+{
+  "name": "embody-tools",
+  "private": true,
+  "type": "module",
+  "description": "embody.tools - the community platform for TouchDesigner networks (Embody v6)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run --workspaces --if-present build",
+    "test": "npm run --workspaces --if-present test",
+    "typecheck": "npm run --workspaces --if-present typecheck"
+  }
+}

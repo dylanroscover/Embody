@@ -1,0 +1,331 @@
+{
+  "slug": "spiral-vortex-feedback",
+  "name": "Spiral Vortex Feedback",
+  "category": "feedback",
+  "difficulty": "advanced",
+  "description": "A polar-warp feedback vortex. A static seed pattern is pulled into an endlessly rotating, in-spiraling whirlpool by a GLSL TOP that rotates and zooms the previous frame's sample coordinates each frame, fed back through a decaying, reset-wired Feedback TOP. Bounded at 640x640; usable as a hypnotic VJ loop, a swirling texture/displacement source, or a teaching reference for the polar feedback pattern.",
+  "key_ops": [
+    "glslTOP",
+    "feedbackTOP",
+    "levelTOP",
+    "outTOP"
+  ],
+  "network_plan": [
+    {
+      "name": "glsl_seed",
+      "type": "glslTOP",
+      "role": "Static heavy source: a domain-warped fBm color field with bright filament streaks. Cooks ONCE (no time reference) and caches; it is the pattern the vortex pulls inward. RGB color, alpha=1.",
+      "params": {
+        "pixeldat": "glsl_seed_pixel",
+        "computedat": "glsl_seed_compute",
+        "outputresolution": "custom",
+        "resolutionw": 640,
+        "resolutionh": 640,
+        "format": "rgba16float"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_warp",
+      "type": "glslTOP",
+      "role": "The vortex engine. Input 0 = feedback_state (last frame), input 1 = glsl_seed. Rotates+zooms the sample coords of the fed-back frame around center (the spiral pull), samples it, then blends a thin amount of the static seed back in so the pattern keeps regenerating instead of draining to black. This is the ONE op carrying the per-frame motion (cheap: two texture reads + trig). No unbounded loops.",
+      "params": {
+        "pixeldat": "glsl_warp_pixel",
+        "computedat": "glsl_warp_compute",
+        "outputresolution": "custom",
+        "resolutionw": 640,
+        "resolutionh": 640,
+        "format": "rgba16float"
+      },
+      "inputs": [
+        "feedback_state",
+        "glsl_seed"
+      ]
+    },
+    {
+      "name": "level_decay",
+      "type": "levelTOP",
+      "role": "Bounds the loop. Sits between the warp output and the Feedback TOP. opacity<1 (the decay term) plus a small blacklevel lift so trails fade and energy cannot run away frame-over-frame. gamma>1 deepens the cores. This is what makes the feedback safe (decay<1).",
+      "params": {
+        "opacity": "=parent().par.Decay.eval()",
+        "blacklevel": 0.02,
+        "gamma2": 1.15
+      },
+      "inputs": [
+        "glsl_warp"
+      ]
+    },
+    {
+      "name": "feedback_state",
+      "type": "feedbackTOP",
+      "role": "Holds the previous frame's decayed vortex state. Its Target is glsl_warp (closing the loop). Fixed 640x640 16-bit float so it never grows. reset bound to the Reset param via expression; its input (level_decay) is the reset/seed source.",
+      "params": {
+        "top": "glsl_warp",
+        "format": "rgba16float",
+        "reset": "=parent().par.Reset.eval()"
+      },
+      "inputs": [
+        "level_decay"
+      ]
+    },
+    {
+      "name": "glsl_colorize",
+      "type": "glslTOP",
+      "role": "Final look. Takes the warp output, applies a hue-rotated palette (Palette param) over luminance, a center bloom glow, and a soft vignette. Cheap per-pixel; gives the vortex its striking deep-core-to-bright-rim grade. Drives out1.",
+      "params": {
+        "pixeldat": "glsl_colorize_pixel",
+        "computedat": "glsl_colorize_compute"
+      },
+      "inputs": [
+        "glsl_warp"
+      ]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target. Clean terminal of the chain.",
+      "params": {
+        "label": "=me.name"
+      },
+      "inputs": [
+        "glsl_colorize"
+      ]
+    },
+    {
+      "name": "glsl_seed_pixel",
+      "type": "textDAT",
+      "role": "Fragment shader source for glsl_seed (docked). language=glsl, extension=frag.",
+      "params": {
+        "extension": "frag"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_seed_compute",
+      "type": "textDAT",
+      "role": "Auto-created empty compute companion for glsl_seed (docked). Omitted on export, recreated by TD on import.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_seed_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_seed (compile-status readout).",
+      "params": {
+        "op": "glsl_seed"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_warp_pixel",
+      "type": "textDAT",
+      "role": "Fragment shader source for glsl_warp (docked). language=glsl, extension=frag.",
+      "params": {
+        "extension": "frag"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_warp_compute",
+      "type": "textDAT",
+      "role": "Auto-created empty compute companion for glsl_warp (docked).",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_warp_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_warp.",
+      "params": {
+        "op": "glsl_warp"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_colorize_pixel",
+      "type": "textDAT",
+      "role": "Fragment shader source for glsl_colorize (docked). language=glsl, extension=frag.",
+      "params": {
+        "extension": "frag"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_colorize_compute",
+      "type": "textDAT",
+      "role": "Auto-created empty compute companion for glsl_colorize (docked).",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_colorize_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for glsl_colorize.",
+      "params": {
+        "op": "glsl_colorize"
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate1",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the seed group.",
+      "params": {
+        "Titletext": "Static Seed",
+        "Bodytext": "A domain-warped fBm field with bright filaments. No time reference, so it cooks ONCE and caches -- this is the pattern the vortex pulls inward. The motion lives downstream, not here.",
+        "Mode": "annotate",
+        "Backcolorr": [
+          0.12,
+          0.18,
+          0.24
+        ],
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate2",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the feedback loop.",
+      "params": {
+        "Titletext": "Polar-Warp Feedback Loop",
+        "Bodytext": "The vortex: glsl_warp rotates and zooms the sample coords of last frame (feedback_state) toward the center, re-samples, and blends a thread of seed back in. level_decay (opacity<1) fades trails so energy never runs away. feedback_state holds the result; Target=glsl_warp closes the loop. Reset repaints the seed.",
+        "Mode": "annotate",
+        "Backcolorr": [
+          0.1,
+          0.16,
+          0.26
+        ],
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate3",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the colorize+output.",
+      "params": {
+        "Titletext": "Colorize & Output",
+        "Bodytext": "Grades the vortex with a hue-rotatable palette (Palette), a center bloom, and a vignette: deep core to bright spiral rim. Terminates in out1.",
+        "Mode": "annotate",
+        "Backcolorr": [
+          0.2,
+          0.14,
+          0.2
+        ],
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_seed",
+      "stage": "pixel",
+      "code": "out vec4 fragColor;\nfloat hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7)))*43758.5453); }\nfloat noise(vec2 p){\n    vec2 i = floor(p), f = fract(p);\n    vec2 u = f*f*(3.0 - 2.0*f);\n    return mix(mix(hash(i), hash(i+vec2(1.0,0.0)), u.x),\n               mix(hash(i+vec2(0.0,1.0)), hash(i+vec2(1.0,1.0)), u.x), u.y);\n}\nfloat fbm(vec2 p){\n    float v = 0.0, a = 0.5;\n    for(int i = 0; i < 6; i++){ v += a*noise(p); p = p*2.02 + 11.3; a *= 0.5; }\n    return v;\n}\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 p = uv*3.0;\n    // domain warp for organic, non-grid filaments\n    float w = fbm(p + vec2(fbm(p+1.7), fbm(p+9.2))*1.5);\n    // bright thin streaks: ridge the warped field so filaments pop\n    float ridge = 1.0 - abs(2.0*w - 1.0);\n    ridge = pow(clamp(ridge, 0.0, 1.0), 3.0);\n    vec3 col = vec3(0.06, 0.10, 0.16) + ridge*vec3(0.95, 0.85, 0.70);\n    fragColor = vec4(col, 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_warp",
+      "stage": "pixel",
+      "code": "uniform vec4 uParams;   // x=swirl(rad/frame), y=zoom(<1 pulls in), z=seedmix, w=time\nout vec4 fragColor;\nvoid main(){\n    float t       = uParams.w;\n    float swirl   = uParams.x;\n    float zoom    = uParams.y;\n    float seedmix = uParams.z;\n    vec2 uv = vUV.st - 0.5;\n    float r = length(uv);\n    float a = atan(uv.y, uv.x);\n    // spiral: rotate more near the center, pull radius inward (zoom<1)\n    float swirlR = swirl * (1.0 + 1.6*(1.0 - r));   // stronger twist at the core\n    a += swirlR;\n    r *= zoom;\n    // slow global breathing so it never settles to a fixed point\n    a += 0.15*sin(t*0.05);\n    vec2 sp = vec2(cos(a), sin(a))*r + 0.5;\n    vec4 prev = texture(sTD2DInputs[0], sp);     // last frame (fed back, decayed)\n    vec4 seed = texture(sTD2DInputs[1], vUV.st); // static seed\n    // thread the seed back in so the vortex regenerates instead of draining\n    vec3 col = mix(prev.rgb, max(prev.rgb, seed.rgb), seedmix);\n    fragColor = vec4(col, 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_colorize",
+      "stage": "pixel",
+      "code": "uniform vec4 uPal;   // x = hue shift 0..1\nout vec4 fragColor;\nvec3 hue(vec3 c, float h){\n    const vec3 k = vec3(0.57735);\n    float ca = cos(h*6.2831853), sa = sin(h*6.2831853);\n    return c*ca + cross(k, c)*sa + k*dot(k, c)*(1.0 - ca);\n}\nvoid main(){\n    vec2 uv = vUV.st;\n    vec3 s = texture(sTD2DInputs[0], uv).rgb;\n    float lum = dot(s, vec3(0.299, 0.587, 0.114));\n    // palette ramp: deep core -> teal -> warm rim, driven by luminance\n    vec3 c0 = vec3(0.02, 0.03, 0.08);\n    vec3 c1 = vec3(0.10, 0.45, 0.55);\n    vec3 c2 = vec3(1.00, 0.80, 0.45);\n    vec3 col = mix(c0, c1, smoothstep(0.0, 0.45, lum));\n    col = mix(col, c2, smoothstep(0.45, 0.85, lum));\n    col = hue(col, uPal.x);\n    // center bloom glow\n    float d = distance(uv, vec2(0.5));\n    col += vec3(0.6, 0.5, 0.35) * pow(max(0.0, 1.0 - d*2.2), 3.0) * lum;\n    // soft vignette\n    col *= mix(1.0, 0.45, smoothstep(0.35, 0.95, d));\n    fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    {
+      "name": "Swirl",
+      "label": "Swirl Speed",
+      "style": "Float",
+      "default": 0.06,
+      "range": [
+        -0.3,
+        0.3
+      ],
+      "drives": "uParams.x on glsl_warp -- radians the sample angle rotates per frame (scaled stronger near the core). The vortex's spin rate and direction. Negative reverses the spiral. 0 freezes rotation."
+    },
+    {
+      "name": "Zoom",
+      "label": "Inward Pull",
+      "style": "Float",
+      "default": 0.985,
+      "range": [
+        0.95,
+        1.02
+      ],
+      "drives": "uParams.y on glsl_warp -- per-frame radial scale of the fed-back sample. Below 1.0 pulls the pattern toward the center (the whirlpool drain); above 1.0 pushes it outward. Closer to 1.0 = slower pull."
+    },
+    {
+      "name": "Seedmix",
+      "label": "Seed Regen",
+      "style": "Float",
+      "default": 0.12,
+      "range": [
+        0,
+        0.6
+      ],
+      "drives": "uParams.z on glsl_warp -- how much of the static seed is blended back each frame. Higher keeps the vortex sharp and re-fed; 0 lets it slowly drain to the decay floor."
+    },
+    {
+      "name": "Decay",
+      "label": "Trail Decay",
+      "style": "Float",
+      "default": 0.94,
+      "range": [
+        0.7,
+        0.995
+      ],
+      "drives": "opacity on level_decay (the Level TOP in the loop) -- the per-frame multiply that fades old frames. Below 1.0 bounds the feedback so energy never runs away; lower = shorter trails, higher = long smeary tails."
+    },
+    {
+      "name": "Palette",
+      "label": "Palette Hue",
+      "style": "Float",
+      "default": 0,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "uPal.x on glsl_colorize -- rotates the entire color grade through the hue wheel. 0 = teal/amber, sweeps the full spectrum."
+    },
+    {
+      "name": "Reset",
+      "label": "Reset Vortex",
+      "style": "Pulse",
+      "default": 0,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "reset on feedback_state -- clears the loop back to the seed image. Pulse to restart the vortex from scratch (e.g. after changing Zoom/Swirl)."
+    }
+  ],
+  "prompt": {
+    "one_liner": "A polar-warp feedback loop that pulls a static seed pattern into an endless rotating whirlpool -- bounded, decaying, and reset-wired.",
+    "evolve": "Push Swirl toward its extremes for a violent spin or flip it negative to reverse the spiral; nudge Zoom further below 1.0 for a faster drain (or above 1.0 to blow the pattern outward into a bloom). Lower Decay for crisp short arms, raise it near 0.99 for long smeary light-trails. Sweep Palette for the full hue range. For a different character, replace glsl_seed's ridged-fBm body with any image (wire a Movie File In into a second input) -- the vortex warps anything. Add a second, counter-rotating warp stage for a double-helix. Pulse Reset after any big parameter change to re-seed cleanly.",
+    "compose_with": [
+      "kaleidoscope",
+      "reaction-diffusion"
+    ]
+  },
+  "warmup_frames": 240,
+  "build_notes": "COOK DEMAND: This is a stateful feedback loop -- it ONLY evolves while out1 is demanded (viewed, rendered, or driven). In the /specimen_lab sandbox, add a temporary Execute DAT OUTSIDE the COMP with onFrameStart cooking the COMP's out1 (never part of the export). The shipped specimen needs no driver: viewing out1 or baking warmup_frames runs the time-dependence. Verify animation with two captures separated by real wall-clock seconds (a background sleep) -- a single forced capture proves nothing; cook(force=True) in a synchronous loop will NOT advance the feedback (Feedback TOP captures on frame boundaries). warmup_frames=240 lets the vortex spin up from the flat seed before a thumbnail bake.\\n\\nSTATIC-SOURCE DISCIPLINE: glsl_seed has NO time reference -- confirm glsl_seed.cookedThisFrame == False after warmup and glsl_warp.cookedThisFrame == True. The heavy 6-octave domain-warp fBm caches; only the cheap warp+feedback re-cooks per frame. Do NOT add absTime to the seed.\\n\\nFEEDBACK SAFETY (performance.md): the loop is bounded three ways and MUST stay so -- (1) fixed 640x640 16-bit-float on BOTH glsl_warp and feedback_state (never 'use input', never 4K; 16f not 32f keeps VRAM low while still avoiding banding); (2) level_decay opacity<1 (Decay param, default 0.94) is the decay multiply that prevents runaway; (3) Reset wired to feedback_state.reset. While wiring the loop, BYPASS feedback_state so it isn't live and accumulating; un-bypass only after the chain is complete. Watch feedback_state gpuCookTime / memory.gpuMemUsedMB across get_project_performance checks -- if either climbs every frame with no param change, the decay is >=1 or a format went float-unbounded. With these caps the whole specimen sits well under the 1280px / 60fps budget.\\n\\nUNIFORM BINDING: glsl_warp uses a vec sequence block uParams: valuex==parent().par.Swirl.eval(), valuey==parent().par.Zoom.eval(), valuez==parent().par.Seedmix.eval(), valuew==absTime.seconds. glsl_colorize uses vec block uPal: valuex==parent().par.Palette.eval(). Set the count with op.seq.vec.numBlocks=1 and vec0type='vec4' (NOT op.par.vec, whose .eval() always reads 0 and will mislead you). Declare 'uniform vec4 uParams;' / 'uniform vec4 uPal;' manually in the TOP shaders (a glslTOP auto-declares nothing). level_decay.opacity binds by expression to parent().par.Decay; feedback_state.reset binds to parent().par.Reset.\\n\\nWIRING ORDER (the loop has a cycle): create glsl_seed, glsl_warp, level_decay, feedback_state, glsl_colorize, out1 first; wire glsl_seed->glsl_warp(in1), feedback_state->glsl_warp(in0); glsl_warp->level_decay->feedback_state; glsl_warp->glsl_colorize->out1. THEN set feedback_state.top='glsl_warp' (the Target param is what closes the loop, not a wire). The Feedback TOP's wired input (level_decay) is its seed/reset-value source.\\n\\nTDN VALUE ROUND-TRIP: per specimen-authoring, custom-param VALUES do not round-trip on import when equal to default -- a freshly imported parametric specimen comes in inert (Swirl=0, Zoom=0, Decay=0). Here that is a BLACK frame, not just slow: Zoom=0 collapses everything to the center and Decay=0 kills the loop instantly. After ImportNetwork the params need a one-time revert-to-default (or an onInitTD setting par.val=par.default). Flag this explicitly in the re-import verification -- the defaults Zoom=0.985 and Decay=0.94 are load-bearing.\\n\\nLAYOUT: glsl_warp, level_decay, feedback_state form the cycle -- place feedback_state LEFT of glsl_warp (it feeds in0) with level_decay below/between so the decay return wire reads cleanly; keep the loop wires off the seed branch. Hug ALL docked DATs (each glslTOP docks pixel+compute+info) directly under their host in the SAME execute_python that creates the op, then get_network_layout to verify -- the three glslTOPs dock nine DATs that scatter onto the annotations otherwise. The auto-created empty compute DATs are omitted on export and recreated on import.",
+  "critique": {
+    "td_plausible": true,
+    "clears_bar": false,
+    "requires_none": true,
+    "photogenic": 2,
+    "verdict": "revise",
+    "issues": [
+      "AESTHETIC/CRITICAL (verified by live capture): The glsl_warp blend `mix(prev.rgb, max(prev.rgb, seed.rgb), seedmix)` is a monotonic LIGHTEN. With the inward zoom (zoom=0.985) re-concentrating energy and a bright seed (seed samples measured >1.0), the loop runs away to a BLOWN-OUT WHITE DISK within ~4s -- no visible spiral arms, no vortex, no filaments. I built the exact chain (real ridged-fBm seed + the spec shader + 640->320 scaled probe) in live TD and captured it: a saturated white blob with faint concentric rings, not a whirlpool. The Level decay (opacity 0.94, a linear *0.94) cannot counter a per-frame max()-injection of near-white seed energy plus radial energy concentration -- net positive feedback. This fails bar points (2) striking and (3) worth-opening, and risks an effectively-broken (all-white) frame rather than the described hypnotic vortex.",
+      "SEED BRIGHTNESS unbounded: glsl_seed outputs vec3(0.06,0.10,0.16)+ridge*vec3(0.95,0.85,0.70); the value-noise fBm is not normalized and ridge*0.95 stacks on the base, so samples exceed 1.0 (measured 1.004). Injecting >1.0 energy into a feedback loop every frame guarantees saturation. No clamp anywhere in the seed or in the loop until the final colorize.",
+      "BUILD_NOTES inaccuracy: the notes say 'op.seq.vec.numBlocks=1 and vec0type=\"vec4\"'. Verified in live TD: a glslTOP vec sequence exposes ONLY vec0name, vec0valuex/y/z/w -- there is NO vec0type param on a glslTOP (vecNtype exists on glslMAT/glslPOP, per specimen-authoring). Following this instruction errors with 'object has no attribute type'. The vec uniform on a TOP is always a vec4 via the four value slots.",
+      "MINOR: Reset is style Pulse bound to feedback_state.reset (a Toggle) via `=parent().par.Reset.eval()`. Verified this DOES fire (reads True only on the pulse frame), so it works -- but binding to the dedicated `resetpulse` (Pulse) param is the more idiomatic match. Acceptable as-is; noting for cleanly-modeled drop-in.",
+      "VERIFIED-OK (not problems): feedbackTOP top/reset, levelTOP opacity/blacklevel/gamma2, glslTOP format rgba16float, the vec0name/valuex..w uniform binding, absTime.seconds binding, static-seed discipline (seed.cookedThisFrame=False, warp=True confirmed), loop topology (fb.top=glsl_warp closes the cycle; fb input=level_decay), GLSL boilerplate, bounded fBm loop (i<6), 640px bound, requires:none, no Camera/Light needed for a TOP-only chain. The inert-import black-frame warning is REAL and correctly flagged (Zoom=0 -> flat color, Decay=0 -> black, both reproduced)."
+    ],
+    "fixes": "REWRITE the glsl_warp blend to stop runaway brightening. Replace `vec3 col = mix(prev.rgb, max(prev.rgb, seed.rgb), seedmix);` with an explicit-decay-plus-faint-additive-seed form, and clamp in-loop: `vec3 col = clamp(prev.rgb*0.985 + seed.rgb*seedmix, 0.0, 1.0);` (the prev*0.985 is in-shader decay that complements the Level TOP, and seed is ADDED faintly, not max()'d). 2) Lower the Seedmix default from 0.12 to ~0.03-0.05 and its range top from 0.6 to ~0.2 -- 0.6 floods the loop. 3) NORMALIZE/clamp the seed: in glsl_seed, normalize the fBm (it sums a*noise with a=0.5,0.25,... so divide by ~ (1-0.5^6)*... or simply clamp w to 0..1 before ridging) and reduce the base+ridge so seed stays <= ~0.6, e.g. `vec3 col = vec3(0.04,0.06,0.10) + ridge*vec3(0.55,0.48,0.38);`. 4) Strengthen the default Trail Decay from 0.94 toward ~0.90 and/or keep the prev*0.985 in-shader term so the loop reaches a stable, structured equilibrium instead of white. 5) After these changes, REBUILD in /specimen_lab, drive frames with a temp Execute DAT, let real wall-clock seconds pass, and capture glsl_colorize -> confirm visible spiral arms with deep core and structured (not uniform-white) field BEFORE persisting -- the current defaults do not pass a look check. 6) Remove the `vec0type='vec4'` instruction from build_notes (no such param on a glslTOP); keep only numBlocks + vec0name + vec0valuex..w. 7) Optional: bind Reset to feedback_state.resetpulse (Pulse->Pulse) for cleaner modeling. The technique, topology, API, and self-containment are all correct -- this is a shader-math + default-tuning revision, not a structural redesign."
+  }
+}

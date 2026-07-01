@@ -7,7 +7,7 @@ You'll need:
 - **TouchDesigner 2025.32280** or later
 - An MCP-compatible client such as [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Cursor](https://www.cursor.com/), or [Windsurf](https://windsurf.com/)
 
-Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled — no manual Python setup required. Envoy validates the virtual environment on each startup and falls back to the system Python if the venv is broken (see [Broken Virtual Environment](troubleshooting.md#broken-virtual-environment)).
+Embody automatically installs all server-side dependencies (`mcp`, `uvicorn`, etc.) when Envoy is first enabled — no manual Python setup required. This first install (and any later dependency upgrade) runs **in a background thread** so TouchDesigner stays responsive; the Embody COMP shows `Installing deps... (one-time)` while it works and switches to `Running on port …` once MCP is ready. After that, every startup takes the fast path and skips the install entirely. Envoy validates the virtual environment on each startup and falls back to the system Python if the venv is broken (see [Broken Virtual Environment](troubleshooting.md#broken-virtual-environment)).
 
 ## Enabling Envoy
 
@@ -87,9 +87,8 @@ When Envoy starts, it generates a full Claude Code configuration in your project
 - **`CLAUDE.md`** — project context and critical rules
 - **`.claude/rules/`** — always-loaded conventions (TD Python, network layout, MCP safety)
 - **`.claude/skills/`** — on-demand workflow guides (operator creation, debugging, externalization)
-- **`.claude/commands/`** — slash commands (`/run-tests`, `/status`, `/explore-network`)
 
-These files are regenerated each time Envoy starts to stay up to date. See [Claude Code Integration](claude-code.md) for the full reference.
+Pristine generated files are refreshed each time Envoy starts to stay up to date. If you edit a generated rule or skill, Embody detects the change (via a content hash in `.embody/generated-hashes.json`) and keeps your version instead of overwriting it — delete the file to opt back into regeneration. See [Claude Code Integration](claude-code.md) for the full reference.
 
 ## MCP Tool Permissions
 
@@ -98,6 +97,14 @@ When Envoy is first enabled, it deploys a `.claude/settings.local.json` file tha
 If you prefer finer control, edit `.claude/settings.local.json` in your project root after setup. The `allow` array lists tool permission patterns — remove any tools you want Claude Code to prompt you for before executing.
 
 For example, to allow only read-only tools and require confirmation for write operations, keep only the `query_*` and `get_*` entries in the allow list.
+
+## Fresh Clones and TD Version Matching
+
+When you clone a repo someone else built with Embody, the `.embody/envoy.json` file (which records the local TD install path) is gitignored — the path it references won't exist on your machine. Embody handles this by also committing `.embody/project.json`, which records the **TouchDesigner build the project was last saved with** (e.g., `{"td_build": "2025.32660"}`).
+
+The first time the bridge needs to launch TD on a fresh clone, it reads `td_build` from `project.json`, scans your standard TouchDesigner install locations (`/Applications/TouchDesigner*.app` on macOS, `C:\Program Files\Derivative\TouchDesigner.*` on Windows, `/opt/derivative/touchdesigner-*` on Linux), and picks the matching install — exact-build match if you have it, otherwise the closest same-year build (with a warning). If nothing matches, the error response includes the Derivative download link and the exact build number you need.
+
+Backward compatible — projects without `project.json` use `envoy.json`'s `td_executable` exactly as before. See [Architecture](architecture.md#embodyprojectjson-build-pin-committed) for the full match policy.
 
 ## Verifying the Connection
 

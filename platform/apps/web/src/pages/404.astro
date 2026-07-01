@@ -1,0 +1,86 @@
+---
+import Base from "../layouts/Base.astro";
+
+// SSR so we can echo the requested path (matches the default 404's "Path:"
+// line, but themed). Astro renders this route for any unmatched URL.
+export const prerender = false;
+
+const path = Astro.url.pathname || "/";
+---
+
+<Base
+  title="404 - embody.tools"
+  description="That page doesn't exist on embody.tools."
+>
+  <section class="page-section notfound">
+    <p class="eyebrow">error 404</p>
+    <h1>this page doesn't exist</h1>
+    <p class="lede">
+      The page you're looking for isn't here. It may have moved, or the link was
+      mistyped. Head back to the Collection and keep exploring transparent
+      TouchDesigner networks.
+    </p>
+
+    <p class="notfound-path">
+      <span>requested</span>
+      <code>{path}</code>
+    </p>
+
+    <div class="notfound-actions">
+      <a class="btn btn--primary" href="/collection">browse the collection</a>
+      <a class="btn btn--ghost" href="/">home</a>
+      <a class="btn btn--ghost" href="/manifesto">manifesto</a>
+    </div>
+  </section>
+</Base>
+
+<style>
+  /* Centered column, same measure as the manifesto/contribute pages, vertically
+     settled so the 404 doesn't float at the very top of a tall viewport. */
+  .notfound {
+    max-width: 46rem;
+    margin-inline: auto;
+    min-height: 52vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* Lowercase the headline to match the site's voice ("see it. embody it."). */
+  .notfound h1 {
+    text-transform: lowercase;
+  }
+
+  .notfound-path {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0 0 2rem;
+  }
+
+  .notfound-path span {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  .notfound-path code {
+    background: var(--bg-code);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.7rem;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    word-break: break-all;
+  }
+
+  .notfound-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+</style>

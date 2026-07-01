@@ -1,8 +1,8 @@
-﻿"""
-Test suite: TDN reconstruction — comprehensive round-trip fidelity,
+"""
+Test suite: TDN reconstruction - comprehensive round-trip fidelity,
 reconstruction simulation, and resilience testing.
 
-Tests ExportNetwork → ImportNetwork round-trips across all operator families,
+Tests ExportNetwork -> ImportNetwork round-trips across all operator families,
 parameter modes, custom parameters, connections, flags, operator storage,
 metadata, DAT content, deep nesting, type_defaults optimization,
 par_templates optimization, reconstruction simulation (strip + reimport),
@@ -30,7 +30,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	# =================================================================
 
 	def _roundTrip(self, parent):
-		"""Export → clear children → import → re-export.
+		"""Export -> clear children -> import -> re-export.
 		Returns (original_tdn, reimported_tdn, import_result).
 		"""
 		orig = self.tdn.ExportNetwork(
@@ -38,7 +38,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'), f'Export failed: {orig}')
 		orig_tdn = orig['tdn']
 
-		# Clear dock relationships before destroying — TD raises an
+		# Clear dock relationships before destroying - TD raises an
 		# uncatchable tdError if a dock target is destroyed first.
 		for c in list(parent.children):
 			try:
@@ -100,7 +100,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		return sorted([c.name for c in parent.children])
 
 	def _getOpTypes(self, parent):
-		"""Get dict of name→OPType for children."""
+		"""Get dict of name->OPType for children."""
 		return {c.name: c.OPType for c in parent.children}
 
 	def _verifyNetworkFidelity(self, original_ops, reimported_ops,
@@ -346,7 +346,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		pg_ver3[0].readOnly = True
 		comp2.par.Version = '2.0.0'
 
-		# comp3 (type_defaults trigger — 3rd baseCOMP)
+		# comp3 (type_defaults trigger - 3rd baseCOMP)
 		comp3 = parent.create(baseCOMP, 'comp3')
 
 		# select and flags
@@ -1025,7 +1025,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def test_F08_default_metadata_omission(self):
 		"""Default metadata should be omitted from export."""
 		n = self.sandbox.create(noiseTOP, 'n')
-		# All defaults — position at 0,0, default color, no comment, no tags
+		# All defaults - position at 0,0, default color, no comment, no tags
 		n.nodeX = 0
 		n.nodeY = 0
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
@@ -1333,7 +1333,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n1 = self.sandbox.create(noiseTOP, 'n1')
 		n1.viewer = True  # Has non-default flags
 		n2 = self.sandbox.create(noiseTOP, 'n2')
-		# n2 has all default flags — no flags key emitted
+		# n2 has all default flags - no flags key emitted
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		td = orig['tdn'].get('type_defaults', {})
 		if 'noiseTOP' in td:
@@ -1649,7 +1649,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(result.get('success'))
 
 	# =================================================================
-	# K3. Target COMP Metadata Preservation — v1.1 (6 tests)
+	# K3. Target COMP Metadata Preservation - v1.1 (6 tests)
 	# =================================================================
 
 	def test_K14_target_comp_type_exported(self):
@@ -2082,7 +2082,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_rel = f'embody/{tdn_comp.name}.tdn'
 		child_rel = f'embody/{tdn_comp.name}/tracked_child.txt'
 
-		# Register both — child has EMPTY strategy (purely TDN-managed)
+		# Register both - child has EMPTY strategy (purely TDN-managed)
 		self._addTableRow(tdn_path, 'base', 'tdn', tdn_rel)
 		self._addTableRow(child_path, 'text', '', child_rel)
 
@@ -2091,11 +2091,11 @@ class TestTDNReconstruction(EmbodyTestCase):
 			child_dat.destroy()
 			self.assertIsNone(op(child_path), 'Child should be destroyed')
 
-			# Run the continuity check — this is what caused file deletion
+			# Run the continuity check - this is what caused file deletion
 			self.embody_ext.checkOpsForContinuity(
 				self.embody_ext.ExternalizationsFolder)
 
-			# The child's row must still exist (no own strategy → skipped)
+			# The child's row must still exist (no own strategy -> skipped)
 			self.assertTrue(self._tableHasRow(child_path),
 				'Continuity check must NOT remove pure TDN-managed children')
 		finally:
@@ -2106,7 +2106,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		"""Individually-externalized children inside TDN COMPs must be checked.
 
 		When a child has its own strategy (py, tsv, etc.), it was explicitly
-		externalized and should go through normal continuity checking —
+		externalized and should go through normal continuity checking -
 		including deletion detection.
 		"""
 		tdn_comp = self.sandbox.create(baseCOMP, 'tdn_with_py_child')
@@ -2126,7 +2126,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			child_dat.destroy()
 			self.assertIsNone(op(child_path), 'Child should be destroyed')
 
-			# Run continuity check — should detect the deletion
+			# Run continuity check - should detect the deletion
 			self.embody_ext.checkOpsForContinuity(
 				self.embody_ext.ExternalizationsFolder)
 
@@ -2152,7 +2152,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			# The operator doesn't exist at this path
 			self.assertIsNone(op(orphan_path))
 
-			# Run continuity check — should detect it as missing
+			# Run continuity check - should detect it as missing
 			self.embody_ext.checkOpsForContinuity(
 				self.embody_ext.ExternalizationsFolder)
 
@@ -2238,7 +2238,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		tdn_path = tdn_comp.path
 		child_path = child.path
 
-		# Register in table — empty strategy (TDN-managed child)
+		# Register in table - empty strategy (TDN-managed child)
 		self._addTableRow(tdn_path, 'base', 'tdn', f'embody/{tdn_comp.name}.tdn')
 		self._addTableRow(child_path, 'text', '',
 			f'embody/{tdn_comp.name}/tracked_dat.txt')
@@ -2503,7 +2503,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertNotIn('dock', ops['op1'])
 
 	def test_R03_dock_roundtrip_sibling(self):
-		"""Sibling-name dock relationship survives export → import."""
+		"""Sibling-name dock relationship survives export -> import."""
 		host = self.sandbox.create(noiseTOP, 'host')
 		docked = self.sandbox.create(infoDAT, 'docked')
 		docked.dock = host
@@ -2559,7 +2559,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(self.sandbox.op('d2').dock, restored_host)
 
 	# =================================================================
-	# S — About page filtering (Embody-managed metadata)
+	# S - About page filtering (Embody-managed metadata)
 	# =================================================================
 
 	def test_S01_export_excludes_embody_about(self):
@@ -2631,11 +2631,11 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertNotIn('About', top_cp, 'Root About page should be excluded')
 
 	# =================================================================
-	# T — Specialized COMP types (geometryCOMP, cameraCOMP, lightCOMP)
+	# T - Specialized COMP types (geometryCOMP, cameraCOMP, lightCOMP)
 	# =================================================================
 
 	def test_T01_geocomp_children_survive_roundtrip(self):
-		"""Geo COMP's SOP children survive export → clear → import."""
+		"""Geo COMP's SOP children survive export -> clear -> import."""
 		geo = self.sandbox.create(geometryCOMP, 'geo_test')
 		# Customize the auto-created torus1 SOP
 		torus = geo.op('torus1')
@@ -2794,7 +2794,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		not when children are cleared.
 		"""
 		geo = self.sandbox.create(geometryCOMP, 'geo_defaults')
-		# Do NOT customize torus1 — leave it fully default
+		# Do NOT customize torus1 - leave it fully default
 		torus = geo.op('torus1')
 		has_torus = torus is not None
 
@@ -2808,7 +2808,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		# Default torus1 should be SKIPPED (trivial keys only)
 		op_names = [o['name'] for o in tdn.get('operators', [])]
 		# Note: if torus1 has no non-trivial keys, it gets skipped
-		# This is the documented behavior — not a bug
+		# This is the documented behavior - not a bug
 
 		# Strip and restore
 		for c in list(geo.findChildren(depth=1, includeUtility=True)):
@@ -2824,7 +2824,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		if 'torus1' not in op_names:
 			self.assertIsNone(geo.op('torus1'),
 				'Uncustomized torus1 should not reappear after restore '
-				'(this is expected — TD only creates defaults on COMP creation)')
+				'(this is expected - TD only creates defaults on COMP creation)')
 
 	def test_T06_geocomp_material_reference_roundtrip(self):
 		"""Geo COMP material parameter referencing an internal MAT survives roundtrip."""
@@ -3028,7 +3028,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def test_T13_divergent_default_not_false_positive(self):
 		"""Params at their true creation value are still omitted from export."""
 		cam = self.sandbox.create(cameraCOMP, 'cam_default')
-		# Don't change tz — leave it at the creation value of 5.0
+		# Don't change tz - leave it at the creation value of 5.0
 
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path,
 			include_dat_content=True)
@@ -3079,7 +3079,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self._addTableRow(child_path, 'base', 'tdn', 'dummy/child_inner.tdn')
 
 		try:
-			# Clear and reimport parent — child's children should be skipped
+			# Clear and reimport parent - child's children should be skipped
 			for c in list(parent.children):
 				c.destroy()
 
@@ -3094,7 +3094,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 
 			# But its children should NOT have been imported from the parent TDN
 			self.assertEqual(len(restored_child.children), 0,
-				'child COMP children must be skipped — its own TDN is '
+				'child COMP children must be skipped - its own TDN is '
 				'source of truth')
 		finally:
 			self._removeTableRow(child_path)
@@ -3110,7 +3110,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(orig.get('success'))
 		parent_tdn = orig['tdn']
 
-		# No TDN entry for child — children should be imported normally
+		# No TDN entry for child - children should be imported normally
 		for c in list(parent.children):
 			c.destroy()
 
@@ -3191,11 +3191,15 @@ class TestTDNReconstruction(EmbodyTestCase):
 	# =================================================================
 	# V. Palette Clone Round-Trip Fidelity (12 tests)
 	# =================================================================
-	# Palette clones are COMPs (buttonCOMP, sliderCOMP) cloned from
-	# /sys/TDTox/defaultCOMPs/. On export, params matching p.default
-	# but differing from the clone source must be captured. On import,
-	# clone/enablecloning params must be skipped. Children come from
-	# the clone source and are not stored in TDN.
+	# Native widget COMPs (buttonCOMP, sliderCOMP) clone from
+	# /sys/TDTox/defaultCOMPs/. As of v5.0.x they are NOT treated as
+	# palette clones at the TDN export layer (palette_clone flag is
+	# reserved for true user palette clones from /sys/TDBasicWidgets
+	# and similar). Native widgets export as regular COMPs with full
+	# children + the clone reference parameter, so user customizations
+	# inside their internals round-trip intact. The "divergent default"
+	# concern remains: params matching p.default but differing from
+	# the clone source must still be captured (V04, V05).
 	# =================================================================
 
 	def test_V01_button_roundtrip_basic(self):
@@ -3226,18 +3230,26 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(clone_op.path.startswith('/sys/'),
 			f'Clone should point to /sys/, got {clone_op.path}')
 
-	def test_V03_palette_clone_flag_in_export(self):
-		"""Export marks palette clones and skips children."""
+	def test_V03_native_widget_exports_with_children(self):
+		"""Native widget COMPs (cloned from /sys/TDTox/defaultCOMPs/)
+		export as regular COMPs: NO palette_clone flag, children fully
+		exported. This preserves any user customization inside the
+		widget's internals through round-trip."""
 		btn = self.sandbox.create(buttonCOMP, 'btn3')
 		actual_name = btn.name
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		ops = orig['tdn']['operators']
 		btn_entry = next(e for e in ops if e['name'] == actual_name)
-		self.assertTrue(btn_entry.get('palette_clone'),
-			'palette_clone flag must be True')
-		self.assertNotIn('children', btn_entry,
-			'Children must not be exported for palette clones')
+		self.assertFalse(btn_entry.get('palette_clone'),
+			'Native widget COMPs must NOT carry the palette_clone flag '
+			'(reserved for true user palette clones)')
+		self.assertIn('children', btn_entry,
+			'Children must be exported in full for native widgets so '
+			'user customizations round-trip intact')
+		self.assertGreater(len(btn_entry['children']), 0,
+			'buttonCOMP from /sys/TDTox/defaultCOMPs/ ships with '
+			'children -- they must appear in the export')
 
 	def test_V04_buttontype_matches_default_preserved(self):
 		"""Params matching p.default but differing from clone source survive round-trip.
@@ -3290,28 +3302,25 @@ class TestTDNReconstruction(EmbodyTestCase):
 		restored = self.sandbox.op(actual_name)
 		self.assertEqual(str(restored.par.label.eval()), 'Custom')
 
-	def test_V07_clone_enablecloning_excluded_from_export(self):
-		"""clone and enablecloning params must not appear in TDN export."""
+	def test_V07_clone_reference_captured_in_export(self):
+		"""Native widget COMPs export their clone reference so the
+		import side can recreate the link to /sys/TDTox/defaultCOMPs/.
+		`enablecloning` matches its default (True) for fresh widgets
+		so it is correctly omitted by the default-skipping export."""
 		btn = self.sandbox.create(buttonCOMP, 'btn7')
 		actual_name = btn.name
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		tdn = orig['tdn']
-		# Check per-op params
 		ops = tdn['operators']
 		btn_entry = next(e for e in ops if e['name'] == actual_name)
 		per_op = btn_entry.get('parameters', {})
-		self.assertNotIn('clone', per_op,
-			'clone must not appear in per-op params')
+		self.assertIn('clone', per_op,
+			'Clone reference must be captured so the link to /sys/ '
+			'survives round-trip')
 		self.assertNotIn('enablecloning', per_op,
-			'enablecloning must not appear in per-op params')
-		# Check type_defaults
-		td_params = tdn.get('type_defaults', {}).get(
-			'buttonCOMP', {}).get('parameters', {})
-		self.assertNotIn('clone', td_params,
-			'clone must not appear in type_defaults')
-		self.assertNotIn('enablecloning', td_params,
-			'enablecloning must not appear in type_defaults')
+			'enablecloning matches its default for fresh widgets and '
+			'should be omitted by the default-skipping export')
 
 	def test_V08_old_tdn_clone_params_skipped_on_import(self):
 		"""Old TDN files with clone/enablecloning params don't overwrite auto-set values."""
@@ -3399,7 +3408,10 @@ class TestTDNReconstruction(EmbodyTestCase):
 				f'{name} buttontype should be toggledown after roundtrip')
 
 	def test_V12_mixed_network_no_interference(self):
-		"""Palette clone handling does not interfere with regular operators."""
+		"""A mixed network of native widget COMPs (button, slider) and
+		regular operators (baseCOMP, nullTOP) round-trips correctly.
+		None of these carry the palette_clone flag under current export
+		semantics -- that flag is reserved for true user palette clones."""
 		btn = self.sandbox.create(buttonCOMP, 'btn30')
 		btn_name = btn.name
 		btn.par.label = 'Mixed'
@@ -3407,26 +3419,26 @@ class TestTDNReconstruction(EmbodyTestCase):
 		sl_name = sl.name
 		base = self.sandbox.create(baseCOMP, 'base30')
 		base.create(nullTOP, 'inner1')
-		null = self.sandbox.create(nullTOP, 'null30')
+		self.sandbox.create(nullTOP, 'null30')
 
-		# Export and check palette_clone flags
 		orig = self.tdn.ExportNetwork(root_path=self.sandbox.path)
 		self.assertTrue(orig.get('success'))
 		ops = orig['tdn']['operators']
 		by_name = {e['name']: e for e in ops}
-		self.assertTrue(by_name[btn_name].get('palette_clone'))
-		self.assertTrue(by_name[sl_name].get('palette_clone'))
-		self.assertFalse(by_name.get('base30', {}).get('palette_clone', False),
-			'baseCOMP must NOT be marked as palette clone')
-		self.assertFalse(by_name.get('null30', {}).get('palette_clone', False))
+		# No operator in this mixed network should carry palette_clone --
+		# native widgets export as regular COMPs, regular ops never qualified.
+		for name in (btn_name, sl_name, 'base30', 'null30'):
+			self.assertFalse(by_name.get(name, {}).get('palette_clone', False),
+				f'{name} must NOT carry palette_clone flag')
 
-		# Round-trip
+		# Round-trip preserves all four operator categories
 		self._roundTrip(self.sandbox)
-		# Palette clones intact
+		# Native widgets keep their children + custom param value
 		self.assertGreater(len(self.sandbox.op(btn_name).children), 0)
 		self.assertGreater(len(self.sandbox.op(sl_name).children), 0)
 		self.assertEqual(str(self.sandbox.op(btn_name).par.label.eval()), 'Mixed')
-		# Regular ops intact
+		# Regular operators round-trip without interference from the
+		# native-widget code path
 		self.assertIsNotNone(self.sandbox.op('base30'))
 		self.assertIsNotNone(self.sandbox.op('base30').op('inner1'))
 		self.assertIsNotNone(self.sandbox.op('null30'))
@@ -3482,7 +3494,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				break
 
 		if info_def is None:
-			# Info DAT may have been filtered as trivial — that's fine too
+			# Info DAT may have been filtered as trivial - that's fine too
 			return
 
 		# If it's in the export, it must be marked read-only with no content

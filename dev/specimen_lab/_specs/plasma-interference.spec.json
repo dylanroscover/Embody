@@ -1,0 +1,190 @@
+{
+  "slug": "plasma-interference",
+  "name": "Plasma Interference",
+  "category": "generative-abstract",
+  "difficulty": "starter",
+  "description": "A flowing demoscene plasma rebuilt for 2025: summed, animated sine fields in a single GLSL TOP, domain-warped into a liquid swirl and detuned so two field scales beat against each other into shimmering interference fringes, then colored through a cyclic cosine palette. A drop-in animated texture / VJ loop / mask / displacement source that self-renders with no input.",
+  "key_ops": [
+    "glslTOP",
+    "outTOP"
+  ],
+  "network_plan": [
+    {
+      "name": "glsl_plasma",
+      "type": "glslTOP",
+      "role": "The entire effect. A generator (no input) that computes summed/animated sine fields, applies a slow rotating domain warp for liquid flow, detunes a second field scale against the first to produce interference beats, and colors through an Inigo-Quilez cyclic cosine palette. Recomputed every frame when out1 is demanded -- cheap (a handful of sin/cos per pixel at 1280x720), so no static-source split is needed. Generator: outputresolution MUST be custom with explicit resolutionw/h or the TOP renders 1x1. Two vec4 uniforms set via the vec parameter SEQUENCE (op.seq.vec, NOT op.par.vec): uParams = (Scale, Warp, Complexity, absTime.seconds*Speed); uPalette = (Palette, Contrast, 0, 0). Bind valuex..w with .expr = parent().par.X.eval(). Place at nodeX 400, nodeY 0.",
+      "params": {
+        "outputresolution": "custom",
+        "resolutionw": 1280,
+        "resolutionh": 720,
+        "pixeldat": "glsl_plasma_pixel",
+        "computedat": "glsl_plasma_compute",
+        "seq.vec[0].name": "uParams",
+        "seq.vec[0].valuex": "=parent().par.Scale.eval()",
+        "seq.vec[0].valuey": "=parent().par.Warp.eval()",
+        "seq.vec[0].valuez": "=parent().par.Complexity.eval()",
+        "seq.vec[0].valuew": "=absTime.seconds*parent().par.Speed.eval()",
+        "seq.vec[1].name": "uPalette",
+        "seq.vec[1].valuex": "=parent().par.Palette.eval()",
+        "seq.vec[1].valuey": "=parent().par.Contrast.eval()",
+        "seq.vec[1].valuez": "0",
+        "seq.vec[1].valuew": "0"
+      },
+      "inputs": []
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target. Terminal of the chain, named exactly out1 per the C3 contract. Flagged viewer so the user sees the plasma immediately on drop-in. Place at nodeX 800, nodeY 0. Add flag: viewer.",
+      "params": {
+        "label": "=me.name"
+      },
+      "inputs": [
+        "glsl_plasma"
+      ]
+    },
+    {
+      "name": "glsl_plasma_pixel",
+      "type": "textDAT",
+      "role": "Docked pixel/fragment shader DAT for glsl_plasma -- holds the GLSL body (see glsl[0]). language=glsl, extension=frag. HUG the host: place directly below glsl_plasma in the dock cluster (~nodeX 550, nodeY -120). Keep source LF/space-indented (no tabs) so TDN exports a clean YAML literal block.",
+      "params": {
+        "extension": "frag",
+        "dock": "glsl_plasma"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_plasma_compute",
+      "type": "textDAT",
+      "role": "Docked (empty) compute DAT auto-created with the glslTOP. Left empty -- this is a pixel-stage shader only. HUG the host (~nodeX 250, nodeY -120). Note: an unedited default compute companion is omitted on TDN export and recreated by TD on import, so it may not appear in the final .tdn file.",
+      "params": {
+        "dock": "glsl_plasma"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_plasma_info",
+      "type": "infoDAT",
+      "role": "Docked Info DAT auto-created with the glslTOP -- surfaces shader compile status. Read-only. HUG the host directly in the dock cluster (~nodeX 400, nodeY -120).",
+      "params": {
+        "op": "glsl_plasma",
+        "dat_read_only": true,
+        "dock": "glsl_plasma"
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate1",
+      "type": "annotateCOMP",
+      "role": "Single teaching annotation enclosing glsl_plasma + out1, titled 'Plasma Interference'. Explains the technique. Mode=annotate, Backcolorr=[0.16,0.13,0.22], Opacity=0.3. Place at nodeX 200, nodeY -340; size [820, 600]. Use /manage-annotations for the coordinate math (nodeX/nodeY is the bottom-left corner).",
+      "params": {
+        "Titletext": "Plasma Interference",
+        "Bodytext": "Classic demoscene plasma: a sum of moving sine waves makes a smooth scalar field. Two non-obvious moves lift it -- (1) a slow rotating DOMAIN WARP offsets the sample coords so the field flows like liquid instead of sliding flat; (2) a second field sampled at a slightly DETUNED scale beats against the first, producing the shimmering interference fringes the name promises. The scalar field drives a cyclic cosine palette (Palette rotates the hue ring, Contrast pushes saturation). One GLSL TOP, no input, terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_plasma_pixel",
+      "stage": "pixel",
+      "code": "uniform vec4 uParams;   // x=scale, y=warp, z=complexity(detune), w=time(=absTime*Speed)\nuniform vec4 uPalette;  // x=hue 0..1, y=contrast\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\n// Inigo-Quilez cyclic cosine palette: smooth, loops in hue, never bands.\nvec3 palette(float t, float hue, float contrast){\n    vec3 a = vec3(0.5);\n    vec3 b = vec3(0.5) * contrast;\n    vec3 c = vec3(1.0, 1.0, 1.0);\n    vec3 d = vec3(0.00, 0.33, 0.67) + hue;   // hue rotates the phase offsets\n    return a + b * cos(6.28318 * (c * t + d));\n}\n\n// One animated sine field: a handful of moving plane-waves summed.\n// freq sets the spatial scale; this is the classic plasma kernel.\nfloat field(vec2 p, float time, float freq){\n    float v = 0.0;\n    v += sin(p.x * freq + time);\n    v += sin(p.y * freq * 1.3 + time * 1.1);\n    v += sin((p.x + p.y) * freq * 0.7 + time * 0.9);\n    float cx = p.x + 0.5 * sin(time * 0.4);\n    float cy = p.y + 0.5 * cos(time * 0.35);\n    v += sin(sqrt(cx * cx + cy * cy) * freq * 1.6 + time * 1.3);  // radial ripple from a moving center\n    return v;\n}\n\nvoid main(){\n    float aspect = uTD2DInfos[0].res.z / uTD2DInfos[0].res.w;  // res.zw = pixel dims\n    vec2 uv = vUV.st;\n    vec2 p  = (uv - 0.5);\n    p.x *= aspect;                               // keep the plasma square on wide formats\n\n    float t      = uParams.w;\n    float scale  = max(0.5, uParams.x);\n    float warp   = uParams.y;\n    float detune = uParams.z;\n\n    p *= scale;\n\n    // --- Domain warp: a slow rotating swirl bends the sample coords so the\n    //     field flows like liquid rather than sliding as flat stripes.\n    vec2 w = vec2(\n        sin(p.y * 1.7 + t * 0.5),\n        cos(p.x * 1.5 - t * 0.45)\n    );\n    vec2 pw = p + warp * w;\n\n    // --- Two fields at slightly detuned scales BEAT against each other.\n    //     Their difference is the interference fringe pattern.\n    float f1 = field(pw, t, 1.0);\n    float f2 = field(pw, t * 1.05, 1.0 + 0.25 * detune);\n    float v  = (f1 + f2) * 0.25;                 // normalize ~[-1,1] (8 sines / ~8)\n    v += 0.30 * detune * sin((f1 - f2) * PI);    // explicit beat term -> visible moire shimmer\n\n    float tone = 0.5 + 0.5 * sin(v * PI);        // fold into 0..1, smooth and cyclic\n\n    vec3 col = palette(tone, uPalette.x, 0.6 + uPalette.y);\n\n    // gentle vignette so it reads as a framed loop, not a flat fill\n    float d = length(uv - 0.5);\n    col *= mix(1.0, 0.55, smoothstep(0.45, 0.95, d));\n\n    fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);\n}"
+    }
+  ],
+  "exposed_params": [
+    {
+      "name": "Scale",
+      "label": "Scale",
+      "style": "Float",
+      "default": 6,
+      "range": [
+        1,
+        20
+      ],
+      "drives": "uParams.x -- spatial frequency of the sine fields. Low = a few broad lava-lamp blobs; high = dense fine plasma. The zoom of the pattern."
+    },
+    {
+      "name": "Speed",
+      "label": "Speed",
+      "style": "Float",
+      "default": 1,
+      "range": [
+        0,
+        4
+      ],
+      "drives": "Multiplies absTime.seconds into uParams.w (the time term every sine reads). 1 = gentle flow, higher = faster churn, 0 freezes the loop (and drops the TOP's time-dependence so it stops cooking)."
+    },
+    {
+      "name": "Warp",
+      "label": "Warp",
+      "style": "Float",
+      "default": 1.2,
+      "range": [
+        0,
+        3
+      ],
+      "drives": "uParams.y -- domain-warp amount. The non-obvious knob: 0 gives flat sliding demoscene stripes; higher bends the sample coords through a rotating swirl so the field flows and curls like liquid."
+    },
+    {
+      "name": "Complexity",
+      "label": "Interference",
+      "style": "Float",
+      "default": 1,
+      "range": [
+        0,
+        2
+      ],
+      "drives": "uParams.z -- detune between the two field scales plus the explicit beat term. 0 = a single clean plasma; higher pulls the two fields apart so they beat into shimmering moire interference fringes (what the name promises)."
+    },
+    {
+      "name": "Palette",
+      "label": "Palette Hue",
+      "style": "Float",
+      "default": 0,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "uPalette.x -- rotates the cyclic cosine palette through the full hue ring. 0 = teal/magenta classic plasma; sweeping it cycles through fire, ocean, toxic green, etc. Loops seamlessly at 1.0 back to 0.0."
+    },
+    {
+      "name": "Contrast",
+      "label": "Contrast",
+      "style": "Float",
+      "default": 0.4,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "uPalette.y -- pushes palette saturation/contrast (added onto a 0.6 base inside the shader). Low = pastel washes; high = punchy neon bands with deep darks."
+    }
+  ],
+  "prompt": {
+    "one_liner": "A liquid demoscene plasma: animated sine fields domain-warped into a flowing swirl and detuned so two scales beat into shimmering interference fringes, colored through a tunable cyclic palette -- one GLSL TOP, no input, drop-in animated texture.",
+    "evolve": "Tune the look live with the six params: raise Warp for more liquid curl, raise Interference for the shimmering moire beat, sweep Palette Hue for a different color world, drop Speed to 0 to freeze a still. To go further: feed out1 into the kaleidoscope specimen's external input for a mandala; wire it into a Displace TOP or a geometry's bump/displacement as a moving height field; or use a single channel as an animated mask. Push the shader by adding a third detuned field, swapping the vignette for a feedback-TOP trail, or driving Scale/Warp from audio (an Analyze CHOP into the vec uniforms) for a reactive VJ loop.",
+    "compose_with": [
+      "kaleidoscope",
+      "reaction-diffusion"
+    ]
+  },
+  "warmup_frames": 3,
+  "build_notes": "COOK DEMAND: glsl_plasma is time-dependent only through uParams.w (absTime.seconds*Speed). It cooks every frame ONLY when out1 is demanded -- a viewer on out1, a downstream render, or the build pipeline baking warmup_frames. In the sandbox nothing views out1, so add a TEMPORARY frame-driver: an Execute DAT in /specimen_lab (OUTSIDE the COMP, so it never exports) with onFrameStart cooking out1. Verify real animation with two captures separated by a real sleep -- a single forced capture proves nothing. Speed=0 removes the time term and the TOP legitimately stops cooking (a still); that is correct, not a bug.\\n\\nPERFORMANCE: This is a true generator, NOT a heavy fBm source -- the static-source-plus-cheap-downstream rule does not apply. The whole field is ~8 sin/cos + a palette per pixel at 1280x720, trivially cheap; recomputing per frame is fine and there is no feedback loop to bound. Resolution is bounded at 1280x720 (under the 1280px cap). If a user pushes Scale very high the visual aliases (fringes thinner than a texel) but FPS is unaffected -- a look issue, not a cost issue. Still gate it: baseline get_project_performance before, re-check after; a concurrent capture_top/numpyArray stalls the GPU and dips the fps reading, so take a clean reading without them.\\n\\nGENERATOR PARAMS: outputresolution MUST be 'custom' with resolutionw=1280/resolutionh=720 -- without it a glslTOP with no input renders 1x1. aspect from uTD2DInfos[0].res.zw keeps the plasma square on the 16:9 format.\\n\\nUNIFORMS: two vec4s set as a parameter SEQUENCE on the glslTOP (op.seq.vec.numBlocks=2, then seq.vec[i].name + valuex..w as expressions), NOT op.par.vec (a Sequence-style par whose .eval() reads 0 and misleads). uParams binds Scale/Warp/Complexity and time*Speed; uPalette binds Palette/Contrast. Both are DECLARED manually at the top of the pixel shader (glslTOP requires manual uniform declarations, unlike a glslPOP whose vec-page uniforms auto-declare).\\n\\nDOCKED DATS: creating the glslTOP docks a pixel DAT, a compute DAT, and an info DAT -- they spawn scattered. HUG all three directly under glsl_plasma AT CREATION (run get_network_layout in the SAME execute_python/create call), never defer to a cleanup pass. Keep the shader source LF/space-indented (no tabs) so TDN exports it as a clean YAML literal block, not a double-quoted scalar.\\n\\nTDN VALUE ROUND-TRIP TRAP: TDN exports param DEFINITIONS (default/range/help) but NOT current values when they equal the default. On re-import the six params are recreated with the right defaults but .val stays at 0/min, so a freshly-imported specimen renders inert (Scale=0 -> blank) until something applies default->value. Verify on re-import; until the importer applies defaults, do a one-time revert-to-default after import.\\n\\nPERSIST: build in sandbox COMP /specimen_lab/plasma_interference, then export_network the COMP with include_dat_content=True. operator_count = 5 (glsl_plasma, out1, glsl_plasma_pixel, glsl_plasma_compute, glsl_plasma_info; annotations not counted -- and the empty default compute DAT may be omitted on export, dropping the on-disk count to 4). output_op=out1, requires=none, difficulty=starter, warmup_frames=3. CATEGORY MISMATCH TO RESOLVE WITH USER: the requested category is 'generative-abstract' but every shipped specimen uses 'generative' (folder specimens/generative/). The manifest schema's category is a free string, but folder + category string should be consistent -- confirm whether to add a new generative-abstract folder/category or file this under the existing generative one before writing the .tdn and manifest entry.\"",
+  "critique": {
+    "td_plausible": true,
+    "clears_bar": true,
+    "requires_none": true,
+    "photogenic": 4,
+    "verdict": "revise",
+    "issues": [
+      "Uniform-binding params syntax in network_plan is invented: the network_plan.params dict encodes uniforms as flat dotted keys 'seq.vec[0].name'/'seq.vec[0].valuex'. That is not how you set a vec sequence in TD. The shipped kaleidoscope specimen confirms the real path: op.seq.vec.numBlocks=2, then op.seq.vec[0].name and op.seq.vec[0].par.valuex.expr=..., which TDN exports under a 'sequences:/vec:' block (name/valuex/valuey/...). The prose and build_notes get this right (op.seq.vec, NOT op.par.vec); only the params dict uses the fake bracket syntax. A builder following the params dict literally would fail.",
+      "Speed=0 cook-demand claim is wrong. The uniform expr '=absTime.seconds*parent().par.Speed.eval()' still REFERENCES absTime.seconds, so TD keeps the parameter (and the TOP) flagged time-dependent even at Speed=0 -- the product just evaluates to 0 every frame. The TOP keeps cooking the same frame; it does not 'drop time-dependence and stop cooking.' The visual result (a frozen still) is correct, but the stated mechanism is false in two places (Speed param 'drives' note and build_notes COOK DEMAND).",
+      "Field-normalization comment overstates. field() sums 4 sin terms (range ~[-4,4]); f1+f2 is ~[-8,8], so (f1+f2)*0.25 is ~[-2,2], not the '~[-1,1] (8 sines / ~8)' the comment claims. Harmless visually because tone=0.5+0.5*sin(v*PI) folds any range cyclically into [0,1], but the comment is inaccurate and 'normalize' is a misnomer (it is a cyclic fold, and v can carry the explicit beat term beyond +-2).",
+      "Compute-DAT omission claim contradicts shipped specimens. build_notes says the empty default compute companion 'may be omitted on TDN export.' Every shipped specimen (reaction-diffusion, kaleidoscope) actually RETAINS its empty compute DATs in the .tdn (glsl_*_compute entries with no dat_content). So operator_count should be 5 and the on-disk file will most likely contain glsl_plasma_compute. The hedge ('may') keeps it from being flat wrong, but the stated expectation is backwards from observed behavior.",
+      "Category/folder inconsistency (spec self-flags). category 'generative-abstract' passes the schema (free string) but no shipped specimen mixes category and folder -- all four use category==folder (generative/compositing/3d/simulation). The spec correctly raises this to the user; it must be resolved (use existing 'generative' folder+category, or add a new one) before writing the .tdn + manifest entry.",
+      "Minor: aspect uses uTD2DInfos[0].res.z/.w = width/height = 1280/720 = 1.78, which is correct (res = (1/w,1/h,w,h)); the inline comment 'res.zw = pixel dims' is accurate. No bug, but the HARD CONSTRAINT line 'texel size uTD2DInfos[0].res.xy' is unused by this pure generator (it never samples sTD2DInputs[0]); fine, just note the texel-size guidance is irrelevant here."
+    ],
+    "fixes": "\"1) Rewrite the glsl_plasma uniform params to match the shipped TDN form: drop the 'seq.vec[0].name'/'seq.vec[0].valuex' dotted keys and instead specify a sequences/vec block (numBlocks=2; vec[0]=uParams with valuex..w = =parent().par.Scale.eval(), =parent().par.Warp.eval(), =parent().par.Complexity.eval(), =absTime.seconds*parent().par.Speed.eval(); vec[1]=uPalette with valuex/valuey = Palette/Contrast, valuez/valuew = 0). Build it via op.seq.vec.numBlocks=2 then op.seq.vec[i].name and op.seq.vec[i].par.valueX.expr. 2) Correct the Speed=0 language in both the Speed 'drives' note and build_notes: at Speed=0 the TOP STILL cooks every frame (absTime is still referenced) but produces an identical frame (a frozen still); it does not stop cooking. If a true 'stop cooking' is desired, gate the time term so the expr drops absTime when Speed==0 (e.g. valuew expr '=absTime.seconds*me.par... ' -> conditional), otherwise just fix the claim. 3) Fix the f1+f2 comment to '~[-2,2], folded cyclically into 0..1 by 0.5+0.5*sin(v*PI)'; rename 'normalize' to 'fold/scale'. 4) Set operator_count=5 and change the build_notes/glsl_plasma_compute role to expect the empty compute DAT to be RETAINED on export (matching reaction-diffusion/kaleidoscope), not omitted. 5) Resolve category with the user: prefer category 'generative' + specimens/generative/plasma-interference.tdn to match the existing convention, unless a new generative-abstract folder is intentionally added. No render-blocking changes: the shader boilerplate (out vec4 fragColor; vUV.st; bounded loops -- in fact zero loops; outputresolution=custom + 1280x720), self-rendering generator (no input, no black-frame risk), out1 viewer flag, 6 expressive params, and requires:none are all correct and clear the bar.\""
+  }
+}

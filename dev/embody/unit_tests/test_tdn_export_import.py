@@ -98,6 +98,90 @@ class TestTDNExportImport(EmbodyTestCase):
         # Should not have dat_content key
         self.assertNotIn('dat_content', dat_entry)
 
+    # --- v2.0: multi-line text dat_content stored as a plain string ---
+
+    def test_export_multiline_dat_content_is_string(self):
+        """v2.0: a multi-line text DAT exports dat_content as a plain
+        string (not a list); YAML's literal block scalar (|) renders it
+        readably on disk. This inverts the v1.5 list behavior."""
+        original = 'line one\nline two\nline three'
+        dat = self.sandbox.create(textDAT, 'ml_dat')
+        dat.text = original
+        result = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=True)
+        dat_entry = None
+        for o in result['tdn']['operators']:
+            if o['name'] == 'ml_dat':
+                dat_entry = o
+                break
+        self.assertIsNotNone(dat_entry)
+        self.assertEqual(dat_entry.get('dat_content_format'), 'text')
+        content = dat_entry['dat_content']
+        self.assertIsInstance(content, str)
+        self.assertEqual(content, original)
+
+    def test_export_single_line_dat_content_is_string(self):
+        """v2.0: a single-line text DAT keeps dat_content as a plain
+        string (as all text dat_content does in v2.0)."""
+        dat = self.sandbox.create(textDAT, 'sl_dat')
+        dat.text = 'just one line'
+        result = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=True)
+        dat_entry = None
+        for o in result['tdn']['operators']:
+            if o['name'] == 'sl_dat':
+                dat_entry = o
+                break
+        self.assertIsNotNone(dat_entry)
+        self.assertEqual(dat_entry.get('dat_content_format'), 'text')
+        self.assertIsInstance(dat_entry['dat_content'], str)
+        self.assertEqual(dat_entry['dat_content'], 'just one line')
+
+    def test_roundtrip_preserves_multiline_dat_content(self):
+        """v2.0: a full export -> import of a multi-line text DAT leaves
+        target.text byte-identical to the original."""
+        original = 'alpha\nbeta\n\ngamma\n'
+        dat = self.sandbox.create(textDAT, 'ml_rt')
+        dat.text = original
+        export = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=True)
+        target = self.sandbox.create(baseCOMP, 'ml_rt_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        imported = target.op('ml_rt')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.text, original)
+
+    def test_import_back_compat_string_dat_content(self):
+        """Back-compat: an op_def whose dat_content is a plain string
+        (the v1.x form) still sets target.text on import."""
+        target = self.sandbox.create(baseCOMP, 'compat_target')
+        tdn = {'operators': [
+            {'name': 'legacy_dat', 'type': 'textDAT',
+             'dat_content': 'old\nstyle\nstring',
+             'dat_content_format': 'text'}
+        ]}
+        result = self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        self.assertTrue(result.get('success'))
+        imported = target.op('legacy_dat')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.text, 'old\nstyle\nstring')
+
+    def test_import_back_compat_list_dat_content(self):
+        """Back-compat: an op_def whose dat_content is a list of line-
+        strings (the v1.5 form) still imports, joined with '\\n'."""
+        target = self.sandbox.create(baseCOMP, 'compat_list_target')
+        lines = ['old', 'style', 'list']
+        tdn = {'operators': [
+            {'name': 'legacy_list_dat', 'type': 'textDAT',
+             'dat_content': lines,
+             'dat_content_format': 'text'}
+        ]}
+        result = self.tdn.ImportNetwork(target_path=target.path, tdn=tdn)
+        self.assertTrue(result.get('success'))
+        imported = target.op('legacy_list_dat')
+        self.assertIsNotNone(imported)
+        self.assertEqual(imported.text, '\n'.join(lines))
+
     # --- ImportNetwork ---
 
     def test_import_basic(self):
@@ -119,6 +203,26 @@ class TestTDNExportImport(EmbodyTestCase):
         child_names = [c.name for c in target.children]
         self.assertIn('src_comp', child_names)
         self.assertIn('src_dat', child_names)
+
+    def test_import_pop_point_sequence_roundtrip(self):
+        # POP point sequences (e.g. primitivePOP `pt`) are reachable only via
+        # iteration -- op.seq['pt'] subscript returns None -- so import must
+        # resolve them by iterating. Regression for numBlocks silently failing
+        # on POP sequences (the warning seen pasting noise_terrain).
+        src = self.sandbox.create(primitivePOP, 'seq_src')
+        src.par.method = 'set'
+        pt = next((s for s in src.seq if s.name == 'pt'), None)
+        self.assertIsNotNone(pt, 'primitivePOP should expose a pt sequence')
+        pt.numBlocks = 3
+        export = self.tdn.ExportNetwork(
+            root_path=self.sandbox.path, include_dat_content=True)
+        target = self.sandbox.create(baseCOMP, 'seq_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        imported = target.op('seq_src')
+        self.assertIsNotNone(imported)
+        ipt = next((s for s in imported.seq if s.name == 'pt'), None)
+        self.assertIsNotNone(ipt, 'pt sequence must round-trip on import')
+        self.assertEqual(ipt.numBlocks, 3)
 
     def test_import_clear_first(self):
         target = self.sandbox.create(baseCOMP, 'clear_target')
@@ -148,6 +252,83 @@ class TestTDNExportImport(EmbodyTestCase):
         result = self.tdn.ImportNetwork(
             target_path=target.path, tdn=export['tdn']['operators'])
         self.assertTrue(result.get('success'))
+
+    # --- Custom parameter VALUE round-trip ---
+
+    def test_roundtrip_custom_par_default_valued(self):
+        """Regression: a custom Float whose value equals its (non-standard)
+        default round-trips with the VALUE intact. The exporter omits a value
+        that equals the default, so the importer must restore it from the
+        default -- otherwise the param imports at 0/min and the network is
+        inert (this broke every parametric specimen on import)."""
+        p = self.sandbox.appendCustomPage('RT').appendFloat('Speed')[0]
+        p.default = 0.7
+        p.val = 0.7
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(baseCOMP, 'rt_def_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        self.assertAlmostEqual(target.par.Speed.eval(), 0.7, places=4)
+
+    def test_roundtrip_custom_par_nondefault_valued(self):
+        """A custom Float whose value differs from its default round-trips."""
+        p = self.sandbox.appendCustomPage('RT').appendFloat('Gain')[0]
+        p.default = 0.0
+        p.val = 0.42
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(baseCOMP, 'rt_nd_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        self.assertAlmostEqual(target.par.Gain.eval(), 0.42, places=4)
+
+    def test_roundtrip_custom_int_default_valued(self):
+        """A custom Int at its non-zero default round-trips with the value."""
+        p = self.sandbox.appendCustomPage('RT').appendInt('Count')[0]
+        p.default = 5
+        p.val = 5
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(baseCOMP, 'rt_int_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        self.assertEqual(int(target.par.Count.eval()), 5)
+
+    def test_roundtrip_custom_toggle_default_valued(self):
+        """A custom Toggle defaulting to True round-trips as True."""
+        p = self.sandbox.appendCustomPage('RT').appendToggle('Active')[0]
+        p.default = True
+        p.val = True
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(baseCOMP, 'rt_tog_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        self.assertEqual(int(target.par.Active.eval()), 1)
+
+    def test_roundtrip_child_custom_par_default_valued(self):
+        """A default-valued custom par on a CHILD COMP round-trips (values
+        flow through Phase 3 for children; the default-fallback restores
+        the omitted value)."""
+        child = self.sandbox.create(baseCOMP, 'rt_child')
+        p = child.appendCustomPage('C').appendFloat('Mass')[0]
+        p.default = 0.3
+        p.val = 0.3
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(baseCOMP, 'rt_child_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        imported = target.op('rt_child')
+        self.assertIsNotNone(imported)
+        self.assertAlmostEqual(imported.par.Mass.eval(), 0.3, places=4)
+
+    def test_roundtrip_custom_par_expression_not_clobbered(self):
+        """A custom par in EXPRESSION mode round-trips the expression -- the
+        default-value fallback must not overwrite it with the constant
+        default."""
+        p = self.sandbox.appendCustomPage('RT').appendFloat('Expr')[0]
+        p.default = 0.5
+        par_mode = type(p.mode)  # ParMode enum (not a module global here)
+        p.expr = '0.1 + 0.2'
+        p.mode = par_mode.EXPRESSION
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(baseCOMP, 'rt_expr_target')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        tp = target.par.Expr
+        self.assertEqual(tp.mode, par_mode.EXPRESSION)
+        self.assertAlmostEqual(tp.eval(), 0.3, places=4)
 
     # --- Round-trip fidelity ---
 

@@ -1,0 +1,675 @@
+---
+// Shared shell for every /admin page: the Base layout + a noindex meta + the
+// admin sub-nav + all the table/control styles the pages slot into. The admin
+// GATE stays in each PAGE's frontmatter (only a page can return Astro.redirect);
+// this component is presentation only.
+import Base from "../layouts/Base.astro";
+
+interface Props {
+  title: string;
+  active: "index" | "reports" | "specimens" | "users" | "activity" | "email";
+}
+const { title, active } = Astro.props;
+
+const items = [
+  { key: "index", href: "/admin", label: "dashboard" },
+  { key: "reports", href: "/admin/reports", label: "reports" },
+  { key: "specimens", href: "/admin/specimens", label: "specimens" },
+  { key: "users", href: "/admin/users", label: "users" },
+  { key: "activity", href: "/admin/activity", label: "activity" },
+  { key: "email", href: "/admin/email", label: "email" }
+] as const;
+---
+
+<Base title={`${title} - embody.tools admin`} description="embody.tools admin panel.">
+  <Fragment slot="head">
+    <meta name="robots" content="noindex, nofollow" />
+  </Fragment>
+  <section class="page-section admin">
+    <p class="eyebrow">Admin</p>
+    <h1 class="admin-title">{title}</h1>
+    <nav class="admin-nav" aria-label="Admin sections">
+      {items.map((it) => (
+        <a
+          href={it.href}
+          class:list={["admin-nav__item", { "is-active": it.key === active }]}
+          aria-current={it.key === active ? "page" : undefined}
+        >{it.label}</a>
+      ))}
+    </nav>
+    <div class="admin-body">
+      <slot />
+    </div>
+  </section>
+
+  {/* Shared app-native confirm/prompt dialog (driven by src/lib/adminDialog.ts).
+      Replaces window.confirm()/prompt() across every admin page. Rendered once. */}
+  <dialog class="admin-dialog" data-admin-dialog aria-labelledby="admin-dialog-title">
+    <div class="admin-dialog__body">
+      <h2 class="admin-dialog__title" id="admin-dialog-title" data-admin-dialog-title></h2>
+      <p class="admin-dialog__msg" data-admin-dialog-msg></p>
+      <label class="admin-dialog__field" data-admin-dialog-field hidden>
+        <span class="mono" data-admin-dialog-label></span>
+        <input type="text" data-admin-dialog-input autocomplete="off" />
+      </label>
+      <div class="admin-dialog__actions">
+        <button type="button" class="admin-btn" data-admin-dialog-cancel>cancel</button>
+        <button type="button" class="admin-btn admin-btn--danger" data-admin-dialog-ok>ok</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script>
+    // App-native dropdowns for the whole admin area. Each .dd[data-dd] wraps a
+    // visually-hidden native <select> (the value source the per-row save/apply
+    // handlers read, and the element Playwright drives with selectOption) plus a
+    // styled trigger + listbox. Choosing an option writes the native value and
+    // dispatches a bubbling 'change' so the existing change-listeners fire
+    // UNCHANGED. We also listen for the native's own 'change' (covers a
+    // programmatic selectOption) to keep the visible trigger label in sync.
+    function initDropdowns(): void {
+      const dropdowns = Array.from(
+        document.querySelectorAll<HTMLElement>(".dd[data-dd]")
+      );
+      if (dropdowns.length === 0) return;
+
+      // While any dropdown is open, switch its enclosing scroll wrapper to
+      // overflow:visible so the absolutely-positioned menu is not clipped by the
+      // table's overflow-x:auto region. Restore on close.
+      const wrapOpenCount = new WeakMap<HTMLElement, number>();
+      const setWrapOpen = (dd: HTMLElement, open: boolean) => {
+        const wrap = dd.closest<HTMLElement>(".admin-table-wrap");
+        if (!wrap) return;
+        const next = (wrapOpenCount.get(wrap) ?? 0) + (open ? 1 : -1);
+        const clamped = Math.max(0, next);
+        wrapOpenCount.set(wrap, clamped);
+        wrap.classList.toggle("dd-open", clamped > 0);
+      };
+
+      const closeDropdown = (dd: HTMLElement) => {
+        if (!dd.hasAttribute("data-open")) return;
+        dd.removeAttribute("data-open");
+        const menu = dd.querySelector<HTMLElement>(".dd__menu");
+        if (menu) {
+          menu.hidden = true;
+          menu.removeAttribute("aria-activedescendant");
+        }
+        const btn = dd.querySelector(".dd__btn");
+        if (btn) btn.setAttribute("aria-expanded", "false");
+        dd.querySelectorAll<HTMLElement>(".dd__opt").forEach((o) =>
+          o.classList.remove("is-active")
+        );
+        setWrapOpen(dd, false);
+      };
+
+      let ddOptSeq = 0;
+      dropdowns.forEach((dd) => {
+        const btn = dd.querySelector<HTMLButtonElement>(".dd__btn");
+        const menu = dd.querySelector<HTMLElement>(".dd__menu");
+        const valEl = dd.querySelector<HTMLElement>(".dd__val");
+        const native = dd.querySelector(".dd__native") as HTMLSelectElement | null;
+        const opts = Array.from(dd.querySelectorAll<HTMLElement>(".dd__opt"));
+        if (!btn || !menu || !valEl || !native) return;
+
+        opts.forEach((opt) => {
+          if (!opt.id) opt.id = `dd-opt-${ddOptSeq++}`;
+        });
+
+        // Keep the visible trigger label + aria-selected in lockstep with the
+        // native value. Drives BOTH a user click and a programmatic selectOption.
+        const syncFromNative = () => {
+          const value = native.value;
+          valEl.textContent =
+            native.options[native.selectedIndex]?.text ?? value;
+          opts.forEach((o) =>
+            o.setAttribute(
+              "aria-selected",
+              String((o.getAttribute("data-value") ?? "") === value)
+            )
+          );
+        };
+
+        let active = -1;
+        const setActive = (index: number) => {
+          const next = Math.max(0, Math.min(index, opts.length - 1));
+          const opt = opts[next];
+          if (!opt) return;
+          opts.forEach((o, i) => o.classList.toggle("is-active", i === next));
+          active = next;
+          menu.setAttribute("aria-activedescendant", opt.id);
+          opt.scrollIntoView({ block: "nearest" });
+        };
+        const clearActive = () => {
+          active = -1;
+          opts.forEach((o) => o.classList.remove("is-active"));
+          menu.removeAttribute("aria-activedescendant");
+        };
+
+        const open = () => {
+          dropdowns.forEach((other) => {
+            if (other !== dd) closeDropdown(other);
+          });
+          dd.setAttribute("data-open", "");
+          menu.hidden = false;
+          btn.setAttribute("aria-expanded", "true");
+          setWrapOpen(dd, true);
+          const sel = opts.findIndex(
+            (o) => o.getAttribute("aria-selected") === "true"
+          );
+          setActive(sel >= 0 ? sel : 0);
+        };
+        const close = () => {
+          clearActive();
+          closeDropdown(dd);
+        };
+        const choose = (opt: HTMLElement) => {
+          native.value = opt.getAttribute("data-value") ?? "";
+          // Bubbling change so the page's existing per-row listeners fire, and
+          // syncFromNative (wired below) updates the visible label.
+          native.dispatchEvent(new Event("change", { bubbles: true }));
+          close();
+          btn.focus();
+        };
+
+        btn.addEventListener("click", () => {
+          if (dd.hasAttribute("data-open")) close();
+          else open();
+        });
+        btn.addEventListener("keydown", (e) => {
+          const isOpen = dd.hasAttribute("data-open");
+          switch (e.key) {
+            case "Escape":
+              if (isOpen) {
+                e.preventDefault();
+                close();
+                btn.focus();
+              }
+              return;
+            case "Tab":
+              if (isOpen) close();
+              return;
+            case "Enter":
+            case " ": {
+              e.preventDefault();
+              if (!isOpen) {
+                open();
+                return;
+              }
+              const activeOpt = active >= 0 ? opts[active] : undefined;
+              if (activeOpt) choose(activeOpt);
+              return;
+            }
+            case "ArrowDown":
+              e.preventDefault();
+              if (!isOpen) {
+                open();
+                return;
+              }
+              setActive(active < 0 ? 0 : active + 1);
+              return;
+            case "ArrowUp":
+              e.preventDefault();
+              if (!isOpen) {
+                open();
+                return;
+              }
+              setActive(active < 0 ? opts.length - 1 : active - 1);
+              return;
+            case "Home":
+              if (isOpen) {
+                e.preventDefault();
+                setActive(0);
+              }
+              return;
+            case "End":
+              if (isOpen) {
+                e.preventDefault();
+                setActive(opts.length - 1);
+              }
+              return;
+            default:
+              return;
+          }
+        });
+
+        opts.forEach((opt, i) => {
+          opt.addEventListener("click", () => choose(opt));
+          opt.addEventListener("mousemove", () => setActive(i));
+        });
+
+        // A programmatic selectOption (Playwright) or any other native change
+        // updates the visible trigger without going through choose().
+        native.addEventListener("change", syncFromNative);
+
+        // Paint the initial label from whichever option the SSR marked selected.
+        syncFromNative();
+      });
+
+      document.addEventListener("click", (e) => {
+        const target = e.target as Node | null;
+        dropdowns.forEach((dd) => {
+          if (
+            dd.hasAttribute("data-open") &&
+            (target === null || !dd.contains(target))
+          ) {
+            closeDropdown(dd);
+          }
+        });
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") dropdowns.forEach((dd) => closeDropdown(dd));
+      });
+    }
+
+    initDropdowns();
+  </script>
+</Base>
+
+<style>
+  .admin { padding-bottom: 56px; }
+  /* Tighten the eyebrow -> title gap (override the global .eyebrow margin)... */
+  .admin :global(.eyebrow) { margin-bottom: 0.4rem; }
+  /* ...and open up the title -> nav gap a touch. */
+  .admin-title { margin-bottom: 1.6rem; }
+
+  /* Each admin page's content sits in a rounded card, matching the rest of the
+     app (contribute / profile / specimen panels). The header (eyebrow + title +
+     nav) stays outside the card. */
+  .admin-body {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    padding: clamp(1.25rem, 3vw, 2rem);
+  }
+
+  .admin-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0 0 1.75rem;
+    border-bottom: 1px solid var(--border-faint);
+    padding-bottom: 0.75rem;
+  }
+  .admin-nav__item {
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0.35rem 0.7rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
+  }
+  .admin-nav__item:hover { color: var(--text); }
+  .admin-nav__item.is-active {
+    color: var(--accent);
+    border-color: var(--border);
+    background: var(--accent-dim);
+  }
+
+  /* Slotted page content uses these (global so the page markup can reference
+     them without re-declaring). */
+  .admin-body :global(.admin-cards) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+  .admin-body :global(.admin-card) {
+    /* Recessed against the elevated .admin-body card (avoid card-on-card flat). */
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+  }
+  .admin-body :global(.admin-card__num) {
+    font-size: 1.8rem;
+    font-weight: 600;
+    color: var(--text);
+    font-family: var(--font-display);
+    line-height: 1;
+  }
+  .admin-body :global(.admin-card__label) {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-top: 0.4rem;
+  }
+
+  .admin-body :global(.admin-filter) {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+  .admin-body :global(.admin-subfilter) {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+  .admin-body :global(.admin-subfilter a) {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+  }
+  .admin-body :global(.admin-subfilter a.is-active) {
+    color: var(--accent);
+    border-color: var(--border);
+    background: var(--accent-dim);
+  }
+
+  /* Horizontal-scroll wrapper for the wide admin tables. Global body has
+     overflow-x: clip, which would clip an overflowing table; this region lets
+     it scroll on tablet/mobile instead. */
+  .admin-body :global(.admin-table-wrap) {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-body :global(table.admin-table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  .admin-body :global(.admin-table-wrap table.admin-table) { min-width: max-content; }
+  .admin-body :global(.admin-table :is(th, td)) { white-space: nowrap; }
+  .admin-body :global(.admin-table th) {
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .admin-body :global(.admin-table td) {
+    padding: 0.55rem 0.6rem;
+    border-bottom: 1px solid var(--border-faint);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .admin-body :global(.admin-table a) { color: var(--accent); }
+
+  .admin-body :global(.admin-pill) {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.03em;
+    padding: 0.12rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  .admin-body :global(.admin-select),
+  .admin-body :global(.admin-input) {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 0.85rem;
+    padding: 0.3rem 0.5rem;
+  }
+  .admin-body :global(.admin-table .admin-select) { margin-right: 0.35rem; }
+
+  /* ---- App-native dropdown ---- */
+  /* A styled trigger + listbox layered over a visually-hidden native <select>.
+     The native select is the value source: per-row save/apply handlers read its
+     .value and Playwright drives it with selectOption(), so it must NOT be
+     display:none (which would make it unfocusable/unselectable). Choosing an
+     option (or a programmatic selectOption) writes the native value and fires a
+     bubbling 'change'; initDropdowns() also listens for that 'change' to keep
+     the visible trigger label in sync. Shared by every admin page. */
+  .admin-body :global(.dd) {
+    position: relative;
+    display: inline-flex;
+    vertical-align: middle;
+  }
+  .admin-body :global(.admin-table .dd) { margin-right: 0.35rem; }
+
+  /* Visually-hidden value carrier (clip pattern, NOT display:none) so the
+     native select stays selectOption-able and its change-listeners still fire. */
+  .admin-body :global(.dd__native) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    pointer-events: none;
+  }
+
+  .admin-body :global(.dd__btn) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 0.85rem;
+    line-height: 1.2;
+    padding: 0.3rem 0.5rem;
+    cursor: pointer;
+    transition: border-color 140ms ease;
+  }
+  .admin-body :global(.dd__btn:hover) { border-color: var(--text-faint); }
+  .admin-body :global(.dd__btn:focus-visible) {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .admin-body :global(.dd[data-open] .dd__btn) { border-color: var(--accent); }
+
+  .admin-body :global(.dd__val) { white-space: nowrap; }
+
+  .admin-body :global(.dd__chev) {
+    flex: none;
+    color: var(--text-faint);
+    transition: transform 180ms ease;
+  }
+  .admin-body :global(.dd[data-open] .dd__chev) { transform: rotate(180deg); }
+
+  /* The menu must overflow the table cell (and the overflow-x:auto wrapper). It
+     is absolutely positioned with a high z-index; initDropdowns() toggles the
+     wrapper to overflow:visible while any dropdown is open so it is not clipped. */
+  .admin-body :global(.dd__menu) {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 80;
+    min-width: 100%;
+    width: max-content;
+    max-width: 14rem;
+    margin: 0;
+    padding: 0.25rem;
+    list-style: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated, #14181a);
+    box-shadow: 0 18px 44px -20px rgba(0, 0, 0, 0.85);
+  }
+  .admin-body :global(.dd__menu[hidden]) { display: none; }
+
+  .admin-body :global(.dd__opt) {
+    display: block;
+    padding: 0.35rem 0.55rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .admin-body :global(.dd__opt:hover),
+  .admin-body :global(.dd__opt.is-active) {
+    background: var(--accent-dim, rgba(120, 200, 150, 0.14));
+    color: var(--accent);
+  }
+  .admin-body :global(.dd__opt[aria-selected="true"]) { color: var(--accent); }
+
+  /* While a dropdown is open, let the scroll wrapper show the overflowing menu
+     instead of clipping it. Added/removed by initDropdowns(). */
+  .admin-body :global(.admin-table-wrap.dd-open) { overflow: visible; }
+
+  .admin-body :global(.admin-btn) {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 0.3rem 0.65rem;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .admin-body :global(.admin-btn:hover) { color: var(--text); border-color: var(--accent); }
+  .admin-body :global(.admin-btn--danger:hover) { color: #ff9b9b; border-color: rgba(220, 80, 80, 0.5); }
+  .admin-body :global(.admin-btn:disabled) { opacity: 0.5; cursor: default; }
+
+  .admin-body :global(.admin-email-form) {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    max-width: 28rem;
+  }
+  .admin-body :global(.admin-email-form label) {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+
+  .admin-body :global(.admin-status) {
+    margin: 1rem 0;
+    padding: 0.6rem 0.75rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+  .admin-body :global(.admin-status[data-kind="ok"]) {
+    background: rgba(110, 230, 104, 0.12);
+    border-color: rgba(110, 230, 104, 0.4);
+    color: var(--accent);
+  }
+  .admin-body :global(.admin-status[data-kind="error"]) {
+    background: rgba(220, 80, 80, 0.12);
+    border-color: rgba(220, 80, 80, 0.4);
+    color: #ff9b9b;
+  }
+  /* Empty -> collapsed, but the element STAYS in the DOM / a11y tree (never
+     display:none or hidden) so this role=status live region is registered
+     before its first message lands -- otherwise some screen readers swallow it. */
+  .admin-body :global(.admin-status:empty) {
+    margin: 0;
+    padding: 0;
+    border-width: 0;
+  }
+  .admin-body :global(.admin-empty) {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 1.5rem 0;
+  }
+
+  /* Touch targets: on coarse pointers (touch), grow the dense desktop controls
+     to a minimum 44px tap height. Nav and subfilter links also become inline
+     flex so the min-height is honored on inline-by-default anchors. */
+  @media (pointer: coarse) {
+    .admin-nav__item {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .admin-body :global(.admin-subfilter a) {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .admin-body :global(.admin-input),
+    .admin-body :global(.admin-select) {
+      min-height: 44px;
+    }
+    .admin-body :global(.admin-btn) {
+      min-height: 44px;
+    }
+    .admin-body :global(.dd__btn) {
+      min-height: 44px;
+    }
+    .admin-body :global(.dd__opt) {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+  }
+
+  /* App-native confirm/prompt dialog (driven by src/lib/adminDialog.ts). The
+     buttons live in THIS component's template, so .admin-btn here is scoped to
+     them directly (the .admin-body :global rules don't reach outside the body). */
+  .admin-dialog {
+    width: min(460px, calc(100vw - 2rem));
+    margin: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: var(--text);
+    padding: 0;
+  }
+  .admin-dialog::backdrop { background: rgba(10, 14, 12, 0.62); }
+  .admin-dialog[hidden] { display: none; }
+  .admin-dialog__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+  .admin-dialog__title { margin: 0; font-size: 1.2rem; }
+  .admin-dialog__msg { margin: 0; color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
+  .admin-dialog__field { display: flex; flex-direction: column; gap: 0.35rem; }
+  .admin-dialog__field[hidden] { display: none; }
+  .admin-dialog__field span {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .admin-dialog__field input {
+    padding: 0.6rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+    font: inherit;
+  }
+  .admin-dialog__field input:focus { outline: none; border-color: var(--accent); }
+  .admin-dialog__actions { display: flex; justify-content: flex-end; gap: 0.6rem; }
+  .admin-dialog .admin-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    padding: 0.45rem 0.9rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease;
+  }
+  .admin-dialog .admin-btn:hover { color: var(--text); border-color: var(--accent); }
+  .admin-dialog .admin-btn--danger { color: #ff9b9b; border-color: rgba(220, 80, 80, 0.5); }
+  .admin-dialog .admin-btn--danger:hover { color: #ffb3b3; border-color: #d65555; background: rgba(220, 80, 80, 0.12); }
+</style>

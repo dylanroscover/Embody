@@ -1,0 +1,1095 @@
+---
+import { env } from "cloudflare:workers";
+import type { SpecimenSummary } from "@embody/contracts";
+import Base from "../../layouts/Base.astro";
+import {
+  getUserByHandle,
+  listSpecimensByAuthor,
+  type UserProfile
+} from "../../server/db";
+import { emailEnabled, type EmailEnv } from "../../server/email";
+import { resultImage } from "../../lib/specimenThumb";
+
+export const prerender = false;
+
+// Whether a real email provider is configured -- tailors the email-change copy
+// (immediate in dev / confirm-via-current-inbox in prod). Read in the frontmatter
+// so the owner edit form below can carry it on a data attribute.
+const emailConfigured = emailEnabled(env as unknown as EmailEnv);
+
+const handle = (Astro.params.handle ?? "").trim();
+
+let profile: UserProfile | null = null;
+let specimens: SpecimenSummary[] = [];
+
+if (handle) {
+  try {
+    profile = await getUserByHandle(env.DB, handle);
+  } catch {
+    profile = null;
+  }
+
+  if (profile) {
+    try {
+      // Pass the viewer id so a user viewing their OWN profile also sees their
+      // private drafts (badged below); visitors see only the public set.
+      specimens = await listSpecimensByAuthor(env.DB, profile.handle, Astro.locals.user?.id);
+    } catch {
+      specimens = [];
+    }
+  }
+}
+
+if (!profile) {
+  Astro.response.status = 404;
+}
+
+const totalCopies = specimens.reduce((sum, item) => sum + item.copies_count, 0);
+const memberSince = profile ? memberYear(profile.created_at) : "";
+const avatarInitial = profile ? initialFor(profile.handle) : "?";
+
+// The viewer can edit the avatar only on their OWN profile.
+const viewer = Astro.locals.user;
+const isOwn = Boolean(viewer && profile && viewer.handle === profile.handle);
+
+// Split the author's specimens into public + private groups, each its own
+// labeled section. Private specimens are only ever in this list for the owner
+// (the query scopes them by viewer id), so visitors just see the public group.
+const publicSpecimens = specimens.filter((s) => (s.visibility ?? "public") === "public");
+const privateSpecimens = specimens.filter((s) => s.visibility && s.visibility !== "public");
+const specimenGroups = [
+  { key: "public", label: "public specimens", items: publicSpecimens },
+  { key: "private", label: "private specimens", items: privateSpecimens }
+].filter((g) => g.items.length > 0);
+
+function initialFor(value: string): string {
+  const cleaned = value.replace(/[^a-z0-9]/gi, "");
+  return (cleaned[0] ?? value[0] ?? "?").toUpperCase();
+}
+
+function memberYear(value: string): string {
+  const year = value.slice(0, 4);
+  return /^\d{4}$/.test(year) ? year : "";
+}
+
+function pluralize(count: number, singular: string): string {
+  if (count === 1) return `${count} ${singular}`;
+  // English: a consonant + "y" pluralizes to "ies" (copy -> copies); otherwise
+  // just append "s" (specimen -> specimens).
+  const plural = /[^aeiou]y$/i.test(singular)
+    ? `${singular.slice(0, -1)}ies`
+    : `${singular}s`;
+  return `${count} ${plural}`;
+}
+---
+
+{
+  profile ? (
+    <Base
+      title={`@${profile.handle} - embody.tools`}
+      description={profile.bio ?? `Specimens shared by @${profile.handle} on embody.tools.`}
+    >
+      <section class="page-section profile-header">
+        {isOwn && (
+          <button type="button" class="profile-edit-btn" data-profile-edit-toggle aria-label="edit profile" title="edit profile">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" />
+              <path d="M13.5 6.5l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </button>
+        )}
+        <div class="profile-id">
+          <div class="profile-avatar" data-avatar-shell={isOwn ? "" : undefined} data-avatar-initial={avatarInitial}>
+            {profile.avatar_url ? (
+              <img class="avatar avatar--img" src={profile.avatar_url} alt={`@${profile.handle}`} data-avatar-img />
+            ) : (
+              <span class="avatar avatar--initial" aria-hidden="true" data-avatar-img>{avatarInitial}</span>
+            )}
+            {isOwn && (
+              <div class="avatar-edit">
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  hidden
+                  data-avatar-input
+                />
+                <button type="button" class="avatar-edit__btn" data-avatar-pick>change</button>
+                <button
+                  type="button"
+                  class="avatar-edit__btn avatar-edit__btn--remove"
+                  data-avatar-remove
+                  hidden={!profile.avatar_url}
+                >remove</button>
+                <span class="avatar-edit__status mono" data-avatar-status aria-live="polite"></span>
+              </div>
+            )}
+          </div>
+          <div class="profile-meta">
+            <p class="eyebrow">{specimens.length > 0 ? "contributor" : "member"}</p>
+            {profile.display_name ? (
+              <Fragment>
+                <h1>{profile.display_name}</h1>
+                <p class="profile-handle mono">@{profile.handle}</p>
+              </Fragment>
+            ) : (
+              <h1>@{profile.handle}</h1>
+            )}
+            {isOwn && (
+              <form
+                class="profile-edit__form"
+                data-profile-edit-form
+                data-email-configured={emailConfigured ? "1" : "0"}
+                data-cur-handle={profile.handle}
+                data-cur-display={profile.display_name ?? ""}
+                data-cur-email={viewer?.email ?? ""}
+                hidden
+              >
+                  <label class="profile-edit__field">
+                    <span class="mono">display name <em>(optional)</em></span>
+                    <input type="text" name="displayName" maxlength="60" value={profile.display_name ?? ""} placeholder="your name" />
+                  </label>
+                  <label class="profile-edit__field">
+                    <span class="mono">handle</span>
+                    <span class="profile-edit__handle">
+                      <span class="profile-edit__at" aria-hidden="true">@</span>
+                      <input type="text" name="handle" maxlength="30" value={profile.handle} autocomplete="off" autocapitalize="off" spellcheck={false} required />
+                    </span>
+                  </label>
+                  <label class="profile-edit__field">
+                    <span class="mono">email</span>
+                    <input type="email" name="email" value={viewer?.email ?? ""} autocomplete="email" required />
+                  </label>
+                  <p class="profile-edit__status mono" data-profile-edit-status role="status" aria-live="polite"></p>
+                  <div class="profile-edit__actions">
+                    <button type="button" class="btn btn--ghost" data-profile-edit-cancel>cancel</button>
+                    <button type="submit" class="btn btn--primary" data-profile-edit-save>save</button>
+                  </div>
+                </form>
+            )}
+            {profile.bio && <p class="lede">{profile.bio}</p>}
+            <div class="badge-row">
+              {/* Only show the trust badge for EARNED roles. Every signed-up
+                  account is 'verified' (it just means "a real account, not
+                  anon"), so badging it reads as if some authority vouched for
+                  the user -- misleading and redundant with "member since". */}
+              {(profile.trust_level === "curator" || profile.trust_level === "admin") && (
+                <span class:list={["badge", `trust-${profile.trust_level}`]}>{profile.trust_level}</span>
+              )}
+              {memberSince && (
+                <span class="badge">
+                  {specimens.length > 0 ? "contributor" : "member"} since {memberSince}
+                </span>
+              )}
+            </div>
+            <p class="stat-line">
+              <strong>{pluralize(specimens.length, "specimen")}</strong>
+              <span class="dot" aria-hidden="true">&middot;</span>
+              <strong>{pluralize(totalCopies, "copy")}</strong> total
+            </p>
+            <div class="profile-specimens" data-specimens data-view="list" data-owner={isOwn ? "" : undefined}>
+              {specimens.length > 0 ? (
+                specimenGroups.map((group, groupIndex) => (
+                  <section class="specimen-group" data-group={group.key}>
+                    <div class="specimen-group__head">
+                      <p class="eyebrow specimen-group__label">{group.label}</p>
+                      {groupIndex === 0 && (
+                        <div class="view-toggle" role="group" aria-label="View mode">
+                          <button type="button" class="view-toggle__btn is-on" data-view-set="list" aria-label="List view" title="List view">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+                              <line x1="8" y1="6" x2="20" y2="6" /><line x1="8" y1="12" x2="20" y2="12" /><line x1="8" y1="18" x2="20" y2="18" />
+                              <line x1="4" y1="6" x2="4" y2="6" /><line x1="4" y1="12" x2="4" y2="12" /><line x1="4" y1="18" x2="4" y2="18" />
+                            </svg>
+                          </button>
+                          <button type="button" class="view-toggle__btn" data-view-set="gallery" aria-label="Gallery view" title="Gallery view">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true">
+                              <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <ul class="specimen-list">
+                      {group.items.map((item) => (
+                        <li class="specimen-row pillar">
+                          <a class="specimen-row__main" href={`/c/${item.slug}`}>
+                            <img
+                              class="specimen-row__thumb"
+                              src={resultImage({ slug: item.slug, name: item.name, category: item.category, thumbnailKey: item.thumbnail_key }).src}
+                              width="64"
+                              height="36"
+                              loading="lazy"
+                              decoding="async"
+                              alt=""
+                            />
+                            <span class="specimen-row__name">{item.name}</span>
+                            <span class="specimen-row__cat mono">{item.category}</span>
+                          </a>
+                          <span class="badge specimen-row__level">{item.level}</span>
+                          <div class="badge-row specimen-row__badges">
+                            {item.requires.map((req) => (
+                              <span class="badge needs">needs {req}</span>
+                            ))}
+                            <span class="badge specimen-row__copies">{pluralize(item.copies_count, "copy")}</span>
+                          </div>
+                          {isOwn && (
+                            <div class="specimen-row__actions">
+                              <a class="specimen-row__action" href={`/c/${item.slug}/edit`} aria-label={`Edit ${item.name}`} title="Edit">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M4 20h4L18.5 9.5a2.12 2.12 0 0 0-3-3L5 17v3z" /><path d="M13.5 6.5l3 3" />
+                                </svg>
+                              </a>
+                              <button
+                                type="button"
+                                class="specimen-row__action specimen-row__action--delete"
+                                data-delete-specimen={item.slug}
+                                data-specimen-name={item.name}
+                                aria-label={`Delete ${item.name}`}
+                                title="Delete"
+                              >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                  <path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M6 6l1 14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-14" />
+                                </svg>
+                              </button>
+                            </div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))
+              ) : (
+                <p class="muted empty-note">no specimens shared yet.</p>
+              )}
+            </div>
+            <script is:inline>
+              // Apply the saved view BEFORE the rows paint, so a persisted
+              // "gallery" preference doesn't flash the SSR default "list" first.
+              // Runs synchronously during parse -- the container + toggle buttons
+              // already exist above this point.
+              (function () {
+                try {
+                  var v = localStorage.getItem("embody:profile-view");
+                  if (v !== "list" && v !== "gallery") return;
+                  var shell = document.querySelector("[data-specimens]");
+                  if (shell) shell.setAttribute("data-view", v);
+                  var btns = document.querySelectorAll("[data-view-set]");
+                  for (var i = 0; i < btns.length; i++) {
+                    btns[i].classList.toggle("is-on", btns[i].getAttribute("data-view-set") === v);
+                  }
+                } catch (e) {}
+              })();
+            </script>
+          </div>
+        </div>
+      </section>
+    </Base>
+  ) : (
+    <Base title="user not found - embody.tools" description="No such contributor.">
+      <section class="page-section profile-missing">
+        <p class="eyebrow">error 404</p>
+        <h1>user not found</h1>
+        <p class="lede">
+          {handle ? <>there is no contributor with the handle <span class="mono">@{handle}</span>.</> : "no handle was provided."}
+        </p>
+        <div class="actions">
+          <a class="btn btn--primary" href="/collection">browse the collection</a>
+          <a class="btn btn--ghost" href="/">home</a>
+        </div>
+      </section>
+    </Base>
+  )
+}
+
+<style>
+  .profile-header {
+    position: relative;
+    padding-bottom: clamp(2rem, 4vw, 3rem);
+  }
+
+  /* Owner edit button: same icon button + top-right placement as the specimen
+     page's owner tools, for consistency. */
+  .profile-edit-btn {
+    position: absolute;
+    top: 0;
+    right: var(--gutter);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+  }
+  .profile-edit-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .profile-id {
+    display: flex;
+    align-items: flex-start;
+    gap: clamp(1.25rem, 3vw, 2.25rem);
+  }
+
+  .avatar {
+    flex: none;
+    width: clamp(84px, 12vw, 128px);
+    height: clamp(84px, 12vw, 128px);
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .avatar--img {
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+  }
+
+  .avatar--initial {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    background: var(--accent-dim);
+    color: var(--accent);
+    font: 600 clamp(2.25rem, 5vw, 3.25rem)/1 var(--font-display);
+  }
+
+  /* Avatar column: the image/initial plus the owner-only edit controls below. */
+  .profile-avatar {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+  }
+
+  .avatar-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+  }
+
+  .avatar-edit__btn {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 0.22rem 0.62rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    transition: border-color 140ms ease, color 140ms ease;
+  }
+
+  .avatar-edit__btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .avatar-edit__btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .avatar-edit__btn--remove {
+    color: var(--text-faint);
+  }
+
+  .avatar-edit__btn--remove:hover {
+    border-color: #c46b6b;
+    color: #c46b6b;
+  }
+
+  .avatar-edit__status {
+    flex-basis: 100%;
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+  }
+
+  .avatar-edit__status.is-error {
+    color: #c46b6b;
+  }
+
+  .profile-meta {
+    /* Fill the column (not content-sized) so the meta -- and the shared-specimens
+       list/gallery inside it -- keep a CONSTANT width regardless of which view is
+       active. Height changes between views; width does not. */
+    flex: 1;
+    min-width: 0;
+  }
+
+  .profile-meta h1 {
+    margin-bottom: 1rem;
+    font-size: clamp(2.1rem, 5.5vw, 3.6rem);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .profile-meta .lede {
+    margin-bottom: 1.25rem;
+  }
+
+  .profile-meta .eyebrow {
+    margin-bottom: 0.85rem;
+  }
+
+  /* When a display name is set it's the h1; the @handle sits just beneath it. */
+  .profile-handle {
+    margin: -0.6rem 0 0;
+    color: var(--text-muted);
+    font-size: 1rem;
+  }
+
+  /* Breathing room between the handle/name block and the identity badges (the
+     "contributor since" badge). Direct child only -- the specimen rows now live
+     in this column too and carry their own .badge-row. */
+  .profile-meta > .badge-row {
+    margin-top: 1.5rem;
+  }
+
+  /* Owner-only identity + account editor (display name + handle + email), toggled
+     by the top-right pencil. A popover: absolutely positioned under the pencil so
+     opening it never shifts the page layout. */
+  .profile-edit__form {
+    position: absolute;
+    top: 52px;
+    right: var(--gutter);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: min(26rem, calc(100vw - 2rem));
+    padding: 1.1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.85);
+  }
+  .profile-edit__form[hidden] {
+    display: none;
+  }
+
+  .profile-edit__field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  .profile-edit__field > span {
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .profile-edit__field > span em {
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--text-faint);
+    font-style: normal;
+  }
+  .profile-edit__field input {
+    padding: 0.55rem 0.7rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  .profile-edit__field input:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    border-color: var(--accent);
+  }
+  .profile-edit__handle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .profile-edit__at {
+    color: var(--text-faint);
+    font-family: var(--font-mono);
+  }
+  .profile-edit__handle input {
+    flex: 1;
+    min-width: 0;
+    font-family: var(--font-mono);
+  }
+  .profile-edit__status {
+    margin: 0;
+    min-height: 1em;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+  }
+  .profile-edit__status.is-error {
+    color: #ff9b9b;
+  }
+  .profile-edit__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  .stat-line {
+    margin: 1.1rem 0 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    letter-spacing: 0.02em;
+  }
+
+  .stat-line strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .stat-line .dot {
+    margin: 0 0.5rem;
+    color: var(--text-faint);
+  }
+
+  .badge.trust-curator,
+  .badge.trust-admin {
+    border-color: rgba(110, 230, 104, 0.34);
+    color: var(--accent);
+  }
+
+  .badge.trust-verified {
+    border-color: var(--border);
+    color: var(--text);
+  }
+
+  /* Shared specimens now live in the meta column (aligned with the name), set
+     off from the identity block above. */
+  .profile-specimens {
+    margin-top: clamp(2rem, 4vw, 3rem);
+    /* Rounded card matching the rest of the app (mirrors the contribute form's
+       .submit-cols and the .pillar tokens). */
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+  }
+
+  /* Public / private specimen groups: each a labeled section. The first group's
+     head also carries the list/gallery toggle, inline with the label and
+     vertically centered. Groups stack with even breathing room between them. */
+  .specimen-group + .specimen-group {
+    margin-top: 1.6rem;
+  }
+  .specimen-group__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.85rem;
+    /* min-height of the toggle so a group WITHOUT the toggle (the 2nd group)
+       keeps the same label baseline rhythm as the first. */
+    min-height: 30px;
+  }
+  /* Beat `.profile-meta .eyebrow` (0,2,0) so the label has no bottom margin and
+     stays vertically centered against the toggle in the flex head. */
+  .specimen-group__head .specimen-group__label {
+    margin-bottom: 0;
+  }
+
+  /* List / gallery view toggle. */
+  .view-toggle {
+    display: inline-flex;
+    gap: 0.2rem;
+    padding: 0.2rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .view-toggle__btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 26px;
+    border: none;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    transition: color 140ms ease, background 140ms ease;
+  }
+  .view-toggle__btn:hover { color: var(--text-muted); }
+  .view-toggle__btn.is-on {
+    background: var(--accent-dim, rgba(110, 230, 104, 0.14));
+    color: var(--accent);
+  }
+
+  .specimen-list {
+    display: grid;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .specimen-row {
+    /* Grid columns so the badges + actions line up vertically across rows
+       (space-between centered the middle group, floating the badges by name
+       length). main | badges, plus an actions column on your own page. */
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 0.85rem 1.25rem;
+    padding: 1.05rem 1.25rem;
+    /* Inset against the elevated section card (rows would otherwise share the
+       container's background and read flat). */
+    background: var(--bg);
+  }
+  [data-owner] .specimen-row {
+    grid-template-columns: 1fr auto auto auto;
+  }
+  /* Level badge gets its own column so levels line up regardless of word width
+     (ADVANCED vs INTERMEDIATE); left-aligned within the auto column. */
+  .specimen-row__level { justify-self: start; }
+
+  .specimen-row__main {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.85rem;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .specimen-row__thumb {
+    flex: none;
+    width: 64px;
+    height: 36px;
+    border-radius: 6px;
+    object-fit: cover;
+    background: var(--bg-code, #161e1a);
+    border: 1px solid var(--border-faint);
+  }
+
+  /* Owner-only edit / delete controls. */
+  .specimen-row__actions {
+    display: inline-flex;
+    gap: 0.3rem;
+    flex: none;
+  }
+  .specimen-row__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 140ms ease, border-color 140ms ease;
+  }
+  .specimen-row__action:hover { border-color: var(--accent); color: var(--accent); }
+  .specimen-row__action--delete:hover { border-color: #c46b6b; color: #c46b6b; }
+  /* Armed (first click): a second click confirms the delete. */
+  .specimen-row__action--delete.is-armed {
+    border-color: #c46b6b;
+    color: #ff9b9b;
+    background: rgba(196, 107, 107, 0.16);
+  }
+
+  /* Gallery view: a minimalist grid showing only the cover + title. */
+  [data-specimens][data-view="gallery"] .specimen-list {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1rem;
+  }
+  [data-view="gallery"] .specimen-row {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+  [data-view="gallery"] .specimen-row__main {
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 0;
+  }
+  [data-view="gallery"] .specimen-row__thumb {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    border: none;
+    border-radius: 0;
+  }
+  [data-view="gallery"] .specimen-row__name {
+    padding: 0.65rem 0.85rem 0.85rem;
+    font-size: 1rem;
+  }
+  [data-view="gallery"] .specimen-row__cat,
+  [data-view="gallery"] .specimen-row__level,
+  [data-view="gallery"] .specimen-row__badges,
+  [data-view="gallery"] .specimen-row__actions {
+    display: none;
+  }
+
+  .specimen-row__name {
+    color: var(--text);
+    font-family: var(--font-display);
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .specimen-row:hover {
+    border-color: var(--border);
+  }
+
+  .specimen-row:hover .specimen-row__name {
+    color: var(--accent);
+  }
+
+  .specimen-row__cat {
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .specimen-row__badges {
+    flex: none;
+    justify-content: flex-end;
+  }
+
+  .empty-note {
+    margin: 0;
+  }
+
+  /* Match the route 404's vertical settling so the short user-not-found
+     message doesn't strand at the top of a tall viewport (mirrors 404.astro). */
+  .profile-missing {
+    min-height: 52vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-bottom: clamp(3rem, 6vw, 5rem);
+  }
+
+  /* A long handle in the lede's @{handle} chip must wrap, not overflow. */
+  .profile-missing .mono {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Generic 404 heading -> lowercase. Scoped to .profile-missing so it never
+     touches the .profile-meta h1, which renders the user's handle (proper noun). */
+  .profile-missing h1 {
+    text-transform: lowercase;
+  }
+
+  /* Touch devices: give the tiny avatar buttons and the specimen-row links a
+     >=44px hit target so they're comfortably tappable. */
+  @media (pointer: coarse) {
+    .avatar-edit__btn {
+      min-height: 44px;
+      padding: 0 0.9rem;
+    }
+
+    .specimen-row__main {
+      min-height: 44px;
+      align-items: center;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .profile-id {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .specimen-row,
+    [data-owner] .specimen-row {
+      grid-template-columns: 1fr;
+      justify-items: start;
+    }
+  }
+</style>
+
+<script>
+  // Owner-only avatar upload/remove. The shell only renders on your OWN profile,
+  // so a missing shell makes this a no-op everywhere else. The picked image is
+  // squared + downscaled to 256px on a canvas (so we never ship a huge file or a
+  // non-square crop), POSTed as a WebP data URL, then the page reloads to show the
+  // canonical state (upload, or the re-seeded GitHub default / letter chip).
+  const shell = document.querySelector<HTMLElement>("[data-avatar-shell]");
+  if (shell) {
+    const input = shell.querySelector<HTMLInputElement>("[data-avatar-input]");
+    const pick = shell.querySelector<HTMLButtonElement>("[data-avatar-pick]");
+    const remove = shell.querySelector<HTMLButtonElement>("[data-avatar-remove]");
+    const status = shell.querySelector<HTMLElement>("[data-avatar-status]");
+    const MAX_INPUT_BYTES = 8 * 1024 * 1024; // reject absurd sources before decoding
+
+    const setStatus = (msg: string, isError = false): void => {
+      if (!status) return;
+      status.textContent = msg;
+      status.classList.toggle("is-error", isError);
+    };
+    const setBusy = (busy: boolean): void => {
+      for (const el of [pick, remove]) if (el) el.disabled = busy;
+    };
+
+    async function squareDataUrl(file: File): Promise<string> {
+      const bitmap = await createImageBitmap(file);
+      const SIZE = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("canvas unavailable");
+      const min = Math.min(bitmap.width, bitmap.height);
+      const sx = (bitmap.width - min) / 2;
+      const sy = (bitmap.height - min) / 2;
+      ctx.drawImage(bitmap, sx, sy, min, min, 0, 0, SIZE, SIZE);
+      bitmap.close();
+      return canvas.toDataURL("image/webp", 0.85);
+    }
+
+    pick?.addEventListener("click", () => input?.click());
+
+    input?.addEventListener("change", async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      if (file.size > MAX_INPUT_BYTES) {
+        setStatus("image too large", true);
+        input.value = "";
+        return;
+      }
+      setBusy(true);
+      setStatus("uploading...");
+      try {
+        const avatar = await squareDataUrl(file);
+        const res = await fetch("/api/account/avatar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatar })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        window.location.reload();
+      } catch {
+        setStatus("upload failed -- try a PNG/JPEG/WebP under 0.5 MB", true);
+        setBusy(false);
+      } finally {
+        input.value = "";
+      }
+    });
+
+    remove?.addEventListener("click", async () => {
+      setBusy(true);
+      setStatus("removing...");
+      try {
+        const res = await fetch("/api/account/avatar", { method: "DELETE" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        window.location.reload();
+      } catch {
+        setStatus("remove failed", true);
+        setBusy(false);
+      }
+    });
+  }
+</script>
+
+<script>
+  // List <-> gallery view toggle, persisted across visits.
+  const specimens = document.querySelector<HTMLElement>("[data-specimens]");
+  if (specimens) {
+    const KEY = "embody:profile-view";
+    const setView = (v: string): void => {
+      specimens.setAttribute("data-view", v);
+      specimens.querySelectorAll<HTMLElement>("[data-view-set]").forEach((b) =>
+        b.classList.toggle("is-on", b.getAttribute("data-view-set") === v));
+      try { localStorage.setItem(KEY, v); } catch { /* private mode */ }
+    };
+    let saved: string | null = null;
+    try { saved = localStorage.getItem(KEY); } catch { saved = null; }
+    if (saved === "gallery" || saved === "list") setView(saved);
+    specimens.querySelectorAll<HTMLElement>("[data-view-set]").forEach((b) =>
+      b.addEventListener("click", () => setView(b.getAttribute("data-view-set") ?? "list")));
+  }
+
+  // Owner delete: an inline "arm, then confirm" (no OS dialog). First click arms
+  // the button (turns red); a second click within a few seconds deletes the
+  // specimen and removes its row. Clicking away / waiting disarms it.
+  document.querySelectorAll<HTMLButtonElement>("[data-delete-specimen]").forEach((btn) => {
+    let armed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const disarm = (): void => {
+      armed = false;
+      btn.classList.remove("is-armed");
+      btn.title = "Delete";
+      if (timer) clearTimeout(timer);
+    };
+    btn.addEventListener("click", async () => {
+      const slug = btn.getAttribute("data-delete-specimen");
+      if (!slug) return;
+      if (!armed) {
+        armed = true;
+        btn.classList.add("is-armed");
+        btn.title = "Click again to delete";
+        timer = setTimeout(disarm, 3500);
+        return;
+      }
+      disarm();
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/specimens/${slug}`, { method: "DELETE" });
+        if (res.ok) btn.closest(".specimen-row")?.remove();
+        else btn.disabled = false;
+      } catch {
+        btn.disabled = false;
+      }
+    });
+  });
+</script>
+
+<script>
+  // Owner-only account editor: display name + handle (our users_profile via
+  // /api/account/profile) AND email (Better Auth changeEmail). One popover, one
+  // save. Identity changes that DON'T touch the handle update the page in place
+  // (no reload); a changed handle changes the canonical /u/<handle> URL, so we
+  // navigate there. Only rendered on your own profile.
+  import { authClient } from "../../lib/authClient";
+
+  const toggle = document.querySelector<HTMLButtonElement>("[data-profile-edit-toggle]");
+  const editForm = document.querySelector<HTMLFormElement>("[data-profile-edit-form]");
+  if (toggle && editForm) {
+    const cancel = editForm.querySelector<HTMLButtonElement>("[data-profile-edit-cancel]");
+    const saveBtn = editForm.querySelector<HTMLButtonElement>("[data-profile-edit-save]");
+    const editStatus = editForm.querySelector<HTMLElement>("[data-profile-edit-status]");
+    const emailConfigured = editForm.dataset.emailConfigured === "1";
+    // Baseline (current saved values) so we only call each endpoint on a real change.
+    const cur = {
+      handle: editForm.dataset.curHandle ?? "",
+      display: editForm.dataset.curDisplay ?? "",
+      email: editForm.dataset.curEmail ?? ""
+    };
+
+    const setEditStatus = (msg: string, isError = false): void => {
+      if (!editStatus) return;
+      editStatus.textContent = msg;
+      editStatus.classList.toggle("is-error", isError);
+    };
+    const openEdit = (show: boolean): void => {
+      editForm.hidden = !show;
+      toggle.setAttribute("aria-expanded", show ? "true" : "false");
+      if (show) (editForm.querySelector('[name="displayName"]') as HTMLInputElement | null)?.focus();
+    };
+
+    toggle.addEventListener("click", (e) => { e.stopPropagation(); setEditStatus(""); openEdit(Boolean(editForm.hidden)); });
+    cancel?.addEventListener("click", () => { setEditStatus(""); openEdit(false); });
+    // Popover: close on outside click or Escape.
+    document.addEventListener("click", (e) => {
+      if (editForm.hidden) return;
+      const t = e.target as Node;
+      if (!editForm.contains(t) && !toggle.contains(t)) openEdit(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !editForm.hidden) { openEdit(false); toggle.focus(); }
+    });
+
+    // Update the visible identity (h1 + @handle subline) in place after a save
+    // that left the handle unchanged -- no reload.
+    const updateIdentity = (display: string, handle: string): void => {
+      const meta = editForm.closest(".profile-meta");
+      const h1 = meta?.querySelector("h1");
+      let sub = meta?.querySelector<HTMLElement>(".profile-handle") ?? null;
+      if (!h1) return;
+      if (display) {
+        h1.textContent = display;
+        if (!sub) {
+          sub = document.createElement("p");
+          sub.className = "profile-handle mono";
+          h1.insertAdjacentElement("afterend", sub);
+        }
+        sub.textContent = "@" + handle;
+      } else {
+        h1.textContent = "@" + handle;
+        sub?.remove();
+      }
+    };
+
+    editForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!saveBtn) return;
+      const data = new FormData(editForm);
+      const handle = String(data.get("handle") || "").trim();
+      const display = String(data.get("displayName") || "").trim();
+      const email = String(data.get("email") || "").trim();
+      if (!handle) { setEditStatus("a handle is required.", true); return; }
+      if (!email) { setEditStatus("an email is required.", true); return; }
+
+      const emailChanged = email !== cur.email;
+      const profileChanged = handle !== cur.handle || display !== cur.display;
+      if (!emailChanged && !profileChanged) { openEdit(false); return; }
+
+      saveBtn.disabled = true;
+      const original = saveBtn.textContent;
+      saveBtn.textContent = "saving...";
+      setEditStatus("saving...");
+      const fail = (msg: string): void => {
+        setEditStatus(msg, true);
+        saveBtn.disabled = false;
+        saveBtn.textContent = original;
+      };
+
+      try {
+        // 1. Email (Better Auth) -- only on a real change.
+        if (emailChanged) {
+          const { error } = await authClient.changeEmail({ newEmail: email, callbackURL: window.location.pathname });
+          if (error) { fail(error.message || "could not update email."); return; }
+        }
+        // 2. Identity (handle + display name).
+        let savedHandle = cur.handle;
+        if (profileChanged) {
+          const res = await fetch("/api/account/profile", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ handle, displayName: display })
+          });
+          const body = (await res.json().catch(() => ({}))) as { handle?: string; detail?: string; error?: string };
+          if (res.status === 401) { window.location.assign("/signin?next=/u/" + encodeURIComponent(handle)); return; }
+          if (!res.ok) { fail(body.detail || body.error || "could not save profile."); return; }
+          savedHandle = body.handle || handle;
+        }
+
+        // 3. A changed handle changes the canonical URL -> navigate there.
+        if (savedHandle !== cur.handle) {
+          window.location.assign("/u/" + encodeURIComponent(savedHandle));
+          return;
+        }
+        // Handle unchanged: hot-update the identity, refresh the baseline, done.
+        updateIdentity(display, savedHandle);
+        cur.display = display;
+        cur.email = email;
+        saveBtn.disabled = false;
+        saveBtn.textContent = original;
+        if (emailChanged && emailConfigured) {
+          setEditStatus("saved -- check your current inbox to confirm the new email.");
+        } else {
+          setEditStatus("");
+          openEdit(false);
+        }
+      } catch {
+        fail("something went wrong. try again.");
+      }
+    });
+  }
+</script>

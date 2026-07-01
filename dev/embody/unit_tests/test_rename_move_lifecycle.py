@@ -1,5 +1,5 @@
-﻿"""
-Test suite: Rename and move lifecycle — operator rename/move detection and table updates.
+"""
+Test suite: Rename and move lifecycle - operator rename/move detection and table updates.
 
 Tests the continuity system that tracks operators across renames and moves:
   - Rename detection: table has old path until refresh
@@ -87,7 +87,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         self.assertTrue(found_old, 'Table should still have old path')
 
     # =========================================================================
-    # updateMovedOp — COMP
+    # updateMovedOp - COMP
     # =========================================================================
 
     def test_updateMovedOp_updates_table_path(self):
@@ -150,7 +150,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         self.assertTrue(comp.par.enableexternaltox.eval())
 
     # =========================================================================
-    # updateMovedOp — DAT
+    # updateMovedOp - DAT
     # =========================================================================
 
     def test_updateMovedOp_dat_updates_file_par(self):
@@ -175,7 +175,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         self.assertTrue(dat.par.syncfile.eval())
 
     # =========================================================================
-    # updateMovedOp — error cases
+    # updateMovedOp - error cases
     # =========================================================================
 
     def test_updateMovedOp_missing_old_path_logs_error(self):
@@ -185,7 +185,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp.tags.add(tox_tag)
 
         ext_folder = self.embody_ext.ExternalizationsFolder
-        # Should not raise — old path doesn't exist in table
+        # Should not raise - old path doesn't exist in table
         self.embody_ext.updateMovedOp(comp, '/nonexistent/old', 'fake/path.tox', ext_folder)
 
     # =========================================================================
@@ -315,7 +315,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         self.assertEqual(self.embody_ext.Externalizations.numRows, initial_rows)
 
     # =========================================================================
-    # TDN rename — _findMovedTDNOp / _updateMovedTDNOp
+    # TDN rename - _findMovedTDNOp / _updateMovedTDNOp
     # =========================================================================
 
     def _externalize_tdn_comp(self, parent, name):
@@ -406,7 +406,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp2.destroy()
 
         processed = set()
-        # comp1 is still tracked — should NOT be matched for comp2's entry.
+        # comp1 is still tracked - should NOT be matched for comp2's entry.
         # The function requires exactly one same-parent untracked candidate.
         # comp1 is tracked so it's excluded, leaving zero candidates.
         found = self.embody_ext._findMovedTDNOp(old_path2, old_rel2, processed)
@@ -451,7 +451,7 @@ class TestRenameMoveLifecycle(EmbodyTestCase):
         comp2.create(constantTOP, 'content')
         tdn_tag = self.embody.par.Tdntag.val
         comp2.tags.add(tdn_tag)
-        # comp2 is tagged but NOT externalized — it's untracked
+        # comp2 is tagged but NOT externalized - it's untracked
 
         # Destroy comp1 so its entry is stale
         comp1.destroy()

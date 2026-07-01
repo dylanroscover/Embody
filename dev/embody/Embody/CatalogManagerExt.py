@@ -1,5 +1,5 @@
-﻿"""
-CatalogManager — background scanner and cross-build default patching.
+"""
+CatalogManager - background scanner and cross-build default patching.
 
 On every startup, checks if a creation-values catalog exists for the
 current TD build in .embody/. If not, runs a background scan (1-2 ops
@@ -32,14 +32,26 @@ _ABSTRACT_TYPES = frozenset({
 	'ObjectCOMP',
 })
 
-# Palette .tox stems (case-insensitive) skipped during scan — they run
-# invasive init on loadTox: messageBoxes, project.cookRate changes,
-# TDImportCache creation. Loss of palette-clone detection for these is
-# acceptable; almost nobody diffs them in TDN networks.
+# Palette .tox stems (case-insensitive) skipped during the one-time
+# first-launch scan. They either run invasive init on loadTox (messageBoxes,
+# project.cookRate changes, TDImportCache creation) OR fail loudly because
+# their dependencies are absent (Ableton Live, VR hardware, Windows-only
+# ctypes.windll) - flooding the textport with harmless-but-alarming errors
+# that read like Embody is broken. Loss of palette-clone detection for these
+# is acceptable; almost nobody diffs them in TDN networks.
 _PALETTE_SCAN_BLOCKLIST = frozenset({
-	'tdvr',      # forces 90fps, shows VR framerate messageBox
-	'autoui',    # shows "Widget Package Required" messageBox
+	'tdvr',                # forces 90fps, shows VR framerate messageBox
+	'autoui',              # shows "Widget Package Required" messageBox
+	'tdabletonpackage',    # Ableton bridge - needs Ableton Live + tdAbleton
+	'resources',           # VRWorldExt + findMouse (Windows-only windll)
+	'world',               # VRWorldExt + findMouse (Windows-only windll)
+	'system',              # findMouse (Windows-only ctypes.windll)
 })
+
+# Palette .tox stem PREFIXES (case-insensitive) skipped during the scan.
+# The Ableton component family (abletonChain, abletonRack, abletonTrack, ...)
+# all raise AttributeError on init without a connected tdAbletonPackage.
+_PALETTE_SCAN_BLOCKLIST_PREFIXES = ('ableton',)
 
 
 class CatalogManagerExt:
@@ -58,6 +70,12 @@ class CatalogManagerExt:
 		self._palette_queue = []          # list of rel_path strings
 		self._palette_results = {}        # {name: placed_type}
 		self._palette_workspace = None
+		# Timeline / cook state snapshot, taken before the palette scan.
+		# Loading some palette .tox files runs their init code, which can
+		# mutate GLOBAL timeline state (pause playback, change cookRate).
+		# We restore the snapshot after every chunk so a misbehaving
+		# component can't leave the timeline paused.
+		self._time_snapshot = None
 
 	def onDestroyTD(self):
 		"""Clean up workspace if scan was interrupted."""
@@ -92,7 +110,7 @@ class CatalogManagerExt:
 		catalog_path = self._getCatalogPath(self._build_str)
 
 		if os.path.isfile(catalog_path):
-			# Catalog exists — load it
+			# Catalog exists - load it
 			catalog = self._readCatalog(catalog_path)
 			if catalog:
 				self._populateTDNExt(catalog)
@@ -101,7 +119,7 @@ class CatalogManagerExt:
 				self._patchCrossBuildDefaults(catalog)
 				return
 
-		# No catalog — start background scan
+		# No catalog - start background scan
 		self._log(f'No catalog for build {self._build_str}, scanning...')
 		self._startBackgroundScan()
 
@@ -109,7 +127,7 @@ class CatalogManagerExt:
 	# Background Scan
 	# =================================================================
 
-	CHUNK_SIZE = 2  # ops per frame — keeps frame time well under 16ms
+	CHUNK_SIZE = 2  # ops per frame - keeps frame time well under 16ms
 
 	def _startBackgroundScan(self):
 		"""Begin async scan of all creatable op types."""
@@ -168,7 +186,7 @@ class CatalogManagerExt:
 					val = p.val
 					if self._probe_name in str(val):
 						continue
-					# Store native Python types — json.dumps handles
+					# Store native Python types - json.dumps handles
 					# int, float, bool, str natively. This preserves
 					# type info so _valuesDiffer comparisons work
 					# correctly (float 5.0 vs float 5.0, not "5" vs 5.0).
@@ -219,7 +237,7 @@ class CatalogManagerExt:
 		# Run cross-build patch check (uses op-type catalog)
 		self._patchCrossBuildDefaults(self._scan_results)
 
-		# Try bootstrap palette_catalog tableDAT first — if it covers
+		# Try bootstrap palette_catalog tableDAT first - if it covers
 		# the current build, skip the palette scan entirely (saves 5-7s
 		# per TD build on fresh installs).
 		bootstrap_palette = self._loadBootstrapPalette(self._build_str)
@@ -234,7 +252,7 @@ class CatalogManagerExt:
 			self._finalizePaletteScan()
 			return
 
-		# Bootstrap miss — fall back to runtime palette scan.
+		# Bootstrap miss - fall back to runtime palette scan.
 		self._startPaletteScan(self._scan_results)
 
 		# Clean up op-type scan state
@@ -245,7 +263,7 @@ class CatalogManagerExt:
 	# Palette Component Scan
 	# =================================================================
 
-	PALETTE_CHUNK_SIZE = 1  # .tox files per frame — some palette .tox are heavy
+	PALETTE_CHUNK_SIZE = 1  # .tox files per frame - some palette .tox are heavy
 
 	def _startPaletteScan(self, op_catalog):
 		"""Begin async scan of all shipped palette .tox components.
@@ -259,7 +277,7 @@ class CatalogManagerExt:
 		"""
 		palette_dir = self._getPaletteDir()
 		if not palette_dir:
-			# Can't find palette — write op-type-only catalog and finish
+			# Can't find palette - write op-type-only catalog and finish
 			self._writeCatalog(self._getCatalogPath(self._build_str), op_catalog)
 			self.ownerComp.par.Status = 'Enabled'
 			return
@@ -273,7 +291,8 @@ class CatalogManagerExt:
 				if not fname.endswith('.tox'):
 					continue
 				stem = os.path.splitext(fname)[0].lower()
-				if stem in _PALETTE_SCAN_BLOCKLIST:
+				if stem in _PALETTE_SCAN_BLOCKLIST or stem.startswith(
+						_PALETTE_SCAN_BLOCKLIST_PREFIXES):
 					skipped.append(stem)
 					continue
 				full = os.path.join(root, fname)
@@ -295,11 +314,22 @@ class CatalogManagerExt:
 		self._palette_workspace.nodeY = -1800
 
 		self._log(f'Palette scan: {len(self._palette_queue)} components')
+		self._log(
+			'First-launch only: building the parameter-default catalog from '
+			'the TD palette. Any red errors below come from TD palette samples '
+			'whose dependencies are absent (Ableton needs Live, VR needs '
+			'hardware, some are Windows-only) -- they are HARMLESS, do not '
+			'affect Embody or your project, and this one-time scan is cached '
+			'so it will not run again for this TD build.', 'INFO')
 		self.ownerComp.par.Status = (
 			f'Scanning palette (0/{len(self._palette_queue)})')
 
 		# Store op_catalog for combined write in _finalizePaletteScan
 		self._op_catalog_pending = op_catalog
+
+		# Snapshot global timeline/cook state - loading palette components
+		# can mutate it, and we must hand it back untouched.
+		self._snapshotTimeState()
 
 		run('args[0]._processPaletteChunk()', self, delayFrames=1)
 
@@ -346,7 +376,7 @@ class CatalogManagerExt:
 					child_count = len(wrapper.children)
 
 				# Only record the first occurrence of each name (handles
-				# TDAbleton Live 11+ vs Live 9&10 duplicates — same type)
+				# TDAbleton Live 11+ vs Live 9&10 duplicates - same type)
 				if name not in self._palette_results:
 					self._palette_results[name] = {
 						'type': placed_type,
@@ -360,10 +390,14 @@ class CatalogManagerExt:
 				if existing:
 					existing.destroy()
 
+		# Loading a palette component may have paused playback or changed
+		# the cook rate - undo any global side effects before yielding.
+		self._restoreTimeState()
+
 		done = len(self._palette_results)
 		self.ownerComp.par.Status = f'Scanning palette ({done}/{total})'
 
-		# Finalize in-band on last chunk — same guard as op-type scan.
+		# Finalize in-band on last chunk - same guard as op-type scan.
 		if not self._palette_queue:
 			self._finalizePaletteScan()
 			return
@@ -379,8 +413,15 @@ class CatalogManagerExt:
 				pass
 			self._palette_workspace = None
 
+		# Final restore in case the last chunk left state dirty.
+		self._restoreTimeState()
+		self._time_snapshot = None
+
 		self._log(
 			f'Palette scan complete: {len(self._palette_results)} components')
+		self._log(
+			'Palette catalog cached. Any palette errors printed above were '
+			'expected and can be ignored.', 'INFO')
 
 		# Merge palette results into catalog under reserved _palette key
 		combined = dict(getattr(self, '_op_catalog_pending', {}))
@@ -432,7 +473,7 @@ class CatalogManagerExt:
 				if not os.path.isfile(abs_path):
 					continue
 				with open(abs_path, 'r', encoding='utf-8') as f:
-					tdn_doc = json.loads(f.read())
+					tdn_doc = self.ownerComp.ext.TDN.tdn_load(f.read())
 				source_build = tdn_doc.get('td_build', '')
 			except Exception:
 				continue
@@ -512,7 +553,7 @@ class CatalogManagerExt:
 				current_val = par.val
 				# Compare typed values directly
 				if self._valuesEqual(current_val, new_val):
-					# Current value matches the new default — user had
+					# Current value matches the new default - user had
 					# the old default, it was omitted, TD set the new one.
 					# Restore the old default.
 					self._setParFromCatalogVal(par, old_val)
@@ -556,7 +597,7 @@ class CatalogManagerExt:
 		"""Load catalog data into TDNExt.
 
 		Separates the reserved _palette key from op-type parameter data.
-		Op-type defaults go into _divergent_defaults; palette name→type
+		Op-type defaults go into _divergent_defaults; palette name->type
 		mapping goes into _palette_catalog.
 		"""
 		try:
@@ -777,6 +818,45 @@ class CatalogManagerExt:
 			except Exception:
 				pass
 			self._workspace = None
+
+	# --- Timeline / cook state guard (around the palette scan) ---------
+
+	# Global state that loading a palette .tox can clobber. Each entry is
+	# (label, getter, setter) over the relevant object.
+	def _timeStateAccessors(self):
+		tl = self.ownerComp.time
+		return [
+			('play', lambda: tl.play, lambda v: setattr(tl, 'play', v)),
+			('rate', lambda: tl.rate, lambda v: setattr(tl, 'rate', v)),
+			('cookRate', lambda: project.cookRate,
+			 lambda v: setattr(project, 'cookRate', v)),
+			('realTime', lambda: project.realTime,
+			 lambda v: setattr(project, 'realTime', v)),
+		]
+
+	def _snapshotTimeState(self):
+		"""Capture global timeline/cook state before the palette scan."""
+		snap = {}
+		for label, get, _set in self._timeStateAccessors():
+			try:
+				snap[label] = get()
+			except Exception:
+				pass
+		self._time_snapshot = snap
+
+	def _restoreTimeState(self):
+		"""Restore any global timeline/cook state a palette load changed."""
+		snap = self._time_snapshot
+		if not snap:
+			return
+		for label, get, set_ in self._timeStateAccessors():
+			if label not in snap:
+				continue
+			try:
+				if get() != snap[label]:
+					set_(snap[label])
+			except Exception:
+				pass
 
 	def _log(self, msg, level='INFO'):
 		"""Log via Embody's logging system."""

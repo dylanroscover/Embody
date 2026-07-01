@@ -1,41 +1,38 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 1,
-	"generator": "Embody/5.0.363",
-	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.363.toe",
-	"exported_at": "2026-04-14T01:35:05Z",
-	"network_path": "/embody/Embody/toolbar/container_right/filter",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "textCOMP",
-	"parameters": {
-		"text": "",
-		"editmode": "editablecontinuous",
-		"placeholdertext": "Filter...",
-		"callbacks": "new_filter_callbacks",
-		"font": "Open Sans",
-		"fontsize": 9,
-		"fontsizeunits": "points",
-		"fontcolorr": "=parent.Embody.par.Textcolorr",
-		"fontcolorg": "=parent.Embody.par.Textcolorg",
-		"fontcolorb": "=parent.Embody.par.Textcolorb",
-		"textoffsetx": 8,
-		"alignx": "left",
-		"w": 170,
-		"vmode": "fill",
-		"alignorder": 25,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"bgcolorr": 0.08,
-		"bgcolorg": 0.08,
-		"bgcolorb": 0.08,
-		"bgalpha": 1
-	},
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": []
-}
+format: tdn
+version: '2.0'
+build: 1
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:35Z'
+network_path: /embody/Embody/toolbar/container_right/filter
+options:
+  include_dat_content: false
+  include_storage: true
+type: textCOMP
+parameters:
+  text: ''
+  editmode: editablecontinuous
+  placeholdertext: Filter...
+  callbacks: new_filter_callbacks
+  font: Open Sans
+  fontsize: 9
+  fontsizeunits: points
+  fontcolorr: =parent.Embody.par.Textcolorr
+  fontcolorg: =parent.Embody.par.Textcolorg
+  fontcolorb: =parent.Embody.par.Textcolorb
+  textoffsetx: 8
+  alignx: left
+  w: 170
+  vmode: fill
+  alignorder: 25
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: 0.08
+  bgcolorg: 0.08
+  bgcolorb: 0.08
+  bgalpha: 1
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

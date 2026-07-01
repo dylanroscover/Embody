@@ -8,7 +8,7 @@
 
 ## Critical Rules
 
-1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are JSON on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) or call `get_externalizations` to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then **always** call `import_network` via MCP with the COMP path, the parsed JSON, and `clear_first=True` to reload it in TD. **Never leave a `.tdn` edit unreloaded** — the user must see updates immediately in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
+1. **Prefer `.tdn` files for reading TDN-externalized COMPs** — `.tdn` files are YAML on disk with complete network structure (operators, parameters, connections, positions, flags, DAT content, annotations). Reading them directly is faster than MCP round-trips. Check `externalizations.tsv` (strategy column) or call `get_externalizations` to identify TDN-strategy COMPs. To edit: modify the `.tdn` file on disk, then **always** call `import_network` via MCP with the COMP path, the parsed network, and `clear_first=True` to reload it in TD. **Never leave a `.tdn` edit unreloaded** — the user must see updates immediately in TD. Use MCP when you need live runtime state (evaluated expressions, cook errors) or for non-TDN operators.
 2. **Use Envoy MCP tools for live TD state and non-TDN operators** — NEVER say "I can't edit that because it's in a .tox" or "these are binary files I can't access." For operators not externalized as TDN, use MCP tools to inspect and modify them. The filesystem holds externalized files (`.py`, `.tox`, `.tdn`, `.json`, `.xml`, etc.); MCP is for interacting with live operator state inside TD.
 3. **NEVER create operators under `/local`** — `/local` is volatile storage, not saved with the `.toe` file. Always place operators under the project root or the user's active network. Use `execute_python` with `result = ui.panes.current.owner.path` to find the current network.
 4. **Do NOT assume network paths** — never guess `/project1`. Use `query_network` on `/` to discover the actual root structure.
@@ -26,6 +26,12 @@
 - Before editing a file, verify it is the ACTUAL file responsible. Grep and trace the render path before making changes.
 - Avoid over-engineering. Prefer minimal, targeted changes.
 - When debugging, state your hypothesis, verify with evidence, then fix.
+- Define success criteria before you start, then loop until you've verified them — don't just run steps and declare done.
+- Checkpoint after each significant step: what changed, what's verified, what's left. Don't continue from a state you can't describe.
+- Fail loud — "done" is wrong if anything was skipped silently, "tests pass" is wrong if any were skipped. Surface uncertainty; don't bury it.
+- Surface conflicts, don't average them: when two patterns or rules contradict, pick one (more recent / more tested), say why, flag the other for cleanup — never silently reconcile.
+- For visual or rendered output, success is a captured, assessed frame, not a clean network. Use `capture_top` to look at the result and judge it (load the `/visual-aesthetics` skill); never declare a visual task done on a black or empty frame.
+- Guard TD's performance and stability: before and after any cook-heavy build, check `get_project_performance`; if FPS drops, frames drop, or GPU/CPU memory runs low, stop and diagnose instead of building further (see `rules/performance.md`). Never freeze or crash the user's TD.
 
 ## Project Structure
 

@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **30 test suites** and **587 test methods** covering core externalization, MCP tools, TDN format, and server lifecycle. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **74 test suites** and **1,727 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -24,7 +24,7 @@ op.unit_tests.RunTestsDeferred()
 
 # Get results
 results = op.unit_tests.GetResults()
-# Returns: {'total': 587, 'passed': 587, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
+# Returns: {'total': 1693, 'passed': 1693, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
 ```
 
 ### Via MCP
@@ -38,55 +38,109 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 ## Test Coverage
 
-### Core Embody (14 suites)
+### Core Embody (25 suites, 408 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_externalization` | 9 | Externalization lifecycle |
+| `test_duplicate_handling` | 43 | Duplicate / clone / replicant resolution |
+| `test_custom_parameters` | 32 | Custom parameter behavior (Folder, Disable/Enable, Update, TDN controls, Logs, Envoy) |
+| `test_tag_management` | 29 | Tagging operators for externalization |
+| `test_rename_move_lifecycle` | 26 | Rename and move tracking |
 | `test_crud_operators` | 21 | Create, read, update, delete operations |
-| `test_file_management` | 7 | File I/O, path handling, cleanup |
-| `test_tag_management` | 19 | Tagging operators for externalization |
-| `test_tag_lifecycle` | 17 | Tag application and removal |
-| `test_rename_move_lifecycle` | 25 | Rename and move tracking |
-| `test_delete_cleanup` | 16 | Deletion and file cleanup |
-| `test_duplicate_handling` | 4 | Duplicate operator handling |
-| `test_update_sync` | 7 | Sync between .toe and externalized files |
+| `test_git_status` | 20 | Git status / uncommitted-file detection |
+| `test_param_tracker` | 20 | Parameter change tracking |
+| `test_v6_hardening` | 20 | v6 community-paste + strip/restore hardening |
+| `test_ancestor_rename` | 19 | Ancestor-rename detection and folder migration |
 | `test_path_utils` | 18 | Path normalization and utilities |
-| `test_param_tracker` | 13 | Parameter change tracking |
+| `test_autosave` | 18 | Auto-save checkpoint engine (skip_cleanup, idle-settle drain, crash recovery, gates) |
+| `test_tag_lifecycle` | 17 | Tag application and removal |
+| `test_delete_cleanup` | 16 | Deletion and file cleanup |
+| `test_strategy_handlers` | 15 | TOX/TDN strategy switch, remove, DAT convert |
+| `test_issue21_safe_cell` | 14 | Safe table-cell handling |
+| `test_glsl_externalize` | 11 | GLSL shader auto-externalization |
+| `test_layout_lint` | 10 | `execute_python` layout-warning linting |
+| `test_logging` | 10 | Logging system and ring buffer |
+| `test_externalization` | 9 | Externalization lifecycle |
+| `test_file_management` | 8 | File I/O, path handling, tracked-file delete safety |
+| `test_os_label` | 8 | OS label resolution (Win10/11 build thresholds, macOS) |
+| `test_update_sync` | 7 | Sync between .toe and externalized files |
+| `test_dialog_suppression` | 8 | File-cleanup dialog suppression during tests |
 | `test_operator_queries` | 6 | Operator discovery and queries |
-| `test_logging` | 10 | Logging system |
-| `test_custom_parameters` | 30 | Custom parameter behavior (Folder, Disable/Enable, Update, TDN controls, Logs, Envoy) |
+| `test_settings_persistence` | 3 | Settings serialization (byte-stable, sorted keys) |
 
-### MCP Tools (11 suites)
+### MCP Tools (15 suites, 193 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
+| `test_mcp_externalization` | 22 | Embody integration via MCP (tag, save, status) |
 | `test_mcp_operators` | 20 | Create, delete, copy, rename, query, find |
-| `test_mcp_parameters` | 11 | Get/set parameters, modes, expressions |
-| `test_mcp_dat_content` | 9 | DAT text and table operations |
-| `test_mcp_connections` | 8 | Wiring operators together |
 | `test_mcp_annotations` | 19 | Creating and managing annotations |
-| `test_mcp_extensions` | 6 | Extension creation and setup |
-| `test_mcp_diagnostics` | 12 | Error checking, performance, info |
-| `test_mcp_flags_position` | 12 | Operator flags and positioning |
+| `test_mcp_dat_content` | 19 | DAT text/table ops + surgical `edit_dat_content` + wipe guards |
+| `test_mcp_diagnostics` | 16 | Error checking, class introspection, module help, log retrieval |
+| `test_mcp_flags_position` | 16 | Operator flags, positioning, and `get_network_layout` |
+| `test_mcp_project_performance` | 14 | Project-level FPS, memory, hotspots |
+| `test_mcp_parameters` | 11 | Get/set parameters, modes, expressions |
+| `test_mcp_top_capture` | 11 | TOP image capture (format, quality, resolution) |
+| `test_mcp_tdn_tools` | 10 | `read_tdn`, `export_network`/`import_network` round-trip |
+| `test_mcp_batch` | 9 | Batched multi-operation requests |
+| `test_mcp_connections` | 8 | Wiring operators together |
 | `test_mcp_code_execution` | 7 | Executing Python in TD |
-| `test_mcp_externalization` | 18 | Embody integration via MCP |
-| `test_mcp_performance` | 5 | Performance monitoring |
+| `test_mcp_extensions` | 6 | Extension creation and setup |
+| `test_mcp_performance` | 5 | Per-operator performance monitoring |
 
-### TDN Format (4 suites)
-
-| Suite | Tests | Coverage |
-|-------|-------|----------|
-| `test_tdn_export_import` | 26 | Network export/import |
-| `test_tdn_helpers` | 25 | TDN utility functions |
-| `test_tdn_reconstruction` | 124 | Reconstruction round-trip fidelity |
-| `test_tdn_file_io` | 66 | TDN file output, per-comp splitting, stale cleanup |
-
-### Infrastructure (1 suite)
+### TDN Format (17 suites, 620 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
-| `test_server_lifecycle` | 17 | Envoy MCP server start/stop |
+| `test_tdn_reconstruction` | 208 | Reconstruction round-trip fidelity |
+| `test_tdn_file_io` | 92 | TDN file output, per-comp splitting, stale cleanup, tdn_ref / tox_ref pointers |
+| `test_tdn_helpers` | 53 | TDN serialization utility functions |
+| `test_tdn_export_import` | 44 | Network export/import + storage round-trip |
+| `test_tdn_crash_safety` | 35 | Atomic writes, backup rotation, validation |
+| `test_tdn_sequences` | 27 | Parameter / operator sequence round-trip |
+| `test_tdn_diff_engine` | 25 | TDN structural diff engine |
+| `test_tdn_palette_catalog` | 23 | Palette-clone detection and handling |
+| `test_tdn_exclude` | 21 | `tdn_exclude` tag (app-managed subtree invisibility) |
+| `test_tdn_mode` | 15 | Tdnmode gating (off / export / full) |
+| `test_dat_restoration` | 14 | DAT restoration from disk on startup |
+| `test_tdn_safety_guards` | 14 | At-risk storage / callback-DAT protection |
+| `test_tdn_yaml` | 14 | TDN v2.0 YAML emitter / parser |
+| `test_tdn_diff` | 11 | `diff_tdn` tool (live-vs-disk, project-wide) |
+| `test_tdn_fingerprint` | 11 | Param-aware dirty detection (fingerprint) |
+| `test_tdn_annotation_export` | 7 | Annotation-only `.tdn` export (annotateCOMP not double-captured) |
+| `test_tdn_external_connections` | 6 | External wire capture/restore across strip |
+
+### Community & Collection (6 suites, 123 tests)
+
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| `test_clipboard_paste` | 42 | Clipboard auto-paste import flow |
+| `test_collection_scanner` | 22 | Capability scanner verdicts (clean / flagged / blocked) |
+| `test_specimen_publish` | 19 | Specimen publish hook |
+| `test_collection_safe_import` | 18 | Safe-import `make_inert` disarming |
+| `test_collection_pure` | 14 | Pure-value-expression preservation (live-if-clean) |
+| `test_clipboard_watch` | 8 | Clipboard watcher poll + gating (incl. outbound-copy suppression) |
+
+### Envoy Server & Bridge (8 suites, 334 tests)
+
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| `test_envoy_bridge` | 156 | STDIO bridge: forwarding, reconciler, registry, meta-tools |
+| `test_claude_config` | 76 | AI client config generation (Claude/Cursor/Copilot/Windsurf) |
+| `test_server_lifecycle` | 22 | Envoy MCP server start/stop |
+| `test_envoy_watchdog` | 21 | Envoy liveness watchdog (revive on dropped socket / save) |
+| `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |
+| `test_envoy_setup_environment` | 18 | MCP import verification (pydantic_core safety) |
+| `test_envoy_registry` | 17 | Instance registry and PID liveness |
+| `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |
+
+### Catalog & Release (3 suites, 49 tests)
+
+| Suite | Tests | Coverage |
+|-------|-------|----------|
+| `test_smoke_release` | 33 | Release smoke checks (extensions loaded, Envoy state) |
+| `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
+| `test_catalog_palette_scan` | 6 | Palette scan time-state snapshot/restore |
 
 ## Execution Modes
 

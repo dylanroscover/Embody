@@ -1,0 +1,1217 @@
+format: tdn
+version: '2.0'
+build: 6
+generator: Embody/6.0.38
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:36Z'
+network_path: /specimen_lab
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  baseCOMP:
+    size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+par_templates:
+  output:
+  - clampMax: true
+    clampMin: true
+    default: 3840
+    help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+    max: 7680.0
+    min: 256.0
+    name: Resw
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+  - clampMax: true
+    clampMin: true
+    default: 2160
+    help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+    max: 7680.0
+    min: 256.0
+    name: Resh
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+  output_2:
+  - clampMax: true
+    clampMin: true
+    default: 3840
+    help: Render width (px). 4K landscape = 3840. Drives every resolution-bearing op in this specimen.
+    max: 7680.0
+    min: 256.0
+    name: Resw
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+  - clampMax: true
+    clampMin: true
+    default: 2160
+    help: Render height (px). 4K landscape = 2160.
+    max: 7680.0
+    min: 256.0
+    name: Resh
+    normMax: 7680.0
+    normMin: 256.0
+    style: Int
+type: baseCOMP
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: hyper_ntsc
+  type: baseCOMP
+  custom_pars:
+    Output:
+      $t: output
+    Controls:
+    - name: Bandcount
+      style: Int
+      default: 10
+      min: 2.0
+      max: 40.0
+      clampMin: true
+      clampMax: true
+      normMin: 2.0
+      normMax: 40.0
+    - name: Hue
+      style: Float
+      clampMin: true
+      clampMax: true
+    - name: Speed
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Bleed
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Dotcrawl
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Jitter
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Noise
+      style: Float
+      default: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Scanlines
+      style: Float
+      default: 0.6
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+    - name: Bloom
+      style: Float
+      default: 1.6
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Bloomwidth
+      style: Float
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+    - name: Grain
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Vignette
+      style: Float
+      default: 0.7
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+  position: [1200, 0]
+  tdn_ref: specimen_lab/hyper_ntsc.tdn
+- name: murmuration
+  type: baseCOMP
+  custom_pars:
+    Murmuration:
+    - name: Cohesion
+      style: Float
+      startSection: true
+      default: 0.04
+      max: 2.0
+      clampMin: true
+      normMax: 0.5
+      help: Steer toward the local flock centroid (Reynolds cohesion).
+    - name: Alignment
+      style: Float
+      default: 0.55
+      max: 3.0
+      clampMin: true
+      normMax: 2.0
+      help: Match the mean heading of neighbors (Reynolds alignment).
+    - name: Separation
+      style: Float
+      default: 0.9
+      max: 5.0
+      clampMin: true
+      normMax: 3.0
+      help: Inverse-square repulsion from close neighbors. Prevents collapse - the anti-blob force.
+    - name: Attractor
+      style: Float
+      default: 0.15
+      max: 2.0
+      clampMin: true
+      help: Pull toward the slow wandering roost attractor.
+    - name: Spiral
+      style: Float
+      default: 0.55
+      max: 3.0
+      clampMin: true
+      normMax: 2.0
+      help: Tangential swirl around the attractor (vortex shear / split-reform).
+    - name: Curl
+      style: Float
+      default: 0.4
+      max: 3.0
+      clampMin: true
+      normMax: 2.0
+      help: Curl-noise wander for organic break-up.
+    - name: Bodyradius
+      style: Float
+      label: Body Radius
+      startSection: true
+      default: 2.4
+      min: 0.5
+      max: 6.0
+      clampMin: true
+      normMin: 1.0
+      normMax: 4.0
+      help: Soft containment radius - the size of the coherent body.
+    - name: Morphspeed
+      style: Float
+      label: Morph Speed
+      default: 1
+      max: 4.0
+      clampMin: true
+      normMax: 3.0
+      help: Overall evolution rate (attractor drift + curl). 0 freezes the motion.
+    - name: Maxparticles
+      style: Int
+      label: Max Particles
+      startSection: true
+      default: 5000
+      min: 100.0
+      clampMin: true
+      normMin: 1000.0
+      normMax: 40000.0
+      help: Maximum live particle pool.
+    - name: Birthrate
+      style: Float
+      label: Birth Rate
+      default: 2000
+      clampMin: true
+      normMax: 8000.0
+      help: Particles born per second.
+    Output:
+      $t: output_2
+  position: [0, -800]
+  tdn_ref: specimen_lab/murmuration.tdn
+- name: kaleidoscope
+  type: baseCOMP
+  custom_pars:
+    Kaleidoscope:
+    - name: Segments
+      style: Int
+      startSection: true
+      default: 8
+      min: 2.0
+      max: 24.0
+      clampMin: true
+      normMin: 2.0
+      normMax: 16.0
+      help: Number of mirror wedges around the center. Higher = more intricate symmetry.
+    - name: Rotation
+      style: Float
+      normMin: -3.1416
+      normMax: 3.1416
+      help: Base rotation of the mirror, in radians. The animation rotates on top of this.
+    - name: Zoom
+      style: Float
+      default: 1
+      min: 0.1
+      clampMin: true
+      normMin: 0.3
+      normMax: 3.0
+      help: How much of the source each wedge samples. Higher = more facets packed in.
+    - name: Flowspeed
+      style: Float
+      label: Flow Speed
+      default: 1
+      clampMin: true
+      normMax: 3.0
+      help: Speed of the tumble / twist / rotation animation. 0 freezes it.
+    - name: Palette
+      style: Float
+      label: Palette Hue
+      clampMin: true
+      clampMax: true
+      help: Rotates the color palette through the full hue range. 0 = fiery.
+    - name: Source
+      style: Menu
+      startSection: true
+      default: demo
+      menuNames:
+      - demo
+      - external
+      menuLabels:
+      - Demo (built-in)
+      - External input
+      help: Demo = built-in animated source. External = kaleidoscope whatever TOP is wired into this COMP.
+    Output:
+      $t: output
+  position: [800, -400]
+  tdn_ref: specimen_lab/kaleidoscope.tdn
+- name: noise_terrain
+  type: baseCOMP
+  custom_pars:
+    Terrain:
+    - name: Height
+      style: Float
+      startSection: true
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Overall vertical scale of the terrain. Master multiplier on all three noise displacement amplitudes, preserving their 2.9 / 1.0 / 0.25 ratio so peaks and fine relief grow in proportion. 1.0 = the shipped look; 0 = a flat plane; 2 = double-height alpine peaks.
+    - name: Ridge
+      style: Float
+      default: 1.6
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      normMin: 1.0
+      normMax: 3.0
+      help: Ridge sharpness of the mountains. Higher values carve sharper, more knife-edged ridgelines and deeper valleys; lower values give rounder, more eroded hills. 1.6 = the shipped look.
+    - name: Warp
+      style: Float
+      default: 1.2
+      max: 2.5
+      clampMin: true
+      normMax: 2.5
+      help: Domain warp amount. Bends the noise domain so ridgelines flow organically instead of aligning to a grid. 0 = regular and repetitive; 1.2 = the shipped look; higher = more chaotic, swirling ridges.
+    - name: Detail
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Surface micro-detail and ruggedness, applied cheaply in the shader as normal-map bump strength (no mesh change, so no triangulation cost or facet artifacts). Scales the shipped bump strength of 0.17. 1.0 = the shipped look; 0 = smooth shading; 2 = heavily rugged rock.
+    - name: Snowline
+      style: Float
+      label: Snow Line
+      startSection: true
+      default: 1.6
+      max: 4.0
+      clampMin: true
+      normMax: 4.0
+      help: World-Y elevation where snow begins to cover the rock. Peaks reach roughly 0 to 4 at Height 1.0, so 1.6 sits mid-slope (the shipped look). Lower the value to blanket the terrain in snow; the slider covers 0 to 4, but you can type higher to clear taller peaks at high Height, leaving only bare rock.
+    - name: Sundiraz
+      style: Float
+      label: Sun Azimuth
+      startSection: true
+      default: -41.6335
+      min: -180.0
+      max: 180.0
+      normMin: -180.0
+      normMax: 180.0
+      help: Compass direction of the sunlight, in degrees in the horizontal plane. 0 points toward +Z (into the scene), +90 toward +X (right), -90 toward -X (left). Combined with Sun Elevation it is converted to a guaranteed unit light direction, so it can never produce a zero-length (NaN) vector. Controls which side of the ridges is lit.
+    - name: Sundirel
+      style: Float
+      label: Sun Elevation
+      default: 49.3007
+      max: 90.0
+      clampMin: true
+      clampMax: true
+      normMax: 90.0
+      help: Height of the sun above the horizon, in degrees. 0 = sun on the horizon (long raking shadows, warm grazing light); 90 = directly overhead (flat, even light). Controls shadow length and contrast. The default matches the shipped sun direction.
+    - name: Haze
+      style: Float
+      startSection: true
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Atmospheric haze amount, a multiplier on the computed distance fog and valley mist. 0 = perfectly clear air; 1.0 = the shipped atmosphere; up to 2 = thick, hazy depth that washes out distant peaks. The blend is re-clamped in the shader so it can never fully erase the scene.
+    - name: Morphspeed
+      style: Float
+      label: Morph Speed
+      startSection: true
+      default: 1
+      max: 3.0
+      clampMin: true
+      normMax: 3.0
+      help: Rate at which the terrain shape evolves over time, driving the 4D-noise time coordinate of all three layers while preserving their 0.04 / 0.085 / 0.15 speed ratio. 0 = frozen on a fixed, deterministic frame; 1.0 = the shipped pace; 3 = rapid morphing.
+    - name: Seed
+      style: Int
+      startSection: true
+      default: 1
+      max: 9999.0
+      clampMin: true
+      normMax: 100.0
+      help: Random seed for the terrain shape. Each value produces a completely different but equally plausible mountain. The three noise layers receive this value plus a fixed per-layer offset (+0, +1, +2) so they stay decorrelated. Default 1 reproduces the shipped seeds 1 / 2 / 3.
+    Output:
+      $t: output_2
+  position: [400, -800]
+  tdn_ref: specimen_lab/noise_terrain.tdn
+- name: packet_fabric
+  type: baseCOMP
+  custom_pars:
+    Controls:
+    - name: Maxpackets
+      style: Int
+      default: 5000
+      min: 200.0
+      max: 16000.0
+      clampMin: true
+      clampMax: true
+      normMin: 200.0
+      normMax: 16000.0
+      help: how many packets cascade down the fabric. Cost scales with this (GPU), NOT with output resolution, so it is independent of the 4K story. Watch GPU headroom; cap 16000.
+    - name: Flowspeed
+      style: Float
+      default: 0.45
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: how fast packets descend each link per second. 0 freezes the cascade (drops time-dependence); higher = near-light-speed rain.
+    - name: Linkcount
+      style: Int
+      default: 26
+      min: 4.0
+      max: 64.0
+      clampMin: true
+      clampMax: true
+      normMin: 4.0
+      normMax: 64.0
+      help: number of distinct sender->receiver vertical links. More = a busier topology.
+    - name: Curveamount
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: how much each vertical link bows horizontally (fiber slack). 0 = straight drops; higher = graceful arcs.
+    - name: Streams
+      style: Int
+      default: 3
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 3.0
+      help: number of separated ST2110 essence classes (1=video, 2=+audio, 3=+ancillary). Colors packets cyan/green/amber by PartId class.
+    - name: Ptprate
+      style: Float
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: frequency of the PTP grandmaster sync pulse all packets flash to in lockstep. The rhythmic heartbeat.
+    - name: Pulsestrength
+      style: Float
+      default: 1.4
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: how brightly packets flash on each PTP beat. 0 = steady cascade; higher = a dramatic synchronized strobe.
+    - name: Fieldscale
+      style: Float
+      default: 1.35
+      min: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.5
+      normMax: 2.0
+      help: spread of node anchors across the tall field. Higher = a wider, more sprawling fabric.
+    - name: Jitter
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: tiny per-packet phase stagger so the cascade looks like real quantized traffic, not a marching grid. 0 = perfectly synced ranks.
+    - name: Bloom
+      style: Float
+      default: 1.3
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: intensity of the bright-pass glow added back. The booth-scale wow knob.
+    - name: Bloomwidth
+      style: Float
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res).
+    Output:
+    - name: Resw
+      style: Int
+      default: 3840
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+    - name: Resh
+      style: Int
+      default: 2160
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+  position: [400, -400]
+  tdn_ref: specimen_lab/packet_fabric.tdn
+- name: waveform_stack
+  type: baseCOMP
+  custom_pars:
+    Output:
+    - name: Resw
+      style: Int
+      default: 3840
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Render width (px), 4K landscape.
+    - name: Resh
+      style: Int
+      default: 2160
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Render height (px), 4K landscape.
+    Controls:
+    - name: Lanes
+      style: Int
+      default: 96
+      min: 1.0
+      max: 512.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 512.0
+      help: number of vertically-stacked scope lanes (1=green audio only; more add cyan video, magenta chroma, amber...). The ST2110 separated essences, one lane each. The row-fold costs nothing per pixel regardl
+    - name: Frequency
+      style: Float
+      default: 8
+      min: 1.0
+      max: 30.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 30.0
+      help: base spatial frequency of the waveforms. Low = slow rolling signal; high = dense rapid oscillation across the lane.
+    - name: Amplitude
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: vertical swing of each trace within its lane. 0 = flat baselines; higher = tall dramatic waveforms (clamped to stay in-lane).
+    - name: Speed
+      style: Float
+      default: 1
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMax: 4.0
+      help: how fast the waveform content evolves. 0 freezes the shape (the sweep still moves).
+    - name: Sweeprate
+      style: Float
+      default: 0.4
+      min: 0.05
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.05
+      normMax: 2.0
+      help: how fast the white-hot playhead sweeps left-to-right across all lanes (Hz). The scope refresh feel.
+    - name: Afterglow
+      style: Float
+      default: 0.85
+      min: 0.5
+      max: 0.97
+      clampMin: true
+      clampMax: true
+      normMin: 0.5
+      normMax: 0.97
+      help: uSweep.y (in-shader persistence) AND level_decay.opacity (the low-res Feedback TOP decay). Higher = a longer CRT phosphor tail. Below 1 keeps the feedback bounded.
+    - name: Linewidth
+      style: Float
+      default: 0.006
+      min: 0.002
+      max: 0.02
+      clampMin: true
+      clampMax: true
+      normMin: 0.002
+      normMax: 0.02
+      help: thickness of the trace core (within-lane UV). Thin = a crisp precise scope line; thicker = a heavier glowing beam. Crisp at any res via fwidth().
+    - name: Graticule
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: brightness of the gold graticule grid + lane dividers. 0 hides the grid; higher makes the engineering scope frame prominent.
+    - name: Harmonics
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: amount of high harmonic detail in the signal. 0 = a clean fundamental sine; higher = a rich complex broadcast waveform.
+    - name: Glow
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: width of the soft halo around each trace before bloom. The signature scope-beam glow.
+    - name: Ptprate
+      style: Float
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: frequency of the PTP sync pulse the whole stack breathes to.
+    - name: Bloom
+      style: Float
+      default: 1.2
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: intensity of the bloom added back. The booth-scale glow knob.
+    - name: Bloomwidth
+      style: Float
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res).
+    - name: Scanlines
+      style: Float
+      default: 0.6
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: strength of the CRT scanline overlay in the finish pass. 0 = clean digital; higher = a heavier broadcast-CRT texture.
+    - name: Rgbsplit
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: strength of the chromatic RGB separation event pulsed on the PTP beat. 0 = clean; higher = a pronounced broadcast chroma tear at each tick.
+  position: [0, -400]
+  tdn_ref: specimen_lab/waveform_stack.tdn
+- name: essence_streams
+  type: baseCOMP
+  custom_pars:
+    Streams:
+    - name: Streams
+      style: Int
+      label: Essence Streams
+      startSection: true
+      default: 3
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 3.0
+    - name: Gutter
+      style: Float
+      label: Channel Gutter
+      default: 0.06
+      max: 0.2
+      clampMin: true
+      clampMax: true
+      normMax: 0.2
+    - name: Edgeglow
+      style: Float
+      label: Edge Glow
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Celldensity
+      style: Float
+      label: Cell Density
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Flowspeed
+      style: Float
+      label: Flow Speed
+      startSection: true
+      default: 0.4
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Filaments
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Shimmer
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Ptprate
+      style: Float
+      label: PTP Beat Rate
+      startSection: true
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+    - name: Syncline
+      style: Float
+      label: Sync Line
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Brightness
+      style: Float
+      default: 1
+      min: 0.3
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.3
+      normMax: 2.0
+    - name: Bloom
+      style: Float
+      startSection: true
+      default: 1.3
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+    - name: Bloomwidth
+      style: Float
+      label: Bloom Width
+      default: 2.2
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+    - name: Grain
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+    - name: Vignette
+      style: Float
+      default: 0.6
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+    Output:
+      $t: output
+  tdn_ref: specimen_lab/essence_streams.tdn
+- name: vertical_fibers
+  type: baseCOMP
+  custom_pars:
+    Controls:
+    - name: Strands
+      style: Int
+      default: 56
+      min: 4.0
+      max: 320.0
+      clampMin: true
+      clampMax: true
+      normMin: 4.0
+      normMax: 320.0
+      help: number of fiber strands in the curtain. Because of the column-fold this costs NOTHING per pixel (no strand loop), so a dense premium bundle is free; raise it freely for a fuller curtain.
+    - name: Converge
+      style: Float
+      clampMin: true
+      clampMax: true
+      help: how strongly the bundle narrows toward the top. 0 = parallel strands (a flat curtain); higher = strong upward perspective into the haze.
+    - name: Bow
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: amount of gentle per-strand bow so the strands read as relaxed cable, not laser-straight. 0 = dead-straight fibers.
+    - name: Glassglow
+      style: Float
+      default: 1.15
+      max: 6.0
+      clampMin: true
+      clampMax: true
+      normMax: 6.0
+      help: strength of the internal-reflection shimmer gradient along each glass tube. The light-bouncing-in-glass look.
+    - name: Pulsespeed
+      style: Float
+      default: 0.6
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: how fast the light pulses race UP the strands. 0 freezes them (and drops that time-dependence); higher = near-light-speed streaks.
+    - name: Pulsedensity
+      style: Int
+      default: 4
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: how many light pulses travel up each strand at once (1-4, the constant loop bound). More = a busier data stream.
+    - name: Pulselength
+      style: Float
+      default: 0.32
+      min: 0.02
+      max: 0.5
+      clampMin: true
+      clampMax: true
+      normMin: 0.02
+      normMax: 0.5
+      help: length of each Gaussian light dash (in vertical UV). Short = crisp countable packets; long = streaking light trails.
+    - name: Haze
+      style: Float
+      default: 2.6
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMax: 4.0
+      help: volumetric haze building toward the top of the frame so distant strands dim into fog. Adds vertical depth.
+    - name: Linewidth
+      style: Float
+      default: 0.0045
+      min: 0.0012
+      max: 0.02
+      clampMin: true
+      clampMax: true
+      normMin: 0.0012
+      normMax: 0.02
+      help: base thickness of the glass tube core. Thin = crisp hairline fibers; thicker = heavier glowing tubes. Crisp at any resolution via fwidth().
+    - name: Ptprate
+      style: Float
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: frequency of the PTP sync pulse all light pulses breathe brighter to in lockstep.
+    - name: Bloom
+      style: Float
+      default: 0.55
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: intensity of the downsampled bloom glow added back over the pulses. The booth-scale wow knob.
+    - name: Bloomwidth
+      style: Float
+      default: 2.6
+      min: 1.0
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 4.0
+      help: the blur step in the 1/4-res bloom pass. Wider = a softer, more atmospheric glow halo (still cheap, since it runs at low res).
+    - name: Grain
+      style: Float
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: film-grain amount in the finish pass. Kills banding on the dark gradient at large scale.
+    - name: Vignette
+      style: Float
+      default: 0.95
+      max: 1.5
+      clampMin: true
+      clampMax: true
+      normMax: 1.5
+      help: edge darkening so the curtain sits on a premium dark stage.
+    Output:
+      $t: output
+  position: [400, 0]
+  tdn_ref: specimen_lab/vertical_fibers.tdn
+- name: mandelbulb_march
+  type: baseCOMP
+  custom_pars:
+    Mandelbulb:
+    - name: Power
+      style: Float
+      startSection: true
+      default: 8
+      min: 2.0
+      max: 12.0
+      clampMin: true
+      clampMax: true
+      normMin: 2.0
+      normMax: 12.0
+      help: Mandelbulb exponent in z=z^Power+c. 8 is the classic bulb; 2-4 = blobby organic forms; 10-12 = more lobes and finer detail.
+    - name: Detail
+      style: Float
+      label: Surface Detail
+      default: 0.6
+      clampMin: true
+      clampMax: true
+      help: Raymarch hit threshold, remapped to a 0.0015->0.0004 epsilon. Higher resolves finer fractal crenellation at more cost near grazing rays.
+    - name: Glow
+      style: Float
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Proximity/iteration glow added along every ray. Close-but-miss rays accumulate an exponential halo. 0 = matte; 3 = ethereal bloom.
+    - name: Orbitspeed
+      style: Float
+      label: Orbit Speed
+      startSection: true
+      default: 1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Multiplies absTime.seconds into the camera orbit. 0 freezes a still; 1 is a slow cinematic orbit. Only the camera moves -- the fractal math is identical each frame.
+    - name: Hue
+      style: Float
+      default: 0.55
+      clampMin: true
+      clampMax: true
+      help: Base hue offset of the orbit-trap cosine palette. Rotates the whole color identity (surface, glow, rim, background sun) through the spectrum.
+    - name: Sunazim
+      style: Float
+      label: Sun Azimuth
+      startSection: true
+      default: 35
+      min: -180.0
+      max: 180.0
+      clampMin: true
+      clampMax: true
+      normMin: -180.0
+      normMax: 180.0
+      help: Azimuth (degrees) of the key light, converted with elevation into a unit direction so normalize() never sees a zero vector. Rotates where the soft key light and shadow fall.
+    - name: Sunelev
+      style: Float
+      label: Sun Elevation
+      default: 45
+      min: -10.0
+      max: 90.0
+      clampMin: true
+      clampMax: true
+      normMin: -10.0
+      normMax: 90.0
+      help: Elevation (degrees) of the key light. High = top-down soft light with short shadows; low = dramatic raking light with long soft shadows.
+    Output:
+      $t: output_2
+  position: [800, -800]
+  tdn_ref: specimen_lab/mandelbulb_march.tdn
+- name: crosspoint_matrix
+  type: baseCOMP
+  custom_pars:
+    Matrix:
+    - name: Gridsize
+      style: Int
+      label: Matrix Size (N)
+      startSection: true
+      default: 20
+      min: 4.0
+      max: 40.0
+      clampMin: true
+      clampMax: true
+      normMin: 4.0
+      normMax: 40.0
+      help: NxN crosspoint matrix dimension.
+    - name: Activeroutes
+      style: Int
+      label: Active Routes
+      default: 16
+      min: 1.0
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 20.0
+      help: Routes lit simultaneously.
+    - name: Latticeglow
+      style: Float
+      label: Lattice Glow
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Brightness of the dim unlit grid.
+    - name: Crosspointglow
+      style: Float
+      label: Crosspoint Glow
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Brightness of lit crosspoints + paths.
+    - name: Packetspeed
+      style: Float
+      label: Packet Speed
+      startSection: true
+      default: 0.5
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Speed packets race the L-path. 0 freezes.
+    - name: Packetdensity
+      style: Int
+      label: Packet Density
+      default: 8
+      min: 1.0
+      max: 10.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 10.0
+      help: Packets per active route.
+    - name: Streams
+      style: Int
+      label: Essence Streams
+      default: 3
+      min: 1.0
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 3.0
+      help: Separated essence colors (cyan/green/amber).
+    - name: Ptprate
+      style: Float
+      label: PTP Beat Rate
+      startSection: true
+      default: 0.5
+      min: 0.1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMin: 0.1
+      normMax: 2.0
+      help: PTP sync pulse frequency.
+    - name: Reconfigrate
+      style: Float
+      label: Reconfigure Rate
+      default: 0.25
+      min: 0.05
+      clampMin: true
+      clampMax: true
+      normMin: 0.05
+      help: How often active routes reconfigure.
+    - name: Lockindicators
+      style: Float
+      label: Lock Indicators
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Corner PTP-lock dot brightness.
+    - name: Bloom
+      style: Float
+      startSection: true
+      default: 1.1
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Bloom over lit crosspoints + packets.
+    - name: Glitch
+      style: Float
+      default: 0.8
+      max: 2.0
+      clampMin: true
+      normMax: 2.0
+      help: 'VHS glitch amount: chroma split, tape jitter/tear, rolling scanlines, grain.'
+    Output:
+      $t: output
+  position: [800, 0]
+  tdn_ref: specimen_lab/crosspoint_matrix.tdn
+- name: reaction_diffusion
+  type: baseCOMP
+  custom_pars:
+    Output:
+    - name: Resw
+      style: Int
+      default: 3840
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Output width (px), 4K. The reaction sim stays bounded 16:9; out1 upscales to this.
+    - name: Resh
+      style: Int
+      default: 2160
+      min: 256.0
+      max: 7680.0
+      clampMin: true
+      clampMax: true
+      normMin: 256.0
+      normMax: 7680.0
+      help: Output height (px), 4K.
+  position: [1200, -400]
+  tdn_ref: specimen_lab/reaction_diffusion.tdn
+- name: plasma_interference
+  type: baseCOMP
+  custom_pars:
+    Plasma:
+    - name: Scale
+      style: Float
+      startSection: true
+      default: 6
+      min: 1.0
+      max: 20.0
+      clampMin: true
+      clampMax: true
+      normMin: 1.0
+      normMax: 20.0
+      help: Spatial frequency of the sine fields. Low = broad lava-lamp blobs; high = dense fine plasma.
+    - name: Speed
+      style: Float
+      default: 1
+      max: 4.0
+      clampMin: true
+      clampMax: true
+      normMax: 4.0
+      help: Animation speed. 1 = gentle flow; 0 freezes a still (the TOP keeps cooking, frame is identical).
+    - name: Warp
+      style: Float
+      default: 1.2
+      max: 3.0
+      clampMin: true
+      clampMax: true
+      normMax: 3.0
+      help: Domain-warp amount. 0 = flat sliding stripes; higher bends the coords into a flowing liquid swirl.
+    - name: Complexity
+      style: Float
+      label: Interference
+      default: 1
+      max: 2.0
+      clampMin: true
+      clampMax: true
+      normMax: 2.0
+      help: Detune between the two sine fields. 0 = one clean plasma; higher beats them into shimmering moire.
+    - name: Palette
+      style: Float
+      label: Palette Hue
+      startSection: true
+      clampMin: true
+      clampMax: true
+      help: Rotates the cyclic cosine palette through the full hue ring. Loops seamlessly 1.0 -> 0.0.
+    - name: Contrast
+      style: Float
+      default: 0.4
+      clampMin: true
+      clampMax: true
+      help: Palette saturation/contrast (onto a 0.6 base in the shader). Low = pastel; high = punchy neon.
+    Output:
+      $t: output_2
+  position: [1200, -800]
+  tdn_ref: specimen_lab/plasma_interference.tdn

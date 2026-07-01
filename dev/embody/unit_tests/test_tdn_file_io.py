@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: TDN file I/O, path resolution, and per-comp splitting.
 
 Tests _resolveOutputPath, _splitPerComp, _collectExistingTDNFiles,
@@ -6,6 +6,7 @@ _cleanupStaleTDNFiles, file write integrity, and end-to-end file export.
 """
 
 import json
+import yaml
 import tempfile
 from pathlib import Path
 
@@ -34,7 +35,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		super().tearDown()
 
 	# =================================================================
-	# _splitPerComp — path generation (static method, pure Python)
+	# _splitPerComp - path generation (static method, pure Python)
 	# =================================================================
 
 	def test_splitPerComp_root_creates_project_named_file(self):
@@ -82,7 +83,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		expected = str(Path(self._temp_dir) / 'embody' / 'Embody' / 'help.tdn')
 		self.assertIn(expected, files)
 		for fpath in files:
-			# Check for actual path segment duplication — the root prefix
+			# Check for actual path segment duplication - the root prefix
 			# should not appear twice in the path. Note: embody/Embody is
 			# valid (two different COMPs), but embody/Embody/embody/Embody
 			# would indicate double-nesting.
@@ -346,7 +347,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			self.assertFalse(Path(f).exists())
 
 	# =================================================================
-	# _resolveOutputPath — direct method testing
+	# _resolveOutputPath - direct method testing
 	# =================================================================
 
 	def test_resolve_auto_nonroot_mirrors_td_path(self):
@@ -409,7 +410,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"TD path segment appears twice in '{normalized}'")
 
 	# =================================================================
-	# _stripBuildSuffix — stable project TDN filenames
+	# _stripBuildSuffix - stable project TDN filenames
 	# =================================================================
 
 	def test_strip_build_suffix_dotted(self):
@@ -443,7 +444,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertEqual(strip('my-cool-project-3'), 'my-cool-project-3')
 
 	# =================================================================
-	# SaveTDN root filename derivation — issue #6 regression
+	# SaveTDN root filename derivation - issue #6 regression
 	# =================================================================
 
 	def test_savetdn_root_filename_strips_build_suffix(self):
@@ -457,7 +458,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		This test mirrors the exact derivation SaveTDN uses at opPath == '/'
 		to confirm _stripBuildSuffix is applied.
 		"""
-		# Simulated project names — build-suffixed and plain variants
+		# Simulated project names - build-suffixed and plain variants
 		cases = [
 			('Embody-5.362.toe', 'Embody-5'),
 			('Embody-5.toe',     'Embody-5'),
@@ -490,10 +491,10 @@ class TestTDNFileIO(EmbodyTestCase):
 			f"_resolveOutputPath returned '{resolved}'")
 
 	# =================================================================
-	# ExportNetwork file output — end-to-end
+	# ExportNetwork file output - end-to-end
 	# =================================================================
 
-	def test_export_file_is_valid_json(self):
+	def test_export_file_is_valid_yaml(self):
 		self.sandbox.create(baseCOMP, 'json_check')
 		fp = str(Path(self._temp_dir) / 'valid.tdn')
 		result = self.embody.ext.TDN.ExportNetwork(
@@ -501,7 +502,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertTrue(result.get('success'))
 		self.assertTrue(Path(fp).exists())
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		self.assertEqual(data['format'], 'tdn')
 
 	def test_export_file_includes_source_file(self):
@@ -512,7 +513,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		self.assertIn('source_file', data)
 		self.assertEqual(data['source_file'], project.name)
 
@@ -524,7 +525,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		names = [o['name'] for o in data['operators']]
 		self.assertIn('op_a', names)
 		self.assertIn('op_b', names)
@@ -539,7 +540,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			content = f.read()
-		data = json.loads(content)
+		data = yaml.safe_load(content)
 		self.assertEqual(len(data['operators']), 25)
 		self.assertTrue(content.endswith('\n'))
 
@@ -552,7 +553,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'dc'][0]
 		self.assertEqual(entry['dat_content'], 'Exported content check')
 		self.assertEqual(entry['dat_content_format'], 'text')
@@ -569,7 +570,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'tbl'][0]
 		self.assertEqual(entry['dat_content_format'], 'table')
 		self.assertEqual(len(entry['dat_content']), 3)
@@ -577,7 +578,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertListEqual(entry['dat_content'][2], ['y', '2'])
 
 	def test_export_file_roundtrip_reimport(self):
-		"""Export to file, read back, import — operators should match."""
+		"""Export to file, read back, import - operators should match."""
 		self.sandbox.create(baseCOMP, 'rt_a')
 		dat = self.sandbox.create(textDAT, 'rt_b')
 		dat.text = 'via file'
@@ -586,7 +587,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			tdn_data = json.load(f)
+			tdn_data = yaml.safe_load(f)
 		target = self.sandbox.create(baseCOMP, 'rt_target')
 		result = self.embody.ext.TDN.ImportNetwork(
 			target_path=target.path, tdn=tdn_data)
@@ -617,7 +618,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		self.assertIn('version', data)
 		self.assertIn('generator', data)
 		self.assertIn('td_build', data)
@@ -633,7 +634,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'dst'][0]
 		self.assertIn('inputs', entry)
 		self.assertEqual(entry['inputs'][0], 'src')
@@ -648,7 +649,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'cp'][0]
 		self.assertIn('custom_pars', entry)
 		par_names = []
@@ -665,7 +666,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		a_entry = [o for o in data['operators'] if o['name'] == 'la'][0]
 		self.assertIn('children', a_entry)
 		b_entry = [o for o in a_entry['children'] if o['name'] == 'lb'][0]
@@ -681,7 +682,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'flagged'][0]
 		self.assertIn('flags', entry)
 		self.assertIn('bypass', entry['flags'])
@@ -695,7 +696,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'positioned'][0]
 		self.assertEqual(entry['position'], [500, 300])
 
@@ -707,7 +708,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'colored'][0]
 		self.assertIn('color', entry)
 		self.assertApproxEqual(entry['color'][0], 1.0)
@@ -723,7 +724,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'tagged'][0]
 		self.assertIn('tags', entry)
 		self.assertIn('mytag', entry['tags'])
@@ -751,13 +752,13 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertIn('error', result)
 		self.assertIn('not found', result['error'])
 
-	def test_importFromFile_invalid_json(self):
+	def test_importFromFile_invalid_tdn(self):
 		bad = str(Path(self._temp_dir) / 'bad.tdn')
 		Path(bad).write_text('{{{invalid')
 		result = self.embody.ext.TDN.ImportNetworkFromFile(
 			file_path=bad, target_path=self.sandbox.path)
 		self.assertIn('error', result)
-		self.assertIn('Invalid JSON', result['error'])
+		self.assertIn('Invalid TDN', result['error'])
 
 	def test_importFromFile_empty_string_path(self):
 		result = self.embody.ext.TDN.ImportNetworkFromFile(
@@ -794,7 +795,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		self.assertEqual(len(data['operators']), n)
 
 	def test_export_large_dat_not_truncated(self):
@@ -807,7 +808,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'big'][0]
 		self.assertEqual(entry['dat_content'], text)
 
@@ -821,7 +822,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'uni'][0]
 		self.assertEqual(entry['dat_content'], utext)
 
@@ -832,7 +833,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		self.assertEqual(len(data['operators']), 0)
 
 	def test_export_file_encoding_utf8(self):
@@ -846,7 +847,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		with open(fp, 'rb') as f:
 			raw = f.read()
 		text = raw.decode('utf-8')
-		data = json.loads(text)
+		data = yaml.safe_load(text)
 		entry = [o for o in data['operators'] if o['name'] == 'enc'][0]
 		self.assertEqual(entry['dat_content'],
 			'\u65e5\u672c\u8a9e\u30c6\u30b9\u30c8')
@@ -859,19 +860,20 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp)
 		self.assertTrue(result.get('success'))
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		self.assertEqual(data['format'], 'tdn')
 
-	def test_export_file_json_indented(self):
-		"""Exported JSON should be indented (human-readable)."""
+	def test_export_file_yaml_indented(self):
+		"""Exported YAML should be indented (human-readable)."""
 		self.sandbox.create(baseCOMP, 'indent_check')
 		fp = str(Path(self._temp_dir) / 'indent.tdn')
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
 			content = f.read()
-		# Indented JSON contains tabs (our format uses tab indentation)
-		self.assertIn('\t', content)
+		# YAML v2.0 nests with 2-space indentation (never tabs)
+		self.assertIn('\n  ', content)
+		self.assertNotIn('\t', content)
 		# Should have newlines between entries
 		lines = content.strip().split('\n')
 		self.assertGreater(len(lines), 1)
@@ -885,7 +887,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			root_path=self.sandbox.path, output_file=fp,
 			include_dat_content=False)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'no_content'][0]
 		self.assertNotIn('dat_content', entry)
 
@@ -899,7 +901,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=self.sandbox.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		types = {o['type'] for o in data['operators']}
 		self.assertIn('baseCOMP', types)
 		self.assertIn('textDAT', types)
@@ -907,7 +909,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.assertIn('waveCHOP', types)
 
 	# =================================================================
-	# tdn_ref — export, import, and cross-validation
+	# tdn_ref - export, import, and cross-validation
 	# =================================================================
 
 	def _get_log_id(self):
@@ -945,7 +947,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'child_comp'][0]
 		self.assertIn('tdn_ref', child_entry)
@@ -960,7 +962,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'child_comp'][0]
 		self.assertNotIn('tdn_ref', child_entry)
@@ -988,7 +990,7 @@ class TestTDNFileIO(EmbodyTestCase):
 		self.embody.ext.TDN.ExportNetwork(
 			root_path=parent.path, output_file=fp, embed_all=True)
 		with open(fp, 'r', encoding='utf-8') as f:
-			data = json.load(f)
+			data = yaml.safe_load(f)
 		child_entry = [o for o in data['operators']
 			if o['name'] == 'child_comp'][0]
 		self.assertNotIn('tdn_ref', child_entry)
@@ -1047,6 +1049,140 @@ class TestTDNFileIO(EmbodyTestCase):
 			op_defs, parent.path)
 		has_file_warning = any('file not found' in w for w in warnings)
 		self.assertTrue(has_file_warning)
+
+	# =================================================================
+	# tox_ref -- export and backward-compat strip
+	# =================================================================
+
+	def test_tox_ref_written_on_export(self):
+		"""Export of parent with TOX-tagged child should include tox_ref
+		and omit children -- the .tox file owns the internals."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp')
+		child = parent.create(baseCOMP, 'tox_child')
+		child.create(textDAT, 'leaf')
+		# Tag the child for TOX and register in the table
+		tox_tag = self.embody.par.Toxtag.val
+		child.tags.add(tox_tag)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'fake/tox_child.tox',
+			timestamp, False, 1, str(app.build), 'tox')
+		# Export the parent
+		fp = str(Path(self._temp_dir) / 'parent_tox.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'tox_child'][0]
+		self.assertIn('tox_ref', child_entry)
+		self.assertEqual(child_entry['tox_ref'], 'fake/tox_child.tox')
+		self.assertNotIn('children', child_entry)
+
+	def test_tox_ref_absent_without_tag(self):
+		"""Export of parent with non-TOX child should not include tox_ref."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp2')
+		child = parent.create(baseCOMP, 'plain_child')
+		child.create(textDAT, 'leaf')
+		fp = str(Path(self._temp_dir) / 'no_tox_ref.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'plain_child'][0]
+		self.assertNotIn('tox_ref', child_entry)
+		self.assertIn('children', child_entry)
+
+	def test_tox_ref_absent_with_embed_all(self):
+		"""embed_all=True should suppress tox_ref and re-embed children."""
+		parent = self.sandbox.create(baseCOMP, 'parent_comp3')
+		child = parent.create(baseCOMP, 'tox_child3')
+		child.create(textDAT, 'leaf')
+		tox_tag = self.embody.par.Toxtag.val
+		child.tags.add(tox_tag)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'fake/tox_child3.tox',
+			timestamp, False, 1, str(app.build), 'tox')
+		fp = str(Path(self._temp_dir) / 'embed_tox.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp, embed_all=True)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		child_entry = [o for o in data['operators']
+			if o['name'] == 'tox_child3'][0]
+		self.assertNotIn('tox_ref', child_entry)
+		self.assertIn('children', child_entry)
+
+	def test_tox_children_stripped_on_import(self):
+		"""Pre-fix .tdn files with embedded TOX children should be stripped
+		on import -- the .tox file owns them."""
+		parent = self.sandbox.create(baseCOMP, 'parent_strip')
+		child = parent.create(baseCOMP, 'tox_strip_child')
+		tox_tag = self.embody.par.Toxtag.val
+		child.tags.add(tox_tag)
+		from datetime import datetime
+		timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+		self.embody_ext._addToTable(child, 'fake/tox_strip_child.tox',
+			timestamp, False, 1, str(app.build), 'tox')
+		# Simulate a pre-fix .tdn with embedded children
+		op_defs = [{
+			'name': 'tox_strip_child',
+			'type': 'baseCOMP',
+			'children': [
+				{'name': 'embedded_dat', 'type': 'textDAT'},
+				{'name': 'embedded_top', 'type': 'noiseTOP'},
+			],
+		}]
+		tox_paths = self.embody.ext.TDN._getTOXExternalizedPaths()
+		self.assertIn(child.path, tox_paths)
+		skipped = self.embody.ext.TDN._stripNestedTOXChildren(
+			op_defs, parent.path, tox_paths)
+		self.assertIn(child.path, skipped)
+		self.assertEqual(op_defs[0]['children'], [])
+
+	def test_tox_type_defaults_not_polluted(self):
+		"""Regression: TOX child internals should not leak into parent
+		type_defaults (the original GH issue #20 symptom)."""
+		parent = self.sandbox.create(baseCOMP, 'tdpollute_parent')
+		# Two TOX-tagged children with identical internal structure
+		for cname in ('tox_a', 'tox_b'):
+			child = parent.create(baseCOMP, cname)
+			child.create(textDAT, 'inner_dat')
+			child.create(noiseTOP, 'inner_top')
+			tox_tag = self.embody.par.Toxtag.val
+			child.tags.add(tox_tag)
+			from datetime import datetime
+			timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+			self.embody_ext._addToTable(child, f'fake/{cname}.tox',
+				timestamp, False, 1, str(app.build), 'tox')
+		fp = str(Path(self._temp_dir) / 'no_pollute.tdn')
+		self.embody.ext.TDN.ExportNetwork(
+			root_path=parent.path, output_file=fp)
+		with open(fp, 'r', encoding='utf-8') as f:
+			data = yaml.safe_load(f)
+		td = data.get('type_defaults', {})
+		# textDAT and noiseTOP are the children\'s grandchildren --
+		# they must NOT appear in the parent\'s type_defaults
+		self.assertNotIn('textDAT', td)
+		self.assertNotIn('noiseTOP', td)
+
+	def test_tox_ref_consumed_on_import(self):
+		"""_createOps should skip child creation for tox_ref entries
+		(round-trip with RestoreTOXComps owning the .tox restore)."""
+		parent = self.sandbox.create(baseCOMP, 'tox_consume_parent')
+		op_defs = [{
+			'name': 'tox_consume_child',
+			'type': 'baseCOMP',
+			'tox_ref': 'fake/tox_consume_child.tox',
+		}]
+		created = []
+		self.embody.ext.TDN._createOps(parent, op_defs, created)
+		child = parent.op('tox_consume_child')
+		self.assertIsNotNone(child)
+		# Should have no children -- tox_ref means .tox file owns internals
+		self.assertLen(list(child.children), 0)
 
 	def test_cascade_tags_children(self):
 		"""_cascadeTDNTag should add TDN tag to direct child COMPs."""
@@ -1118,7 +1254,7 @@ class TestTDNFileIO(EmbodyTestCase):
 			'Large TDN File': 0})
 		try:
 			self.embody.ext.TDN._warnLargeTDN(str(big_file), '/test')
-			# Dialog was intercepted — warn pref should still be 'ask'
+			# Dialog was intercepted - warn pref should still be 'ask'
 			self.assertEqual(self.embody.par.Tdncascadewarn.eval(), 'ask')
 		finally:
 			self.embody.par.Tdncascadewarn = orig_warn

@@ -1,0 +1,185 @@
+---
+import Base from "../layouts/Base.astro";
+---
+
+<Base
+  title="manifesto - embody.tools"
+  description="Why TouchDesigner should be transparent, diffable, and built faster alongside your AI agent."
+>
+  <section class="page-section manifesto-hero">
+    <p class="eyebrow">manifesto</p>
+    <h1>Build faster, in the open</h1>
+    <p class="lede">
+      Everything is moving faster now. Everyone is shipping. We&rsquo;re entering a new era in
+      digital media, and TouchDesigner is positioned to become one of the leading
+      platforms of content creation. Embody exists to help our community build faster and
+      better than ever &mdash; open source, no strings attached, nothing SaaSy.
+    </p>
+  </section>
+
+  <article class="page-section tight manifesto-body">
+    <p>
+      The gap between what an artist imagines and what&rsquo;s on their screen is where almost every
+      creative project has died. Not because they gave up, but because the
+      cost of executing it was higher than the cost of moving on. Embody exists to collapse
+      that gap.
+    </p>
+
+    <h2>Forward velocity</h2>
+
+    <p>
+      The first move is forward velocity. <strong>Envoy</strong> is an MCP server that lets
+      your AI assistant build inside your live TouchDesigner session. Say what you want
+      &mdash; &ldquo;give me a noise-driven particle system that reacts to audio&rdquo; &mdash;
+      and watch the operators appear, wired up, named, annotated, laid out. Not a screenshot
+      of a network. Not a code snippet to paste. The actual network, in front of you, ready
+      to play with. Idea to first version in seconds.
+    </p>
+
+    <p>
+      But forward velocity by itself is a trap. Generative tools that only go forward are
+      tools that lock you in. You ask the model for a thing, you get a thing, and now you&rsquo;re
+      stuck with a thing &mdash; because the cost of trying a different approach is starting
+      over. That&rsquo;s not flow. That&rsquo;s a fancier kind of friction.
+    </p>
+
+    <h2>Lateral velocity</h2>
+
+    <p>
+      So the second move is lateral velocity. <strong>Embody</strong> externalizes every
+      operator to files on disk. Branch off the version that&rsquo;s almost right. Restore
+      yesterday&rsquo;s state on the next project open. See exactly what changed from a week
+      ago. Hand the agent a snapshot of what&rsquo;s currently on the screen and ask it to
+      riff. Every direction you&rsquo;d want to move costs about as much as deciding to move
+      there.
+    </p>
+
+    <h2>A format the network can live in</h2>
+
+    <p>
+      Both of these depend on a quiet third thing: a <strong>format the network can live in
+      as text</strong>. A <code>.toe</code> file is a black box &mdash; your AI agent can&rsquo;t
+      see inside it, your diff tool can&rsquo;t read it, your filesystem can&rsquo;t store one
+      version of it next to another. TDN is what lets the network exist as something the agent
+      and the artist can both work on. Without it, none of the rest of this is possible. With
+      it, every step of the loop &mdash; generate, compare, revert, branch &mdash; runs at the
+      speed of typing.
+    </p>
+
+    <blockquote>
+      <p>
+        The tool keeps up with you, instead of the other way around.
+      </p>
+    </blockquote>
+
+    <p>
+      What this adds up to is a single promise: <strong>the tool keeps up with you, instead
+      of the other way around</strong>. The forty-minute translation tax goes away. You stay
+      in the room with the idea. The network is the conversation, not the homework after the
+      conversation.
+    </p>
+
+    <p>
+      That&rsquo;s what speed of thought looks like. It&rsquo;s not &ldquo;the AI did it for
+      you.&rdquo; It&rsquo;s &ldquo;you didn&rsquo;t have to slow down.&rdquo;
+    </p>
+
+    <p>
+      Embody is open source, runs entirely inside TouchDesigner, and works with Claude Code,
+      Cursor, Windsurf, or any MCP-compatible client. Try it on a real idea you&rsquo;ve been
+      putting off. See how far you get in an hour.
+    </p>
+  </article>
+</Base>
+
+<style>
+  /* Give the lede the same readable measure as the body and pull it tight to
+     the hero so the essay reads as one continuous column. */
+  .manifesto-hero .lede {
+    max-width: 70ch;
+    margin-bottom: 0;
+  }
+
+  /* The body neutralizes its own top padding, but the hero still carried a full
+     section padding-bottom -- a huge lede->body gap. Drop it so the essay flows
+     as one column (the body's tight top padding supplies the breathing room). */
+  .manifesto-hero {
+    padding-bottom: 0;
+  }
+
+  /* Headings stay lowercase to match the kicker and the site's lowercase voice
+     ("see it. embody it."). Scoped to the manifesto's own headings so the body
+     prose (TouchDesigner, Envoy, MCP, ...) keeps its proper casing. */
+  .manifesto-hero h1 {
+    text-transform: lowercase;
+  }
+
+  /* Single-column essay capped at a comfortable reading measure (~70ch). The
+     body sits directly under the hero, so neutralize the section's own top
+     padding and rely on paragraph rhythm instead. */
+  .manifesto-body {
+    max-width: 70ch;
+    padding-top: clamp(1.75rem, 3vw, 2.5rem);
+  }
+
+  .manifesto-body p {
+    margin: 0 0 1.4rem;
+    color: var(--text);
+    font-size: 1.08rem;
+    line-height: 1.7;
+  }
+
+  /* Section subheads: display font, accent color, generous space above so each
+     movement of the argument is clearly set off. */
+  .manifesto-body h2 {
+    margin: 2.6rem 0 1.1rem;
+    color: var(--accent);
+    font-family: var(--font-display);
+    font-size: clamp(1.4rem, 2.4vw, 1.85rem);
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    text-transform: lowercase;
+  }
+
+  .manifesto-body strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .manifesto-body a {
+    color: var(--accent);
+  }
+
+  .manifesto-body a:hover {
+    color: var(--accent-hover);
+  }
+
+  .manifesto-body code {
+    background: var(--bg-code);
+    border: 1px solid var(--border-faint);
+    border-radius: 4px;
+    padding: 0.05em 0.4em;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+  }
+
+  /* Pull quote: an accent rule on the left, display font, larger -- echoes the
+     landing page's .pullquote treatment so the two manifesto surfaces feel of a
+     piece. */
+  .manifesto-body blockquote {
+    margin: 2.4rem 0;
+    padding: 0 0 0 1.75rem;
+    border-left: 2px solid var(--accent);
+  }
+
+  .manifesto-body blockquote p {
+    margin: 0;
+    color: var(--text);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.3rem, 2.4vw, 1.85rem);
+    line-height: 1.45;
+    letter-spacing: -0.015em;
+  }
+</style>

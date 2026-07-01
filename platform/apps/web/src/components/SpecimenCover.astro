@@ -1,0 +1,311 @@
+---
+// SpecimenCover: a single specimen card cover.
+//
+// Renders TWO layers and lets the card flip between them with a per-card
+// toggle (no extra JS island here for the flip -- the collection page's inline
+// script flips the data-cover attribute, and CSS swaps which layer is visible):
+//
+//   NETWORK: the interactive TdnViewer node-graph for this specimen,
+//     mounted as the SpecimenCoverGraph island. Lazy-mounted with client:visible
+//     so the React/ReactFlow island only hydrates when the card scrolls into
+//     view -- many cards never spawn many live viewers at once. The island
+//     LAZY-FETCHES the graph from /api/specimens/<slug>/tdn?format=graph on
+//     mount, so the page NEVER bundles thousands of graphs at build time. An
+//     optional SSR `tdn` prop is a fast path for the first page (no fetch).
+//
+//   RESULT (default): the baked render at /public/specimens/<slug>.jpg for known
+//     baked slugs (see lib/specimenThumb BAKED_RESULTS, captured from the live
+//     networks); otherwise a tasteful placeholder (specimenThumbnail SVG). Never
+//     a broken img.
+//
+// All styles are scoped to this component.
+import SpecimenCoverGraph from "./SpecimenCoverGraph";
+import { resultImage } from "../lib/specimenThumb";
+
+interface Props {
+  slug: string;
+  name: string;
+  category: string;
+  /** R2 thumbnail key (non-empty when the author uploaded one). */
+  thumbnailKey?: string;
+  /**
+   * Optional SSR graph (specimen-graphs fixture) for the first, server-rendered
+   * page -- a fast paint with no fetch. Omit it and the island lazy-fetches the
+   * graph itself; this is the path that scales to thousands of cards.
+   */
+  tdn?: Record<string, unknown>;
+}
+
+const { slug, name, category, thumbnailKey, tdn } = Astro.props;
+// RESULT layer image: uploaded thumbnail (if any) > baked render for known slugs
+// > procedural placeholder. Source of truth lives in lib/specimenThumb.
+const { src: thumb, baked: hasBaked } = resultImage({ slug, name, category, thumbnailKey });
+// No rendered result yet -> the network graph IS the preview: open on it and lock
+// the toggle (there's nothing to flip to). A real/baked thumbnail keeps the normal
+// result-default with a working flip. Keep this in sync with the appended-card
+// template in collection/index.astro.
+const defaultView = hasBaked ? "result" : "network";
+---
+
+<!--
+  data-cover-interactive marks ONLY the network layer as a "do not navigate"
+  island: the collection page's card-click handler bails when the click
+  originates there, so dragging/panning the live TdnViewer canvas never fires
+  the card's navigation. The result layer (a static thumbnail) is intentionally
+  NOT marked, so clicking the rendered image navigates to /c/<slug> like the
+  rest of the card -- the card-wide pointer cursor then tells the truth. The
+  flip buttons opt out separately (the handler bails on any <button>).
+-->
+<div class="cover" data-cover={defaultView} data-cover-shell>
+  <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden={hasBaked ? "true" : "false"}>
+    <SpecimenCoverGraph slug={slug} tdn={tdn} client:visible />
+  </div>
+  <div class="cover__layer cover__layer--result" aria-hidden={hasBaked ? "false" : "true"}>
+    <img src={thumb} loading="lazy" alt={hasBaked ? `${name} rendered result` : `${name} preview placeholder`} />
+    {!hasBaked && <span class="cover__soon mono">preview coming soon</span>}
+  </div>
+
+  <div class="cover__flip" role="group" aria-label={`${name} cover view`}>
+    <button
+      type="button"
+      class={`cover__flip-btn${hasBaked ? "" : " is-active"}`}
+      data-cover-option="network"
+      aria-pressed={hasBaked ? "false" : "true"}
+      disabled={!hasBaked}
+      title="Show network graph"
+    >network</button>
+    <button
+      type="button"
+      class={`cover__flip-btn${hasBaked ? " is-active" : ""}`}
+      data-cover-option="result"
+      aria-pressed={hasBaked ? "true" : "false"}
+      disabled={!hasBaked}
+      title={hasBaked ? "Show rendered result" : "Rendered result coming soon"}
+    >result</button>
+  </div>
+</div>
+
+<style>
+  .cover {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    background: var(--bg-code);
+  }
+
+  .cover__layer {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* The live graph is a pan/zoom island, not a navigate target -- don't show the
+     card's pointer over it (ReactFlow shows its own grab cursor on the pane).
+     The result layer keeps the inherited pointer since clicking it navigates. */
+  .cover__layer--network {
+    cursor: default;
+  }
+
+  /* The TdnViewer renders its own full-bleed flow canvas; pin it to the box.
+     Inside a card cover it is flush against the card's clipped corners and the
+     body, so it must NOT carry its standalone border + 14px radius (those belong
+     to the card frame). Dropping them removes the rounded inner corner sitting
+     against the neighbouring body and the green border-stroke that trailed off
+     into the background along the bottom edge. The detail page / hero viewers,
+     which are NOT inside a cover, keep their frame.
+
+     min-height: 0 is LOAD-BEARING: the standalone .tdn-viewer carries
+     min-height: 320px (right for the hero), but `height: 100%` does NOT override
+     a larger min-height. A cover is only ~132-164px tall, so without this the
+     ReactFlow pane stays 320px, fitView centers the graph in that 320px box, and
+     the cover clips to its top ~half -- pushing the "centered" content below the
+     visible area (big empty top, nodes crammed at the bottom). Clearing the
+     min-height lets the pane match the cover so fitView centers in what's seen. */
+  .cover__layer--network :global(.tdn-viewer) {
+    height: 100% !important;
+    min-height: 0;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  /* Light skeleton shown while the cover island lazy-fetches its graph (and the
+     resting state if that fetch fails -- never a broken viewer). Rendered by the
+     SpecimenCoverGraph React island, so the selectors are :global. */
+  .cover__layer--network :global(.cover-skeleton) {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    background: var(--bg-code);
+  }
+
+  /* A narrow band swept across with translateX. It sits fully off-screen at both
+     keyframe endpoints, so the infinite loop's instant reset is invisible -- and
+     linear timing keeps the sweep at constant velocity (ease-in-out would halt
+     and snap-back each cycle, reading as a stutter). Transform is GPU-composited,
+     unlike background-position which repaints every frame and moves nonlinearly. */
+  .cover__layer--network :global(.cover-skeleton__shimmer) {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 60%;
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(110, 230, 104, 0.06) 35%,
+      rgba(110, 230, 104, 0.1) 50%,
+      rgba(110, 230, 104, 0.06) 65%,
+      transparent 100%
+    );
+    will-change: transform;
+    animation: cover-skeleton-sweep 1.4s linear infinite;
+  }
+
+  .cover__layer--network :global(.cover-skeleton.is-error .cover-skeleton__shimmer) {
+    animation: none;
+    background: none;
+  }
+
+  /* -100% = band just off the left edge; 166.667% = band just off the right edge
+     (band is 60% wide, so 100/60 of its own width clears the container). Both ends
+     are off-screen, so the from/to teleport never shows. */
+  @keyframes cover-skeleton-sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(166.667%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cover__layer--network :global(.cover-skeleton__shimmer) {
+      animation: none;
+    }
+  }
+
+  .cover__layer--result img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .cover__soon {
+    position: absolute;
+    left: 50%;
+    bottom: 0.7rem;
+    transform: translateX(-50%);
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* Result is the default view; hide whichever layer is not selected. */
+  .cover[data-cover="network"] .cover__layer--result {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .cover[data-cover="result"] .cover__layer--network {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .cover__flip {
+    position: absolute;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    z-index: 4;
+    display: inline-flex;
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(14, 22, 18, 0.82);
+    backdrop-filter: blur(6px);
+    padding: 2px;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .cover:hover .cover__flip,
+  .cover:focus-within .cover__flip {
+    opacity: 1;
+  }
+
+  /* The TdnViewer's fullscreen control reveals on hover for card covers only
+     (the detail-page preview is not a .cover, so it keeps the button visible). */
+  .cover__layer--network :global(.react-flow__controls) {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  .cover:hover .cover__layer--network :global(.react-flow__controls),
+  .cover:focus-within .cover__layer--network :global(.react-flow__controls) {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .cover__flip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    padding: 0.25rem 0.6rem;
+    color: var(--text-faint);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  .cover__flip-btn:hover {
+    color: var(--text);
+  }
+
+  .cover__flip-btn.is-active {
+    background: var(--accent);
+    color: #0e1612;
+  }
+
+  /* Locked toggle (no rendered result yet): the network view is the only option,
+     so both buttons are disabled. The active "network" pill keeps its normal look;
+     the unavailable "result" side dims to read as "coming soon", not broken. */
+  .cover__flip-btn:disabled {
+    cursor: default;
+  }
+
+  .cover__flip-btn:disabled:hover {
+    color: var(--text-faint);
+  }
+
+  .cover__flip-btn:disabled:not(.is-active) {
+    opacity: 0.45;
+  }
+
+  /* Touch devices have no hover, so the hover-reveal flip controls are
+     unreachable. On a coarse pointer, keep the controls always visible and
+     enlarge the buttons to a >=44px touch target. Fine pointers (mouse) keep
+     the hover-reveal behavior above. */
+  @media (pointer: coarse) {
+    .cover__flip {
+      opacity: 1;
+    }
+
+    .cover__flip-btn {
+      display: inline-flex;
+      align-items: center;
+      min-height: 44px;
+      padding: 0 0.75rem;
+      font-size: 0.75rem;
+    }
+  }
+</style>

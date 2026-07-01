@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: TDN built-in parameter sequence round-trip (v1.3).
 
 Tests export, import, and round-trip fidelity for operators with
@@ -193,7 +193,7 @@ class TestTDNSequences(EmbodyTestCase):
         self.assertNotIn('sequences', td)
 
     def test_sequence_absent_key_preserves_defaults(self):
-        # Import a TDN without sequences key — existing blocks unaltered
+        # Import a TDN without sequences key - existing blocks unaltered
         chop = self.sandbox.create(constantCHOP, 'nokey_chop')
         chop.seq.const[0].par.name = 'keep_me'
         chop.seq.const[0].par.value = 42.0
@@ -386,7 +386,7 @@ class TestTDNSequences(EmbodyTestCase):
         # Test that a COMP with 2 extension slots round-trips correctly.
         comp = self.sandbox.create(baseCOMP, 'rt_ext_comp')
         # ext sequence default is 1 block. The ext sequence pars are
-        # object, name, promote — these are already handled by the
+        # object, name, promote - these are already handled by the
         # existing parameter export for the first block. Verify that
         # adding a second ext slot (numBlocks=2) round-trips.
         comp.seq.ext.numBlocks = 2
@@ -417,7 +417,7 @@ class TestTDNSequences(EmbodyTestCase):
                     if o['name'] == 'cs_skip_test'][0]
         custom_pars = comp_def.get('custom_pars', {}).get('Items', [])
         names = [p['name'] for p in custom_pars]
-        # Should have header + 2 template pars only — no per-block instances
+        # Should have header + 2 template pars only - no per-block instances
         self.assertIn('Items', names)
         self.assertEqual(len(custom_pars), 3)
         # No prefixed names should appear

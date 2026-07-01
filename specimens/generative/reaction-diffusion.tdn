@@ -1,0 +1,264 @@
+format: tdn
+version: '2.0'
+build: 3
+generator: Embody/6.0.39
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:42Z'
+network_path: /specimen_lab/reaction_diffusion
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  glslTOP:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+type: baseCOMP
+custom_pars:
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Output width (px), 4K. The reaction sim stays bounded 16:9; out1 upscales to this.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Output height (px), 4K.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  position: [2750, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - res_up
+- name: res_up
+  type: resolutionTOP
+  parameters:
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  position: [2500, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_colorize
+- name: glsl_seed
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_seed_pixel
+    computedat: seed_compute
+    outputresolution: custom
+    resolutionw: 1280
+    resolutionh: 720
+    format: rgba32float
+- name: glsl_rd_step
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_rd_step_pixel
+    computedat: rd_step_compute
+    outputresolution: custom
+    resolutionw: 1280
+    resolutionh: 720
+    format: rgba32float
+  position: [1200, 0]
+  inputs:
+  - feedback_state
+- name: glsl_colorize
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_colorize_pixel
+    computedat: colorize_compute
+  position: [2250, 0]
+  inputs:
+  - glsl_rd_step
+- name: feedback_state
+  type: feedbackTOP
+  parameters:
+    top: glsl_rd_step
+    format: rgba32float
+  flags:
+  - viewer
+  position: [900, 0]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_seed
+- name: glsl_seed_info
+  type: infoDAT
+  parameters:
+    op: glsl_seed
+  position: [0, -120]
+  dock: glsl_seed
+  dat_read_only: true
+- name: glsl_seed_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_seed_pixel.glsl
+    extension: frag
+  position: [150, -120]
+  dock: glsl_seed
+  dat_content: |-
+    out vec4 fragColor;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
+    void main(){
+        vec2 uv = vUV.st;
+        float a = 1.0; float b = 0.0;
+        vec2 g = uv * 7.0;
+        vec2 cell = floor(g);
+        vec2 f = fract(g);
+        vec2 jit = vec2(h(cell), h(cell+3.7))*0.6 + 0.2;
+        if(distance(f, jit) < 0.13) b = 1.0;
+        fragColor = vec4(a, b, 0.0, 1.0);
+    }
+  dat_content_format: text
+- name: glsl_rd_step_info
+  type: infoDAT
+  parameters:
+    op: glsl_rd_step
+  position: [1200, -120]
+  dock: glsl_rd_step
+  dat_read_only: true
+- name: glsl_seed_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_seed_compute.glsl
+  position: [-150, -120]
+  dock: glsl_seed
+- name: glsl_colorize_info
+  type: infoDAT
+  parameters:
+    op: glsl_colorize
+  position: [2250, -120]
+  dock: glsl_colorize
+  dat_read_only: true
+- name: glsl_rd_step_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_rd_step_pixel.glsl
+    extension: frag
+  position: [1350, -120]
+  dock: glsl_rd_step
+  dat_content: |-
+    out vec4 fragColor;
+    const float feed = 0.055;
+    const float kill = 0.062;
+    const float da = 1.0;
+    const float db = 0.5;
+    void main(){
+        vec2 texel = uTD2DInfos[0].res.xy;
+        vec2 uv = vUV.st;
+        vec2 s = texture(sTD2DInputs[0], uv).rg;
+        float a = s.r; float b = s.g;
+        vec2 lap = vec2(0.0);
+        lap += texture(sTD2DInputs[0], uv + texel*vec2(-1.0,-1.0)).rg * 0.05;
+        lap += texture(sTD2DInputs[0], uv + texel*vec2( 0.0,-1.0)).rg * 0.20;
+        lap += texture(sTD2DInputs[0], uv + texel*vec2( 1.0,-1.0)).rg * 0.05;
+        lap += texture(sTD2DInputs[0], uv + texel*vec2(-1.0, 0.0)).rg * 0.20;
+        lap += s * -1.0;
+        lap += texture(sTD2DInputs[0], uv + texel*vec2( 1.0, 0.0)).rg * 0.20;
+        lap += texture(sTD2DInputs[0], uv + texel*vec2(-1.0, 1.0)).rg * 0.05;
+        lap += texture(sTD2DInputs[0], uv + texel*vec2( 0.0, 1.0)).rg * 0.20;
+        lap += texture(sTD2DInputs[0], uv + texel*vec2( 1.0, 1.0)).rg * 0.05;
+        float reaction = a*b*b;
+        float na = a + (da*lap.r - reaction + feed*(1.0-a));
+        float nb = b + (db*lap.g + reaction - (kill+feed)*b);
+        fragColor = vec4(clamp(na,0.0,1.0), clamp(nb,0.0,1.0), 0.0, 1.0);
+    }
+  dat_content_format: text
+- name: glsl_colorize_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_colorize_pixel.glsl
+    extension: frag
+  position: [2400, -120]
+  dock: glsl_colorize
+  dat_content: |-
+    out vec4 fragColor;
+    void main(){
+        vec2 uv = vUV.st;
+        vec2 s = texture(sTD2DInputs[0], uv).rg;
+        float b = s.g;
+        vec3 c0 = vec3(0.03, 0.04, 0.09);
+        vec3 c1 = vec3(0.10, 0.42, 0.55);
+        vec3 c2 = vec3(0.98, 0.90, 0.70);
+        vec3 col = mix(c0, c1, smoothstep(0.0, 0.35, b));
+        col = mix(col, c2, smoothstep(0.35, 0.55, b));
+        float d = distance(uv, vec2(0.5));
+        col *= mix(1.0, 0.55, smoothstep(0.40, 0.95, d));
+        fragColor = vec4(col, 1.0);
+    }
+  dat_content_format: text
+- name: glsl_rd_step_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_rd_step_compute.glsl
+  position: [1050, -120]
+  dock: glsl_rd_step
+- name: glsl_colorize_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/reaction_diffusion/glsl_colorize_compute.glsl
+  position: [2100, -120]
+  dock: glsl_colorize
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Seed
+  text: Initial conditions. A=1 everywhere; B=1 in a jittered grid of spots, setting where the reaction begins.
+  position: [-220, -190]
+  size: [570, 450]
+  color: [0.12, 0.19, 0.16]
+  opacity: 0.3
+- name: annotate2
+  mode: annotate
+  title: Reaction-Diffusion Loop
+  text: 'The Gray-Scott core: chemical state is held between frames and updated by diffusion + reaction each frame. Feed/kill rates choose the pattern regime. Cooks every frame when the output is demanded.'
+  position: [830, -190]
+  size: [720, 450]
+  color: [0.1, 0.18, 0.26]
+  opacity: 0.3
+- name: annotate3
+  mode: annotate
+  title: Colorize & Output
+  text: Maps B concentration to a deep-navy -> teal -> cream palette with a soft vignette, terminating in the output Null.
+  position: [2030, -190]
+  size: [920, 450]
+  color: [0.2, 0.16, 0.21]
+  opacity: 0.3

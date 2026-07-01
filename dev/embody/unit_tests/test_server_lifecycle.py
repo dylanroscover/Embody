@@ -108,3 +108,47 @@ class TestServerLifecycle(EmbodyTestCase):
         if mod_path is not None:
             module = mod_path.module
             self.assertTrue(hasattr(module, 'ENVOY_VERSION'))
+
+
+class TestAsyncBootstrap(EmbodyTestCase):
+    """Contract for the background dependency bootstrap.
+
+    The venv build + pip install that a fresh install / version upgrade
+    triggers now runs off the main thread, so TD no longer freezes during an
+    upgrade drag-in. Start() routes on EmbodyExt._environmentNeedsInstall:
+    ready -> synchronous _continueStart; install-needed -> _beginAsyncBootstrap
+    (worker thread) -> run()-scheduled _pollBootstrap -> _continueStart.
+
+    The deep async path (live worker + frame-scheduled poll + live Envoyenable
+    coupling) is validated by the live fast-path start and manual upgrade
+    testing rather than unit-mocked here -- the run()-scheduled poll fires
+    after the test method returns, which makes it unsafe to drive in-process.
+    These tests lock down the wiring and the clean initial state.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.envoy = self.embody.ext.Envoy
+
+    def test_async_methods_exist(self):
+        for name in ('_beginAsyncBootstrap', '_pollBootstrap', '_continueStart'):
+            self.assertTrue(hasattr(self.envoy, name),
+                            f'EnvoyExt must define {name}')
+
+    def test_embody_bootstrap_pieces_exist(self):
+        emb = self.embody.ext.Embody
+        for name in ('_venvPaths', '_environmentNeedsInstall',
+                     '_installDependencies'):
+            self.assertTrue(hasattr(emb, name),
+                            f'EmbodyExt must define {name}')
+
+    def test_bootstrapping_flag_is_bool(self):
+        self.assertIsInstance(self.envoy._bootstrapping, bool)
+
+    def test_bootstrap_result_attr_exists(self):
+        self.assertTrue(hasattr(self.envoy, '_bootstrap_result'))
+
+    def test_setup_environment_still_callable(self):
+        # The synchronous entry point survives for the venv-recreate recovery
+        # path; in the dev project the env is already healthy so it returns True.
+        self.assertTrue(self.embody.ext.Embody._setupEnvironment())

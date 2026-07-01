@@ -1,8 +1,8 @@
-﻿"""
+"""
 Test suite: MCP diagnostics and introspection handlers in EnvoyExt.
 
 Tests _get_td_info, _get_op_errors, _exec_op_method,
-_get_td_classes, _get_td_class_details, _get_module_help.
+_get_td_classes, _get_td_class_details, _get_module_help, _get_logs.
 """
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
@@ -81,7 +81,7 @@ class TestMCPDiagnostics(EmbodyTestCase):
     # --- _get_module_help ---
 
     def test_get_module_help_td_attr(self):
-        # Use 'OP' to test the hasattr(td, name) path — fast unlike 'td' (7s)
+        # Use 'OP' to test the hasattr(td, name) path - fast unlike 'td' (7s)
         result = self.envoy._get_module_help(module_name='OP')
         self.assertDictHasKey(result, 'helpText')
         self.assertIn('OP', result['helpText'])
@@ -89,3 +89,31 @@ class TestMCPDiagnostics(EmbodyTestCase):
     def test_get_module_help_tdu(self):
         result = self.envoy._get_module_help(module_name='td.tdu')
         self.assertDictHasKey(result, 'helpText')
+
+    # --- _get_logs ---
+
+    def test_get_logs_returns_entries(self):
+        op.Embody.Log('test_get_logs marker', 'INFO')
+        result = self.envoy._get_logs()
+        self.assertDictHasKey(result, 'entries')
+        self.assertIsInstance(result['entries'], list)
+        self.assertDictHasKey(result, 'latest_id')
+        self.assertDictHasKey(result, 'total_in_buffer')
+
+    def test_get_logs_count_capped(self):
+        result = self.envoy._get_logs(count=5)
+        self.assertLessEqual(len(result['entries']), 5)
+
+    def test_get_logs_level_filter(self):
+        op.Embody.Log('an error for the filter test', 'ERROR')
+        result = self.envoy._get_logs(level='ERROR')
+        for e in result['entries']:
+            self.assertEqual(e['level'], 'ERROR')
+
+    def test_get_logs_since_id_returns_only_newer(self):
+        op.Embody.Log('before the cursor', 'INFO')
+        cursor = self.envoy._get_logs()['latest_id']
+        op.Embody.Log('after the cursor', 'INFO')
+        result = self.envoy._get_logs(since_id=cursor)
+        for e in result['entries']:
+            self.assertGreater(e['id'], cursor)

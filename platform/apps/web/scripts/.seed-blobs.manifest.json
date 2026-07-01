@@ -1,0 +1,38 @@
+[
+  {
+    "slug": "murmuration",
+    "sha256": "c799ff94ec1b93eb56d9d5dde3717b42445ee101861eac76e12563b2cc9cdfca",
+    "size": 20494,
+    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/simulation/murmuration.tdn"
+  },
+  {
+    "slug": "reaction-diffusion",
+    "sha256": "5e6e132c128411e4f0ca5bccb61fa6eb1aabd192384abed2eb00d55012902937",
+    "size": 12892,
+    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/generative/reaction-diffusion.tdn"
+  },
+  {
+    "slug": "kaleidoscope",
+    "sha256": "9dd49408b286453c441d178acabd72bf7d1c0d38802b22bc0bdb09f5a634b66d",
+    "size": 12648,
+    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/compositing/kaleidoscope.tdn"
+  },
+  {
+    "slug": "noise-terrain",
+    "sha256": "b2daddcf508ae25ec56b4ccf97504b47356770327efea872b107566ebfaa8562",
+    "size": 30340,
+    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/3d/noise-terrain.tdn"
+  },
+  {
+    "slug": "plasma-interference",
+    "sha256": "a751113e37b8c9a1efcf9da6765a3c18b4136bd7516fbfad9c352f31e8bfcc59",
+    "size": 12644,
+    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/generative/plasma-interference.tdn"
+  },
+  {
+    "slug": "mandelbulb-march",
+    "sha256": "da127dc0ed5e2890f650baee0a3098c3ad66be338429facf33ec8186060f479a",
+    "size": 16003,
+    "tdn_path": "/Users/rosco/Documents/Git/Embody/specimens/raymarching-sdf/mandelbulb-march.tdn"
+  }
+]

@@ -11,12 +11,23 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Enable/Update** — Initialize or update all externalizations
 - **Externalize Full Project** — Pulse to externalize every eligible operator in the project
 - **Detect Duplicate Paths** — Enable/disable duplicate path detection prompts
+- **Template Master Name** — When a duplicate-path group has exactly one operator whose path contains this name, that operator is auto-selected as the master (default `__template__`). Clear it to always choose the master manually, or set your own convention (e.g. `_master`). See [Duplicate Path Handling](externalization.md#duplicate-path-handling).
 - **Open Manager** / **Close Manager** — Toggle the Manager UI
+- **Clipboard Auto-Paste** — When ON (default), Embody watches the OS clipboard (~1.5s poll) for an **inbound** TDN network — e.g. from the web "embody it" button — and prompts to paste it as a new COMP in the current network. Your own **outbound** copies (++ctrl+shift+c++ on a COMP, which exports it to the clipboard to share or paste elsewhere) are recognized and do **not** re-trigger the prompt. Disabled in Perform Mode and self-suppressed during saves and tests. Turn OFF to ignore the clipboard. See [Keyboard Shortcuts](keyboard-shortcuts.md).
+- **Uncommitted Color** — RGB color of the manager's **orange** git-uncommitted badge (an externalized file saved to disk but not yet committed to git). Defaults to a warm orange. See [Manager UI — Status Indicators](manager-ui.md#status-indicators).
 
 ### Envoy
 
 - **Envoy Enable** — Toggle the MCP server on/off
 - **Envoy Port** — Port number for the MCP server (default: 9870)
+- **AI Client** — Which AI coding assistant to generate config for (`Claude Code`, `Cursor`, `Copilot`, `Windsurf`, or `None`). Switching clients regenerates the corresponding files.
+- **AI Project Root** — Where Embody writes AI/MCP config files (`AGENTS.md`, `CLAUDE.md`, `.claude/`, `.cursor/`, `.mcp.json`, `.embody/`). Three modes:
+    - *Git root* (default) — config lives at the top of the git repository. This is the right choice when the whole repo is your AI tool's workspace.
+    - *Project folder (.toe directory)* — config lives next to the `.toe`. Use this when your TouchDesigner project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool's workspace (e.g. `myrepo/touchdesigner/` opened in Cursor or Claude Code).
+    - *Custom* — config lives at a directory you pick via the **AI Project Root (Custom)** parameter (paired Folder picker, greyed out when this mode isn't selected). Useful for monorepos with multiple `.toe` files that share a parent directory — set the same relative path (e.g. `../`) on each `.toe` and they all converge on one set of AI config files plus a shared `.embody/envoy.json`, which lets the multi-instance MCP feature work naturally across sibling projects.
+    Flipping the parameter (or changing the custom path while in Custom mode) migrates Embody's own state (`.embody/config.json`, `project.json`, palette catalogs, `.claude/settings.local.json`) to the new root and cleans up Embody-generated AI files at the old root. User-authored files (custom skills, hand-edited `CLAUDE.md`, other entries in `.mcp.json`) are preserved.
+- **AI Project Root (Custom)** — Custom directory for AI/MCP config when **AI Project Root** is set to `Custom`. Relative paths are resolved against the `.toe` directory (e.g. `../` places config one level above the `.toe`); absolute paths are used as-is. Greyed out unless the menu is on `Custom`.
+- **Envoy Follow** — When ON (default OFF), the network editor follows Envoy's work as Claude builds — gliding to center on each operator just touched, and navigating into whatever COMP is being built when the work moves to a network you're not viewing. A small builder-bot ("embot") hops between the nodes being worked on. Yields the instant you pan, zoom, or navigate the view yourself, and resumes once you stop. View-only (writes pane state, never externalized). See [Claude Code Integration — Live Build Visualization](../envoy/claude-code.md#live-build-visualization).
 
 ### Restoration
 
@@ -39,6 +50,8 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Palette Handling** — How to handle TD palette COMPs (e.g. `abletonLink`, Widget components) during TDN export. *Ask* (default) prompts on first encounter per COMP with four choices; *Black Box* always references the palette and skips internal children (correct for stock palette COMPs); *Full Export* always exports all internals (for heavily customized palette COMPs). Native operator templates (`/sys/TDTox/defaultCOMPs/`) are excluded from palette detection — a plain `buttonCOMP` or `panelCOMP` is treated as a regular COMP, not a palette clone. See [TDN Palette Handling](../tdn/specification.md#palette-handling) for details
 - **Content Safety** — What to do when TDN COMPs contain DATs or storage that would be lost on save: *Ask Each Save* (default) prompts before each save, *Always Externalize* auto-externalizes at-risk DATs without asking, *Never Ask* suppresses the check entirely. The *Never Ask* value is an opt-in escape hatch for power users — the save-time dialog no longer offers a single-click bypass button.
 - **Export Project TDN** — Pulse to export the entire project network
+- **Auto-Save Checkpoints** — When ON (default), a beat after the agent (or you) goes idle Embody writes any changed TDN COMP to disk as a frame-cheap `.tdn` checkpoint (~3-6 ms, no full project save, no strip/restore, no freeze) so an accidental crash loses little unsaved work — the checkpointed COMPs rebuild on next open. Also fires a synchronous pre-checkpoint before a destructive `delete_op` inside a tracked COMP. Bypassed in Perform Mode and during saves, and perf-gated so it never piles onto a hot frame. `execute_python` is deliberately not a trigger. See [Crash Recovery](externalization.md#crash-recovery).
+- **Auto-Save Status** — Read-only readout of the auto-save engine's state: *Idle* / *Saved &lt;time&gt;* / *Bypassed* (Perform Mode) / *Disabled*.
 
 ### Logs
 

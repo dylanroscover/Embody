@@ -5,7 +5,7 @@
 **Symptoms:** Toggling Envoy Enable does nothing, no port number appears in the toolbar, or errors in the Textport.
 
 1. **Check the Textport** (Alt+T) — Embody logs all startup messages there. Look for lines starting with `[Envoy]`.
-2. **Dependency install failed:** Envoy installs `mcp`, `uvicorn`, and other packages on first enable. If this fails (e.g., no internet, Python version mismatch), the server can't start. Check for pip errors in the Textport and try installing manually:
+2. **Dependency install in progress:** On first enable (or after a version upgrade), Envoy builds its virtual environment and installs `mcp`, `uvicorn`, and other packages. This runs in a background thread — the status reads `Installing deps... (one-time)` and the port appears only when it finishes. A fresh install can take a minute or two; wait for it rather than re-toggling. If it **failed** (e.g., no internet, Python version mismatch), the status shows `Error: Python environment not ready`. Check for pip errors in the Textport and try installing manually:
    ```
    pip install mcp uvicorn httpx pydantic
    ```

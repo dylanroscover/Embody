@@ -1,0 +1,1716 @@
+---
+import { env } from "cloudflare:workers";
+import type { ListResponse, SpecimenSummary } from "@embody/contracts";
+import Base from "../../layouts/Base.astro";
+import SpecimenCover from "../../components/SpecimenCover.astro";
+import { fixtureSummaries } from "../../lib/specimenFallback";
+import { reactionsClusterHtml } from "../../lib/reactions";
+import { specimenGraph } from "../../fixtures/specimen-graphs";
+import { sampleTdn } from "../../fixtures/sample-tdn";
+import {
+  getCollectionFacets,
+  listSpecimensForCollection,
+  type CollectionFacets
+} from "../../server/db";
+
+// Cards show the top few reaction tallies + a picker trigger; the detail page
+// shows them all. Anonymous visitors who try to react are bounced to /signin.
+const CARD_REACTION_MAX = 3;
+const isSignedIn = Boolean(Astro.locals.user);
+
+export const prerender = false;
+
+// Page size for the collection. ~24 keeps the first SSR paint fast and bounds
+// every subsequent fetch -- the page NEVER loads the whole set. FTS handles
+// search at thousands of rows; keyset (cursor) pagination keeps each page O(24).
+const PAGE_SIZE = 24;
+const DEFAULT_SORT = "az" as const;
+
+// SSR the FIRST page server-side (fast paint + SEO). The search box, facet
+// filters, sort, and infinite scroll then talk to /api/specimens and take over
+// the grid client-side. On any D1 error we degrade to the embedded fixture set
+// so the page is never blank.
+// A category link (e.g. the specimen breadcrumb "Specimen / generative") lands
+// here as ?category=<facet>. SSR-apply it so the first paint is already filtered
+// (no client flash) and the dropdown renders pre-selected. ?author=<handle>
+// (e.g. a profile "see all" link) is applied the same way.
+const requestedCategory = (Astro.url.searchParams.get("category") ?? "").trim();
+const requestedAuthor = (Astro.url.searchParams.get("author") ?? "").trim();
+
+let firstPage: SpecimenSummary[];
+let totalCount: number;
+let nextCursor: string | null;
+let facets: CollectionFacets;
+let usingFixtures = false;
+let activeCategory = "";
+let activeAuthor = "";
+
+try {
+  // Facets double as a D1 health probe AND the whitelist that validates the
+  // requested category/author (an unknown value is ignored, falling back to
+  // "all").
+  facets = await getCollectionFacets(env.DB);
+  activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
+  activeAuthor = facets.authors.includes(requestedAuthor) ? requestedAuthor : "";
+  const response: ListResponse = await listSpecimensForCollection(env.DB, {
+    sort: DEFAULT_SORT,
+    pageSize: PAGE_SIZE,
+    category: activeCategory || undefined,
+    author: activeAuthor || undefined
+  });
+  // An empty UNFILTERED result means the DB has no rows (e.g. dev without a
+  // seed) -- degrade to fixtures. An empty FILTERED result is legitimate.
+  if (response.specimens.length === 0 && !activeCategory && !activeAuthor) throw new Error("empty");
+  firstPage = response.specimens;
+  totalCount = response.count;
+  nextCursor = response.nextCursor ?? null;
+} catch {
+  usingFixtures = true;
+  facets = {
+    categories: [...new Set(fixtureSummaries.map((s) => s.category))].sort(),
+    requires: [...new Set(fixtureSummaries.flatMap((s) => s.requires))].sort(),
+    authors: [...new Set(fixtureSummaries.map((s) => s.author_handle))].sort()
+  };
+  activeCategory = facets.categories.includes(requestedCategory) ? requestedCategory : "";
+  activeAuthor = facets.authors.includes(requestedAuthor) ? requestedAuthor : "";
+  const pool = fixtureSummaries.filter(
+    (s) =>
+      (!activeCategory || s.category === activeCategory) &&
+      (!activeAuthor || s.author_handle === activeAuthor)
+  );
+  firstPage = pool.sort((a, b) => a.name.localeCompare(b.name)).slice(0, PAGE_SIZE);
+  totalCount = pool.length;
+  nextCursor = null;
+}
+
+// Same user-facing wording whether the rows came from D1 or the embedded
+// fallback set -- "fixture" is internal jargon and should never reach visitors.
+const countLabel = `${totalCount} specimen${totalCount === 1 ? "" : "s"}`;
+
+const LEVELS = ["starter", "intermediate", "advanced"] as const;
+
+// Card badges abbreviate the level (STR/INT/ADV) so the pill row stays on
+// one line in the narrow gallery cards; the full word is on the title tooltip.
+const LEVEL_ABBR: Record<string, string> = { starter: "STR", intermediate: "INT", advanced: "ADV" };
+const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCase();
+---
+
+<Base
+  title="the collection - embody.tools"
+  description="Browse transparent TouchDesigner networks - inspect every node and parameter, then copy any specimen's TDN straight into a live .toe running Embody."
+>
+  <section class="page-section collection-hero">
+    <p class="eyebrow">the Collection</p>
+    <h1>see it. embody it</h1>
+    <p class="lede">
+      Copy any specimen's TDN to your clipboard and paste it straight into a TouchDesigner .toe running <a href="https://github.com/dylanroscover/Embody/releases/latest">Embody</a>.
+    </p>
+  </section>
+
+  <section class="page-section tight collection-gallery">
+    <div
+      class="collection-shell"
+      id="collection-view"
+      data-view="list"
+      data-page-size={PAGE_SIZE}
+      data-next-cursor={nextCursor ?? ""}
+      data-base-count={countLabel}
+      data-fixtures={usingFixtures ? "1" : "0"}
+      data-signed-in={isSignedIn ? "1" : "0"}
+    >
+      <div class="collection-toolbar">
+      <div class="toolbar-controls">
+        <span class="collection-total mono" data-collection-count>{countLabel}</span>
+
+        <div class="sort-control">
+          <span class="sort-control__label mono" id="ddlbl-category">category</span>
+          <div class="dd" data-dd>
+            <button type="button" class="dd__btn mono" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-category dd-val-category">
+              <span class="dd__val" id="dd-val-category">{activeCategory || "all"}</span>
+              <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+            </button>
+            <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-category" hidden>
+              <li class="dd__search-row" role="presentation"><input class="dd__search" type="search" placeholder="" aria-label="Search categories" data-dd-search /></li>
+              <li class="dd__opt" role="option" data-value="" aria-selected={!activeCategory}>all</li>
+              {facets.categories.map((value) => (
+                <li class="dd__opt" role="option" data-value={value} aria-selected={value === activeCategory}>{value}</li>
+              ))}
+              <li class="dd__empty" role="presentation" hidden>no matches.</li>
+            </ul>
+            <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-category>
+              <option value="" selected={!activeCategory}>all</option>
+              {facets.categories.map((value) => (
+                <option value={value} selected={value === activeCategory}>{value}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div class="sort-control">
+          <span class="sort-control__label mono" id="ddlbl-level">level</span>
+          <div class="dd" data-dd>
+            <button type="button" class="dd__btn mono" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-level dd-val-level">
+              <span class="dd__val" id="dd-val-level">all</span>
+              <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+            </button>
+            <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-level" hidden>
+              <li class="dd__opt" role="option" data-value="" aria-selected="true">all</li>
+              {LEVELS.map((value) => (
+                <li class="dd__opt" role="option" data-value={value} aria-selected="false">{value}</li>
+              ))}
+            </ul>
+            <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-level>
+              <option value="" selected>all</option>
+              {LEVELS.map((value) => (
+                <option value={value}>{value}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {facets.authors.length > 1 && (
+          <div class="sort-control">
+            <span class="sort-control__label mono" id="ddlbl-author">contributor</span>
+            <div class="dd" data-dd>
+              <button type="button" class="dd__btn mono" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-author dd-val-author">
+                <span class="dd__val" id="dd-val-author">{activeAuthor ? `@${activeAuthor}` : "all"}</span>
+                <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+              </button>
+              <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-author" hidden>
+                <li class="dd__search-row" role="presentation"><input class="dd__search" type="search" placeholder="" aria-label="Search contributors" data-dd-search /></li>
+                <li class="dd__opt" role="option" data-value="" aria-selected={!activeAuthor}>all</li>
+                {facets.authors.map((value) => (
+                  <li class="dd__opt" role="option" data-value={value} aria-selected={value === activeAuthor}>@{value}</li>
+                ))}
+                <li class="dd__empty" role="presentation" hidden>no matches.</li>
+              </ul>
+              <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-author>
+                <option value="" selected={!activeAuthor}>all</option>
+                {facets.authors.map((value) => (
+                  <option value={value} selected={value === activeAuthor}>@{value}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        <div class="sort-control">
+          <span class="sort-control__label mono" id="ddlbl-sort">sort</span>
+          <div class="dd" data-dd>
+            <button type="button" class="dd__btn mono" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="ddlbl-sort dd-val-sort">
+              <span class="dd__val" id="dd-val-sort">A-Z</span>
+              <svg class="dd__chev" width="10" height="6" viewBox="0 0 10 6" fill="none" aria-hidden="true"><path d="M1 1l4 4 4-4" stroke="currentColor" stroke-width="1.4" /></svg>
+            </button>
+            <ul class="dd__menu" role="listbox" aria-labelledby="ddlbl-sort" hidden>
+              <li class="dd__opt" role="option" data-value="az" aria-selected="true">A-Z</li>
+              <li class="dd__opt" role="option" data-value="newest" aria-selected="false">newest</li>
+              <li class="dd__opt" role="option" data-value="liked" aria-selected="false">most liked 👍</li>
+              <li class="dd__opt" role="option" data-value="copied" aria-selected="false">most copied</li>
+            </ul>
+            <select class="dd__native" aria-hidden="true" tabindex="-1" data-collection-sort>
+              <option value="az" selected>A-Z</option>
+              <option value="newest">newest</option>
+              <option value="liked">most liked 👍</option>
+              <option value="copied">most copied</option>
+            </select>
+          </div>
+        </div>
+
+        <input
+          type="search"
+          class="collection-search"
+          placeholder=" "
+          aria-label="Search the collection"
+          data-collection-search
+        />
+
+        <div class="view-toggle" role="group" aria-label="Collection view">
+          <button
+            type="button"
+            class="view-toggle__button is-active"
+            data-view-option="list"
+            aria-label="List view"
+            aria-pressed="true"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="3" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="6" y="3.5" width="8" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="2" y="7" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="6" y="7.5" width="8" height="1.4" rx="0.7" fill="currentColor" />
+              <rect x="2" y="11" width="2" height="2" rx="0.5" fill="currentColor" />
+              <rect x="6" y="11.5" width="8" height="1.4" rx="0.7" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            class="view-toggle__button"
+            data-view-option="gallery"
+            aria-label="Gallery view"
+            aria-pressed="false"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="2" width="5" height="5" rx="1" fill="currentColor" />
+              <rect x="9" y="2" width="5" height="5" rx="1" fill="currentColor" />
+              <rect x="2" y="9" width="5" height="5" rx="1" fill="currentColor" />
+              <rect x="9" y="9" width="5" height="5" rx="1" fill="currentColor" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      </div>
+
+      <script is:inline>
+      // Apply the saved view BEFORE the grid paints, so a persisted "gallery"
+      // preference doesn't flash the SSR default "list" first. Runs synchronously
+      // during parse -- the shell + toggle buttons already exist above this point.
+      (function () {
+        try {
+          var v = localStorage.getItem("embody:collection:view");
+          if (v !== "list" && v !== "gallery") return;
+          var shell = document.getElementById("collection-view");
+          if (shell) shell.setAttribute("data-view", v);
+          var btns = document.querySelectorAll("[data-view-option]");
+          for (var i = 0; i < btns.length; i++) {
+            btns[i].classList.toggle("is-active", btns[i].getAttribute("data-view-option") === v);
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <section class="collection-results">
+      <div class="card-grid" data-card-grid>
+        {firstPage.map((specimen) => (
+          <article
+            class="specimen-card"
+            data-specimen
+            data-slug={specimen.slug}
+            data-name={specimen.name}
+            data-href={`/c/${specimen.slug}`}
+            data-copied={specimen.copies_count}
+            data-copies={specimen.copies_count}
+            data-search={`${specimen.name} ${specimen.description} ${specimen.categories.join(" ")} ${specimen.level} ${specimen.requires}`.toLowerCase()}
+          >
+            <div class="specimen-card__cover">
+              <SpecimenCover
+                slug={specimen.slug}
+                name={specimen.name}
+                category={specimen.category}
+                thumbnailKey={specimen.thumbnail_key}
+                tdn={usingFixtures ? (specimenGraph(specimen.slug) ?? sampleTdn) : specimenGraph(specimen.slug)}
+              />
+            </div>
+
+            <div class="specimen-card__body">
+              <div class="badge-row">
+                <span class="badge" title={specimen.level}>{diffAbbr(specimen.level)}</span>
+                <span class="badge specimen-category">{specimen.category}</span>
+                {specimen.categories.length > 1 && (
+                  <span class="badge specimen-category" title={specimen.categories.slice(1).join(", ")}>+{specimen.categories.length - 1}</span>
+                )}
+                <span class="badge license">CC-BY</span>
+
+                <button
+                  type="button"
+                  class="card-copy"
+                  data-card-copy
+                  data-slug={specimen.slug}
+                  aria-label={`Embody it -- copy ${specimen.name}'s TDN for TouchDesigner`}
+                  title="Embody it -- copy this specimen's TDN for your agent"
+                >
+                  <svg
+                    class="card-copy__icon card-copy__icon--copy"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="11" height="11" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  <svg
+                    class="card-copy__icon card-copy__icon--check"
+                    viewBox="0 0 24 24"
+                    width="14"
+                    height="14"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                  <span class="card-copy__count mono" data-copy-count>{specimen.copies_count}</span>
+                </button>
+              </div>
+
+              <div class="specimen-card__name-row">
+                <h3 class="specimen-card__name">{specimen.name}</h3>
+
+                <a
+                  class="specimen-card__author mono"
+                  href={`/u/${specimen.author_handle}`}
+                  aria-label={`View ${specimen.author_handle}'s profile`}
+                >
+                  <span class="specimen-card__author-by">by</span>
+                  <span class="specimen-card__author-avatar" aria-hidden="true">{specimen.author_handle.charAt(0).toUpperCase()}</span>
+                  <span class="specimen-card__author-handle">@{specimen.author_handle}</span>
+                </a>
+              </div>
+
+              <p class="specimen-card__desc">{specimen.description}</p>
+
+              <Fragment set:html={reactionsClusterHtml({ slug: specimen.slug, reactions: specimen.reactions ?? {}, max: CARD_REACTION_MAX })} />
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <p class="empty-state mono" data-empty-state hidden>no specimens match that filter.</p>
+      <p class="empty-state mono" data-loading-state hidden>loading...</p>
+
+      <!--
+        Infinite-scroll sentinel. When it nears the viewport the client module
+        FETCHES the next page from /api/specimens via the keyset cursor and
+        APPENDS the returned cards -- it never loads the whole set. Search, facet
+        filters, and sort issue a fresh /api/specimens request and REPLACE the
+        grid; the cursor resets to that result's nextCursor.
+      -->
+      <div class="scroll-sentinel" data-scroll-sentinel aria-hidden="true"></div>
+    </section>
+    </div>
+  </section>
+
+  <script>
+    // Server-driven collection: the SSR first page paints instantly; this module
+    // then runs all search / facet / sort as DEBOUNCED /api/specimens requests
+    // that REPLACE the grid, and infinite scroll fetches the NEXT page via the
+    // keyset cursor and APPENDS it. The set is never loaded all at once. Covers
+    // for appended cards mount a React SpecimenCoverGraph (which lazy-fetches its
+    // own graph), so thousands of graphs are never bundled. If the API errors,
+    // the page degrades gracefully to the already-painted SSR first page.
+    import { createElement } from "react";
+    import { createRoot, type Root } from "react-dom/client";
+    import type { ListResponse, SpecimenSummary } from "@embody/contracts";
+    import SpecimenCoverGraph from "../../components/SpecimenCoverGraph";
+    import { specimenThumbnail } from "../../lib/specimenThumb";
+    import { reactionsClusterHtml } from "../../lib/reactions";
+    import { initReactions } from "../../lib/reactionsClient";
+
+    interface CopyResponse {
+      envelope: unknown;
+      copies_count?: number;
+    }
+
+    const STORAGE_KEY = "embody:collection:view";
+    const DEBOUNCE_MS = 220;
+    const COPY_RESET_MS = 1500;
+    // Mirror of CARD_REACTION_MAX in the frontmatter -- cap the tally chips shown
+    // on a card so a heavily-reacted specimen does not overflow the badge row.
+    const CARD_REACTION_MAX = 3;
+
+    const shell = document.querySelector<HTMLElement>("[data-view]");
+    const grid = document.querySelector<HTMLElement>("[data-card-grid]");
+
+    // Emoji reactions: one delegated listener over the whole document covers SSR
+    // cards AND client-appended ones. Anonymous visitors are bounced to /signin.
+    initReactions({ signedIn: shell?.getAttribute("data-signed-in") === "1" });
+    const viewButtons = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-view-option]")
+    );
+    const searchInput = document.querySelector("[data-collection-search]") as HTMLInputElement | null;
+    const categorySelect = document.querySelector("[data-collection-category]") as HTMLSelectElement | null;
+    const levelSelect = document.querySelector("[data-collection-level]") as HTMLSelectElement | null;
+    const requiresSelect = document.querySelector("[data-collection-requires]") as HTMLSelectElement | null;
+    const authorSelect = document.querySelector("[data-collection-author]") as HTMLSelectElement | null;
+    const sortSelect = document.querySelector("[data-collection-sort]") as HTMLSelectElement | null;
+    const countEl = document.querySelector<HTMLElement>("[data-collection-count]");
+    const emptyEl = document.querySelector<HTMLElement>("[data-empty-state]");
+    const loadingEl = document.querySelector<HTMLElement>("[data-loading-state]");
+    const sentinel = document.querySelector<HTMLElement>("[data-scroll-sentinel]");
+
+    const baseCount = shell?.getAttribute("data-base-count") ?? (countEl?.textContent ?? "");
+    const usingFixtures = shell?.getAttribute("data-fixtures") === "1";
+    const pageSize = Number(shell?.getAttribute("data-page-size") || "24") || 24;
+
+    // ---- View toggle (LIST default, list-left / gallery-right) ----
+    function setView(view: string): void {
+      if (shell) shell.setAttribute("data-view", view);
+      viewButtons.forEach((item) => {
+        const selected = item.getAttribute("data-view-option") === view;
+        item.classList.toggle("is-active", selected);
+        item.setAttribute("aria-pressed", String(selected));
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY, view);
+      } catch {
+        /* localStorage persistence is a nice-to-have; ignore failures. */
+      }
+    }
+
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === "list" || saved === "gallery") setView(saved);
+    } catch {
+      /* ignore */
+    }
+
+    viewButtons.forEach((button) => {
+      button.addEventListener("click", () =>
+        setView(button.getAttribute("data-view-option") || "list")
+      );
+    });
+
+    // ---- React cover roots: mount SpecimenCoverGraph into appended cards ----
+    // SSR cards already carry a client:visible island; appended cards get the
+    // SAME component mounted here (no SSR tdn prop, so it lazy-fetches its graph).
+    // We lazy-mount with an IntersectionObserver to mirror client:visible -- a
+    // card's viewer only spawns when it scrolls near the viewport.
+    const coverRoots = new WeakMap<Element, Root>();
+    const coverObserver =
+      "IntersectionObserver" in window
+        ? new IntersectionObserver(
+            (entries, obs) => {
+              for (const entry of entries) {
+                if (!entry.isIntersecting) continue;
+                obs.unobserve(entry.target);
+                mountCover(entry.target as HTMLElement);
+              }
+            },
+            { rootMargin: "240px 0px" }
+          )
+        : null;
+
+    function mountCover(mountEl: HTMLElement): void {
+      if (coverRoots.has(mountEl)) return;
+      const slug = mountEl.getAttribute("data-cover-mount");
+      if (!slug) return;
+      const root = createRoot(mountEl);
+      coverRoots.set(mountEl, root);
+      root.render(createElement(SpecimenCoverGraph, { slug }));
+    }
+
+    function observeCover(mountEl: HTMLElement): void {
+      if (coverObserver) coverObserver.observe(mountEl);
+      else mountCover(mountEl); // no observer support: mount immediately
+    }
+
+    // ---- Cover flip (network <-> result), card click, per-card copy ----
+    // Delegated from the grid so they work for SSR AND appended cards alike.
+    function flipCover(option: Element): void {
+      const cover = option.closest<HTMLElement>("[data-cover-shell]");
+      if (!cover) return;
+      const mode = option.getAttribute("data-cover-option") || "network";
+      cover.setAttribute("data-cover", mode);
+      cover.querySelectorAll<HTMLElement>("[data-cover-option]").forEach((item) => {
+        const on = item.getAttribute("data-cover-option") === mode;
+        item.classList.toggle("is-active", on);
+        item.setAttribute("aria-pressed", String(on));
+      });
+      const net = cover.querySelector(".cover__layer--network");
+      const res = cover.querySelector(".cover__layer--result");
+      if (net) net.setAttribute("aria-hidden", String(mode !== "network"));
+      if (res) res.setAttribute("aria-hidden", String(mode !== "result"));
+    }
+
+    async function runCopy(button: HTMLElement): Promise<void> {
+      const slug = button.getAttribute("data-slug");
+      if (!slug) return;
+      const counter = button.querySelector<HTMLElement>("[data-copy-count]");
+      button.classList.remove("is-copied", "is-failed");
+      try {
+        const response = await fetch(
+          `/api/specimens/${encodeURIComponent(slug)}/copy`,
+          { method: "POST" }
+        );
+        if (!response.ok) throw new Error(`copy failed: ${response.status}`);
+        const data = (await response.json()) as CopyResponse;
+        await navigator.clipboard.writeText(JSON.stringify(data.envelope));
+        if (counter && typeof data.copies_count === "number") {
+          counter.textContent = String(data.copies_count);
+          button.closest("[data-specimen]")?.setAttribute("data-copies", String(data.copies_count));
+        }
+        button.classList.add("is-copied");
+      } catch {
+        button.classList.add("is-failed");
+      }
+      window.setTimeout(() => button.classList.remove("is-copied", "is-failed"), COPY_RESET_MS);
+    }
+
+    if (grid) {
+      grid.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const flip = target.closest<HTMLElement>("[data-cover-option]");
+        if (flip) {
+          event.preventDefault();
+          // Locked covers (no rendered result) disable both buttons; never flip.
+          if (!(flip as HTMLButtonElement).disabled) flipCover(flip);
+          return;
+        }
+
+        const copy = target.closest<HTMLElement>("[data-card-copy]");
+        if (copy) {
+          event.preventDefault();
+          event.stopPropagation();
+          void runCopy(copy);
+          return;
+        }
+
+        // Interactive islands (cover canvas) and real links/controls opt out.
+        if (
+          target.closest("[data-cover-interactive], a, button, input, select, textarea")
+        ) {
+          return;
+        }
+        const card = target.closest<HTMLElement>("[data-specimen]");
+        const href = card?.getAttribute("data-href");
+        if (href) window.location.href = href;
+      });
+    }
+
+    // ---- Card markup for APPENDED (client-fetched) cards ----
+    // Mirrors the SSR article in collection/index.astro: the badge row
+    // (level / category / CC-BY, plus the "embody it" button floated to the
+    // far right), the cover shell (network skeleton + result placeholder + flip),
+    // the name row (title + prominent author chip linking to /u/<handle>), the
+    // description, and the emoji reaction cluster as the card's footer row.
+    // The cover network layer is an empty mount node the React root fills in
+    // (lazy-fetched graph). reactionsClusterHtml is shared with the SSR card so
+    // both emit identical reaction markup.
+    // Escape for interpolation into HTML text AND double/single-quoted attribute
+    // values. The previous textContent->innerHTML round-trip escaped < > & but
+    // NOT " or ' (text-node serialization never escapes quotes), so author-
+    // controlled fields (name/description) interpolated into attributes in
+    // buildCard's article.innerHTML could break out of the attribute -> stored
+    // XSS. Escape all five characters so attribute contexts are safe too.
+    function esc(value: string): string {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    // Astro scopes the page's (and SpecimenCover's) <style> by stamping a
+    // data-astro-cid-* attribute on every element it renders and rewriting each
+    // selector to require it. JS-built cards don't get those attributes, so the
+    // scoped .specimen-card / .badge / .cover rules never match them -> garbled
+    // layout. Collect EVERY scope attr present anywhere in a painted SSR card
+    // (collection scope + the SpecimenCover component scope) and stamp them on
+    // each JS-built element. Over-stamping a scope a selector never uses is inert.
+    const SSR_SCOPES: string[] = (() => {
+      const ssr = document.querySelector("main .specimen-card");
+      if (!ssr) return [];
+      const set = new Set<string>();
+      const collect = (el: Element) => {
+        for (const a of Array.from(el.attributes)) {
+          if (a.name.startsWith("data-astro-cid-")) set.add(a.name);
+        }
+      };
+      collect(ssr);
+      ssr.querySelectorAll("*").forEach(collect);
+      return Array.from(set);
+    })();
+
+    function applyScope(root: HTMLElement): void {
+      if (!SSR_SCOPES.length) return;
+      const stamp = (el: Element) => {
+        for (const s of SSR_SCOPES) el.setAttribute(s, "");
+      };
+      stamp(root);
+      root.querySelectorAll("*").forEach(stamp);
+    }
+
+    // Slugs with a baked RESULT render -- keep in sync with SpecimenCover.astro.
+    const BAKED_THUMBS = new Set([
+      "kaleidoscope", "mandelbulb-march", "murmuration",
+      "noise-terrain", "plasma-interference", "reaction-diffusion",
+    ]);
+
+    const diffAbbr = (d: string): string =>
+      (({ starter: "STR", intermediate: "INT", advanced: "ADV" }) as Record<string, string>)[d] ??
+      d.slice(0, 3).toUpperCase();
+
+    function buildCard(s: SpecimenSummary): HTMLElement {
+      const cats = s.categories?.length ? s.categories : [s.category];
+      const search = `${s.name} ${s.description} ${cats.join(" ")} ${s.level} ${s.requires}`.toLowerCase();
+      const moreCats = cats.length > 1
+        ? `<span class="badge specimen-category" title="${esc(cats.slice(1).join(", "))}">+${cats.length - 1}</span>`
+        : "";
+      const uploaded = Boolean(s.thumbnail_key);
+      const baked = uploaded || BAKED_THUMBS.has(s.slug);
+      const thumb = uploaded
+        ? `/api/specimens/${encodeURIComponent(s.slug)}/thumbnail`
+        : BAKED_THUMBS.has(s.slug)
+          ? `/specimens/${s.slug}.jpg`
+          : specimenThumbnail({ slug: s.slug, name: s.name, category: s.category });
+      const initial = (s.author_handle || "?").charAt(0).toUpperCase();
+
+      const article = document.createElement("article");
+      article.className = "specimen-card";
+      article.setAttribute("data-specimen", "");
+      article.setAttribute("data-slug", s.slug);
+      article.setAttribute("data-name", s.name);
+      article.setAttribute("data-href", `/c/${s.slug}`);
+      article.setAttribute("data-copied", String(s.copies_count ?? 0));
+      article.setAttribute("data-copies", String(s.copies_count ?? 0));
+      article.setAttribute("data-search", search);
+
+      // No rendered result -> open on the network graph and lock the toggle
+      // (nothing to flip to). Mirrors SpecimenCover.astro's defaultView logic.
+      const dis = baked ? "" : " disabled";
+      article.innerHTML = `
+        <div class="specimen-card__cover">
+          <div class="cover" data-cover="${baked ? 'result' : 'network'}" data-cover-shell>
+            <div class="cover__layer cover__layer--network" data-cover-interactive aria-hidden="${baked ? 'true' : 'false'}">
+              <div class="cover-mount" data-cover-mount="${esc(s.slug)}"></div>
+            </div>
+            <div class="cover__layer cover__layer--result" aria-hidden="${baked ? 'false' : 'true'}">
+              <img src="${esc(thumb)}" loading="lazy" alt="${esc(s.name)} ${baked ? 'rendered result' : 'preview placeholder'}" />
+              ${baked ? "" : '<span class="cover__soon mono">preview coming soon</span>'}
+            </div>
+            <div class="cover__flip" role="group" aria-label="${esc(s.name)} cover view">
+              <button type="button" class="cover__flip-btn${baked ? '' : ' is-active'}" data-cover-option="network" aria-pressed="${baked ? 'false' : 'true'}"${dis} title="Show network graph">network</button>
+              <button type="button" class="cover__flip-btn${baked ? ' is-active' : ''}" data-cover-option="result" aria-pressed="${baked ? 'true' : 'false'}"${dis} title="${baked ? 'Show rendered result' : 'Rendered result coming soon'}">result</button>
+            </div>
+          </div>
+        </div>
+        <div class="specimen-card__body">
+          <div class="badge-row">
+            <span class="badge" title="${esc(s.level)}">${esc(diffAbbr(s.level))}</span>
+            <span class="badge specimen-category">${esc(s.category)}</span>
+            ${moreCats}
+            <span class="badge license">CC-BY</span>
+            <button type="button" class="card-copy" data-card-copy data-slug="${esc(s.slug)}" aria-label="Embody it -- copy ${esc(s.name)}'s TDN for TouchDesigner" title="Embody it -- copy this specimen's TDN for your agent">
+              <svg class="card-copy__icon card-copy__icon--copy" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+              <svg class="card-copy__icon card-copy__icon--check" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+              <span class="card-copy__count mono" data-copy-count>${esc(String(s.copies_count ?? 0))}</span>
+            </button>
+          </div>
+          <div class="specimen-card__name-row">
+            <h3 class="specimen-card__name">${esc(s.name)}</h3>
+            <a class="specimen-card__author mono" href="/u/${esc(s.author_handle)}" aria-label="View ${esc(s.author_handle)}'s profile">
+              <span class="specimen-card__author-by">by</span>
+              <span class="specimen-card__author-avatar" aria-hidden="true">${esc(initial)}</span>
+              <span class="specimen-card__author-handle">@${esc(s.author_handle)}</span>
+            </a>
+          </div>
+          <p class="specimen-card__desc">${esc(s.description)}</p>
+          ${reactionsClusterHtml({ slug: s.slug, reactions: s.reactions ?? {}, max: CARD_REACTION_MAX })}
+        </div>
+      `;
+
+      applyScope(article);
+
+      const mount = article.querySelector<HTMLElement>("[data-cover-mount]");
+      if (mount) observeCover(mount);
+      return article;
+    }
+
+    // ---- Server-driven list state ----
+    let cursor = shell?.getAttribute("data-next-cursor") || "";
+    let requestSeq = 0; // guards against out-of-order debounced responses
+    let loadingMore = false;
+
+    function buildQuery(withCursor: boolean): string {
+      const params = new URLSearchParams();
+      const q = searchInput?.value.trim();
+      if (q) params.set("q", q);
+      if (categorySelect?.value) params.set("category", categorySelect.value);
+      if (levelSelect?.value) params.set("level", levelSelect.value);
+      if (requiresSelect?.value) params.set("requires", requiresSelect.value);
+      if (authorSelect?.value) params.set("author", authorSelect.value);
+      if (sortSelect?.value) params.set("sort", sortSelect.value);
+      params.set("pageSize", String(pageSize));
+      if (withCursor && cursor) params.set("cursor", cursor);
+      return params.toString();
+    }
+
+    function setCount(total: number): void {
+      if (countEl) countEl.textContent = `${total} specimen${total === 1 ? "" : "s"}`;
+    }
+
+    function appendSpecimens(specimens: SpecimenSummary[]): void {
+      if (!grid) return;
+      const frag = document.createDocumentFragment();
+      for (const s of specimens) frag.appendChild(buildCard(s));
+      grid.appendChild(frag);
+    }
+
+    function syncSentinel(): void {
+      if (sentinel) sentinel.toggleAttribute("hidden", !cursor);
+    }
+
+    // REPLACE the grid with a fresh server result (search / facet / sort change).
+    async function runQuery(): Promise<void> {
+      // Fixtures fallback (D1 unreachable at SSR): there is no live API set to
+      // page over, so keep the painted SSR first page rather than blank it.
+      if (usingFixtures) return;
+
+      const seq = ++requestSeq;
+      if (loadingEl) loadingEl.hidden = false;
+      try {
+        const response = await fetch(`/api/specimens?${buildQuery(false)}`);
+        if (!response.ok) throw new Error(`list failed: ${response.status}`);
+        const data = (await response.json()) as ListResponse;
+        if (seq !== requestSeq) return; // a newer query superseded this one
+
+        if (grid) grid.replaceChildren();
+        cursor = data.nextCursor || "";
+        appendSpecimens(data.specimens || []);
+        setCount(typeof data.count === "number" ? data.count : (data.specimens?.length ?? 0));
+        if (emptyEl) emptyEl.hidden = (data.specimens?.length ?? 0) !== 0;
+        syncSentinel();
+      } catch {
+        // Degrade gracefully: leave whatever is already on screen in place.
+        if (seq === requestSeq && countEl) countEl.textContent = baseCount;
+      } finally {
+        if (seq === requestSeq && loadingEl) loadingEl.hidden = true;
+      }
+    }
+
+    // APPEND the next page (infinite scroll via the keyset cursor).
+    async function loadMore(): Promise<void> {
+      if (usingFixtures || loadingMore || !cursor) return;
+      loadingMore = true;
+      if (loadingEl) loadingEl.hidden = false;
+      try {
+        const response = await fetch(`/api/specimens?${buildQuery(true)}`);
+        if (!response.ok) throw new Error(`page failed: ${response.status}`);
+        const data = (await response.json()) as ListResponse;
+        cursor = data.nextCursor || "";
+        appendSpecimens(data.specimens || []);
+        if (typeof data.count === "number") setCount(data.count);
+        syncSentinel();
+      } catch {
+        // Stop paging on error; the cursor is left as-is so a later scroll retries.
+      } finally {
+        loadingMore = false;
+        if (loadingEl) loadingEl.hidden = true;
+      }
+    }
+
+    // ---- Debounced controls ----
+    let debounceTimer: number | undefined;
+    function scheduleQuery(): void {
+      window.clearTimeout(debounceTimer);
+      debounceTimer = window.setTimeout(() => void runQuery(), DEBOUNCE_MS);
+    }
+
+    searchInput?.addEventListener("input", scheduleQuery);
+    categorySelect?.addEventListener("change", () => void runQuery());
+    levelSelect?.addEventListener("change", () => void runQuery());
+    requiresSelect?.addEventListener("change", () => void runQuery());
+    authorSelect?.addEventListener("change", () => void runQuery());
+    sortSelect?.addEventListener("change", () => void runQuery());
+
+    // ---- Infinite scroll: fetch + append the next page near the bottom ----
+    if (sentinel && "IntersectionObserver" in window) {
+      const pager = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) void loadMore();
+          }
+        },
+        { rootMargin: "480px 0px" }
+      );
+      pager.observe(sentinel);
+    }
+
+    // Wire SSR per-card copy buttons that the React island owns inside the cover?
+    // No -- copy buttons live in the card body (SSR HTML), and the delegated grid
+    // click handler above covers them for SSR and appended cards alike.
+
+    // Initial sentinel visibility (hidden when there is no next page).
+    syncSentinel();
+
+    // ---- App-native dropdowns ----
+    // Each .dd wraps a visually-hidden native <select> (the value source the
+    // query reads) plus a template-rendered styled trigger + listbox. Choosing
+    // an option writes the native select and dispatches 'change', so the
+    // existing runQuery wiring above fires unchanged.
+    const closeDropdown = (dd: Element) => {
+      dd.removeAttribute("data-open");
+      const m = dd.querySelector(".dd__menu");
+      if (m) (m as HTMLElement).hidden = true;
+      const b = dd.querySelector(".dd__btn");
+      if (b) b.setAttribute("aria-expanded", "false");
+    };
+    // Unique id seed so each option across the three dropdowns gets a stable id
+    // for aria-activedescendant (the listbox points at the active option's id).
+    let ddOptSeq = 0;
+    const dropdowns = Array.from(document.querySelectorAll(".dd[data-dd]"));
+    dropdowns.forEach((dd) => {
+      const btn = dd.querySelector(".dd__btn") as HTMLButtonElement | null;
+      const menu = dd.querySelector(".dd__menu") as HTMLElement | null;
+      const valEl = dd.querySelector(".dd__val") as HTMLElement | null;
+      const native = dd.querySelector(".dd__native") as HTMLSelectElement | null;
+      const opts = Array.from(dd.querySelectorAll(".dd__opt")) as HTMLElement[];
+      if (!btn || !menu || !valEl || !native) return;
+
+      // Optional search filter (only on dropdowns that render a .dd__search, e.g.
+      // category + contributor). Hides non-matching options; never steals focus.
+      const ddSearch = dd.querySelector(".dd__search") as HTMLInputElement | null;
+      const ddEmpty = dd.querySelector(".dd__empty") as HTMLElement | null;
+      const filterOpts = (q: string): void => {
+        const needle = q.trim().toLowerCase();
+        let any = false;
+        opts.forEach((o) => {
+          const match = !needle || (o.textContent || "").toLowerCase().includes(needle);
+          o.hidden = !match;
+          if (match) any = true;
+        });
+        if (ddEmpty) ddEmpty.hidden = any;
+      };
+      if (ddSearch) {
+        ddSearch.addEventListener("input", () => filterOpts(ddSearch.value));
+        ddSearch.addEventListener("keydown", (e: KeyboardEvent) => {
+          if (e.key === "Enter") e.preventDefault();
+          else if (e.key === "Escape") { e.preventDefault(); close(); btn.focus(); }
+        });
+        ddSearch.addEventListener("click", (e) => e.stopPropagation());
+      }
+
+      // Give every option a stable id so the listbox can name the ACTIVE option
+      // via aria-activedescendant (the focus stays on the button; this is how a
+      // screen reader announces which option is highlighted without moving DOM
+      // focus into the list).
+      opts.forEach((opt) => {
+        if (!opt.id) opt.id = `dd-opt-${ddOptSeq++}`;
+      });
+
+      // The active (keyboard-highlighted) option index. -1 == none highlighted.
+      let active = -1;
+      const setActive = (index: number) => {
+        const next = Math.max(0, Math.min(index, opts.length - 1));
+        const opt = opts[next];
+        if (!opt) return;
+        opts.forEach((o, i) => o.classList.toggle("is-active", i === next));
+        active = next;
+        menu.setAttribute("aria-activedescendant", opt.id);
+        opt.scrollIntoView({ block: "nearest" });
+      };
+      const clearActive = () => {
+        active = -1;
+        opts.forEach((o) => o.classList.remove("is-active"));
+        menu.removeAttribute("aria-activedescendant");
+      };
+
+      const open = (highlightSelected = true) => {
+        dropdowns.forEach((other) => { if (other !== dd) closeDropdown(other); });
+        dd.setAttribute("data-open", "");
+        menu.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+        if (ddSearch) { ddSearch.value = ""; filterOpts(""); }
+        if (highlightSelected) {
+          // Open with the currently-selected option highlighted (or the first).
+          const sel = opts.findIndex((o) => o.getAttribute("aria-selected") === "true");
+          setActive(sel >= 0 ? sel : 0);
+        }
+      };
+      const close = () => {
+        clearActive();
+        closeDropdown(dd);
+      };
+      const choose = (opt: HTMLElement) => {
+        if (opt.hidden) return;
+        native.value = opt.getAttribute("data-value") || "";
+        native.dispatchEvent(new Event("change", { bubbles: true }));
+        valEl.textContent = opt.textContent;
+        opts.forEach((o) => o.setAttribute("aria-selected", String(o === opt)));
+        close();
+        btn.focus();
+      };
+
+      btn.addEventListener("click", () => {
+        if (dd.hasAttribute("data-open")) close(); else open();
+      });
+      btn.addEventListener("keydown", (e) => {
+        const isOpen = dd.hasAttribute("data-open");
+        switch (e.key) {
+          case "Escape":
+            if (isOpen) { e.preventDefault(); close(); btn.focus(); }
+            return;
+          case "Tab":
+            // Tab moves focus away -- close without swallowing the Tab.
+            if (isOpen) close();
+            return;
+          case "Enter":
+          case " ": {
+            e.preventDefault();
+            if (!isOpen) { open(); return; }
+            const activeOpt = active >= 0 ? opts[active] : undefined;
+            if (activeOpt) choose(activeOpt);
+            return;
+          }
+          case "ArrowDown":
+            e.preventDefault();
+            if (!isOpen) { open(); return; }
+            setActive(active < 0 ? 0 : active + 1);
+            return;
+          case "ArrowUp":
+            e.preventDefault();
+            if (!isOpen) { open(); return; }
+            setActive(active < 0 ? opts.length - 1 : active - 1);
+            return;
+          case "Home":
+            if (isOpen) { e.preventDefault(); setActive(0); }
+            return;
+          case "End":
+            if (isOpen) { e.preventDefault(); setActive(opts.length - 1); }
+            return;
+          default:
+            return;
+        }
+      });
+
+      // Pointer: hover syncs the active highlight so mouse + keyboard agree.
+      opts.forEach((opt, i) => {
+        opt.addEventListener("click", () => choose(opt));
+        opt.addEventListener("mousemove", () => setActive(i));
+      });
+    });
+    document.addEventListener("click", (e) => {
+      const target = e.target as Node | null;
+      dropdowns.forEach((dd) => {
+        if (dd.hasAttribute("data-open") && (target === null || !dd.contains(target))) closeDropdown(dd);
+      });
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") dropdowns.forEach((dd) => closeDropdown(dd));
+    });
+  </script>
+</Base>
+
+<style>
+  /* Compact header: keep the focus on the cards, not the title block
+     (product-owner feedback). Shrink the h1 + lede and trim padding. */
+  .collection-hero {
+    padding-top: 1.6rem;
+    padding-bottom: 0.75rem;
+  }
+
+  /* Consistent title-block rhythm: equal tight gaps between eyebrow, h1 and lede
+     (was 31px / 7px -- jarringly uneven), then a section gap to the gallery that
+     is exactly 2x that (0.75rem hero padding-bottom + 0.75rem gallery
+     padding-top = 1.5rem). */
+  .collection-hero .eyebrow {
+    margin-bottom: 0.75rem;
+  }
+
+  .collection-hero h1 {
+    margin: 0;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    line-height: 1.15;
+  }
+
+  .collection-hero .lede {
+    margin: 0.75rem 0 0;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+  }
+
+  .collection-gallery {
+    padding-top: 0.75rem !important;
+  }
+
+  .collection-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem 1rem;
+  }
+
+  /* The gallery panel: one encased box holding the toolbar AND the card grid,
+     with no divider line between them -- the panel itself is the grouping.
+     Page-base background (darker than the elevated cards) so the cards read as
+     sitting inside the frame. */
+  .collection-shell {
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg);
+    padding: clamp(1rem, 2.2vw, 1.35rem);
+  }
+
+  .collection-search {
+    /* Shrinkable (not a fixed 240px) so it yields width to the filter controls
+       on a tight row -- keeps "contributor" and the dropdowns on a single line. */
+    flex: 0 1 240px;
+    min-width: 130px;
+    margin-left: auto;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    /* A magnifying-glass icon replaces the placeholder text (left-aligned). */
+    background-color: rgba(24, 30, 30, 0.72);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23909990' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M21 21l-4.35-4.35'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 0.85rem center;
+    background-size: 15px 15px;
+    padding: 0.4rem 0.9rem 0.4rem 2.15rem;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+
+  .collection-search::placeholder {
+    color: var(--text-faint);
+  }
+
+  .collection-search:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  /* The native clear (X) is a clickable button, so show a pointer over it --
+     not the text caret the rest of the input shows. */
+  .collection-search::-webkit-search-cancel-button {
+    cursor: pointer;
+  }
+
+  .toolbar-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    width: 100%;
+    /* Lock the resting row height (set by the taller dropdowns/toggle). Below
+       1000px, focusing the search HIDES those siblings; without this the row
+       would shrink to the shorter input's height and the whole page would jump
+       a few px. Pinning it keeps the layout perfectly still on focus/blur. */
+    min-height: 38px;
+    gap: 0.65rem 1rem;
+  }
+
+  /* The configuration bar stays on ONE line at every width. As space tightens:
+     drop the specimens count, collapse the search field to a magnifying-glass
+     icon, then drop the dropdown text labels -- the dropdowns themselves and the
+     view toggle always remain, never wrapping. */
+  /* The search is fixed-width so its text NEVER clips; below 1000px it collapses
+     straight to a magnifying-glass icon (no cropped in-between state). Then the
+     count drops, then the dropdown labels -- dropdowns + toggle always remain,
+     never wrapping, never cropped. */
+  @media (max-width: 1000px) {
+    .collection-search {
+      width: 40px;
+      padding: 0.4rem;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 15 15' fill='none' stroke='%2397a098' stroke-width='1.4'%3E%3Ccircle cx='6.2' cy='6.2' r='4.5'/%3E%3Cpath d='M9.7 9.7l3.6 3.6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: center;
+      transition: width 180ms ease, flex-basis 180ms ease;
+    }
+    .collection-search::placeholder { color: transparent; }
+
+    /* Click into the collapsed magnifier and it expands to fill the bar; the
+       other controls step aside for the duration. Blur collapses it back to
+       the icon. :has(... :focus) targets ONLY a focused search -- so clicking
+       a dropdown or the view toggle never triggers the expand. */
+    .toolbar-controls:has(.collection-search:focus) :is(.collection-total, .sort-control, .view-toggle),
+    .toolbar-controls:has(.collection-search:not(:placeholder-shown)) :is(.collection-total, .sort-control, .view-toggle) {
+      display: none;
+    }
+    /* Expand on focus OR whenever a query is typed (:not(:placeholder-shown)),
+       with a min-width so the entered text is always legible -- blurring a field
+       that still has text no longer collapses it back to the icon and hides what
+       you typed. An empty field collapses back to the magnifier on blur. */
+    .collection-search:focus,
+    .collection-search:not(:placeholder-shown) {
+      width: auto;
+      flex: 1 1 auto;
+      min-width: 160px;
+      padding: 0.4rem 0.9rem;
+      background-image: none;
+    }
+    .collection-search:focus::placeholder { color: var(--text-faint); }
+  }
+
+  @media (max-width: 820px) {
+    .collection-total { display: none; }
+    .toolbar-controls { gap: 0.5rem 0.7rem; }
+  }
+
+  @media (max-width: 480px) {
+    .sort-control__label { display: none; }
+    .sort-control { gap: 0; }
+    /* Allow wrapping as a last resort on very narrow phones. flex-wrap only
+       wraps when the row genuinely overflows, so 390-480px still stays on one
+       line; below ~360px (where the row was forcing +54px of page scroll) the
+       view toggle / a dropdown drops to a second line instead of overflowing.
+       min-height unset so a wrapped second row isn't clipped. */
+    .toolbar-controls { gap: 0.4rem 0.45rem; flex-wrap: wrap; min-height: 0; }
+  }
+
+  .collection-total {
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* ---- Sort control ---- */
+  .sort-control {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .sort-control__label {
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  /* App-native dropdown: a styled trigger + listbox over a hidden <select>. */
+  .dd {
+    position: relative;
+    display: inline-flex;
+  }
+
+  /* Visually-hidden value carrier the query JS reads/writes. */
+  .dd__native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    opacity: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    pointer-events: none;
+  }
+
+  .dd__btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 0.32rem 0.7rem 0.32rem 0.85rem;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 140ms ease;
+  }
+
+  .dd__btn:hover {
+    border-color: var(--text-faint);
+  }
+
+  .dd__btn:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .dd[data-open] .dd__btn {
+    border-color: var(--accent);
+  }
+
+  .dd__val {
+    white-space: nowrap;
+  }
+
+  .dd__chev {
+    flex: none;
+    color: var(--text-faint);
+    transition: transform 180ms ease;
+  }
+
+  .dd[data-open] .dd__chev {
+    transform: rotate(180deg);
+  }
+
+  .dd__menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 60;
+    min-width: 100%;
+    width: max-content;
+    max-width: 16rem;
+    margin: 0;
+    padding: 0.3rem;
+    list-style: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-elevated, #14181a);
+    box-shadow: 0 18px 44px -20px rgba(0, 0, 0, 0.85);
+  }
+
+  .dd__menu[hidden] {
+    display: none;
+  }
+
+  .dd__opt {
+    display: block;
+    padding: 0.4rem 0.65rem;
+    border-radius: 7px;
+    color: var(--text-muted, #b6bfb8);
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .dd__opt:hover,
+  .dd__opt.is-active {
+    background: var(--accent-dim, rgba(120, 200, 150, 0.14));
+    color: var(--accent);
+  }
+
+  .dd__opt[aria-selected="true"] {
+    color: var(--accent);
+  }
+
+  .dd__opt[hidden] { display: none; }
+
+  /* Sticky search field at the top of the category / contributor menus. */
+  .dd__search-row {
+    position: sticky;
+    top: -0.3rem;
+    margin: -0.3rem -0.3rem 0.3rem;
+    padding: 0.3rem;
+    background: var(--bg-elevated, #14181a);
+  }
+  .dd__search {
+    width: 100%;
+    padding: 0.4rem 0.6rem 0.4rem 1.9rem;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--bg)
+      url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='14'%20height='14'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='%23889'%20stroke-width='2'%20stroke-linecap='round'%3E%3Ccircle%20cx='11'%20cy='11'%20r='7'/%3E%3Cpath%20d='M21%2021l-4.3-4.3'/%3E%3C/svg%3E")
+      no-repeat left 0.6rem center;
+    background-size: 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+  }
+  .dd__search::placeholder { color: var(--text-faint); }
+  .dd__search:focus { outline: none; border-color: var(--accent); }
+  .dd__empty {
+    padding: 0.5rem 0.7rem;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  .dd__empty[hidden] { display: none; }
+
+  /* ---- Icon view toggle (LIST left, GALLERY right) ---- */
+  .view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 3px;
+  }
+
+  .view-toggle__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 30px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .view-toggle__button:hover {
+    color: var(--text);
+  }
+
+  .view-toggle__button.is-active {
+    background: var(--accent);
+    color: #0e1612;
+  }
+
+  /* ---- Touch targets (coarse pointer only) ---- */
+  /* On touch devices the toolbar triggers, the collapsed search icon, the view
+     toggle, and the listbox options are below the 44x44 minimum. Enlarge them
+     for coarse pointers ONLY so fine-pointer desktop density is unchanged. */
+  @media (pointer: coarse) {
+    .dd__btn,
+    .collection-search,
+    .view-toggle__button {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .dd__opt {
+      min-height: 44px;
+      display: flex;
+      align-items: center;
+    }
+
+    /* The per-card copy button shares the badge row -- give it a real touch
+       target on touch devices without changing the desktop badge rhythm. */
+    .card-copy {
+      min-height: 44px;
+    }
+  }
+
+  /* ---- Results ---- */
+  /* The divider above the grid gets generous breathing room so the grid does
+     not crowd the line (product-owner feedback: v1 was too tight). */
+  /* No divider line above the grid -- the encasing panel groups it with the
+     toolbar. Just an even gap below the toolbar (matches the panel padding). */
+  .collection-results {
+    margin-top: clamp(1rem, 2.2vw, 1.35rem);
+  }
+
+  .scroll-sentinel {
+    height: 1px;
+    width: 100%;
+  }
+
+  .scroll-sentinel[hidden] {
+    display: none;
+  }
+
+  .empty-state {
+    margin: 2rem 0 0;
+    color: var(--text-faint);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* Reset the card-grid + card from embody.css globals: this page owns its own
+     dense layout and a restructured card (cover island + body). */
+  .collection-shell .card-grid {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .specimen-card {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    color: inherit;
+    /* The whole card is clickable (-> /c/<slug>); the cover and copy button
+       opt out of navigation in the inline script. */
+    cursor: pointer;
+    transition: border-color 180ms ease, background 180ms ease;
+  }
+
+  /* Cards stay put on hover -- only border/background respond (product-owner
+     feedback: drop the "move up" lift). Neutralize any inherited transform. */
+  .specimen-card:hover {
+    border-color: var(--border);
+    background: var(--bg-elevated-2);
+    transform: none;
+  }
+
+  .specimen-card.is-hidden {
+    display: none;
+  }
+
+  .specimen-card__cover {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg-code);
+  }
+
+  .specimen-card__body {
+    display: grid;
+    align-content: start;
+    gap: 0.55rem;
+    padding: 0.95rem 1rem 1rem;
+  }
+
+  /* Title + author share one flexible row (the copy button lives in the badge
+     row above). In gallery the author wraps to its own line under the title
+     (flex-basis 100%); list view keeps it inline beside the title (override
+     below). */
+  .specimen-card__name-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.3rem 0.55rem;
+  }
+
+  .specimen-card__name-row .specimen-card__author {
+    order: 2;
+    flex: 1 1 100%;
+  }
+
+  .specimen-card__name {
+    margin: 0;
+    flex: 1 1 auto;
+    order: 0;
+    font-size: 1.02rem;
+    line-height: 1.25;
+    min-width: 0;
+  }
+
+  .specimen-card:hover .specimen-card__name {
+    color: var(--accent);
+  }
+
+  /* ---- Author: shown prominently -- the collection is about its people. ---- */
+  .specimen-card__author {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    align-self: baseline;
+    /* Let the flex item shrink so a long handle can ellipsize instead of
+       blowing out the row width. */
+    min-width: 0;
+    color: var(--text);
+    font-size: 0.82rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .specimen-card__author-by {
+    color: var(--accent);
+  }
+
+  .specimen-card__author-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    flex: none;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #0e1612;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .specimen-card__author-handle {
+    /* Long handles ellipsize rather than overflow the card. */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--accent);
+  }
+
+  .specimen-card__author:hover .specimen-card__author-handle {
+    color: var(--accent-hover);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .specimen-card__desc {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    line-height: 1.5;
+  }
+
+  /* Badges share the top row with the "embody it" button, which floats to the far
+     right to draw the eye; the row is vertically centered so the pill-shaped
+     button lines up with the badge pills. Emoji reactions sit on their own row
+     below the title (not here). */
+  .badge-row {
+    align-items: center;
+    gap: 0.35rem;
+    /* One line, always: abbreviated level (STR/INT/ADV) + CC-BY keep the
+       gallery row from wrapping. The copy button is pinned right and never
+       shrinks; the secondary badges shrink/clip first if a card is ever too
+       narrow, so the copy action is always reachable. */
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  .badge-row .badge {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .badge-row .card-copy {
+    flex: none;
+    margin-left: auto;
+  }
+
+  /* Reactions are their own row below the title -- left-aligned, never stretched. */
+  .specimen-card__body > .reactions {
+    justify-self: start;
+  }
+
+  /* Compact badges -- denser than the global default. */
+  .specimen-card .badge {
+    min-height: 22px;
+    padding: 0 0.5rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+  }
+
+  .specimen-card .badge.license {
+    border-color: rgba(178, 145, 176, 0.45);
+    color: #b291b0;
+  }
+
+  /* ---- Per-card "embody it" button ---- */
+  /* Sized to match the badge pills (min-height 22px) so the whole top row reads
+     as one consistent family. The reaction pills below use the same height. */
+  .card-copy {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    min-height: 22px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: rgba(24, 30, 30, 0.72);
+    padding: 0 0.55rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+  }
+
+  .card-copy:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .card-copy:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .card-copy__icon {
+    flex: none;
+  }
+
+  /* Show the copy glyph by default, the check only in the copied state. */
+  .card-copy__icon--check {
+    display: none;
+  }
+
+  .card-copy.is-copied {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .card-copy.is-copied .card-copy__icon--copy {
+    display: none;
+  }
+
+  .card-copy.is-copied .card-copy__icon--check {
+    display: inline;
+  }
+
+  .card-copy.is-failed {
+    border-color: #c46b6b;
+    color: #c46b6b;
+  }
+
+  .card-copy__count {
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    min-width: 0.8ch;
+    text-align: right;
+    opacity: 0.7;
+  }
+
+  /* ---- GALLERY: dense grid, small min card width ---- */
+  .collection-shell[data-view="gallery"] .card-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 232px), 1fr));
+    gap: 0.9rem;
+  }
+
+  .collection-shell[data-view="gallery"] .specimen-card__cover {
+    border-bottom: 1px solid var(--border-faint);
+  }
+
+  /* Trim the gallery body to the essentials -- name + badges only. */
+  .collection-shell[data-view="gallery"] .specimen-card__desc,
+  .collection-shell[data-view="gallery"] .card-link,
+  .collection-shell[data-view="gallery"] .specimen-category {
+    display: none;
+  }
+
+  .collection-shell[data-view="gallery"] .specimen-card__body {
+    gap: 0.5rem;
+    padding: 0.7rem 0.8rem 0.85rem;
+  }
+
+  /* ---- LIST: tight horizontal rows ---- */
+  .collection-shell[data-view="list"] .card-grid {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+
+  .collection-shell[data-view="list"] .specimen-card {
+    grid-template-columns: minmax(180px, 248px) minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .collection-shell[data-view="list"] .specimen-card__cover {
+    border-right: 1px solid var(--border-faint);
+  }
+
+  .collection-shell[data-view="list"] .specimen-card__cover :global(.cover) {
+    aspect-ratio: auto;
+    height: 100%;
+    min-height: 132px;
+  }
+
+  /* List rows are compact -- hide the TdnViewer's react-flow zoom/fit controls
+     in list view only (they stay in gallery, where covers are larger). */
+  .collection-shell[data-view="list"] .specimen-card__cover :global(.react-flow__controls) {
+    display: none;
+  }
+
+  /* List rows: tighter rhythm now that the inspect line is gone, and the author
+     sits INLINE beside the title instead of on its own line -- one fewer line
+     per row (the copy button lives in the badge row above). */
+  .collection-shell[data-view="list"] .specimen-card__body {
+    align-content: center;
+    gap: 0.4rem;
+    padding: 0.8rem 1.15rem;
+  }
+
+  /* List rows have room -- enlarge the title so it's the clear visual anchor. */
+  .collection-shell[data-view="list"] .specimen-card__name {
+    flex: 0 1 auto;
+    font-size: 1.4rem;
+    line-height: 1.2;
+  }
+
+  .collection-shell[data-view="list"] .specimen-card__name-row .specimen-card__author {
+    order: 1;
+    flex: 0 1 auto;
+  }
+
+  @media (max-width: 640px) {
+    .collection-shell[data-view="list"] .specimen-card {
+      grid-template-columns: 1fr;
+    }
+
+    .collection-shell[data-view="list"] .specimen-card__cover {
+      border-right: 0;
+      border-bottom: 1px solid var(--border-faint);
+    }
+
+    .collection-shell[data-view="list"] .specimen-card__cover :global(.cover) {
+      aspect-ratio: 16 / 9;
+    }
+  }
+</style>

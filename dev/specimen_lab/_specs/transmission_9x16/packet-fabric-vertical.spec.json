@@ -1,0 +1,280 @@
+{
+  "slug": "packet-fabric-vertical",
+  "name": "Packet Fabric (Vertical)",
+  "category": "transmission",
+  "aspect": "9:16",
+  "dev_resolution": [720, 1280],
+  "difficulty": "advanced",
+  "one_liner": "Thousands of glowing GPU packets cascade DOWN a tall portrait frame along vertical fiber links between senders at the top and receivers at the bottom -- an ST2110 IP fabric falling like luminous rain, snapping to a PTP sync pulse.",
+  "visual_description": "On a near-black charcoal portrait stage, a row of dim cool-gray sender nodes sits near the top edge and a row of receiver nodes near the bottom; faint structural fiber links arc between them down the full height of the frame. Riding ON those links, thousands of discrete white-hot glowing dots -- packets -- cascade DOWNWARD at near-light speed like luminous rain, each leaving a short additive comet trail pointing up. The packets are quantized: you can see and count individual dots. Three classes of stream descend in parallel and take different vertical routes -- cyan for the video essence, phosphor-green for audio, amber for ancillary data -- the core ST2110 idea of separated flows, now falling. Every ~2 seconds a single PTP grandmaster pulse radiates and every packet flashes brighter in lockstep, then resumes its descent. The fabric is denser at the top (senders) and fans out toward the receivers below. Controlled lush bloom blows the white-hot cores out to cyan/green/amber halos; faint depth haze dims the far links. It reads instantly as a live IP network raining uncompressed video as light down a tall wall.",
+  "technique": "GPU particle system (POPs) advecting points DOWN baked vertical link curves -- inherently 4K-cheap because the cost scales with PACKET COUNT on the GPU, not with the 8.3M output pixels. A gridPOP seeds packets, a particlePOP births and integrates them along a feedback loop (targetpop = downstream Null, relative ref), and a glslPOP compute shader advects each packet's parametric position DOWN its assigned vertical link path, recycling it to the link start when it reaches the bottom (endless, bounded). A second glslPOP writes per-packet Color (by stream class) and PointScale (by a PTP sync pulse). Rendered as additive glowing point sprites via a Point Sprite MAT with a radial-falloff colormap, over a dark Render Simple TOP framed 9:16. A cheap static GLSL TOP draws the node + link fabric background composited under the swarm. CRITICAL 4K change vs the old packet-fabric: the finishing bloom is NOT a full-res 13x13 tap loop (fatal at 4K) -- it is a SEPARATE downsampled chain (downsample 1/4 -> bright-pass+blur at low res -> composite-add), so glow cost is ~1/16 of full-res and constant at 4K.",
+  "network_plan": [
+    {
+      "name": "geo_seed",
+      "type": "gridPOP",
+      "role": "Seeds the packet point cloud -- one point per packet. rows*columns ~= Maxpackets. Feeds the Particle POP. Place nodeX 0, nodeY 0.",
+      "params": { "rows": 64, "columns": 64 },
+      "inputs": []
+    },
+    {
+      "name": "particle_pop",
+      "type": "particlePOP",
+      "role": "Births packets and runs the GPU feedback sim. targetpop = null_sim (RELATIVE ref -- closes the loop with last frame's state). timeintegration OFF: glsl_advect writes P[id] directly (kinematic advection along curves), so birthrate high + life long; packets recycled in-shader. Transport: pulse initializepulse THEN startpulse, confirm play=True; births accrue over real frames. Place nodeX 300, nodeY 0.",
+      "params": {
+        "targetpop": "null_sim",
+        "maxparticles": "=parent().par.Maxpackets.eval()",
+        "birthrate": "=parent().par.Maxpackets.eval()",
+        "life": 1000,
+        "timeintegration": false
+      },
+      "inputs": ["geo_seed"]
+    },
+    {
+      "name": "glsl_advect",
+      "type": "glslPOP",
+      "role": "THE engine. Compute shader: for each packet, advance its parametric position s DOWN an assigned VERTICAL link path (a quadratic Bezier from a top sender anchor to a bottom receiver anchor, derived from PartId), wrap s back to 0 at the bottom (endless recycling), write world-space P[id] on that curve. Also writes Phase for the PTP flash. Uniforms AUTO-declared from the Vectors page -- do NOT redeclare. Reads TDIn_P/TDIn_PartId, writes P. outputattrs '*'. Place nodeX 700, nodeY 0.",
+      "params": { "computedat": "glsl_advect_compute", "outputattrs": "*" },
+      "sequences": {
+        "vec": [
+          { "name": "uFlow", "type": "vec4", "valuex": "=parent().par.Flowspeed.eval()", "valuey": "=parent().par.Linkcount.eval()", "valuez": "=parent().par.Curveamount.eval()", "valuew": "=absTime.seconds" },
+          { "name": "uClock", "type": "vec4", "valuex": "=parent().par.Ptprate.eval()", "valuey": "=parent().par.Fieldscale.eval()", "valuez": "=parent().par.Streams.eval()", "valuew": "=parent().par.Jitter.eval()" }
+        ]
+      },
+      "inputs": ["particle_pop"]
+    },
+    {
+      "name": "null_sim",
+      "type": "nullPOP",
+      "role": "Feedback target. particle_pop.targetpop points here. Last op INSIDE the sim loop. The render/color side branch hangs off this Null. Place nodeX 1100, nodeY 0.",
+      "params": {},
+      "inputs": ["glsl_advect"]
+    },
+    {
+      "name": "glsl_color",
+      "type": "glslPOP",
+      "role": "Render-side branch (OUTSIDE the loop, off null_sim). Adds Color (RGBA) + PointScale via the New Attribute sequence. Compute shader: stream class = PartId % Streams -> cyan(video)/green(audio)/amber(ancillary); brightness pulses on the PTP beat (uClock time + per-packet Phase). Writes Color[id], PointScale[id], passes P[id] through. Place nodeX 1500, nodeY 0.",
+      "params": { "computedat": "glsl_color_compute" },
+      "sequences": {
+        "attr": [
+          { "customname": "Color", "numcomps": "4", "value0": 0.0, "value1": 0.9, "value2": 1.0, "value3": 1.0 },
+          { "customname": "PointScale", "value0": 1 }
+        ],
+        "vec": [
+          { "name": "uClock", "type": "vec4", "valuex": "=parent().par.Ptprate.eval()", "valuey": "=absTime.seconds", "valuez": "=parent().par.Streams.eval()", "valuew": "=parent().par.Pulsestrength.eval()" }
+        ]
+      },
+      "inputs": ["null_sim"]
+    },
+    {
+      "name": "mat_sprite",
+      "type": "pointspriteMAT",
+      "role": "Additive glowing point-sprite material. colormap = sprite_dot (radial falloff). pointscaleattrib = PointScale, pointsize multiplier. Additive glow: blending on, blendop add, srcblend one, destblend one, depthtest off, depthwriting off. Place nodeX 1500, nodeY -400.",
+      "params": {
+        "colormap": "sprite_dot",
+        "pointscaleattrib": "PointScale",
+        "pointsize": 7,
+        "blending": true,
+        "blendop": "add",
+        "srcblend": "one",
+        "destblend": "one",
+        "depthtest": false,
+        "depthwriting": false,
+        "skelrootpath": "=parent()"
+      },
+      "inputs": []
+    },
+    {
+      "name": "sprite_dot",
+      "type": "glslTOP",
+      "role": "Tiny radial-falloff sprite texture for soft round glowing packets. Generator: outputresolution custom 64x64. Place nodeX 1300, nodeY -400.",
+      "params": { "pixeldat": "sprite_dot_pixel", "computedat": "sprite_dot_compute", "outputresolution": "custom", "resolutionw": 64, "resolutionh": 64 },
+      "inputs": []
+    },
+    {
+      "name": "render_swarm",
+      "type": "rendersimpleTOP",
+      "role": "Renders the packet POP swarm with the sprite MAT over a near-black bg, framed 9:16 PORTRAIT. pop = glsl_color, materialsource matnode, mat = mat_sprite. outputresolution custom 720x1280 (set via Outw/Outh). camdistance + the vertical field framing so the top-to-bottom cascade fills the tall frame. rgba16float. Place nodeX 1900, nodeY 0.",
+      "params": {
+        "pop": "glsl_color",
+        "materialsource": "matnode",
+        "mat": "mat_sprite",
+        "camdistance": 8.0,
+        "outputresolution": "custom",
+        "resolutionw": "=parent().par.Outw.eval()",
+        "resolutionh": "=parent().par.Outh.eval()",
+        "bgcolorr": 0.02,
+        "bgcolorg": 0.025,
+        "bgcolorb": 0.035,
+        "bgcolora": 1,
+        "format": "rgba16float"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_fabric",
+      "type": "glslTOP",
+      "role": "Static background fabric: dim cool-gray sender row (top) + receiver row (bottom) + faint VERTICAL link arcs + depth haze + film grain, on a near-black charcoal ground. Generator (no input); cheap, caches (only a very slow uniform for subtle node twinkle). NO per-pixel link loop at 4K cost -- a SMALL constant-bounded link loop (the links are few). uTDOutputInfo.res. outputresolution custom 720x1280. rgba16float. Place nodeX 1300, nodeY 400.",
+      "params": {
+        "pixeldat": "glsl_fabric_pixel",
+        "computedat": "glsl_fabric_compute",
+        "outputresolution": "custom",
+        "resolutionw": "=parent().par.Outw.eval()",
+        "resolutionh": "=parent().par.Outh.eval()",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uFab", "type": "vec4", "valuex": "=parent().par.Linkcount.eval()", "valuey": "=parent().par.Fieldscale.eval()", "valuez": "=absTime.seconds*0.05", "valuew": "=parent().par.Ptprate.eval()" } ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "comp_over",
+      "type": "compTOP",
+      "role": "Composite the glowing packet render OVER the static fabric background. Input0 = render_swarm (fg), Input1 = glsl_fabric (bg). operand = add. resolutionmenu=input. rgba16float. Place nodeX 1900, nodeY 400.",
+      "params": { "operand": "add", "resolutionmenu": "input", "format": "rgba16float" },
+      "inputs": ["render_swarm", "glsl_fabric"]
+    },
+    {
+      "name": "res_down",
+      "type": "resolutionTOP",
+      "role": "Downsample the composite to 1/4 res for the cheap bloom (replaces the old fatal full-res tap loop). Input0 = comp_over. width/height = int(Outw/4)/int(Outh/4). rgba16float. Place nodeX 2300, nodeY 400.",
+      "params": { "outputresolution": "custom", "resolutionw": "=int(parent().par.Outw.eval()/4)", "resolutionh": "=int(parent().par.Outh.eval()/4)", "format": "rgba16float" },
+      "inputs": ["comp_over"]
+    },
+    {
+      "name": "glsl_bloomblur",
+      "type": "glslTOP",
+      "role": "Bright-pass + blur at 1/4 res (cheap, constant at 4K). Input0 = res_down. Bloom-only output. outputresolution = 1/4 of Outw/Outh. rgba16float. Place nodeX 2300, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_bloomblur_pixel",
+        "computedat": "glsl_bloomblur_compute",
+        "outputresolution": "custom",
+        "resolutionw": "=int(parent().par.Outw.eval()/4)",
+        "resolutionh": "=int(parent().par.Outh.eval()/4)",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.6, "valuez": "=parent().par.Bloomwidth.eval()", "valuew": 0 } ]
+      },
+      "inputs": ["res_down"]
+    },
+    {
+      "name": "comp_bloom",
+      "type": "compTOP",
+      "role": "Composite-add the upscaled 1/4-res bloom back over the full-res composite. in0 = comp_over (sharp), in1 = glsl_bloomblur (upscaled glow). operand=add, resolutionmenu=input. rgba16float. Place nodeX 2700, nodeY 0.",
+      "params": { "operand": "add", "resolutionmenu": "input", "format": "rgba16float" },
+      "inputs": ["comp_over", "glsl_bloomblur"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named exactly out1. Viewer flagged. Place nodeX 3100, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["comp_bloom"]
+    },
+    { "name": "glsl_advect_compute", "type": "textDAT", "role": "Docked compute DAT for glsl_advect. See glsl[0]. LF/space-indented.", "params": {}, "inputs": [] },
+    { "name": "glsl_advect_info", "type": "infoDAT", "role": "Docked info DAT for glsl_advect.", "params": { "op": "glsl_advect" }, "inputs": [] },
+    { "name": "glsl_color_compute", "type": "textDAT", "role": "Docked compute DAT for glsl_color. See glsl[1].", "params": {}, "inputs": [] },
+    { "name": "glsl_color_info", "type": "infoDAT", "role": "Docked info DAT for glsl_color.", "params": { "op": "glsl_color" }, "inputs": [] },
+    { "name": "sprite_dot_pixel", "type": "textDAT", "role": "Docked pixel shader for sprite_dot. See glsl[2]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "sprite_dot_compute", "type": "textDAT", "role": "Docked empty compute companion for sprite_dot.", "params": {}, "inputs": [] },
+    { "name": "sprite_dot_info", "type": "infoDAT", "role": "Docked info DAT for sprite_dot.", "params": { "op": "sprite_dot" }, "inputs": [] },
+    { "name": "glsl_fabric_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_fabric. See glsl[3]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_fabric_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_fabric.", "params": {}, "inputs": [] },
+    { "name": "glsl_fabric_info", "type": "infoDAT", "role": "Docked info DAT for glsl_fabric.", "params": { "op": "glsl_fabric" }, "inputs": [] },
+    { "name": "glsl_bloomblur_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_bloomblur. See glsl[4]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_bloomblur_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_bloomblur.", "params": {}, "inputs": [] },
+    { "name": "glsl_bloomblur_info", "type": "infoDAT", "role": "Docked info DAT for glsl_bloomblur.", "params": { "op": "glsl_bloomblur" }, "inputs": [] },
+    {
+      "name": "annotate_sim",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the POP sim loop (geo_seed -> particle_pop -> glsl_advect -> null_sim). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Vertical Packet Advection (GPU POP loop)",
+        "Bodytext": "gridPOP seeds one point per packet; particlePOP births them and feeds last frame's state back (targetpop = null_sim). The glsl_advect compute shader advances each packet DOWN an assigned vertical link curve (top sender -> bottom receiver) and wraps it to the top when it reaches the bottom -- an endless, bounded cascade. The cost scales with PACKET COUNT on the GPU, not with output pixels, so it is inherently 4K-cheap: raise the resolution and the sim cost does not change.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_render",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over color + render + sprite (glsl_color, mat_sprite, sprite_dot, render_swarm). Mode annotate.",
+      "params": {
+        "Titletext": "Stream Color & Additive Glow",
+        "Bodytext": "glsl_color tags each packet by stream class (cyan video / green audio / amber ancillary -- the ST2110 separated essences) and flashes them on the PTP beat. A Point Sprite MAT with a radial-falloff texture renders them as additive glowing dots over a near-black 9:16 stage. Sprites are resolution-independent: they stay crisp and cheap at 4K.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over fabric + composite + downsampled bloom + out (glsl_fabric, comp_over, res_down, glsl_bloomblur, comp_bloom, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Fabric, Composite & Downsampled Bloom",
+        "Bodytext": "A static GLSL fabric (sender row top, receiver row bottom, faint vertical links, depth haze, grain) sits under the swarm. The bloom is the 4K-critical change: NOT a full-res tap loop (fatal at 8.3M pixels) but a SEPARATE downsampled chain -- downsample to 1/4, blur there, Composite-ADD the upscaled glow back. White-hot packet cores blow out to colored halos at ~1/16 the cost, constant as the wall scales to 4K. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_advect_compute",
+      "stage": "compute",
+      "code": "// Packet Fabric (Vertical) -- advect each packet DOWN an assigned vertical link, recycle at the bottom.\n// uFlow  = (flowSpeed, linkCount, curveAmount, time)\n// uClock = (ptpRate, fieldScale, streams, jitter)\n// Uniforms are AUTO-declared from the Vectors page -- do NOT redeclare here.\n\nfloat hash11(float p){ return fract(sin(p*127.1)*43758.5453); }\nvec3  hash31(float p){ return fract(sin(vec3(p*127.1, p*311.7, p*74.7))*43758.5453)*2.0-1.0; }\n\n// a node anchor; senders live near the TOP (+Y), receivers near the BOTTOM (-Y).\nvec3 nodeAnchor(float n, float scale, float yLevel){\n    vec3 h = hash31(n*13.0 + 1.0);\n    // spread nodes mostly along X (a tall portrait field), fixed Y level, small Z scatter\n    return vec3(h.x*0.9*scale, yLevel, h.z*0.5*scale);\n}\n\nvoid main(){\n    const uint id = TDIndex();\n    if(id >= TDNumElements()) return;\n\n    float t      = uFlow.w;\n    float speed  = uFlow.x;\n    float linkN  = max(2.0, uFlow.y);\n    float curve  = uFlow.z;\n    float scale  = uClock.y;\n    float jitter = uClock.w;\n\n    float pid = float(id);\n\n    // assign this packet to a vertical link (a top sender + a bottom receiver)\n    float link    = floor(mod(pid, linkN));\n    float srcNode = floor(mod(link*2.0,   linkN+7.0));\n    float dstNode = floor(mod(link*2.0+1.0, linkN+11.0));\n    vec3  A = nodeAnchor(srcNode, scale,  1.7*scale);   // sender (top)\n    vec3  B = nodeAnchor(dstNode, scale, -1.7*scale);   // receiver (bottom)\n\n    // a gentle horizontal control point so the link bows (fiber slack)\n    vec3  mid = mix(A, B, 0.5);\n    vec3  bow = vec3((hash11(link*7.3)*2.0-1.0)*1.0, 0.0, (hash11(link*3.1)*2.0-1.0)*0.6) * curve;\n    vec3  C   = mid + bow;\n\n    // per-packet parametric position: travels DOWN the link (s: 0 top -> 1 bottom), wraps.\n    float jit = (hash11(pid*1.7)*2.0-1.0) * 0.08 * jitter;\n    float s   = fract(hash11(pid*9.13) + (t*speed*(0.6+0.5*hash11(pid*4.2))) + jit);\n\n    // quadratic Bezier A(top) -> C -> B(bottom): s grows -> packet descends\n    float u  = 1.0 - s;\n    vec3 pos = u*u*A + 2.0*u*s*C + s*s*B;\n\n    P[id] = pos;\n}\n"
+    },
+    {
+      "op": "glsl_color_compute",
+      "stage": "compute",
+      "code": "// Packet Fabric (Vertical) -- per-packet stream color + PTP sync flash. (render side branch)\n// uClock = (ptpRate, time, streams, pulseStrength)\n// New attributes Color (vec4) and PointScale (float) come from the Attr sequence.\nfloat hash11(float p){ return fract(sin(p*127.1)*43758.5453); }\n\nvoid main(){\n    const uint id = TDIndex();\n    if(id >= TDNumElements()) return;\n\n    vec3 pos = TDIn_P(0, id);\n    float pid = float(id);\n\n    float streams = max(1.0, uClock.z);\n    float klass   = floor(mod(pid, streams));   // 0=video,1=audio,2=ancillary\n\n    vec3 cyan  = vec3(0.00, 0.90, 1.00);   // video essence\n    vec3 green = vec3(0.22, 1.00, 0.42);   // audio essence\n    vec3 amber = vec3(1.00, 0.69, 0.00);   // ancillary data\n    vec3 col = (klass < 0.5) ? cyan : (klass < 1.5) ? green : amber;\n    col = mix(col, vec3(1.0), 0.35);       // white-hot core lift; palette carries mid-glow\n\n    // PTP grandmaster pulse: a steady beat all packets flash to, in lockstep.\n    float rate  = max(0.05, uClock.x);\n    float beat  = fract(uClock.y * rate);\n    float flash = pow(max(0.0, 1.0 - beat*3.0), 3.0);\n    float pulse = 1.0 + uClock.w * flash;\n\n    Color[id]      = vec4(col * (0.45 * pulse), 1.0);\n    PointScale[id] = 0.8 + 0.7*flash;      // packets swell on the sync beat\n}\n"
+    },
+    {
+      "op": "sprite_dot_pixel",
+      "stage": "pixel",
+      "code": "out vec4 fragColor;\nvoid main(){\n    vec2 uv = vUV.st * 2.0 - 1.0;\n    float r = length(uv);\n    float a = smoothstep(1.0, 0.05, r);   // bright round core, soft falloff edge\n    a = pow(a, 1.5);\n    fragColor = vec4(vec3(a), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_fabric_pixel",
+      "stage": "pixel",
+      "code": "// Static vertical IP-fabric background: sender row (top) + receiver row (bottom) + faint vertical links.\n// Cheap: a SMALL constant-bounded link loop (links are few), no per-pixel mass loop.\nuniform vec4 uFab;   // x=linkCount, y=fieldScale, z=slowTime, w=ptpRate\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nfloat segDist(vec2 p, vec2 a, vec2 b){\n    vec2 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/dot(ba,ba),0.0,1.0); return length(pa-ba*h);\n}\nvoid main(){\n    vec2 uv = vUV.st;\n    float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;\n    vec2 p = (uv - 0.5); p.x *= aspect;     // centered, y up\n\n    vec3 col = mix(vec3(0.012,0.014,0.018), vec3(0.026,0.030,0.038), 1.0-length(p));\n\n    float linkN = clamp(uFab.x, 4.0, 24.0);\n    vec3 fiber = vec3(0.0);\n    const int MAXL = 24;\n    for(int i=0;i<MAXL;i++){\n        if(float(i) >= linkN) break;\n        float fi = float(i);\n        // sender near the top, receiver near the bottom -> VERTICAL links\n        vec2 a = vec2((hash21(vec2(fi,1.0))-0.5)*0.9*aspect,  0.42);  // top\n        vec2 b = vec2((hash21(vec2(fi,3.0))-0.5)*0.9*aspect, -0.42);  // bottom\n        float d = segDist(p, a, b);\n        fiber += vec3(0.10,0.13,0.16) * smoothstep(0.010, 0.0, d) * 0.5;\n        float tw = 0.7 + 0.3*sin(uFab.z*6.2831 + fi*2.0);\n        fiber += vec3(0.12,0.16,0.20) * smoothstep(0.045,0.0,length(p-a)) * tw;  // sender node\n        fiber += vec3(0.12,0.16,0.20) * smoothstep(0.045,0.0,length(p-b)) * tw;  // receiver node\n    }\n    col += fiber;\n\n    // depth haze: dim toward the frame edges\n    col *= mix(1.0, 0.55, smoothstep(0.4, 1.1, length(p)));\n    // grain to kill banding on the dark gradient at booth scale\n    col += (hash21(uv*uTDOutputInfo.res.zw + uFab.z*100.0) - 0.5) * 0.012;\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloomblur_pixel",
+      "stage": "pixel",
+      "code": "// Bright-pass + gaussian blur at 1/4 resolution. The 4K-safe replacement for a full-res tap loop.\nuniform vec4 uBloom;   // x=strength, y=threshold, z=blurWidth\nout vec4 fragColor;\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;   // 1/lowW, 1/lowH (large in screen terms)\n    float thr = uBloom.y;\n    float bw  = uBloom.z;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;                     // 13x13 taps but only on ~1/16 the pixels\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/22.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*bw).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    fragColor = vec4((sum/max(wsum,1e-4)) * uBloom.x, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Maxpackets", "label": "Packet Count", "style": "Int", "default": 5000, "range": [200, 16000], "drives": "Particle POP maxparticles + birthrate -- how many packets cascade down the fabric. Cost scales with this (GPU), NOT with output resolution, so it is independent of the 4K story. Watch GPU headroom; cap 16000." },
+    { "name": "Flowspeed", "label": "Flow Speed", "style": "Float", "default": 0.35, "range": [0.0, 1.5], "drives": "uFlow.x in glsl_advect -- how fast packets descend each link per second. 0 freezes the cascade (drops time-dependence); higher = near-light-speed rain." },
+    { "name": "Linkcount", "label": "Link Count", "style": "Int", "default": 16, "range": [4, 24], "drives": "uFlow.y (advect) + uFab.x (fabric) -- number of distinct sender->receiver vertical links. More = a busier topology." },
+    { "name": "Curveamount", "label": "Link Bow", "style": "Float", "default": 0.7, "range": [0.0, 2.0], "drives": "uFlow.z in glsl_advect -- how much each vertical link bows horizontally (fiber slack). 0 = straight drops; higher = graceful arcs." },
+    { "name": "Streams", "label": "Essence Streams", "style": "Int", "default": 3, "range": [1, 3], "drives": "uClock.z -- number of separated ST2110 essence classes (1=video, 2=+audio, 3=+ancillary). Colors packets cyan/green/amber by PartId class." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uClock.x -- frequency of the PTP grandmaster sync pulse all packets flash to in lockstep. The rhythmic heartbeat." },
+    { "name": "Pulsestrength", "label": "Sync Flash", "style": "Float", "default": 1.4, "range": [0.0, 3.0], "drives": "uClock.w in glsl_color -- how brightly packets flash on each PTP beat. 0 = steady cascade; higher = a dramatic synchronized strobe." },
+    { "name": "Fieldscale", "label": "Field Scale", "style": "Float", "default": 1.0, "range": [0.5, 2.0], "drives": "uClock.y (advect) + uFab.y (fabric) -- spread of node anchors across the tall field. Higher = a wider, more sprawling fabric." },
+    { "name": "Jitter", "label": "Packet Jitter", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uClock.w in glsl_advect -- tiny per-packet phase stagger so the cascade looks like real quantized traffic, not a marching grid. 0 = perfectly synced ranks." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.3, "range": [0.0, 3.0], "drives": "uBloom.x in glsl_bloomblur (downsampled chain) -- intensity of the bright-pass glow added back. The booth-scale wow knob." },
+    { "name": "Bloomwidth", "label": "Bloom Width", "style": "Float", "default": 2.2, "range": [1.0, 4.0], "drives": "uBloom.z -- blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res)." },
+    { "name": "Outw", "label": "Output Width", "style": "Int", "default": 720, "range": [256, 3840], "drives": "Render width (render_swarm + glsl_fabric + comps). The /4 bloom buffer auto-tracks. 720 dev, 2160 for 4K portrait." },
+    { "name": "Outh", "label": "Output Height", "style": "Int", "default": 1280, "range": [256, 3840], "drives": "Render height. 1280 dev, 3840 for 4K portrait. The /4 bloom buffer auto-tracks." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "structure": ["#20242A", "#2E3440"],
+    "signal_cyan": ["#00E5FF", "#18FFE0"],
+    "essence_triplet": { "video_cyan": "#00E5FF", "audio_green": "#39FF6A", "ancillary_amber": "#FFB000" },
+    "white_hot_core": ["#FFFFFF", "#EAFBFF"],
+    "ratio": "~85% dark charcoal + cool-gray fabric, ~15% saturated packet color; cyan leads, green/amber differentiate the essences."
+  },
+  "performance_notes": "WHY IT STAYS CHEAP AT 4K: this is the structurally cheapest path of all -- the heavy work is a GPU PARTICLE SIM whose cost scales with PACKET COUNT (thousands), NOT with the 8.3M output pixels. Raising the output to 2160x3840 does not change the advect/color compute cost at all; only the rasterization of the sprites grows, and additive point sprites are extremely cheap (a few fragments each). The packets are GEOMETRY (resolution-independent), exactly the brief's approved 'thousands of packets via instanced/POP sprites, not a per-pixel loop' technique. THE ONE TRAP the old packet-fabric had: a full-res 13x13 bloom tap loop, which IS O(pixels*169) and fatal at 4K. That is removed here: the bloom is a separate chain that downsamples to 1/4, blurs there (touching ~1/16 the pixels), and composite-adds the upscaled glow back -- bounded and constant across resolutions. The static fabric background uses a SMALL constant-bounded link loop (links capped at 24) and caches (only a slow twinkle). BUDGET: sim cost ~= one Bezier eval + one color/scale eval per PACKET (independent of resolution); the only resolution-dependent loop is the 1/4-res bloom blur, pinned at 1/16-scale. Gate get_project_performance before/after; watch GPU headroom as Packet Count climbs (default 5000 is safe). Keep all TOPs rgba16float (no feedback sim, so NOT 32f).",
+  "wow_factor": 5,
+  "conference_fit": "The headline piece and the most literal enactment of ST2110, re-composed for a tall 9:16 wall: separated essence streams (cyan/green/amber) routed as countable glowing packets that RAIN DOWN from senders at the top to receivers at the bottom, snapping to a PTP sync pulse. Vertical cascade reads beautifully on a portrait LED tower -- the eye follows the falling light. It directly visualizes 'video over IP' and transmission.video's 'Routing Redefined.' The dense thousands-of-packets field reads as a live running system from across the booth and survives close inspection (individual packets visible). Because the cost is in the GPU sim, not the pixels, it stays smooth at full 4K -- the showcase anchor.",
+  "warmup_frames": 180,
+  "build_notes": "POP TRANSPORT: after wiring targetpop=null_sim (RELATIVE ref), pulse particle_pop initializepulse THEN startpulse, confirm play=True. Births accrue over REAL frames -- a synchronous cook(force=True) loop will NOT advance them. Add a temp Execute DAT in /specimen_lab OUTSIDE the COMP (onFrameStart cooking out1); let wall-clock seconds pass; capture twice and compare to prove the cascade animates. timeintegration is OFF (glsl_advect writes P[id] directly). Verify packet COUNT stabilizes at ~Maxpackets after a few seconds.\\n\\nGLSL POP UNIFORMS: glsl_advect + glsl_color custom uniforms are AUTO-declared from the Vectors page (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions) -- do NOT write 'uniform vec4 uFlow;' in the compute DATs or they fail to compile. The glslTOP shaders (fabric, bloomblur) DO declare uniforms manually. NO uTD2DInfos on the generators (fabric is a generator -> uTDOutputInfo.res); bloomblur HAS an input so sTD2DInputs[0] + uTDOutputInfo.res for its own (low) size are fine.\\n\\nOUTPUTATTRS: glsl_advect must have outputattrs='*' (or 'P') or P[id] does not exist. glsl_color adds Color+PointScale via the New Attribute sequence (seq.attr) then writes them; initoutputattrs=on seeds outputs from inputs.\\n\\nRENDER: Render Simple TOP + materialsource=matnode + Point Sprite MAT is the glowing-sprite path. mat_sprite: blending on, blendop add, srcblend one, destblend one, depthtest off, depthwriting off; colormap=sprite_dot (radial falloff). Keep per-sprite Color brightness LOW (0.45*) so dense additive moments don't clip flat-white before bloom. Frame the render 9:16 PORTRAIT (resolutionw/h = Outw/Outh) and set camdistance so the top-to-bottom cascade fills the tall frame -- verify the sender row reads near the top, receivers near the bottom.\\n\\nRESOLUTION TRACKING (4K story): Outw/Outh drive render_swarm + glsl_fabric (both custom = Outw/Outh) + the comps (resolutionmenu='input') + the bloom buffer at 1/4 (int(Outw/4)/int(Outh/4) on res_down + glsl_bloomblur). 4K portrait: set Outw=2160, Outh=3840; bloom auto-stays at 540x960. Verify res_down reports 1/4 size.\\n\\nCHEAP-BLOOM WIRING: render_swarm + glsl_fabric -> comp_over(add) ; comp_over -> res_down -> glsl_bloomblur (bloom-only) ; comp_bloom in0=comp_over (sharp), in1=glsl_bloomblur (upscaled glow), operand=add ; comp_bloom -> out1. ALTERNATIVE: a Blur TOP (Pre-Shrink=1/4, large Filter Size) + Level bright-pass can replace res_down+glsl_bloomblur.\\n\\nPERFORMANCE (performance.md): gate before/after. Watch GPU headroom as Packet Count climbs. The sim is cheap and resolution-independent; the only resolution-dependent cost is the 1/4-res bloom. Default 5000 packets is safe.\\n\\nDOCKED DATS: glsl_advect/glsl_color (glslPOP) each dock compute+info; sprite_dot/glsl_fabric/glsl_bloomblur (glslTOP) each dock pixel+compute+info. HUG all under their host in the SAME execute_python that creates each op, then get_network_layout -- never defer.\\n\\nLAYOUT: the sim loop (geo_seed->particle_pop->glsl_advect->null_sim) is a cycle closed by targetpop (a param, not a wire) -- lay it left-to-right; render branch off null_sim; fabric/composite/bloom below or right.\\n\\nTDN ROUND-TRIP: all 13 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~28."
+}

@@ -1,7 +1,7 @@
 """
 Test suite: external connection preservation across TDN strip/rebuild.
 
-Issue #11 — wires from external siblings into a TDN-strategy BaseCOMP's
+Issue #11 - wires from external siblings into a TDN-strategy BaseCOMP's
 own input connectors (backed by inCHOP/inTOP/etc. inside the COMP) are
 severed when the COMP's children are destroyed. The fix captures these
 external wires before strip and restores them after rebuild.
@@ -133,7 +133,7 @@ class TestTDNExternalConnections(EmbodyTestCase):
 		result = self.tdn.ExportNetwork(root_path=base.path)
 		tdn_doc = result['tdn']
 
-		# No explicit strip — ImportNetwork should capture in-memory first.
+		# No explicit strip - ImportNetwork should capture in-memory first.
 		imp = self.tdn.ImportNetwork(
 			target_path=base.path, tdn=tdn_doc, clear_first=True)
 		self.assertTrue(imp.get('success'))

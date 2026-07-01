@@ -1,12 +1,14 @@
 """
-Test suite: TDN content safety guards — DAT + storage loss detection,
-combined dialog, and removal of the single-click "Never Ask" footgun.
+Test suite: TDN content safety guards - DAT + storage loss detection,
+combined dialog, and the Skip Once / Always Skip preference buttons.
 
 Covers:
   A. _findAtRiskStorage detects user storage keys on TDN COMPs
   B. Control keys and runtime/skip keys are NOT flagged as at-risk
   C. Combined dialog surfaces both DATs and storage
-  D. Dialog no longer offers "Never Ask" as a button
+  D. Dialog offers Skip Once + an explicit, reversible Always Skip
+     (the old bare single-click "Never Ask" label stays gone); the
+     "Always" buttons persist the Tdndatsafety preference
   E. Skip logs a SUCCESS summary of what was dropped
 """
 
@@ -38,10 +40,10 @@ class TestTDNSafetyGuards(EmbodyTestCase):
         def _stub(title, message, buttons):
             self._captured.append({'title': title, 'message': message,
                                    'buttons': list(buttons)})
-            # Default: return 1 (index for "Skip").
             return self._scripted_choice
 
-        self._scripted_choice = 1
+        # Default: index 2 == "Skip Once" (one-time skip, no persistence).
+        self._scripted_choice = 2
         self.embody_ext._messageBox = _stub
 
     def tearDown(self):
@@ -117,21 +119,59 @@ class TestTDNSafetyGuards(EmbodyTestCase):
             tdn_parent.unstore('embed_storage_in_tdn')
 
     # ------------------------------------------------------------------
-    # B. Dialog — no "Never Ask" button, combined DAT + storage surface
+    # B. Dialog - Skip Once + explicit reversible Always Skip; both
+    #    "Always" buttons persist the Tdndatsafety preference
     # ------------------------------------------------------------------
 
-    def test_prompt_offers_no_never_ask_button(self):
+    def test_prompt_offers_skip_once_and_always_skip(self):
         self.sandbox.store('risky', 'data')
         try:
             self.embody_ext._checkTDNContentSafety()
             self.assertEqual(len(self._captured), 1,
                 'Expected exactly one dialog for at-risk content')
             buttons = self._captured[0]['buttons']
-            self.assertNotIn('Never Ask', buttons,
-                '"Never Ask" button must be removed — it is a silent '
-                'single-click footgun')
-            # Skip is still offered as an escape.
-            self.assertIn('Skip', buttons)
+            # The old bare single-click "Never Ask" / "Skip" labels are gone;
+            # the persistent skip is now the explicit, reversible "Always Skip".
+            self.assertNotIn('Never Ask', buttons)
+            self.assertIn('Skip Once', buttons)
+            self.assertIn('Always Skip', buttons)
+            self.assertIn('Always Externalize', buttons)
+        finally:
+            self.sandbox.unstore('risky')
+
+    def test_always_skip_persists_ignore_preference(self):
+        """'Always Skip' (index 3) sets Tdndatsafety='ignore' so future
+        saves don't warn, and still skips the current save."""
+        self.sandbox.store('risky', 'data')
+        try:
+            self._scripted_choice = 3  # Always Skip
+            self.embody_ext._checkTDNContentSafety()
+            self.assertEqual(self.embody.par.Tdndatsafety.eval(), 'ignore',
+                'Always Skip must persist the ignore preference')
+        finally:
+            self.sandbox.unstore('risky')
+
+    def test_always_externalize_persists_externalize_preference(self):
+        """'Always Externalize' (index 1) sets Tdndatsafety='externalize'."""
+        self.sandbox.store('risky', 'data')
+        try:
+            self._scripted_choice = 1  # Always Externalize
+            self.embody_ext._checkTDNContentSafety()
+            self.assertEqual(self.embody.par.Tdndatsafety.eval(),
+                             'externalize',
+                'Always Externalize must persist the externalize preference')
+        finally:
+            self.sandbox.unstore('risky')
+
+    def test_ignore_preference_suppresses_prompt(self):
+        """With Tdndatsafety='ignore' (the result of Always Skip), no dialog
+        is shown even when at-risk content exists - that is the whole point."""
+        self.embody.par.Tdndatsafety.val = 'ignore'
+        self.sandbox.store('risky', 'data')
+        try:
+            self.embody_ext._checkTDNContentSafety()
+            self.assertEqual(len(self._captured), 0,
+                'ignore preference must suppress the dialog entirely')
         finally:
             self.sandbox.unstore('risky')
 
@@ -156,7 +196,7 @@ class TestTDNSafetyGuards(EmbodyTestCase):
     def test_skip_logs_success_summary(self):
         self.sandbox.store('soon_gone', 'value')
         try:
-            self._scripted_choice = 1  # Skip
+            self._scripted_choice = 2  # Skip Once
             log_count_before = self.embody_ext._log_counter
             self.embody_ext._checkTDNContentSafety()
             new_logs = [e for e in self.embody_ext._log_buffer
@@ -170,3 +210,87 @@ class TestTDNSafetyGuards(EmbodyTestCase):
                 f'got: {[e.get("message", "") for e in new_logs]}')
         finally:
             self.sandbox.unstore('soon_gone')
+
+    # ------------------------------------------------------------------
+    # D. DAT type filter - skip TD-managed, keep user-authored
+    # ------------------------------------------------------------------
+
+    def _flatten_dats(self, result):
+        """Flatten [(comp_path, [dat_ops])] into a set of DAT paths."""
+        return {d.path for _, dats in result for d in dats}
+
+    def test_TD_MANAGED_DAT_TYPES_membership(self):
+        """The denylist must include the types that triggered the user's
+        original noise (info, webrtc, folder, monitors, devices) AND must
+        NOT include any callback DAT type -- callbacks hold user-authored
+        Python and losing them silently is exactly what the warning
+        exists to prevent."""
+        types = self.embody_ext._TD_MANAGED_DAT_TYPES
+        # Read-only TD-generated outputs that must be skipped
+        for t in ('info', 'webrtc', 'folder', 'monitors',
+                  'audiodevices', 'videodevices', 'serialdevices',
+                  'mididevices'):
+            self.assertIn(t, types,
+                f'TD-managed DAT type {t!r} missing from skip set')
+        # Callback DAT types that must NEVER be skipped
+        for t in ('execute', 'parexec', 'pargroupexec', 'chopexec',
+                  'datexec', 'opexec', 'panelexec'):
+            self.assertNotIn(t, types,
+                f'Callback DAT type {t!r} must NOT be in skip set -- '
+                f'callbacks hold user-authored Python')
+        # Common user-authored types that must never be skipped
+        for t in ('text', 'table'):
+            self.assertNotIn(t, types,
+                f'User-authored type {t!r} must NOT be in skip set')
+
+    def test_findAtRiskDATs_ignores_td_managed_folder_dat(self):
+        """Functional end-to-end: a folderDAT with real rows (TD-managed
+        content) must be excluded from the at-risk warning even though
+        it has non-empty content. This is the user's exact scenario."""
+        folder_dat = self.sandbox.create(folderDAT, 'mgr_folder')
+        folder_dat.par.folder = project.folder
+        folder_dat.cook(force=True)
+        try:
+            # Sanity: must have rows, otherwise the empty-content skip
+            # would short-circuit before the type filter runs and the
+            # test would pass for the wrong reason.
+            self.assertGreater(folder_dat.numRows, 0,
+                f'Test setup: folder DAT must have rows '
+                f'(got {folder_dat.numRows})')
+            flat = self._flatten_dats(self.embody_ext._findAtRiskDATs())
+            self.assertNotIn(folder_dat.path, flat,
+                'TD-managed folder DAT with content was incorrectly '
+                'flagged as at-risk')
+        finally:
+            folder_dat.destroy()
+
+    def test_findAtRiskDATs_keeps_callback_dats(self):
+        """Callback DATs (executeDAT family) hold user-authored Python
+        and MUST continue to surface in the at-risk warning -- losing a
+        callback silently is a destructive footgun."""
+        cb_dat = self.sandbox.create(chopexecuteDAT, 'safety_callback')
+        cb_dat.text = (
+            '# user-authored callback\n'
+            'def onValueChange(channel, sampleIndex, val, prev):\n'
+            '\tpass\n'
+        )
+        try:
+            flat = self._flatten_dats(self.embody_ext._findAtRiskDATs())
+            self.assertIn(cb_dat.path, flat,
+                'chopexecuteDAT with user-authored callback content must '
+                'surface in at-risk results -- callbacks are exactly what '
+                'the warning exists to protect')
+        finally:
+            cb_dat.destroy()
+
+    def test_findAtRiskDATs_flags_plain_text_dat(self):
+        """Baseline: a user-authored textDAT with content must still be
+        flagged. Confirms the type filter did not break the happy path."""
+        text_dat = self.sandbox.create(textDAT, 'safety_text')
+        text_dat.text = 'user-authored content that would be lost'
+        try:
+            flat = self._flatten_dats(self.embody_ext._findAtRiskDATs())
+            self.assertIn(text_dat.path, flat,
+                'Plain textDAT with content must still be flagged')
+        finally:
+            text_dat.destroy()

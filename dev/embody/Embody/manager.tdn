@@ -1,42 +1,39 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 14,
-	"generator": "Embody/5.0.363",
-	"td_build": "099.2025.32280",
-	"source_file": "Embody-5.364.toe",
-	"exported_at": "2026-04-14T02:35:50Z",
-	"network_path": "/embody/Embody/manager",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type": "containerCOMP",
-	"parameters": {
-		"y": 13,
-		"w": 1080,
-		"h": 440,
-		"resizer": true,
-		"resizeb": true,
-		"resizecomp": "=me",
-		"resizewmin": 250,
-		"resizewmax": 3840,
-		"resizehmin": 50,
-		"resizehmax": 2160,
-		"repocomp": "=me",
-		"topsmoothness": "mipmap",
-		"borderar": "=parent.Embody.par.Textcolorr * 0.5",
-		"borderag": "=parent.Embody.par.Textcolorg * 0.5",
-		"borderab": "=parent.Embody.par.Textcolorb * 0.5",
-		"borderaalpha": "=parent.Embody.par.Textcolora",
-		"leftborder": "bordera",
-		"rightborder": "bordera",
-		"bottomborder": "bordera",
-		"topborder": "bordera",
-		"align": "verttb",
-		"reloadbuiltin": false
-	},
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": []
-}
+format: tdn
+version: '2.0'
+build: 14
+generator: Embody/6.0.25
+td_build: 099.2025.32820
+source_file: Embody-6.25.toe
+exported_at: '2026-06-13T05:52:38Z'
+network_path: /embody/Embody/manager
+options:
+  include_dat_content: false
+  include_storage: true
+type: containerCOMP
+parameters:
+  y: 13
+  w: 1080
+  h: 440
+  resizer: true
+  resizeb: true
+  resizecomp: =me
+  resizewmin: 250
+  resizewmax: 3840
+  resizehmin: 50
+  resizehmax: 2160
+  repocomp: =me
+  topsmoothness: mipmap
+  borderar: =parent.Embody.par.Textcolorr * 0.5
+  borderag: =parent.Embody.par.Textcolorg * 0.5
+  borderab: =parent.Embody.par.Textcolorb * 0.5
+  borderaalpha: =parent.Embody.par.Textcolora
+  leftborder: bordera
+  rightborder: bordera
+  bottomborder: bordera
+  topborder: bordera
+  align: verttb
+  reloadbuiltin: false
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators: []

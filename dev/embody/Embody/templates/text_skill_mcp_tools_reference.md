@@ -32,7 +32,8 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, `"auto"`) |
-| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?` | Set content from text string or list of row lists |
+| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. **Wipe guardrail**: calls that would leave the DAT empty (`text=""`, `rows=[]`, or `clear=True` with no content) are refused unless `confirm_wipe=True`. **For partial edits to text DATs, prefer `edit_dat_content`** -- it sends only the changed substring (much cheaper for large DATs). Use `set_dat_content` for tables, full rewrites, or intentional wipes. |
+| `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a DAT -- replaces `old_string` with `new_string`. Mirrors Claude Code's Edit tool: `old_string` must appear exactly once by default; widen with surrounding context for uniqueness, or pass `replace_all=True` to replace every occurrence. Token-efficient -- only the changed substring crosses the wire. **Text DATs only**; tables go through `set_dat_content(rows=...)`. Refuses empty `old_string`, identical strings, and edits that would wipe the DAT (unless `confirm_wipe=True`). |
 
 ## Operator Flags
 
@@ -115,18 +116,23 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Returns live network as a TDN dict. ~20-90x fewer tokens than `get_op`+`query_network` walks thanks to default-omission, type_defaults, and par_templates. |
-| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdn` to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from `.tdn` JSON |
+| `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write `.tdn` to disk. **With `output_file` set, returns a compact summary (op/annotation counts + file path), NOT the full document** -- Read the file for details. Without `output_file`, returns the full dict like `read_tdn`. |
+| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate network from a parsed TDN document (on-disk `.tdn` is YAML in v2.0; reads legacy JSON) |
+| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What's UNSAVED in TDN networks** (live vs on-disk `.tdn`) -- the view git can't give. Omit `target` -> whole project (every live TDN COMP, summarized); `target` = a COMP path OR a `.tdn` file path/bare filename -> that one COMP in full detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` (Embody's `.tdn` diff driver keeps those clean). Read-only. |
 
 **When to prefer `read_tdn`:** exploring or auditing ≥3 operators, checking structure and parameters-as-authored, mapping connections, reading annotations. Scope cost with `comp_path`; cap with `max_depth` on large roots.
 
 **When NOT to use `read_tdn`:** evaluated-expression runtime values (`get_parameter`), cook errors (`get_op_errors`), DAT/CHOP/TOP output data (`get_dat_content`, `capture_top`), cook timing (`get_op_performance`), flag state after runtime mutation (`get_op_flags`). `read_tdn` is an authored-state snapshot, not a runtime probe.
 
+**When to use `diff_tdn`:** whenever the user asks "what's changed / unsaved?" for TDN networks. It shows what is UNSAVED -- the live in-memory network vs the on-disk `.tdn` -- which **git cannot see** (git only reads disk, never TD's live state). Omit `target` (or pass `""`/`"project"`) for a **whole-project** summary (every live TDN COMP: which changed + counts); pass a `target` (a COMP path OR a `.tdn` file path/bare filename, resolved to its COMP) for **one COMP in full detail** (`old`=disk, `new`=live). For **committed/history** diffs use plain `git diff` -- Embody installs a `.tdn` git diff driver so those are clean (the volatile export header is stripped). Read-only, non-interactive. Requires TD running.
+
 ## TOP Capture
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?` | Capture a TOP's output as an image. Returns file path + optional inline preview |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?` | Capture a TOP's output as an image. Returns the saved **file path only** by default (Read it to view). Pass `inline=true` for a small embedded base64 preview (token-heavy). |
+
+For visual work, success is verified by capturing and judging the output TOP, not by a clean network alone; see `/visual-aesthetics`.
 
 ## Logging
 
@@ -134,7 +140,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
-**Auto-piggybacked logs**: Every MCP response includes a `_logs` field with up to 20 recent entries. Log files inside Embody's logs directory (see the `Logfolder` parameter on the Embody COMP) have the complete picture.
+**Auto-piggybacked logs**: A `_logs` field rides along **only when a WARNING or ERROR was logged during the call** (capped at ~8) -- routine INFO/DEBUG/SUCCESS history is omitted to keep responses token-lean. Call `get_logs` for the full history, or read the log files in Embody's logs directory (see the `Logfolder` parameter on the Embody COMP).
 
 ## Bridge Meta-Tools
 

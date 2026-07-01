@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 46 MCP tools for interacting with TouchDesigner. All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 
@@ -28,7 +28,8 @@ Envoy exposes 46 MCP tools for interacting with TouchDesigner. All tools use the
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, or `"auto"`) |
-| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?` | Set DAT content from text string or list of row lists |
+| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. Wipe guardrail refuses `text=""`, `rows=[]`, or `clear=True` with no content unless `confirm_wipe=True` is passed. For partial edits to text DATs, prefer `edit_dat_content` -- it sends only the changed substring. |
+| `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a DAT (mirrors Claude Code's Edit tool). Replaces `old_string` with `new_string`. By default `old_string` must appear exactly once -- pass `replace_all=True` to replace every occurrence. Token-efficient: only the changed substring crosses the wire. Text DATs only; use `set_dat_content(rows=...)` for tables. |
 
 ## Operator Flags
 
@@ -74,7 +75,7 @@ Envoy exposes 46 MCP tools for interacting with TouchDesigner. All tools use the
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `execute_python` | `code` | Execute Python code in TD. Set `result` variable to return values |
+| `execute_python` | `code` | Execute Python in TD; set the `result` variable to return values. Auto-lints newly-created ops and emits a **LAYOUT WARNING** when they are left at (0,0) or overlapping (unlike `create_op`, raw `comp.create()` does not auto-position) |
 
 ## Introspection & Diagnostics
 
@@ -103,7 +104,8 @@ Envoy exposes 46 MCP tools for interacting with TouchDesigner. All tools use the
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from `.tdn` JSON |
+| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdn` file |
+| `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDN networks** -- the live in-memory network vs the on-disk `.tdn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDN COMP, which changed + counts); pass a COMP path OR a `.tdn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` -- Embody installs a `.tdn` diff driver that keeps those clean. Read-only, non-interactive |
 
 ## TOP Capture
 

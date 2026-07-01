@@ -1,0 +1,161 @@
+{
+  "slug": "raster-descent",
+  "name": "Raster Descent",
+  "category": "transmission",
+  "aspect": "9:16",
+  "dev_resolution": [720, 1280],
+  "difficulty": "intermediate",
+  "one_liner": "A tall video frame painted line-by-line down a portrait wall: a white-hot scanline sweeps downward resolving a raster of fine pixels, then each row dissolves into a stream of discrete IP packets and reassembles -- SDI-to-IP made literal and vertical.",
+  "visual_description": "A 9:16 portrait panel on near-black ground. A bright horizontal scanline sweeps top-to-bottom, drawing the image one line at a time like a CRT raster painting down a tall screen. Above the active line the picture is resolved -- a shimmering field of fine cyan/green signal pixels with a subtle moving pattern; below it the panel is dark, waiting to be painted, with a faint phosphor afterglow trailing the sweep. The active scanline is white-hot and blooms. On a steady PTP beat the upper portion of each resolved row PACKETIZES: the solid video bar breaks into a marching train of discrete glowing packet-blocks (quantized cells with gaps) that drift sideways -- the act of putting essence into RTP packets -- and reassemble back into a clean line. At the moving boundary where the picture is freshly drawn, the three color channels tear apart by a few pixels (RGB chromatic separation) then re-register into clean white. A faint scanline/CRT overlay and film grain finish the broadcast look. It reads instantly as 'the video in video-over-IP,' caught mid-transmission between a solid frame and a packet stream, painting down a tall wall.",
+  "technique": "Single self-contained GLSL TOP generator (no input) finished by a SEPARATE downsampled bloom chain. The generator is inherently 4K-cheap: it has NO loops at all -- it is pure per-pixel math (a procedural cell image from a couple of hash/sin terms, a raster-reveal gate, a phosphor afterglow exp(), a horizontal packetization via fract()/smoothstep, and an RGB chroma offset). Per-pixel cost is a small CONSTANT independent of resolution. Crisp scanline + packet edges use fwidth() for resolution-independence. Time-dependence via absTime (sweep position + image motion + PTP beat). The only change vs the old video-raster is composition (a top-to-bottom sweep is already vertical -- it maps perfectly to 9:16) and the bloom: the old shader's bloom was a full-res 13x13 tap loop (fatal at 4K). Here the bloom is its own chain (downsample 1/4 -> bright-pass+blur at low res -> composite-add), so glow cost is ~1/16 of full-res and constant at 4K.",
+  "network_plan": [
+    {
+      "name": "glsl_raster",
+      "type": "glslTOP",
+      "role": "The generator. NO input -- MUST use uTDOutputInfo.res; NEVER uTD2DInfos. Procedural cell image + top-to-bottom raster reveal + phosphor afterglow + horizontal packetization + RGB chroma separation at the active line + PTP beat. NO loops (pure per-pixel math). Crisp edges via fwidth. outputresolution custom 720x1280, rgba16float. Three vec4 uniforms via the vec SEQUENCE (declared manually). Place nodeX 0, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_raster_pixel",
+        "computedat": "glsl_raster_compute",
+        "outputresolution": "custom",
+        "resolutionw": 720,
+        "resolutionh": 1280,
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [
+          { "name": "uRaster", "type": "vec4", "valuex": "=parent().par.Scanrate.eval()", "valuey": "=parent().par.Linecount.eval()", "valuez": "=parent().par.Afterglow.eval()", "valuew": "=absTime.seconds*parent().par.Scanrate.eval()" },
+          { "name": "uPacket", "type": "vec4", "valuex": "=parent().par.Packetize.eval()", "valuey": "=parent().par.Packetsize.eval()", "valuez": "=parent().par.Driftspeed.eval()", "valuew": "=parent().par.Chromasplit.eval()" },
+          { "name": "uLook", "type": "vec4", "valuex": "=parent().par.Detail.eval()", "valuey": "=parent().par.Ptprate.eval()", "valuez": "=parent().par.Palette.eval()", "valuew": "=absTime.seconds" }
+        ]
+      },
+      "inputs": []
+    },
+    {
+      "name": "res_down",
+      "type": "resolutionTOP",
+      "role": "Downsample to 1/4 of output res for the cheap bloom. Input0 = glsl_raster. width/height = int(Outw/4)/int(Outh/4) so it tracks dev AND 4K. rgba16float. Place nodeX 300, nodeY -400.",
+      "params": { "outputresolution": "custom", "resolutionw": "=int(parent().par.Outw.eval()/4)", "resolutionh": "=int(parent().par.Outh.eval()/4)", "format": "rgba16float" },
+      "inputs": ["glsl_raster"]
+    },
+    {
+      "name": "glsl_bloomblur",
+      "type": "glslTOP",
+      "role": "Bright-pass + blur at 1/4 res (cheap, constant at 4K). Input0 = res_down. Bloom-only output. outputresolution = 1/4 of Outw/Outh. rgba16float. Place nodeX 600, nodeY -400.",
+      "params": {
+        "pixeldat": "glsl_bloomblur_pixel",
+        "computedat": "glsl_bloomblur_compute",
+        "outputresolution": "custom",
+        "resolutionw": "=int(parent().par.Outw.eval()/4)",
+        "resolutionh": "=int(parent().par.Outh.eval()/4)",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uBloom", "type": "vec4", "valuex": "=parent().par.Bloom.eval()", "valuey": 0.5, "valuez": "=parent().par.Bloomwidth.eval()", "valuew": 0 } ]
+      },
+      "inputs": ["res_down"]
+    },
+    {
+      "name": "glsl_finish",
+      "type": "glslTOP",
+      "role": "Composite-add the upscaled 1/4-res bloom over the sharp generator AND apply the cheap CRT finish (scanline overlay + grain) in one O(1) pass. in0 = glsl_raster (sharp), in1 = glsl_bloomblur (upscaled glow). NO blur loop here. outputresolutionmenu = input. rgba16float. Place nodeX 900, nodeY 0.",
+      "params": {
+        "pixeldat": "glsl_finish_pixel",
+        "computedat": "glsl_finish_compute",
+        "outputresolutionmenu": "input",
+        "format": "rgba16float"
+      },
+      "sequences": {
+        "vec": [ { "name": "uFin", "type": "vec4", "valuex": "=parent().par.Scanlines.eval()", "valuey": "=parent().par.Linecount.eval()", "valuez": "=parent().par.Grain.eval()", "valuew": "=absTime.seconds" } ]
+      },
+      "inputs": ["glsl_raster", "glsl_bloomblur"]
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Manifest output_op / capture target, named exactly out1. Viewer flagged. Place nodeX 1200, nodeY 0.",
+      "params": { "label": "=me.name" },
+      "inputs": ["glsl_finish"]
+    },
+    { "name": "glsl_raster_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_raster. See glsl[0]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_raster_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_raster.", "params": {}, "inputs": [] },
+    { "name": "glsl_raster_info", "type": "infoDAT", "role": "Docked info DAT for glsl_raster.", "params": { "op": "glsl_raster" }, "inputs": [] },
+    { "name": "glsl_bloomblur_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_bloomblur. See glsl[1]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_bloomblur_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_bloomblur.", "params": {}, "inputs": [] },
+    { "name": "glsl_bloomblur_info", "type": "infoDAT", "role": "Docked info DAT for glsl_bloomblur.", "params": { "op": "glsl_bloomblur" }, "inputs": [] },
+    { "name": "glsl_finish_pixel", "type": "textDAT", "role": "Docked pixel shader for glsl_finish. See glsl[2]. extension frag.", "params": { "extension": "frag" }, "inputs": [] },
+    { "name": "glsl_finish_compute", "type": "textDAT", "role": "Docked empty compute companion for glsl_finish.", "params": {}, "inputs": [] },
+    { "name": "glsl_finish_info", "type": "infoDAT", "role": "Docked info DAT for glsl_finish.", "params": { "op": "glsl_finish" }, "inputs": [] },
+    {
+      "name": "annotate_raster",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the generator (glsl_raster). Mode annotate, Opacity 0.3.",
+      "params": {
+        "Titletext": "Raster Descent & Packetization (loop-free)",
+        "Bodytext": "One generator GLSL TOP, NO loops -- pure per-pixel math. A white-hot scanline sweeps top-to-bottom drawing the image line by line (CRT raster down a tall screen) with a phosphor afterglow below the active line. On the PTP beat each drawn row PACKETIZES -- the solid video bar quantizes into discrete glowing packet-blocks that drift and reassemble (essence into RTP packets). RGB chroma tears at the active line then re-registers. The 'video' in video-over-IP, made literal and vertical. Per-pixel cost is constant, so it scales to 4K untouched.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate_finish",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation over the bloom + finish + out (res_down, glsl_bloomblur, glsl_finish, out1). Mode annotate.",
+      "params": {
+        "Titletext": "Downsampled Bloom & CRT Finish",
+        "Bodytext": "Bloom is a SEPARATE downsampled chain (downsample 1/4 -> blur there -> the finish pass adds the upscaled glow back), NOT the old full-res tap loop -- ~1/16 the cost, constant at 4K. The finish pass also lays a CRT scanline overlay + film grain. Terminates in out1.",
+        "Mode": "annotate",
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_raster_pixel",
+      "stage": "pixel",
+      "code": "// Raster Descent -- line-by-line top-to-bottom reveal + packetization + chroma separation.\n// NO loops -- pure per-pixel math, constant cost at any resolution.\nuniform vec4 uRaster;   // x=scanRate, y=lineCount, z=afterglow, w=time(=absTime*scanRate)\nuniform vec4 uPacket;   // x=packetize, y=packetSize, z=driftSpeed, w=chromaSplit\nuniform vec4 uLook;     // x=detail, y=ptpRate, z=palette, w=absTime\nout vec4 fragColor;\nconst float PI = 3.14159265;\n\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\n\nvec3 sigPalette(float v, float hue){\n    vec3 a = vec3(0.45, 0.55, 0.6);\n    vec3 b = vec3(0.45, 0.55, 0.6);\n    vec3 c = vec3(1.0, 1.0, 0.6);\n    vec3 d = vec3(0.55, 0.35, 0.15) + hue;\n    return a + b*cos(6.28318*(c*v + d));\n}\n\n// procedural 'image': fine moving cells in the signal palette\nvec3 sourceImage(vec2 uv, float detail, float hue, float t){\n    vec2 g = uv * mix(20.0, 90.0, detail*0.5);\n    float cell = hash21(floor(g) + floor(t*0.6));\n    float fine = 0.5 + 0.5*sin(uv.x*60.0*detail + t) * sin(uv.y*34.0*detail - t*0.7);\n    float v = mix(cell, fine, 0.5);\n    return sigPalette(v, hue) * (0.35 + 0.5*v);\n}\n\nvoid main(){\n    vec2 uv = vUV.st;\n    float t = uLook.w;\n\n    float lines  = clamp(uRaster.y, 90.0, 1280.0);\n    float row    = floor((1.0 - uv.y) * lines) / lines;   // 0 at top, increasing downward\n    float scan   = fract(uRaster.w);                       // active scan position (0..1 top->bottom)\n    float hue    = uLook.z;\n    float detail = uLook.x;\n\n    vec3 img = sourceImage(uv, detail, hue, t);\n\n    // --- raster reveal: only rows above/at the sweep are 'drawn' ---\n    float drawn = step(row, scan);\n    float below = row - scan;\n    float afterglow = exp(-max(below,0.0) * mix(40.0, 6.0, uRaster.z)) * step(scan, row);\n\n    vec3 col = img * drawn;\n    col += vec3(0.10, 0.55, 0.7) * afterglow * 0.6;        // cyan-green phosphor trail\n\n    // white-hot active scanline (crisp via fwidth)\n    float aaY = fwidth(row) * 1.5 + 1.0/lines;\n    float lineGlow = smoothstep(aaY, 0.0, abs(row - scan));\n    col += vec3(1.0) * lineGlow * 1.2;\n\n    // --- RGB chroma separation at the active boundary, re-registers away from it ---\n    float boundary = exp(-abs(row - scan) * 30.0);\n    float sp = uPacket.w * 0.004 * boundary;\n    vec3 chroma;\n    chroma.r = sourceImage(uv + vec2(0.0, sp), detail, hue, t).r * drawn;   // vertical tear (matches the vertical sweep)\n    chroma.g = img.g * drawn;\n    chroma.b = sourceImage(uv - vec2(0.0, sp), detail, hue, t).b * drawn;\n    col = mix(col, chroma + vec3(1.0)*lineGlow*1.2 + vec3(0.10,0.55,0.7)*afterglow*0.6, boundary);\n\n    // --- packetization on the PTP beat: quantize the UPPER portion of each drawn row ---\n    float beat   = fract(uLook.w * uLook.y);\n    float pktAmt = uPacket.x * smoothstep(0.0, 0.3, beat) * (1.0 - smoothstep(0.6, 1.0, beat));\n    float psize  = uPacket.y;\n    float drift  = t * uPacket.z;\n    float x = uv.x + drift;\n    float inCell = fract(x / psize);\n    float gap = smoothstep(0.82, 0.86, inCell);            // gap between packets -> discrete blocks\n    float cellId = floor(x / psize);\n    float pktBright = 0.6 + 0.4*hash21(vec2(cellId, row*lines));\n    // packetize the UPPER region (freshly transmitted), reassemble lower\n    float region = smoothstep(0.45, 0.55, uv.y);           // y up: upper portion\n    vec3 packed = col * (1.0 - gap) * pktBright;\n    col = mix(col, packed, pktAmt * region * drawn);\n\n    // near-black ground for undrawn rows\n    col += vec3(0.010, 0.012, 0.016) * (1.0 - drawn);\n\n    fragColor = vec4(max(col, 0.0), 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_bloomblur_pixel",
+      "stage": "pixel",
+      "code": "// Bright-pass + gaussian blur at 1/4 resolution (cheap, constant at 4K).\nuniform vec4 uBloom;   // x=strength, y=threshold, z=blurWidth\nout vec4 fragColor;\nvoid main(){\n    vec2 uv = vUV.st;\n    vec2 texel = uTDOutputInfo.res.xy;\n    float thr = uBloom.y;\n    float bw  = uBloom.z;\n    vec3 sum = vec3(0.0); float wsum = 0.0;\n    const int R = 6;\n    for(int x=-R;x<=R;x++){\n        for(int y=-R;y<=R;y++){\n            vec2 o = vec2(float(x), float(y));\n            float w = exp(-dot(o,o)/22.0);\n            vec3 s = texture(sTD2DInputs[0], uv + o*texel*bw).rgb;\n            sum += max(s - thr, 0.0) * w;\n            wsum += w;\n        }\n    }\n    fragColor = vec4((sum/max(wsum,1e-4)) * uBloom.x, 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_finish_pixel",
+      "stage": "pixel",
+      "code": "// Composite-add the 1/4-res bloom over the sharp raster + CRT scanline + grain. No blur loop.\n// in0 = sharp glsl_raster, in1 = upscaled bloom.\nuniform vec4 uFin;   // x=scanlines, y=lineCount, z=grain, w=absTime\nout vec4 fragColor;\nfloat hash21(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }\nvoid main(){\n    vec2 uv = vUV.st;\n    vec3 src = texture(sTD2DInputs[0], uv).rgb;\n    vec3 bloom = texture(sTD2DInputs[1], uv).rgb;\n    vec3 col = src + bloom;\n    // CRT scanline darkening tied to line count (horizontal lines across the tall frame)\n    float lc = clamp(uFin.y, 90.0, 1280.0);\n    float scan = 1.0 - uFin.x * 0.35 * (0.5 + 0.5*sin(uv.y * lc * 6.28318));\n    col *= scan;\n    col += (hash21(uv*uTDOutputInfo.res.zw + uFin.w*60.0)-0.5) * 0.014 * uFin.z;\n    fragColor = vec4(col, 1.0);\n}\n"
+    }
+  ],
+  "exposed_params": [
+    { "name": "Scanrate", "label": "Scan Rate", "style": "Float", "default": 0.3, "range": [0.0, 2.0], "drives": "uRaster.x + the time term uRaster.w -- how fast the raster scanline sweeps top-to-bottom (frame draw rate). 0 freezes the sweep (drops that time-dependence); higher = a fast refresh." },
+    { "name": "Linecount", "label": "Line Count", "style": "Int", "default": 320, "range": [90, 1280], "drives": "uRaster.y (row quantization) + uFin.y (CRT scanline frequency) -- number of horizontal raster lines down the tall frame. Low = chunky retro scanlines; high = a fine modern raster." },
+    { "name": "Afterglow", "label": "Phosphor Afterglow", "style": "Float", "default": 0.6, "range": [0.0, 1.0], "drives": "uRaster.z -- length of the phosphor trail below the active scanline. 0 = a hard edge; higher = a long glowing CRT persistence tail." },
+    { "name": "Packetize", "label": "Packetize", "style": "Float", "default": 0.8, "range": [0.0, 1.0], "drives": "uPacket.x -- how strongly the upper portion of each drawn row breaks into discrete packet-blocks on the PTP beat (SDI->IP dissolve). 0 = a solid frame; 1 = full packetization." },
+    { "name": "Packetsize", "label": "Packet Size", "style": "Float", "default": 0.04, "range": [0.01, 0.15], "drives": "uPacket.y -- width of each packet-block (in screen UV). Small = many fine packets; large = chunky blocks. The granularity of the IP packet stream." },
+    { "name": "Driftspeed", "label": "Packet Drift", "style": "Float", "default": 0.15, "range": [0.0, 1.0], "drives": "uPacket.z -- how fast the packet-blocks drift sideways (toward reassembly). The transport motion across the row." },
+    { "name": "Chromasplit", "label": "Chroma Split", "style": "Float", "default": 1.0, "range": [0.0, 3.0], "drives": "uPacket.w -- strength of the RGB chromatic separation at the active scanline boundary (a vertical tear matching the vertical sweep). 0 = clean; higher = a pronounced broadcast color tear that re-registers away from the line." },
+    { "name": "Detail", "label": "Image Detail", "style": "Float", "default": 0.6, "range": [0.0, 1.5], "drives": "uLook.x -- fineness of the procedural source-image cells. Low = broad shapes; high = a dense fine-pixel field." },
+    { "name": "Palette", "label": "Palette Hue", "style": "Float", "default": 0.0, "range": [0.0, 1.0], "drives": "uLook.z -- rotates the cyclic signal palette of the source image. 0 = cyan/green signal look; sweeping shifts the chroma." },
+    { "name": "Ptprate", "label": "PTP Beat Rate", "style": "Float", "default": 0.5, "range": [0.1, 2.0], "drives": "uLook.y -- frequency of the PTP sync pulse that triggers each packetization burst. The transmission heartbeat." },
+    { "name": "Scanlines", "label": "CRT Scanlines", "style": "Float", "default": 0.8, "range": [0.0, 1.5], "drives": "uFin.x -- strength of the CRT scanline darkening overlay in the finish pass. 0 = clean digital; higher = a heavier broadcast-CRT texture." },
+    { "name": "Bloom", "label": "Bloom", "style": "Float", "default": 1.1, "range": [0.0, 3.0], "drives": "uBloom.x in glsl_bloomblur (downsampled chain) -- intensity of the bloom over the scanline and packet-blocks. The booth-scale glow knob." },
+    { "name": "Bloomwidth", "label": "Bloom Width", "style": "Float", "default": 2.2, "range": [1.0, 4.0], "drives": "uBloom.z -- blur step in the 1/4-res bloom pass. Wider = a softer halo, still cheap (low-res)." },
+    { "name": "Grain", "label": "Grain", "style": "Float", "default": 1.0, "range": [0.0, 2.0], "drives": "uFin.z -- film-grain amount in the finish pass. Kills banding on the dark undrawn rows at booth scale." },
+    { "name": "Outw", "label": "Output Width", "style": "Int", "default": 720, "range": [256, 3840], "drives": "Render width (generator + finish). The /4 bloom buffer auto-tracks. 720 dev, 2160 for 4K portrait." },
+    { "name": "Outh", "label": "Output Height", "style": "Int", "default": 1280, "range": [256, 3840], "drives": "Render height. 1280 dev, 3840 for 4K portrait. The /4 bloom buffer auto-tracks." }
+  ],
+  "palette": {
+    "ground": ["#0A0B0D", "#000000"],
+    "image_signal": ["#00E5FF", "#39FF6A"],
+    "rgb_split": { "red": "#FF0033", "green": "#00FF66", "blue": "#2A6BFF" },
+    "white_hot_scanline": ["#FFFFFF", "#EAFBFF"],
+    "phosphor_trail": "#0E8CB3",
+    "ratio": "~85% dark ground + undrawn rows, ~15% saturated image signal + white-hot scanline; cyan/green lead, RGB-split is an accent event at the active line, not constant."
+  },
+  "performance_notes": "WHY IT STAYS CHEAP AT 4K: this is the simplest cost profile -- the generator has ZERO loops. It is pure per-pixel math: a couple of sourceImage() evals (each a hash + two sin terms), a step()/exp() raster-reveal + afterglow, a fract()/smoothstep packetization, and an RGB chroma offset. That per-pixel budget is a small fixed constant identical at 720x1280 and 2160x3840, so cost is O(pixels) with the smallest constant in the set besides essence-streams. Crisp scanline + packet edges via fwidth(), resolution-independent. The ONLY change needed for 4K was the bloom: the original video-raster used a full-res 13x13 tap loop (O(pixels*169), fatal at 4K). Here the bloom is a separate downsampled chain (1/4-res blur -> upscale -> add in the finish pass), touching ~1/16 the pixels at a ratio fixed across resolutions. BUDGET: generator ~= 2 sourceImage evals + ~6 cheap ops per pixel, no loops; the only loop is the 1/4-res blur, pinned at 1/16-scale. Gate get_project_performance before/after; very comfortable at 4K.",
+  "wow_factor": 4,
+  "conference_fit": "The literal 'video' motif, natively vertical -- a frame painting itself line by line DOWN a tall portrait wall, caught mid-transmission dissolving into IP packets and reassembling. It directly stages SDI->IP packetization (essence into RTP packets), the core of why ST2110 exists, in the broadcast-authentic CRT-scanline + RGB-chroma-tear language every video engineer knows. The top-to-bottom raster sweep is the most natural possible composition for a 9:16 portrait wall (a CRT always painted top-down). Dark, premium, on-brand restraint with color appearing only as the signal. Self-contained and cheap; a recognizable 'this is the video being transmitted' beat that complements the abstract fiber/packet pieces. Bonus: sourceImage() can be swapped for a real Movie File In to demo SDI->IP on actual footage.",
+  "warmup_frames": 60,
+  "build_notes": "GENERATOR CORRECTNESS: glsl_raster has NO input -- MUST use uTDOutputInfo.res; uTD2DInfos on a no-input generator is a compile error. outputresolution MUST be 'custom' + resolutionw/h (720x1280) or it renders 1x1. NOTE: glsl_raster has NO loops at all; glsl_bloomblur has the only loop, bounded by constant R=6 at 1/4 res. res_down/glsl_bloomblur/glsl_finish HAVE inputs so sTD2DInputs[0] is valid.\\n\\nUNIFORMS: each glslTOP declares uniforms MANUALLY via the vec parameter SEQUENCE (op.seq.vec.numBlocks=N, vecNname, vecNtype='vec4', vecNvaluex..w expressions), NOT op.par.vec.\\n\\nRESOLUTION TRACKING (4K story): Outw/Outh drive the generator + finish output (resolutionmenu='input' on finish) and the bloom buffer at 1/4 (int(Outw/4)/int(Outh/4) on res_down + glsl_bloomblur). 4K portrait: set Outw=2160, Outh=3840; bloom auto-stays at 540x960. Verify res_down reports 1/4 size.\\n\\nCHEAP-BLOOM WIRING: glsl_raster -> res_down -> glsl_bloomblur (bloom-only) ; glsl_finish in0=glsl_raster (sharp), in1=glsl_bloomblur (upscaled glow) -- the finish pass adds them + applies the CRT overlay/grain ; glsl_finish -> out1. ALTERNATIVE: a Blur TOP (Pre-Shrink=1/4) + Level bright-pass can replace res_down+glsl_bloomblur.\\n\\nCRISP EDGES: scanline + packet edges use fwidth() so they stay sharp at 4K. Verify in a 4K capture.\\n\\nCOOK DEMAND: time-dependent via absTime in uRaster.w + uLook.w. Cooks every frame only when out1 demanded; temp Execute DAT OUTSIDE the COMP cooking out1; verify with two captures + a real sleep. Scan Rate=0 freezes the sweep but uLook.w (PTP beat + image motion) still references absTime so the TOP keeps cooking -- correct.\\n\\nLOOK CHECK: several blending modes (raster reveal, afterglow, packetize, chroma) -- MUST be judged by an actual capture (load visual-aesthetics). Verify the scanline reads clearly sweeping DOWN, the packetization is legible as discrete blocks (not mush), and the chroma tear re-registers. Tune Packet Size / Packetize against a real frame.\\n\\nDOCKED DATS: glsl_raster + glsl_bloomblur + glsl_finish each dock pixel+compute+info; HUG all nine under their hosts in the SAME execute_python that creates each op, then get_network_layout. LF/space-indented shader source.\\n\\nTDN ROUND-TRIP: all 16 params single-component (Int/Float) -> default->value seeding works on re-import (verified v6.0.26). Re-import into a throwaway COMP, confirm a couple .vals + out1 renders, destroy it. operator_count = all ops incl docked DATs (annotations not counted): ~15."
+}

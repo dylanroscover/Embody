@@ -1,0 +1,258 @@
+format: tdn
+version: '2.0'
+build: 3
+generator: Embody/6.0.39
+td_build: 099.2025.32820
+source_file: Embody-6.39.toe
+exported_at: '2026-06-22T03:49:42Z'
+network_path: /specimen_lab/kaleidoscope
+options:
+  include_dat_content: true
+  include_storage: true
+type_defaults:
+  glslTOP:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  infoDAT:
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  textDAT:
+    parameters:
+      syncfile: true
+      language: glsl
+    flags:
+    - viewer
+    size: [130, 90]
+    color: [0.9, 0.3, 0.4]
+    tags:
+    - glsl
+type: baseCOMP
+custom_pars:
+  Kaleidoscope:
+  - name: Segments
+    style: Int
+    startSection: true
+    default: 8
+    min: 2.0
+    max: 24.0
+    clampMin: true
+    normMin: 2.0
+    normMax: 16.0
+    help: Number of mirror wedges around the center. Higher = more intricate symmetry.
+  - name: Rotation
+    style: Float
+    normMin: -3.1416
+    normMax: 3.1416
+    help: Base rotation of the mirror, in radians. The animation rotates on top of this.
+  - name: Zoom
+    style: Float
+    default: 1
+    min: 0.1
+    clampMin: true
+    normMin: 0.3
+    normMax: 3.0
+    help: How much of the source each wedge samples. Higher = more facets packed in.
+  - name: Flowspeed
+    style: Float
+    label: Flow Speed
+    default: 1
+    clampMin: true
+    normMax: 3.0
+    help: Speed of the tumble / twist / rotation animation. 0 freezes it.
+  - name: Palette
+    style: Float
+    label: Palette Hue
+    clampMin: true
+    clampMax: true
+    help: Rotates the color palette through the full hue range. 0 = fiery.
+  - name: Source
+    style: Menu
+    startSection: true
+    default: demo
+    menuNames:
+    - demo
+    - external
+    menuLabels:
+    - Demo (built-in)
+    - External input
+    help: Demo = built-in animated source. External = kaleidoscope whatever TOP is wired into this COMP.
+  Output:
+  - name: Resw
+    style: Int
+    default: 3840
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render width (px). 3840 = 4K landscape, 2160 = 4K portrait. Drives every resolution-bearing op in this specimen.
+  - name: Resh
+    style: Int
+    default: 2160
+    min: 256.0
+    max: 7680.0
+    clampMin: true
+    clampMax: true
+    normMin: 256.0
+    normMax: 7680.0
+    help: Render height (px). 2160 = 4K landscape, 3840 = 4K portrait.
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: in1
+  type: inTOP
+  parameters:
+    label: =me.name
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+- name: out1
+  type: outTOP
+  parameters:
+    label: =me.name
+  position: [1700, -150]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_kaleido
+- name: glsl_source
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_source_pixel
+    computedat: glsl_source_compute
+    outputresolution: custom
+    resolutionw: =parent().par.Resw.eval()
+    resolutionh: =parent().par.Resh.eval()
+  sequences:
+    vec:
+    - name: uPal
+      valuex: =parent().par.Palette.eval()
+  position: [0, -300]
+- name: glsl_kaleido
+  type: glslTOP
+  parameters:
+    pixeldat: glsl_kaleido_pixel
+    computedat: glsl_kaleido_compute
+  sequences:
+    vec:
+    - name: uParams
+      valuex: =parent().par.Segments.eval()
+      valuey: =parent().par.Rotation.eval()
+      valuez: =parent().par.Zoom.eval()
+      valuew: =absTime.seconds*parent().par.Flowspeed.eval()
+  position: [1300, -150]
+  inputs:
+  - switch_source
+- name: switch_source
+  type: switchTOP
+  parameters:
+    index: =parent().par.Source.menuIndex
+  position: [450, -150]
+  size: [130, 90]
+  color: [0.67, 0.67, 0.67]
+  inputs:
+  - glsl_source
+  - in1
+- name: glsl_source_info
+  type: infoDAT
+  parameters:
+    op: glsl_source
+  position: [0, -420]
+  dock: glsl_source
+  dat_read_only: true
+- name: glsl_kaleido_info
+  type: infoDAT
+  parameters:
+    op: glsl_kaleido
+  position: [1300, -270]
+  dock: glsl_kaleido
+  dat_read_only: true
+- name: glsl_source_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/kaleidoscope/glsl_source_pixel.glsl
+    extension: frag
+  position: [150, -420]
+  dock: glsl_source
+  dat_content: |-
+    uniform vec4 uPal;   // x = hue 0..1
+    out vec4 fragColor;
+    float hash(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
+    float noise(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+      return mix(mix(hash(i),hash(i+vec2(1,0)),u.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x),u.y); }
+    float fbm(vec2 p){ float v=0.0,a=0.5; for(int i=0;i<5;i++){v+=a*noise(p);p*=2.0;a*=0.5;} return v; }
+    void main(){
+        vec2 uv=vUV.st; vec2 p=uv*3.0;
+        float n1=fbm(p);
+        float n2=fbm(p*1.8 + n1*2.0);
+        vec3 col = 0.5 + 0.5*cos(vec3(0.0,0.9,1.9) + n2*3.2 + uPal.x*6.2831);
+        col = mix(vec3(dot(col,vec3(0.299,0.587,0.114))),col,1.35);
+        fragColor=vec4(clamp(col,0.0,1.0),1.0);
+    }
+  dat_content_format: text
+- name: glsl_kaleido_pixel
+  type: textDAT
+  parameters:
+    file: specimen_lab/kaleidoscope/glsl_kaleido_pixel.glsl
+    extension: frag
+  position: [1450, -270]
+  dock: glsl_kaleido
+  dat_content: |-
+    uniform vec4 uParams;   // x=segs, y=rot_base, z=zoom_base, w=time
+    out vec4 fragColor;
+    const float PI=3.14159265;
+    void main(){
+        float t = uParams.w;
+        float aspect = uTDOutputInfo.res.z / uTDOutputInfo.res.w;   // width/height
+        vec2 uv = vUV.st - 0.5;
+        uv.x *= aspect;                                             // square the polar space -> no skew at any aspect ratio
+        float segs = max(2.0, uParams.x);
+        float rot  = uParams.y + t*0.06;
+        float zoom = max(0.1, uParams.z) * (1.0 + 0.10*sin(t*0.20));
+        float r = length(uv) * zoom;
+        float a = atan(uv.y, uv.x) + rot;
+        a += 0.35 * sin(t*0.15) * r;                 // oscillating twist (swirl)
+        float seg = 2.0*PI/segs;
+        a = mod(a, seg);
+        a = abs(a - seg*0.5);
+        vec2 pp = vec2(cos(a), sin(a)) * r + 0.5;
+        pp += vec2(sin(t*0.07)*0.15 + t*0.012,        // content drifts/tumbles
+                   cos(t*0.05)*0.15 + t*0.009);
+        pp = abs(fract(pp*0.5)*2.0 - 1.0);
+        fragColor = texture(sTD2DInputs[0], pp);
+    }
+  dat_content_format: text
+- name: glsl_source_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/kaleidoscope/glsl_source_compute.glsl
+  position: [-150, -420]
+  dock: glsl_source
+- name: glsl_kaleido_compute
+  type: textDAT
+  parameters:
+    file: specimen_lab/kaleidoscope/glsl_kaleido_compute.glsl
+  position: [1150, -270]
+  dock: glsl_kaleido
+annotations:
+- name: annotate1
+  mode: annotate
+  title: Input & Source
+  text: Chooses what gets mirrored. glsl_source is a built-in animated fBm field; in1 is this COMP's external input; switch_source picks between them via the Source parameter.
+  position: [-220, -490]
+  size: [870, 750]
+  color: [0.12, 0.18, 0.24]
+  opacity: 0.3
+- name: annotate2
+  mode: annotate
+  title: Kaleidoscope
+  text: Folds the source into N mirrored wedges (Segments) with rotation, a breathing zoom, an oscillating twist, and a drifting sample so the content tumbles through the symmetry. out1 exposes the result.
+  position: [1080, -340]
+  size: [820, 450]
+  color: [0.2, 0.14, 0.18]
+  opacity: 0.3

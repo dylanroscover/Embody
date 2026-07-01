@@ -1,0 +1,110 @@
+name: Platform CI
+
+on:
+  push:
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+  pull_request:
+    paths:
+      - 'platform/**'
+      - '.github/workflows/platform-ci.yml'
+
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: platform-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Astro requires Node >=22.12.0 (astro check/build abort on Node 20).
+          node-version: '22'
+          # Cache npm downloads keyed off the platform-root lockfile.
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+
+      # Installs every workspace (apps/web + packages/*) from the root lockfile.
+      - name: Install dependencies
+        run: npm ci
+
+      # Typecheck the Astro app (astro check). Runs against the web workspace.
+      - name: Typecheck (astro check)
+        run: npm run typecheck --workspace=@embody/web
+
+      # Production build of the Astro + Cloudflare worker app.
+      - name: Build (astro build)
+        run: npm run build --workspace=@embody/web
+
+      # Scanner unit tests (vitest run).
+      - name: Test scanner-ts
+        run: npm run test --workspace=@embody/scanner-ts
+
+  # ---------------------------------------------------------------------------
+  # Gate the Cloudflare deploy on its secret actually being configured, so a repo
+  # that has NOT set CLOUDFLARE_API_TOKEN yet gets a GREEN run (deploy skipped +
+  # a warning annotation) instead of a red one. Secrets cannot be read in a
+  # job-level `if:`, so this tiny job exposes "is the token set?" as an output
+  # the deploy job gates on. Once the secret is added, deploy runs automatically.
+  check-deploy-secrets:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - id: check
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CF_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Cloudflare deploy skipped::Set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID repo secrets to enable auto-deploy of embody-web to embody.tools."
+          fi
+
+  # Cloudflare deploy. Runs ONLY on push to main, after build-and-test passes
+  # (a red typecheck/build never ships) AND the deploy secret is set. wrangler
+  # deploy reads platform/apps/web/wrangler.jsonc (name: embody-web), so it always
+  # targets the correct Worker and its embody.tools custom domain.
+  #
+  # Requires two repo secrets (Settings -> Secrets and variables -> Actions):
+  #   CLOUDFLARE_API_TOKEN   - token with the "Edit Cloudflare Workers" template
+  #                            (Workers Scripts:Edit + the embody.tools zone).
+  #   CLOUDFLARE_ACCOUNT_ID  - the account that owns the embody-web Worker.
+  deploy:
+    needs: [build-and-test, check-deploy-secrets]
+    if: needs.check-deploy-secrets.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Build (astro build)
+        run: npm run build --workspace=@embody/web
+      - name: Deploy to Cloudflare (wrangler deploy)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: platform/apps/web

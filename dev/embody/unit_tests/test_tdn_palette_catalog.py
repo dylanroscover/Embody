@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: TDN palette catalog detection + animationCOMP DAT preservation.
 
 Covers:
@@ -35,7 +35,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	# =================================================================
 
 	def test_A01_catalog_lookup_positive(self):
-		"""name + OPType match against catalog → detected as palette."""
+		"""name + OPType match against catalog -> detected as palette."""
 		self.tdn._palette_catalog = {
 			'myWidget': {'type': 'containerCOMP', 'min_children': 0},
 		}
@@ -44,12 +44,12 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			'Catalog entry with matching name+type must be detected')
 
 	def test_A02_catalog_lookup_wrong_type_rejected(self):
-		"""name match but wrong OPType → not detected via catalog."""
+		"""name match but wrong OPType -> not detected via catalog."""
 		self.tdn._palette_catalog = {
 			'myWidget': {'type': 'containerCOMP', 'min_children': 0},
 		}
-		# baseCOMP != containerCOMP → catalog match fails.
-		# Empty clone parameter → heuristic fallback also returns False.
+		# baseCOMP != containerCOMP -> catalog match fails.
+		# Empty clone parameter -> heuristic fallback also returns False.
 		comp = self.sandbox.create(baseCOMP, 'myWidget')
 		self.assertFalse(self.tdn._isPaletteClone(comp),
 			'Wrong OPType must not match catalog entry')
@@ -59,17 +59,17 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	# =================================================================
 
 	def test_B01_child_count_floor_rejects_empty_user_comp(self):
-		"""Empty user COMP with palette name → rejected by floor check."""
+		"""Empty user COMP with palette name -> rejected by floor check."""
 		self.tdn._palette_catalog = {
 			'buttonCheckbox': {'type': 'containerCOMP', 'min_children': 10},
 		}
-		# floor = max(1, 10//2) = 5; COMP has 0 children → rejected
+		# floor = max(1, 10//2) = 5; COMP has 0 children -> rejected
 		comp = self.sandbox.create(containerCOMP, 'buttonCheckbox')
 		self.assertFalse(self.tdn._isPaletteClone(comp),
 			'Empty COMP must not match palette entry with min_children=10')
 
 	def test_B02_child_count_floor_tolerates_user_mods(self):
-		"""User who kept most palette children (half count) → still detected."""
+		"""User who kept most palette children (half count) -> still detected."""
 		self.tdn._palette_catalog = {
 			'vrHMD': {'type': 'geometryCOMP', 'min_children': 51},
 		}
@@ -81,7 +81,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			'COMP at half expected child count must still match')
 
 	def test_B03_child_count_floor_when_min_is_one(self):
-		"""min_children=1 → floor 1; 0 children fails, 1+ passes."""
+		"""min_children=1 -> floor 1; 0 children fails, 1+ passes."""
 		self.tdn._palette_catalog = {
 			'buttonCheckbox': {'type': 'containerCOMP', 'min_children': 1},
 		}
@@ -93,7 +93,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			'1 child must pass floor when min_children=1')
 
 	def test_B04_child_count_floor_zero_skips_check(self):
-		"""min_children=0 → floor 0, any child count passes."""
+		"""min_children=0 -> floor 0, any child count passes."""
 		self.tdn._palette_catalog = {
 			'odd': {'type': 'containerCOMP', 'min_children': 0},
 		}
@@ -119,7 +119,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	# =================================================================
 
 	def test_D01_tdbasicwidgets_heuristic(self):
-		"""op.TDBasicWidgets.* clone expr → detected via heuristic fallback."""
+		"""op.TDBasicWidgets.* clone expr -> detected via heuristic fallback."""
 		self.tdn._palette_catalog = {}  # force fallback path
 		comp = self.sandbox.create(containerCOMP, 'someWidget')
 		# Create a sibling whose path includes the substring, so the clone
@@ -165,7 +165,7 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			'Standalone DAT must NOT carry content when flag is False')
 
 	def test_E03_animationcomp_dats_roundtrip(self):
-		"""animationCOMP internal data survives export → destroy → import."""
+		"""animationCOMP internal data survives export -> destroy -> import."""
 		anim = self.sandbox.create(animationCOMP, 'anim2')
 		attrs = anim.op('attributes')
 		self.assertIsNotNone(attrs)
@@ -198,14 +198,14 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	# =================================================================
 
 	def test_F01_inside_animationcomp_positive(self):
-		"""Direct child of animationCOMP → True."""
+		"""Direct child of animationCOMP -> True."""
 		anim = self.sandbox.create(animationCOMP, 'anim3')
 		keys = anim.op('keys')
 		self.assertIsNotNone(keys)
 		self.assertTrue(self.tdn._isInsideAnimationCOMP(keys))
 
 	def test_F02_inside_animationcomp_negative(self):
-		"""DAT outside animationCOMP → False."""
+		"""DAT outside animationCOMP -> False."""
 		dat = self.sandbox.create(tableDAT, 'plain_dat')
 		self.assertFalse(self.tdn._isInsideAnimationCOMP(dat))
 

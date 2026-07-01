@@ -1,0 +1,67 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "embody-web",
+	// Pin the Cloudflare account so deploys ALWAYS target the embody.tools
+	// account, never whichever account `wrangler login` last used. The deploy
+	// token (.cloudflare.env, gitignored) must have access to this account.
+	"account_id": "6a37e9b97eb8cf7ac208714658168a8c",
+	"compatibility_date": "2026-06-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// Custom domain: binds the worker to embody.tools (the zone is already in the
+	// CF account; CF auto-manages the DNS record + TLS cert). The *.workers.dev
+	// URL keeps working too.
+	"routes": [
+		{
+			"pattern": "embody.tools",
+			"custom_domain": true
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "embody",
+			"database_id": "a8cf3a3a-1121-4b61-a4cf-0722a7fcd8ee",
+			"migrations_dir": "../../migrations"
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "BLOBS",
+			"bucket_name": "embody-blobs"
+		}
+	],
+	// Cloudflare Images binding for runtime image optimization (@astrojs/cloudflare
+	// imageService: "cloudflare"). The landing is SSR, so the hero <Picture> is
+	// transformed to avif/webp per request via env.IMAGES. Requires "Image
+	// Transformations" enabled for the zone in the Cloudflare dashboard (free tier).
+	"images": {
+		"binding": "IMAGES"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "KV",
+			"id": "6f6d934dee314532ad19a74b902feb0a"
+		},
+		// Astro's session feature (auto-enabled by @astrojs/cloudflare) needs a KV
+		// binding named SESSION. We don't use Astro sessions (Better Auth stores its
+		// own in D1), so this reuses the same namespace to satisfy the adapter.
+		{
+			"binding": "SESSION",
+			"id": "6f6d934dee314532ad19a74b902feb0a"
+		}
+	],
+	// TURNSTILE_SECRET is a Worker secret (wrangler secret put), NOT a plaintext var.
+	// ENVIRONMENT is "production" here (the deployed default); .dev.vars overrides
+	// it to "development" for local dev so the Turnstile gate bypasses locally.
+	"vars": {
+		"ENVIRONMENT": "production"
+	}
+	// NOTE: do NOT set BETTER_AUTH_URL here. wrangler `vars` apply to local dev
+	// too (miniflare), so pinning it to https://embody.tools makes Better Auth
+	// reject localhost requests with "Invalid origin". Leaving it unset lets
+	// Better Auth derive the origin per-request -- correct for both embody.tools
+	// (prod) and localhost (dev). If GitHub OAuth is added later, set it as a
+	// PROD-ONLY Worker secret (`wrangler secret put BETTER_AUTH_URL`), never a var.
+}

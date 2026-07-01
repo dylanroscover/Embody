@@ -1,4 +1,4 @@
-﻿"""
+"""
 Test suite: Custom parameter behavior.
 
 Tests the high-value, failure-prone custom parameters on the Embody COMP:
@@ -256,7 +256,7 @@ class TestCustomParameters(EmbodyTestCase):
     def test_disable_z03_restore_tdn(self):
         """Externalize full project (TDN mode), verify table is populated.
 
-        Only checks that the table has rows — file existence and TDN/py counts
+        Only checks that the table has rows - file existence and TDN/py counts
         are verified in z04, which runs one frame later after deferred Updates
         (TDN exports and DAT additions) have had time to settle.
         """
@@ -267,7 +267,7 @@ class TestCustomParameters(EmbodyTestCase):
         finally:
             parexec.par.active = True
 
-        # Verify table is populated — deferred Updates may still be in-flight,
+        # Verify table is populated - deferred Updates may still be in-flight,
         # so we only assert the table is non-empty here. Full file/count checks
         # happen in z04 (next frame).
         table = self.embody_ext.Externalizations
@@ -396,12 +396,15 @@ class TestCustomParameters(EmbodyTestCase):
         """If Envoyenable is True, Envoystatus should contain Running."""
         if self.embody.par.Envoyenable.eval():
             status = str(self.embody.par.Envoystatus.eval())
-            # Skip if server is in a transitional state (port conflicts, startup)
-            if any(s in status for s in ('Waiting', 'Starting', 'Stopping')):
+            # Skip if server is in a transitional state (port conflicts,
+            # startup, or post-reinit restart -- 'Restarting after reinit...'
+            # is reported by the resilience layer until bind is reconfirmed).
+            if any(s in status for s in ('Waiting', 'Starting', 'Stopping',
+                                         'Restarting', 'reinit')):
                 self.skip(f'Server in transitional state: {status}')
             self.assertIn('Running', status)
         else:
-            # Server not running — just verify the par exists
+            # Server not running - just verify the par exists
             self.assertIsNotNone(self.embody.par.Envoystatus.eval())
 
     def test_envoyport_is_valid_range(self):
@@ -613,7 +616,7 @@ class TestCustomParameters(EmbodyTestCase):
             self.assertTrue(target_dir.is_dir(),
                             f'Target directory was deleted during Disable: {target_dir}')
 
-            # Re-enable — UpdateHandler should create the subfolder
+            # Re-enable - UpdateHandler should create the subfolder
             self.embody_ext.UpdateHandler()
             self.assertEqual(self.embody.par.Status.eval(), 'Enabled')
 
@@ -655,7 +658,7 @@ class TestCustomParameters(EmbodyTestCase):
             # Create an empty "canary" directory inside project.folder
             canary_dir.mkdir(exist_ok=True)
 
-            # Disable with empty prev — this was the trigger for issue #3
+            # Disable with empty prev - this was the trigger for issue #3
             self.embody_ext.Disable('', removeTags=False)
             self.assertEqual(self.embody.par.Status.eval(), 'Disabled')
 

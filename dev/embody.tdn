@@ -1,3576 +1,2762 @@
-{
-	"format": "tdn",
-	"version": "1.3",
-	"build": 40,
-	"generator": "Embody/5.0.379",
-	"td_build": "099.2025.32460",
-	"source_file": "Embody-5.380.toe",
-	"exported_at": "2026-04-18T19:43:49Z",
-	"network_path": "/embody",
-	"options": {
-		"include_dat_content": false,
-		"include_storage": true
-	},
-	"type_defaults": {
-		"baseCOMP": {
-			"size": [160, 130],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"]
-		},
-		"annotateCOMP": {
-			"parameters": {
-				"order": "=me.digits or 0",
-				"layerzone": "=0 if hasattr(me, 'EncloseOPs') and me.EncloseOPs else 1"
-			},
-			"flags": ["display"],
-			"color": [0.45, 0.45, 0.45]
-		}
-	},
-	"par_templates": {
-		"about": [
-			{
-				"default": "1.0",
-				"help": "Annotate COMP default setup version.",
-				"name": "Version",
-				"readOnly": true,
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"help": "Click to open help page.",
-				"name": "Help",
-				"style": "Pulse"
-			}
-		],
-		"text": [
-			{
-				"default": "Annotate",
-				"help": "Text in the title bar.",
-				"label": "Title Text",
-				"name": "Titletext",
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"clampMin": true,
-				"default": 30,
-				"help": "Height of the title bar. Title font height adjusts automatically to fill.",
-				"label": "Title Height",
-				"name": "Titleheight",
-				"normMax": 100.0,
-				"normMin": 5.0,
-				"style": "Int"
-			},
-			{
-				"default": "left",
-				"help": "Alignment of title text.",
-				"label": "Title Align",
-				"menuLabels": ["Left", "Center", "Right"],
-				"menuNames": ["left", "center", "right"],
-				"name": "Titlealign",
-				"style": "Menu"
-			},
-			{
-				"help": "Text in the body area. Use an expression for newlines etc.",
-				"label": "Body Text",
-				"name": "Bodytext",
-				"startSection": true,
-				"style": "Str"
-			},
-			{
-				"clampMin": true,
-				"default": 10,
-				"help": "Size of text in the body area.",
-				"label": "Body Font Size",
-				"name": "Bodyfontsize",
-				"normMax": 100.0,
-				"normMin": 8.0,
-				"style": "Int"
-			},
-			{
-				"help": "Limit the width of the text area.",
-				"label": "Limit Body Text Width",
-				"name": "Bodylimitwidth",
-				"style": "Toggle"
-			},
-			{
-				"clampMin": true,
-				"default": 1000,
-				"help": "Width limit that will cause wraparound or cut-off. Measured in Panel units.",
-				"label": "Max Body Text Width",
-				"name": "Bodymaxwidth",
-				"normMax": 2000.0,
-				"normMin": 100.0,
-				"style": "Int"
-			}
-		],
-		"settings": [
-			{
-				"default": "comment",
-				"help": "Switch between Comment, Network Box, and Annotate Modes. ",
-				"menuLabels": ["Comment", "Network Box", "Annotate"],
-				"menuNames": ["comment", "networkbox", "annotate"],
-				"name": "Mode",
-				"style": "Menu"
-			},
-			{
-				"help": "Converts quotes, ellipsis, and dashes to more typographically nice unicode versions.",
-				"label": "Smart Quote",
-				"name": "Smartquote",
-				"startSection": true,
-				"style": "Toggle"
-			},
-			{
-				"default": true,
-				"help": "Wrap body text when it extends past right bound.",
-				"label": "Body Word Wrap",
-				"name": "Bodywordwrap",
-				"style": "Toggle"
-			},
-			{
-				"default": 1,
-				"help": "Background color base.",
-				"label": "Back Color",
-				"name": "Backcolorr",
-				"startSection": true,
-				"style": "RGBA"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Back color alpha.",
-				"label": "Back Color Alpha",
-				"name": "Backcoloralpha",
-				"style": "Float"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Opacity of the entire Annotate.",
-				"label": "Annotate Opacity",
-				"name": "Opacity",
-				"style": "Float"
-			}
-		],
-		"op_viewer": [
-			{
-				"help": "Turn the visibility of the viewer specified in the OP parameter below on or off.",
-				"label": "Viewer Display",
-				"name": "Opviewerdisplay",
-				"style": "Toggle"
-			},
-			{
-				"help": "The operator whose viewer is displayed in the Annotate.",
-				"label": "OP",
-				"name": "Opviewer",
-				"style": "OP"
-			},
-			{
-				"help": "Allow interaction with the OP viewer.",
-				"label": "OP Viewer Interactive",
-				"name": "Opviewerinteractive",
-				"style": "Toggle"
-			},
-			{
-				"default": "False",
-				"help": "Use the Size/Aspect Override to control viewer's size in the background.",
-				"label": "Size/Aspect Override",
-				"menuLabels": ["Natural", "Specify", "Auto-Fit"],
-				"menuNames": ["natural", "specify", "autofit"],
-				"name": "Opvieweroversize",
-				"startSection": true,
-				"style": "Menu"
-			},
-			{
-				"clampMin": true,
-				"default": 800,
-				"help": "Diplay viewer as-if it were being displayed at this resolution. This is particularly useful for zooming into operators that don't have a built-in resolution, like CHOPs, SOPs, and DATs.",
-				"label": "Size/Aspect",
-				"name": "Opviewersize",
-				"normMax": 1000.0,
-				"normMin": 1.0,
-				"style": "WH"
-			},
-			{
-				"default": 1,
-				"help": "Scale the viewer by this factor.",
-				"label": "Scale",
-				"name": "Opviewerscale",
-				"normMax": 2.0,
-				"startSection": true,
-				"style": "Float"
-			},
-			{
-				"help": "Move the border of the viewer towards left edge of Annotate when negative or towards right edge when positive.",
-				"label": "Justify X",
-				"name": "Opviewerjustifyx",
-				"normMin": -1.0,
-				"style": "Float"
-			},
-			{
-				"label": "Justify Y",
-				"name": "Opviewerjustifyy",
-				"normMin": -1.0,
-				"style": "Float"
-			},
-			{
-				"help": "When True, allow viewer to display in the Annotate title area as well as body.",
-				"label": "Cover Body and Title",
-				"name": "Opviewerfillbodytitle",
-				"style": "Toggle"
-			},
-			{
-				"clampMin": true,
-				"default": 1,
-				"help": "Zoom the viewer by this scale factor without increasing the size of its display area in the Annotate.",
-				"label": "OP Viewer Zoom",
-				"min": 0.001,
-				"name": "Opviewerzoom",
-				"normMax": 5.0,
-				"normMin": 1.0,
-				"startSection": true,
-				"style": "Float"
-			},
-			{
-				"help": "Offsets the displayed area within the viewer. Combined with OP Viewer Zoom, this lets you display a specific area of a viewer, such as a CHOP channel or table cell.",
-				"label": "OP Viewer Offset",
-				"name": "Opvieweroffsetx",
-				"style": "XYZW"
-			},
-			{
-				"clampMax": true,
-				"clampMin": true,
-				"default": 1,
-				"help": "Alpha value of the background area in the OP Viewer.",
-				"label": "Fill Alpha",
-				"name": "Opviewerfillalpha",
-				"startSection": true,
-				"style": "Float"
-			}
-		]
-	},
-	"type": "containerCOMP",
-	"parameters": {
-		"w": 960,
-		"h": 880,
-		"resizecomp": "=me",
-		"repocomp": "=me",
-		"top": "./out1",
-		"topsmoothness": "mipmap",
-		"borderover": false,
-		"parentshortcut": "Project",
-		"reloadbuiltin": false
-	},
-	"sequences": {
-		"ext": [
-			{
-				"promote": true
-			},
-			{}
-		]
-	},
-	"flags": ["viewer"],
-	"color": [0.3, 0.5, 0.9],
-	"tags": ["tdn"],
-	"operators": [
-		{
-			"name": "Embody",
-			"type": "containerCOMP",
-			"parameters": {
-				"w": "~op('./manager').par.w",
-				"h": "~op('./manager').par.h",
-				"display": false,
-				"resizecomp": "=me",
-				"repocomp": "=me",
-				"borderover": false,
-				"align": "horizlr",
-				"parentshortcut": "Embody",
-				"opshortcut": "Embody",
-				"opviewer": "./text_bg",
-				"reloadbuiltin": false
-			},
-			"sequences": {
-				"ext": [
-					{
-						"object": "op('./EmbodyExt').module.EmbodyExt(me)",
-						"name": "Embody",
-						"promote": true
-					},
-					{
-						"object": "op('./EnvoyExt').module.EnvoyExt(me)",
-						"name": "Envoy",
-						"promote": true
-					},
-					{
-						"object": "op('./TDNExt').module.TDNExt(me)",
-						"name": "TDN",
-						"promote": true
-					},
-					{
-						"object": "op('./CatalogManagerExt').module.CatalogManagerExt(me)",
-						"name": "CatalogManager",
-						"promote": true
-					},
-					{},
-					{},
-					{},
-					{},
-					{},
-					{},
-					{}
-				]
-			},
-			"custom_pars": {
-				"Embody": [
-					{
-						"name": "Status",
-						"style": "Str",
-						"readOnly": true,
-						"help": "Current Embody status (read-only). Shows whether Embody is initialized and running.",
-						"value": "Enabled"
-					},
-					{
-						"name": "Performmode",
-						"style": "Toggle",
-						"label": "Perform Mode"
-					},
-					{
-						"name": "Createexternalizationstable",
-						"style": "Pulse",
-						"label": "Create Externalizations Table",
-						"startSection": true,
-						"help": "Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade."
-					},
-					{
-						"name": "Externalizations",
-						"style": "DAT",
-						"label": "Externalizations Table",
-						"help": "Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.",
-						"value": "/embody/externalizations"
-					},
-					{
-						"name": "Openexternalizationstable",
-						"style": "Pulse",
-						"label": "Open Externalizations Table",
-						"help": "Opens the externalizations tracking table in a floating viewer window."
-					},
-					{
-						"name": "Folder",
-						"style": "Folder",
-						"label": "Externalizations Folder",
-						"startSection": true,
-						"help": "Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder."
-					},
-					{
-						"name": "Disable",
-						"style": "Pulse",
-						"startSection": true,
-						"help": "Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable."
-					},
-					{
-						"name": "Update",
-						"style": "Pulse",
-						"label": "Enable/Update",
-						"help": "Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table."
-					},
-					{
-						"name": "Refresh",
-						"style": "Pulse",
-						"help": "Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks."
-					},
-					{
-						"name": "Externalizeproject",
-						"style": "Pulse",
-						"label": "Externalize Full Project",
-						"startSection": true,
-						"help": "Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content."
-					},
-					{
-						"name": "Detectduplicatepaths",
-						"style": "Toggle",
-						"label": "Detect Duplicate Paths",
-						"help": "When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.",
-						"value": true
-					},
-					{
-						"name": "Localtimestamps",
-						"style": "Toggle",
-						"label": "Local Timestamps",
-						"default": true,
-						"help": "When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC."
-					},
-					{
-						"name": "Toxrestoreonstart",
-						"style": "Toggle",
-						"label": "Restore toxes on Start",
-						"help": "When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.",
-						"value": true
-					},
-					{
-						"name": "Datrestoreonstart",
-						"style": "Toggle",
-						"label": "Restore DATs on Start",
-						"default": true,
-						"help": "When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs."
-					},
-					{
-						"name": "Filecleanup",
-						"style": "Menu",
-						"label": "File Cleanup",
-						"startSection": true,
-						"default": "ask",
-						"menuNames": ["ask", "keep", "delete"],
-						"menuLabels": ["Ask", "Always Keep Files", "Always Delete Files"],
-						"help": "When a deleted operator's external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.",
-						"value": "delete"
-					},
-					{
-						"name": "Tdndatsafety",
-						"style": "Menu",
-						"label": "Content Safety",
-						"default": "ask",
-						"menuNames": ["ask", "externalize", "ignore"],
-						"menuLabels": ["Ask Each Save", "Always Externalize", "Never Ask"],
-						"help": "What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk."
-					},
-					{
-						"name": "Openmanager",
-						"style": "Pulse",
-						"label": "Open Manager",
-						"startSection": true,
-						"help": "Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management."
-					},
-					{
-						"name": "Closemanager",
-						"style": "Pulse",
-						"label": "Close Manager",
-						"help": "Closes the Embody Manager window."
-					}
-				],
-				"Tags": [
-					{
-						"name": "Toxtags",
-						"style": "Header",
-						"label": "tox Tags",
-						"help": "Tag strings and operator colors for TOX externalization. COMPs tagged with the Tox tag are externalized as .tox files."
-					},
-					{
-						"name": "Toxtagcolorr",
-						"style": "RGBA",
-						"label": "tox Tag Color",
-						"help": "Color applied to tox-tagged COMP operators in the network editor. Makes externalized COMPs visually identifiable.",
-						"values": [0.325, 0.8, 0.3]
-					},
-					{
-						"name": "Toxtag",
-						"style": "Str",
-						"label": ".tox Tag",
-						"help": "Tag string applied to COMP operators for .tox externalization. Operators with this tag are externalized as .tox files.",
-						"value": "tox"
-					},
-					{
-						"name": "Dattags",
-						"style": "Header",
-						"label": "DAT Tags",
-						"startSection": true,
-						"help": "Tag strings and operator colors for DAT externalization. DATs are tagged with format-specific tags (py, json, xml, etc.) and externalized to matching file types."
-					},
-					{
-						"name": "Dattagcolorr",
-						"style": "RGBA",
-						"label": "DAT Tag Color",
-						"help": "Color applied to DAT-tagged operators in the network editor. Makes externalized DATs visually identifiable.",
-						"values": [0.9, 0.3, 0.4]
-					},
-					{
-						"name": "Clonetagcolorr",
-						"style": "RGBA",
-						"label": "Clone Tag Color",
-						"help": "Color applied to clone-tagged operators in the network editor. Distinguishes cloned externalized operators from originals.",
-						"values": [1, 0.7, 0.1]
-					},
-					{
-						"name": "Pytag",
-						"style": "Str",
-						"label": ".py Tag",
-						"help": "Tag string for .py (Python) externalization. Applied to text DATs containing Python code.",
-						"value": "py"
-					},
-					{
-						"name": "Jsontag",
-						"style": "Str",
-						"label": ".json Tag",
-						"startSection": true,
-						"help": "Tag string for .json externalization. Applied to text DATs containing JSON data.",
-						"value": "json"
-					},
-					{
-						"name": "Xmltag",
-						"style": "Str",
-						"label": ".xml Tag",
-						"help": "Tag string for .xml externalization. Applied to text DATs containing XML data.",
-						"value": "xml"
-					},
-					{
-						"name": "Htmltag",
-						"style": "Str",
-						"label": ".html Tag",
-						"help": "Tag string for .html externalization. Applied to text DATs containing HTML content.",
-						"value": "html"
-					},
-					{
-						"name": "Glsltag",
-						"style": "Str",
-						"label": ".glsl Tag",
-						"startSection": true,
-						"help": "Tag string for .glsl externalization. Applied to text DATs containing GLSL shader code.",
-						"value": "glsl"
-					},
-					{
-						"name": "Fragtag",
-						"style": "Str",
-						"label": ".frag Tag",
-						"help": "Tag string for .frag externalization. Applied to text DATs containing fragment shader code.",
-						"value": "frag"
-					},
-					{
-						"name": "Verttag",
-						"style": "Str",
-						"label": ".vert Tag",
-						"help": "Tag string for .vert externalization. Applied to text DATs containing vertex shader code.",
-						"value": "vert"
-					},
-					{
-						"name": "Txttag",
-						"style": "Str",
-						"label": ".txt Tag",
-						"startSection": true,
-						"help": "Tag string for .txt externalization. Applied to text DATs containing plain text.",
-						"value": "txt"
-					},
-					{
-						"name": "Mdtag",
-						"style": "Str",
-						"label": ".md Tag",
-						"help": "Tag string for .md externalization. Applied to text DATs containing Markdown content.",
-						"value": "md"
-					},
-					{
-						"name": "Rtftag",
-						"style": "Str",
-						"label": ".rtf Tag",
-						"help": "Tag string for .rtf externalization. Applied to text DATs containing rich text format content.",
-						"value": "rtf"
-					},
-					{
-						"name": "Csvtag",
-						"style": "Str",
-						"label": ".csv Tag",
-						"startSection": true,
-						"help": "Tag string for .csv externalization. Applied to table DATs with comma-separated values.",
-						"value": "csv"
-					},
-					{
-						"name": "Tsvtag",
-						"style": "Str",
-						"label": ".tsv Tag",
-						"help": "Tag string for .tsv externalization. Applied to table DATs with tab-separated values.",
-						"value": "tsv"
-					},
-					{
-						"name": "Dattag",
-						"style": "Str",
-						"label": ".dat Tag",
-						"help": "Tag string for .dat externalization. Generic DAT externalization format.",
-						"value": "dat"
-					},
-					{
-						"name": "Tdntags",
-						"style": "Header",
-						"label": "TDN Tags",
-						"startSection": true,
-						"help": "Tag strings and operator colors for TDN externalization. COMPs tagged with the TDN tag have their children exported as human-readable .tdn JSON network files."
-					},
-					{
-						"name": "Tdntagcolor",
-						"style": "RGBA",
-						"label": "TDN Tag Color",
-						"default": 0.3,
-						"help": "Color applied to TDN-tagged COMP operators in the network editor. Makes TDN-strategy COMPs visually identifiable."
-					},
-					{
-						"name": "Tdntag",
-						"style": "Str",
-						"label": ".tdn Tag",
-						"help": "Tag string for .tdn externalization. Applied to COMPs whose children are exported as human-readable JSON network files.",
-						"value": "tdn"
-					}
-				],
-				"TDN": [
-					{
-						"name": "Tdnmode",
-						"style": "Menu",
-						"label": "TDN Mode",
-						"startSection": true,
-						"default": "export",
-						"menuNames": ["off", "export", "full"],
-						"menuLabels": ["Off", "Export-on-Save", "Roundtrip (Experimental)"],
-						"help": "Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs."
-					},
-					{
-						"name": "Tdncascade",
-						"style": "Toggle",
-						"label": "Cascade to Children",
-						"startSection": true,
-						"help": "When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file."
-					},
-					{
-						"name": "Tdncascadewarn",
-						"style": "Menu",
-						"label": "Large TDN Warning",
-						"default": "ask",
-						"menuNames": ["ask", "quiet"],
-						"menuLabels": ["Ask", "Quiet"],
-						"help": "Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed."
-					},
-					{
-						"name": "Embeddatsintdns",
-						"style": "Toggle",
-						"label": "Embed DATs (default)",
-						"startSection": true,
-						"help": "When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content."
-					},
-					{
-						"name": "Embedstorageintdns",
-						"style": "Toggle",
-						"label": "Embed Storage (default)",
-						"default": true,
-						"help": "Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu."
-					},
-					{
-						"name": "Tdncreateonstart",
-						"style": "Toggle",
-						"label": "TDN Create on Start",
-						"startSection": true,
-						"default": true,
-						"help": "When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save."
-					},
-					{
-						"name": "Tdnstriponsave",
-						"style": "Toggle",
-						"label": "Strip on Save",
-						"default": true,
-						"help": "When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal."
-					},
-					{
-						"name": "Tdnpalettehandling",
-						"style": "Menu",
-						"label": "Palette Handling",
-						"startSection": true,
-						"default": "ask",
-						"menuNames": ["ask", "blackbox", "fullexport"],
-						"menuLabels": ["Ask", "Black Box", "Full Export"],
-						"help": "How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.",
-						"value": "blackbox"
-					},
-					{
-						"name": "Tdnfile",
-						"style": "File",
-						"label": "TDN File",
-						"startSection": true,
-						"help": "Path to a .tdn file to import. Select a file, set the Network Path target, then pulse Import TDN."
-					},
-					{
-						"name": "Networkpath",
-						"style": "COMP",
-						"label": "Network Path",
-						"help": "Target COMP where the TDN file will be imported. Operators from the .tdn are created as children of this COMP."
-					},
-					{
-						"name": "Importtdn",
-						"style": "Pulse",
-						"label": "Import TDN",
-						"help": "Imports the specified TDN File into the Network Path target. Creates all operators, sets parameters, connections, and positions."
-					}
-				],
-				"Envoy": [
-					{
-						"name": "Aiclient",
-						"style": "Menu",
-						"label": "AI Client",
-						"default": "0",
-						"menuNames": ["claudecode", "cursor", "copilot", "windsurf", "none"],
-						"menuLabels": ["Claude Code", "Cursor", "GitHub Copilot", "Windsurf", "None"],
-						"help": "Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).",
-						"value": "claudecode"
-					},
-					{
-						"name": "Envoyenable",
-						"style": "Toggle",
-						"label": "Envoy Enable",
-						"help": "Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.",
-						"value": true
-					},
-					{
-						"name": "Envoyport",
-						"style": "Int",
-						"label": "Envoy Port",
-						"default": 9876,
-						"help": "Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.",
-						"value": 9870
-					},
-					{
-						"name": "Envoystatus",
-						"style": "Str",
-						"label": "Envoy Status",
-						"readOnly": true,
-						"help": "Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.",
-						"value": "Running on port 9870"
-					}
-				],
-				"Logs": [
-					{
-						"name": "Verbose",
-						"style": "Toggle",
-						"label": "Verbose (Debug)",
-						"help": "Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues."
-					},
-					{
-						"name": "Print",
-						"style": "Toggle",
-						"label": "Print to Textport",
-						"help": "Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time.",
-						"value": true
-					},
-					{
-						"name": "Logtofile",
-						"style": "Toggle",
-						"label": "Log to File",
-						"help": "Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB.",
-						"value": true
-					},
-					{
-						"name": "Logfolder",
-						"style": "Folder",
-						"label": "Log Folder",
-						"help": "Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.",
-						"value": "logs"
-					}
-				],
-				"UI": [
-					{
-						"name": "Enablekeyboardshortcuts",
-						"style": "Toggle",
-						"label": "Enable Keyboard Shortcuts",
-						"help": "Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.",
-						"value": true
-					},
-					{
-						"name": "Addtagshort",
-						"style": "Str",
-						"label": "Add Externalization Tag",
-						"startSection": true,
-						"readOnly": true,
-						"help": "Keyboard shortcut for adding an externalization tag to the selected operator(s). Default: double-press Left Ctrl.",
-						"value": "lctrl-lctrl (lclick op & press 2x)"
-					},
-					{
-						"name": "Openmanagershort",
-						"style": "Str",
-						"label": "Open Manager",
-						"readOnly": true,
-						"help": "Keyboard shortcut for opening the Embody Manager window.",
-						"value": "ctrl/cmd + lshift + o"
-					},
-					{
-						"name": "Initializeupdateshort",
-						"style": "Str",
-						"label": "Initialize/Update All",
-						"readOnly": true,
-						"help": "Keyboard shortcut for triggering Initialize/Update All (Ctrl+Shift+U). Saves all dirty externalized operators to disk.",
-						"value": "ctrl/cmd + lshift + u"
-					},
-					{
-						"name": "Saveshort",
-						"style": "Str",
-						"label": "Update Current COMP",
-						"readOnly": true,
-						"help": "Keyboard shortcut for updating/saving the current COMP to its externalized file.",
-						"value": "ctrl/cmd + alt + u"
-					},
-					{
-						"name": "Exportprojecttdn",
-						"style": "Str",
-						"label": "Export Project to TDN",
-						"startSection": true,
-						"default": "ctrl/cmd + lshift + e",
-						"readOnly": true,
-						"help": "Export the entire project network to a single .tdn file at your project root."
-					},
-					{
-						"name": "Exportcomptdn",
-						"style": "Str",
-						"label": "Export Current COMP to TDN",
-						"default": "ctrl/cmd + alt + e",
-						"readOnly": true,
-						"help": "Export the current COMP network to a .tdn file."
-					},
-					{
-						"name": "Textcolor",
-						"style": "RGBA",
-						"label": "Text Color",
-						"startSection": true,
-						"help": "Text color used throughout the Embody UI (toolbar, manager, dialogs).",
-						"values": [0.59472, 0.63, 0.599424, 1]
-					},
-					{
-						"name": "Backgroundcolor",
-						"style": "RGBA",
-						"label": "Background Color",
-						"help": "Background color for the Embody UI panels and windows.",
-						"values": [0.0968, 0.121, 0.121, 0.8]
-					},
-					{
-						"name": "Buttonbackgroundcolor",
-						"style": "RGBA",
-						"label": "Button Background Color",
-						"help": "Background color for buttons in the Embody UI.",
-						"values": [0.1246, 0.14, 0.13, 1]
-					},
-					{
-						"name": "Listheadercolor",
-						"style": "RGBA",
-						"label": "List Header Color",
-						"help": "Header row color in the Manager list view.",
-						"values": [0.089419, 0.121, 0.103104, 1]
-					},
-					{
-						"name": "Listrowcolor",
-						"style": "RGBA",
-						"label": "List Row Color",
-						"help": "Default row color in the Manager list view.",
-						"values": [0.1246, 0.14, 0.13, 1]
-					},
-					{
-						"name": "Listrowselectcolor",
-						"style": "RGBA",
-						"label": "List Row Select Color",
-						"help": "Selected row highlight color in the Manager list view.",
-						"values": [0.220088, 0.244, 0.221283, 1]
-					},
-					{
-						"name": "Savedcolor",
-						"style": "RGBA",
-						"label": "Saved Color",
-						"help": "Color indicator for operators that are saved and up-to-date (not dirty).",
-						"values": [0.227574, 0.423, 0.289133, 0.5]
-					},
-					{
-						"name": "Dirtycolor",
-						"style": "RGBA",
-						"label": "Dirty Color",
-						"help": "Color indicator for operators that have unsaved changes (dirty state).",
-						"values": [0.675, 0.25668, 0.2268, 1]
-					},
-					{
-						"name": "Dirtyparcolor",
-						"style": "RGBA",
-						"label": "Dirty Par Color",
-						"help": "Color indicator for parameters that have been modified since last save.",
-						"values": [0.49, 0.321897, 0.16464, 1]
-					},
-					{
-						"name": "Taggingmenucolor",
-						"style": "RGBA",
-						"label": "Tagging Menu Color",
-						"help": "Background color for the tagging menu popup.",
-						"values": [0.2, 0.2, 0.2, 1]
-					},
-					{
-						"name": "Highlightcolor",
-						"style": "RGBA",
-						"label": "Highlight Color",
-						"help": "Accent/highlight color used for interactive elements in the Embody UI.",
-						"values": [1, 1, 1, 1]
-					},
-					{
-						"name": "Tdnsavedcolor",
-						"style": "RGBA",
-						"label": "TDN Saved Color",
-						"help": "Color indicator for TDN-strategy operators that are saved and up-to-date.",
-						"values": [0.153552, 0.376081, 0.457, 1]
-					}
-				],
-				"About": [
-					{
-						"name": "Version",
-						"style": "Str",
-						"startSection": true,
-						"readOnly": true,
-						"help": "Embody version string (read-only).",
-						"value": "5.0.379"
-					},
-					{
-						"name": "Touchbuild",
-						"style": "Str",
-						"label": "Touch Build",
-						"readOnly": true,
-						"help": "TouchDesigner build number this version was developed on (read-only).",
-						"value": "2025.32460"
-					},
-					{
-						"name": "Author",
-						"style": "Str",
-						"readOnly": true,
-						"help": "Embody author (read-only).",
-						"value": "Dylan Roscover"
-					},
-					{
-						"name": "Build",
-						"style": "Int",
-						"label": "Build Number",
-						"readOnly": true,
-						"help": "Embody build number (read-only). Incremented with each release.",
-						"value": 398
-					},
-					{
-						"name": "Github",
-						"style": "Pulse",
-						"label": "GitHub",
-						"startSection": true,
-						"help": "Opens the Embody GitHub repository in your web browser."
-					},
-					{
-						"name": "Date",
-						"style": "Str",
-						"label": "Build Date",
-						"readOnly": true,
-						"help": "Date of this Embody build (read-only).",
-						"value": "2026-04-18 19:43:48 UTC"
-					},
-					{
-						"name": "Help",
-						"style": "Pulse",
-						"help": "Opens the Embody help documentation."
-					}
-				]
-			},
-			"flags": ["display", "viewer"],
-			"size": [160, 98],
-			"color": [0.3, 0.5, 0.9],
-			"tags": ["tdn"],
-			"storage": {
-				"claudius_running": false,
-				"_tdn_restore_failures": ["/embody/base1"],
-				"expand_order": ["/embody"],
-				"_start_in_progress": true
-			},
-			"tdn_ref": "embody/Embody.tdn"
-		},
-		{
-			"name": "base_tdn",
-			"type": "baseCOMP",
-			"position": [700, -325],
-			"tdn_ref": "embody/base_tdn.tdn"
-		},
-		{
-			"name": "tdn_tests",
-			"type": "baseCOMP",
-			"flags": ["viewer"],
-			"position": [500, -325],
-			"storage": {
-				"embed_dats_in_tdn": true
-			},
-			"tdn_ref": "embody/tdn_tests.tdn"
-		},
-		{
-			"name": "unit_tests",
-			"type": "baseCOMP",
-			"parameters": {
-				"opshortcut": "unit_tests"
-			},
-			"sequences": {
-				"ext": [
-					{
-						"object": "op('./TestRunnerExt').module.TestRunnerExt(me)",
-						"name": "TestRunnerExt",
-						"promote": true
-					},
-					{},
-					{}
-				]
-			},
-			"position": [-600, -300],
-			"storage": {
-				"test_results": {
-					"total": 341,
-					"passed": 341,
-					"failed": 0,
-					"errors": 0,
-					"skipped": 0,
-					"results": [
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_adds_table_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 58.89
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_build_params",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 41.27
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_enables_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 48.58
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_no_backslashes",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 42.73
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_rel_file_path_is_tox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 52.34
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_sets_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 59.16
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_sets_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 47.46
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_table_has_correct_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 53.57
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_comp_table_has_correct_type",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 79.41
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_dat_adds_table_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 27.45
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_dat_rel_path_has_py_extension",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 25.15
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_dat_sets_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13.18
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_dat_sets_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 12.67
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleAddition_idempotent_no_duplicate_rows",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 52.58
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleSubtraction_comp_removes_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 67.94
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleSubtraction_comp_unlocks_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 75.38
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleSubtraction_dat_removes_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 25.39
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_handleSubtraction_dat_unlocks_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 23.28
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_mixed_comp_and_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 63.49
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_multiple_comps_unique_paths",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 154.87
-						},
-						{
-							"suite": "test_crud_operators",
-							"test": "test_nested_comp_hierarchy_in_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 55.81
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_checkFileReferences_shared_file_returns_true",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 53.28
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_checkFileReferences_unique_file_returns_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 59.8
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_delete_comp_leaves_stale_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 52.53
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_delete_dat_leaves_stale_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 25.57
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_handleMissingOperator_cleans_stale_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 68.83
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_handleMissingOperator_cleans_stale_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 37.45
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_comp_clears_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 58.8
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_comp_removes_table_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 56.05
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_comp_removes_tag",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 56.88
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_comp_resets_color",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 54.28
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_comp_unlocks_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 54.77
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_dat_clears_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 26.17
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_dat_removes_table_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 32.94
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_dat_removes_tag",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 31.73
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_destroyed_op_no_crash",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 60.01
-						},
-						{
-							"suite": "test_delete_cleanup",
-							"test": "test_removeListerRow_nonexistent_path_no_crash",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.41
-						},
-						{
-							"suite": "test_duplicate_handling",
-							"test": "test_cleanupAllDuplicateRows_runs_without_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.76
-						},
-						{
-							"suite": "test_duplicate_handling",
-							"test": "test_cleanupDuplicateRows_existing_path_no_duplicates",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.18
-						},
-						{
-							"suite": "test_duplicate_handling",
-							"test": "test_cleanupDuplicateRows_nonexistent_path_returns_none",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.05
-						},
-						{
-							"suite": "test_duplicate_handling",
-							"test": "test_cleanup_preserves_table_row_count",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.86
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_externalizations_folder_returns_string",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_externalizations_table_exists",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_externalizations_table_has_columns",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.05
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_getOpPaths_comp_new_generates_tox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.66
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_getOpPaths_comp_with_existing_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.69
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_getOpPaths_returns_none_tuple_on_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.01
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_setupComp_enables_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 23.46
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_setupComp_sets_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 18.9
-						},
-						{
-							"suite": "test_externalization",
-							"test": "test_setupDat_sets_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.79
-						},
-						{
-							"suite": "test_file_management",
-							"test": "test_getTrackedFilePaths_entries_are_paths",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.05
-						},
-						{
-							"suite": "test_file_management",
-							"test": "test_getTrackedFilePaths_has_entries",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 2.83
-						},
-						{
-							"suite": "test_file_management",
-							"test": "test_getTrackedFilePaths_returns_set",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.09
-						},
-						{
-							"suite": "test_file_management",
-							"test": "test_isTrackedFile_known_tracked_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.88
-						},
-						{
-							"suite": "test_file_management",
-							"test": "test_isTrackedFile_untracked_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.02
-						},
-						{
-							"suite": "test_file_management",
-							"test": "test_safeDeleteFile_force_on_temp_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 2.19
-						},
-						{
-							"suite": "test_file_management",
-							"test": "test_safeDeleteFile_untracked_returns_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.71
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_buffer_ids_monotonic",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.18
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_buffer_max_size_200",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_debug_logs_at_debug_level",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.14
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_error_logs_at_error_level",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.15
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_info_logs_at_info_level",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.18
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_log_appends_to_buffer",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.18
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_log_buffer_entry_structure",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.15
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_log_increments_counter",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.23
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_log_level_stored_correctly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.92
-						},
-						{
-							"suite": "test_logging",
-							"test": "test_warn_logs_at_warning_level",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.21
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_comment_mode",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 168.42
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_default_mode",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 39.38
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_invalid_mode",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_invalid_parent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_networkbox_mode",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 38.54
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_with_color",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 34.24
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_with_name",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 55.5
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_with_position",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 44.69
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_with_size",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 42.42
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_with_text",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 39.23
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_create_annotation_with_title",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 43.82
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_get_annotations_finds_created",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 80.5
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_get_annotations_invalid_parent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_get_annotations_returns_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.09
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_get_enclosed_ops_annotation",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 64.42
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_get_enclosed_ops_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_set_annotation_modify_text",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 87.04
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_set_annotation_modify_title",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 52.36
-						},
-						{
-							"suite": "test_mcp_annotations",
-							"test": "test_set_annotation_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_code_execution",
-							"test": "test_execute_multiline",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.37
-						},
-						{
-							"suite": "test_mcp_code_execution",
-							"test": "test_execute_no_result_variable",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.3
-						},
-						{
-							"suite": "test_mcp_code_execution",
-							"test": "test_execute_op_access",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.29
-						},
-						{
-							"suite": "test_mcp_code_execution",
-							"test": "test_execute_runtime_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.3
-						},
-						{
-							"suite": "test_mcp_code_execution",
-							"test": "test_execute_simple_code",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.19
-						},
-						{
-							"suite": "test_mcp_code_execution",
-							"test": "test_execute_string_result",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.24
-						},
-						{
-							"suite": "test_mcp_code_execution",
-							"test": "test_execute_syntax_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.24
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_connect_chops",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13.08
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_connect_nonexistent_source",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.11
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_connect_tops",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 11.63
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_disconnect_after_connect",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.27
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_disconnect_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_get_connections_basic",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.76
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_get_connections_empty",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6
-						},
-						{
-							"suite": "test_mcp_connections",
-							"test": "test_get_connections_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_get_dat_content_auto_table",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.66
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_get_dat_content_auto_text",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.14
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_get_dat_content_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_get_dat_content_table",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.52
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_get_dat_content_text",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.32
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_set_dat_content_clear",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.01
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_set_dat_content_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_set_dat_content_rows",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.74
-						},
-						{
-							"suite": "test_mcp_dat_content",
-							"test": "test_set_dat_content_text",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.23
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_exec_node_method_cook",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.8
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_exec_node_method_nonexistent_method",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.96
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_module_help_td",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13138.06
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_module_help_tdu",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.43
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_node_errors_clean_op",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.18
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_node_errors_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_node_errors_recursive",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13.4
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_td_class_details_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.06
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_td_class_details_op",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.79
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_td_classes",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.79
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_td_info",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_mcp_diagnostics",
-							"test": "test_get_td_info_has_os",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_extensions",
-							"test": "test_create_extension_custom_code",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13.3
-						},
-						{
-							"suite": "test_mcp_extensions",
-							"test": "test_create_extension_existing_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13.03
-						},
-						{
-							"suite": "test_mcp_extensions",
-							"test": "test_create_extension_invalid_class_name",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_extensions",
-							"test": "test_create_extension_new_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 12.06
-						},
-						{
-							"suite": "test_mcp_extensions",
-							"test": "test_create_extension_nonexistent_parent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.09
-						},
-						{
-							"suite": "test_mcp_extensions",
-							"test": "test_create_extension_reports_ext_index",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 14.3
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_get_externalization_status_existing",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.1
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_get_externalization_status_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_get_externalizations_entry_structure",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.17
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_get_externalizations_has_entries",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.15
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_get_externalizations_returns_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.13
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_remove_externalization_tag",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 128.23
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_remove_externalization_tag_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_tag_for_externalization_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 71.52
-						},
-						{
-							"suite": "test_mcp_externalization",
-							"test": "test_tag_for_externalization_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_get_op_flags",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.3
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_get_op_flags_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_get_op_position",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.24
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_get_op_position_has_color",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.89
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_layout_children",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 15.58
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_layout_children_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_set_op_flags_bypass",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.8
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_set_op_flags_multiple",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.83
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_set_op_flags_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_set_op_position_color",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.23
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_set_op_position_comment",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 16.15
-						},
-						{
-							"suite": "test_mcp_flags_position",
-							"test": "test_set_op_position_xy",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.9
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_cook_operator",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.3
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_cook_operator_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_copy_operator_basic",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 10.3
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_copy_operator_without_name",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.95
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_create_operator_in_non_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.91
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_create_operator_invalid_parent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_create_operator_valid",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.83
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_create_operator_without_name",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.03
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_delete_operator_existing",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.38
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_delete_operator_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_find_children_by_name",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.29
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_find_children_by_type",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.78
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_get_operator_has_parameters",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.55
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_get_operator_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_get_operator_returns_info",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.44
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_query_network_basic",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.96
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_query_network_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_query_network_with_type_filter",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.01
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_rename_operator",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 45.97
-						},
-						{
-							"suite": "test_mcp_operators",
-							"test": "test_rename_operator_nonexistent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_get_parameter_basic",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 11.13
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_get_parameter_has_metadata",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.29
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_get_parameter_nonexistent_op",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_get_parameter_nonexistent_par",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.09
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_set_parameter_constant",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 11.17
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_set_parameter_expression",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.19
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_set_parameter_mode_constant",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 10.01
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_set_parameter_nonexistent_op",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_set_parameter_nonexistent_par",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.57
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_set_parameter_verifies_value",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 16.82
-						},
-						{
-							"suite": "test_mcp_parameters",
-							"test": "test_set_toggle_parameter_with_0_1",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 16.14
-						},
-						{
-							"suite": "test_mcp_performance",
-							"test": "test_basic_return_structure",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.01
-						},
-						{
-							"suite": "test_mcp_performance",
-							"test": "test_has_memory_fields",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.49
-						},
-						{
-							"suite": "test_mcp_performance",
-							"test": "test_include_children",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 10.22
-						},
-						{
-							"suite": "test_mcp_performance",
-							"test": "test_nonexistent_op",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_mcp_performance",
-							"test": "test_without_include_children",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.59
-						},
-						{
-							"suite": "test_operator_queries",
-							"test": "test_getExternalizedOps_comp_contains_embody",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.31
-						},
-						{
-							"suite": "test_operator_queries",
-							"test": "test_getExternalizedOps_comp_returns_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.31
-						},
-						{
-							"suite": "test_operator_queries",
-							"test": "test_getExternalizedOps_dat_has_entries",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.33
-						},
-						{
-							"suite": "test_operator_queries",
-							"test": "test_getExternalizedOps_dat_returns_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.3
-						},
-						{
-							"suite": "test_operator_queries",
-							"test": "test_getOpsByPar_comp_returns_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 1.28
-						},
-						{
-							"suite": "test_operator_queries",
-							"test": "test_getOpsByPar_dat_returns_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 2.72
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_captureParameters_entries_have_value_expr_mode",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.53
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_captureParameters_excludes_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.71
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_captureParameters_has_params",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.25
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_captureParameters_returns_dict",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.89
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_compareParameters_after_change",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 11.86
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_compareParameters_first_call_returns_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 8.87
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_compareParameters_no_change",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.78
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_removeComp_nonexistent_no_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_removeComp_removes_entry",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.14
-						},
-						{
-							"suite": "test_param_tracker",
-							"test": "test_updateParamStore_stores_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.4
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_buildAbsolutePath_contains_rel_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.06
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_buildAbsolutePath_is_absolute",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.06
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_buildAbsolutePath_returns_path_object",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.09
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_getExternalPath_comp_normalizes_backslashes",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.27
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_getExternalPath_comp_returns_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.82
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_getExternalPath_dat_returns_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.76
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_getExternalPath_empty_returns_falsy",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.47
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_normalizePath_backslashes_converted",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_normalizePath_empty_string_returns_falsy",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_normalizePath_forward_slashes_unchanged",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_normalizePath_mixed_slashes",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_normalizePath_none_returns_none",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_normalizePath_pathlib_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.13
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_setExternalPath_comp_normalizes",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.9
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_setExternalPath_comp_not_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.41
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_setExternalPath_comp_readonly_default",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.05
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_setExternalPath_comp_sets_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.65
-						},
-						{
-							"suite": "test_path_utils",
-							"test": "test_setExternalPath_dat_sets_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.77
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_cleanupDuplicateRows_keeps_most_recent",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 58.75
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_cleanupDuplicateRows_no_duplicates_noop",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 52.04
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_copy_to_different_parent_changes_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 50.44
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_findMovedOp_finds_renamed_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 103.76
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_findMovedOp_finds_renamed_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 99.36
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_findMovedOp_returns_false_when_truly_missing",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 2.58
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_getOpPaths_reflects_new_parent_hierarchy",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 38.16
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_handleMissingOperator_removes_from_table",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 76.3
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_rename_comp_table_has_old_path_before_refresh",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 71.12
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_rename_dat_table_has_old_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 40.97
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_dat_enables_syncfile",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 100.98
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_dat_updates_file_par",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 82.95
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_enables_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 88.57
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_missing_old_path_logs_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.69
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_sets_externaltox_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 86.29
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_updates_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 130.29
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_updates_rel_file_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 210.64
-						},
-						{
-							"suite": "test_rename_move_lifecycle",
-							"test": "test_updateMovedOp_updates_table_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 126.32
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_claudius_version_constant",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_enable_parameter_exists",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_execute_operation_handler_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.07
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_execute_operation_unknown",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_execute_operation_valid",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.07
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_execute_operation_with_params",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.57
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_last_served_log_id_exists",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_last_served_log_id_is_int",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_port_is_integer",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_port_parameter_exists",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_request_queue_exists",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_response_queue_exists",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_running_flag_is_bool",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_running_flag_is_stored",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_shutdown_event_on_sys",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_shutdown_event_registered",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_server_lifecycle",
-							"test": "test_status_parameter_exists",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_applyTagToOperator_comp_with_existing_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 15.54
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_full_lifecycle_tag_externalize_untag_retag",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 66.39
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_getTagColor_comp_tox_returns_tuple",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.21
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_getTagColor_dat_py_returns_tuple",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.19
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_getTagColor_invalid_returns_none",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.53
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_retag_comp_after_removal_one_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 73.94
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_retag_dat_after_removal_one_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 43.17
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_dat_tag_on_comp_returns_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.44
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_off_clears_dat_file",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 22.15
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_off_clears_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 18.47
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_off_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.21
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_off_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.01
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_off_resets_color",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.58
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_off_unlocks_readonly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 23.07
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_on_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.79
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_toggle_on_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.31
-						},
-						{
-							"suite": "test_tag_lifecycle",
-							"test": "test_tagSetter_wrong_family_returns_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.68
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_applyTagToOperator_adds_tag",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.83
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_applyTagToOperator_duplicate_tag_no_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.56
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_applyTagToOperator_sets_color",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.88
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_getTags_filter_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.25
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_getTags_filter_tox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.24
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_getTags_has_tox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.18
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_getTags_returns_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.11
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isClone_dat_not_clone",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.06
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isClone_regular_comp_not_clone",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.54
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isInsideClone_regular_op_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13.25
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpEligible_comp_is_eligible",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 3.59
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpEligible_comp_with_existing_externaltox",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.05
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpEligible_tagged_dat_is_eligible",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 33.51
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpEligible_tagged_dat_with_file_set",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.66
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpEligible_text_dat_without_tag_not_eligible",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 10.78
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpEligible_untagged_dat_not_eligible",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 4.99
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpProcessable_normal_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 6.7
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isOpProcessable_normal_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.03
-						},
-						{
-							"suite": "test_tag_management",
-							"test": "test_isReplicant_regular_op_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.27
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_dat_content_excluded",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.22
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_dat_content_included",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 7.01
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_empty_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.25
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_includes_children",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 13.72
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_max_depth_zero",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 15.56
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_non_comp",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 9.51
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_nonexistent_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_returns_success",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.23
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_returns_tdn_dict",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.24
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_export_tdn_has_format_fields",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.47
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_import_basic",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 20.33
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_import_clear_first",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 18.04
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_import_creates_operators",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 26.12
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_import_invalid_tdn",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 5.59
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_import_nonexistent_target",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_import_operators_array_directly",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 15.29
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_roundtrip_preserves_dat_content",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 26.06
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_roundtrip_preserves_nested_structure",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 57.99
-						},
-						{
-							"suite": "test_tdn_export_import",
-							"test": "test_roundtrip_preserves_operator_names",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 47.71
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_assembleHierarchy_deeply_nested",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.03
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_assembleHierarchy_empty",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_assembleHierarchy_flat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_assembleHierarchy_nested",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_colorsDiffer_beyond_tolerance",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_colorsDiffer_identical",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_colorsDiffer_length_mismatch",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_colorsDiffer_within_tolerance",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_bool_false",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_bool_true",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_float_decimal_preserved",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_float_whole_to_int",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_int_unchanged",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_list_recursion",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.02
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_none_to_empty_string",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_string_unchanged",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_serializeValue_tuple_becomes_list",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.04
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_different_int",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_empty_string_vs_none",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_float_precision",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_float_vs_int",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_none_vs_empty_string",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_same_int",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_strings_differ",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_tdn_helpers",
-							"test": "test_valuesDiffer_strings_same",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.01
-						},
-						{
-							"suite": "test_update_sync",
-							"test": "test_createExternalizationsTable_header_row",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.06
-						},
-						{
-							"suite": "test_update_sync",
-							"test": "test_externalizations_no_backslashes_in_paths",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.1
-						},
-						{
-							"suite": "test_update_sync",
-							"test": "test_externalizations_property_returns_dat",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.08
-						},
-						{
-							"suite": "test_update_sync",
-							"test": "test_externalizations_table_rows_have_file_path",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.12
-						},
-						{
-							"suite": "test_update_sync",
-							"test": "test_externalizations_table_rows_have_type",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.09
-						},
-						{
-							"suite": "test_update_sync",
-							"test": "test_externalizations_table_rows_have_valid_paths",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.08
-						},
-						{
-							"suite": "test_update_sync",
-							"test": "test_normalizeAllPaths_runs_without_error",
-							"status": "PASS",
-							"message": "",
-							"duration_ms": 0.38
-						}
-					]
-				}
-			},
-			"tdn_ref": "embody/unit_tests.tdn"
-		},
-		{
-			"name": "execute_src_ctrl",
-			"type": "executeDAT",
-			"parameters": {
-				"fromop": "=parent()",
-				"projectpresave": true,
-				"file": "embody/execute_src_ctrl.py",
-				"syncfile": true
-			},
-			"flags": ["viewer"],
-			"position": [-625, 120],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["py"]
-		},
-		{
-			"name": "externalizations",
-			"type": "tableDAT",
-			"parameters": {
-				"file": "embody/externalizations.tsv",
-				"syncfile": true,
-				"rows": 155,
-				"cols": 11
-			},
-			"flags": ["viewer"],
-			"position": [-200, 0],
-			"size": [130, 90],
-			"color": [0.9, 0.3, 0.4],
-			"tags": ["tsv"]
-		},
-		{
-			"name": "annotation_unit_tests",
-			"type": "annotateCOMP",
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Unit Tests",
-					"Bodytext": "Embody's test suites for verifying externalization, path resolution, and MCP tool behavior."
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": [0.18, 0.22, 0.28],
-					"Opacity": 0.9
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-700, -352],
-			"size": [329, 322],
-			"palette_clone": true
-		},
-		{
-			"name": "annotation_execute_src_ctrl",
-			"type": "annotateCOMP",
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Build & Release Manager",
-					"Bodytext": "Runs on every project save (onProjectPreSave):\n\n1. Auto-increments the patch version\n   (e.g. v5.0.32 -> v5.0.33)\n\n2. Updates README.md with the new\n   version number and TD build\n\n3. Deletes the previous release .tox\n\n4. Saves a fresh Embody-vX.Y.Z.tox\n   to the /release folder",
-					"Bodyfontsize": 12
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": [0.18, 0.22, 0.28],
-					"Opacity": 0.9
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-775, 50],
-			"size": [440, 480],
-			"palette_clone": true
-		},
-		{
-			"name": "annotation_externalizations",
-			"type": "annotateCOMP",
-			"sequences": {
-				"ext": [
-					{
-						"object": "op.TDAnnotate.mod.AnnotateExt.AnnotateExt(me)",
-						"promote": true
-					}
-				]
-			},
-			"custom_pars": {
-				"Text": {
-					"$t": "text",
-					"Titletext": "Externalization Tracking",
-					"Bodytext": "Master tracking table for all externalized operators. Managed exclusively by Embody — never edit directly."
-				},
-				"Settings": {
-					"$t": "settings",
-					"Mode": "annotate",
-					"Backcolorr": [0.18, 0.22, 0.28],
-					"Opacity": 0.9
-				},
-				"OP Viewer": {
-					"$t": "op_viewer",
-					"Opvieweroversize": "natural"
-				},
-				"About": {
-					"$t": "about"
-				}
-			},
-			"position": [-250, -50],
-			"size": [223, 279],
-			"palette_clone": true
-		}
-	],
-	"annotations": [
-		{
-			"name": "annotation_execute_src_ctrl",
-			"mode": "annotate",
-			"title": "Build & Release Manager",
-			"text": "Runs on every project save (onProjectPreSave):\n\n1. Auto-increments the patch version\n   (e.g. v5.0.32 -> v5.0.33)\n\n2. Updates README.md with the new\n   version number and TD build\n\n3. Deletes the previous release .tox\n\n4. Saves a fresh Embody-vX.Y.Z.tox\n   to the /release folder",
-			"position": [-775, 50],
-			"size": [440, 480],
-			"color": [0.18, 0.22, 0.28],
-			"opacity": 0.9,
-			"bodyFontSize": 12
-		},
-		{
-			"name": "annotation_externalizations",
-			"mode": "annotate",
-			"title": "Externalization Tracking",
-			"text": "Master tracking table for all externalized operators. Managed exclusively by Embody — never edit directly.",
-			"position": [-250, -50],
-			"size": [223, 279],
-			"color": [0.18, 0.22, 0.28],
-			"opacity": 0.9
-		},
-		{
-			"name": "annotation_unit_tests",
-			"mode": "annotate",
-			"title": "Unit Tests",
-			"text": "Embody's test suites for verifying externalization, path resolution, and MCP tool behavior.",
-			"position": [-700, -352],
-			"size": [329, 322],
-			"color": [0.18, 0.22, 0.28],
-			"opacity": 0.9
-		}
-	]
-}
+format: tdn
+version: '2.0'
+build: 420
+generator: Embody/6.0.60
+td_build: 099.2025.32820
+source_file: Embody-6.61.toe
+exported_at: '2026-06-29T00:35:10Z'
+network_path: /embody
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  baseCOMP:
+    size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
+type: containerCOMP
+parameters:
+  w: 960
+  h: 880
+  resizecomp: =me
+  repocomp: =me
+  top: ./out1
+  topsmoothness: mipmap
+  borderover: false
+  parentshortcut: Project
+  reloadbuiltin: false
+sequences:
+  ext:
+  - promote: true
+  - {}
+flags:
+- viewer
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+operators:
+- name: Embody
+  type: containerCOMP
+  parameters:
+    w: ~op('./manager').par.w
+    h: ~op('./manager').par.h
+    display: false
+    resizecomp: =me
+    repocomp: =me
+    borderover: false
+    align: horizlr
+    parentshortcut: Embody
+    opshortcut: Embody
+    opviewer: ./text_bg
+    reloadbuiltin: false
+  sequences:
+    ext:
+    - object: op('./EmbodyExt').module.EmbodyExt(me)
+      name: Embody
+      promote: true
+    - object: op('./EnvoyExt').module.EnvoyExt(me)
+      name: Envoy
+      promote: true
+    - object: op('./TDNExt').module.TDNExt(me)
+      name: TDN
+      promote: true
+    - object: op('./CatalogManagerExt').module.CatalogManagerExt(me)
+      name: CatalogManager
+      promote: true
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+    - {}
+  custom_pars:
+    Embody:
+    - name: Status
+      style: Str
+      readOnly: true
+      help: Current Embody status (read-only). Shows whether Embody is initialized and running.
+      value: Enabled
+    - name: Disable
+      style: Pulse
+      help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
+    - name: Update
+      style: Pulse
+      label: Enable/Update
+      help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
+    - name: Refresh
+      style: Pulse
+      help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
+    - name: Performmode
+      style: Toggle
+      label: Perform Mode
+    - name: Createexternalizationstable
+      style: Pulse
+      label: Create Externalizations Table
+      startSection: true
+      help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
+    - name: Externalizations
+      style: DAT
+      label: Externalizations Table
+      help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
+      value: /embody/externalizations
+    - name: Openexternalizationstable
+      style: Pulse
+      label: Open Externalizations Table
+      help: Opens the externalizations tracking table in a floating viewer window.
+    - name: Folder
+      style: Folder
+      label: Externalizations Folder
+      startSection: true
+      help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
+    - name: Externalizeproject
+      style: Pulse
+      label: Externalize Full Project
+      startSection: true
+      help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
+    - name: Detectduplicatepaths
+      style: Toggle
+      label: Detect Duplicate Paths
+      help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
+      value: true
+    - name: Templatemaster
+      style: Str
+      label: Template Master Name
+      default: __template__
+      help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
+    - name: Localtimestamps
+      style: Toggle
+      label: Local Timestamps
+      default: true
+      help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
+    - name: Toxrestoreonstart
+      style: Toggle
+      label: Restore toxes on Start
+      help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
+      value: true
+    - name: Datrestoreonstart
+      style: Toggle
+      label: Restore DATs on Start
+      default: true
+      help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
+    - name: Filecleanup
+      style: Menu
+      label: File Cleanup
+      startSection: true
+      default: ask
+      menuNames:
+      - ask
+      - keep
+      - delete
+      menuLabels:
+      - Ask
+      - Always Keep Files
+      - Always Delete Files
+      help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
+      value: delete
+    - name: Tdndatsafety
+      style: Menu
+      label: Content Safety
+      default: ask
+      menuNames:
+      - ask
+      - externalize
+      - ignore
+      menuLabels:
+      - Ask Each Save
+      - Always Externalize
+      - Never Ask
+      help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+    - name: Openmanager
+      style: Pulse
+      label: Open Manager
+      startSection: true
+      help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
+    - name: Closemanager
+      style: Pulse
+      label: Close Manager
+      help: Closes the Embody Manager window.
+    Tags:
+    - name: Toxtags
+      style: Header
+      label: tox Tags
+      help: Tag strings and operator colors for TOX externalization. COMPs tagged with the Tox tag are externalized as .tox files.
+    - name: Toxtagcolorr
+      style: RGBA
+      label: tox Tag Color
+      help: Color applied to tox-tagged COMP operators in the network editor. Makes externalized COMPs visually identifiable.
+      values: [0.325, 0.8, 0.3]
+    - name: Toxtag
+      style: Str
+      label: .tox Tag
+      help: Tag string applied to COMP operators for .tox externalization. Operators with this tag are externalized as .tox files.
+      value: tox
+    - name: Dattags
+      style: Header
+      label: DAT Tags
+      startSection: true
+      help: Tag strings and operator colors for DAT externalization. DATs are tagged with format-specific tags (py, json, xml, etc.) and externalized to matching file types.
+    - name: Dattagcolorr
+      style: RGBA
+      label: DAT Tag Color
+      help: Color applied to DAT-tagged operators in the network editor. Makes externalized DATs visually identifiable.
+      values: [0.9, 0.3, 0.4]
+    - name: Clonetagcolorr
+      style: RGBA
+      label: Clone Tag Color
+      help: Color applied to clone-tagged operators in the network editor. Distinguishes cloned externalized operators from originals.
+      values: [1, 0.7, 0.1]
+    - name: Pytag
+      style: Str
+      label: .py Tag
+      help: Tag string for .py (Python) externalization. Applied to text DATs containing Python code.
+      value: py
+    - name: Jsontag
+      style: Str
+      label: .json Tag
+      startSection: true
+      help: Tag string for .json externalization. Applied to text DATs containing JSON data.
+      value: json
+    - name: Xmltag
+      style: Str
+      label: .xml Tag
+      help: Tag string for .xml externalization. Applied to text DATs containing XML data.
+      value: xml
+    - name: Htmltag
+      style: Str
+      label: .html Tag
+      help: Tag string for .html externalization. Applied to text DATs containing HTML content.
+      value: html
+    - name: Glsltag
+      style: Str
+      label: .glsl Tag
+      startSection: true
+      help: Tag string for .glsl externalization. Applied to text DATs containing GLSL shader code.
+      value: glsl
+    - name: Fragtag
+      style: Str
+      label: .frag Tag
+      help: Tag string for .frag externalization. Applied to text DATs containing fragment shader code.
+      value: frag
+    - name: Verttag
+      style: Str
+      label: .vert Tag
+      help: Tag string for .vert externalization. Applied to text DATs containing vertex shader code.
+      value: vert
+    - name: Txttag
+      style: Str
+      label: .txt Tag
+      startSection: true
+      help: Tag string for .txt externalization. Applied to text DATs containing plain text.
+      value: txt
+    - name: Mdtag
+      style: Str
+      label: .md Tag
+      help: Tag string for .md externalization. Applied to text DATs containing Markdown content.
+      value: md
+    - name: Rtftag
+      style: Str
+      label: .rtf Tag
+      help: Tag string for .rtf externalization. Applied to text DATs containing rich text format content.
+      value: rtf
+    - name: Csvtag
+      style: Str
+      label: .csv Tag
+      startSection: true
+      help: Tag string for .csv externalization. Applied to table DATs with comma-separated values.
+      value: csv
+    - name: Tsvtag
+      style: Str
+      label: .tsv Tag
+      help: Tag string for .tsv externalization. Applied to table DATs with tab-separated values.
+      value: tsv
+    - name: Dattag
+      style: Str
+      label: .dat Tag
+      help: Tag string for .dat externalization. Generic DAT externalization format.
+      value: dat
+    - name: Tdntags
+      style: Header
+      label: TDN Tags
+      startSection: true
+      help: Tag strings and operator colors for TDN externalization. COMPs tagged with the TDN tag have their children exported as human-readable .tdn JSON network files.
+    - name: Tdntagcolor
+      style: RGBA
+      label: TDN Tag Color
+      default: 0.3
+      help: Color applied to TDN-tagged COMP operators in the network editor. Makes TDN-strategy COMPs visually identifiable.
+    - name: Tdntag
+      style: Str
+      label: .tdn Tag
+      help: Tag string for .tdn externalization. Applied to COMPs whose children are exported as human-readable JSON network files.
+      value: tdn
+    - name: Tdnexcludetag
+      style: Str
+      label: .tdn Exclude Tag
+      startSection: true
+      default: tdn_exclude
+      help: 'Tag name (default ''tdn_exclude'') that opts a COMP out of the entire TDN system. Primary use: opt a single child out of cascade autotag (when Tdncascade is on, the tdn tag normally propagates from a tdn-tagged parent to all its children -- apply this tag to a child to keep it excluded). Also useful for app-managed COMPs (e.g. spawned via .copy() at runtime) that the application is responsible for. Excluded COMPs are invisible to TDN: never exported, never inlined in parent .tdn files, never stripped on save, never destroyed by reconstruction.'
+    TDN:
+    - name: Tdnmode
+      style: Menu
+      label: TDN Mode
+      startSection: true
+      default: export
+      menuNames:
+      - 'off'
+      - export
+      - full
+      menuLabels:
+      - 'Off'
+      - Export-on-Save
+      - Roundtrip (Experimental)
+      help: Three-mode master for the TDN subsystem. Off = no TDN runtime (.tdn files on disk are preserved, Embody simply stops touching them). Export-on-Save (recommended) = write .tdn on save, .toe stays the source of truth, MCP reads live state via read_tdn. Roundtrip (Experimental) = bidirectional strip/restore of COMPs at save and open; may hit edge cases with extension reload timing on deeply-nested TDN COMPs.
+    - name: Clipboardautopaste
+      style: Toggle
+      label: Clipboard Auto-Paste
+      startSection: true
+      default: true
+      help: When on, Embody watches the OS clipboard and prompts to paste an Embody network the moment one is copied (e.g. the web "embody it" button) -- no keyboard shortcut needed. Turn off to disable the automatic prompt.
+    - name: Tdncascade
+      style: Toggle
+      label: Cascade to Children
+      startSection: true
+      help: When tagging a COMP for TDN, automatically tag all child COMPs so each gets its own .tdn file.
+    - name: Tdncascadewarn
+      style: Menu
+      label: Large TDN Warning
+      default: ask
+      menuNames:
+      - ask
+      - quiet
+      menuLabels:
+      - Ask
+      - Quiet
+      help: Controls whether a warning dialog is shown when a TDN file exceeds 5 MB. Set automatically when dismissed.
+    - name: Embeddatsintdns
+      style: Toggle
+      label: Embed DATs (default)
+      startSection: true
+      help: When enabled, DAT content (text and table data) is included in TDN exports by default. Can be overridden per-export. Disabling reduces file size but loses DAT content.
+    - name: Embedstorageintdns
+      style: Toggle
+      label: Embed Storage (default)
+      default: true
+      help: Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu.
+    - name: Autosave
+      style: Toggle
+      label: Auto-Save Checkpoints
+      startSection: true
+      default: true
+      help: When on, after the agent (or you) goes idle Embody writes changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves.
+    - name: Tdncreateonstart
+      style: Toggle
+      label: TDN Create on Start
+      startSection: true
+      default: true
+      help: When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save.
+    - name: Autosavestatus
+      style: Str
+      label: Auto-Save Status
+      readOnly: true
+      help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
+      value: Saved 06:21:35 UTC
+    - name: Tdnstriponsave
+      style: Toggle
+      label: Strip on Save
+      default: true
+      help: When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal.
+    - name: Tdnpalettehandling
+      style: Menu
+      label: Palette Handling
+      startSection: true
+      default: ask
+      menuNames:
+      - ask
+      - blackbox
+      - fullexport
+      menuLabels:
+      - Ask
+      - Black Box
+      - Full Export
+      help: 'How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally.'
+      value: blackbox
+    - name: Tdnfile
+      style: File
+      label: TDN File
+      startSection: true
+      help: Path to a .tdn file to import. Select a file, set the Network Path target, then pulse Import TDN.
+    - name: Networkpath
+      style: COMP
+      label: Network Path
+      help: Target COMP where the TDN file will be imported. Operators from the .tdn are created as children of this COMP.
+    - name: Importtdn
+      style: Pulse
+      label: Import TDN
+      help: Imports the specified TDN File into the Network Path target. Creates all operators, sets parameters, connections, and positions.
+    Envoy:
+    - name: Aiclient
+      style: Menu
+      label: AI Client
+      default: '0'
+      menuNames:
+      - claudecode
+      - cursor
+      - copilot
+      - windsurf
+      - none
+      menuLabels:
+      - Claude Code
+      - Cursor
+      - GitHub Copilot
+      - Windsurf
+      - None
+      help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
+      value: claudecode
+    - name: Aiprojectroot
+      style: Menu
+      label: AI Project Root
+      default: gitroot
+      menuNames:
+      - gitroot
+      - projectfolder
+      - custom
+      menuLabels:
+      - Git root
+      - Project folder (.toe directory)
+      - Custom
+      help: Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). "Git root" (default) writes at the top of the git repo. "Project folder" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace.
+    - name: Aiprojectrootcustom
+      style: Folder
+      label: AI Project Root (Custom)
+      help: Custom directory for AI/MCP config when "AI Project Root" is set to "Custom". Relative paths are resolved against the .toe directory (e.g. "../" places config one level above the .toe -- useful when multiple TouchDesigner projects share a parent folder in a monorepo). Absolute paths are used as-is. Changing this path migrates Embody state and AI config to the new location.
+    - name: Envoyenable
+      style: Toggle
+      label: Envoy Enable
+      startSection: true
+      help: Enables/disables the Envoy MCP server. When enabled, starts an HTTP server that exposes TouchDesigner operations to Claude Code and other MCP clients.
+      value: true
+    - name: Envoyport
+      style: Int
+      label: Envoy Port
+      default: 9876
+      help: 'Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.'
+      value: 9870
+    - name: Embotenable
+      style: Toggle
+      label: Embot
+      startSection: true
+      default: true
+      help: Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. Off hides him entirely (no character, no camera movement).
+    - name: Envoyfollow
+      style: Toggle
+      label: Envoy Follow
+      default: true
+      help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
+    - name: Envoystatus
+      style: Str
+      label: Envoy Status
+      startSection: true
+      readOnly: true
+      help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
+      value: Running on port 9870
+    Logs:
+    - name: Verbose
+      style: Toggle
+      label: Verbose (Debug)
+      help: Enables debug-level logging. When off, only INFO and above are logged. Enable for detailed diagnostics when troubleshooting issues.
+    - name: Print
+      style: Toggle
+      label: Print to Textport
+      help: Echoes all log messages to the TouchDesigner textport. Useful for monitoring Embody activity in real-time.
+      value: true
+    - name: Logtofile
+      style: Toggle
+      label: Log to File
+      help: Writes log messages to a file on disk. Files are saved to the Log Folder with automatic rotation at 10 MB.
+      value: true
+    - name: Logfolder
+      style: Folder
+      label: Log Folder
+      help: Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.
+      value: logs
+    UI:
+    - name: Enablekeyboardshortcuts
+      style: Toggle
+      label: Enable Keyboard Shortcuts
+      help: Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.
+      value: true
+    - name: Addtagshort
+      style: Str
+      label: Add Externalization Tag
+      startSection: true
+      readOnly: true
+      help: 'Keyboard shortcut for adding an externalization tag to the selected operator(s). Default: double-press Left Ctrl.'
+      value: lctrl-lctrl (lclick op & press 2x)
+    - name: Openmanagershort
+      style: Str
+      label: Open Manager
+      readOnly: true
+      help: Keyboard shortcut for opening the Embody Manager window.
+      value: ctrl/cmd + lshift + o
+    - name: Initializeupdateshort
+      style: Str
+      label: Initialize/Update All
+      readOnly: true
+      help: Keyboard shortcut for triggering Initialize/Update All (Ctrl+Shift+U). Saves all dirty externalized operators to disk.
+      value: ctrl/cmd + lshift + u
+    - name: Saveshort
+      style: Str
+      label: Update Current COMP
+      readOnly: true
+      help: Keyboard shortcut for updating/saving the current COMP to its externalized file.
+      value: ctrl/cmd + alt + u
+    - name: Exportprojecttdn
+      style: Str
+      label: Export Project to TDN
+      startSection: true
+      default: ctrl/cmd + lshift + e
+      readOnly: true
+      help: Export the entire project network to a single .tdn file at your project root.
+    - name: Exportcomptdn
+      style: Str
+      label: Export Current COMP to TDN
+      default: ctrl/cmd + alt + e
+      readOnly: true
+      help: Export the current COMP network to a .tdn file.
+    - name: Textcolor
+      style: RGBA
+      label: Text Color
+      startSection: true
+      help: Text color used throughout the Embody UI (toolbar, manager, dialogs).
+      values: [0.59472, 0.63, 0.599424, 1]
+    - name: Backgroundcolor
+      style: RGBA
+      label: Background Color
+      help: Background color for the Embody UI panels and windows.
+      values: [0.0968, 0.121, 0.121, 0.8]
+    - name: Buttonbackgroundcolor
+      style: RGBA
+      label: Button Background Color
+      help: Background color for buttons in the Embody UI.
+      values: [0.1246, 0.14, 0.13, 1]
+    - name: Listheadercolor
+      style: RGBA
+      label: List Header Color
+      help: Header row color in the Manager list view.
+      values: [0.089419, 0.121, 0.103104, 1]
+    - name: Listrowcolor
+      style: RGBA
+      label: List Row Color
+      help: Default row color in the Manager list view.
+      values: [0.1246, 0.14, 0.13, 1]
+    - name: Listrowselectcolor
+      style: RGBA
+      label: List Row Select Color
+      help: Selected row highlight color in the Manager list view.
+      values: [0.220088, 0.244, 0.221283, 1]
+    - name: Savedcolor
+      style: RGBA
+      label: Saved Color
+      help: Color indicator for operators that are saved and up-to-date (not dirty).
+      values: [0.227574, 0.423, 0.289133, 0.5]
+    - name: Dirtycolor
+      style: RGBA
+      label: Dirty Color
+      help: Color indicator for operators that have unsaved changes (dirty state).
+      values: [0.675, 0.25668, 0.2268, 1]
+    - name: Dirtyparcolor
+      style: RGBA
+      label: Dirty Par Color
+      help: Color indicator for parameters that have been modified since last save.
+      values: [0.49, 0.321897, 0.16464, 1]
+    - name: Uncommittedcolor
+      style: RGBA
+      label: Uncommitted Color
+      default: 0.6
+      help: Color indicator for externalized files that are saved to disk but not yet committed to git (uncommitted). Distinct from the red unsaved color and the amber par-change color.
+    - name: Taggingmenucolor
+      style: RGBA
+      label: Tagging Menu Color
+      help: Background color for the tagging menu popup.
+      values: [0.2, 0.2, 0.2, 1]
+    - name: Highlightcolor
+      style: RGBA
+      label: Highlight Color
+      help: Accent/highlight color used for interactive elements in the Embody UI.
+      values: [1, 1, 1, 1]
+    - name: Tdnsavedcolor
+      style: RGBA
+      label: TDN Saved Color
+      help: Color indicator for TDN-strategy operators that are saved and up-to-date.
+      values: [0.153552, 0.376081, 0.457, 1]
+    About:
+    - name: Version
+      style: Str
+      startSection: true
+      readOnly: true
+      help: Embody version string (read-only).
+      value: 6.0.60
+    - name: Touchbuild
+      style: Str
+      label: Touch Build
+      readOnly: true
+      help: TouchDesigner build number this version was developed on (read-only).
+      value: '2025.32820'
+    - name: Author
+      style: Str
+      readOnly: true
+      help: Embody author (read-only).
+      value: Dylan Roscover
+    - name: Build
+      style: Int
+      label: Build Number
+      readOnly: true
+      help: Embody build number (read-only). Incremented with each release.
+      value: 660
+    - name: Github
+      style: Pulse
+      label: GitHub
+      startSection: true
+      help: Opens the Embody GitHub repository in your web browser.
+    - name: Date
+      style: Str
+      label: Build Date
+      readOnly: true
+      help: Date of this Embody build (read-only).
+      value: 2026-06-29 00:35:10 UTC
+    - name: Help
+      style: Pulse
+      help: Opens the Embody help documentation.
+  flags:
+  - display
+  - viewer
+  size: [160, 98]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
+  storage:
+    claudius_running: false
+    _tdn_restore_failures:
+    - /embody/base1
+    expand_order: []
+    _start_in_progress: true
+    git_status:
+      /embody/Embody/EnvoyExt: ' M'
+    _watchdog_gen: 441
+    _suite_proof_progress:
+      todo:
+      - test_ancestor_rename
+      - test_catalog_bootstrap_palette
+      - test_catalog_palette_scan
+      - test_claude_config
+      - test_clipboard_paste
+      - test_collection_safe_import
+      - test_collection_scanner
+      - test_crud_operators
+      - test_dat_restoration
+      - test_delete_cleanup
+      - test_duplicate_handling
+      - test_envoy_bridge
+      - test_envoy_lifecycle_hardening
+      - test_envoy_registry
+      - test_envoy_setup_environment
+      - test_envoy_thread_comm
+      - test_envoy_watchdog
+      - test_externalization
+      - test_file_management
+      - test_glsl_externalize
+      - test_issue21_safe_cell
+      - test_layout_lint
+      - test_logging
+      - test_mcp_annotations
+      - test_mcp_batch
+      - test_mcp_code_execution
+      - test_mcp_connections
+      - test_mcp_dat_content
+      - test_mcp_diagnostics
+      - test_mcp_extensions
+      - test_mcp_externalization
+      - test_mcp_flags_position
+      - test_mcp_operators
+      - test_mcp_parameters
+      - test_mcp_performance
+      - test_mcp_project_performance
+      - test_mcp_tdn_tools
+      - test_mcp_top_capture
+      - test_operator_queries
+      - test_os_label
+      - test_param_tracker
+      - test_path_utils
+      - test_rename_move_lifecycle
+      - test_server_lifecycle
+      - test_settings_persistence
+      - test_smoke_release
+      - test_specimen_publish
+      - test_strategy_handlers
+      - test_tag_lifecycle
+      - test_tag_management
+      - test_tdn_crash_safety
+      - test_tdn_exclude
+      - test_tdn_export_import
+      - test_tdn_external_connections
+      - test_tdn_file_io
+      - test_tdn_fingerprint
+      - test_tdn_helpers
+      - test_tdn_mode
+      - test_tdn_palette_catalog
+      - test_tdn_reconstruction
+      - test_tdn_safety_guards
+      - test_tdn_sequences
+      - test_tdn_yaml
+      - test_update_sync
+      - test_v6_hardening
+      done: []
+    _suite_proof_result:
+      agg:
+        total: 1576
+        passed: 1573
+        failed: 2
+        errors: 0
+        skipped: 1
+      fails:
+      - $type: tuple
+        $value:
+        - test_envoy_thread_comm
+        - null
+        - FAIL
+      - $type: tuple
+        $value:
+        - test_envoy_thread_comm
+        - null
+        - FAIL
+      n: 65
+    _e2e_result:
+      pre_seed_is_none: true
+      results:
+        test_envoy_setup_environment:
+          pass: 17
+          tot: 17
+          fail: 0
+          err: 0
+        test_envoy_lifecycle_hardening:
+          pass: 4
+          tot: 4
+          fail: 0
+          err: 0
+        test_smoke_release:
+          pass: 33
+          tot: 33
+          fail: 0
+          err: 0
+    _setgate_test:
+      results:
+        test_envoy_setup_environment:
+          pass: 17
+          tot: 17
+        test_envoy_lifecycle_hardening:
+          pass: 4
+          tot: 4
+        test_smoke_release:
+          pass: 33
+          tot: 33
+      onboarding_seed_before: 40
+      onboarding_seed_after: 0
+      onboarding_prompts_fired: 40
+    _noseed_test:
+      seed_cleared: true
+      smoke:
+        pass: 32
+        tot: 33
+      pending_prompt_right_after_run: absent
+    _final_noseed_test:
+      seed_was_clear: true
+      results:
+        test_envoy_setup_environment:
+          pass: 17
+          tot: 17
+          fail: 0
+        test_envoy_lifecycle_hardening:
+          pass: 4
+          tot: 4
+          fail: 0
+        test_smoke_release:
+          pass: 32
+          tot: 33
+          fail: 1
+      pending_after: absent
+    _clip_watch_gen: 205
+    _suppress_dialogs: true
+  tdn_ref: embody/Embody.tdn
+- name: base_tdn
+  type: baseCOMP
+  position: [700, -325]
+  tdn_ref: embody/base_tdn.tdn
+- name: tdn_tests
+  type: baseCOMP
+  flags:
+  - viewer
+  position: [500, -325]
+  storage:
+    embed_dats_in_tdn: true
+  tdn_ref: embody/tdn_tests.tdn
+- name: unit_tests
+  type: baseCOMP
+  parameters:
+    opshortcut: unit_tests
+  sequences:
+    ext:
+    - object: op('./TestRunnerExt').module.TestRunnerExt(me)
+      name: TestRunnerExt
+      promote: true
+    - {}
+    - {}
+  position: [-600, -300]
+  storage:
+    test_results:
+      total: 341
+      passed: 341
+      failed: 0
+      errors: 0
+      skipped: 0
+      results:
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_adds_table_row
+        status: PASS
+        message: ''
+        duration_ms: 58.89
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_build_params
+        status: PASS
+        message: ''
+        duration_ms: 41.27
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_enables_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 48.58
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_no_backslashes
+        status: PASS
+        message: ''
+        duration_ms: 42.73
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_rel_file_path_is_tox
+        status: PASS
+        message: ''
+        duration_ms: 52.34
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_sets_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 59.16
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_sets_readonly
+        status: PASS
+        message: ''
+        duration_ms: 47.46
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_table_has_correct_path
+        status: PASS
+        message: ''
+        duration_ms: 53.57
+      - suite: test_crud_operators
+        test: test_handleAddition_comp_table_has_correct_type
+        status: PASS
+        message: ''
+        duration_ms: 79.41
+      - suite: test_crud_operators
+        test: test_handleAddition_dat_adds_table_row
+        status: PASS
+        message: ''
+        duration_ms: 27.45
+      - suite: test_crud_operators
+        test: test_handleAddition_dat_rel_path_has_py_extension
+        status: PASS
+        message: ''
+        duration_ms: 25.15
+      - suite: test_crud_operators
+        test: test_handleAddition_dat_sets_file
+        status: PASS
+        message: ''
+        duration_ms: 13.18
+      - suite: test_crud_operators
+        test: test_handleAddition_dat_sets_readonly
+        status: PASS
+        message: ''
+        duration_ms: 12.67
+      - suite: test_crud_operators
+        test: test_handleAddition_idempotent_no_duplicate_rows
+        status: PASS
+        message: ''
+        duration_ms: 52.58
+      - suite: test_crud_operators
+        test: test_handleSubtraction_comp_removes_row
+        status: PASS
+        message: ''
+        duration_ms: 67.94
+      - suite: test_crud_operators
+        test: test_handleSubtraction_comp_unlocks_readonly
+        status: PASS
+        message: ''
+        duration_ms: 75.38
+      - suite: test_crud_operators
+        test: test_handleSubtraction_dat_removes_row
+        status: PASS
+        message: ''
+        duration_ms: 25.39
+      - suite: test_crud_operators
+        test: test_handleSubtraction_dat_unlocks_readonly
+        status: PASS
+        message: ''
+        duration_ms: 23.28
+      - suite: test_crud_operators
+        test: test_mixed_comp_and_dat
+        status: PASS
+        message: ''
+        duration_ms: 63.49
+      - suite: test_crud_operators
+        test: test_multiple_comps_unique_paths
+        status: PASS
+        message: ''
+        duration_ms: 154.87
+      - suite: test_crud_operators
+        test: test_nested_comp_hierarchy_in_path
+        status: PASS
+        message: ''
+        duration_ms: 55.81
+      - suite: test_delete_cleanup
+        test: test_checkFileReferences_shared_file_returns_true
+        status: PASS
+        message: ''
+        duration_ms: 53.28
+      - suite: test_delete_cleanup
+        test: test_checkFileReferences_unique_file_returns_false
+        status: PASS
+        message: ''
+        duration_ms: 59.8
+      - suite: test_delete_cleanup
+        test: test_delete_comp_leaves_stale_row
+        status: PASS
+        message: ''
+        duration_ms: 52.53
+      - suite: test_delete_cleanup
+        test: test_delete_dat_leaves_stale_row
+        status: PASS
+        message: ''
+        duration_ms: 25.57
+      - suite: test_delete_cleanup
+        test: test_handleMissingOperator_cleans_stale_comp
+        status: PASS
+        message: ''
+        duration_ms: 68.83
+      - suite: test_delete_cleanup
+        test: test_handleMissingOperator_cleans_stale_dat
+        status: PASS
+        message: ''
+        duration_ms: 37.45
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_comp_clears_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 58.8
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_comp_removes_table_row
+        status: PASS
+        message: ''
+        duration_ms: 56.05
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_comp_removes_tag
+        status: PASS
+        message: ''
+        duration_ms: 56.88
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_comp_resets_color
+        status: PASS
+        message: ''
+        duration_ms: 54.28
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_comp_unlocks_readonly
+        status: PASS
+        message: ''
+        duration_ms: 54.77
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_dat_clears_file
+        status: PASS
+        message: ''
+        duration_ms: 26.17
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_dat_removes_table_row
+        status: PASS
+        message: ''
+        duration_ms: 32.94
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_dat_removes_tag
+        status: PASS
+        message: ''
+        duration_ms: 31.73
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_destroyed_op_no_crash
+        status: PASS
+        message: ''
+        duration_ms: 60.01
+      - suite: test_delete_cleanup
+        test: test_removeListerRow_nonexistent_path_no_crash
+        status: PASS
+        message: ''
+        duration_ms: 8.41
+      - suite: test_duplicate_handling
+        test: test_cleanupAllDuplicateRows_runs_without_error
+        status: PASS
+        message: ''
+        duration_ms: 0.76
+      - suite: test_duplicate_handling
+        test: test_cleanupDuplicateRows_existing_path_no_duplicates
+        status: PASS
+        message: ''
+        duration_ms: 0.18
+      - suite: test_duplicate_handling
+        test: test_cleanupDuplicateRows_nonexistent_path_returns_none
+        status: PASS
+        message: ''
+        duration_ms: 0.05
+      - suite: test_duplicate_handling
+        test: test_cleanup_preserves_table_row_count
+        status: PASS
+        message: ''
+        duration_ms: 0.86
+      - suite: test_externalization
+        test: test_externalizations_folder_returns_string
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_externalization
+        test: test_externalizations_table_exists
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_externalization
+        test: test_externalizations_table_has_columns
+        status: PASS
+        message: ''
+        duration_ms: 0.05
+      - suite: test_externalization
+        test: test_getOpPaths_comp_new_generates_tox
+        status: PASS
+        message: ''
+        duration_ms: 4.66
+      - suite: test_externalization
+        test: test_getOpPaths_comp_with_existing_path
+        status: PASS
+        message: ''
+        duration_ms: 3.69
+      - suite: test_externalization
+        test: test_getOpPaths_returns_none_tuple_on_error
+        status: PASS
+        message: ''
+        duration_ms: 4.01
+      - suite: test_externalization
+        test: test_setupComp_enables_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 23.46
+      - suite: test_externalization
+        test: test_setupComp_sets_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 18.9
+      - suite: test_externalization
+        test: test_setupDat_sets_file
+        status: PASS
+        message: ''
+        duration_ms: 3.79
+      - suite: test_file_management
+        test: test_getTrackedFilePaths_entries_are_paths
+        status: PASS
+        message: ''
+        duration_ms: 3.05
+      - suite: test_file_management
+        test: test_getTrackedFilePaths_has_entries
+        status: PASS
+        message: ''
+        duration_ms: 2.83
+      - suite: test_file_management
+        test: test_getTrackedFilePaths_returns_set
+        status: PASS
+        message: ''
+        duration_ms: 3.09
+      - suite: test_file_management
+        test: test_isTrackedFile_known_tracked_file
+        status: PASS
+        message: ''
+        duration_ms: 6.88
+      - suite: test_file_management
+        test: test_isTrackedFile_untracked_path
+        status: PASS
+        message: ''
+        duration_ms: 5.02
+      - suite: test_file_management
+        test: test_safeDeleteFile_force_on_temp_file
+        status: PASS
+        message: ''
+        duration_ms: 2.19
+      - suite: test_file_management
+        test: test_safeDeleteFile_untracked_returns_false
+        status: PASS
+        message: ''
+        duration_ms: 0.71
+      - suite: test_logging
+        test: test_buffer_ids_monotonic
+        status: PASS
+        message: ''
+        duration_ms: 0.18
+      - suite: test_logging
+        test: test_buffer_max_size_200
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_logging
+        test: test_debug_logs_at_debug_level
+        status: PASS
+        message: ''
+        duration_ms: 0.14
+      - suite: test_logging
+        test: test_error_logs_at_error_level
+        status: PASS
+        message: ''
+        duration_ms: 0.15
+      - suite: test_logging
+        test: test_info_logs_at_info_level
+        status: PASS
+        message: ''
+        duration_ms: 0.18
+      - suite: test_logging
+        test: test_log_appends_to_buffer
+        status: PASS
+        message: ''
+        duration_ms: 0.18
+      - suite: test_logging
+        test: test_log_buffer_entry_structure
+        status: PASS
+        message: ''
+        duration_ms: 0.15
+      - suite: test_logging
+        test: test_log_increments_counter
+        status: PASS
+        message: ''
+        duration_ms: 0.23
+      - suite: test_logging
+        test: test_log_level_stored_correctly
+        status: PASS
+        message: ''
+        duration_ms: 0.92
+      - suite: test_logging
+        test: test_warn_logs_at_warning_level
+        status: PASS
+        message: ''
+        duration_ms: 0.21
+      - suite: test_mcp_annotations
+        test: test_create_annotation_comment_mode
+        status: PASS
+        message: ''
+        duration_ms: 168.42
+      - suite: test_mcp_annotations
+        test: test_create_annotation_default_mode
+        status: PASS
+        message: ''
+        duration_ms: 39.38
+      - suite: test_mcp_annotations
+        test: test_create_annotation_invalid_mode
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_annotations
+        test: test_create_annotation_invalid_parent
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_annotations
+        test: test_create_annotation_networkbox_mode
+        status: PASS
+        message: ''
+        duration_ms: 38.54
+      - suite: test_mcp_annotations
+        test: test_create_annotation_with_color
+        status: PASS
+        message: ''
+        duration_ms: 34.24
+      - suite: test_mcp_annotations
+        test: test_create_annotation_with_name
+        status: PASS
+        message: ''
+        duration_ms: 55.5
+      - suite: test_mcp_annotations
+        test: test_create_annotation_with_position
+        status: PASS
+        message: ''
+        duration_ms: 44.69
+      - suite: test_mcp_annotations
+        test: test_create_annotation_with_size
+        status: PASS
+        message: ''
+        duration_ms: 42.42
+      - suite: test_mcp_annotations
+        test: test_create_annotation_with_text
+        status: PASS
+        message: ''
+        duration_ms: 39.23
+      - suite: test_mcp_annotations
+        test: test_create_annotation_with_title
+        status: PASS
+        message: ''
+        duration_ms: 43.82
+      - suite: test_mcp_annotations
+        test: test_get_annotations_finds_created
+        status: PASS
+        message: ''
+        duration_ms: 80.5
+      - suite: test_mcp_annotations
+        test: test_get_annotations_invalid_parent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_annotations
+        test: test_get_annotations_returns_list
+        status: PASS
+        message: ''
+        duration_ms: 0.09
+      - suite: test_mcp_annotations
+        test: test_get_enclosed_ops_annotation
+        status: PASS
+        message: ''
+        duration_ms: 64.42
+      - suite: test_mcp_annotations
+        test: test_get_enclosed_ops_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_mcp_annotations
+        test: test_set_annotation_modify_text
+        status: PASS
+        message: ''
+        duration_ms: 87.04
+      - suite: test_mcp_annotations
+        test: test_set_annotation_modify_title
+        status: PASS
+        message: ''
+        duration_ms: 52.36
+      - suite: test_mcp_annotations
+        test: test_set_annotation_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_code_execution
+        test: test_execute_multiline
+        status: PASS
+        message: ''
+        duration_ms: 0.37
+      - suite: test_mcp_code_execution
+        test: test_execute_no_result_variable
+        status: PASS
+        message: ''
+        duration_ms: 0.3
+      - suite: test_mcp_code_execution
+        test: test_execute_op_access
+        status: PASS
+        message: ''
+        duration_ms: 0.29
+      - suite: test_mcp_code_execution
+        test: test_execute_runtime_error
+        status: PASS
+        message: ''
+        duration_ms: 0.3
+      - suite: test_mcp_code_execution
+        test: test_execute_simple_code
+        status: PASS
+        message: ''
+        duration_ms: 0.19
+      - suite: test_mcp_code_execution
+        test: test_execute_string_result
+        status: PASS
+        message: ''
+        duration_ms: 0.24
+      - suite: test_mcp_code_execution
+        test: test_execute_syntax_error
+        status: PASS
+        message: ''
+        duration_ms: 0.24
+      - suite: test_mcp_connections
+        test: test_connect_chops
+        status: PASS
+        message: ''
+        duration_ms: 13.08
+      - suite: test_mcp_connections
+        test: test_connect_nonexistent_source
+        status: PASS
+        message: ''
+        duration_ms: 6.11
+      - suite: test_mcp_connections
+        test: test_connect_tops
+        status: PASS
+        message: ''
+        duration_ms: 11.63
+      - suite: test_mcp_connections
+        test: test_disconnect_after_connect
+        status: PASS
+        message: ''
+        duration_ms: 9.27
+      - suite: test_mcp_connections
+        test: test_disconnect_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_mcp_connections
+        test: test_get_connections_basic
+        status: PASS
+        message: ''
+        duration_ms: 8.76
+      - suite: test_mcp_connections
+        test: test_get_connections_empty
+        status: PASS
+        message: ''
+        duration_ms: 6
+      - suite: test_mcp_connections
+        test: test_get_connections_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_mcp_dat_content
+        test: test_get_dat_content_auto_table
+        status: PASS
+        message: ''
+        duration_ms: 4.66
+      - suite: test_mcp_dat_content
+        test: test_get_dat_content_auto_text
+        status: PASS
+        message: ''
+        duration_ms: 8.14
+      - suite: test_mcp_dat_content
+        test: test_get_dat_content_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_dat_content
+        test: test_get_dat_content_table
+        status: PASS
+        message: ''
+        duration_ms: 5.52
+      - suite: test_mcp_dat_content
+        test: test_get_dat_content_text
+        status: PASS
+        message: ''
+        duration_ms: 6.32
+      - suite: test_mcp_dat_content
+        test: test_set_dat_content_clear
+        status: PASS
+        message: ''
+        duration_ms: 6.01
+      - suite: test_mcp_dat_content
+        test: test_set_dat_content_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_mcp_dat_content
+        test: test_set_dat_content_rows
+        status: PASS
+        message: ''
+        duration_ms: 6.74
+      - suite: test_mcp_dat_content
+        test: test_set_dat_content_text
+        status: PASS
+        message: ''
+        duration_ms: 6.23
+      - suite: test_mcp_diagnostics
+        test: test_exec_node_method_cook
+        status: PASS
+        message: ''
+        duration_ms: 5.8
+      - suite: test_mcp_diagnostics
+        test: test_exec_node_method_nonexistent_method
+        status: PASS
+        message: ''
+        duration_ms: 3.96
+      - suite: test_mcp_diagnostics
+        test: test_get_module_help_td
+        status: PASS
+        message: ''
+        duration_ms: 13138.06
+      - suite: test_mcp_diagnostics
+        test: test_get_module_help_tdu
+        status: PASS
+        message: ''
+        duration_ms: 6.43
+      - suite: test_mcp_diagnostics
+        test: test_get_node_errors_clean_op
+        status: PASS
+        message: ''
+        duration_ms: 9.18
+      - suite: test_mcp_diagnostics
+        test: test_get_node_errors_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_diagnostics
+        test: test_get_node_errors_recursive
+        status: PASS
+        message: ''
+        duration_ms: 13.4
+      - suite: test_mcp_diagnostics
+        test: test_get_td_class_details_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.06
+      - suite: test_mcp_diagnostics
+        test: test_get_td_class_details_op
+        status: PASS
+        message: ''
+        duration_ms: 3.79
+      - suite: test_mcp_diagnostics
+        test: test_get_td_classes
+        status: PASS
+        message: ''
+        duration_ms: 6.79
+      - suite: test_mcp_diagnostics
+        test: test_get_td_info
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_mcp_diagnostics
+        test: test_get_td_info_has_os
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_extensions
+        test: test_create_extension_custom_code
+        status: PASS
+        message: ''
+        duration_ms: 13.3
+      - suite: test_mcp_extensions
+        test: test_create_extension_existing_comp
+        status: PASS
+        message: ''
+        duration_ms: 13.03
+      - suite: test_mcp_extensions
+        test: test_create_extension_invalid_class_name
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_extensions
+        test: test_create_extension_new_comp
+        status: PASS
+        message: ''
+        duration_ms: 12.06
+      - suite: test_mcp_extensions
+        test: test_create_extension_nonexistent_parent
+        status: PASS
+        message: ''
+        duration_ms: 0.09
+      - suite: test_mcp_extensions
+        test: test_create_extension_reports_ext_index
+        status: PASS
+        message: ''
+        duration_ms: 14.3
+      - suite: test_mcp_externalization
+        test: test_get_externalization_status_existing
+        status: PASS
+        message: ''
+        duration_ms: 0.1
+      - suite: test_mcp_externalization
+        test: test_get_externalization_status_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_externalization
+        test: test_get_externalizations_entry_structure
+        status: PASS
+        message: ''
+        duration_ms: 0.17
+      - suite: test_mcp_externalization
+        test: test_get_externalizations_has_entries
+        status: PASS
+        message: ''
+        duration_ms: 0.15
+      - suite: test_mcp_externalization
+        test: test_get_externalizations_returns_list
+        status: PASS
+        message: ''
+        duration_ms: 0.13
+      - suite: test_mcp_externalization
+        test: test_remove_externalization_tag
+        status: PASS
+        message: ''
+        duration_ms: 128.23
+      - suite: test_mcp_externalization
+        test: test_remove_externalization_tag_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_externalization
+        test: test_tag_for_externalization_comp
+        status: PASS
+        message: ''
+        duration_ms: 71.52
+      - suite: test_mcp_externalization
+        test: test_tag_for_externalization_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_flags_position
+        test: test_get_op_flags
+        status: PASS
+        message: ''
+        duration_ms: 7.3
+      - suite: test_mcp_flags_position
+        test: test_get_op_flags_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_mcp_flags_position
+        test: test_get_op_position
+        status: PASS
+        message: ''
+        duration_ms: 4.24
+      - suite: test_mcp_flags_position
+        test: test_get_op_position_has_color
+        status: PASS
+        message: ''
+        duration_ms: 4.89
+      - suite: test_mcp_flags_position
+        test: test_layout_children
+        status: PASS
+        message: ''
+        duration_ms: 15.58
+      - suite: test_mcp_flags_position
+        test: test_layout_children_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_flags_position
+        test: test_set_op_flags_bypass
+        status: PASS
+        message: ''
+        duration_ms: 4.8
+      - suite: test_mcp_flags_position
+        test: test_set_op_flags_multiple
+        status: PASS
+        message: ''
+        duration_ms: 6.83
+      - suite: test_mcp_flags_position
+        test: test_set_op_flags_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_flags_position
+        test: test_set_op_position_color
+        status: PASS
+        message: ''
+        duration_ms: 5.23
+      - suite: test_mcp_flags_position
+        test: test_set_op_position_comment
+        status: PASS
+        message: ''
+        duration_ms: 16.15
+      - suite: test_mcp_flags_position
+        test: test_set_op_position_xy
+        status: PASS
+        message: ''
+        duration_ms: 3.9
+      - suite: test_mcp_operators
+        test: test_cook_operator
+        status: PASS
+        message: ''
+        duration_ms: 6.3
+      - suite: test_mcp_operators
+        test: test_cook_operator_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_operators
+        test: test_copy_operator_basic
+        status: PASS
+        message: ''
+        duration_ms: 10.3
+      - suite: test_mcp_operators
+        test: test_copy_operator_without_name
+        status: PASS
+        message: ''
+        duration_ms: 9.95
+      - suite: test_mcp_operators
+        test: test_create_operator_in_non_comp
+        status: PASS
+        message: ''
+        duration_ms: 6.91
+      - suite: test_mcp_operators
+        test: test_create_operator_invalid_parent
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_operators
+        test: test_create_operator_valid
+        status: PASS
+        message: ''
+        duration_ms: 5.83
+      - suite: test_mcp_operators
+        test: test_create_operator_without_name
+        status: PASS
+        message: ''
+        duration_ms: 4.03
+      - suite: test_mcp_operators
+        test: test_delete_operator_existing
+        status: PASS
+        message: ''
+        duration_ms: 8.38
+      - suite: test_mcp_operators
+        test: test_delete_operator_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_operators
+        test: test_find_children_by_name
+        status: PASS
+        message: ''
+        duration_ms: 9.29
+      - suite: test_mcp_operators
+        test: test_find_children_by_type
+        status: PASS
+        message: ''
+        duration_ms: 8.78
+      - suite: test_mcp_operators
+        test: test_get_operator_has_parameters
+        status: PASS
+        message: ''
+        duration_ms: 3.55
+      - suite: test_mcp_operators
+        test: test_get_operator_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_mcp_operators
+        test: test_get_operator_returns_info
+        status: PASS
+        message: ''
+        duration_ms: 6.44
+      - suite: test_mcp_operators
+        test: test_query_network_basic
+        status: PASS
+        message: ''
+        duration_ms: 8.96
+      - suite: test_mcp_operators
+        test: test_query_network_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_mcp_operators
+        test: test_query_network_with_type_filter
+        status: PASS
+        message: ''
+        duration_ms: 8.01
+      - suite: test_mcp_operators
+        test: test_rename_operator
+        status: PASS
+        message: ''
+        duration_ms: 45.97
+      - suite: test_mcp_operators
+        test: test_rename_operator_nonexistent
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_parameters
+        test: test_get_parameter_basic
+        status: PASS
+        message: ''
+        duration_ms: 11.13
+      - suite: test_mcp_parameters
+        test: test_get_parameter_has_metadata
+        status: PASS
+        message: ''
+        duration_ms: 9.29
+      - suite: test_mcp_parameters
+        test: test_get_parameter_nonexistent_op
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_parameters
+        test: test_get_parameter_nonexistent_par
+        status: PASS
+        message: ''
+        duration_ms: 5.09
+      - suite: test_mcp_parameters
+        test: test_set_parameter_constant
+        status: PASS
+        message: ''
+        duration_ms: 11.17
+      - suite: test_mcp_parameters
+        test: test_set_parameter_expression
+        status: PASS
+        message: ''
+        duration_ms: 9.19
+      - suite: test_mcp_parameters
+        test: test_set_parameter_mode_constant
+        status: PASS
+        message: ''
+        duration_ms: 10.01
+      - suite: test_mcp_parameters
+        test: test_set_parameter_nonexistent_op
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_parameters
+        test: test_set_parameter_nonexistent_par
+        status: PASS
+        message: ''
+        duration_ms: 4.57
+      - suite: test_mcp_parameters
+        test: test_set_parameter_verifies_value
+        status: PASS
+        message: ''
+        duration_ms: 16.82
+      - suite: test_mcp_parameters
+        test: test_set_toggle_parameter_with_0_1
+        status: PASS
+        message: ''
+        duration_ms: 16.14
+      - suite: test_mcp_performance
+        test: test_basic_return_structure
+        status: PASS
+        message: ''
+        duration_ms: 7.01
+      - suite: test_mcp_performance
+        test: test_has_memory_fields
+        status: PASS
+        message: ''
+        duration_ms: 4.49
+      - suite: test_mcp_performance
+        test: test_include_children
+        status: PASS
+        message: ''
+        duration_ms: 10.22
+      - suite: test_mcp_performance
+        test: test_nonexistent_op
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_mcp_performance
+        test: test_without_include_children
+        status: PASS
+        message: ''
+        duration_ms: 4.59
+      - suite: test_operator_queries
+        test: test_getExternalizedOps_comp_contains_embody
+        status: PASS
+        message: ''
+        duration_ms: 0.31
+      - suite: test_operator_queries
+        test: test_getExternalizedOps_comp_returns_list
+        status: PASS
+        message: ''
+        duration_ms: 0.31
+      - suite: test_operator_queries
+        test: test_getExternalizedOps_dat_has_entries
+        status: PASS
+        message: ''
+        duration_ms: 0.33
+      - suite: test_operator_queries
+        test: test_getExternalizedOps_dat_returns_list
+        status: PASS
+        message: ''
+        duration_ms: 0.3
+      - suite: test_operator_queries
+        test: test_getOpsByPar_comp_returns_list
+        status: PASS
+        message: ''
+        duration_ms: 1.28
+      - suite: test_operator_queries
+        test: test_getOpsByPar_dat_returns_list
+        status: PASS
+        message: ''
+        duration_ms: 2.72
+      - suite: test_param_tracker
+        test: test_captureParameters_entries_have_value_expr_mode
+        status: PASS
+        message: ''
+        duration_ms: 4.53
+      - suite: test_param_tracker
+        test: test_captureParameters_excludes_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 4.71
+      - suite: test_param_tracker
+        test: test_captureParameters_has_params
+        status: PASS
+        message: ''
+        duration_ms: 4.25
+      - suite: test_param_tracker
+        test: test_captureParameters_returns_dict
+        status: PASS
+        message: ''
+        duration_ms: 3.89
+      - suite: test_param_tracker
+        test: test_compareParameters_after_change
+        status: PASS
+        message: ''
+        duration_ms: 11.86
+      - suite: test_param_tracker
+        test: test_compareParameters_first_call_returns_false
+        status: PASS
+        message: ''
+        duration_ms: 8.87
+      - suite: test_param_tracker
+        test: test_compareParameters_no_change
+        status: PASS
+        message: ''
+        duration_ms: 7.78
+      - suite: test_param_tracker
+        test: test_removeComp_nonexistent_no_error
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_param_tracker
+        test: test_removeComp_removes_entry
+        status: PASS
+        message: ''
+        duration_ms: 5.14
+      - suite: test_param_tracker
+        test: test_updateParamStore_stores_comp
+        status: PASS
+        message: ''
+        duration_ms: 5.4
+      - suite: test_path_utils
+        test: test_buildAbsolutePath_contains_rel_path
+        status: PASS
+        message: ''
+        duration_ms: 0.06
+      - suite: test_path_utils
+        test: test_buildAbsolutePath_is_absolute
+        status: PASS
+        message: ''
+        duration_ms: 0.06
+      - suite: test_path_utils
+        test: test_buildAbsolutePath_returns_path_object
+        status: PASS
+        message: ''
+        duration_ms: 0.09
+      - suite: test_path_utils
+        test: test_getExternalPath_comp_normalizes_backslashes
+        status: PASS
+        message: ''
+        duration_ms: 7.27
+      - suite: test_path_utils
+        test: test_getExternalPath_comp_returns_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 6.82
+      - suite: test_path_utils
+        test: test_getExternalPath_dat_returns_file
+        status: PASS
+        message: ''
+        duration_ms: 6.76
+      - suite: test_path_utils
+        test: test_getExternalPath_empty_returns_falsy
+        status: PASS
+        message: ''
+        duration_ms: 4.47
+      - suite: test_path_utils
+        test: test_normalizePath_backslashes_converted
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_path_utils
+        test: test_normalizePath_empty_string_returns_falsy
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_path_utils
+        test: test_normalizePath_forward_slashes_unchanged
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_path_utils
+        test: test_normalizePath_mixed_slashes
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_path_utils
+        test: test_normalizePath_none_returns_none
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_path_utils
+        test: test_normalizePath_pathlib_path
+        status: PASS
+        message: ''
+        duration_ms: 0.13
+      - suite: test_path_utils
+        test: test_setExternalPath_comp_normalizes
+        status: PASS
+        message: ''
+        duration_ms: 7.9
+      - suite: test_path_utils
+        test: test_setExternalPath_comp_not_readonly
+        status: PASS
+        message: ''
+        duration_ms: 6.41
+      - suite: test_path_utils
+        test: test_setExternalPath_comp_readonly_default
+        status: PASS
+        message: ''
+        duration_ms: 6.05
+      - suite: test_path_utils
+        test: test_setExternalPath_comp_sets_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 7.65
+      - suite: test_path_utils
+        test: test_setExternalPath_dat_sets_file
+        status: PASS
+        message: ''
+        duration_ms: 6.77
+      - suite: test_rename_move_lifecycle
+        test: test_cleanupDuplicateRows_keeps_most_recent
+        status: PASS
+        message: ''
+        duration_ms: 58.75
+      - suite: test_rename_move_lifecycle
+        test: test_cleanupDuplicateRows_no_duplicates_noop
+        status: PASS
+        message: ''
+        duration_ms: 52.04
+      - suite: test_rename_move_lifecycle
+        test: test_copy_to_different_parent_changes_path
+        status: PASS
+        message: ''
+        duration_ms: 50.44
+      - suite: test_rename_move_lifecycle
+        test: test_findMovedOp_finds_renamed_comp
+        status: PASS
+        message: ''
+        duration_ms: 103.76
+      - suite: test_rename_move_lifecycle
+        test: test_findMovedOp_finds_renamed_dat
+        status: PASS
+        message: ''
+        duration_ms: 99.36
+      - suite: test_rename_move_lifecycle
+        test: test_findMovedOp_returns_false_when_truly_missing
+        status: PASS
+        message: ''
+        duration_ms: 2.58
+      - suite: test_rename_move_lifecycle
+        test: test_getOpPaths_reflects_new_parent_hierarchy
+        status: PASS
+        message: ''
+        duration_ms: 38.16
+      - suite: test_rename_move_lifecycle
+        test: test_handleMissingOperator_removes_from_table
+        status: PASS
+        message: ''
+        duration_ms: 76.3
+      - suite: test_rename_move_lifecycle
+        test: test_rename_comp_table_has_old_path_before_refresh
+        status: PASS
+        message: ''
+        duration_ms: 71.12
+      - suite: test_rename_move_lifecycle
+        test: test_rename_dat_table_has_old_path
+        status: PASS
+        message: ''
+        duration_ms: 40.97
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_dat_enables_syncfile
+        status: PASS
+        message: ''
+        duration_ms: 100.98
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_dat_updates_file_par
+        status: PASS
+        message: ''
+        duration_ms: 82.95
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_enables_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 88.57
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_missing_old_path_logs_error
+        status: PASS
+        message: ''
+        duration_ms: 4.69
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_sets_externaltox_readonly
+        status: PASS
+        message: ''
+        duration_ms: 86.29
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_updates_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 130.29
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_updates_rel_file_path
+        status: PASS
+        message: ''
+        duration_ms: 210.64
+      - suite: test_rename_move_lifecycle
+        test: test_updateMovedOp_updates_table_path
+        status: PASS
+        message: ''
+        duration_ms: 126.32
+      - suite: test_server_lifecycle
+        test: test_claudius_version_constant
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_server_lifecycle
+        test: test_enable_parameter_exists
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_server_lifecycle
+        test: test_execute_operation_handler_error
+        status: PASS
+        message: ''
+        duration_ms: 0.07
+      - suite: test_server_lifecycle
+        test: test_execute_operation_unknown
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_server_lifecycle
+        test: test_execute_operation_valid
+        status: PASS
+        message: ''
+        duration_ms: 0.07
+      - suite: test_server_lifecycle
+        test: test_execute_operation_with_params
+        status: PASS
+        message: ''
+        duration_ms: 6.57
+      - suite: test_server_lifecycle
+        test: test_last_served_log_id_exists
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_server_lifecycle
+        test: test_last_served_log_id_is_int
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_server_lifecycle
+        test: test_port_is_integer
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_server_lifecycle
+        test: test_port_parameter_exists
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_server_lifecycle
+        test: test_request_queue_exists
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_server_lifecycle
+        test: test_response_queue_exists
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_server_lifecycle
+        test: test_running_flag_is_bool
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_server_lifecycle
+        test: test_running_flag_is_stored
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_server_lifecycle
+        test: test_shutdown_event_on_sys
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_server_lifecycle
+        test: test_shutdown_event_registered
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_server_lifecycle
+        test: test_status_parameter_exists
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tag_lifecycle
+        test: test_applyTagToOperator_comp_with_existing_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 15.54
+      - suite: test_tag_lifecycle
+        test: test_full_lifecycle_tag_externalize_untag_retag
+        status: PASS
+        message: ''
+        duration_ms: 66.39
+      - suite: test_tag_lifecycle
+        test: test_getTagColor_comp_tox_returns_tuple
+        status: PASS
+        message: ''
+        duration_ms: 5.21
+      - suite: test_tag_lifecycle
+        test: test_getTagColor_dat_py_returns_tuple
+        status: PASS
+        message: ''
+        duration_ms: 4.19
+      - suite: test_tag_lifecycle
+        test: test_getTagColor_invalid_returns_none
+        status: PASS
+        message: ''
+        duration_ms: 4.53
+      - suite: test_tag_lifecycle
+        test: test_retag_comp_after_removal_one_row
+        status: PASS
+        message: ''
+        duration_ms: 73.94
+      - suite: test_tag_lifecycle
+        test: test_retag_dat_after_removal_one_row
+        status: PASS
+        message: ''
+        duration_ms: 43.17
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_dat_tag_on_comp_returns_false
+        status: PASS
+        message: ''
+        duration_ms: 7.44
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_off_clears_dat_file
+        status: PASS
+        message: ''
+        duration_ms: 22.15
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_off_clears_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 18.47
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_off_comp
+        status: PASS
+        message: ''
+        duration_ms: 5.21
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_off_dat
+        status: PASS
+        message: ''
+        duration_ms: 6.01
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_off_resets_color
+        status: PASS
+        message: ''
+        duration_ms: 6.58
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_off_unlocks_readonly
+        status: PASS
+        message: ''
+        duration_ms: 23.07
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_on_comp
+        status: PASS
+        message: ''
+        duration_ms: 4.79
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_toggle_on_dat
+        status: PASS
+        message: ''
+        duration_ms: 5.31
+      - suite: test_tag_lifecycle
+        test: test_tagSetter_wrong_family_returns_false
+        status: PASS
+        message: ''
+        duration_ms: 6.68
+      - suite: test_tag_management
+        test: test_applyTagToOperator_adds_tag
+        status: PASS
+        message: ''
+        duration_ms: 3.83
+      - suite: test_tag_management
+        test: test_applyTagToOperator_duplicate_tag_no_error
+        status: PASS
+        message: ''
+        duration_ms: 5.56
+      - suite: test_tag_management
+        test: test_applyTagToOperator_sets_color
+        status: PASS
+        message: ''
+        duration_ms: 3.88
+      - suite: test_tag_management
+        test: test_getTags_filter_dat
+        status: PASS
+        message: ''
+        duration_ms: 0.25
+      - suite: test_tag_management
+        test: test_getTags_filter_tox
+        status: PASS
+        message: ''
+        duration_ms: 0.24
+      - suite: test_tag_management
+        test: test_getTags_has_tox
+        status: PASS
+        message: ''
+        duration_ms: 0.18
+      - suite: test_tag_management
+        test: test_getTags_returns_list
+        status: PASS
+        message: ''
+        duration_ms: 0.11
+      - suite: test_tag_management
+        test: test_isClone_dat_not_clone
+        status: PASS
+        message: ''
+        duration_ms: 5.06
+      - suite: test_tag_management
+        test: test_isClone_regular_comp_not_clone
+        status: PASS
+        message: ''
+        duration_ms: 6.54
+      - suite: test_tag_management
+        test: test_isInsideClone_regular_op_false
+        status: PASS
+        message: ''
+        duration_ms: 13.25
+      - suite: test_tag_management
+        test: test_isOpEligible_comp_is_eligible
+        status: PASS
+        message: ''
+        duration_ms: 3.59
+      - suite: test_tag_management
+        test: test_isOpEligible_comp_with_existing_externaltox
+        status: PASS
+        message: ''
+        duration_ms: 9.05
+      - suite: test_tag_management
+        test: test_isOpEligible_tagged_dat_is_eligible
+        status: PASS
+        message: ''
+        duration_ms: 33.51
+      - suite: test_tag_management
+        test: test_isOpEligible_tagged_dat_with_file_set
+        status: PASS
+        message: ''
+        duration_ms: 9.66
+      - suite: test_tag_management
+        test: test_isOpEligible_text_dat_without_tag_not_eligible
+        status: PASS
+        message: ''
+        duration_ms: 10.78
+      - suite: test_tag_management
+        test: test_isOpEligible_untagged_dat_not_eligible
+        status: PASS
+        message: ''
+        duration_ms: 4.99
+      - suite: test_tag_management
+        test: test_isOpProcessable_normal_comp
+        status: PASS
+        message: ''
+        duration_ms: 6.7
+      - suite: test_tag_management
+        test: test_isOpProcessable_normal_dat
+        status: PASS
+        message: ''
+        duration_ms: 5.03
+      - suite: test_tag_management
+        test: test_isReplicant_regular_op_false
+        status: PASS
+        message: ''
+        duration_ms: 7.27
+      - suite: test_tdn_export_import
+        test: test_export_dat_content_excluded
+        status: PASS
+        message: ''
+        duration_ms: 5.22
+      - suite: test_tdn_export_import
+        test: test_export_dat_content_included
+        status: PASS
+        message: ''
+        duration_ms: 7.01
+      - suite: test_tdn_export_import
+        test: test_export_empty_comp
+        status: PASS
+        message: ''
+        duration_ms: 0.25
+      - suite: test_tdn_export_import
+        test: test_export_includes_children
+        status: PASS
+        message: ''
+        duration_ms: 13.72
+      - suite: test_tdn_export_import
+        test: test_export_max_depth_zero
+        status: PASS
+        message: ''
+        duration_ms: 15.56
+      - suite: test_tdn_export_import
+        test: test_export_non_comp
+        status: PASS
+        message: ''
+        duration_ms: 9.51
+      - suite: test_tdn_export_import
+        test: test_export_nonexistent_path
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_tdn_export_import
+        test: test_export_returns_success
+        status: PASS
+        message: ''
+        duration_ms: 0.23
+      - suite: test_tdn_export_import
+        test: test_export_returns_tdn_dict
+        status: PASS
+        message: ''
+        duration_ms: 0.24
+      - suite: test_tdn_export_import
+        test: test_export_tdn_has_format_fields
+        status: PASS
+        message: ''
+        duration_ms: 0.47
+      - suite: test_tdn_export_import
+        test: test_import_basic
+        status: PASS
+        message: ''
+        duration_ms: 20.33
+      - suite: test_tdn_export_import
+        test: test_import_clear_first
+        status: PASS
+        message: ''
+        duration_ms: 18.04
+      - suite: test_tdn_export_import
+        test: test_import_creates_operators
+        status: PASS
+        message: ''
+        duration_ms: 26.12
+      - suite: test_tdn_export_import
+        test: test_import_invalid_tdn
+        status: PASS
+        message: ''
+        duration_ms: 5.59
+      - suite: test_tdn_export_import
+        test: test_import_nonexistent_target
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_tdn_export_import
+        test: test_import_operators_array_directly
+        status: PASS
+        message: ''
+        duration_ms: 15.29
+      - suite: test_tdn_export_import
+        test: test_roundtrip_preserves_dat_content
+        status: PASS
+        message: ''
+        duration_ms: 26.06
+      - suite: test_tdn_export_import
+        test: test_roundtrip_preserves_nested_structure
+        status: PASS
+        message: ''
+        duration_ms: 57.99
+      - suite: test_tdn_export_import
+        test: test_roundtrip_preserves_operator_names
+        status: PASS
+        message: ''
+        duration_ms: 47.71
+      - suite: test_tdn_helpers
+        test: test_assembleHierarchy_deeply_nested
+        status: PASS
+        message: ''
+        duration_ms: 0.03
+      - suite: test_tdn_helpers
+        test: test_assembleHierarchy_empty
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_assembleHierarchy_flat
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_tdn_helpers
+        test: test_assembleHierarchy_nested
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_tdn_helpers
+        test: test_colorsDiffer_beyond_tolerance
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_tdn_helpers
+        test: test_colorsDiffer_identical
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_colorsDiffer_length_mismatch
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_tdn_helpers
+        test: test_colorsDiffer_within_tolerance
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_serializeValue_bool_false
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_tdn_helpers
+        test: test_serializeValue_bool_true
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_tdn_helpers
+        test: test_serializeValue_float_decimal_preserved
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_tdn_helpers
+        test: test_serializeValue_float_whole_to_int
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_tdn_helpers
+        test: test_serializeValue_int_unchanged
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_serializeValue_list_recursion
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_tdn_helpers
+        test: test_serializeValue_none_to_empty_string
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_serializeValue_string_unchanged
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_serializeValue_tuple_becomes_list
+        status: PASS
+        message: ''
+        duration_ms: 0.04
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_different_int
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_empty_string_vs_none
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_float_precision
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_float_vs_int
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_none_vs_empty_string
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_same_int
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_strings_differ
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_tdn_helpers
+        test: test_valuesDiffer_strings_same
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_update_sync
+        test: test_createExternalizationsTable_header_row
+        status: PASS
+        message: ''
+        duration_ms: 0.06
+      - suite: test_update_sync
+        test: test_externalizations_no_backslashes_in_paths
+        status: PASS
+        message: ''
+        duration_ms: 0.1
+      - suite: test_update_sync
+        test: test_externalizations_property_returns_dat
+        status: PASS
+        message: ''
+        duration_ms: 0.08
+      - suite: test_update_sync
+        test: test_externalizations_table_rows_have_file_path
+        status: PASS
+        message: ''
+        duration_ms: 0.12
+      - suite: test_update_sync
+        test: test_externalizations_table_rows_have_type
+        status: PASS
+        message: ''
+        duration_ms: 0.09
+      - suite: test_update_sync
+        test: test_externalizations_table_rows_have_valid_paths
+        status: PASS
+        message: ''
+        duration_ms: 0.08
+      - suite: test_update_sync
+        test: test_normalizeAllPaths_runs_without_error
+        status: PASS
+        message: ''
+        duration_ms: 0.38
+    cp_summary:
+      total: 32
+      passed: 30
+      failed: 1
+      errors: 0
+      skipped: 1
+      results:
+      - suite: test_custom_parameters
+        test: test_detectduplicatepaths_toggle
+        status: PASS
+        message: ''
+        duration_ms: 0.15
+      - suite: test_custom_parameters
+        test: test_disable_directly_with_keep_tags
+        status: PASS
+        message: ''
+        duration_ms: 346276.02
+      - suite: test_custom_parameters
+        test: test_disable_directly_with_remove_tags
+        status: PASS
+        message: ''
+        duration_ms: 176.69
+      - suite: test_custom_parameters
+        test: test_disable_z01_restore_tox
+        status: PASS
+        message: ''
+        duration_ms: 1001.2
+      - suite: test_custom_parameters
+        test: test_disable_z02_disable_again
+        status: PASS
+        message: ''
+        duration_ms: 29.11
+      - suite: test_custom_parameters
+        test: test_disable_z03_restore_tdn
+        status: PASS
+        message: ''
+        duration_ms: 3122.71
+      - suite: test_custom_parameters
+        test: test_disable_z04_verify_complete
+        status: FAIL
+        message: Should have at least one TDN file
+        duration_ms: 1.34
+      - suite: test_custom_parameters
+        test: test_embeddatsintdns_toggle_triggers_reexport
+        status: PASS
+        message: ''
+        duration_ms: 0.15
+      - suite: test_custom_parameters
+        test: test_enablekeyboardshortcuts_toggle
+        status: PASS
+        message: ''
+        duration_ms: 0.22
+      - suite: test_custom_parameters
+        test: test_envoyenable_reflects_server_state
+        status: SKIP
+        message: 'Server in transitional state: Restarting after reinit...'
+        duration_ms: 0.01
+      - suite: test_custom_parameters
+        test: test_envoyport_is_valid_range
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_custom_parameters
+        test: test_externalizations_par_points_to_valid_table
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_custom_parameters
+        test: test_folder_is_string_and_getProjectFolder_works
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_custom_parameters
+        test: test_importtdn_with_invalid_file_logs_error
+        status: PASS
+        message: ''
+        duration_ms: 3.26
+      - suite: test_custom_parameters
+        test: test_logfolder_change_affects_log_path
+        status: PASS
+        message: ''
+        duration_ms: 0.15
+      - suite: test_custom_parameters
+        test: test_logfolder_default
+        status: PASS
+        message: ''
+        duration_ms: 0
+      - suite: test_custom_parameters
+        test: test_logtofile_toggle
+        status: PASS
+        message: ''
+        duration_ms: 0.02
+      - suite: test_custom_parameters
+        test: test_networkpath_accepts_path
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_custom_parameters
+        test: test_print_toggle
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_custom_parameters
+        test: test_refresh_cleans_and_updates
+        status: PASS
+        message: ''
+        duration_ms: 86.24
+      - suite: test_custom_parameters
+        test: test_tdncreateonstart_toggle
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_custom_parameters
+        test: test_tdnfile_accepts_path
+        status: PASS
+        message: ''
+        duration_ms: 0.01
+      - suite: test_custom_parameters
+        test: test_update_creates_externalization_folder
+        status: PASS
+        message: ''
+        duration_ms: 1.57
+      - suite: test_custom_parameters
+        test: test_update_pulse_sets_status_enabled
+        status: PASS
+        message: ''
+        duration_ms: 1.57
+      - suite: test_custom_parameters
+        test: test_verbose_toggle_affects_debug_output
+        status: PASS
+        message: ''
+        duration_ms: 0.25
+      - suite: test_custom_parameters
+        test: test_zz_folder_01_change_to_temp
+        status: PASS
+        message: ''
+        duration_ms: 20.69
+      - suite: test_custom_parameters
+        test: test_zz_folder_02_reenable_new
+        status: PASS
+        message: ''
+        duration_ms: 59.67
+      - suite: test_custom_parameters
+        test: test_zz_folder_03_update_new_folder
+        status: PASS
+        message: ''
+        duration_ms: 3814.81
+      - suite: test_custom_parameters
+        test: test_zz_folder_04_restore_original
+        status: PASS
+        message: ''
+        duration_ms: 26.25
+      - suite: test_custom_parameters
+        test: test_zz_folder_05_reenable_original
+        status: PASS
+        message: ''
+        duration_ms: 3707.48
+      - suite: test_custom_parameters
+        test: test_zz_folder_10_empty_dir_survives_disable
+        status: PASS
+        message: ''
+        duration_ms: 3214.27
+      - suite: test_custom_parameters
+        test: test_zz_folder_11_disable_empty_prev_skips_project_folder
+        status: PASS
+        message: ''
+        duration_ms: 3146.21
+  tdn_ref: embody/unit_tests.tdn
+- name: execute_src_ctrl
+  type: executeDAT
+  parameters:
+    fromop: =parent()
+    projectpresave: true
+    file: embody/execute_src_ctrl.py
+    syncfile: true
+  flags:
+  - viewer
+  position: [-625, 120]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: externalizations
+  type: tableDAT
+  parameters:
+    file: embody/externalizations.tsv
+    syncfile: true
+    rows: 246
+    cols: 11
+  flags:
+  - viewer
+  position: [-200, 0]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - tsv
+annotations:
+- name: annotation_execute_src_ctrl
+  mode: annotate
+  title: Build & Release Manager
+  text: |-
+    Runs on every project save (onProjectPreSave):
+
+    1. Auto-increments the patch version
+       (e.g. v5.0.32 -> v5.0.33)
+
+    2. Updates README.md with the new
+       version number and TD build
+
+    3. Deletes the previous release .tox
+
+    4. Saves a fresh Embody-vX.Y.Z.tox
+       to the /release folder
+  position: [-775, 50]
+  size: [440, 480]
+  color: [0.18, 0.22, 0.28]
+  opacity: 0.9
+  bodyFontSize: 12
+- name: annotation_externalizations
+  mode: annotate
+  title: Externalization Tracking
+  text: Master tracking table for all externalized operators. Managed exclusively by Embody — never edit directly.
+  position: [-250, -50]
+  size: [223, 279]
+  color: [0.18, 0.22, 0.28]
+  opacity: 0.9
+- name: annotation_unit_tests
+  mode: annotate
+  title: Unit Tests
+  text: Embody's test suites for verifying externalization, path resolution, and MCP tool behavior.
+  position: [-700, -352]
+  size: [329, 322]
+  color: [0.18, 0.22, 0.28]
+  opacity: 0.9

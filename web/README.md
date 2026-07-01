@@ -74,15 +74,19 @@ owlette's `made with 🎤 in california` register. If you'd rather use a real
 emoji + place, that's the slot. The `<span class="footer__city">` is so the
 city color stays slightly brighter than the rest of the line.
 
-### 2. The hero CTA target
-`index.html` line ~70:
-```html
-<a class="btn btn--primary" href="https://github.com/dylanroscover/Embody/tree/main/release">
-```
-This points to the `/release` directory listing on GitHub. Once you cut a
-proper GitHub Release with the `.tox` as an asset, change this to
-`https://github.com/dylanroscover/Embody/releases/latest` so visitors land on
-the newest tagged release instead of a folder listing.
+### 2. The hero CTAs
+The hero has three text CTAs (plus a `btn--ghost` GitHub icon link):
+1. **Download the .tox** (`btn--primary`, solid green) → `releases/latest`
+2. **Quickstart** (`btn--outline`, green border, fills on hover) → the docs
+   Quickstart page at `dylanroscover.github.io/Embody/quickstart/`
+3. **Read the manifesto** (`btn--ghost`) → the manifesto
+
+The Quickstart button is the broad-audience entry point — it points at the
+five-minute, AI-first guide rather than a bare file download. There's a second
+`Read the full Quickstart →` CTA at the end of the "four steps to flow" section
+(`.start__cta`), since those steps are a teaser for the same page. If you move
+the docs site off `dylanroscover.github.io/Embody/`, update both Quickstart
+hrefs to match.
 
 ### 3. The Open Graph meta tags assume embody.tools is live
 `index.html` lines 13–14, 21:
@@ -184,7 +188,7 @@ If you want a different mono webfont, add it to the `<link>` at the top of
 - All interactive elements have `aria-hidden` set on decorative SVGs
 - Color contrast on body text vs. background passes WCAG AA at 17px
 
-The single accessibility gap I'd flag: the JSON code block in the TDN section
+The single accessibility gap I'd flag: the YAML code block in the TDN section
 uses hand-rolled `<span>` colors for syntax highlighting. Screen readers will
 read the entire block as one long string of punctuation — fine for sighted
 users, suboptimal for SR users. If you want to fix that, add

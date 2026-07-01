@@ -1,0 +1,196 @@
+{
+  "slug": "mandelbulb-march",
+  "name": "Mandelbulb March",
+  "category": "raymarching-sdf",
+  "difficulty": "advanced",
+  "description": "A raymarched 3D Mandelbulb fractal rendered entirely in one GLSL TOP. The classic Mandelbulb distance estimator is marched per-pixel against an orbiting camera; orbit-trap values captured during iteration tint the surface, and soft shadows plus iteration-glow give it depth. Drop-in via out1 as a hero render, a looping VJ source, or a learning reference for distance-estimated raymarching.",
+  "key_ops": [
+    "glslTOP",
+    "outTOP"
+  ],
+  "network_plan": [
+    {
+      "name": "glsl_mandelbulb",
+      "type": "glslTOP",
+      "role": "The whole specimen: a single generator GLSL TOP that raymarches the Mandelbulb SDF, applies orbit-trap coloring and soft lighting. No input -- it self-renders, so it needs a custom output resolution. All seven exposed params feed it through two vec4 uniforms.",
+      "params": {
+        "outputresolution": "custom",
+        "resolutionw": 1024,
+        "resolutionh": 1024,
+        "pixeldat": "glsl_mandelbulb_pixel",
+        "computedat": "glsl_mandelbulb_compute",
+        "format": "rgba16float"
+      },
+      "inputs": []
+    },
+    {
+      "name": "out1",
+      "type": "outTOP",
+      "role": "Contract output. The capture target / manifest output_op. Terminates the chain. Viewer flag on so a user sees it immediately and its time-dependence cooks.",
+      "params": {
+        "label": "=me.name"
+      },
+      "inputs": [
+        "glsl_mandelbulb"
+      ]
+    },
+    {
+      "name": "glsl_mandelbulb_pixel",
+      "type": "textDAT",
+      "role": "Pixel (fragment) shader DAT for glsl_mandelbulb. Docked directly below the host. extension=frag. Holds the raymarcher (see glsl block).",
+      "params": {
+        "extension": "frag"
+      },
+      "inputs": []
+    },
+    {
+      "name": "glsl_mandelbulb_compute",
+      "type": "textDAT",
+      "role": "Auto-spawned compute shader DAT (empty -- this is a pixel-stage shader). Docked below the host. TD recreates it on import if omitted, but it is listed for completeness.",
+      "params": {},
+      "inputs": []
+    },
+    {
+      "name": "glsl_mandelbulb_info",
+      "type": "infoDAT",
+      "role": "Docked info DAT for the GLSL TOP -- surfaces compile errors. Hug it to the host. dat_read_only=true.",
+      "params": {
+        "op": "glsl_mandelbulb"
+      },
+      "inputs": []
+    },
+    {
+      "name": "annotate1",
+      "type": "annotateCOMP",
+      "role": "Teaching annotation enclosing the GLSL TOP and its docked DATs. Title 'Mandelbulb Raymarcher'. Explains the DE + orbit-trap + soft-light pipeline. Palette clone of TDAnnotate.",
+      "params": {
+        "Titletext": "Mandelbulb Raymarcher",
+        "Bodytext": "One GLSL TOP raymarches the Mandelbulb SDF. The distance estimator iterates z = z^Power + c in spherical form, tracking the running derivative (dr) for a true distance bound and the closest approach to the axes (orbit trap) for color. An orbiting camera marches rays; soft shadows, AO, and an iteration-glow finish it. Bounded loops keep the GPU safe.",
+        "Mode": "annotate",
+        "Backcolorr": [
+          0.16,
+          0.13,
+          0.22
+        ],
+        "Opacity": 0.3
+      },
+      "inputs": []
+    }
+  ],
+  "glsl": [
+    {
+      "op": "glsl_mandelbulb_pixel",
+      "stage": "pixel",
+      "code": "// Mandelbulb March -- raymarched 3D Mandelbulb, orbit-trap color, soft light.\n// uParams: x=Power  y=Detail  z=Glow  w=time(=absTime*OrbitSpeed)\n// uLight : xyz=sun unit dir (from azim/elev)  w=Hue\nuniform vec4 uParams;\nuniform vec4 uLight;\nout vec4 fragColor;\n\nconst float PI = 3.14159265;\nconst int   DE_ITER    = 12;   // bounded fractal iterations\nconst int   MARCH_STEPS = 96;  // bounded raymarch steps\nconst int   SHADOW_STEPS = 28; // bounded soft-shadow march\nconst float MAX_DIST = 8.0;\n\n// Orbit-trap accumulator (set inside the DE, read for color).\nvec4 g_trap;\n\n// Mandelbulb distance estimator. Returns the distance bound; fills g_trap.\nfloat mandelbulbDE(vec3 pos){\n    vec3 z = pos;\n    float dr = 1.0;\n    float r  = 0.0;\n    float power = uParams.x;\n    vec4  trap = vec4(1e10);          // min |z| to x,y,z axes and origin\n    for(int i = 0; i < DE_ITER; i++){\n        r = length(z);\n        if(r > 2.0) break;\n        // record orbit traps (closest approach during the orbit)\n        trap = min(trap, vec4(abs(z), r));\n        // to polar\n        float theta = acos(clamp(z.z / r, -1.0, 1.0));\n        float phi   = atan(z.y, z.x);\n        dr = pow(r, power - 1.0) * power * dr + 1.0;\n        // scale and rotate the point\n        float zr = pow(r, power);\n        theta *= power;\n        phi   *= power;\n        z = zr * vec3(sin(theta) * cos(phi),\n                      sin(theta) * sin(phi),\n                      cos(theta));\n        z += pos;\n    }\n    g_trap = trap;\n    return 0.5 * log(r) * r / dr;     // analytic distance estimate\n}\n\n// Forward-difference normal (4 DE taps).\nvec3 calcNormal(vec3 p, float eps){\n    vec2 e = vec2(eps, 0.0);\n    return normalize(vec3(\n        mandelbulbDE(p + e.xyy) - mandelbulbDE(p - e.xyy),\n        mandelbulbDE(p + e.yxy) - mandelbulbDE(p - e.yxy),\n        mandelbulbDE(p + e.yyx) - mandelbulbDE(p - e.yyx)));\n}\n\n// Soft shadow by marching toward the light (bounded).\nfloat softShadow(vec3 ro, vec3 rd, float k){\n    float res = 1.0;\n    float t = 0.02;\n    for(int i = 0; i < SHADOW_STEPS; i++){\n        vec3 p = ro + rd * t;\n        float h = mandelbulbDE(p);\n        if(h < 0.0008) return 0.0;\n        res = min(res, k * h / t);\n        t += clamp(h, 0.01, 0.2);\n        if(t > 4.0) break;\n    }\n    return clamp(res, 0.0, 1.0);\n}\n\n// hue rotation -> rgb (palette)\nvec3 palette(float h){\n    return 0.5 + 0.5 * cos(6.28318 * (vec3(0.0, 0.33, 0.67) + h));\n}\n\nvoid main(){\n    vec2 res = uTD2DInfos[0].res.zw;        // pixel resolution\n    vec2 uv  = (gl_FragCoord.xy - 0.5 * res) / res.y;\n\n    float t = uParams.w;\n\n    // Orbiting camera around the bulb.\n    float ca = t * 0.25;\n    float cam_r = 2.6;\n    vec3 ro = vec3(sin(ca) * cam_r, 0.55 * sin(t * 0.13), cos(ca) * cam_r);\n    vec3 ta = vec3(0.0);\n    vec3 ww = normalize(ta - ro);\n    vec3 uu = normalize(cross(ww, vec3(0.0, 1.0, 0.0)));\n    vec3 vv = cross(uu, ww);\n    float fov = 1.4;\n    vec3 rd = normalize(uv.x * uu + uv.y * vv + fov * ww);\n\n    // Raymarch.\n    float detail = mix(0.0015, 0.0004, clamp(uParams.y, 0.0, 1.0));\n    float tDist = 0.0;\n    float glowAcc = 0.0;\n    bool  hit = false;\n    vec4  trap = vec4(1e10);\n    for(int i = 0; i < MARCH_STEPS; i++){\n        vec3 p = ro + rd * tDist;\n        float d = mandelbulbDE(p);\n        // accumulate proximity glow (close-but-miss rays glow at the edges)\n        glowAcc += exp(-d * 28.0);\n        if(d < detail * (1.0 + tDist)){\n            hit  = true;\n            trap = g_trap;\n            break;\n        }\n        tDist += d;\n        if(tDist > MAX_DIST) break;\n    }\n\n    vec3 col = vec3(0.0);\n    if(hit){\n        vec3 p = ro + rd * tDist;\n        vec3 n = calcNormal(p, detail * 1.5);\n        vec3 sun = normalize(uLight.xyz);\n\n        // soft key light + soft shadow\n        float dif = clamp(dot(n, sun), 0.0, 1.0);\n        float sh  = softShadow(p + n * 0.002, sun, 16.0);\n        // ambient + sky fill from above\n        float sky = 0.5 + 0.5 * n.y;\n        // cheap AO from how far the march got\n        float ao = clamp(1.0 - float(MARCH_STEPS) * 0.0 - (tDist - 2.0) * 0.15, 0.3, 1.0);\n\n        // orbit-trap color: blend axis traps + origin trap into the palette\n        float hue = uLight.w + trap.w * 0.18 + trap.x * 0.25;\n        vec3 base = palette(hue);\n        base = mix(base, base.zxy, clamp(trap.y * 0.6, 0.0, 1.0));\n\n        col  = base * (0.18 * sky);                         // ambient/sky fill\n        col += base * dif * sh * vec3(1.0, 0.93, 0.82);     // soft key light\n        // rim / fresnel for edge separation\n        float fres = pow(1.0 - clamp(dot(n, -rd), 0.0, 1.0), 3.0);\n        col += fres * 0.25 * palette(hue + 0.5);\n        col *= ao;\n    } else {\n        // background: subtle vertical gradient toward the light\n        vec3 sun = normalize(uLight.xyz);\n        float g = 0.5 + 0.5 * rd.y;\n        col = mix(vec3(0.015, 0.018, 0.03), vec3(0.04, 0.05, 0.08), g);\n        col += pow(clamp(dot(rd, sun), 0.0, 1.0), 8.0) * 0.06 * palette(uLight.w + 0.5);\n    }\n\n    // iteration / proximity glow (the 'how'd they do that' inner light)\n    col += palette(uLight.w + 0.15) * glowAcc * (0.012 * uParams.z);\n\n    // tonemap + gamma\n    col = col / (1.0 + col);\n    col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));\n    fragColor = vec4(col, 1.0);\n}\n"
+    },
+    {
+      "op": "glsl_mandelbulb_compute",
+      "stage": "compute",
+      "code": ""
+    }
+  ],
+  "exposed_params": [
+    {
+      "name": "Power",
+      "label": "Power",
+      "style": "Float",
+      "default": 8,
+      "range": [
+        2,
+        12
+      ],
+      "drives": "The Mandelbulb exponent in z = z^Power + c (uParams.x). 8 is the classic bulb; lower (2-4) gives blobby organic forms, higher (10-12) sprouts more lobes and finer detail. The single biggest shape control."
+    },
+    {
+      "name": "Detail",
+      "label": "Surface Detail",
+      "style": "Float",
+      "default": 0.6,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "Raymarch hit threshold (uParams.y), remapped to a 0.0015->0.0004 epsilon. Higher = the march gets closer to the true surface, resolving finer fractal crenellation at the cost of more steps near grazing rays. Visible as sharpness of the bulb's pores and ridges."
+    },
+    {
+      "name": "Glow",
+      "label": "Glow",
+      "style": "Float",
+      "default": 1,
+      "range": [
+        0,
+        3
+      ],
+      "drives": "Intensity of the proximity/iteration glow added along every ray (uParams.z). Rays that pass close to the surface without hitting accumulate an exponential glow, giving the bulb a luminous halo and lighting the interior crevices. 0 = matte, 3 = ethereal bloom."
+    },
+    {
+      "name": "Orbitspeed",
+      "label": "Orbit Speed",
+      "style": "Float",
+      "default": 1,
+      "range": [
+        0,
+        3
+      ],
+      "drives": "Multiplies absTime.seconds into uParams.w, which orbits the camera (azimuth = t*0.25) and bobs it vertically. 0 freezes the camera for a still; 1 is a slow cinematic orbit. This is the cheap per-frame animation -- only the camera moves, the fractal math is identical each frame."
+    },
+    {
+      "name": "Hue",
+      "label": "Hue",
+      "style": "Float",
+      "default": 0.55,
+      "range": [
+        0,
+        1
+      ],
+      "drives": "Base hue offset of the orbit-trap palette (uLight.w), feeding a cosine palette. Orbit-trap values captured during the DE iteration shift around this base, so the whole color identity (surface + glow + rim + background sun) rotates through the spectrum."
+    },
+    {
+      "name": "Sunazim",
+      "label": "Sun Azimuth",
+      "style": "Float",
+      "default": 35,
+      "range": [
+        -180,
+        180
+      ],
+      "drives": "Azimuth (degrees) of the key light. Converted with elevation into a unit direction (uLight.xyz) in the value expression -- cos(el)*sin(az), sin(el), cos(el)*cos(az) -- so normalize() never sees a zero vector. Rotates where the soft key light and its shadow fall across the bulb."
+    },
+    {
+      "name": "Sunelev",
+      "label": "Sun Elevation",
+      "style": "Float",
+      "default": 45,
+      "range": [
+        -10,
+        90
+      ],
+      "drives": "Elevation (degrees) of the key light, the y of the unit sun vector (uLight.y). Raises/lowers the light: high = top-down soft light with short shadows, low = dramatic raking light that throws long soft shadows across the lobes."
+    }
+  ],
+  "prompt": {
+    "one_liner": "A raymarched 3D Mandelbulb fractal with orbit-trap coloring and soft lighting, rendered entirely in one GLSL TOP and lit by a slowly orbiting camera.",
+    "evolve": "Push Power past 8 toward 12 for denser lobes, or down to 2-4 for blobby organic forms. Crank Glow to 3 with a low Sun Elevation for an ethereal, self-lit nebula look; drop Glow to 0 for a hard sculptural matte. Sweep Hue while Orbit Speed is slow for a hypnotic color loop. For a different fractal entirely, swap the spherical z = z^Power formula in mandelbulbDE for a Mandelbox (box-fold + sphere-fold) or a Juliabulb (replace 'z += pos' with a fixed c). Feed out1 into a Bloom TOP or the kaleidoscope specimen for a faceted mandala.",
+    "compose_with": [
+      "kaleidoscope",
+      "reaction-diffusion"
+    ]
+  },
+  "warmup_frames": 8,
+  "build_notes": "COOK DEMAND: This is a pure per-frame raymarcher -- the camera orbits via absTime.seconds (uParams.w), so the GLSL TOP must cook every frame. Unlike the static-source+cheap-downstream pattern, there is no heavy source to cache: the fractal DE runs per pixel every frame. The cost is bounded and fixed per frame (it does not grow), so this is acceptable. In the sandbox nothing views out1, so add a TEMP frame-driver: an Execute DAT in /specimen_lab (OUTSIDE the COMP) with onFrameStart cooking out1. It is NOT part of the spec and must never be exported (it lives outside the COMP). Verify animation with two captures separated by real wall-clock seconds -- the camera azimuth should advance; a single forced capture proves nothing.\\n\\nUNIFORM BINDING (set on glsl_mandelbulb via the vec sequence -- op.seq.vec.numBlocks=2, vecNtype='vec4'):\\n  uParams: valuex='=parent().par.Power.eval()'  valuey='=parent().par.Detail.eval()'  valuez='=parent().par.Glow.eval()'  valuew='=absTime.seconds*parent().par.Orbitspeed.eval()'\\n  uLight : valuex='=__import__(\\\"math\\\").cos(__import__(\\\"math\\\").radians(parent().par.Sunelev.eval()))*__import__(\\\"math\\\").sin(__import__(\\\"math\\\").radians(parent().par.Sunazim.eval()))'  valuey='=__import__(\\\"math\\\").sin(__import__(\\\"math\\\").radians(parent().par.Sunelev.eval()))'  valuez='=__import__(\\\"math\\\").cos(__import__(\\\"math\\\").radians(parent().par.Sunelev.eval()))*__import__(\\\"math\\\").cos(__import__(\\\"math\\\").radians(parent().par.Sunazim.eval()))'  valuew='=parent().par.Hue.eval()'\\nDeclare BOTH uniforms manually in the pixel shader (a glslTOP requires manual uniform declaration -- unlike a glslPOP). Order matters: uParams then uLight, names exact.\\n\\nPERFORMANCE GOTCHAS:\\n- Resolution capped at 1024x1024 (<=1280 rule). Raymarching is O(width*height*MARCH_STEPS*DE_ITER); do NOT raise to 4K. format=rgba16float keeps tonemapping smooth without 32-bit cost.\\n- ALL loops bounded by constant literals: DE_ITER=12, MARCH_STEPS=96, SHADOW_STEPS=28. Never let Power or Detail drive a loop count (GPU-crash rule) -- they only change per-iteration math/epsilon.\\n- The DE is evaluated ~MARCH_STEPS + 4 (normal) + SHADOW_STEPS times per pixel. Gate with get_project_performance before/after; if fps dips below ~90% target, lower MARCH_STEPS to 64 or resolution to 768 first, before touching DE_ITER (which costs detail).\\n- TDN does NOT round-trip custom-param VALUES (only definitions): a freshly imported specimen comes in inert (Power=0, etc.) until par.val is set to par.default. After ImportNetwork, do a one-time 'revert to default' on all 7 params, then verify the bulb renders (Power=0 yields a degenerate blob/black frame -- the tell-tale of the inert-import trap).\\n- DOCKED DATS: glsl_mandelbulb docks a pixel DAT, a compute DAT, and an info DAT -- hug all three directly below the host AT CREATION (row_y = host_bottom - dh - 30, centered), and run get_network_layout in the SAME execute_python that creates the op. Do not defer.\\n- BACKGROUND: acos input is clamped (clamp(z.z/r,-1,1)) to avoid NaN at r->0; r==0 only at the exact center which a ray rarely hits, but the clamp + the r>2 break keep it safe. log(r) is guarded by the r>2 early-out leaving r in (0,2].\\n- Judge the look by capturing out1 and reading the frame (load visual-aesthetics). A black frame means the ray missed everything (check fov/cam_r) or Power is 0 (inert import).",
+  "critique": {
+    "td_plausible": true,
+    "clears_bar": true,
+    "requires_none": true,
+    "photogenic": 5,
+    "verdict": "revise",
+    "issues": [
+      "FATAL (verified compile error): The pixel shader reads output resolution via `vec2 res = uTD2DInfos[0].res.zw;`. On a generator GLSL TOP with ZERO inputs, `uTD2DInfos` is undeclared -- TD 2025 returns `ERROR: glsl_mandelbulb_pixel:66: 'uTD2DInfos' : undeclared identifier` and `No code generated`. The shader does not compile, so out1 renders nothing as written. uTD2DInfos[] is the INPUT texture-info array; there are no inputs here.",
+      "build_notes claims uniforms are bound on the glslTOP via `op.seq.vec.numBlocks=2, vecNtype='vec4'`. Verified live: a glslTOP has NO `vecNtype` parameter (that is a glslMAT/glslPOP-only sequence param). The TOP's vec uniforms are fixed vec4-by-four-values; only `vec0name/vec1name` and `vec0valuex..w / vec1valuex..w` exist. The `vecNtype='vec4'` instruction is inapplicable and will mislead the builder.",
+      "Annotation param `Backcolorr` is given a 3-element array `[0.16, 0.13, 0.22]`. Verified live: `Backcolorr` is a single float (the red channel only); the green/blue are separate pars `Backcolorg`/`Backcolorb`. Assigning an array to a single float par is wrong (cosmetic, not a render blocker).",
+      "Aesthetic note (not a blocker): cam_r=2.6 places the camera so close the bulb fills the entire frame with no negative space or silhouette -- the captured frame never shows the whole bulb. Considered pulling cam_r to ~3.0-3.5 for a hero composition that reads as a recognizable Mandelbulb rather than an extreme close-up.",
+      "Minor: the unused `ao` term contains `- float(MARCH_STEPS) * 0.0` (a literal zero multiply, dead code) -- harmless but confusing; the `const float PI` is declared and never used."
+    ],
+    "fixes": "\"1) REQUIRED for compile: change the resolution line in glsl_mandelbulb_pixel from `vec2 res = uTD2DInfos[0].res.zw;` to `vec2 res = uTDOutputInfo.res.zw;`. Verified live: this compiles with zero errors/zero warnings and the bulb renders (mean RGB ~0.39/0.49/0.28, peaks ~0.75) with the time-driven camera orbiting per frame. This is the single change needed to make the specimen render. 2) In build_notes, drop the `vecNtype='vec4'` instruction; bind uniforms by setting only `seq.vec.numBlocks=2`, `vec0name='uParams'`, `vec1name='uLight'`, and the `vec0valuex..w / vec1valuex..w` expressions (all of which were verified to evaluate correctly, including the unit-magnitude sun vector). 3) In the annotate1 plan, replace `\\\"Backcolorr\\\": [0.16, 0.13, 0.22]` with three scalar params: `\\\"Backcolorr\\\": 0.16, \\\"Backcolorg\\\": 0.13, \\\"Backcolorb\\\": 0.22`. 4) Optional aesthetic improvement: raise `cam_r` from 2.6 to ~3.2 so the whole bulb silhouette is visible against negative space. 5) Optional cleanup: remove the dead `- float(MARCH_STEPS) * 0.0` term and the unused `PI` const. Everything else (op types, two-vec binding mechanism, bounded loops, az/el sun conversion, requires:none, 1024px cap, rgba16float, inert-import revert-to-default workaround, temp frame-driver, docked-DAT hugging) was verified correct and should ship as-is.\""
+  }
+}
