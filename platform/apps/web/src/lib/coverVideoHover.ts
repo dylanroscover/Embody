@@ -65,6 +65,14 @@ function stopVideo(video: HTMLVideoElement): void {
 export interface InitCoverVideoHoverOptions {
   /** Where to delegate hover from. Defaults to document. */
   scope?: Document | HTMLElement;
+  /**
+   * The element that counts as "the card": hovering ANYWHERE inside it plays
+   * that card's cover video, and playback stops only once the pointer leaves
+   * the whole card (not merely the cover). Defaults to the cover box itself
+   * ([data-cover-shell]). The collection passes its card wrapper
+   * ([data-specimen]) so hovering the badges/title/author plays it too.
+   */
+  cardSelector?: string;
 }
 
 /**
@@ -76,6 +84,7 @@ export interface InitCoverVideoHoverOptions {
 export function initCoverVideoHover(options: InitCoverVideoHoverOptions = {}): void {
   const scope: Document | HTMLElement = options.scope ?? document;
   const root: HTMLElement = scope instanceof Document ? scope.body : scope;
+  const cardSelector = options.cardSelector ?? "[data-cover-shell]";
   if (root.dataset.coverVideoBound === "1") return;
   root.dataset.coverVideoBound = "1";
 
@@ -84,30 +93,27 @@ export function initCoverVideoHover(options: InitCoverVideoHoverOptions = {}): v
   if (noHoverPointer()) return;
 
   // mouseenter/mouseleave don't bubble, so delegate their bubbling cousins
-  // (mouseover/mouseout) and find the video for the card under the pointer.
-  // mouseout also fires moving BETWEEN a card's children; guard with
-  // relatedTarget still inside the same card so we only stop on a real leave.
-  const videoFor = (target: EventTarget | null): HTMLVideoElement | null => {
-    if (!(target instanceof Element)) return null;
-    const shell = target.closest("[data-cover-shell]");
-    if (!shell) return null;
-    return shell.querySelector<HTMLVideoElement>(VIDEO_SELECTOR);
-  };
+  // (mouseover/mouseout) and resolve the card under the pointer. The "card" is
+  // options.cardSelector, so hovering ANYWHERE inside it (cover, badges, title,
+  // author, reactions) plays that card's cover video; mouseout only stops once
+  // the pointer leaves the whole card (relatedTarget no longer inside it).
+  const cardFor = (target: EventTarget | null): Element | null =>
+    target instanceof Element ? target.closest(cardSelector) : null;
 
   root.addEventListener("mouseover", (event) => {
-    const video = videoFor(event.target);
+    const card = cardFor(event.target);
+    const video = card?.querySelector<HTMLVideoElement>(VIDEO_SELECTOR);
     if (video) playVideo(video);
   });
 
   root.addEventListener("mouseout", (event) => {
     const mouse = event as MouseEvent;
-    const video = videoFor(mouse.target);
+    const card = cardFor(mouse.target);
+    if (!card) return;
+    const video = card.querySelector<HTMLVideoElement>(VIDEO_SELECTOR);
     if (!video) return;
-    // Still inside the same cover (moving between its children) -> not a leave.
-    const shell = video.closest("[data-cover-shell]");
-    if (shell && mouse.relatedTarget instanceof Node && shell.contains(mouse.relatedTarget)) {
-      return;
-    }
+    // Still inside the same card (moving between its children) -> not a leave.
+    if (mouse.relatedTarget instanceof Node && card.contains(mouse.relatedTarget)) return;
     stopVideo(video);
   });
 }

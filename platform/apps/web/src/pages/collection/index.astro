@@ -452,7 +452,7 @@ const diffAbbr = (d: string): string => LEVEL_ABBR[d] ?? d.slice(0, 3).toUpperCa
     // Cover-video hover-play: one delegated pair of listeners over the grid
     // covers SSR AND appended cards (no per-card binding to leak). No-op on a
     // coarse pointer or with reduced motion -- those keep the static poster.
-    if (grid) initCoverVideoHover({ scope: grid });
+    if (grid) initCoverVideoHover({ scope: grid, cardSelector: "[data-specimen]" });
     const viewButtons = Array.from(
       document.querySelectorAll<HTMLElement>("[data-view-option]")
     );
