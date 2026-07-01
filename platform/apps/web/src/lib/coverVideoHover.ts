@@ -11,21 +11,23 @@
 // real hover sets the src -- keeping the grid's bandwidth/jank cost at zero for
 // covers no one hovers.
 //
-// Respects the two "don't autoplay" cases: prefers-reduced-motion: reduce
-// (never load/play -> poster only) and a coarse/touch pointer (no hover in the
-// grid -> poster stays static). In both cases the poster is the whole cover.
+// A hover is a DELIBERATE user action, so hover-play is NOT suppressed by
+// prefers-reduced-motion (only automatic playback respects that -- see the
+// detail page's autoplaying cover). It IS a no-op on a coarse/touch pointer,
+// which has no hover in the grid, so those covers stay a static poster.
 
 // The video element carries its resolved URL here (set NO src until hover).
 const VIDEO_SELECTOR = "video[data-cover-video]";
 
-// True when the environment should show the static poster only and never
-// hover-play: reduced-motion users, and coarse/touch pointers (no real hover).
-function posterOnly(): boolean {
+// True when the pointer cannot hover (coarse / touch): there is no hover in the
+// grid, so hover-play is pointless and the static poster is the whole cover. We
+// deliberately do NOT gate on prefers-reduced-motion -- a hover is a deliberate
+// user action requesting playback, not autoplay, so hover-play stays available
+// to reduced-motion users. (Only automatic playback respects reduced motion:
+// the detail page's autoplaying cover, in c/[slug].astro.)
+function noHoverPointer(): boolean {
   if (typeof window === "undefined" || !window.matchMedia) return false;
-  return (
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
-    window.matchMedia("(pointer: coarse)").matches
-  );
+  return window.matchMedia("(pointer: coarse)").matches;
 }
 
 function playVideo(video: HTMLVideoElement): void {
@@ -77,9 +79,9 @@ export function initCoverVideoHover(options: InitCoverVideoHoverOptions = {}): v
   if (root.dataset.coverVideoBound === "1") return;
   root.dataset.coverVideoBound = "1";
 
-  // Poster-only environments never hover-play; leave the covers as static
-  // posters. (Marked bound above so a later call still short-circuits.)
-  if (posterOnly()) return;
+  // Touch / coarse pointers have no hover; leave those covers as static posters.
+  // (Marked bound above so a later call still short-circuits.)
+  if (noHoverPointer()) return;
 
   // mouseenter/mouseleave don't bubble, so delegate their bubbling cousins
   // (mouseover/mouseout) and find the video for the card under the pointer.
