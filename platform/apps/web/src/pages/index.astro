@@ -252,11 +252,18 @@ const jsonLd = {
     z-index: 2;
     display: flex;
     flex-direction: column;
-    gap: 3rem;
+    /* Same shared rhythm token as nav->eyebrow and eyebrow->heading, so every
+       gap down the hero is identical: nav = eyebrow = headline = CTAs = shot. */
+    gap: var(--stack-gap);
   }
 
   .hero__inner .eyebrow {
     margin: 0;
+    /* Same leading-trim as the headline so the eyebrow's box hugs its ink and
+       the nav->eyebrow / eyebrow->headline gaps read as a true 48px, not the
+       font's line box. Keeps the hero stack uniform ink-to-ink. */
+    text-box-trim: trim-both;
+    text-box-edge: cap alphabetic;
   }
 
   /* Headline + eyebrow stay left-aligned; the CTA row and the shot share the

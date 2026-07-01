@@ -241,16 +241,28 @@ pre {
    the page H1. Every inner item shares one height rule (--nav-item-h) so no
    item is ever taller, circular, or wrapped. */
 :root {
-  /* The single source of truth for inner-item height. The wordmark, the
-     auth buttons, every link, and the GitHub pill all resolve to this exact
-     box height (min-height + matching vertical padding + line-height: 1). */
+  /* The single source of truth for inner-item height. The wordmark, the auth
+     buttons, every link, the account chip, and the GitHub pill all resolve to
+     this exact box height (a fixed height on desktop; line-height: 1). */
   --nav-item-h: 30px;
   --nav-item-pad-y: 0.38rem;
+
+  /* Nav geometry, defined ONCE. Everything that has to sit below the fixed nav
+     pill (main's top clearance, the specimen app-shell panels) derives from
+     these so a nav-size change can never desync a hardcoded copy again -- a
+     stale "52px" old-nav-height literal in three places is exactly what drifted
+     when the pill shrank. --nav-h tracks the pill's real box: item height +
+     its 2x0.3rem padding + 2x1px border. */
+  --nav-top: clamp(0.85rem, 2vw, 1.4rem);          /* the pill's top offset */
+  --nav-h: calc(var(--nav-item-h) + 0.6rem + 2px); /* the pill's total height */
+  /* One vertical rhythm for the whole stack: nav -> eyebrow, eyebrow -> heading,
+     and each hero block are all this gap, so the page reads as x = x = x = x. */
+  --stack-gap: 3rem;
 }
 
 .navbar {
   position: fixed;
-  top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem));
+  top: calc(var(--safe-top, 0px) + var(--nav-top));
   left: 50%;
   z-index: 100;
   transform: translateX(-50%);
@@ -328,15 +340,18 @@ pre {
   backdrop-filter: none;
 }
 
-/* Shared height + centering for every inner item. ONE rule guarantees
-   uniform height: same min-height, same vertical padding, line-height 1,
-   vertically centered, never wrapping. */
+/* Shared height + centering for every inner item. ONE fixed height guarantees
+   uniform pills across every state -- a tall child (the brand dot, the account
+   avatar) can no longer push its pill taller than its neighbors the way a bare
+   min-height allowed. line-height 1, vertically centered, never wrapping. The
+   mobile dropdown releases this height (below) so stacked label + description
+   rows can still grow. */
 .navbar__mark,
 .navbar__item {
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
-  min-height: var(--nav-item-h);
+  height: var(--nav-item-h);
   padding-top: var(--nav-item-pad-y);
   padding-bottom: var(--nav-item-pad-y);
   line-height: 1;
@@ -386,8 +401,12 @@ pre {
    navbar (the footer mark sits on a solid background and needs no plate). The
    glyph is inset within the disc so the fill reads as a deliberate badge. */
 .navbar__mark .mark__dot {
+  /* Sized to sit inside the fixed 30px pill with even breathing room (the base
+     26px dot is what pushed the wordmark pill taller than its neighbors). */
+  width: 22px;
+  height: 22px;
   background-color: var(--bg);
-  background-size: 20px 20px;
+  background-size: 17px 17px;
   border-radius: 50%;
 }
 
@@ -459,11 +478,6 @@ pre {
   justify-content: center;
   padding-left: var(--nav-item-pad-y);
   padding-right: var(--nav-item-pad-y);
-  /* This pill renders shorter than the nav row (the wordmark sets the row
-     height), so it centers with ~4px extra above and below. Nothing adds that
-     on the right, where it's just the nav's 0.4rem padding -- so mirror the 4px
-     here, making the right gap to the nav edge match the top/bottom gap exactly. */
-  margin-right: 4px;
   border-color: var(--border);
   background: var(--bg-elevated);
   color: var(--text-muted);
@@ -800,6 +814,9 @@ pre {
      the account chip carry no description, so they stay centered single rows. */
   .navbar__items .navbar__item {
     justify-content: flex-start;
+    /* Desktop pins a fixed pill height; the dropdown rows stack label +
+       description, so release it here and let them grow. */
+    height: auto;
     min-height: 0;
     padding: 0.6rem 0.7rem;
     border-radius: 12px;
@@ -922,17 +939,14 @@ main {
   min-height: calc(100dvh - 150px);
   /* Reserve clear space below the floating consolidated bar so it never sits
      on top of the page H1 / hero text. This is the SINGLE owner of top
-     clearance: the first section of every page drops its own large top
-     padding (below) so the totals stay tasteful instead of double-stacking.
-     Paired with the smaller .eyebrow bottom margin below: more breathing room
-     between the nav and the eyebrow, less between the eyebrow and its heading,
-     so the heading itself stays put. The value TRACKS the nav's own vertical
-     position -- the first clamp is a mirror of .navbar's `top` offset, +59px is
-     the nav's fixed rendered height, + the eyebrow gap -- so the nav->eyebrow
-     gap stays EXACTLY equal to the eyebrow->heading gap at every viewport width,
-     not just where the clamps happen to bottom out. Keep the first clamp in sync
-     with .navbar `top` and 1.95rem in sync with .eyebrow `margin-bottom`. */
-  padding-top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem) + 52px + 1.95rem);
+     clearance: the first section of every page drops its own large top padding
+     (below) so the totals stay tasteful instead of double-stacking. Built
+     entirely from the shared nav tokens + one rhythm gap: nav top offset + nav
+     height + --stack-gap. Because --stack-gap is the SAME gap the eyebrow uses
+     below it (and the hero uses between its blocks), nav -> eyebrow ==
+     eyebrow -> heading at every viewport width. Nothing to keep "in sync" by
+     hand anymore -- change --nav-h or --stack-gap once and every offset follows. */
+  padding-top: calc(var(--safe-top, 0px) + var(--nav-top) + var(--nav-h) + var(--stack-gap));
 }
 
 /* The first block in <main> no longer needs its own big top padding -- main's
@@ -968,12 +982,11 @@ main > .collection-hero:first-child {
 }
 
 .eyebrow {
-  /* An eyebrow is a kicker label FOR its heading, so it sits close to it. The
-     nav->eyebrow breathing room is owned by main's padding-top (above), not a
-     big gap here. Global: applies to every page (the landing hero overrides
-     this to margin:0 and uses its own flex gap, so it is unaffected). Matches
-     the nav->eyebrow gap above (main padding-top) for a balanced rhythm. */
-  margin: 0 0 1.95rem;
+  /* An eyebrow is a kicker label FOR its heading. It uses the shared vertical
+     rhythm so nav->eyebrow (main padding-top, above) == eyebrow->heading == the
+     hero's block gaps -- one uniform stack. Global: every page (the landing hero
+     overrides this to margin:0 and uses its own flex gap of the same token). */
+  margin: 0 0 var(--stack-gap);
   color: var(--accent);
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -1506,6 +1519,14 @@ pre {
   text-transform: lowercase;
   max-width: 18ch;
   text-shadow: 0 2px 30px rgba(8, 12, 8, 0.6);
+  /* Trim the font's internal leading (the empty band above the cap height and
+     below the baseline) so the box hugs the ink. Without this the 48px flex
+     gaps measure equal box-to-box but read UNEQUAL ink-to-ink -- the big
+     display face's leading inflates the two gaps that touch the headline
+     (the y=x=x=y the eye sees). Trimmed, every hero gap is a true cap/baseline
+     48px. Progressive enhancement: unsupported browsers keep the untrimmed box. */
+  text-box-trim: trim-both;
+  text-box-edge: cap alphabetic;
 }
 .hero__ctas {
   display: flex;

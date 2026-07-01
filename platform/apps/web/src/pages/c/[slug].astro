@@ -1466,9 +1466,9 @@ function emitKey(key: string): string {
   /* ===== App shell: full-viewport graph canvas + floating docked panels ===== */
   .specimen-app {
     /* Shared geometry for the floating panels. --app-top clears the fixed nav
-       pill: a mirror of .navbar's `top` offset + its ~59px rendered height + a
-       gap. Keep in sync with .navbar in embody.css. */
-    --app-top: calc(var(--safe-top, 0px) + clamp(0.85rem, 2vw, 1.4rem) + 52px + 16px);
+       pill using the shared nav tokens (top offset + real pill height) + a 16px
+       gap -- no hardcoded nav height to drift out of sync. */
+    --app-top: calc(var(--safe-top, 0px) + var(--nav-top) + var(--nav-h) + 16px);
     --app-bottom: clamp(14px, 2vw, 22px);
     --app-side: clamp(14px, 2vw, 26px);
     --app-panel-w: clamp(264px, 24vw, 372px);
