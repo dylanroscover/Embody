@@ -859,19 +859,21 @@ class EmbodyExt:
             'Enable Envoy?\n\n'
             'Envoy is an MCP server that lets AI coding assistants\n'
             'create, modify, and query TouchDesigner operators.\n\n'
-            'This will:\n'
-            '  - Install Python dependencies (~30 MB)\n'
-            '  - Start a local MCP server on port '
+            'Enabling it sets up the following in your project:\n'
+            '  - a Python virtualenv (.venv) for the MCP bridge (~30 MB)\n'
+            '  - a local MCP server on port '
             f'{self.my.par.Envoyport.eval()}\n'
-            '  - Generate AI config files in your project root\n'
-            '    (CLAUDE.md, AGENTS.md, .mcp.json, .claude/ rules + skills)\n\n'
-            'All Envoy MCP tools are auto-authorized for convenience.\n'
-            'To adjust permissions, edit .claude/settings.local.json\n'
-            'in your project root after setup.\n\n'
+            '  - AI config files: CLAUDE.md, AGENTS.md, .claude/ rules + skills\n'
+            '  - .mcp.json + .embody/ (bridge, config, runtime state)\n'
+            '  - .gitignore / .gitattributes entries + a .tdn git diff driver\n\n'
+            'All Envoy MCP tools are auto-authorized for convenience\n'
+            '(edit .claude/settings.local.json to tighten this).\n\n'
+            'Fully reversible: run PreviewUninstall to see exactly what would\n'
+            'be removed, then Uninstall to undo everything above.\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
-            'You can change this later via the Envoyenable parameter.\n\n'
+            'Change this later via the Envoyenable parameter.\n\n'
             'Note: TD will be unresponsive for a few seconds while\n'
-            'dependencies are installed.',
+            'dependencies install.',
             buttons=['Skip', 'Enable Envoy'])
 
         # choice == -1 means _messageBox suppressed the dialog (a test run OR a
