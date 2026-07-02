@@ -1647,7 +1647,6 @@ class EnvoyExt:
         self._viz_bot_pending_cleanup: set = set()    # nets whose left-behind bot to tear down off-screen
         self._crash_trace_enabled: bool = False       # diagnostic: flush a breadcrumb per viz annotation-graph op
         self._crash_trace_f = None                    # open handle to the breadcrumb file
-        self._ensureVizParams()                       # self-heal the Embot + Envoy Follow toggles
 
         # Get Thread Manager from TDResources
         self.ThreadManager = op.TDResources.ThreadManager
@@ -3097,45 +3096,6 @@ class EnvoyExt:
             f.flush()
         except Exception:
             pass
-
-    def _ensureVizParams(self) -> None:
-        """Create the Embot (character) + Envoy Follow (camera) toggles on the Envoy
-        page if missing, so the feature is controllable on any load. They were added
-        live in a session and vanished on restart; this self-heals them on every init
-        -- idempotent, and they bake into the .toe on save. Mirrors
-        EmbodyExt._ensureAutosaveParams. Called once from __init__; never raises (the
-        viz tick no-ops cleanly while a param is briefly absent)."""
-        try:
-            comp = self.ownerComp
-            page = None
-            for pg in comp.customPages:
-                if pg.name == 'Envoy':
-                    page = pg
-                    break
-            if page is None:
-                return
-            if not hasattr(comp.par, 'Embotenable'):
-                p = page.appendToggle('Embotenable', label='Embot')[0]
-                p.default = True
-                p.val = True
-                p.startSection = True
-                p.order = 5.0
-                p.help = ('Show the Embot builder mascot. He appears on each operator '
-                          'Envoy creates or edits and narrates what it does. Off hides '
-                          'him entirely (no character, no camera movement).')
-            if not hasattr(comp.par, 'Envoyfollow'):
-                f = page.appendToggle('Envoyfollow', label='Envoy Follow')[0]
-                f.default = True
-                f.val = True
-                f.order = 5.6
-                f.help = ('Camera follows the operator Envoy is working on, panning '
-                          'the network editor to it. Works with or without the Embot '
-                          'character shown.')
-        except Exception as e:
-            try:
-                self._log('_ensureVizParams failed: %s' % e, 'DEBUG')
-            except Exception:
-                pass
 
     def _vizTick(self) -> None:
         """Once-per-frame visualization driver (after the drain loop): retire

@@ -154,10 +154,13 @@ class TestDialogSuppression(EmbodyTestCase):
             runner._running = False                       # isolate: not a test
             op.Embody.unstore('_smoke_test_responses')    # no seed
             op.Embody.store('_suppress_dialogs', True)    # a save is mid-flight
-            before = len(emb._log_buffer)
+            before_id = max((e['id'] for e in emb._log_buffer), default=0)
             ret = emb._messageBox('TDN Content at Risk', 'guard',
                                   ['Externalize', 'Skip'])
-            new_entries = list(emb._log_buffer)[before:]
+            # Diff by entry id, not list index: _log_buffer is a bounded
+            # deque(maxlen=200); once saturated, appends evict from the left, so a
+            # positional [before:] tail slice is always empty (false negative).
+            new_entries = [e for e in emb._log_buffer if e['id'] > before_id]
             self.assertEqual(ret, -1, 'must return the safe default during save')
             offending = [e for e in new_entries
                          if e['level'] == 'WARNING'
@@ -182,9 +185,10 @@ class TestDialogSuppression(EmbodyTestCase):
         try:
             op.Embody.unstore('_smoke_test_responses')    # no seed, run active
             self.assertTrue(emb._testRunnerActive())
-            before = len(emb._log_buffer)
+            before_id = max((e['id'] for e in emb._log_buffer), default=0)
             ret = emb._messageBox('UNSEEDED DURING RUN', 'guard', ['A', 'B'])
-            new_entries = list(emb._log_buffer)[before:]
+            # Diff by entry id, not list index (bounded deque -- see sibling test).
+            new_entries = [e for e in emb._log_buffer if e['id'] > before_id]
             self.assertEqual(ret, -1)
             warned = [e for e in new_entries
                       if e['level'] == 'WARNING'

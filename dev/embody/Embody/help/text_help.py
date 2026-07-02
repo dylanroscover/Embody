@@ -89,6 +89,24 @@ To reset ('unexternalize'), pulse the Disable button. This
 deletes only files tracked by Embody. Untracked files in
 the externalization folder are preserved.
 
+Dropped .tox Expression
+-----------------------
+When you drag a .tox onto the network, TouchDesigner writes a
+default expression into the COMP's External .tox parameter
+(me.parent().fileFolder + '/' + ...). Embody's continuity
+sweep can clean these up. The "Dropped .tox Expression" menu
+on the Embody page controls how:
+
+- Ask (default): prompt when detected, listing the affected
+  COMPs (truncated for large sets so the buttons stay
+  reachable), with Clean / Ignore / Always Clean / Always
+  Ignore. The Always buttons remember your choice so you are
+  not asked again.
+- Always Clean: silently clear the expression.
+- Always Ignore: silently leave it.
+
+Embody's own descendant COMPs are always cleaned regardless.
+
 Export Portable Tox
 -------------------
 Export any COMP as a self-contained .tox file with all

@@ -184,8 +184,7 @@ class EmbodyExt:
         self._last_checkpoint_activity = 0.0   # time.monotonic()
         self._autosave_gen = 0
         self._autosave_armed = False
-        self._ensureAutosaveParams()  # self-heal the toggle + status if missing
-        
+
         # Logging configuration
         self.header = 'Embody >'
         self.debug_mode = False  # Set to True for verbose path logging
@@ -3215,43 +3214,6 @@ class EmbodyExt:
             except Exception:
                 pass
 
-    def _ensureAutosaveParams(self) -> None:
-        """Create the Autosave toggle + status readout on the TDN page if missing.
-
-        Self-heal so the feature is controllable on a fresh install of the shipped
-        .tox / an older .toe that predates these params (the engine itself
-        defaults ON when the param is absent, so this only adds the control
-        surface). Idempotent; the params bake into the .toe + Embody.tdn on save.
-        Called once from __init__; never raises."""
-        try:
-            tdn_page = None
-            for pg in self.my.customPages:
-                if pg.name == 'TDN':
-                    tdn_page = pg
-                    break
-            if tdn_page is None:
-                return
-            if not hasattr(self.my.par, 'Autosave'):
-                p = tdn_page.appendToggle('Autosave', label='Auto-Save Checkpoints')[0]
-                p.default = True
-                p.val = True
-                p.startSection = True
-                p.help = (
-                    'When on, after the agent (or you) goes idle Embody writes '
-                    'changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- '
-                    'no full project save, no strip/restore, no freeze -- so a '
-                    'crash loses little unsaved work. Checkpointed COMPs are '
-                    'rebuilt on next open. Skips during Perform Mode and saves.')
-            if not hasattr(self.my.par, 'Autosavestatus'):
-                s = tdn_page.appendStr('Autosavestatus', label='Auto-Save Status')[0]
-                s.readOnly = True
-                s.default = ''
-                s.val = 'Idle'
-                s.help = ('Read-only auto-save state: Idle / Saved <time> / '
-                          'Bypassed (Perform Mode) / Disabled.')
-        except Exception as e:
-            self.Log(f'_ensureAutosaveParams failed: {e}', 'DEBUG')
-
     def _preRiskyCheckpoint(self, operation: str, params: dict) -> None:
         """Synchronously checkpoint the touched TDN root BEFORE a destructive
         delete (delete_op of a CHILD inside a tracked COMP) so an agent-induced
@@ -4346,9 +4308,21 @@ class EmbodyExt:
             headers = [self._cellVal(0, c)
                        for c in range(self.Externalizations.numCols)]
             has_strategy = 'strategy' in headers
+            embody_root = self.my.path
             for i in range(1, self.Externalizations.numRows):
                 row_path = self._cellVal(i, 'path')
                 if row_path:
+                    # HARD INVARIANT: the continuity sweep must NEVER touch
+                    # Embody's own subtree. Its externalization is managed
+                    # specially (excluded from TDN strip/reconstruction). During
+                    # heavy strip/restore thrashing these rows can transiently
+                    # look "missing"/"replaced" and get deleted or re-externalized
+                    # (observed: a TDN->TOX flip that destroyed Embody's own .tdn
+                    # files). Skipping them here closes that gap; the normal case
+                    # was already a no-op, so nothing legitimate is lost.
+                    if (row_path == embody_root
+                            or row_path.startswith(embody_root + '/')):
+                        continue
                     rel_file_path = self.normalizePath(self._cellVal(i, 'rel_file_path'))
                     row_type = self._cellVal(i, 'type')
                     strategy = self._cellVal(i, 'strategy') if has_strategy else ''
@@ -4491,8 +4465,31 @@ class EmbodyExt:
         except Exception as e:
             self.Log("Error in checkOpsForContinuity", "ERROR", str(e))
 
+    # Dropped-.tox prompt: cap the paths listed in the dialog body so a project
+    # with dozens/hundreds of dragged-in COMPs cannot grow the message so tall
+    # that the buttons get pushed off-screen. Overflow collapses to "... and N
+    # more". Mirrors the truncation in _warnLockedNonDATs.
+    _MAX_TOXDROP_LISTED = 15
+
+    def _resetToxdropExpr(self, comp) -> None:
+        """Clear TD's default drag-in expression from a COMP's External .tox."""
+        try:
+            comp.par.externaltox.expr = ''
+            comp.par.externaltox = ''
+            self.Log(f"Reset externaltox for '{comp.path}'", "SUCCESS")
+        except Exception as e:
+            self.Log(f"Error resetting '{comp.path}'", "ERROR", str(e))
+
     def _checkExternalToxPar(self):
-        """Check for COMPs using deprecated fileFolder pattern."""
+        """Handle COMPs carrying TD's default drag-in externaltox expression.
+
+        When a .tox is dragged into a network, TouchDesigner auto-writes a
+        default expression into the COMP's External .tox parameter
+        (``me.parent().fileFolder + '/' + ...``). Embody's own descendants are
+        always cleaned silently -- that expression there is never intentional.
+        User COMPs are routed to _resolveToxdropExternals, which applies the
+        ``Toxdropexpr`` preference (clean / ignore / ask).
+        """
         comps_with_filefolder = self.root.findChildren(
             type=COMP,
             key=lambda x: (
@@ -4512,27 +4509,74 @@ class EmbodyExt:
             else:
                 external.append(comp)
 
-        def _reset(comp):
-            try:
-                comp.par.externaltox.expr = ''
-                comp.par.externaltox = ''
-                self.Log(f"Reset externaltox for '{comp.path}'", "SUCCESS")
-            except Exception as e:
-                self.Log(f"Error resetting '{comp.path}'", "ERROR", str(e))
-
+        # Embody's own descendants: always clean, regardless of preference.
         for comp in internal:
-            _reset(comp)
+            self._resetToxdropExpr(comp)
 
-        # Skip this prompt while dialogs are suppressed (test run or save in
-        # progress) -- a modal mid-save freezes TD. The deprecated-path reset is
-        # advisory and is re-offered on the next continuity check.
-        if external and not self._suppressDialogs():
-            message = "Found COMPs using deprecated 'me.parent().fileFolder':\n\n"
-            message += "\n".join([f"- {comp.path}" for comp in external])
-            message += "\n\nReset these paths?"
-            if ui.messageBox('Embody', message, buttons=['No', 'Yes']) == 1:
-                for comp in external:
-                    _reset(comp)
+        self._resolveToxdropExternals(external)
+
+    def _resolveToxdropExternals(self, external) -> None:
+        """Apply the Toxdropexpr preference to a list of user COMPs carrying
+        TD's default drag-in externaltox expression.
+
+          - ``clean``  -> silently clear the expression on each
+          - ``ignore`` -> silently leave them (never prompt)
+          - ``ask``    -> prompt with a truncated list (capped at
+                          _MAX_TOXDROP_LISTED so the buttons stay reachable) and
+                          a 4-button dialog: Clean / Ignore / Always Clean /
+                          Always Ignore. The two "Always" buttons persist the
+                          choice into ``Toxdropexpr`` so the user is not
+                          re-prompted.
+
+        Operates ONLY on the COMPs passed in -- never re-scans the project --
+        so callers (and tests) control the blast radius.
+        """
+        if not external:
+            return
+
+        par = getattr(self.my.par, 'Toxdropexpr', None)
+        preference = par.eval() if par else 'ask'
+
+        if preference == 'ignore':
+            return
+        if preference == 'clean':
+            for comp in external:
+                self._resetToxdropExpr(comp)
+            return
+
+        # preference == 'ask' -- prompt. _messageBox self-suppresses during
+        # saves and test runs (returning -1), so no modal escapes; when
+        # suppressed we do nothing and the sweep re-offers on the next pass.
+        count = len(external)
+        shown = external[:self._MAX_TOXDROP_LISTED]
+        op_list = '\n'.join(f'  - {comp.path}' for comp in shown)
+        if count > self._MAX_TOXDROP_LISTED:
+            op_list += f'\n  ... and {count - self._MAX_TOXDROP_LISTED} more'
+        noun = 'COMP' if count == 1 else 'COMPs'
+        verb = 'uses' if count == 1 else 'use'
+        message = (
+            f'{count} {noun} {verb} the default expression TouchDesigner writes '
+            f"into External .tox on drag-in (me.parent().fileFolder + '/' + "
+            f'...):\n\n{op_list}\n\n'
+            f'Clean clears that expression; Ignore leaves it. '
+            f'Choose an "Always" option to stop being asked.')
+        choice = self._messageBox(
+            'Dropped .tox Expression Detected',
+            message,
+            buttons=['Clean', 'Ignore', 'Always Clean', 'Always Ignore'])
+
+        # 0 Clean, 1 Ignore, 2 Always Clean, 3 Always Ignore, -1 suppressed/closed.
+        if choice in (0, 2):
+            for comp in external:
+                self._resetToxdropExpr(comp)
+        if choice == 2 and par:
+            self.my.par.Toxdropexpr = 'clean'
+            self.Log('Dropped .tox expression handling set to Always Clean',
+                     'INFO')
+        elif choice == 3 and par:
+            self.my.par.Toxdropexpr = 'ignore'
+            self.Log('Dropped .tox expression handling set to Always Ignore',
+                     'INFO')
 
     def _updateOpTimestamp(self, oper):
         """Update timestamp for an operator from file system."""
@@ -6765,6 +6809,8 @@ class EmbodyExt:
             # no .toe truth to honor -- rebuild it from its .tdn. Additive: never
             # clear_first an existing COMP. tsv-driven, so an orphan .tdn with no
             # row is invisible. (Spike-verified 2026-06-27.)
+            self.Log('TDN mode=export -- additive recovery only, existing '
+                     'COMPs kept (no full reconstruction)', 'INFO')
             self._recoverMissingTDNComps()
             return
         # mode == 'full' -- repopulate ALL TDN COMPs (loop below)

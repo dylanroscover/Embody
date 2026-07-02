@@ -1,5 +1,26 @@
 # Changelog
 
+## v6.0.69
+
+A new **Dropped .tox Expression** control, plus a **data-safety hardening** of the test harness driven by a real incident: destructive whole-project test suites can no longer run as part of a normal test run, so a full `RunTests()` can never mutate your live project.
+
+### Embody core
+
+- **Dropped .tox Expression (`Toxdropexpr`).** New menu on the Embody page controlling how the continuity sweep treats the default expression TouchDesigner auto-writes into a COMP's External .tox when a `.tox` is dragged in (`me.parent().fileFolder + '/' + ...`). `Ask` (default) prompts on detection with a list that truncates past a cap (so the dialog buttons stay reachable) and four choices -- **Clean**, **Ignore**, **Always Clean**, **Always Ignore**; the two "Always" buttons persist the choice into the parameter so you are not re-prompted. Embody's own descendants are always cleaned. The prompt now routes through the test-seedable `_messageBox` instead of a raw `ui.messageBox`.
+- **Removed self-heal param bloat.** `_ensureAutosaveParams` (EmbodyExt) and `_ensureVizParams` (EnvoyExt) recreated their own custom params on every init -- unnecessary, since params persist in the `.toe`. Both deleted; the params remain baked into the build.
+- **Continuity sweep never touches Embody's own subtree.** `checkOpsForContinuity` now hard-skips rows under Embody's own path, closing a gap where a transiently-missing Embody COMP could be deleted or re-externalized during strip/restore thrashing.
+- **TDN `export` mode announces itself.** `ReconstructTDNComps` now logs its export-mode action (additive recovery only, existing COMPs kept), matching the `off` and `full` branches.
+- **Fixed the shipped `CLAUDE.md` template's accuracy.** `templates/text_claude.md` (which generates a user project's `CLAUDE.md` / `ENVOY.md`) still wrongly called `.tox`/`.toe` "text files" and described the deployed `.claude/settings.local.json` as read-only-only -- it had drifted behind the v6.0.66 accuracy sweep, so regeneration reverted that sweep. Corrected to match: `.tox`/`.toe` are opaque binary (`.tdn` is the text format), and Embody's `settings.local.json` pre-allows the write tools it actually deploys (`create_op`, `set_parameter`, `execute_python`, `import_network`, ...), written only if the file is missing and never overwritten.
+
+### Test-harness data safety
+
+- **Destructive whole-project suites are segregated.** A test suite that calls `Disable` / `ExternalizeProject` / `Reset` on `ext.root` (the ENTIRE live project) now sets `DESTRUCTIVE = True` and is EXCLUDED from every normal run (`RunTests` / `RunTestsSync` / `RunTestsDeferred*`). Such suites run ONLY via the opt-in, save-gated `RunDestructiveTests(confirm_saved=True)`, which refuses on an unsaved project so a recoverable `.toe` always exists. A plain full run can no longer mutate the live project. New dev rule `rules/destructive-tests.md` documents the convention and the incident it prevents.
+- **`Filecleanup` cannot get stuck at `delete`.** The test runner's suppress/restore of `Filecleanup` is now re-entrancy-guarded, so an interrupted or timed-out batch cannot leave it stuck at `delete` -- a stuck value turns any file operation into a silent unlink.
+
+### Tests
+
+- New `test_toxdrop_expr` suite (10 tests: the menu, all four dialog buttons, silent clean/ignore, Embody-descendant always-clean, and dialog-list truncation). `test_dialog_suppression` hardened to diff the log buffer by entry `id` rather than a positional slice on a bounded `deque(maxlen=200)`. Test suite **76 suites / 1,761 tests**; the normal `RunTests()` (1,729 tests, destructive suite excluded) is green with 1 conditional skip, and the 32-test destructive `test_custom_parameters` runs separately via `RunDestructiveTests`.
+
 ## v6.0.66
 
 A one-click **Launch AI Client** button on Embody's Envoy page: pick your assistant in the `Aiclient` menu, press the button, and Embody opens it at the project root -- editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the folder as a workspace, terminal CLIs (Claude Code, Codex, Gemini) open in a new terminal. Built to survive the real cross-platform traps and hardened by a 10-agent codex cross-platform review.
