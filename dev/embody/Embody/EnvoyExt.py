@@ -2056,6 +2056,8 @@ class EnvoyExt:
         """
         self._bootstrapping = True
         self._bootstrap_result = None
+        import os as _os
+        self._venv_existed = _os.path.isdir(spec['venv_dir'])  # only record a venv Embody creates
         self.ownerComp.par.Envoystatus = 'Installing deps... (one-time)'
         self._log(
             'Installing Envoy Python dependencies in the background (one-time '
@@ -2115,6 +2117,16 @@ class EnvoyExt:
                 'Envoy start aborted -- dependency install failed. '
                 'See messages above.', 'ERROR')
             return
+
+        # The worker created the venv (if it didn't already exist) -- record it
+        # for Uninstall. Best-effort; must never block the start.
+        try:
+            if not getattr(self, '_venv_existed', True):
+                Embody = op.Embody.ext.Embody
+                Embody._manifestRecordVenv(
+                    str(Embody._findProjectRoot()), Embody._venvPaths()['venv_dir'])
+        except Exception:
+            pass
 
         # Install done. Confirm the import on the main thread (preserves the
         # careful pydantic_core handling in _verifyMcpImportable); deps are now
@@ -6342,6 +6354,20 @@ class EnvoyExt:
             config_abs = str(
                 (target_dir / '.embody' / 'envoy.json')).replace('\\', '/')
 
+            # Record .mcp.json footprint: Embody manages the mcpServers.envoy
+            # key. If it created the file, Uninstall may delete it; if it merged
+            # into a pre-existing one, Uninstall removes only that key.
+            try:
+                Embody = op.Embody.ext.Embody
+                if mcp_file.exists():
+                    Embody._manifestRecordAppendedFile(
+                        str(target_dir), mcp_file, 'mcpServers.envoy',
+                        kind='json_key')
+                else:
+                    Embody._manifestRecordCreatedFile(str(target_dir), mcp_file)
+            except Exception:
+                pass
+
             # Read existing config to preserve other servers
             config = {}
             if mcp_file.exists():
@@ -6446,6 +6472,12 @@ class EnvoyExt:
         claude_dir.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(settings_content, encoding='utf-8')
         self._log(f'Deployed settings.local.json to {settings_path}')
+        try:  # Embody created it (only writes when absent) -> safe to remove on uninstall
+            Embody = op.Embody.ext.Embody
+            Embody._manifestRecordCreatedFile(
+                str(Embody._findProjectRoot()), settings_path)
+        except Exception:
+            pass
 
     def _findGitRoot(self):
         """Silently find the git repo root. Returns Path or 'no-git'. Never prompts."""
@@ -7023,6 +7055,12 @@ class EnvoyExt:
 
             gitignore.write_text(existing_content + block, encoding='utf-8')
             self._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
+            try:  # record the marked block so Uninstall strips only it (never the user's file)
+                Embody = op.Embody.ext.Embody
+                Embody._manifestRecordAppendedFile(
+                    str(Embody._findProjectRoot()), gitignore, '# Embody / Envoy')
+            except Exception:
+                pass
 
         except Exception as e:
             self._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
@@ -7074,6 +7112,12 @@ class EnvoyExt:
 
             gitattr.write_text(existing + MANAGED_BLOCK, encoding='utf-8')
             self._log('Added line-ending normalization to .gitattributes')
+            try:  # record the marked block so Uninstall strips only it (never the user's file)
+                Embody = op.Embody.ext.Embody
+                Embody._manifestRecordAppendedFile(
+                    str(Embody._findProjectRoot()), gitattr, MARKER)
+            except Exception:
+                pass
 
         except Exception as e:
             self._log(f'Could not auto-configure .gitattributes: {e}', 'WARNING')
@@ -7136,6 +7180,12 @@ class EnvoyExt:
                     ['git', 'config', 'diff.tdn.cachetextconv', 'false'],
                     check=True, **git_kwargs)
                 self._log('Configured git diff driver for .tdn (semantic diffs)')
+                try:  # record so Uninstall un-sets the repo git config
+                    op.Embody.ext.Embody._manifestRecordGitConfig(
+                        str(target_dir),
+                        ['diff.tdn.textconv', 'diff.tdn.cachetextconv'])
+                except Exception:
+                    pass
 
         except (subprocess.SubprocessError, OSError) as e:
             self._log(f'Could not configure .tdn git diff driver: {e}', 'DEBUG')

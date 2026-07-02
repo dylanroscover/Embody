@@ -358,6 +358,7 @@ class EmbodyExt:
         """
         spec = self._venvPaths()
         site_packages = spec['site_packages']
+        venv_existed = os.path.isdir(spec['venv_dir'])  # only record a venv Embody creates
 
         if self._environmentNeedsInstall(spec):
             msgs = []
@@ -367,6 +368,8 @@ class EmbodyExt:
                 self.Log(m, lvl)
             if not ok:
                 return False
+            if not venv_existed and os.path.isdir(spec['venv_dir']):
+                self._manifestRecordVenv(self._findProjectRoot(), spec['venv_dir'])
 
         self._addSitePackages(site_packages)
         if sys.platform.startswith('win'):
@@ -1271,6 +1274,425 @@ class EmbodyExt:
         if deleted:
             self.Log(f'Removed {deleted} Embody-generated file(s) at {old_root}', 'INFO')
 
+    # === Mode + consent (Auto vs Advanced) ===================================
+    # Embodymode governs Embody's posture toward invasive, project-level actions:
+    #   auto (default) -- manage everything, act silently (today's behavior)
+    #   advanced       -- ask before each such action (a batched confirm)
+    # _guard is the single chokepoint every gated action flows through, so the
+    # two postures stay ONE code path (cheap to maintain + test). It reads the
+    # mode via getattr, so it degrades to 'auto' until the Embodymode param is
+    # authored on the COMP (which needs a save).
+    # See dev/embody/plan-init-deinit-wizard.md sec 1c.
+
+    def _embodyMode(self):
+        """Current posture: 'auto' (default) or 'advanced'. Falls back to 'auto'
+        until the Embodymode param is authored, so behavior is unchanged today."""
+        par = getattr(self.my.par, 'Embodymode', None)
+        return par.eval() if par is not None else 'auto'
+
+    def _guard(self, title, message, apply_fn, mode=None):
+        """Gate ONE invasive action by Embody mode. Returns True if applied.
+
+          auto     -> apply immediately (silent).
+          advanced -> confirm via _messageBox (Apply/Skip); apply only on Apply.
+
+        A suppressed / headless dialog (_messageBox -> -1) DECLINES in advanced:
+        when the user asked to be consulted, never act without an explicit yes.
+        In auto, headless still applies (safe managed default). This respects the
+        existing test/save dialog suppression -- it never opens a modal in a
+        context where _messageBox is gated."""
+        mode = mode if mode is not None else self._embodyMode()
+        if mode != 'advanced':
+            apply_fn()
+            return True
+        if self._messageBox(title, message, ['Apply', 'Skip']) == 0:
+            apply_fn()
+            return True
+        return False
+
+    # === Uninstall / Deinit ==================================================
+    # A reversible teardown of Embody's project footprint. This is the
+    # NON-DESTRUCTIVE planner: _computeUninstallPlan reads the install manifest
+    # (precise) plus a marker-scan fallback (pre-manifest installs) and returns
+    # exactly what a full Uninstall WOULD do -- nothing is removed here. The
+    # executor (built next) consumes THIS plan, so the preview can never drift
+    # from what runs. Conservative: anything not provably Embody-owned is
+    # classed 'review' (KEPT + flagged), never silently deleted.
+    # See dev/embody/plan-init-deinit-wizard.md sec 5.
+
+    _UNINSTALL_MARKER_FILES = ('AGENTS.md', 'CLAUDE.md', 'ENVOY.md', 'GEMINI.md')
+    _UNINSTALL_MARKER_TREES = ('.claude/rules', '.claude/skills', '.cursor/rules',
+                               '.github/instructions', '.windsurf/rules')
+    _UNINSTALL_MARKER_SINGLES = ('.github/copilot-instructions.md',)
+
+    def _uninstallClassifyMarker(self, path, root, hashes):
+        """Classify a candidate file: 'delete' (Embody-generated + unmodified),
+        'review' (marker present but edited -> keep + flag), or None (no marker
+        -> not ours, ignore)."""
+        try:
+            content = path.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            return None
+        if self._EMBODY_MARKER not in content:
+            return None
+        try:
+            rel = path.resolve().relative_to(root).as_posix()
+        except Exception:
+            rel = path.name
+        stored = hashes.get(rel)
+        if stored is None or self._contentHash(content) == stored:
+            return 'delete'
+        return 'review'  # user edited a generated file -> preserve it
+
+    def _computeUninstallPlan(self, target_dir=None):
+        """NON-DESTRUCTIVE. Return exactly what Uninstall would remove/strip so
+        it can be reviewed before any deletion. Manifest-driven, with a
+        marker-scan fallback for pre-manifest installs.
+
+        Plan dict:
+          root, sources[list],
+          delete  [{path,kind,why}]        provably Embody's -> remove
+          strip   [{path,kind,marker,why}] git block / .mcp.json key -> reverse only that
+          unset   [keys]                   repo git config to un-set
+          review  [{path,why}]             exists, not provably ours -> KEPT, flagged
+          missing [paths]                  recorded but already gone
+        """
+        root = (Path(target_dir).resolve() if target_dir
+                else Path(self._findProjectRoot()).resolve())
+        m = self._loadInstallManifest(str(root))
+        hashes = self._loadHashManifest(str(root))
+        plan = {'root': str(root), 'sources': [],
+                'delete': [], 'strip': [], 'unset': [], 'review': [], 'missing': []}
+        seen = set()
+
+        def _abs(stored):
+            p = Path(stored)
+            return p if p.is_absolute() else (root / p)
+
+        def _rel(p):
+            try:
+                return p.resolve().relative_to(root).as_posix()
+            except Exception:
+                return str(p)
+
+        def _add(bucket, p, **kw):
+            rp = str(p.resolve() if hasattr(p, 'resolve') else p)
+            if rp in seen:
+                return False
+            seen.add(rp)
+            entry = {'path': _rel(p)}
+            entry.update(kw)
+            plan[bucket].append(entry)
+            return True
+
+        def _add_strip(p, kind, marker, why):
+            rp = str(p.resolve())
+            if any(s['path'] == _rel(p) for s in plan['strip']):
+                return
+            seen.add(rp)
+            plan['strip'].append({'path': _rel(p), 'kind': kind,
+                                  'marker': marker, 'why': why})
+
+        def _classify_into(p):
+            cls = self._uninstallClassifyMarker(p, root, hashes)
+            if cls == 'delete':
+                _add('delete', p, kind='file', why='Embody-generated, unmodified')
+            elif cls == 'review':
+                _add('review', p, why='you edited this generated file -- kept')
+
+        # ---- manifest (precise) ----
+        if any((m.get('files_created'), m.get('files_appended'),
+                m.get('git_config'), m.get('venv'))):
+            plan['sources'].append('manifest')
+
+        for stored in m.get('files_created', []):
+            p = _abs(stored)
+            if p.name == '.mcp.json':
+                if p.exists():
+                    _add_strip(p, 'json_key', 'mcpServers.envoy',
+                               'remove Embody server; delete file only if none remain')
+                continue
+            if not p.exists():
+                plan['missing'].append(stored); continue
+            if p.name == 'settings.local.json':
+                _add('review', p,
+                     why='created by Embody but may hold your permission edits -- kept')
+                continue
+            _classify_into(p)
+
+        for e in m.get('files_appended', []):
+            p = _abs(e['path'])
+            if not p.exists():
+                plan['missing'].append(e['path']); continue
+            _add_strip(p, e.get('kind', 'block'), e.get('marker', ''),
+                       "strip only Embody's block/key -- your file is kept")
+
+        plan['unset'] = list(m.get('git_config', []))
+
+        v = m.get('venv')
+        if v:
+            p = _abs(v['path'])
+            if p.exists():
+                _add('delete', p, kind='dir', why='Embody-created virtual environment')
+            else:
+                plan['missing'].append(v['path'])
+
+        # ---- marker-scan FALLBACK (pre-manifest installs / anything missed) ----
+        before = sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset'])
+        for name in self._UNINSTALL_MARKER_FILES:
+            p = root / name
+            if p.is_file():
+                _classify_into(p)
+        for sub in self._UNINSTALL_MARKER_TREES:
+            d = root / sub
+            if d.is_dir():
+                for p in d.rglob('*'):
+                    if p.is_file():
+                        _classify_into(p)
+        for single in self._UNINSTALL_MARKER_SINGLES:
+            p = root / single
+            if p.is_file():
+                _classify_into(p)
+        mcp = root / '.mcp.json'
+        if mcp.is_file() and str(mcp.resolve()) not in seen:
+            try:
+                if 'envoy' in json.loads(
+                        mcp.read_text(encoding='utf-8')).get('mcpServers', {}):
+                    _add_strip(mcp, 'json_key', 'mcpServers.envoy',
+                               'remove Embody server; delete file only if none remain')
+            except Exception:
+                pass
+        for gname, marker in (('.gitignore', '# Embody / Envoy'),
+                              ('.gitattributes', 'Embody / Envoy')):
+            gp = root / gname
+            if gp.is_file() and str(gp.resolve()) not in seen:
+                try:
+                    if marker in gp.read_text(encoding='utf-8'):
+                        _add_strip(gp, 'block', marker,
+                                   "strip only Embody's block -- your file is kept")
+                except Exception:
+                    pass
+        # git config (read-only query) for pre-manifest installs
+        if not plan['unset']:
+            for key in ('diff.tdn.textconv', 'diff.tdn.cachetextconv'):
+                try:
+                    r = subprocess.run(['git', 'config', '--get', key],
+                                       cwd=str(root), capture_output=True,
+                                       text=True, timeout=5,
+                                       stdin=subprocess.DEVNULL)
+                    if r.returncode == 0 and (r.stdout or '').strip():
+                        plan['unset'].append(key)
+                except Exception:
+                    pass
+        # venv not captured by the manifest -> flag for review (can't prove
+        # Embody created it without the record, so never auto-delete it). Prefer
+        # the authoritative venv location (under project.folder) -- which can sit
+        # in a subdir of the manifest root -- but ONLY when it falls under the
+        # root being planned, so a plan for an unrelated root (a test/other
+        # project) never picks up the LIVE project's venv.
+        venv_dir = root / '.venv'
+        try:
+            cand = Path(self._venvPaths()['venv_dir']).resolve()
+            cand.relative_to(root)  # raises if not under this root
+            venv_dir = cand
+        except Exception:
+            pass
+        if venv_dir.is_dir() and str(venv_dir.resolve()) not in seen:
+            _add('review', venv_dir, kind='dir',
+                 why="looks like Embody's virtualenv but was not recorded -- review before removing")
+        if sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset']) > before:
+            plan['sources'].append('fallback')
+
+        # ---- .embody/ (Embody-owned state) removable wholesale ----
+        embody_dir = root / '.embody'
+        if embody_dir.is_dir():
+            _add('delete', embody_dir, kind='dir',
+                 why='Embody runtime state (manifest, bridge, config, hashes)')
+
+        return plan
+
+    def PreviewUninstall(self, target_dir=None):
+        """Log + return a NON-DESTRUCTIVE preview of a full Uninstall. Nothing is
+        removed. Use this to review the reversal plan before running Uninstall."""
+        plan = self._computeUninstallPlan(target_dir)
+        src = ', '.join(plan['sources']) or 'none -- nothing recorded/found'
+        lines = [f'Uninstall preview for {plan["root"]} (sources: {src})']
+        if plan['delete']:
+            lines.append(f'  REMOVE ({len(plan["delete"])}):')
+            for a in plan['delete']:
+                lines.append(f'    - {a["path"]}  [{a.get("kind","file")}] -- {a["why"]}')
+        if plan['strip']:
+            lines.append(f'  MODIFY ({len(plan["strip"])}) -- your file kept, only Embody\'s part reversed:')
+            for a in plan['strip']:
+                lines.append(f'    ~ {a["path"]}  ({a["kind"]}: {a["marker"]})')
+        if plan['unset']:
+            lines.append(f'  GIT CONFIG un-set: {", ".join(plan["unset"])}')
+        if plan['review']:
+            lines.append(f'  REVIEW ({len(plan["review"])}) -- KEPT (may hold your edits):')
+            for a in plan['review']:
+                lines.append(f'    ? {a["path"]} -- {a["why"]}')
+        if plan['missing']:
+            lines.append(f'  already gone: {len(plan["missing"])}')
+        self.Log('\n'.join(lines), 'INFO')
+        return plan
+
+    # ---- executor (destructive) -- consumes a plan from _computeUninstallPlan --
+
+    def _removeTreeWithin(self, path, root):
+        """Recursively remove a directory, but ONLY if it resolves INSIDE root
+        (guard against a catastrophic path). Bottom-up unlink + rmdir -- a
+        scoped, explicit walk, never a blind rmtree of an arbitrary path.
+        Returns files removed."""
+        path = Path(path).resolve()
+        root = Path(root).resolve()
+        try:
+            path.relative_to(root)  # raises if path is not under root
+        except ValueError:
+            self.Log(f'Uninstall: refusing to remove {path} -- outside {root}',
+                     'WARNING')
+            return 0
+        if not path.is_dir():
+            return 0
+        removed = 0
+        # deepest-first so a dir is empty by the time we rmdir it
+        for child in sorted(path.rglob('*'),
+                            key=lambda p: len(p.parts), reverse=True):
+            try:
+                if child.is_file() or child.is_symlink():
+                    child.unlink(); removed += 1
+                elif child.is_dir():
+                    child.rmdir()
+            except OSError as e:
+                self.Log(f'Uninstall: could not remove {child}: {e}', 'DEBUG')
+        try:
+            path.rmdir()
+        except OSError as e:
+            self.Log(f'Uninstall: could not remove {path}: {e}', 'DEBUG')
+        return removed
+
+    def _stripMarkedBlock(self, text, marker):
+        """Return text with Embody's marked comment block removed -- the header
+        comment line containing `marker` plus its consecutive non-blank entry
+        lines (and a single preceding blank separator). User content is kept."""
+        lines = text.split('\n')
+        out = []
+        i, n = 0, len(lines)
+        while i < n:
+            if marker in lines[i] and lines[i].lstrip().startswith('#'):
+                if out and out[-1] == '':
+                    out.pop()               # drop the blank separator we added
+                i += 1
+                while i < n and lines[i].strip() != '':
+                    i += 1                  # skip the block's entry lines
+                continue
+            out.append(lines[i]); i += 1
+        return '\n'.join(out)
+
+    def _stripMcpEnvoy(self, path):
+        """Remove only the 'envoy' server from a .mcp.json. Delete the file only
+        if that leaves no servers AND no other top-level keys -- the user's other
+        servers/keys are always preserved."""
+        try:
+            cfg = json.loads(path.read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, OSError):
+            return
+        servers = cfg.get('mcpServers', {})
+        servers.pop('envoy', None)
+        other_keys = [k for k in cfg if k != 'mcpServers']
+        if servers:
+            cfg['mcpServers'] = servers
+            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
+        elif other_keys:
+            cfg['mcpServers'] = {}
+            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
+        else:
+            path.unlink()  # the file held only Embody's server -> remove it
+
+    def _executeUninstallPlan(self, plan, include_review=False):
+        """Execute a plan from _computeUninstallPlan. Filesystem + git only.
+        'review' items are KEPT unless include_review=True. Returns a summary
+        dict. This is the one place that actually removes/modifies files."""
+        root = Path(plan['root'])
+
+        def _abs(rel):
+            p = Path(rel)
+            return p if p.is_absolute() else (root / p)
+
+        summary = {'deleted': 0, 'stripped': 0, 'unset': 0,
+                   'kept_review': 0, 'errors': 0}
+
+        def _remove(entry):
+            p = _abs(entry['path'])
+            try:
+                if entry.get('kind') == 'dir':
+                    if p.is_dir():
+                        self._removeTreeWithin(p, root)
+                        summary['deleted'] += 1
+                elif p.exists():
+                    p.unlink(); summary['deleted'] += 1
+            except OSError as e:
+                summary['errors'] += 1
+                self.Log(f'Uninstall: could not remove {p}: {e}', 'WARNING')
+
+        for entry in plan['delete']:
+            _remove(entry)
+
+        for a in plan['strip']:
+            p = _abs(a['path'])
+            if not p.exists():
+                continue
+            try:
+                if a['kind'] == 'json_key':
+                    self._stripMcpEnvoy(p)
+                else:
+                    p.write_text(
+                        self._stripMarkedBlock(
+                            p.read_text(encoding='utf-8'), a['marker']),
+                        encoding='utf-8')
+                summary['stripped'] += 1
+            except OSError as e:
+                summary['errors'] += 1
+                self.Log(f'Uninstall: could not strip {p}: {e}', 'WARNING')
+
+        for key in plan['unset']:
+            try:
+                subprocess.run(['git', 'config', '--unset', key],
+                               cwd=str(root), capture_output=True, text=True,
+                               timeout=5, stdin=subprocess.DEVNULL)
+                summary['unset'] += 1
+            except Exception as e:
+                self.Log(f'Uninstall: could not un-set {key}: {e}', 'DEBUG')
+
+        if include_review:
+            for entry in plan['review']:
+                _remove(entry)
+        else:
+            summary['kept_review'] = len(plan['review'])
+
+        return summary
+
+    def Uninstall(self, confirm=False, include_review=False, target_dir=None):
+        """Reverse Embody's project footprint. DESTRUCTIVE -- requires
+        confirm=True (review PreviewUninstall() first). Stops Envoy, then
+        removes/strips per the plan. 'review' items (files you edited, an
+        unrecorded venv) are KEPT unless include_review=True; user files are
+        never deleted -- only Embody's own additions."""
+        if not confirm:
+            self.Log('Uninstall is destructive. Review PreviewUninstall() first, '
+                     'then call Uninstall(confirm=True). Nothing was changed.',
+                     'WARNING')
+            return {'ran': False, 'reason': 'confirm required'}
+        plan = self._computeUninstallPlan(target_dir)
+        try:  # stop Envoy so its venv/config aren't in use during removal
+            if self.my.par.Envoyenable.eval():
+                self.my.par.Envoyenable = 0
+        except Exception:
+            pass
+        summary = self._executeUninstallPlan(plan, include_review=include_review)
+        summary['ran'] = True
+        self.Log(f'Uninstall complete: {summary}', 'SUCCESS')
+        return summary
+
     def _extractAIConfig(self):
         """Extract AI coding assistant config files based on par.Aiclient."""
         target_dir = self._findProjectRoot()
@@ -1554,6 +1976,111 @@ class EmbodyExt:
         path.write_text(
             json.dumps(manifest, indent=2, sort_keys=True), encoding='utf-8')
 
+    # --- Install manifest -----------------------------------------------------
+    # Records Embody's project footprint so Uninstall/Deinit can reverse it
+    # PRECISELY and SAFELY -- above all, never delete a file that predated
+    # Embody. Additive + best-effort: a manifest write must never break the
+    # footprint action it records. See dev/embody/plan-init-deinit-wizard.md #6.
+    _INSTALL_MANIFEST = '.embody/manifest.json'
+
+    def _installManifestSkeleton(self):
+        return {'version': 1, 'files_created': [], 'files_appended': [],
+                'git_config': [], 'venv': None, 'network_ops': []}
+
+    def _loadInstallManifest(self, target_dir):
+        path = Path(target_dir) / self._INSTALL_MANIFEST
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding='utf-8'))
+                skel = self._installManifestSkeleton()
+                if isinstance(data, dict):
+                    skel.update(data)  # tolerate older/partial manifests
+                return skel
+            except Exception:
+                pass
+        return self._installManifestSkeleton()
+
+    def _saveInstallManifest(self, target_dir, manifest):
+        path = Path(target_dir) / self._INSTALL_MANIFEST
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True), encoding='utf-8')
+
+    def _manifestRelPath(self, target_dir, path):
+        """Stored form for a footprint path: POSIX-relative to the manifest root
+        when the path lives under it, else an absolute POSIX path (so files
+        outside the project root -- e.g. a repo .gitignore when the project is a
+        subdir -- still record cleanly). Accepts a path already relative to
+        target_dir OR an absolute path."""
+        try:
+            base = Path(target_dir).resolve()
+            p = Path(path)
+            if not p.is_absolute():
+                p = base / p
+            p = p.resolve()
+            try:
+                return p.relative_to(base).as_posix()
+            except ValueError:
+                return p.as_posix()
+        except Exception:
+            return str(path).replace('\\', '/')
+
+    def _manifestRecordCreatedFile(self, target_dir, path):
+        """Record a file Embody CREATED (did not previously exist) so Uninstall
+        can safely remove ONLY Embody's own additions. Best-effort; never raises."""
+        try:
+            rel = self._manifestRelPath(target_dir, path)
+            m = self._loadInstallManifest(target_dir)
+            if rel not in m['files_created']:
+                m['files_created'].append(rel)
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest record failed for {path}: {e}', 'DEBUG')
+
+    def _manifestRecordAppendedFile(self, target_dir, path, marker, kind='block'):
+        """Record a SHARED file Embody modified in place -- a git file it
+        appended a marked BLOCK to (kind='block', marker = block header), or a
+        JSON file it added a KEY to (kind='json_key', marker = the dotted key,
+        e.g. 'mcpServers.envoy'). Uninstall reverses ONLY that unit; it NEVER
+        deletes the user's file. Best-effort; never raises."""
+        try:
+            rel = self._manifestRelPath(target_dir, path)
+            m = self._loadInstallManifest(target_dir)
+            if not any(e.get('path') == rel for e in m['files_appended']):
+                m['files_appended'].append(
+                    {'path': rel, 'marker': marker, 'kind': kind})
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest append record failed for {path}: {e}',
+                     'DEBUG')
+
+    def _manifestRecordVenv(self, target_dir, venv_path):
+        """Record that Embody CREATED the venv (safe to remove on uninstall)."""
+        try:
+            rel = self._manifestRelPath(target_dir, venv_path)
+            m = self._loadInstallManifest(target_dir)
+            if not m.get('venv'):
+                m['venv'] = {'path': rel, 'created': True}
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest venv record failed: {e}', 'DEBUG')
+
+    def _manifestRecordGitConfig(self, target_dir, keys):
+        """Record git config keys Embody set (un-set on uninstall)."""
+        try:
+            if isinstance(keys, str):
+                keys = [keys]
+            m = self._loadInstallManifest(target_dir)
+            changed = False
+            for k in keys:
+                if k not in m['git_config']:
+                    m['git_config'].append(k)
+                    changed = True
+            if changed:
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest git-config record failed: {e}', 'DEBUG')
+
     def _writeTemplate(self, target_dir, rel_path, content):
         """Write a single template file, respecting the Embody/Envoy marker.
 
@@ -1573,6 +2100,7 @@ class EmbodyExt:
         Returns True if the file was written, False if skipped.
         """
         target_path = Path(target_dir) / rel_path
+        was_new = not target_path.exists()  # pre-existence -> install-manifest safe-delete record
         manifest = self._loadHashManifest(target_dir)
         if target_path.exists():
             existing = target_path.read_text(encoding='utf-8')
@@ -1589,6 +2117,8 @@ class EmbodyExt:
         target_path.write_text(content, encoding='utf-8')
         manifest[rel_path] = self._contentHash(content)
         self._saveHashManifest(target_dir, manifest)
+        if was_new:
+            self._manifestRecordCreatedFile(target_dir, rel_path)
         return True
 
     def _upgradeEnvoy(self):
