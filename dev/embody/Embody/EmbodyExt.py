@@ -74,6 +74,7 @@ class EmbodyExt:
         # Behavior
         'Logfolder', 'Logtofile', 'Verbose', 'Print',
         'Detectduplicatepaths', 'Templatemaster', 'Localtimestamps',
+        'Embodymode',
         # TDN
         'Tdnmode',
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
@@ -918,6 +919,155 @@ class EmbodyExt:
         self.Log(
             f'Envoy enabled! Config generated for {client_label}. '
             f'Connect your AI coding assistant via MCP.',
+            'SUCCESS'
+        )
+
+    # === Setup wizard (native panel onboarding) ==============================
+    # The wizard (op.Embody.op('wizard') shown via 'window_wizard') is the
+    # first-run / re-openable onboarding surface. It collects the user's posture
+    # and AI preferences one screen at a time, then calls _applyWizardSetup().
+    # See dev/embody/plan-init-deinit-wizard.md sec 4.
+
+    def _openSetupWizard(self):
+        """Open the setup-wizard window (first run, or re-run via Setupwizard).
+
+        Respects the same suppression as every onboarding surface: never opens
+        during a test run or a project save (_suppressDialogs), so it cannot
+        surprise-pop during automation. Falls back to the classic _promptEnvoy
+        dialog when the wizard sub-network is absent (older / headless builds)."""
+        if self._suppressDialogs():
+            return
+        win = self.my.op('window_wizard')
+        wiz = self.my.op('wizard')
+        if win is None or wiz is None:
+            self.Log('Setup wizard UI not found -- using the classic Envoy '
+                     'prompt.', 'DEBUG')
+            self._promptEnvoy()
+            return
+        logic = wiz.op('logic')
+        if logic is not None and hasattr(logic.module, 'start'):
+            try:
+                logic.module.start()   # reset to step 1 + preselect from live params
+            except Exception as e:
+                # Never let a render glitch swallow onboarding: still show the
+                # window (in whatever state) rather than produce no dialog.
+                self.Log(f'Setup wizard start() failed: {e}', 'WARNING')
+        win.par.winopen.pulse()
+
+    def _applyWizardSetup(self, mode='auto', assistant='claudecode',
+                          client='', root='gitroot', custom_root=''):
+        """Apply the setup-wizard selections and enable (or skip) Envoy.
+
+        The single backend entry point the wizard's finish() calls. Because the
+        wizard already obtained consent (the footprint step discloses everything
+        Embody adds; the summary step confirms), the enable path here is
+        modal-free in BOTH modes -- Embodymode governs only LATER invasive
+        actions via _guard(), not this one-time consented setup.
+
+          mode:        'auto' | 'advanced'
+          assistant:   'claudecode' | 'other' | 'none'
+          client:      Aiclient menu value, used when assistant == 'other'
+          root:        'gitroot' | 'projectfolder' | 'custom'
+          custom_root: absolute path, used when root == 'custom'
+        """
+        # Whitelist the assistant token: an unrecognized value (a typo, a
+        # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
+        # Envoy -- the opposite of intent.
+        assistant = (assistant or '').strip().lower()
+        if assistant not in ('claudecode', 'other', 'none'):
+            self.Log(f'Setup wizard: unrecognized assistant "{assistant}" -- no '
+                     f'change made.', 'WARNING')
+            return
+
+        # 1. Posture.
+        if mode in ('auto', 'advanced'):
+            self.my.par.Embodymode = mode
+
+        # 2. Config-file location. Assigning Aiprojectroot fires parexec's
+        #    _migrateRootFiles UNCONDITIONALLY (only the InitEnvoy regen is
+        #    Envoyenable-gated). On first run that is benign -- nothing is at the
+        #    old root yet. Set the custom PATH BEFORE flipping the mode to
+        #    'custom' so the single migration resolves the real custom directory
+        #    rather than the empty-path project-folder fallback.
+        if root == 'custom' and custom_root:
+            self.my.par.Aiprojectrootcustom = custom_root
+        if root in ('gitroot', 'projectfolder', 'custom'):
+            self.my.par.Aiprojectroot = root
+
+        # 3. AI client / assistant.
+        if assistant == 'none':
+            self.my.par.Aiclient = 'none'
+            self.my.par.Envoyenable = False
+            self.Log('Embody is set up for externalization only. Turn on the AI '
+                     'assistant anytime via the Envoyenable parameter or by '
+                     're-running setup (the Setup Wizard button).', 'SUCCESS')
+            return
+        if assistant == 'claudecode':
+            self.my.par.Aiclient = 'claudecode'
+        elif assistant == 'other' and client:
+            try:
+                self.my.par.Aiclient = client
+            except Exception:
+                self.Log(f'Unknown AI client "{client}" -- keeping the current '
+                         f'selection.', 'WARNING')
+
+        # 4. Enable (first run) or restart-to-apply (re-run), modal-free.
+        self._enableEnvoyResolved()
+
+    def _enableEnvoyResolved(self):
+        """Modal-free Envoy enable/refresh, used by the setup wizard.
+
+        Skips the interactive git modal that _enableEnvoy() pops: the wizard
+        already chose the config location (Aiprojectroot) and disclosed the git
+        changes, so consent exists. Resolves the git root silently (via
+        _findGitRootSync -- Start() re-resolves the same way). If the project is
+        not in a git repo, MCP + AI config are still generated, with no
+        .gitignore / .gitattributes edits.
+
+        Two paths:
+        - FIRST RUN (Envoy off): write AI config, then flip Envoyenable so
+          parexec launches Start(), whose async bootstrap builds the venv OFF
+          the main thread (do NOT call _setupEnvironment() here -- that is the
+          blocking path _enableEnvoy uses).
+        - RE-RUN (Envoy already on, via the Setup Wizard button): the param
+          changes above already regenerated config through parexec; a
+          `Envoyenable = True` would be a no-op and never restart the server, so
+          the running server would keep its OLD port/root/client. RESTART it
+          explicitly so the new selections take effect, and only then set the
+          'Starting...' status (setting it on a no-op would lie forever)."""
+        already_on = bool(self.my.par.Envoyenable.eval())
+
+        # Resolve + record the git root without a prompt so _extractAIConfig's
+        # _findProjectRoot('gitroot') and Start() agree on one location.
+        git_root = self._findGitRootSync()  # Path or 'no-git'
+        self.my.store('_git_root', str(git_root))
+        if git_root == 'no-git':
+            self.Log('No git repo found -- generating MCP + AI config only (no '
+                     '.gitignore / .gitattributes). Run op.Embody.InitGit() '
+                     'later to add git integration.', 'INFO')
+
+        if already_on:
+            # Re-run: config already regenerated by parexec on the param changes.
+            # Restart so the runtime binds the new port/root/client.
+            self.Log('Re-applying Envoy setup...', 'INFO')
+            self.my.ext.Envoy.Stop()
+            self.my.par.Envoystatus = 'Starting...'
+            run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=10)
+            self.Log(f'Envoy setup updated for {self.my.par.Aiclient.label}.',
+                     'SUCCESS')
+            return
+
+        # First enable.
+        self.Log('Setting up Envoy...', 'INFO')
+        # AI config now (fast, no venv needed). The heavy venv build + pip
+        # install runs asynchronously inside Start() (_beginAsyncBootstrap).
+        self._extractAIConfig()
+        # Flip Envoyenable -> parexec kicks Envoy.Start() (async bootstrap).
+        self.my.par.Envoyenable = True
+        self.my.par.Envoystatus = 'Starting...'
+        self.Log(
+            f'Envoy enabled! Config generated for {self.my.par.Aiclient.label}. '
+            f'Dependencies install in the background; MCP connects when ready.',
             'SUCCESS'
         )
 
@@ -3204,12 +3354,14 @@ class EmbodyExt:
         if not suppress_refresh:
             run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
 
-        # Chain the Envoy opt-in prompt AFTER init completes.
-        # Verify() sets this flag; we consume it here so the Envoy dialog
-        # appears only after deprecated-pattern and re-scan dialogs resolve.
+        # Chain the first-run setup wizard AFTER init completes.
+        # Verify() sets this flag; we consume it here so the wizard opens only
+        # after deprecated-pattern and re-scan dialogs resolve. _openSetupWizard
+        # respects _suppressDialogs (never opens during a test/save) and falls
+        # back to the classic _promptEnvoy dialog if the wizard UI is absent.
         if getattr(self, '_pending_envoy_prompt', False):
             self._pending_envoy_prompt = False
-            run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=5)
+            run(f"op('{self.my}').ext.Embody._openSetupWizard()", delayFrames=5)
 
     def _reportResults(self, dirties, additions, subtractions):
         """Report update results to log."""
@@ -8992,6 +9144,9 @@ class EmbodyExt:
         """
         if sys.platform.startswith('win'):
             cands = [
+                # Native installers (claude's recommended install.ps1 lands here
+                # -- the Windows twin of ~/.local/bin below).
+                os.path.expandvars(rf'%USERPROFILE%\.local\bin\{cli}.exe'),
                 os.path.expandvars(rf'%APPDATA%\npm\{cli}.cmd'),
                 os.path.expandvars(rf'%USERPROFILE%\.bun\bin\{cli}.exe'),
                 os.path.expandvars(rf'%LOCALAPPDATA%\Programs\{cli}\{cli}.exe'),
@@ -9152,7 +9307,18 @@ class EmbodyExt:
                 # Doubled-quote form keeps a resolved .cmd path literally quoted
                 # through cmd /K so a metachar (& | etc.) is not re-parsed; a
                 # bareword cli resolves via PATH the same.
-                subprocess.Popen(f'cmd /K ""{target}""', cwd=d, stdin=subprocess.DEVNULL,
+                #
+                # NO std-handle redirection here. The CLIs are interactive
+                # Ink/Node TUIs (claude/codex/gemini) that need a real console
+                # TTY on stdin -- claude's OAuth login especially. Passing
+                # stdin=DEVNULL sets STARTF_USESTDHANDLES, which (a) pins the
+                # child's stdin to NUL so Ink cannot enter raw mode, and (b) from
+                # a GUI parent like TD -- which has no valid console handles --
+                # also hands the child bogus stdout/stderr. That combination is
+                # exactly the "blank terminal, login browser flashes then closes"
+                # bug on Windows. With CREATE_NEW_CONSOLE and no redirection, the
+                # fresh console owns fully-working stdin/stdout/stderr.
+                subprocess.Popen(f'cmd /K ""{target}""', cwd=d,
                                  creationflags=subprocess.CREATE_NEW_CONSOLE, env=env)
                 return True
         except OSError as e:

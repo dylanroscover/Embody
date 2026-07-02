@@ -122,6 +122,9 @@ def onPulse(par):
 	elif par.name == 'Refresh':
 		parent.Embody.Refresh()
 
+	elif par.name == 'Setupwizard':
+		parent.Embody.ext.Embody._openSetupWizard()
+
 	elif par.name == 'Openmanager':
 		parent.Embody.Manager('open')
 

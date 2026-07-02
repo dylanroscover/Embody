@@ -7,9 +7,12 @@ terminals or editors -- only pure builders and _launchEditor's no-window
 failure path are exercised live.
 """
 
+import sys
 import tempfile
 import shutil
+import subprocess
 from pathlib import Path
+from unittest import mock
 
 runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
@@ -178,3 +181,56 @@ class TestLaunchAIClient(EmbodyTestCase):
 		"""_launchEnv preserves a normal environment (HOME/PATH/USER survive)."""
 		env = self.embody_ext._launchEnv()
 		self.assertTrue(any(k in env for k in ('HOME', 'PATH', 'USER')))
+
+	# ------------------------------------------------------------------
+	# Group F: _launchTerminal Windows console (regression guard)
+	# ------------------------------------------------------------------
+
+	def _capture_win_terminal_popen(self, cli='claude'):
+		"""Run _launchTerminal on the Windows branch with subprocess.Popen mocked;
+		return (result, captured_kwargs, captured_args). Portable: patches
+		sys.platform and injects CREATE_NEW_CONSOLE so it runs on any host."""
+		new_console = getattr(subprocess, 'CREATE_NEW_CONSOLE', 0x10)
+		captured = {}
+
+		def fake_popen(*args, **kwargs):
+			captured['args'] = args
+			captured['kwargs'] = kwargs
+			return mock.Mock()
+
+		with mock.patch.object(sys, 'platform', 'win32'), \
+			 mock.patch.object(subprocess, 'CREATE_NEW_CONSOLE', new_console, create=True), \
+			 mock.patch.object(subprocess, 'Popen', side_effect=fake_popen):
+			result = self.embody_ext._launchTerminal(self._temp_dir, cli)
+		return result, captured.get('kwargs', {}), captured.get('args', ())
+
+	def test_F01_windows_terminal_never_redirects_stdin(self):
+		"""Windows terminal launch must NOT redirect stdin.
+
+		The CLIs are interactive Ink/Node TUIs that need a real console TTY on
+		stdin (claude's OAuth especially). stdin=DEVNULL sets
+		STARTF_USESTDHANDLES: stdin is pinned to NUL (Ink can't enter raw mode)
+		and -- from a GUI parent with no console handles -- the child also gets
+		bogus stdout/stderr. That is the "blank terminal, login browser flashes
+		then closes" bug. This guards against re-adding the redirect.
+		"""
+		result, kwargs, _ = self._capture_win_terminal_popen()
+		self.assertTrue(result)
+		self.assertNotIn('stdin', kwargs,
+			'Windows terminal launch must not redirect stdin (breaks the TUI TTY)')
+		self.assertNotIn('stdout', kwargs)
+		self.assertNotIn('stderr', kwargs)
+
+	def test_F02_windows_terminal_allocates_new_console(self):
+		"""The launch must open a fresh console (CREATE_NEW_CONSOLE) at cwd."""
+		result, kwargs, args = self._capture_win_terminal_popen()
+		self.assertTrue(result)
+		self.assertEqual(kwargs.get('creationflags'),
+			getattr(subprocess, 'CREATE_NEW_CONSOLE', 0x10))
+		self.assertEqual(str(kwargs.get('cwd')), str(self._temp_dir))
+
+	def test_F03_windows_terminal_uses_doubled_quote_cmd_k(self):
+		"""cmd /K with the doubled-quote form keeps the target literally quoted."""
+		_, _, args = self._capture_win_terminal_popen(cli='claude')
+		self.assertTrue(args, 'Popen was not called')
+		self.assertEqual(args[0], 'cmd /K ""claude""')

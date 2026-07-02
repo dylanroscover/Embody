@@ -115,6 +115,13 @@ tidily, never leave them at (0, 0). Beyond that, the TD-specific traps:
 - **Button behavior is `buttontype`** (`momentary`, `toggledown`, ...), not `type`.
 - **Text padding is `textoffsetx`/`textoffsety`.** A Text COMP ignores `marginl`
   for its rendered text (margins inset *containers*, not text).
+- **Word wrap needs `type='multiline'`, not just `wordwrap=True`.** A Text COMP's
+  `wordwrap` toggle does nothing while `type='string'` (the default) -- the text
+  renders on ONE line and clips at the panel edge, and `\n` is stripped. Set
+  `type='multiline'` AND `wordwrap=True` to wrap a block of body text at the
+  panel width (minus `textoffsetx`). Note `type='multiline'` also makes the Text
+  COMP an *editable field*, so for a static label/hint set `clickthrough=True` so
+  it neither steals edit focus nor blocks clicks on a card underneath it.
 - **`verttb`/`horizlr` stacking order is the child `order` par, not creation
   order.** Omit `order` and the title can stack at the BOTTOM.
 - **Panel sizing is `hmode`/`vmode`** (`fixed`/`fill`/`anchors`) + `hfillweight`/
