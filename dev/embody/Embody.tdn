@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 669
-generator: Embody/6.0.68
+build: 672
+generator: Embody/6.0.70
 td_build: 099.2025.32820
-source_file: Embody-6.68.toe
-exported_at: '2026-07-01T21:17:49Z'
+source_file: Embody-6.70.toe
+exported_at: '2026-07-02T08:24:25Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -44,11 +44,23 @@ type_defaults:
 type: containerCOMP
 custom_pars:
   Embody:
+  - name: Embodymode
+    style: Menu
+    label: Mode
+    startSection: true
+    default: auto
+    menuNames:
+    - auto
+    - advanced
+    menuLabels:
+    - Auto -- manage everything
+    - Advanced -- ask first
+    help: How Embody handles invasive, project-level changes (git config, .venv, MCP/AI config files, network ops). 'Auto' manages everything silently -- recommended for most users. 'Advanced' asks before each such change and keeps the footprint minimal -- for users who want full control.
   - name: Status
     style: Str
     readOnly: true
     help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-    value: Enabled
+    value: Testing
   - name: Disable
     style: Pulse
     help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
@@ -457,7 +469,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Running on port 9870
+    value: Starting...
   Logs:
   - name: Verbose
     style: Toggle
@@ -594,7 +606,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.68
+    value: 6.0.70
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -611,7 +623,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 669
+    value: 672
   - name: Github
     style: Pulse
     label: GitHub
@@ -622,7 +634,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-01 21:17:49 UTC
+    value: 2026-07-02 08:24:25 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -672,7 +684,6 @@ storage:
   expand_order: []
   _start_in_progress: true
   git_status:
-    /embody/externalizations: ' M'
     /specimen_lab/waveform_stack: ' M'
     /specimen_lab/vertical_fibers: ' M'
     /specimen_lab/plasma_interference: ' M'
@@ -684,14 +695,9 @@ storage:
     /specimen_lab/crosspoint_matrix: ' M'
     /specimen_lab: ' M'
     /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests/test_custom_parameters: ' M'
-    /embody/unit_tests/TestRunnerExt: ' M'
-    /embody/Embody/help/text_help: ' M'
     /embody/Embody/EnvoyExt: ' M'
     /embody/Embody/EmbodyExt: ' M'
-    /embody/Embody: ' M'
-    /embody: ' M'
-  _watchdog_gen: 490
+  _watchdog_gen: 516
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -833,8 +839,10 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 255
+  _clip_watch_gen: 281
   _init_complete: true
+  _smoke_test_responses:
+    Embody - AI Coding Assistant Integration: 0
 operators:
 - name: help
   type: opviewerCOMP
@@ -1142,7 +1150,7 @@ operators:
   size: [160, 130]
   comp_inputs:
   - manager
-  palette_clone: true
+  tdn_ref: embody/Embody/windowHeader.tdn
 - name: _envoy_perform
   type: performCHOP
   parameters:
