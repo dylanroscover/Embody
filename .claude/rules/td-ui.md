@@ -99,10 +99,12 @@ Creating panel COMPs via `execute_python`/`.create()` follows the same layout
 discipline as any op creation (see `network-layout.md`) -- position child nodes
 tidily, never leave them at (0, 0). Beyond that, the TD-specific traps:
 
-- **`execute_python` is transactional.** A mid-script exception ROLLS BACK every
-  op the script created -- so a buggy trailing `result`/diagnostic line silently
-  undoes all your real work. Keep result/log lines bulletproof (no `sorted()`
-  over mixed `None`, no unguarded attribute access).
+- **`execute_python` rolls back created ops, not every mutation.** A mid-script
+  exception makes Envoy destroy the operators the script CREATED before failing;
+  the error reports the rollback count. Mutations to PRE-EXISTING ops (parameter
+  changes, wiring on old ops) are NOT rolled back. The whole call is still one TD
+  undo block, so Ctrl+Z reverts it interactively. Keep result/log lines
+  bulletproof (no `sorted()` over mixed `None`, no unguarded attribute access).
 - **`.destroy()` is deferred.** Destroy-then-recreate with the same name in one
   script collides (new op gets a numeric suffix). Tear down in one call, rebuild
   in the next -- and TD may still briefly reserve a just-destroyed name, so write

@@ -29,6 +29,8 @@ This is a TouchDesigner project using **Embody** for version-controlled external
     - Before writing TD Python (`execute_python`, `set_dat_content`, `edit_dat_content`): load `/td-api-reference`
     - Before fetching data over HTTP, or building any background / long-running / blocking task: load `/td-api-reference` (use a Web Client DAT, not hand-rolled threading)
     - When diagnosing operator errors: load `/debug-operator`
+    - Before building or refining any visual or rendered output (generative art, VJ visuals, shaders, scenes, renders, projections, anything shown on screen): load `/visual-aesthetics`
+    - Before creating or editing POP operators, particle systems, GPU point/geometry work, or glslPOP compute: load `/pop-networks`
     - Before first MCP call in a new session: load `/mcp-tools-reference`
 
 ## Approach Guidelines
@@ -40,6 +42,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
 - Checkpoint after each significant step: what changed, what's verified, what's left. Don't continue from a state you can't describe.
 - Fail loud — "done" is wrong if anything was skipped silently, "tests pass" is wrong if any were skipped. Surface uncertainty; don't bury it.
 - Surface conflicts, don't average them: when two patterns or rules contradict, pick one (more recent / more tested), say why, flag the other for cleanup — never silently reconcile.
+- For visual or rendered output, success is a captured, assessed frame, not a clean network. Use `capture_top` to look at the result and judge it (load the `/visual-aesthetics` skill first); never declare a visual task done on a black or empty frame.
 
 ## Envoy MCP Server
 
@@ -61,7 +64,7 @@ Manual configuration if needed:
 
 To reduce tool-approval prompts, Embody deploys a `.claude/settings.local.json` that pre-allows the Envoy MCP tools (inspect tools like `get_op`/`query_network` AND write tools like `create_op`, `set_parameter`, `execute_python`, `import_network`, plus `Bash` and `WebFetch`). It is written only if the file is missing — Embody never overwrites or regenerates your customizations, so edit its `permissions.allow` list to tighten or loosen access:
 
-`get_op`, `get_parameter`, `get_connections`, `get_annotations`, `get_enclosed_ops`, `get_op_position`, `get_op_flags`, `get_op_performance`, `get_op_errors`, `get_dat_content`, `get_td_info`, `get_td_classes`, `get_td_class_details`, `get_logs`, `get_externalizations`, `get_externalization_status`, `get_module_help`, `query_network`, `find_children`, `create_op`, `delete_op`, `connect_ops`, `set_parameter`, `execute_python`, `import_network`, `externalize_op`
+`get_op`, `get_parameter`, `get_connections`, `get_annotations`, `get_enclosed_ops`, `get_op_position`, `get_op_flags`, `get_op_performance`, `get_op_errors`, `get_dat_content`, `get_td_info`, `get_td_classes`, `get_td_class_details`, `get_logs`, `get_externalizations`, `get_externalization_status`, `get_module_help`, `get_sessions`, `claim_scope`, `release_scope`, `query_network`, `find_children`, `create_op`, `delete_op`, `connect_ops`, `set_parameter`, `execute_python`, `import_network`, `externalize_op`
 
 ## Extension Conventions
 

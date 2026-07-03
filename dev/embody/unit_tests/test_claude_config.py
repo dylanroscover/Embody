@@ -38,9 +38,9 @@ class TestClaudeConfig(EmbodyTestCase):
 		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
 		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)
 
-	def test_A02_skills_map_has_8_entries(self):
-		"""_TEMPLATE_MAP_SKILLS should have exactly 8 skill entries."""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 8)
+	def test_A02_skills_map_has_9_entries(self):
+		"""_TEMPLATE_MAP_SKILLS should have exactly 9 skill entries."""
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 9)
 
 	def test_A03_templates_comp_exists(self):
 		"""The templates COMP should exist inside Embody."""
@@ -352,11 +352,11 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertLen(rule_files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_D05_skills_directories_count(self):
-		"""Eight skill directories should be created in .claude/skills/."""
+		"""One skill directory per _TEMPLATE_MAP_SKILLS entry in .claude/skills/."""
 		self._run_claude_pipeline()
 		skills_dir = self._temp_dir / '.claude' / 'skills'
 		skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
-		self.assertLen(skill_dirs, 8)
+		self.assertLen(skill_dirs, len(self.embody_ext._TEMPLATE_MAP_SKILLS))
 
 	def test_D06_idempotent_rerun(self):
 		"""Running the Claude pipeline twice should produce identical files."""

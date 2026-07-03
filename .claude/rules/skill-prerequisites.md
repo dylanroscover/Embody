@@ -16,6 +16,7 @@ Skills are prerequisites, not optional reference. **Load the relevant skill BEFO
 | Fetching data over HTTP, or any background / long-running / blocking task | `/td-api-reference` (Background and Long-Running Work) |
 | Diagnosing operator errors | `/debug-operator` |
 | Building or refining any visual / rendered output (generative art, VJ visuals, shaders, scenes, renders, anything shown on screen) | `/visual-aesthetics` |
+| Creating or editing POP operators, particle systems, GPU point/geometry work, glslPOP compute, or converting SOP chains to POPs | `/pop-networks` |
 | Building or styling a TD panel UI (dialog, wizard, HUD, control panel, buttons/text) | `/build-ui` (design system) + `rules/td-ui.md` (mechanics) |
 | `switch_instance` or multi-instance workflows | `/multi-instance` |
 | Building or persisting a Specimen (gallery TDN networks) | `/specimen-authoring` |

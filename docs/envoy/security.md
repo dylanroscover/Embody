@@ -4,11 +4,11 @@ Envoy is designed as a **local development tool** — it runs on `localhost` and
 
 ## Local-Only by Design
 
-Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0.0.0.0` or any external interface. This means:
+Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0.0.0.0` or any external interface, and it validates `Host` and `Origin` headers on every request with explicit FastMCP `TransportSecuritySettings`. This means:
 
 - Only processes running on the same machine can connect
 - It is not accessible from the local network or internet
-- DNS rebinding attacks from malicious websites cannot reach it
+- Browser-driven cross-site requests, including DNS-rebinding attempts from malicious websites, are rejected by `Host`/`Origin` validation rather than relying on the localhost bind alone
 
 !!! danger "Do not expose Envoy to the network"
     Never use port forwarding, SSH tunnels, reverse proxies, or firewall rules to make Envoy's port accessible from other machines. Envoy has **no authentication** — any process that can reach the port has full control over your TouchDesigner session.

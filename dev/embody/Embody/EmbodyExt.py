@@ -53,6 +53,7 @@ class EmbodyExt:
         'text_skill_manage_annotations':  'manage-annotations',
         'text_skill_td_api_reference':    'td-api-reference',
         'text_skill_mcp_tools_reference': 'mcp-tools-reference',
+        'text_skill_pop_networks':        'pop-networks',
         'text_skill_visual_aesthetics':   'visual-aesthetics',
     }
 

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 679
-generator: Embody/6.0.82
+build: 695
+generator: Embody/6.0.85
 td_build: 099.2025.32820
-source_file: Embody-6.82.toe
-exported_at: '2026-07-03T19:02:04Z'
+source_file: Embody-6.85.toe
+exported_at: '2026-07-03T22:37:24Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -295,7 +295,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 19:02:03 UTC
+    value: Saved 22:36:46 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -338,6 +338,7 @@ custom_pars:
     - claudecode
     - codex
     - gemini
+    - vscode
     - cursor
     - windsurf
     - copilot
@@ -346,6 +347,7 @@ custom_pars:
     - Claude Code
     - Codex
     - Gemini
+    - VS Code
     - Cursor
     - Windsurf
     - GitHub Copilot
@@ -613,7 +615,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: keep
+    value: delete
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -628,6 +630,7 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -647,7 +650,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.82
+    value: 6.0.85
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -664,7 +667,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 679
+    value: 695
   - name: Github
     style: Pulse
     label: GitHub
@@ -675,7 +678,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-03 13:30:17 UTC
+    value: 2026-07-03 22:37:24 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -727,20 +730,18 @@ storage:
   git_status:
     /embody/externalizations: ' M'
     /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests: ' M'
+    /embody/unit_tests/test_envoy_thread_comm: ' M'
+    /embody/unit_tests/test_envoy_bridge: ' M'
+    /embody/unit_tests/test_claude_config: ' M'
     /embody/Embody/templates/text_skill_mcp_tools_reference: ' M'
-    /embody/Embody/templates/text_settings_local: ' M'
     /embody/Embody/templates/text_claude: ' M'
     /embody/Embody/templates: ' M'
-    /embody/Embody/execute: ' M'
-    /embody/Embody/TDNExt: ' M'
     /embody/Embody/EnvoyExt: ' M'
     /embody/Embody/EmbodyExt: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
-    /embody/unit_tests/test_envoy_sessions: ' M'
-    /embody/Embody/templates/text_rule_multi_session: ??
-  _watchdog_gen: 655
+    /embody/Embody/templates/text_skill_pop_networks: ??
+  _watchdog_gen: 661
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -882,7 +883,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 420
+  _clip_watch_gen: 426
   _init_complete: true
 operators:
 - name: help
@@ -1005,7 +1006,7 @@ operators:
   type: containerCOMP
   parameters:
     w: 500
-    h: 640
+    h: 440
     bgcolorr: 0.11
     bgcolorg: 0.12
     bgcolorb: 0.115
@@ -1019,16 +1020,18 @@ operators:
     step: 0
     sel:
       mode: advanced
-    step_id: mode
+    step_id: summary
     sel_mode: auto
     sel_assistant: claudecode
-    sel_client: ''
+    sel_client: cursor
     sel_root: gitroot
   children:
   - name: hint
     type: textCOMP
     parameters:
-      text: Choose one, then Next.
+      text: |-
+        Mode: auto. AI assistant: on (Claude Code).
+        Nothing has changed yet - click Set up Embody to apply.
       type: multiline
       wordwrap: true
       callbacks: hint_callbacks
@@ -1037,11 +1040,10 @@ operators:
       fontcolorg: 0.61
       fontcolorb: 0.6
       textoffsetx: 24
-      textpaddingr: 36
       alignx: left
       aligny: top
       w: 452
-      h: 16
+      h: 88
       alignorder: 3
       bgcolorr: 0.11
       bgcolorg: 0.12
@@ -1057,7 +1059,7 @@ operators:
   - name: title
     type: textCOMP
     parameters:
-      text: How should Embody manage your project?
+      text: Ready to set up Embody
       wordwrap: true
       callbacks: title_callbacks
       fontsize: 18
@@ -1065,7 +1067,6 @@ operators:
       fontcolorg: 0.92
       fontcolorb: 0.92
       textoffsetx: 24
-      textpaddingr: 36
       alignx: left
       h: 30
       alignorder: 2
@@ -1087,7 +1088,7 @@ operators:
       bgcolorb: 0.205
       bgalpha: 1
       marginl: 24
-      marginr: 36
+      marginr: 24
     position: [0, -150]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
@@ -1095,7 +1096,7 @@ operators:
     - name: fill
       type: containerCOMP
       parameters:
-        w: 150
+        w: 452
         h: 4
         bgcolorr: 0.24
         bgcolorg: 0.52
@@ -1124,7 +1125,7 @@ operators:
       align: horizlr
       spacing: 10
       marginl: 24
-      marginr: 36
+      marginr: 24
       marginb: 22
       margint: 10
     position: [480, -150]
@@ -1152,15 +1153,15 @@ operators:
       - name: text
         type: textCOMP
         parameters:
-          text: Not now
+          text: Back
           type: multiline
           legacyfontselection: true
           scaletofit: =parent().par[me.curPar.name] or me.curPar.val
           fontsize: 13
           linespacing: =parent().par[me.curPar.name] or me.curPar.val
-          fontcolorr: 0.34
-          fontcolorg: 0.35
-          fontcolorb: 0.34
+          fontcolorr: 0.92
+          fontcolorg: 0.92
+          fontcolorb: 0.92
           textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
@@ -1226,7 +1227,7 @@ operators:
       - name: text
         type: textCOMP
         parameters:
-          text: Next
+          text: Set up Embody
           type: multiline
           legacyfontselection: true
           scaletofit: =parent().par[me.curPar.name] or me.curPar.val
@@ -1303,7 +1304,7 @@ operators:
       bgcolorb: 0.245
       bgalpha: 1
       marginl: 24
-      marginr: 36
+      marginr: 24
     position: [240, -300]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
@@ -1313,6 +1314,7 @@ operators:
       h: 134
       hmode: fill
       alignorder: 4
+      display: false
       bgcolorr: 0.11
       bgcolorg: 0.12
       bgcolorb: 0.115
@@ -1320,7 +1322,7 @@ operators:
       align: verttb
       spacing: 8
       marginl: 24
-      marginr: 36
+      marginr: 24
     position: [480, -300]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
@@ -1345,7 +1347,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [25, 100]
       children:
       - name: desc
@@ -1362,7 +1364,6 @@ operators:
           alignx: left
           aligny: top
           h: 24
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1387,6 +1388,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -1455,7 +1460,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [25, 100]
       children:
       - name: desc
@@ -1472,7 +1477,6 @@ operators:
           alignx: left
           aligny: top
           h: 24
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1497,6 +1501,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -1561,14 +1569,13 @@ operators:
   - name: steplabel
     type: textCOMP
     parameters:
-      text: Step 1 of 3
+      text: Step 3 of 3
       callbacks: steplabel_callbacks
       fontsize: 11
       fontcolorr: 0.6
       fontcolorg: 0.61
       fontcolorb: 0.6
       textoffsetx: 24
-      textpaddingr: 36
       alignx: left
       h: 16
       bgcolorr: 0.11
@@ -1597,14 +1604,13 @@ operators:
     parameters:
       h: 216
       hmode: fill
-      vmode: fill
-      vfillweight: 999
       alignorder: 4
       display: false
       align: verttb
       spacing: 8
       marginl: 24
-      marginr: 36
+      marginr: 24
+      pvscrollbar: 'on'
     position: [960, -600]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
@@ -1629,7 +1635,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -200]
       children:
       - name: desc
@@ -1646,7 +1652,6 @@ operators:
           alignx: left
           aligny: top
           h: 22
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1671,6 +1676,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -1722,6 +1731,7 @@ operators:
     - name: opt_cursor
       type: buttonCOMP
       parameters:
+        value0: true
         buttontype: radiodown
         colorr: 0.2
         colorg: 0.42
@@ -1738,7 +1748,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       children:
       - name: desc
         type: textCOMP
@@ -1754,7 +1764,6 @@ operators:
           alignx: left
           aligny: top
           h: 22
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1779,6 +1788,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -1847,7 +1860,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -300]
       children:
       - name: desc
@@ -1864,7 +1877,6 @@ operators:
           alignx: left
           aligny: top
           h: 22
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1889,6 +1901,123 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_vscode
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 52
+        alignorder: 4
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 1
+      position: [0, -400]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Generates VS Code MCP config.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 22
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: VS Code
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -1957,7 +2086,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -500]
       children:
       - name: desc
@@ -1974,7 +2103,6 @@ operators:
           alignx: left
           aligny: top
           h: 22
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1999,6 +2127,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2067,7 +2199,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -100]
       children:
       - name: desc
@@ -2084,7 +2216,6 @@ operators:
           alignx: left
           aligny: top
           h: 22
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2109,6 +2240,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2167,7 +2302,7 @@ operators:
       align: verttb
       spacing: 8
       marginl: 24
-      marginr: 36
+      marginr: 24
     position: [700, -600]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
@@ -2191,7 +2326,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -100]
       children:
       - name: desc
@@ -2208,7 +2343,6 @@ operators:
           alignx: left
           aligny: top
           h: 28
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2233,6 +2367,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2300,7 +2438,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -200]
       children:
       - name: desc
@@ -2317,7 +2455,6 @@ operators:
           alignx: left
           aligny: top
           h: 28
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2342,6 +2479,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2410,7 +2551,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       children:
       - name: desc
         type: textCOMP
@@ -2426,7 +2567,6 @@ operators:
           alignx: left
           aligny: top
           h: 28
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2451,6 +2591,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2509,7 +2653,7 @@ operators:
       align: verttb
       spacing: 8
       marginl: 24
-      marginr: 36
+      marginr: 24
     position: [1220, -600]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
@@ -2533,7 +2677,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -200]
       children:
       - name: desc
@@ -2550,7 +2694,6 @@ operators:
           alignx: left
           aligny: top
           h: 28
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2575,6 +2718,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2642,7 +2789,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       children:
       - name: desc
         type: textCOMP
@@ -2658,7 +2805,6 @@ operators:
           alignx: left
           aligny: top
           h: 28
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2683,6 +2829,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2750,7 +2900,7 @@ operators:
         bottomborder: bordera
         topborder: bordera
         align: verttb
-        spacing: 6
+        spacing: 1
       position: [0, -100]
       children:
       - name: desc
@@ -2767,7 +2917,6 @@ operators:
           alignx: left
           aligny: top
           h: 28
-          vmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2792,6 +2941,10 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
           alignx: left
           aligny: bottom
           h: 28
@@ -2997,8 +3150,8 @@ operators:
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - TDExtension
   - py
+  - TDExtension
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -3093,7 +3246,7 @@ operators:
     justifyh: center
     justifyv: center
     winw: 500
-    winh: 680
+    winh: 480
   position: [1200, 675]
   size: [160, 130]
   color: [0.67, 0.67, 0.67]

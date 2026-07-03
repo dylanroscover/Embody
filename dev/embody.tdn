@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 448
-generator: Embody/6.0.81
+build: 474
+generator: Embody/6.0.85
 td_build: 099.2025.32820
-source_file: Embody-6.82.toe
-exported_at: '2026-07-03T17:57:48Z'
+source_file: Embody-6.85.toe
+exported_at: '2026-07-03T22:37:26Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -303,7 +303,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 17:52:20 UTC
+      value: Saved 22:36:46 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -623,7 +623,7 @@ operators:
       - Always Keep Files
       - Always Delete Files
       help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-      value: keep
+      value: delete
     - name: Toxdropexpr
       style: Menu
       label: Dropped .tox Expression
@@ -638,6 +638,7 @@ operators:
       - Always Clean
       - Always Ignore
       help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+      value: ignore
     - name: Tdndatsafety
       style: Menu
       label: Content Safety
@@ -657,7 +658,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.81
+      value: 6.0.85
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -674,7 +675,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 679
+      value: 695
     - name: Github
       style: Pulse
       label: GitHub
@@ -685,7 +686,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-03 13:30:17 UTC
+      value: 2026-07-03 22:37:24 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -705,18 +706,18 @@ operators:
     git_status:
       /embody/externalizations: ' M'
       /embody/unit_tests/test_sandbox: ' M'
-      /embody/unit_tests: ' M'
+      /embody/unit_tests/test_envoy_thread_comm: ' M'
+      /embody/unit_tests/test_envoy_bridge: ' M'
+      /embody/unit_tests/test_claude_config: ' M'
       /embody/Embody/templates/text_skill_mcp_tools_reference: ' M'
-      /embody/Embody/templates/text_settings_local: ' M'
       /embody/Embody/templates/text_claude: ' M'
       /embody/Embody/templates: ' M'
       /embody/Embody/EnvoyExt: ' M'
       /embody/Embody/EmbodyExt: ' M'
       /embody/Embody: ' M'
       /embody: ' M'
-      /embody/unit_tests/test_envoy_sessions: ' M'
-      /embody/Embody/templates/text_rule_multi_session: ??
-    _watchdog_gen: 639
+      /embody/Embody/templates/text_skill_pop_networks: ??
+    _watchdog_gen: 661
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -858,8 +859,8 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 404
-    _suppress_dialogs: true
+    _clip_watch_gen: 426
+    _init_complete: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn
   type: baseCOMP
@@ -2785,7 +2786,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 255
+    rows: 256
     cols: 11
   flags:
   - viewer

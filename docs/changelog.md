@@ -1,5 +1,21 @@
 # Changelog
 
+## v6.0.87
+
+Envoy grows to 53 MCP tools with undoable edits, official TD docs lookup, numeric TOP sampling, tighter parameter/script guardrails, explicit transport hardening, and new POP-building guidance.
+
+- **Undoable MCP mutations.** Every mutating Envoy operation in `_UNDOABLE_OPS` now runs inside a TD undo block -- adapted from Derivative's TDMCP with permission -- so one `batch_operations` request collapses to one Ctrl+Z step instead of a pile of per-op edits.
+- **Official TD docs from Envoy.** New `get_docs` tool brings the live TD tool surface to **53 MCP tools** and looks up official TouchDesigner docs by preferring the version-exact offline help mirror under `<Samples>/Learn/offlineHelp`, then falling back to docs.derivative.ca's MediaWiki API. Section drill-down uses `sections_available`, and the HTML/API fetch work happens on the MCP worker thread so TD's frame loop stays clear.
+- **`capture_top(sample_grid=...)`.** `capture_top` can now return a clamped 2..32 NxN RGBA sample grid instead of an image, with row 0 at the top and full-resolution per-channel min/max/mean. It is token-cheap, machine-assertable, preserves HDR values above 1.0 that image capture clips, and sanitizes NaN/Inf values.
+- **Parameter search mode.** `get_parameter` now has glob search over parameter names, evaluated values, expressions, and bind expressions across a bounded subtree (`search`, `search_in`, `depth`, `max_results`), so searches like `search="*/project1/*", search_in="expr"` expose absolute-path expressions.
+- **Safer parameter writes.** `set_parameter` now rejects invalid Menu values with `menuNames` / `menuLabels` instead of accepting TD's silent index-0 coercion, includes a label-to-name hint when the caller sends a label, and auto-grows sequence-block parameters such as `const5name` to 6 blocks.
+- **`execute_python` rollback contract.** A script exception now destroys operators created by that call and reports the rollback count, while mutations to pre-existing operators remain in place; the whole call is still Ctrl+Z-able, and the generated TD UI rule now states that true contract.
+- **Transport security pinned.** Envoy now passes explicit FastMCP `TransportSecuritySettings` for Host/Origin validation and DNS-rebinding/CSRF defense instead of relying on SDK defaults; the security docs now say the localhost bind alone is not the defense.
+- **New `pop-networks` skill.** The ninth shipped skill adds POP-family builder guidance adapted from Derivative's TDMCPSkills `td-pop-family` with permission: POPs vs SOPs, the `geometryCOMP` ritual, particle lifecycle, `glslPOP` discipline, trap list, and Embody's performance/layout/naming/verification gates. The template DAT, `_TEMPLATE_MAP_SKILLS`, release sync table, prerequisite row, and generated Claude list are wired.
+- **New drift and tool-guard tests.** Added `test_envoy_tool_guards` (29 tests: undo wiring including live Ctrl+Z proof, menu/sequence guards, parameter search, `execute_python` rollback, `get_docs` parsing, and `sample_grid`) and `test_template_sync` (5 tests: template map/disk/release-table sync plus orphan allowlist), bringing the source inventory to **87 test suites / 1,940 test methods**.
+- **Stale Envoy tests repaired.** Six stale tests across `test_envoy_thread_comm`, `test_envoy_bridge`, and `test_server_lifecycle` now match the current per-session log-cursor and `_process_is_real_td` contracts; queue-based thread-comm tests use private queues so they no longer inject fake requests into the live MCP queue or drain real sessions' pending calls.
+- **Tool reference sync.** The `mcp-tools-reference` skill/template, docs/envoy tools pages, docs index, and README counts are synced to 53 tools, including `get_docs` and `capture_top`'s `sample_grid` mode.
+
 ## v6.0.83
 
 Multi-session Envoy coordination, 52 MCP tools, and a TDN stability pass. This release makes parallel AI/client work more visible and safer, tightens destructive-operation behavior, hardens several TDN edge cases, refreshes the generated agent guidance, and regenerates the 6.0.83 release artifacts.

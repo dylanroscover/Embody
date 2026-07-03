@@ -17,19 +17,25 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Optional, Any, Callable
-from queue import Queue, Empty
-from threading import Lock, Event, Thread
+import asyncio
 import colorsys
 import contextvars
+import fnmatch
 import json
 import math
+import os
 import random
+import re
 import subprocess
 import sys
 import tempfile
 import time
-import asyncio
+import urllib.parse
+import urllib.request
+from html import unescape
+from queue import Queue, Empty
+from threading import Lock, Event, Thread
+from typing import Optional, Any, Callable
 
 ENVOY_VERSION = "1.4.0"
 
@@ -176,10 +182,38 @@ class EnvoyMCPServer:
         self._claims: dict = existing_claims if isinstance(existing_claims, dict) else {}
         sys._envoy_claims = self._claims
 
+        self._docs_state = {'resolved': False, 'root': None, 'index': None, 'cache': {}}
+
         # Import mcp only when server is instantiated (in worker thread)
         from mcp.server.fastmcp import FastMCP, Image
         self._Image = Image  # Store for use in tool functions
-        self.mcp = FastMCP("Envoy", host="127.0.0.1", port=port, stateless_http=True)
+        # The MCP SDK auto-enables this for host="127.0.0.1" since about
+        # 1.10, but pin it explicitly so a default change cannot silently
+        # drop the Host/Origin validation that defeats DNS rebinding/CSRF
+        # from a local browser. Idea prompted by TDMCP's 1.1.46 security work.
+        transport_security = None
+        try:
+            from mcp.server.transport_security import TransportSecuritySettings
+            transport_security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=True,
+                allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+                allowed_origins=[
+                    "http://127.0.0.1:*",
+                    "http://localhost:*",
+                    "http://[::1]:*",
+                ],
+            )
+        except Exception as e:
+            print(f'[Envoy][WARNING] Transport security settings unavailable; '
+                  f'continuing without explicit FastMCP transport_security: {e}')
+        mcp_kwargs = {
+            'host': "127.0.0.1",
+            'port': port,
+            'stateless_http': True,
+        }
+        if transport_security is not None:
+            mcp_kwargs['transport_security'] = transport_security
+        self.mcp = FastMCP("Envoy", **mcp_kwargs)
         self._register_tools()
 
     def _touch_session(self, sid: str, label: str = None,
@@ -442,6 +476,11 @@ class EnvoyMCPServer:
             """
             Set a parameter value, expression, bind expression, or mode on an operator.
 
+            Invalid Menu values are rejected with the valid menuNames because
+            TD would otherwise silently coerce them to index 0. Sequence-block
+            parameters auto-grow their sequence, e.g. const5name grows
+            numBlocks to 6.
+
             Args:
                 op_path: Full path to the operator
                 par_name: Parameter name (e.g., "tx", "frequency", "file")
@@ -463,21 +502,41 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def get_parameter(op_path: str, par_name: str) -> dict:
+        def get_parameter(op_path: str, par_name: str = None,
+                         search: str = None, search_in: str = 'any',
+                         depth: int = 2, max_results: int = 50) -> dict:
             """
-            Get a parameter value from an operator.
+            Get a single parameter value, or search parameters by glob.
+
+            Single-parameter mode requires par_name. Search mode scans the
+            target operator and children to depth using fnmatch glob semantics;
+            patterns without *?[ are treated as contains searches. search_in
+            may be "name", "value", "expr", or "any". Example: search
+            absolute-path expressions with search="*/project1/*",
+            search_in="expr".
+            search_in='value' evaluates every parameter it scans (expressions
+            included) -- expression side effects and cooking cost are on the
+            caller; 'any' only evaluates constant-mode values.
 
             Args:
                 op_path: Full path to the operator
-                par_name: Parameter name
+                par_name: Parameter name for single-parameter mode
+                search: Glob or substring pattern for search mode
+                search_in: Field to search: name, value, expr, or any
+                depth: Child search depth
+                max_results: Maximum search hits to return
 
             Returns:
-                Dict with parameter value, mode, expression, bind expression,
-                export source, label, min/max, and default value
+                Single-parameter details, or search results with op, par,
+                value, mode, and expression/bind expression fields when present
             """
             return self._execute_in_td('get_parameter', {
                 'op_path': op_path,
-                'par_name': par_name
+                'par_name': par_name,
+                'search': search,
+                'search_in': search_in,
+                'depth': depth,
+                'max_results': max_results
             })
 
         @self.mcp.tool()
@@ -689,6 +748,29 @@ class EnvoyMCPServer:
             return self._execute_in_td('get_module_help', {
                 'module_name': module_name
             })
+
+        @self.mcp.tool()
+        def get_docs(query: str, section: str = None, source: str = 'auto',
+                     max_chars: int = 20000) -> dict:
+            """Look up official TouchDesigner documentation (docs.derivative.ca).
+
+            Resolves operator pages ("Movie File In TOP", "moviefileinTOP"), Python
+            class pages ("CHOP Class"), and concept articles. Prefers the local
+            offline help mirror when the TD installation has one (version-exact,
+            instant); falls back to the live docs.derivative.ca wiki API.
+
+            Args:
+                query: Page name or topic (e.g. "noiseTOP", "Timer CHOP", "Instancing")
+                section: Optional section heading from a previous call's
+                    sections_available -- returns just that section
+                source: 'auto' (offline then web), 'offline', or 'web'
+                max_chars: Truncate content to this many characters (default 20000)
+
+            Returns:
+                Dict with title, source, sections_available, content (markdown-ish
+                text), and optional url / matches / truncated fields.
+            """
+            return self._get_docs(query, section, source, max_chars)
 
         # === MCP Prompts ===
 
@@ -1471,7 +1553,8 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def capture_top(op_path: str, format: str = "jpeg", quality: float = 0.8,
-                        max_resolution: int = 640, inline: bool = False) -> list:
+                        max_resolution: int = 640, inline: bool = False,
+                        sample_grid: int = 0) -> list:
             """
             Capture a TOP operator's output as an image.
 
@@ -1479,28 +1562,46 @@ class EnvoyMCPServer:
             Inline base64 previews are token-heavy, so they are OFF by default --
             pass inline=True to also embed a small preview in the response.
 
+            When sample_grid >= 2, no image is captured or saved. Instead the
+            tool returns a downsampled NxN RGBA grid (row 0 = TOP of the image)
+            with per-channel min/max/mean computed over the full-resolution
+            texture. format/quality/max_resolution/inline are ignored in this
+            mode. Values are floats rounded to 4 decimals, NaN/Inf are
+            sanitized to 0.0, and the requested grid is clamped to 2..32.
+
             Args:
                 op_path: Path to a TOP operator (e.g., "/project1/null1")
                 format: Image format - "jpeg" (smaller, lossy) or "png" (lossless)
                 quality: JPEG compression quality 0.0-1.0 (ignored for PNG)
                 max_resolution: Max pixels on longest edge. 0 = native resolution.
                 inline: If True, also embed a small base64 preview (token-heavy).
+                sample_grid: If >= 2, return an NxN RGBA sample grid instead of an image.
 
             Returns:
                 Text metadata with the saved file path; plus an inline image if inline=True.
+                In sample_grid mode, a dict with cells and channel stats.
             """
             import base64
             import os
             import uuid
+
+            try:
+                sample_grid_value = int(sample_grid or 0)
+            except Exception:
+                sample_grid_value = 0
 
             result = self._execute_in_td('capture_top', {
                 'op_path': op_path,
                 'format': format,
                 'quality': quality,
                 'max_resolution': max_resolution,
+                'sample_grid': sample_grid_value,
             })
 
             if 'error' in result:
+                return result
+
+            if sample_grid_value >= 2:
                 return result
 
             # Decode the base64 image data from the main thread
@@ -1703,6 +1804,278 @@ class EnvoyMCPServer:
                 'operations': operations,
                 'override': override,
             })
+
+    # === get_docs: official TD documentation lookup ===
+    # Design adapted from Derivative's TDMCP get_docs, with permission.
+
+    def _get_docs(self, query, section, source, max_chars) -> dict:
+        try:
+            query = (query or '').strip()
+            if not query:
+                return {'error': 'Provide query'}
+            section = (section or '').strip() or None
+            source = (source or 'auto').strip().lower()
+            if source not in ('auto', 'offline', 'web'):
+                return {'error': 'Invalid source. Use: auto, offline, web'}
+            try:
+                max_chars = int(max_chars)
+            except Exception:
+                max_chars = 20000
+            max_chars = max(1, max_chars)
+
+            cache_key = (query.lower(), section.lower() if section else None,
+                         source, int(max_chars))
+            cache = self._docs_state['cache']
+            if cache_key in cache:
+                return cache[cache_key]
+
+            doc = None
+            offline_reason = None
+            web_reason = None
+
+            if source in ('auto', 'offline'):
+                try:
+                    doc = self._docsOffline(query)
+                    if doc is None:
+                        offline_reason = 'offline mirror missing or no match'
+                except Exception as e:
+                    offline_reason = f'offline lookup failed: {e}'
+                    doc = None
+                if isinstance(doc, dict) and doc.get('matches'):
+                    result = {'source': 'offline', 'matches': doc['matches']}
+                    cache[cache_key] = result
+                    if len(cache) > 20:
+                        cache.pop(next(iter(cache)))
+                    return result
+
+            if doc is None and source in ('auto', 'web'):
+                try:
+                    doc = self._docsWeb(query)
+                    if doc is None:
+                        web_reason = 'web lookup found no match'
+                    elif isinstance(doc, dict) and doc.get('error'):
+                        web_reason = doc['error']
+                        doc = None
+                except Exception as e:
+                    web_reason = f'web lookup failed: {e}'
+                    doc = None
+
+            if doc is None:
+                tried = []
+                if source in ('auto', 'offline'):
+                    tried.append(offline_reason or 'offline mirror missing or no match')
+                if source in ('auto', 'web'):
+                    tried.append(web_reason or 'web lookup found no match')
+                return {'error': 'Documentation lookup failed: ' + '; '.join(tried)}
+
+            sections_available, sections = self._docsSplitSections(doc.get('text') or '')
+            content = doc.get('text') or ''
+            if section:
+                wanted = section.lower()
+                title = None
+                for candidate in sections_available:
+                    if candidate.lower() == wanted:
+                        title = candidate
+                        break
+                if title is None:
+                    for candidate in sections_available:
+                        if candidate.lower().startswith(wanted):
+                            title = candidate
+                            break
+                if title is None:
+                    return {
+                        'error': f'Section not found: {section}',
+                        'sections_available': sections_available,
+                    }
+                content = sections.get(title.lower(), '')
+
+            truncated = len(content) > max_chars
+            if truncated:
+                content = content[:max_chars]
+            result = {
+                'title': doc.get('title'),
+                'source': doc.get('source'),
+                'sections_available': sections_available,
+                'content': content,
+            }
+            if doc.get('url'):
+                result['url'] = doc['url']
+            if truncated:
+                result['truncated'] = True
+            cache[cache_key] = result
+            if len(cache) > 20:
+                cache.pop(next(iter(cache)))
+            return result
+        except Exception as e:
+            return {'error': f'Documentation lookup failed: {e}'}
+
+    def _docsOfflineRoot(self):
+        if self._docs_state['resolved']:
+            return self._docs_state['root']
+        root_path = None
+        result = self._execute_in_td('get_docs_roots', {})
+        if not (isinstance(result, dict) and 'roots' in result
+                and not result.get('error')):
+            return None
+        try:
+            for candidate in result.get('roots', []):
+                if os.path.isdir(candidate):
+                    root_path = candidate
+                    break
+        except Exception:
+            root_path = None
+        self._docs_state['resolved'] = True
+        self._docs_state['root'] = root_path
+        return root_path
+
+    def _docsOffline(self, query):
+        root_path = self._docsOfflineRoot()
+        if root_path is None:
+            return None
+        if self._docs_state['index'] is None:
+            index = {}
+            for filename in os.listdir(root_path):
+                if not filename.lower().endswith(('.htm', '.html')):
+                    continue
+                stem = os.path.splitext(filename)[0]
+                key = self._docsNormalize(stem)
+                if key and key not in index:
+                    index[key] = filename
+            self._docs_state['index'] = index
+
+        index = self._docs_state['index']
+        key = self._docsNormalize(query)
+        if not key:
+            return None
+
+        def read_doc(filename):
+            path = os.path.join(root_path, filename)
+            with open(path, 'r', encoding='utf-8', errors='replace') as f:
+                html_src = f.read()
+            stem = os.path.splitext(filename)[0]
+            return {
+                'title': stem.replace('_', ' '),
+                'source': 'offline',
+                'text': self._docsHtmlToText(html_src),
+            }
+
+        if key in index:
+            return read_doc(index[key])
+
+        candidates = [filename for index_key, filename in index.items()
+                      if key in index_key or index_key in key]
+        if len(candidates) == 1:
+            return read_doc(candidates[0])
+        if 2 <= len(candidates) <= 8:
+            return {
+                'source': 'offline',
+                'matches': [
+                    os.path.splitext(filename)[0].replace('_', ' ')
+                    for filename in candidates
+                ],
+            }
+        return None
+
+    def _docsWeb(self, query):
+        try:
+            headers = {'User-Agent': 'Embody-Envoy-get_docs'}
+            search_params = urllib.parse.urlencode({
+                'action': 'query',
+                'list': 'search',
+                'format': 'json',
+                'srlimit': 5,
+                'srsearch': query,
+            })
+            search_url = 'https://docs.derivative.ca/api.php?' + search_params
+            request = urllib.request.Request(search_url, headers=headers)
+            with urllib.request.urlopen(request, timeout=8) as response:
+                data = json.loads(response.read().decode('utf-8', errors='replace'))
+            results = data.get('query', {}).get('search', [])
+            if not results:
+                return {'error': 'web lookup found no match'}
+            title = results[0].get('title')
+            if not title:
+                return {'error': 'web lookup returned no title'}
+
+            parse_params = urllib.parse.urlencode({
+                'action': 'parse',
+                'format': 'json',
+                'prop': 'text',
+                'page': title,
+            })
+            parse_url = 'https://docs.derivative.ca/api.php?' + parse_params
+            request = urllib.request.Request(parse_url, headers=headers)
+            with urllib.request.urlopen(request, timeout=8) as response:
+                data = json.loads(response.read().decode('utf-8', errors='replace'))
+            html_src = data.get('parse', {}).get('text', {}).get('*')
+            if html_src is None:
+                return {'error': 'web lookup returned no page content'}
+            return {
+                'title': title,
+                'source': 'web',
+                'url': f'https://docs.derivative.ca/{title.replace(" ", "_")}',
+                'text': self._docsHtmlToText(html_src),
+            }
+        except Exception as e:
+            return {'error': f'web lookup failed: {e}'}
+
+    @staticmethod
+    def _docsNormalize(name: str) -> str:
+        return re.sub(r'[^a-z0-9]', '', (name or '').lower())
+
+    @staticmethod
+    def _docsHtmlToText(html_src: str) -> str:
+        text = html_src or ''
+        text = re.sub(r'(?is)<(script|style)[^>]*>.*?</\1>', '', text)
+        text = re.sub(r'(?i)<h([1-4])[^>]*>',
+                      lambda m: '\n' + ('#' * int(m.group(1))) + ' ', text)
+        text = re.sub(r'(?i)</h[1-4]>', '\n', text)
+        text = re.sub(r'(?i)<li[^>]*>', '\n- ', text)
+        text = re.sub(r'(?i)</li>', '\n', text)
+        text = re.sub(
+            r'(?i)</?(p|div|tr|br|table|tbody|thead|tfoot|td|th|ul|ol)[^>]*>',
+            '\n',
+            text,
+        )
+        text = re.sub(r'(?s)<[^>]+>', '', text)
+        text = unescape(text)
+        text = text.replace('\ufeff', '').replace('[edit]', '')
+        text = re.sub(r'[ \t\r\f\v]+', ' ', text)
+        text = re.sub(r' *\n *', '\n', text)
+        # MediaWiki boilerplate, removed AFTER whitespace normalization so the
+        # line anchors see trimmed lines: the nav skeleton renders as bare '-'
+        # / 'Jump to ...' lines, and nested headline spans strand '#' markers
+        # on their own line -- regluing them keeps sections drill-down-able.
+        text = re.sub(r'(?m)^(?:-|Jump to navigation|Jump to search)$\n?', '', text)
+        text = re.sub(r'(?m)^(#{1,6})\n+(?=\S)', r'\1 ', text)
+        # The mirror's page footer (Personal tools / Namespaces / Views / ...)
+        # starts at a '## Personal tools' heading -- nothing after it is page
+        # content, so cut there rather than blocklist each footer heading.
+        cut = re.search(r'(?m)^#{1,6} Personal tools$', text)
+        if cut:
+            text = text[:cut.start()]
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text.strip()
+
+    @staticmethod
+    def _docsSplitSections(text: str):
+        sections_available = []
+        buffers = {'': []}
+        current = ''
+        for line in (text or '').splitlines():
+            match = re.match(r'^(#{1,6})\s+(.+?)\s*$', line)
+            if match:
+                current = match.group(2).strip()
+                # MediaWiki chrome headings still bucket their text away from
+                # real sections, but are not offered for section= drill-down.
+                if current.lower() not in ('contents', 'navigation menu'):
+                    sections_available.append(current)
+                buffers.setdefault(current.lower(), []).append(line)
+            else:
+                buffers.setdefault(current.lower(), []).append(line)
+        sections = {key: '\n'.join(lines).strip()
+                    for key, lines in buffers.items()}
+        return sections_available, sections
 
     def run(self) -> None:
         """Run the MCP server (blocking) with graceful shutdown support"""
@@ -1994,6 +2367,7 @@ class EnvoyExt:
         # against overlapping bootstraps from repeated Start() calls.
         self._bootstrap_result: Optional[tuple] = None
         self._bootstrapping: bool = False
+        self._undo_active: bool = False  # re-entrancy guard: batch sub-ops must not nest undo blocks
 
         # --- Live build visualization (smooth follow of the active op) ---
         # The network editor glides to centre on the op Envoy just touched.
@@ -3452,6 +3826,23 @@ class EnvoyExt:
 
     # === Operation Routing ===
 
+    # Operations whose handlers mutate TD state. Each top-level call is wrapped
+    # in one ui.undo block so the user can Ctrl+Z anything an agent does
+    # (adapted from Derivative's TDMCP, with permission). Read-only ops,
+    # run_tests (deferred across frames -- an undo block must never span
+    # frames), cook_op (cooking is not an undoable edit), and disk-only ops
+    # (export_network, save_externalization) stay unwrapped.
+    _UNDOABLE_OPS = frozenset({
+        'create_op', 'delete_op', 'copy_op', 'rename_op',
+        'set_parameter', 'connect_ops', 'disconnect_op',
+        'execute_python', 'set_dat_content', 'edit_dat_content',
+        'set_op_flags', 'set_op_position', 'layout_children',
+        'exec_op_method', 'externalize_op', 'remove_externalization_tag',
+        'create_extension', 'import_network',
+        'create_annotation', 'set_annotation',
+        'batch_operations',
+    })
+
     def _execute_operation(self, operation: str, params: dict) -> dict:
         """Route operation to appropriate handler"""
         # 'override' belongs to the multi-session gate, not the handlers
@@ -3496,6 +3887,8 @@ class EnvoyExt:
             'get_td_classes': self._get_td_classes,
             'get_td_class_details': self._get_td_class_details,
             'get_module_help': self._get_module_help,
+            # Documentation root discovery for worker-side get_docs
+            'get_docs_roots': self._get_docs_roots,
             # Embody integration
             'externalize_op': self._externalize_op,
             'remove_externalization_tag': self._remove_externalization_tag,
@@ -3538,7 +3931,12 @@ class EnvoyExt:
                         op.Embody.ext.Embody._preRiskyCheckpoint(operation, params)
                     except Exception:
                         pass
-                result = handler(**params)
+                undo_open = self._beginUndoBlock(operation)
+                try:
+                    result = handler(**params)
+                finally:
+                    if undo_open:
+                        self._endUndoBlock()
                 # Record where Envoy is building for the re-center camera.
                 # Routed here (not at the _onRefresh chokepoint) so each sub-op
                 # of a batch_operations call is seen -- batches loop back through
@@ -3550,6 +3948,27 @@ class EnvoyExt:
                 self._log(f'Operation {operation} failed: {e}', 'ERROR')
                 return {'error': str(e)}
         return {'error': f'Unknown operation: {operation}'}
+
+    def _beginUndoBlock(self, operation: str) -> bool:
+        if operation not in self._UNDOABLE_OPS or self._undo_active:
+            return False
+        try:
+            ui.undo.startBlock(f'Envoy {operation}')
+            self._undo_active = True
+            return True
+        except Exception as e:
+            self._log(f'Could not start undo block for {operation}: {e}', 'WARNING')
+            return False
+
+    def _endUndoBlock(self) -> None:
+        self._undo_active = False
+        try:
+            ui.undo.endBlock()
+        except Exception as e:
+            # annotateCOMP creation tears down open undo blocks TD-internally,
+            # making endBlock raise "Cannot end non existent undo operation"
+            # (gotcha documented by TDMCP); never break dispatch for that.
+            self._log(f'Could not end undo block: {e}', 'DEBUG')
 
     # === Live Build Visualization: smooth follow + navigate to the active op ===
     # While Claude builds via MCP, the network editor follows Envoy's work so the
@@ -4918,6 +5337,8 @@ class EnvoyExt:
 
         return self._maybe_offload_to_file(info, 'get_op')
 
+    _SEQ_PAR_RE = re.compile(r'^([A-Za-z]+?)(\d+)([A-Za-z0-9]*)$')
+
     def _set_parameter(self, op_path: str, par_name: str, value=None,
                       mode: str = None, expr: str = None,
                       bind_expr: str = None) -> dict:
@@ -4927,7 +5348,8 @@ class EnvoyExt:
             return {'error': f'Operator not found: {op_path}'}
 
         if not hasattr(target.par, par_name):
-            return {'error': f'Parameter not found: {par_name}'}
+            if not self._growSequenceFor(target, par_name):
+                return {'error': f'Parameter not found: {par_name}'}
 
         try:
             par = getattr(target.par, par_name)
@@ -4942,6 +5364,23 @@ class EnvoyExt:
                 par.mode = ParMode.BIND
             # Set constant value (with type coercion for numeric/toggle pars)
             elif value is not None:
+                # TD silently coerces invalid Menu values to index 0 and reports
+                # success; a lying success is worse than an error (guard adapted
+                # from TDMCP).
+                if (isinstance(value, str) and par.isMenu and par.style == 'Menu'
+                        and value not in par.menuNames):
+                    menu_names = list(par.menuNames)
+                    menu_labels = list(par.menuLabels)
+                    msg = f'Invalid menu value {value!r} for {par_name}.'
+                    if value in menu_labels:
+                        label_index = menu_labels.index(value)
+                        if label_index < len(menu_names):
+                            msg += f' Use menuNames value {menu_names[label_index]!r}.'
+                    return {
+                        'error': msg,
+                        'menuNames': menu_names,
+                        'menuLabels': menu_labels,
+                    }
                 if isinstance(value, str) and par.isNumber:
                     try:
                         value = int(value) if par.isInt else float(value)
@@ -4974,11 +5413,159 @@ class EnvoyExt:
         except Exception as e:
             return {'error': f'Failed to set parameter: {e}'}
 
-    def _get_parameter(self, op_path: str, par_name: str) -> dict:
+    def _growSequenceFor(self, target, par_name: str) -> bool:
+        """Sequence blocks do not exist until numBlocks grows (e.g. const5name
+        on a Constant CHOP with 3 blocks). Auto-grow the sequence so agents can
+        address block N directly (adapted from TDMCP's _ensure_seq_block).
+        Returns True when the parameter exists afterwards."""
+        match = self._SEQ_PAR_RE.match(par_name or '')
+        if not match:
+            return False
+        prefix = match.group(1)
+        idx = int(match.group(2))
+        try:
+            sequences = getattr(target, 'seq', None)
+            seq = getattr(sequences, prefix, None) if sequences is not None else None
+        except Exception:
+            seq = None
+        if seq is None:
+            return False
+        try:
+            if idx >= seq.numBlocks:
+                if idx >= 100:
+                    return False
+                if seq.numBlocks >= 1:
+                    # Validate the block-0 suffix first so typos like
+                    # const5nam do not grow numBlocks before failing.
+                    if not hasattr(target.par, f'{prefix}0{match.group(3)}'):
+                        return False
+                seq.numBlocks = idx + 1
+        except Exception:
+            return False
+        try:
+            return hasattr(target.par, par_name)
+        except Exception:
+            return False
+
+    def _get_parameter(self, op_path: str, par_name: str = None,
+                      search: str = None, search_in: str = 'any',
+                      depth: int = 2, max_results: int = 50) -> dict:
         """Get a parameter value with full details"""
         target = op(op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
+
+        if search is not None:
+            valid_search = ('name', 'value', 'expr', 'any')
+            search_in = (search_in or 'any').lower()
+            if search_in not in valid_search:
+                return {'error': 'Invalid search_in. Use: name, value, expr, any'}
+            try:
+                depth = int(depth)
+            except Exception:
+                depth = 2
+            depth = max(0, depth)
+            try:
+                max_results = int(max_results)
+            except Exception:
+                max_results = 50
+            max_results = min(500, max(1, max_results))
+
+            # Finding absolute-path expressions project-wide is an Embody
+            # code-review rule turned into a query (idea from TDMCP).
+            pattern = str(search).lower()
+            if not any(ch in pattern for ch in '*?['):
+                pattern = f'*{pattern}*'
+
+            ops_to_scan = [target]
+            try:
+                ops_to_scan.extend(target.findChildren(maxDepth=depth))
+            except Exception:
+                pass
+
+            hits = []
+            truncated = False
+            for o in ops_to_scan:
+                try:
+                    pars = o.pars()
+                except Exception:
+                    continue
+                for p in pars:
+                    try:
+                        mode_name = p.mode.name
+                    except Exception:
+                        mode_name = str(getattr(p, 'mode', ''))
+
+                    matched = False
+                    if search_in in ('name', 'any'):
+                        matched = fnmatch.fnmatch(p.name.lower(), pattern)
+
+                    value_text = None
+                    if search_in in ('value', 'any') and not matched:
+                        if search_in == 'any' and mode_name != 'CONSTANT':
+                            pass
+                        else:
+                            try:
+                                value_text = str(p.eval())
+                                matched = fnmatch.fnmatch(value_text.lower(), pattern)
+                            except Exception:
+                                pass
+
+                    if search_in in ('expr', 'any') and not matched:
+                        if mode_name == 'EXPRESSION':
+                            try:
+                                matched = fnmatch.fnmatch(str(p.expr).lower(), pattern)
+                            except Exception:
+                                pass
+                        elif mode_name == 'BIND':
+                            try:
+                                matched = fnmatch.fnmatch(str(p.bindExpr).lower(), pattern)
+                            except Exception:
+                                pass
+
+                    if not matched:
+                        continue
+                    if value_text is None:
+                        try:
+                            value_text = str(p.eval())
+                        except Exception as e:
+                            value_text = f'<eval error: {e}>'
+                    hit = {
+                        'op': o.path,
+                        'par': p.name,
+                        'value': value_text,
+                        'mode': mode_name,
+                    }
+                    if mode_name == 'EXPRESSION':
+                        try:
+                            hit['expr'] = p.expr
+                        except Exception:
+                            pass
+                    elif mode_name == 'BIND':
+                        try:
+                            hit['bindExpr'] = p.bindExpr
+                        except Exception:
+                            pass
+                    hits.append(hit)
+                    if len(hits) >= max_results:
+                        truncated = True
+                        break
+                if truncated:
+                    break
+
+            result = {
+                'root': op_path,
+                'pattern': search,
+                'search_in': search_in,
+                'count': len(hits),
+                'results': hits,
+            }
+            if truncated:
+                result['truncated'] = True
+            return result
+
+        if par_name is None:
+            return {'error': 'Provide par_name, or search for pattern mode'}
 
         if not hasattr(target.par, par_name):
             return {'error': f'Parameter not found: {par_name}'}
@@ -5325,7 +5912,9 @@ class EnvoyExt:
             # the exact path that keeps dropping ops at (0,0); _lintNewOps below
             # turns that into a WARNING on the response.
             try:
-                pre_paths = set(o.path for o in root.findChildren(maxDepth=12))
+                # Matched pair with _rollbackNewOps maxDepth; ops created
+                # deeper than the snapshot depth are invisible to rollback.
+                pre_paths = set(o.path for o in root.findChildren(maxDepth=20))
             except Exception:
                 pre_paths = None
 
@@ -5350,9 +5939,59 @@ class EnvoyExt:
             return {'success': True}
         except Exception as e:
             self._log(f'execute_python failed: {e}', 'ERROR')
-            return {'error': f'Execution failed: {e}'}
+            removed = self._rollbackNewOps(pre_paths)
+            msg = f'Execution failed: {e}'
+            if removed:
+                msg += f' (rolled back {removed} operator(s) the script created before failing)'
+            return {'error': msg}
+
+    def _rollbackNewOps(self, pre_paths) -> int:
+        """A failed execute_python must not leave a half-built network: destroy
+        ops the script created before the exception (documented contract in
+        rules/td-ui.md). Parameter changes to PRE-EXISTING ops are NOT rolled
+        back -- only creations. Best-effort; returns count destroyed."""
+        count = 0
+        if pre_paths is None:
+            return 0
+        try:
+            post = []
+            # Matched pair with _execute_python snapshot maxDepth; ops created
+            # deeper than the snapshot depth are invisible to rollback.
+            for o in root.findChildren(maxDepth=20):
+                try:
+                    if o.valid and o.path not in pre_paths:
+                        post.append(o)
+                except Exception:
+                    pass
+            post.sort(key=lambda o: o.path.count('/'))
+            destroyed_roots = []
+            for o in post:
+                try:
+                    path = o.path
+                    if any(path.startswith(root_path + '/')
+                           for root_path in destroyed_roots):
+                        continue
+                    if not o.valid:
+                        continue
+                    o.destroy()
+                    destroyed_roots.append(path)
+                    count += 1
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return count
 
     # === Introspection & Diagnostics (Main Thread Only) ===
+
+    def _get_docs_roots(self) -> dict:
+        """Candidate offline-help mirror locations (App Class, main thread)."""
+        try:
+            samples = str(app.samplesFolder).replace('\\', '/').rstrip('/')
+            roots = [samples + '/Learn/offlineHelp/https.docs.derivative.ca']
+            return {'roots': roots}
+        except Exception as e:
+            return {'roots': [], 'error': f'Failed to get docs roots: {e}'}
 
     def _get_td_info(self) -> dict:
         """Get TouchDesigner environment and Envoy server info"""
@@ -5798,7 +6437,8 @@ class EnvoyExt:
     # === TOP Capture (Main Thread Only) ===
 
     def _capture_top(self, op_path: str, format: str = 'jpeg',
-                     quality: float = 0.8, max_resolution: int = 640) -> dict:
+                     quality: float = 0.8, max_resolution: int = 640,
+                     inline: bool = False, sample_grid: int = 0) -> dict:
         """Capture a TOP operator's output as a compressed image."""
         import base64
 
@@ -5807,6 +6447,13 @@ class EnvoyExt:
             return {'error': f'Operator not found: {op_path}'}
         if target.family != 'TOP':
             return {'error': f'{op_path} is not a TOP (family: {target.family})'}
+
+        try:
+            sample_grid = int(sample_grid or 0)
+        except Exception:
+            sample_grid = 0
+        if sample_grid >= 2:
+            return self._sample_grid_top(target, sample_grid)
 
         if format not in ('jpeg', 'png'):
             return {'error': f'Unsupported format: {format}. Use "jpeg" or "png".'}
@@ -5878,6 +6525,154 @@ class EnvoyExt:
             }
         except Exception as e:
             return {'error': f'Failed to capture TOP: {e}'}
+
+    def _sample_grid_top(self, target, grid) -> dict:
+        try:
+            import numpy as np
+
+            def _finite(value):
+                try:
+                    value = float(value)
+                    if not math.isfinite(value):
+                        return 0.0
+                    return value
+                except Exception:
+                    return 0.0
+
+            grid = max(2, min(32, int(grid)))
+
+            # Force cook so we get current output, matching the image path.
+            target.cook(force=True)
+
+            try:
+                arr = target.numpyArray()
+            except Exception as e:
+                return {'error': f'sample_grid failed: numpyArray failed: {e}'}
+            if arr is None or arr.size == 0:
+                return {'error': f'sample_grid failed: No pixel data available from {target.path}'}
+
+            # Matches saved-image orientation; TD texture origin is bottom-left,
+            # see td-python.md render-coords table.
+            arr = np.flipud(arr)
+
+            if arr.ndim == 2:
+                arr = arr[:, :, np.newaxis]
+            if arr.ndim != 3:
+                return {'error': f'sample_grid failed: unexpected array shape {arr.shape}'}
+
+            h, w, c = arr.shape
+            if h <= 0 or w <= 0:
+                return {'error': f'sample_grid failed: No pixel data available from {target.path}'}
+
+            effective_grid = max(1, min(grid, h, w))
+
+            try:
+                pixel_format = str(target.pixelFormat)
+            except Exception:
+                pixel_format = ''
+            fmt = pixel_format.lower()
+
+            # A texture with no alpha plane is opaque; padding a=0 falsely
+            # reported opaque textures as transparent (review finding).
+            if c >= 4:
+                channel_map = (0, 1, 2, 3)
+                pad_values = (None, None, None, None)
+            elif c == 3:
+                channel_map = (0, 1, 2, None)
+                pad_values = (None, None, None, 1.0)
+            elif c == 2 and 'monoalpha' in fmt:
+                channel_map = (0, 0, 0, 1)
+                pad_values = (None, None, None, None)
+            elif c == 2:
+                channel_map = (0, 1, None, None)
+                pad_values = (None, None, 0.0, 1.0)
+            elif c == 1:
+                channel_map = (0, 0, 0, None)
+                pad_values = (None, None, None, 1.0)
+            else:
+                return {'error': f'sample_grid failed: unexpected channel count {c}'}
+
+            # Detect non-finite values without a full-frame float64 RGBA copy:
+            # an 8K RGBA copy was ~2GB (review finding).
+            sanitized = False
+            checked_channels = set()
+            for idx in channel_map:
+                if idx is None or idx in checked_channels:
+                    continue
+                checked_channels.add(idx)
+                channel = arr[:, :, idx]
+                try:
+                    raw_min = float(channel.min())
+                    raw_max = float(channel.max())
+                    if not math.isfinite(raw_min) or not math.isfinite(raw_max):
+                        sanitized = True
+                        break
+                except Exception:
+                    sanitized = True
+                    break
+            if sanitized:
+                arr = np.nan_to_num(arr, copy=False, nan=0.0,
+                                    posinf=0.0, neginf=0.0)
+
+            def _channel_stat(idx, pad):
+                if idx is None:
+                    return {
+                        'min': round(float(pad), 4),
+                        'max': round(float(pad), 4),
+                        'mean': round(float(pad), 4),
+                    }
+                channel = arr[:, :, idx]
+                return {
+                    'min': round(_finite(channel.min()), 4),
+                    'max': round(_finite(channel.max()), 4),
+                    'mean': round(_finite(channel.mean()), 4),
+                }
+
+            def _block_mean(block, idx, pad):
+                if idx is None:
+                    return round(float(pad), 4)
+                return round(_finite(block[:, :, idx].mean()), 4)
+
+            stats = {}
+            for out_idx, name in enumerate(('r', 'g', 'b', 'a')):
+                stats[name] = _channel_stat(channel_map[out_idx],
+                                            pad_values[out_idx])
+
+            row_edges = np.linspace(0, h, effective_grid + 1).astype(int)
+            col_edges = np.linspace(0, w, effective_grid + 1).astype(int)
+            rows = []
+            for row_idx in range(effective_grid):
+                y0 = row_edges[row_idx]
+                y1 = row_edges[row_idx + 1]
+                row = []
+                for col_idx in range(effective_grid):
+                    x0 = col_edges[col_idx]
+                    x1 = col_edges[col_idx + 1]
+                    block = arr[y0:y1, x0:x1]
+                    row.append([
+                        _block_mean(block, channel_map[0], pad_values[0]),
+                        _block_mean(block, channel_map[1], pad_values[1]),
+                        _block_mean(block, channel_map[2], pad_values[2]),
+                        _block_mean(block, channel_map[3], pad_values[3]),
+                    ])
+                rows.append(row)
+
+            result = {
+                'op': target.path,
+                'width': w,
+                'height': h,
+                'channels': c,
+                'pixel_format': pixel_format,
+                'grid': effective_grid,
+                'origin': 'top-left',
+                'cells': rows,
+                'stats': stats,
+            }
+            if sanitized:
+                result['nan_or_inf_sanitized'] = True
+            return result
+        except Exception as e:
+            return {'error': f'sample_grid failed: {e}'}
 
     # === Operator Flags Operations (Main Thread Only) ===
 

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 15
-generator: Embody/6.0.80
+build: 16
+generator: Embody/6.0.84
 td_build: 099.2025.32820
-source_file: Embody-6.80.toe
-exported_at: '2026-07-03T17:26:41Z'
+source_file: Embody-6.84.toe
+exported_at: '2026-07-03T22:24:56Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -51,7 +51,7 @@ operators:
   parameters:
     file: embody/Embody/templates/text_tdn_textconv.py
     language: python
-  position: [900, -600]
+  position: [0, -1000]
   tags:
   - py
 - name: text_rule_td_python
@@ -108,6 +108,14 @@ operators:
     file: embody/Embody/templates/text_rule_multi_session.md
     extension: md
   position: [2700, 400]
+  tags:
+  - md
+- name: text_skill_pop_networks
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_skill_pop_networks.md
+    extension: md
+  position: [2400, -400]
   tags:
   - md
 - name: text_rule_github_release
@@ -221,7 +229,7 @@ annotations:
   title: Rule Templates
   text: Auto-deployed rules for user projects
   position: [-70, 330]
-  size: [1770, 330]
+  size: [3069, 330]
   color: [0.45, 0.45, 0.45]
   opacity: 0.5
 - name: annotate3
@@ -229,6 +237,6 @@ annotations:
   title: Skill Templates
   text: Auto-deployed skills for Claude Code
   position: [-70, -470]
-  size: [2070, 330]
+  size: [3063, 330]
   color: [0.45, 0.45, 0.45]
   opacity: 0.5

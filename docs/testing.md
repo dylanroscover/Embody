@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **85 test suites** and **1,906 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **87 test suites** and **1,940 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -25,7 +25,7 @@ op.unit_tests.RunTestsDeferred()
 # Get results
 results = op.unit_tests.GetResults()
 # Example after a full successful run:
-# {'total': 1906, 'passed': 1906, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
+# {'total': 1940, 'passed': 1940, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
 ```
 
 ### Via MCP
@@ -74,10 +74,11 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_embody_mode_guard` | 5 | Mode guard behavior around Embody operations |
 | `test_settings_persistence` | 3 | Settings serialization (byte-stable, sorted keys) |
 
-### MCP Tools (15 suites, 195 tests)
+### MCP Tools (16 suites, 224 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
+| `test_envoy_tool_guards` | 29 | Envoy tool safety guards (undo blocks, parameter guards/search, rollback, docs, sample grid) |
 | `test_mcp_externalization` | 22 | Embody integration via MCP (tag, save, status) |
 | `test_mcp_operators` | 20 | Create, delete, copy, rename, query, find |
 | `test_mcp_annotations` | 21 | Creating and managing annotations |
@@ -143,7 +144,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_envoy_registry` | 17 | Instance registry and PID liveness |
 | `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |
 
-### Install, Uninstall & Release (6 suites, 82 tests)
+### Install, Uninstall & Release (7 suites, 87 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -153,6 +154,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_uninstall_preview` | 10 | Uninstall preview plan and protected-file handling |
 | `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
 | `test_catalog_palette_scan` | 6 | Palette scan time-state snapshot/restore |
+| `test_template_sync` | 5 | Template map, disk, release-table, and orphan allowlist sync |
 
 ## Execution Modes
 

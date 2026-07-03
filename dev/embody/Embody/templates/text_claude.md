@@ -30,6 +30,7 @@ This is a TouchDesigner project using **Embody** for version-controlled external
     - Before fetching data over HTTP, or building any background / long-running / blocking task: load `/td-api-reference` (use a Web Client DAT, not hand-rolled threading)
     - When diagnosing operator errors: load `/debug-operator`
     - Before building or refining any visual or rendered output (generative art, VJ visuals, shaders, scenes, renders, projections, anything shown on screen): load `/visual-aesthetics`
+    - Before creating or editing POP operators, particle systems, GPU point/geometry work, or glslPOP compute: load `/pop-networks`
     - Before first MCP call in a new session: load `/mcp-tools-reference`
 
 ## Approach Guidelines

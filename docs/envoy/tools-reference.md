@@ -1,6 +1,8 @@
 # Tools Reference
 
-Envoy exposes 52 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 53 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+
+Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
 ## Operator Management
 
@@ -20,8 +22,18 @@ Envoy exposes 52 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`) |
-| `get_parameter` | `op_path`, `par_name` | Get parameter value, mode, expression, bind info, export source, label, range, menu entries, and default |
+| `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`). Invalid Menu values are rejected with valid `menuNames`; sequence-block names auto-grow their sequence (`const5name` grows `numBlocks` to 6) |
+| `get_parameter` | `op_path`, `par_name?`, `search?`, `search_in?`, `depth?`, `max_results?` | Get one parameter, or search parameters by glob/substring across a subtree. Search fields: `name`, `value`, `expr`, or `any` |
+
+Search mode omits `par_name` and passes `search`. It scans the target operator and children to `depth` (default 2) using fnmatch glob semantics; patterns without `*?[` become contains searches. Results are `{root, pattern, search_in, count, results, truncated?}`, where each hit includes `op`, `par`, `value`, `mode`, and `expr` or `bindExpr` when present.
+
+`search_in='value'` evaluates every parameter it scans (expressions included), so expression side effects and cooking cost are on the caller; `search_in='any'` only evaluates constant-mode values and matches expression/bind parameters by text.
+
+**Example** -- find expressions under `/project1` that reference absolute paths in that subtree:
+
+```json
+{"op_path": "/project1", "search": "*/project1/*", "search_in": "expr", "depth": 10, "max_results": 100}
+```
 
 ## DAT Content
 
@@ -87,6 +99,7 @@ Envoy exposes 52 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 | `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |
 | `get_module_help` | `module_name` | Get Python help text for a module (supports dotted names like `td.tdu`) |
+| `get_docs` | `query`, `section?`, `source?`, `max_chars?` | Look up official TouchDesigner docs. `source` is `auto` (offline then web), `offline`, or `web`; normal responses carry `title`, `source`, `sections_available`, `content`, and optional `url`/`truncated`; ambiguous offline lookups return `source` + `matches` only |
 
 ## Embody Integration
 
@@ -111,7 +124,7 @@ Envoy exposes 52 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?` | Capture a TOP's output as an image. Saves to a temp file and returns the path — Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP's output as an image. Saves to a temp file and returns the path -- Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. Pass `sample_grid>=2` to return a downsampled NxN RGBA grid instead of an image: row 0 is the top of the image, stats are computed over the full-resolution texture, the requested grid clamps to 2..32, the returned `grid` is further capped to the TOP's width/height and can drop below 2 on tiny textures, and image params are ignored. Channel padding: RG -> b=0/a=1, mono -> replicated/a=1, monoalpha -> replicated + real alpha; `channels` reports the raw plane count. |
 
 ## Multi-Session Awareness
 
