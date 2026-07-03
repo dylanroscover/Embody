@@ -50,6 +50,7 @@ To create an annotation that encloses a group of operators:
 ## `annotateCOMP` Quirks
 
 - `utility` property: `True` from TD UI, `False` from code. Set `ann.utility = True` to match TD behavior.
+- **`utility=True` hides the op from `op()`, `parent.op()`, AND `.children`** -- only `findChildren(includeUtility=True)` sees it. Any code resolving an annotation by path must use that fallback (Envoy's `set_annotation`/`get_enclosed_ops` do this internally). A probe that iterates `.children` will falsely report annotations as missing.
 - `.type` returns `'annotate'` (not `'annotateCOMP'`)
 - `findChildren(type=annotateCOMP)` requires the class object, not the string
 - Cannot be reliably renamed after creation

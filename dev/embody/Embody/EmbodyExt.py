@@ -74,7 +74,7 @@ class EmbodyExt:
         # Behavior
         'Logfolder', 'Logtofile', 'Verbose', 'Print',
         'Detectduplicatepaths', 'Templatemaster', 'Localtimestamps',
-        'Embodymode',
+        'Embodymode', 'Autoexternalize',
         # TDN
         'Tdnmode',
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
@@ -960,9 +960,12 @@ class EmbodyExt:
 
         The single backend entry point the wizard's finish() calls. Because the
         wizard already obtained consent (the footprint step discloses everything
-        Embody adds; the summary step confirms), the enable path here is
-        modal-free in BOTH modes -- Embodymode governs only LATER invasive
-        actions via _guard(), not this one-time consented setup.
+        Embody adds; the summary step confirms), the enable path is modal-free:
+        _enableEnvoyResolved sets _consent_bulk so the config writes -- both the
+        synchronous ones here AND the git/MCP writes in the deferred Start() --
+        apply silently without re-prompting, in either mode. Embodymode still
+        governs LATER, un-disclosed invasive actions (InitGit/InitEnvoy, a
+        startup repair) via _guardFileWrite.
 
           mode:        'auto' | 'advanced'
           assistant:   'claudecode' | 'other' | 'none'
@@ -1053,20 +1056,29 @@ class EmbodyExt:
             self.my.ext.Envoy.Stop()
             self.my.par.Envoystatus = 'Starting...'
             run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=10)
-            self.Log(f'Envoy setup updated for {self.my.par.Aiclient.label}.',
+            self.Log(f'Envoy setup updated for {self._aiClientLabel()}.',
                      'SUCCESS')
             return
 
-        # First enable.
+        # First enable. The wizard's footprint step disclosed + the user
+        # confirmed the whole set, so consent the initial writes as a batch: set
+        # _consent_bulk so this sync _extractAIConfig AND the git/MCP writes in
+        # the DEFERRED Start() apply silently (no double-prompt; the enable stays
+        # atomic -- config can't be declined while Envoyenable flips True).
+        # _continueStart clears the flag once its writes finish; a bounded timer
+        # is the backstop so it can never stick (which would silence all guards).
         self.Log('Setting up Envoy...', 'INFO')
+        self._consent_bulk = True
+        run(f"op('{self.my}').ext.Embody._consent_bulk = False", delayFrames=7200)
         # AI config now (fast, no venv needed). The heavy venv build + pip
         # install runs asynchronously inside Start() (_beginAsyncBootstrap).
         self._extractAIConfig()
-        # Flip Envoyenable -> parexec kicks Envoy.Start() (async bootstrap).
+        # Flip Envoyenable -> parexec kicks Envoy.Start() (async bootstrap); its
+        # git/MCP writes run under the still-set _consent_bulk.
         self.my.par.Envoyenable = True
         self.my.par.Envoystatus = 'Starting...'
         self.Log(
-            f'Envoy enabled! Config generated for {self.my.par.Aiclient.label}. '
+            f'Envoy enabled! Config generated for {self._aiClientLabel()}. '
             f'Dependencies install in the background; MCP connects when ready.',
             'SUCCESS'
         )
@@ -1462,6 +1474,60 @@ class EmbodyExt:
             return True
         return False
 
+    # _consent_bulk: set by an orchestrator (InitGit / InitEnvoy) or the setup
+    # wizard once it has shown ONE combined confirm for a whole category, so the
+    # individual _guardFileWrite sub-calls it makes apply silently instead of
+    # each popping its own dialog. This keeps Advanced mode's per-category prompt
+    # from fragmenting into one-dialog-per-file. Set/cleared in a try/finally (or,
+    # for the wizard's async span, cleared in _continueStart + a bounded timer)
+    # so it can never stay stuck (which would silence all guards).
+    _consent_bulk = False
+    # _startup_config_pass: set by _continueStart / _upgradeEnvoy around the
+    # auto-config writes that run on project OPEN. In Advanced mode a modal must
+    # NOT pop there (it would block the frame-30..80 restore chain), so guards
+    # DEFER with a breadcrumb instead of prompting.
+    _startup_config_pass = False
+
+    def _guardFileWrite(self, category, action, details, apply_fn, mode=None):
+        """Gate an invasive write to the USER'S repo, showing EXACTLY which
+        files/entries change so Advanced mode never surprises them.
+
+        Call ONLY when a real change is pending (after the idempotency check),
+        so a no-op never prompts. Behavior:
+          consented batch (_consent_bulk) -> apply_fn() silently.
+          auto                            -> apply_fn() silently.
+          advanced + startup Start        -> DEFER + breadcrumb (never a modal on
+                                             open; never a silent write).
+          advanced + interactive          -> Apply/Skip listing `details`.
+          advanced + save/test            -> DECLINE via _guard (_messageBox -1).
+
+        category: short noun for the dialog title (e.g. 'Git config').
+        action:   verb phrase naming the effect + location ('update .gitignore
+                  at /repo').
+        details:  list of strings shown as bullets -- the exact file paths, or
+                  the exact lines/entries being written.
+        Returns True if applied."""
+        if self._consent_bulk:
+            apply_fn()
+            return True
+        mode = mode if mode is not None else self._embodyMode()
+        if mode != 'advanced':
+            apply_fn()
+            return True
+        if self._startup_config_pass:
+            # Startup Start on open: never block, never write silently -- defer
+            # with an actionable breadcrumb (only reached when a real change is
+            # pending, so clean opens stay quiet).
+            self.Log(f'Advanced mode: deferred a repo change on open ({action}). '
+                     f'Nothing was written -- run op.Embody.InitEnvoy() / '
+                     f'InitGit(), or set Embodymode to Auto, to apply it.', 'INFO')
+            return False
+        bullets = '\n'.join(f'  - {d}' for d in details) if details else ''
+        msg = (f'Embody will {action}:\n\n{bullets}\n\nApply this change?'
+               if bullets else
+               f'Embody will {action}.\n\nApply this change?')
+        return self._guard(f'Embody - {category}', msg, apply_fn, mode='advanced')
+
     # === Uninstall / Deinit ==================================================
     # A reversible teardown of Embody's project footprint. This is the
     # NON-DESTRUCTIVE planner: _computeUninstallPlan reads the install manifest
@@ -1845,26 +1911,46 @@ class EmbodyExt:
         self.Log(f'Uninstall complete: {summary}', 'SUCCESS')
         return summary
 
+    # AI-client tokens -> the config files _extractAIConfig writes for them (on
+    # top of AGENTS.md, which is always written). Used to list the exact files
+    # in the Advanced-mode confirm.
+    _AI_CONFIG_FILES = {
+        'claudecode': ['CLAUDE.md (or ENVOY.md)', '.claude/rules/', '.claude/skills/'],
+        'cursor':     ['.cursor/rules/'],
+        'copilot':    ['.github/copilot-instructions.md'],
+        'windsurf':   ['.windsurf/rules/'],
+        'gemini':     ['GEMINI.md'],
+    }
+
     def _extractAIConfig(self):
         """Extract AI coding assistant config files based on par.Aiclient."""
         target_dir = self._findProjectRoot()
         client = self.my.par.Aiclient.eval()
 
-        # Always: AGENTS.md (universal standard, read by all major AI tools)
-        self._writeAgentsMd(target_dir)
+        def _write():
+            # Always: AGENTS.md (universal standard, read by all major AI tools)
+            self._writeAgentsMd(target_dir)
+            if client == 'claudecode':
+                self._writeClaudeCodeConfig(target_dir)
+            elif client == 'cursor':
+                self._writeCursorRules(target_dir)
+            elif client == 'copilot':
+                self._writeCopilotInstructions(target_dir)
+            elif client == 'windsurf':
+                self._writeWindsurfRules(target_dir)
+            elif client == 'gemini':
+                self._writeGeminiConfig(target_dir)
+            # 'codex', 'vscode', 'none': AGENTS.md only (Codex reads AGENTS.md;
+            # VS Code has no native rules file -- Copilot config is its own token).
 
-        if client == 'claudecode':
-            self._writeClaudeCodeConfig(target_dir)
-        elif client == 'cursor':
-            self._writeCursorRules(target_dir)
-        elif client == 'copilot':
-            self._writeCopilotInstructions(target_dir)
-        elif client == 'windsurf':
-            self._writeWindsurfRules(target_dir)
-        elif client == 'gemini':
-            self._writeGeminiConfig(target_dir)
-        # 'codex', 'vscode', 'none': AGENTS.md only (Codex reads AGENTS.md;
-        # VS Code has no native rules file -- Copilot config is its own token).
+        # Advanced mode: confirm before (re)writing AI assistant config files.
+        details = [f'{target_dir}/AGENTS.md'] + [
+            f'{target_dir}/{f}' for f in self._AI_CONFIG_FILES.get(client, [])]
+        self._guardFileWrite(
+            'AI config',
+            f'write AI assistant config for {self._aiClientLabel()} in '
+            f'{target_dir}',
+            details, _write)
 
     def _writeAgentsMd(self, target_dir):
         """Write AGENTS.md -- universal AI instructions read by all major AI tools."""
@@ -2274,14 +2360,24 @@ class EmbodyExt:
         return True
 
     def _upgradeEnvoy(self):
-        """Silently extract AI config if Envoy is enabled but files are missing."""
+        """Restore AI config on open if Envoy is enabled but files are missing.
+
+        Auto restores silently (the managed default). Advanced defers with a
+        breadcrumb: _extractAIConfig runs under _startup_config_pass so its guard
+        DEFERS instead of popping a modal that would block the restore chain."""
         if not self.my.par.Envoyenable.eval():
             return
         target_dir = self._findProjectRoot()
         client = self.my.par.Aiclient.eval()
         agents_md_missing = not (target_dir / 'AGENTS.md').exists()
-        if agents_md_missing or self._clientFilesMissing(target_dir, client):
+        if not (agents_md_missing or self._clientFilesMissing(target_dir, client)):
+            return
+        prior = self._startup_config_pass
+        self._startup_config_pass = True
+        try:
             self._extractAIConfig()
+        finally:
+            self._startup_config_pass = prior
 
     def _clientFilesMissing(self, target_dir, client):
         """Return True if the primary config files for the selected client are absent."""
@@ -2296,6 +2392,15 @@ class EmbodyExt:
             'none':       lambda d: False,
         }
         return checks.get(client, lambda d: False)(target_dir)
+
+    def _aiClientLabel(self):
+        """Human label of the SELECTED Aiclient option (e.g. 'Claude Code') --
+        NOT the parameter's own label ('AI Client')."""
+        p = self.my.par.Aiclient
+        try:
+            return p.menuLabels[p.menuIndex]
+        except Exception:
+            return p.eval()
 
     def InitEnvoy(self) -> None:
         """(Re)generate all Envoy and AI client config files.
@@ -2328,15 +2433,29 @@ class EmbodyExt:
         else:
             port = self.my.par.Envoyport.eval()
 
-        envoy._configureMCPClient(port, target_dir=target_dir)
+        # ONE combined Advanced-mode confirm for the whole config regen (MCP +
+        # AI); the sub-calls apply silently under _consent_bulk so this never
+        # fragments into a dialog per file.
+        client_label = self._aiClientLabel()
 
-        # AI client config (CLAUDE.md, AGENTS.md, rules, skills, etc.)
-        self._extractAIConfig()
+        def _apply():
+            prior = self._consent_bulk
+            self._consent_bulk = True
+            try:
+                envoy._configureMCPClient(port, target_dir=target_dir)
+                self._extractAIConfig()  # AI client config
+            finally:
+                self._consent_bulk = prior
+            self.Log(
+                f'Envoy config regenerated for {client_label} at {target_dir}',
+                'SUCCESS')
 
-        client_label = self.my.par.Aiclient.label
-        self.Log(
-            f'Envoy config regenerated for {client_label} at {target_dir}',
-            'SUCCESS')
+        self._guardFileWrite(
+            'AI & MCP config',
+            f'(re)write MCP + AI client config for {client_label} in {target_dir}',
+            [f'{target_dir}/.mcp.json', f'{target_dir}/AGENTS.md',
+             f'{target_dir}/ (rules/instructions for {client_label})'],
+            _apply)
 
     def InitGit(self) -> None:
         """Initialize or reconnect to a git repository, then generate
@@ -2368,12 +2487,24 @@ class EmbodyExt:
         # Store git root so Envoy can find it later (e.g. for deregistration)
         self.my.store('_git_root', git_root)
 
-        # Git-specific config
-        envoy._configureGitignore(git_root)
-        envoy._configureGitattributes(git_root)
-        self.Log(f'Git config generated at {git_root}', 'SUCCESS')
+        # Git-specific config -- ONE combined Advanced-mode confirm (sub-calls
+        # apply silently under _consent_bulk so this doesn't fragment per file).
+        def _apply():
+            prior = self._consent_bulk
+            self._consent_bulk = True
+            try:
+                envoy._configureGitignore(git_root)
+                envoy._configureGitattributes(git_root)
+            finally:
+                self._consent_bulk = prior
+            self.Log(f'Git config generated at {git_root}', 'SUCCESS')
 
-        # Regenerate MCP + AI config so paths point to git root
+        self._guardFileWrite(
+            'Git config', f'update git config in {git_root}',
+            [f'{git_root}/.gitignore', f'{git_root}/.gitattributes'],
+            _apply)
+
+        # Regenerate MCP + AI config so paths point to git root (own confirm)
         self.InitEnvoy()
 
     # ==========================================================================
@@ -6974,6 +7105,205 @@ class EmbodyExt:
                 self._handleTDNAddition(oper)
 
         return True
+
+    # ==========================================================================
+    # AUTO-EXTERNALIZATION (Envoy-created ops)
+    # ==========================================================================
+
+    def AutoExternalizeNewOp(self, oper: OP) -> Optional[str]:
+        """Auto-tag a newly Envoy-created op for externalization, per the
+        'Autoexternalize' preference on the Envoy page.
+
+        Called by Envoy's create_op (the single creation chokepoint) right
+        after a successful create. This is deliberately the ONLY trigger: the
+        LLM is never asked to "remember to externalize" -- tagging rides along
+        on the create it already performs, so an unreliable model cannot skip a
+        step it never takes.
+
+        Strictly ADDITIVE and boundary-scoped. It only ever ADDS a tag (never
+        deletes a file or un-tags), and it tags a COMP/DAT only when that op is
+        its own externalization unit:
+
+          - the preference gates the family (Neither / DATs / COMPs / both)
+          - COMP -> TDN tag (the diffable strategy); DAT -> inferred source tag
+          - skip non-processable ops (clone/replicant/local/engine/time/annotate)
+          - skip Embody's own subtree (managed specially, never externalized here)
+          - skip palette/vendor clones and anything inside one
+          - skip if ANY ancestor COMP is already externalized -- that ancestor's
+            .tdn/.tox already captures this op (outermost boundary wins), which
+            also keeps us clear of the TDN parent/child collision
+
+        The write is handled by the existing reconciler: applying the TDN tag
+        exports the .tdn synchronously (_handleTDNAddition); a loose DAT's file
+        is written by a single coalesced, settle-debounced Update() so a batch
+        of creates costs one sweep, not one per op. Returns the applied tag
+        string, or None if the op was skipped. Never raises -- a failure here
+        must never break op creation.
+        """
+        try:
+            tag = self._autoExternalizeTagFor(oper)
+            if not tag:
+                return None
+            self.applyTagToOperator(oper, tag)
+            # COMPs export synchronously inside _handleTDNAddition. A loose DAT's
+            # file is written by the addition sweep -- coalesce that into one
+            # settle-debounced Update() so a batch of DAT creates costs one sweep.
+            if oper.family == 'DAT':
+                self._scheduleAutoExternalizeFlush()
+            self.Log(f"Auto-externalized {oper.family} '{oper.path}' ({tag})", "INFO")
+            return tag
+        except Exception as e:
+            self.Log(f"AutoExternalizeNewOp failed for "
+                     f"{getattr(oper, 'path', '?')}: {e}", "WARNING")
+            return None
+
+    def _autoExternalizeTagFor(self, oper: OP) -> Optional[str]:
+        """Pure decision behind AutoExternalizeNewOp: the tag that WOULD be
+        applied to a newly-created `oper` under the current 'Autoexternalize'
+        preference, or None if the op should be skipped. No side effects -- the
+        whole boundary matrix is unit-testable without any file I/O.
+
+        Skips (return None): preference off / family not selected; a
+        non-externalizable family; a non-processable op; Embody's own subtree; a
+        palette/vendor clone (the op or any ancestor); an op with any already-
+        externalized ancestor COMP (that ancestor's .tdn/.tox already captures
+        it); or an op that already carries the tag (idempotent).
+        """
+        if oper is None or not oper.valid:
+            return None
+
+        mode = self.my.par.Autoexternalize.eval()
+        dats_on = mode in ('dats', 'both')
+        comps_on = mode in ('comps', 'both')
+
+        # Family gate -- only COMPs and DATs are externalizable at all.
+        if oper.family == 'COMP':
+            if not comps_on:
+                return None
+        elif oper.family == 'DAT':
+            if not dats_on:
+                return None
+        else:
+            return None
+
+        # Never externalize non-processable ops or Embody's own subtree.
+        if not self.isOpProcessable(oper):
+            return None
+        embody_root = self.my.path
+        if oper.path == embody_root or oper.path.startswith(embody_root + '/'):
+            return None
+
+        # Skip palette/vendor clones -- the op itself or any COMP ancestor
+        # (a clone's internals are regenerable palette boilerplate).
+        node = oper if oper.family == 'COMP' else oper.parent()
+        while node is not None and node.path != '/':
+            if node.family == 'COMP' and self.my.ext.TDN._isPaletteClone(node):
+                return None
+            node = node.parent()
+
+        # Boundary: if any ancestor COMP is already externalized, this op is
+        # already captured by that ancestor's .tdn/.tox -- don't double-manage
+        # (and don't collide with the TDN parent/child model).
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+        ancestor = oper.parent()
+        while ancestor is not None and ancestor.path != '/':
+            if (tox_tag in ancestor.tags or tdn_tag in ancestor.tags
+                    or self._findExternalizedComp(ancestor.path)):
+                return None
+            ancestor = ancestor.parent()
+
+        # COMP -> TDN (diffable); DAT -> inferred source type.
+        tag = tdn_tag if oper.family == 'COMP' else self._inferDATTagValue(oper)
+
+        # Idempotent: already carries this tag -> nothing to do.
+        if tag in oper.tags:
+            return None
+        return tag
+
+    def _scheduleAutoExternalizeFlush(self) -> None:
+        """Coalesce loose-DAT externalization into one settle-debounced Update().
+        Multiple auto-tagged DATs in a batch collapse to a single sweep."""
+        if getattr(self, '_auto_ext_flush_pending', False):
+            return
+        self._auto_ext_flush_pending = True
+        run(f"op('{self.my}').ext.Embody._autoExternalizeFlush()",
+            delayFrames=8, fromOP=self.my)
+
+    def _autoExternalizeFlush(self) -> None:
+        """Deferred reconcile that writes newly auto-tagged DAT files. Re-arms
+        itself while a save is mid-flight (mutating the table then is fatal)."""
+        self._auto_ext_flush_pending = False
+        if self._performMode:
+            return
+        if self.my.fetch('_suppress_dialogs', False, search=False):
+            self._scheduleAutoExternalizeFlush()  # save window -- wait it out
+            return
+        self.Update()
+
+    def AutoExternalizeCopiedOp(self, oper: OP) -> Optional[str]:
+        """Auto-externalize a COPIED op (copy_op), per the Autoexternalize
+        preference. A copy made with COMP.copy() inherits the SOURCE's
+        externalization tags -- and a copied DAT inherits its `file` par pointing
+        at the SOURCE's file. That stale state must be cleared first, otherwise
+        the copy looks 'already tagged' (so it is skipped) yet is untracked with
+        no file of its own, and a copied DAT would share/overwrite the source's
+        .py via syncfile. So: gate on preference+family, clear the copy's
+        inherited externalization state (recursively for a COMP, so its TDN
+        export is fully self-contained and references none of the source's
+        files), then defer to the normal fresh-op path. Never raises."""
+        try:
+            if oper is None or not oper.valid:
+                return None
+            mode = self.my.par.Autoexternalize.eval()
+            if oper.family == 'COMP' and mode not in ('comps', 'both'):
+                return None
+            if oper.family == 'DAT' and mode not in ('dats', 'both'):
+                return None
+            if oper.family not in ('COMP', 'DAT'):
+                return None
+            self._resetInheritedExternalization(oper)
+            return self.AutoExternalizeNewOp(oper)
+        except Exception as e:
+            self.Log(f"AutoExternalizeCopiedOp failed for "
+                     f"{getattr(oper, 'path', '?')}: {e}", "WARNING")
+            return None
+
+    def _resetInheritedExternalization(self, oper: OP) -> None:
+        """Clear externalization tags + file references a COPY inherited from its
+        source, so it externalizes fresh at its OWN path and never points at the
+        source's files. Recurses through a copied COMP's descendants so a TDN
+        export captures live content only (no stale source-file references)."""
+        tox = self.my.par.Toxtag.val
+        tdn = self.my.par.Tdntag.val
+        dat_tag_set = set(self.getTags('DAT'))
+
+        def clear(o):
+            try:
+                if o.family == 'COMP':
+                    for t in (tox, tdn):
+                        if t in o.tags:
+                            o.tags.remove(t)
+                    p = getattr(o.par, 'externaltox', None)
+                    if p is not None and p.eval():
+                        p.val = ''
+                elif o.family == 'DAT':
+                    for t in list(o.tags):
+                        if t in dat_tag_set:
+                            o.tags.remove(t)
+                    fp = getattr(o.par, 'file', None)
+                    if fp is not None:
+                        fp.readOnly = False
+                        if fp.eval():
+                            fp.val = ''
+            except Exception:
+                pass
+
+        clear(oper)
+        if oper.family == 'COMP':
+            for child in oper.findChildren(maxDepth=100):
+                if child.family in ('COMP', 'DAT'):
+                    clear(child)
 
     def TagExiter(self) -> None:
         """Close tagging menu and reset mode."""

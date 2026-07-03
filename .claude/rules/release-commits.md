@@ -55,6 +55,7 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `rules/mcp-safety.md` | `templates/text_rule_mcp_safety.md` |
 | `rules/network-layout.md` | `templates/text_rule_network_layout.md` |
 | `rules/td-connectivity.md` | `templates/text_rule_td_connectivity.md` |
+| `rules/performance.md` | `templates/text_rule_performance.md` |
 | `skills/td-api-reference/SKILL.md` | `templates/text_skill_td_api_reference.md` |
 | `skills/create-operator/SKILL.md` | `templates/text_skill_create_operator.md` |
 | `skills/debug-operator/SKILL.md` | `templates/text_skill_debug_operator.md` |
@@ -62,8 +63,11 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `skills/create-extension/SKILL.md` | `templates/text_skill_create_extension.md` |
 | `skills/manage-annotations/SKILL.md` | `templates/text_skill_manage_annotations.md` |
 | `skills/mcp-tools-reference/SKILL.md` | `templates/text_skill_mcp_tools_reference.md` |
+| `skills/visual-aesthetics/SKILL.md` | `templates/text_skill_visual_aesthetics.md` |
 
-Templates have a BOM (`﻿`) and an Embody/Envoy generated-by HTML comment but otherwise must match their `.claude/` counterpart in content. Diff them and fix any drift.
+This table is the source of truth for what ships; keep it in sync with `_TEMPLATE_MAP_RULES` / `_TEMPLATE_MAP_SKILLS` in `EmbodyExt.py` (the actual shipping map). Template files that exist on disk but are NOT in that map (e.g. `text_rule_commit_push_checklist.md`, `text_rule_github_release.md`, `text_rule_refresh_after_commit.py`) are orphans -- do not add them here.
+
+Most templates carry a BOM and an Embody/Envoy generated-by HTML comment; a few (e.g. `text_rule_performance.md`) have no BOM. Templates are CRLF (LF in `.claude/`). Otherwise each must match its `.claude/` counterpart in content -- diff them (normalizing BOM + line endings) and fix any drift.
 
 Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/github-release.md`, `.claude/rules/release-commits.md`, `.claude/rules/skill-prerequisites.md`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
 

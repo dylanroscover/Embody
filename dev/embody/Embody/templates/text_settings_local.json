@@ -31,6 +31,7 @@
       "mcp__envoy__get_op_performance",
       "mcp__envoy__get_op_position",
       "mcp__envoy__get_parameter",
+      "mcp__envoy__get_sessions",
       "mcp__envoy__get_td_class_details",
       "mcp__envoy__get_td_classes",
       "mcp__envoy__get_td_info",

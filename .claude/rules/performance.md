@@ -111,8 +111,32 @@ For a frame-accurate offline render (e.g. an exact-loop sequence driven by a uni
 - For each frame `i` in `0..N-1`: set that frame's state (uniforms/params), **force-cook the source TOP and confirm it actually cooked** (`cookedThisFrame` True / `totalCooks` incremented, no cook error or GLSL fallback image), then `mfo.par.addframe.pulse()` -- Add Frame writes exactly one frame per pulse (Pause must be On to enable it).
 - **Step across real frames with `run('...', delayFrames=1)`** -- a blocking Python `for` loop CANNOT advance TD frames, so the Movie File Out never writes. The driver self-schedules one step per frame and routes every exit through `_finish(prior)`.
 - `TOP.save(path)` per frame also works but is ~seconds/frame (synchronous GPU readback + encode) -- too slow for long sequences; prefer the Movie File Out's threaded encoder.
+- **This force-cook-then-`addframe` ordering is same-pass-safe ONLY for a GENERATIVE source** (uniforms/params drive the pixels, so a forced cook produces the new frame in the same pass). If the source is a FILE READER (Movie File In / image sequence), its reload is asynchronous and this ordering captures STALE content -- use the pipelined-preload pattern in "Async file readers serve stale content" below instead.
 
 `performLongOperation` is NOT a documented Project/UI method -- do not rely on it. Use `project.realTime = False` + `run(delayFrames=...)` chunking.
+
+### Async file readers serve stale content -- the batch-encode trap
+
+Batch-encoding a set of file sequences (PNG sequence, `.mov`, image sequence) through one Movie File Out is the deterministic path above, but the SOURCE is now a file reader whose content updates ASYNCHRONOUSLY. It can hand the encoder the wrong pixels with no error, no warning, correct resolution -- silent corruption that every container check passes and only a human eye (or an out-of-process decode) catches. There are TWO stale-content layers, and the second defeats the "obvious" fix for the first:
+
+- **Layer 1 -- a reload completes only across real frame advances.** Setting a [Movie File In](https://docs.derivative.ca/Movie_File_In_TOP) `par.file` + `reloadpulse.pulse()` then `cook(force=True)` in the SAME frame does not reliably apply the reload -- the op serves its previous cached texture. Pull-based cooking makes it worse: an undemanded reader never cooks at all, so scheduling the first `addframe` a few frames later via `run(delayFrames=N)` does NOT help unless something actually cooks the reader during those frames. Symptom: frame 0 of every output after the first holds the PRIOR scene's last frame.
+- **Layer 2 -- a mid-pass reload does not propagate downstream in the same cook pass.** Even after a preroll settles the reader, when the pending reload is applied DURING a forced-cook pass, ops downstream (blur -> GLSL -> cross -> upscaler -> null -> writer) can still consume the PRE-reload texture -- *even with the whole chain force-cooked in dependency order*. The reader's own `numpyArray()` shows the new content (so a reader-side uniqueness guard PASSES) while the writer captures the old frame; the new content propagates one real frame later. Symptom: the output lags the reader by exactly one frame -- `[f0, f0, f1, ..., f(N-2)]`: head frame duplicated, final source frame dropped, a 2-frame motion step at the loop wrap.
+- **'Specify Index' image-sequence playback pre-reads asynchronously too.** Under forced non-realtime stepping it serves stale frames -- a fractional-index 60fps encode writes long duplicate-frame runs at implausible speed. Per-file explicit stepping is the only reliable non-realtime pattern.
+
+**Correct pattern -- pipeline the load one frame ahead, and verify AT THE POINT OF CAPTURE (the writer's input), not at the source:**
+
+1. **Preroll each new scene.** Set `file(0)` + reload pulse, then cook the FULL chain across ~5 real frames (`run`-chained, `delayFrames=1`) BEFORE the first `addframe`.
+2. **Per frame `i`:** cook the chain -> fingerprint the WRITER'S INPUT TOP (e.g. `null.numpyArray()` downsampled) and require it to differ from the last WRITTEN fingerprint (retry on the next real frame if equal; bounded) -> `addframe` -> ONLY THEN set `file(i+1)` + pulse -> schedule step `i+1` with `delayFrames=1`. The reload lands during the inter-step frame advance, so the next pass reads fresh content with no retry in steady state.
+3. **Persist the fingerprint across scene boundaries** -- a stale frame 0 equals the previous scene's final fingerprint, which is exactly what catches it.
+
+"Force-cook the whole chain in dependency order" is NOT sufficient on its own (Layer 2). Fingerprint the WRITER'S input, not the reader's, and let each reload settle across a real frame advance.
+
+**Content verification is SEPARATE from container/drop verification (container checks lie by omission), and must be done OUT OF PROCESS:**
+
+- Length / rate / clean-decode all PASS on corrupt content -- necessary but INSUFFICIENT. Content-verify frame 0 AND frame N-1 of EVERY output.
+- **External ffmpeg is the mandatory render-acceptance gate.** Decode the finished file out of process for byte-honest frame diffs -- ffmpeg's NotchLC decoder is decode-only in FFmpeg >= 4.3. That decode is the render's acceptance test, not any in-TD check.
+- **Never QC through TD during a render.** A second Movie File In inherits the same async-seek staleness (self-consistent WRONG answers) AND perturbs the running encode.
+- **Cross-domain pixel compares are invalid.** `TOP.numpyArray()` returns linearized values; comparing against sRGB PNG bytes (cv2/PIL) yields ~0.1-0.4 baseline diffs that swamp any single-frame difference. Compare same-domain ONLY.
 
 ### If drops happen, the fix depends on the mode
 

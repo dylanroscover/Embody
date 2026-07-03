@@ -91,6 +91,7 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | `get_td_classes` | _(none)_ | List all Python classes in `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, docs for a TD class |
 | `get_module_help` | `module_name` | Python help text for a module |
+| `get_sessions` | _(none)_ | List AI client sessions connected to this Envoy (sid, label, pid, idle, last tool, stale flag) plus `you` = caller's own sid. Check at session start and before large or destructive operations so concurrent sessions don't clobber each other |
 
 ## MCP Prompts
 
@@ -140,7 +141,7 @@ For visual work, success is verified by capturing and judging the output TOP, no
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
-**Auto-piggybacked logs**: A `_logs` field rides along **only when a WARNING or ERROR was logged during the call** (capped at ~8) -- routine INFO/DEBUG/SUCCESS history is omitted to keep responses token-lean. Call `get_logs` for the full history, or read the log files in Embody's logs directory (see the `Logfolder` parameter on the Embody COMP).
+**Auto-piggybacked logs**: A `_logs` field rides along **only when a WARNING or ERROR was logged during the call** (capped at ~8) -- routine INFO/DEBUG/SUCCESS history is omitted to keep responses token-lean. Warning cursors are **per session** (from the bridge's identity headers), so concurrent sessions each receive their own copy of a warning -- one session polling first no longer consumes it for the others. Call `get_logs` for the full history, or read the log files in Embody's logs directory (see the `Logfolder` parameter on the Embody COMP).
 
 ## Bridge Meta-Tools
 
@@ -148,7 +149,7 @@ These run locally on the STDIO bridge — they work even when TD is not running.
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness. Includes instance registry |
+| `get_td_status` | _(none)_ | Check if TD is running, Envoy reachable, crash detection, process liveness. Includes instance registry and live bridge `sessions` (from heartbeat files -- works even with TD down) |
 | `launch_td` | `timeout?` | Launch TD with the project's `.toe` file, wait for Envoy (default: 120s) |
 | `restart_td` | `timeout?` | Gracefully quit TD and relaunch, wait for Envoy (default: 120s) |
 | `switch_instance` | `instance?` | List all registered TD instances (omit `instance`) or switch the bridge to a different running instance (provide toe basename without `.toe`). See `/multi-instance` skill for workflow |

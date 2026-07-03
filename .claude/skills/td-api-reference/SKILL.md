@@ -229,6 +229,8 @@ arr = op('noise1').numpyArray()  # [height, width, channels] — NOT [width, hei
 arr_td = np.flipud(arr)
 ```
 
+**Color domain: `numpyArray()` is NOT sRGB file bytes.** `TOP.numpyArray()` returns the TOP's raw pixel values -- linearized/linear-light floats for a float TOP -- NOT the sRGB-gamma-encoded 8-bit bytes that `cv2`/`PIL` read from a `.png`/`.jpg`. A direct pixel diff across the two domains is invalid: it shows a ~0.1-0.4 baseline difference that swamps any real per-pixel change. For any pixel-comparison or frame-exactness workflow (e.g. verifying a movie encode), compare **same-domain only** -- reader `numpyArray()` vs reader `numpyArray()` -- or convert one side (apply/remove the sRGB transfer) before comparing. This is why in-TD readback and out-of-process file decodes must not be diffed against each other directly.
+
 ## POPs — GPU-Accelerated Point Operators
 
 POPs process 3D geometry on the GPU (analogous to SOPs but GPU-accelerated).

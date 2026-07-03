@@ -50,6 +50,12 @@ class TestSetupWizard(EmbodyTestCase):
         self._ext._extractAIConfig = lambda *a, **k: self._extract_calls.append(1)
         self._envoy.Stop = lambda *a, **k: self._stop_calls.append(1)
 
+        # _enableEnvoyResolved sets _consent_bulk (cleared in production by
+        # _continueStart + a timer, neither of which fires in a sync test) -- so
+        # snapshot it and clear on teardown, or it leaks True into the session.
+        self._prev_bulk = getattr(self._ext, '_consent_bulk', False)
+        self._prev_pass = getattr(self._ext, '_startup_config_pass', False)
+
         # Default posture: first run (Envoy off). Suppressed, so no real Stop.
         self._emb.par.Envoyenable = False
 
@@ -57,6 +63,8 @@ class TestSetupWizard(EmbodyTestCase):
         for obj, name in ((self._ext, '_extractAIConfig'),
                           (self._envoy, 'Stop')):
             obj.__dict__.pop(name, None)
+        self._ext._consent_bulk = self._prev_bulk
+        self._ext._startup_config_pass = self._prev_pass
         # Restore params while side effects are still sealed, then lift the seal.
         for n, v in self._saved.items():
             try:
@@ -147,6 +155,22 @@ class TestSetupWizard(EmbodyTestCase):
                          'a re-run must not re-extract AI config')
         self.assertTrue(bool(self._emb.par.Envoyenable.eval()),
                         'Envoy must stay enabled across a re-run')
+
+    # ----- consented, atomic first-run enable (fix #4) --------------------
+
+    def test_first_run_enable_consents_the_config_batch(self):
+        # The wizard's footprint step IS the consent, so _enableEnvoyResolved
+        # sets _consent_bulk -> the config writes (this sync one + the git/MCP
+        # writes in the deferred Start) apply silently, without a second modal,
+        # and the enable stays atomic (config can't be declined mid-flip).
+        self._emb.par.Envoyenable = False
+        self._ext._applyWizardSetup(mode='advanced', assistant='claudecode')
+        self.assertTrue(self._ext._consent_bulk,
+                        'first-run enable must consent the config batch so the '
+                        'deferred Start writes apply without re-prompting')
+        self.assertTrue(bool(self._emb.par.Envoyenable.eval()))
+        self.assertEqual(self._extract_calls, [1],
+                         'AI config is written once under the consent')
 
     # ----- _openSetupWizard suppression -----------------------------------
 

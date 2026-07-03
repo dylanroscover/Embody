@@ -20,6 +20,7 @@
 10. **Always analyze log files after MCP operations** — read `dev/logs/` for the complete picture. Ring buffer only holds 200 entries.
 11. **Always update unit tests when modifying project code** — check whether existing tests assert against changed behavior.
 12. **Batch repetitive MCP operations** — never make 3+ individual calls to the same tool. Use `batch_operations` to combine `set_op_position`, `connect_ops`, `set_parameter`, `set_op_flags`, etc. into a single request. For complex logic (conditionals, loops, computed values), use `execute_python` instead. Each MCP round-trip costs tokens and latency — minimize them.
+13. **Prefer the operator-creating MCP tools** (`create_op`, `copy_op`, `create_extension`) over raw `execute_python` — they auto-position, lint layout, and (when the Envoy `Autoexternalize` preference is `DATs`/`COMPs`/`both`) auto-externalize new COMPs (TDN) and DATs (source) at their boundary — additively, never inside an already-externalized ancestor. A `copy_op` gets a **fresh** externalization at its own path (inherited source tags/file-refs are cleared, so the copy never shares or overwrites the source's files); `create_extension` externalizes the host COMP it creates (its code DAT is captured inside). Batch via `batch_operations`. Reach for `execute_python`/`comp.create()`/`.copy()` only when you genuinely need computed/looped creation or connection-preserving `copyOPs`; those bypass auto-externalization (Envoy rides an `AUTO-EXTERNALIZE BYPASS` warning back on the response) and require manual layout + tagging.
 
 ## Approach Guidelines
 
@@ -59,7 +60,10 @@ Embody/
 │       ├── run-tests/                   # Test suite runner (dev only)
 │       ├── td-api-reference/            # Full TD Python API reference
 │       ├── mcp-tools-reference/         # Complete MCP tool catalog
-│       └── multi-instance/              # Multi-instance bridge workflow
+│       ├── multi-instance/              # Multi-instance bridge workflow
+│       ├── visual-aesthetics/           # Visual craft: composition, camera, lighting, color
+│       ├── build-ui/                    # TD panel UI design system (dev only)
+│       └── specimen-authoring/          # Specimen gallery authoring (dev only)
 ├── docs/                                  # MkDocs documentation site
 │   ├── embody/                           # Embody feature docs
 │   ├── envoy/                            # Envoy MCP server docs

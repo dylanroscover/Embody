@@ -21,6 +21,7 @@ from typing import Optional, Any, Callable
 from queue import Queue, Empty
 from threading import Lock, Event, Thread
 import colorsys
+import contextvars
 import json
 import math
 import random
@@ -31,6 +32,13 @@ import time
 import asyncio
 
 ENVOY_VERSION = "1.4.0"
+
+# Per-request session identity, set by the ASGI middleware from the
+# X-Envoy-Session / X-Envoy-Label headers the bridge sends. anyio's
+# to_thread.run_sync copies the caller's context into tool threads, so
+# tool functions and _execute_in_td read the same values. (None, None)
+# for clients that connect without a bridge (direct HTTP).
+_SESSION_CTX = contextvars.ContextVar('envoy_session', default=(None, None))
 
 class EnvoyMCPServer:
     """
@@ -57,11 +65,66 @@ class EnvoyMCPServer:
         self.lock: Lock = Lock()
         self.running: bool = True
 
+        # Session presence registry: sid -> entry dict. Lives on sys so it
+        # survives worker recreation across extension reinits / server
+        # restarts (same pattern as sys._envoy_queues). Touched from the
+        # ASGI middleware (event loop) and tool threads -- guard with
+        # _sessions_lock. Pure Python only; never holds TD objects.
+        existing_sessions = getattr(sys, '_envoy_sessions', None)
+        self._sessions: dict = existing_sessions if isinstance(existing_sessions, dict) else {}
+        sys._envoy_sessions = self._sessions
+        self._sessions_lock: Lock = Lock()
+
         # Import mcp only when server is instantiated (in worker thread)
         from mcp.server.fastmcp import FastMCP, Image
         self._Image = Image  # Store for use in tool functions
         self.mcp = FastMCP("Envoy", host="127.0.0.1", port=port, stateless_http=True)
         self._register_tools()
+
+    def _touch_session(self, sid: str, label: str = None,
+                       operation: str = None) -> None:
+        """Register or refresh a session in the presence registry.
+
+        Called from the ASGI middleware on every headered HTTP request and
+        from _execute_in_td to attribute the current operation. Worker-side
+        pure Python only (mcp-safety thread boundary).
+        """
+        now = time.time()
+        with self._sessions_lock:
+            entry = self._sessions.get(sid)
+            if entry is None:
+                pid = None
+                try:
+                    pid = int(str(sid).split('-', 1)[0])
+                except Exception:
+                    pass
+                entry = {'sid': sid, 'label': label or sid, 'pid': pid,
+                         'first_seen': now, 'requests': 0, 'last_tool': None}
+                self._sessions[sid] = entry
+            if label:
+                entry['label'] = label
+            if operation:
+                entry['last_tool'] = operation
+            else:
+                entry['requests'] += 1
+            entry['last_seen'] = now
+            # Lazy prune: drop sessions silent for over an hour.
+            if len(self._sessions) > 8:
+                for stale_sid in [k for k, v in self._sessions.items()
+                                  if now - v.get('last_seen', 0) > 3600]:
+                    del self._sessions[stale_sid]
+
+    def _sessions_snapshot(self) -> dict:
+        """Presence list for get_sessions. Worker-side pure Python."""
+        now = time.time()
+        with self._sessions_lock:
+            sessions = [dict(v) for v in self._sessions.values()]
+        for e in sessions:
+            idle = now - e.get('last_seen', now)
+            e['idle_s'] = round(idle, 1)
+            e['stale'] = idle > 90
+        sessions.sort(key=lambda e: e.get('last_seen', 0), reverse=True)
+        return {'sessions': sessions, 'count': len(sessions)}
 
     def _execute_in_td(self, operation: str, params: dict,
                        timeout: float = 30.0) -> dict:
@@ -72,11 +135,18 @@ class EnvoyMCPServer:
             event = Event()
             self.pending_requests[request_id] = {'event': event, 'result': None}
 
+        # Attribute the operation to the calling session (if the request
+        # arrived through a bridge that sent identity headers).
+        sid, _label = _SESSION_CTX.get()
+        if sid:
+            self._touch_session(sid, operation=operation)
+
         # Queue request to main thread via Thread Manager's refresh queue
         self.add_to_refresh_queue({
             'id': request_id,
             'operation': operation,
-            'params': params
+            'params': params,
+            'sid': sid
         })
 
         # Wait for response (with timeout)
@@ -1276,6 +1346,32 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
+        def get_sessions() -> dict:
+            """
+            List AI client sessions currently connected to this Envoy server.
+
+            Each session is one AI client window (e.g. one Claude Code
+            session) connected through its own bridge process. Check this
+            at session start and before large or destructive operations
+            (import_network with clear_first, delete_op on a COMP, project
+            save, test runs) so concurrent sessions don't clobber each
+            other's work.
+
+            Returns:
+                Dict with 'sessions' (newest-activity first: sid, label,
+                pid, first_seen, last_seen, idle_s, requests, last_tool,
+                stale = no traffic for >90s), 'count', and 'you' (the
+                caller's own sid, or null for clients that connect without
+                a bridge). Sessions silent for over an hour are dropped.
+            """
+            # Answered on the worker thread from pure-Python state -- no
+            # TD access, so no main-thread round-trip (mcp-safety).
+            snapshot = self._sessions_snapshot()
+            sid, _label = _SESSION_CTX.get()
+            snapshot['you'] = sid
+            return snapshot
+
+        @self.mcp.tool()
         def run_tests(suite_name: str = None, test_name: str = None) -> dict:
             """
             Run Embody test suites and return results.
@@ -1465,7 +1561,39 @@ class EnvoyMCPServer:
                         return
                     raise
 
-        starlette_app = _SuppressDisconnect(starlette_app)
+        # Session identity capture: read the bridge's X-Envoy-Session /
+        # X-Envoy-Label headers, update the presence registry, and stash
+        # the identity in _SESSION_CTX for the duration of the request so
+        # tool functions can attribute their work. Pure Python only --
+        # never touches TD objects (mcp-safety thread boundary).
+        worker = self
+
+        class _SessionCapture:
+            def __init__(self, app):
+                self.app = app
+
+            async def __call__(self, scope, receive, send):
+                sid = label = None
+                if scope.get('type') == 'http':
+                    try:
+                        hdrs = {k.decode('latin-1').lower(): v.decode('latin-1')
+                                for k, v in (scope.get('headers') or [])}
+                        sid = hdrs.get('x-envoy-session') or None
+                        label = hdrs.get('x-envoy-label') or None
+                    except Exception:
+                        sid = label = None
+                    if sid:
+                        try:
+                            worker._touch_session(sid, label)
+                        except Exception:
+                            pass
+                token = _SESSION_CTX.set((sid, label))
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    _SESSION_CTX.reset(token)
+
+        starlette_app = _SuppressDisconnect(_SessionCapture(starlette_app))
 
         config = uvicorn.Config(
             starlette_app,
@@ -1559,7 +1687,11 @@ class EnvoyExt:
         sys._envoy_queues = _q_registry
         self.current_task: Optional[Any] = None
         self._server_gen: int = 0  # Generation counter for stale callback detection
-        self._last_served_log_id: int = 0
+        # Per-session piggyback cursors: sid (or '_anon') -> last served log
+        # id. A single shared cursor let whichever session polled first
+        # CONSUME warnings meant for everyone (multi-session bug); each
+        # session now tracks its own position in the log ring.
+        self._log_cursors: dict = {}
         self._restart_count: int = 0
         self._deadTicks: int = 0  # consecutive watchdog ticks seeing a dead/refused socket
         self._last_start_time: float = 0.0  # time.time() when Start() was called
@@ -2266,25 +2398,40 @@ class EnvoyExt:
         # Auto-configure project files.
         # Each step is independent -- one failure must not block the others.
         # MCP + AI config: always co-located, honoring Aiprojectroot.
+        #
+        # This is a startup Start: in Advanced mode a config write must NOT pop a
+        # modal here (it would block the restore chain), so _startup_config_pass
+        # makes the guards DEFER + breadcrumb. The setup wizard's _consent_bulk
+        # (set before it flipped Envoyenable) takes precedence, so a consented
+        # first-run still applies. Cleared in the finally so it can't stick.
+        Embody = op.Embody.ext.Embody
+        prior_pass = Embody._startup_config_pass
+        Embody._startup_config_pass = True
         try:
-            target_dir = op.Embody.ext.Embody._findProjectRoot()
-        except Exception:
-            # Defensive fallback for older deployments
-            target_dir = git_root if git_root != 'no-git' else None
-        self._configureMCPClient(port, target_dir=target_dir)
-        try:
-            op.Embody.ext.Embody._upgradeEnvoy()
-        except Exception as e:
-            self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
+            try:
+                target_dir = Embody._findProjectRoot()
+            except Exception:
+                # Defensive fallback for older deployments
+                target_dir = git_root if git_root != 'no-git' else None
+            self._configureMCPClient(port, target_dir=target_dir)
+            try:
+                Embody._upgradeEnvoy()
+            except Exception as e:
+                self._log(f'Could not auto-configure AI client files: {e}', 'WARNING')
 
-        # Git config: only when a git repo exists. Always lives at the git
-        # root regardless of Aiprojectroot -- .gitignore/.gitattributes are
-        # git's files, not Embody's.
-        if git_root != 'no-git':
-            from pathlib import Path
-            git_path = Path(git_root)
-            self._configureGitignore(git_path)
-            self._configureGitattributes(git_path)
+            # Git config: only when a git repo exists. Always lives at the git
+            # root regardless of Aiprojectroot -- .gitignore/.gitattributes are
+            # git's files, not Embody's.
+            if git_root != 'no-git':
+                from pathlib import Path
+                git_path = Path(git_root)
+                self._configureGitignore(git_path)
+                self._configureGitattributes(git_path)
+        finally:
+            Embody._startup_config_pass = prior_pass
+            # Clear the wizard's batch consent now its deferred-Start writes are
+            # done (the bounded timer in _enableEnvoyResolved is the backstop).
+            Embody._consent_bulk = False
 
     def _pollStartup(self, gen: int) -> None:
         """Main-thread poll (H1): declare 'Running' only after the worker
@@ -2579,29 +2726,48 @@ class EnvoyExt:
 
     # === Thread Manager Callbacks (run on main thread) ===
 
-    def _attachNotableLogs(self, result):
+    def _baselineLogCursor(self, sid):
+        """On first sight of a session (main thread, BEFORE executing its
+        operation), start its cursor at the current end of the log ring so
+        it is served exactly the warnings its own operations generate from
+        here on -- not the whole ring's history, and not nothing."""
+        key = sid or '_anon'
+        if key in self._log_cursors:
+            return
+        log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
+        latest = log_buffer[-1]['id'] if log_buffer else 0
+        # Crude cap so a long-lived TD session accumulating many
+        # short-lived sids cannot grow unbounded; re-serving up to 8
+        # warnings once after a clear is harmless.
+        if len(self._log_cursors) > 64:
+            self._log_cursors.clear()
+        self._log_cursors[key] = latest
+
+    def _attachNotableLogs(self, result, sid=None):
         """Piggyback only WARNING/ERROR logs onto a response, capped small, to
-        keep MCP responses token-lean. The served-cursor still advances over
-        ALL new entries so nothing is re-served on the next call; the full
-        INFO/DEBUG/SUCCESS history is available on demand via the get_logs tool.
-        (INFO noise -- 'Processing:', the echoed code, 'completed successfully'
-        -- previously rode along on every single response.)"""
+        keep MCP responses token-lean. Cursors are PER SESSION (sid from the
+        bridge headers; '_anon' for direct clients): each session's cursor
+        advances over ALL entries new to IT, so one session polling cannot
+        consume warnings meant for another. The full INFO/DEBUG/SUCCESS
+        history is available on demand via the get_logs tool."""
         log_buffer = getattr(op.Embody.ext.Embody, '_log_buffer', None)
         if not log_buffer:
             return
+        key = sid or '_anon'
+        last_served = self._log_cursors.get(key, 0)
         recent = [e for e in log_buffer
-                  if e['id'] > self._last_served_log_id]
+                  if e['id'] > last_served]
         if not recent:
             return
-        self._last_served_log_id = recent[-1]['id']
+        self._log_cursors[key] = recent[-1]['id']
         notable = [e for e in recent
                    if e.get('level') in ('WARNING', 'ERROR')]
         if notable:
             result['_logs'] = notable[-8:]
 
-    def _send_response(self, request_id, result):
+    def _send_response(self, request_id, result, sid=None):
         """Send a response back to the worker thread (token-lean log piggyback)."""
-        self._attachNotableLogs(result)
+        self._attachNotableLogs(result, sid)
 
         self.response_queue.put({
             'id': request_id,
@@ -2646,6 +2812,11 @@ class EnvoyExt:
             request_id = info.get('id')
             operation = info['operation']
             params = info.get('params', {})
+            sid = info.get('sid')
+
+            # Baseline this session's log cursor BEFORE executing, so the
+            # response carries the warnings THIS operation generates.
+            self._baselineLogCursor(sid)
 
             self._log(f'Processing: {operation}')
 
@@ -2656,7 +2827,7 @@ class EnvoyExt:
             if result is None:
                 continue
 
-            self._send_response(request_id, result)
+            self._send_response(request_id, result, sid)
 
         # Live build visualization (opt-in): camera follow + node pulse + the
         # dancing builder-bot. Runs every frame AFTER the drain loop. Wrapped so
@@ -4103,7 +4274,16 @@ class EnvoyExt:
             # op_type can be a string like 'baseCOMP', 'noiseTOP', etc.
             new_op = parent.create(op_type, name) if name else parent.create(op_type)
             self._find_non_overlapping_position(parent, new_op)
-            return {
+            # Auto-externalize per the Envoy 'Autoexternalize' preference. create_op
+            # is the single creation chokepoint, so tagging here removes the LLM from
+            # the externalization decision entirely. Additive + boundary-scoped;
+            # never raises (must not break op creation).
+            auto_tag = None
+            try:
+                auto_tag = op.Embody.ext.Embody.AutoExternalizeNewOp(new_op)
+            except Exception as e:
+                self._log(f'auto-externalize failed for {new_op.path}: {e}', 'WARNING')
+            result = {
                 'success': True,
                 'path': new_op.path,
                 'name': new_op.name,
@@ -4112,6 +4292,9 @@ class EnvoyExt:
                 'nodeX': new_op.nodeX,
                 'nodeY': new_op.nodeY
             }
+            if auto_tag:
+                result['externalized'] = auto_tag
+            return result
         except Exception as e:
             return {'error': f'Failed to create operator: {e}'}
 
@@ -4407,7 +4590,16 @@ class EnvoyExt:
         try:
             new_op = dest.copy(source, name=new_name) if new_name else dest.copy(source)
             self._find_non_overlapping_position(dest, new_op)
-            return {
+            # Auto-externalize the COPY per the Autoexternalize preference. The
+            # copied-op path clears externalization state inherited from the
+            # source (tags + file refs) so the copy is externalized fresh at its
+            # own path and never shares the source's files. Never breaks the copy.
+            auto_tag = None
+            try:
+                auto_tag = op.Embody.ext.Embody.AutoExternalizeCopiedOp(new_op)
+            except Exception as e:
+                self._log(f'auto-externalize (copy) failed for {new_op.path}: {e}', 'WARNING')
+            result = {
                 'success': True,
                 'source': source_path,
                 'new_path': new_op.path,
@@ -4415,6 +4607,9 @@ class EnvoyExt:
                 'nodeX': new_op.nodeX,
                 'nodeY': new_op.nodeY
             }
+            if auto_tag:
+                result['externalized'] = auto_tag
+            return result
         except Exception as e:
             return {'error': f'Failed to copy: {e}'}
 
@@ -4515,9 +4710,11 @@ class EnvoyExt:
             return
         try:
             new_parents = {}
+            new_ops = []
             for o in root.findChildren(maxDepth=12):
                 if o.path in pre_paths:
                     continue
+                new_ops.append(o)
                 par = o.parent()
                 if par is not None:
                     new_parents.setdefault(par.path, par)
@@ -4529,6 +4726,30 @@ class EnvoyExt:
                         + '. execute_python does NOT auto-position ops (create_op does); '
                         'run get_network_layout and reposition per network-layout.md.',
                         'WARNING')
+            self._warnAutoExternalizeBypass(new_ops)
+        except Exception:
+            pass
+
+    def _warnAutoExternalizeBypass(self, new_ops):
+        """When the Autoexternalize preference is on, ops created via
+        execute_python bypass it -- only create_op is the auto-externalize
+        chokepoint. Warn for any new op that WOULD have been auto-externalized
+        (uses EmbodyExt's pure boundary decision, so no false positives on ops
+        already captured by an externalized ancestor), steering callers to
+        create_op as the preferred creation path."""
+        try:
+            emb = op.Embody.ext.Embody
+            if op.Embody.par.Autoexternalize.eval() == 'neither':
+                return
+            bypassed = [o.path for o in new_ops if emb._autoExternalizeTagFor(o)]
+            if bypassed:
+                shown = ', '.join(bypassed[:5]) + ('...' if len(bypassed) > 5 else '')
+                self._log(
+                    'AUTO-EXTERNALIZE BYPASS: ' + str(len(bypassed)) + ' op(s) created '
+                    'via execute_python were NOT auto-externalized (' + shown + '). '
+                    'create_op is the preferred creation path and auto-externalizes; '
+                    'recreate via create_op, or tag manually with externalize_op.',
+                    'WARNING')
         except Exception:
             pass
 
@@ -5475,12 +5696,41 @@ class EnvoyExt:
         except Exception as e:
             return {'error': f'Failed to get annotations: {e}'}
 
+    def _resolve_annotation(self, op_path: str):
+        """Resolve an annotation path, including utility-flagged ones.
+
+        Utility ops (every UI-created annotation, and MCP-created ones per
+        the utility=True convention) are HIDDEN from op(), parent.op() and
+        .children -- only findChildren(includeUtility=True) sees them. A
+        plain op() lookup therefore fails for exactly the annotations this
+        tool exists to modify.
+        """
+        target = op(op_path)
+        if target is not None:
+            return target
+        parent_path, _, name = op_path.rpartition('/')
+        parent = op(parent_path) if parent_path else None
+        if not parent or not name:
+            return None
+        try:
+            import td as _td
+            ann_class = getattr(_td, 'annotateCOMP', None)
+            kwargs = {'includeUtility': True, 'depth': 1}
+            if ann_class is not None:
+                kwargs['type'] = ann_class
+            for candidate in parent.findChildren(**kwargs):
+                if candidate.name == name:
+                    return candidate
+        except Exception:
+            return None
+        return None
+
     def _set_annotation(self, op_path: str, text: str = None, title: str = None,
                         color: list = None, opacity: float = None,
                         width: int = None, height: int = None,
                         x: int = None, y: int = None) -> dict:
         """Modify an existing annotation."""
-        target = op(op_path)
+        target = self._resolve_annotation(op_path)
         if not target:
             return {'error': f'Annotation not found: {op_path}'}
         if target.type != 'annotate':
@@ -5523,7 +5773,7 @@ class EnvoyExt:
 
     def _get_enclosed_ops(self, op_path: str) -> dict:
         """Get annotation/operator enclosure relationships."""
-        target = op(op_path)
+        target = self._resolve_annotation(op_path)
         if not target:
             return {'error': f'Operator not found: {op_path}'}
 
@@ -6022,6 +6272,24 @@ class EnvoyExt:
         # Ensure viewer flag stays off (initializeExtensions can activate it)
         comp.viewer = False
 
+        # Auto-externalize per the Autoexternalize preference. Externalize the
+        # host COMP only if WE created it (COMP -> TDN; the code DAT is then
+        # captured inside it). The code DAT is always a fresh op: under 'dats'
+        # (COMP not externalized) it becomes its own .py; under 'comps'/'both'
+        # the COMP's TDN already captures it, so its own call boundary-skips.
+        auto_ext = {}
+        try:
+            emb = op.Embody.ext.Embody
+            if created_comp:
+                t = emb.AutoExternalizeNewOp(comp)
+                if t:
+                    auto_ext['comp'] = t
+            t = emb.AutoExternalizeNewOp(text_dat)
+            if t:
+                auto_ext['dat'] = t
+        except Exception as e:
+            self._log(f'auto-externalize (extension) failed for {comp.path}: {e}', 'WARNING')
+
         result = {
             'success': True,
             'comp_path': comp.path,
@@ -6033,6 +6301,8 @@ class EnvoyExt:
             'promote': promote,
             'created_comp': created_comp,
         }
+        if auto_ext:
+            result['externalized'] = auto_ext
 
         if init_warning:
             result['warning'] = init_warning
@@ -6395,9 +6665,18 @@ class EnvoyExt:
                 'args': expected_args,
             }
             config['mcpServers'] = servers
-            mcp_file.write_text(
-                json.dumps(config, indent=2) + '\n', encoding='utf-8')
-            self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge -> port {port})')
+
+            def _write():
+                mcp_file.write_text(
+                    json.dumps(config, indent=2) + '\n', encoding='utf-8')
+                self._log(f'Wrote MCP config to {mcp_file} (STDIO bridge -> port {port})')
+
+            # Advanced mode: confirm before writing the Envoy entry into the
+            # user's .mcp.json (only reached when it is missing or out of date).
+            verb = 'add the Envoy MCP server entry to' if existing else 'create'
+            op.Embody.ext.Embody._guardFileWrite(
+                'MCP config', f'{verb} .mcp.json in {target_dir}',
+                [str(mcp_file)], _write)
 
             # --- Deploy settings.local.json (auto-allow read-only MCP tools) ---
             self._deploySettingsLocal(target_dir / '.claude')
@@ -6469,15 +6748,24 @@ class EnvoyExt:
             self._log('text_settings_local template not found -- skipping settings deployment', 'DEBUG')
             return
 
-        claude_dir.mkdir(parents=True, exist_ok=True)
-        settings_path.write_text(settings_content, encoding='utf-8')
-        self._log(f'Deployed settings.local.json to {settings_path}')
-        try:  # Embody created it (only writes when absent) -> safe to remove on uninstall
-            Embody = op.Embody.ext.Embody
-            Embody._manifestRecordCreatedFile(
-                str(Embody._findProjectRoot()), settings_path)
-        except Exception:
-            pass
+        def _write():
+            claude_dir.mkdir(parents=True, exist_ok=True)
+            settings_path.write_text(settings_content, encoding='utf-8')
+            self._log(f'Deployed settings.local.json to {settings_path}')
+            try:  # Embody created it (only writes when absent) -> safe to remove on uninstall
+                Embody = op.Embody.ext.Embody
+                Embody._manifestRecordCreatedFile(
+                    str(Embody._findProjectRoot()), settings_path)
+            except Exception:
+                pass
+
+        # Advanced: confirm before creating .claude/settings.local.json.
+        op.Embody.ext.Embody._guardFileWrite(
+            'AI config',
+            f'create .claude/settings.local.json (pre-allows read-only Envoy '
+            f'MCP tools) in {claude_dir.parent}',
+            [str(settings_path)],
+            _write)
 
     def _findGitRoot(self):
         """Silently find the git repo root. Returns Path or 'no-git'. Never prompts."""
@@ -7053,14 +7341,24 @@ class EnvoyExt:
             if existing_content and not existing_content.endswith('\n'):
                 block = '\n' + block
 
-            gitignore.write_text(existing_content + block, encoding='utf-8')
-            self._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
-            try:  # record the marked block so Uninstall strips only it (never the user's file)
-                Embody = op.Embody.ext.Embody
-                Embody._manifestRecordAppendedFile(
-                    str(Embody._findProjectRoot()), gitignore, '# Embody / Envoy')
-            except Exception:
-                pass
+            def _write():
+                gitignore.write_text(existing_content + block, encoding='utf-8')
+                self._log(f'Added {len(missing)} entries to .gitignore: {", ".join(missing)}')
+                try:  # record the marked block so Uninstall strips only it (never the user's file)
+                    Embody = op.Embody.ext.Embody
+                    Embody._manifestRecordAppendedFile(
+                        str(Embody._findProjectRoot()), gitignore, '# Embody / Envoy')
+                except Exception:
+                    pass
+
+            # Advanced mode: confirm before editing the user's .gitignore. Only
+            # reached when entries are actually missing, so a no-op never prompts.
+            op.Embody.ext.Embody._guardFileWrite(
+                'Git config',
+                f'add {len(missing)} entr{"y" if len(missing) == 1 else "ies"} to '
+                f'.gitignore in {git_root}',
+                list(missing),
+                _write)
 
         except Exception as e:
             self._log(f'Could not auto-configure .gitignore: {e}', 'WARNING')
@@ -7110,14 +7408,23 @@ class EnvoyExt:
             if existing and not existing.endswith('\n'):
                 existing += '\n'
 
-            gitattr.write_text(existing + MANAGED_BLOCK, encoding='utf-8')
-            self._log('Added line-ending normalization to .gitattributes')
-            try:  # record the marked block so Uninstall strips only it (never the user's file)
-                Embody = op.Embody.ext.Embody
-                Embody._manifestRecordAppendedFile(
-                    str(Embody._findProjectRoot()), gitattr, MARKER)
-            except Exception:
-                pass
+            def _write():
+                gitattr.write_text(existing + MANAGED_BLOCK, encoding='utf-8')
+                self._log('Added line-ending normalization to .gitattributes')
+                try:  # record the marked block so Uninstall strips only it (never the user's file)
+                    Embody = op.Embody.ext.Embody
+                    Embody._manifestRecordAppendedFile(
+                        str(Embody._findProjectRoot()), gitattr, MARKER)
+                except Exception:
+                    pass
+
+            # Advanced mode: confirm before editing the user's .gitattributes.
+            op.Embody.ext.Embody._guardFileWrite(
+                'Git config',
+                f'add line-ending + .tdn-diff rules to .gitattributes in {git_root}',
+                [ln for ln in MANAGED_BLOCK.strip().splitlines()
+                 if ln and not ln.startswith('#')],
+                _write)
 
         except Exception as e:
             self._log(f'Could not auto-configure .gitattributes: {e}', 'WARNING')
@@ -7173,19 +7480,29 @@ class EnvoyExt:
             current = subprocess.run(
                 ['git', 'config', '--get', 'diff.tdn.textconv'], **git_kwargs)
             if (current.stdout or '').strip() != driver:
-                subprocess.run(
-                    ['git', 'config', 'diff.tdn.textconv', driver],
-                    check=True, **git_kwargs)
-                subprocess.run(
-                    ['git', 'config', 'diff.tdn.cachetextconv', 'false'],
-                    check=True, **git_kwargs)
-                self._log('Configured git diff driver for .tdn (semantic diffs)')
-                try:  # record so Uninstall un-sets the repo git config
-                    op.Embody.ext.Embody._manifestRecordGitConfig(
-                        str(target_dir),
-                        ['diff.tdn.textconv', 'diff.tdn.cachetextconv'])
-                except Exception:
-                    pass
+                def _write():
+                    subprocess.run(
+                        ['git', 'config', 'diff.tdn.textconv', driver],
+                        check=True, **git_kwargs)
+                    subprocess.run(
+                        ['git', 'config', 'diff.tdn.cachetextconv', 'false'],
+                        check=True, **git_kwargs)
+                    self._log('Configured git diff driver for .tdn (semantic diffs)')
+                    try:  # record so Uninstall un-sets the repo git config
+                        op.Embody.ext.Embody._manifestRecordGitConfig(
+                            str(target_dir),
+                            ['diff.tdn.textconv', 'diff.tdn.cachetextconv'])
+                    except Exception:
+                        pass
+
+                # Advanced: confirm before mutating the repo's .git/config.
+                op.Embody.ext.Embody._guardFileWrite(
+                    'Git config',
+                    f'register the .tdn semantic-diff driver in '
+                    f'{target_dir}/.git/config',
+                    ['git config diff.tdn.textconv',
+                     'git config diff.tdn.cachetextconv'],
+                    _write)
 
         except (subprocess.SubprocessError, OSError) as e:
             self._log(f'Could not configure .tdn git diff driver: {e}', 'DEBUG')
