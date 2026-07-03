@@ -6,7 +6,7 @@
 
 TouchDesigner has no external API. A `.toe` file has no access surface — nothing outside TD can read it, write to it, or interact with what's running inside it. AI assistants hitting this wall have two options: describe what a network *might* look like and hope you can implement it, or stop. Neither is useful when you're mid-session with a half-built network in front of you.
 
-Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 49 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
+Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 52 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
 
 ## Key Design Principles
 
@@ -266,5 +266,5 @@ Envoy works with any MCP client:
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Cursor](https://www.cursor.com/)
 - [Windsurf](https://windsurf.com/)
-- [VS Code](https://code.visualstudio.com/) and [GitHub Copilot](https://github.com/features/copilot)
+- [GitHub Copilot](https://github.com/features/copilot) via [VS Code](https://code.visualstudio.com/)
 - Any other client that supports the MCP protocol

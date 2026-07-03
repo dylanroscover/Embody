@@ -1,5 +1,38 @@
 # Changelog
 
+## v6.0.83
+
+Multi-session Envoy coordination, 52 MCP tools, and a TDN stability pass. This release makes parallel AI/client work more visible and safer, tightens destructive-operation behavior, hardens several TDN edge cases, refreshes the generated agent guidance, and regenerates the 6.0.83 release artifacts.
+
+### Envoy multi-session coordination
+
+- **52 MCP tools.** Envoy now exposes `claim_scope` and `release_scope` alongside the existing `get_sessions` view, bringing the live TD tool surface to 52 tools plus the bridge meta-tools.
+- **Live-session awareness.** `get_sessions` now reports recent scopes and claims so agents can see which peers are active and what part of the project they are working on.
+- **Peer advisories on tool responses.** MCP responses can include `_peers` metadata when another live session is active nearby, giving agents enough context to coordinate before editing the same network area.
+- **Destructive-operation gates.** `delete_op`, `import_network(clear_first=True)`, `run_tests`, and `batch_operations` now refuse risky work when another recent session owns or touched the relevant scope unless the caller passes `override=True`.
+- **Per-session log cursors.** Recent log piggybacking is tracked per session, so one client no longer drains another client's warning/error feed.
+
+### TDN stability
+
+- **Import validates before clearing.** Malformed TDN is rejected before `import_network(clear_first=True)` clears an existing COMP.
+- **DAT editability capture is non-mutating.** Capturing `isEditable` no longer changes the live DAT state while exporting.
+- **Flag defaults round-trip more cleanly.** Object COMP render/display defaults and noise terrain default flags no longer produce avoidable TDN churn.
+- **Stale cleanup is tracking-aware.** Cleanup only removes tracked `.tdn` files; ad-hoc untagged exports no longer enroll themselves into Embody tracking.
+- **Orphan shell recovery remains intact.** `_tdn_rel_path` recovery for orphan shells is preserved across the export/import path.
+- **Malformed templates degrade gracefully.** Bad generated-template content is handled without cascading into broader TDN failure.
+
+### Setup and generated guidance
+
+- **Setup Wizard polish.** The AI-client picker no longer forces a scrollbar now that the option list is shorter, and wizard copy has more right-side padding so text does not crowd the window edge.
+- **AI-client menu reflects current support.** The standalone VS Code client token has been removed; GitHub Copilot remains supported through VS Code.
+- **Agent guidance updated.** The generated multi-session rule/template and default MCP allowlist now include `claim_scope` and `release_scope`.
+
+### Tests and release artifacts
+
+- **New regression coverage.** Added `test_tdn_stability_hardening` and expanded `test_envoy_sessions` for multi-session coordination and destructive-operation behavior.
+- **Current test source inventory.** The repo now contains **85 test suites / 1,906 test methods**.
+- **Release artifacts refreshed.** The development `.toe`, generated `.tdn` files, externalization table, and shipped release artifact were regenerated for **6.0.83**.
+
 ## v6.0.69
 
 A new **Dropped .tox Expression** control, plus a **data-safety hardening** of the test harness driven by a real incident: destructive whole-project test suites can no longer run as part of a normal test run, so a full `RunTests()` can never mutate your live project.

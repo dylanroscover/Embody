@@ -1,6 +1,6 @@
 # Tools Reference
 
-Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 52 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
 
 ## Operator Management
 

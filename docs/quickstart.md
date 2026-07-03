@@ -13,7 +13,7 @@ Embody itself is free, open source (MIT), and runs entirely on your own machine 
 You need two things installed before you start:
 
 - **TouchDesigner 2025.32280 or later** — Windows or macOS. [Download from Derivative](https://derivative.ca/download).
-- **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or VS Code/Copilot.
+- **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code.
 
 !!! note "Never used an AI coding tool?"
     Claude Code is the gentlest place to start — it runs as a desktop app, a VS Code extension, or a web app, not only in a terminal. The first time, you'll create or sign in to a Claude account and then open a folder; you won't be writing code, just describing what you want in plain language. (The five-minute estimate above assumes TouchDesigner and your AI assistant are already installed — first-time installs take a little longer.)

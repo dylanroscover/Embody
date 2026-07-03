@@ -37,7 +37,7 @@ The `execute_python` tool runs arbitrary Python code on TouchDesigner's main thr
 The `exec_op_method` tool can call any callable attribute on any operator, which also provides broad access.
 
 !!! warning "MCP clients have full system access"
-    Any MCP client connected to Envoy (Claude Code, Cursor, etc.) can execute arbitrary code through these tools. Only connect MCP clients you trust, and review operations in their logs if you have concerns.
+    Any MCP client connected to Envoy can execute arbitrary code through these tools. Only connect MCP clients you trust, and review operations in their logs if you have concerns.
 
 ## Recommendations
 

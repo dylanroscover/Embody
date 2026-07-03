@@ -21,6 +21,6 @@ What this adds up to is a single promise: **the tool keeps up with you, instead 
 
 That's what speed of thought looks like. It's not "the AI did it for you." It's "you didn't have to slow down."
 
-Embody is open source, runs entirely inside TouchDesigner, and works with Claude Code, Cursor, Windsurf, or any MCP-compatible client. Try it on a real idea you've been putting off. See how far you get in an hour.
+Embody is open source, runs entirely inside TouchDesigner, and works with Claude Code, Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot via VS Code, or any MCP-compatible client. Try it on a real idea you've been putting off. See how far you get in an hour.
 
 — Dylan Roscover

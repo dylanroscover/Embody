@@ -6,9 +6,9 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.69-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.83-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
-[![MCP Tools](https://img.shields.io/badge/MCP_tools-49-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
+[![MCP Tools](https://img.shields.io/badge/MCP_tools-52-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/dylanroscover/Embody?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/stargazers)
 [![Downloads](https://img.shields.io/github/downloads/dylanroscover/Embody/total?style=flat-square&labelColor=181e1e&color=6ee668)](https://github.com/dylanroscover/Embody/releases)
@@ -23,7 +23,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 ## Three Tools, One Idea
 
-**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [VS Code](https://code.visualstudio.com/), [Cursor](https://www.cursor.com/), and [Windsurf](https://windsurf.com/) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
+**Envoy** — *forward velocity.* An embedded [MCP](https://modelcontextprotocol.io/) server lets [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), and [GitHub Copilot](https://github.com/features/copilot) (via VS Code) talk directly to your live TouchDesigner session. Create operators, wire them up, set parameters, write extensions, debug errors — by saying what you want. No copy-pasting code. No describing your network in chat. Idea → operators in seconds.
 
 **Embody** — *lateral velocity.* Tag any operator and Embody externalizes it to files on disk that mirror your network hierarchy. Try a new direction, branch off a good one, restore the state from yesterday — all in seconds. Your externalized files are the source of truth, so every project opens already in flow.
 
@@ -33,7 +33,7 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 
 | | What | Why it matters |
 |---|---|---|
-| 🤖 | **Envoy MCP Server** | 49 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
+| 🤖 | **Envoy MCP Server** | 52 tools let your AI assistant build, wire, parameterize, and debug live networks. The first time you watch it happen, you stop typing operator names by hand for good. |
 | 📄 | **TDN Network Format** | Networks become text. Diff two versions, revisit any version, hand an LLM a complete picture of what's on screen — all from a single `.tdn` file. |
 | 📦 | **Automatic Restoration** | Externalized files are written on save, so any COMP can be recovered from disk. By default (Export-on-Save) the `.toe` stays authoritative on open; switch to Roundtrip mode to rebuild TDN-strategy COMPs from `.tdn` on every open. |
 | 📤 | **Portable Tox Export** | Pull any COMP out as a self-contained `.tox` with external references stripped. Ship a piece of your project anywhere. |
@@ -117,9 +117,9 @@ If you'd rather configure the client by hand, this is the `.mcp.json` Envoy writ
 | `create_extension` | Scaffold a full extension (COMP + DAT + wiring) |
 | `get_op_errors` | Inspect errors on any operator and its children |
 
-...and 42 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
+...and 45 more. See the [full tools reference](https://dylanroscover.github.io/Embody/envoy/tools-reference/).
 
-When Envoy starts, it always generates an `AGENTS.md` file in your project root with TD development patterns and project-specific guidance. It also writes a client-specific config for whichever assistant you select in the `Aiclient` parameter (`CLAUDE.md` + `.claude/` for Claude Code, Cursor/Windsurf rules, Copilot instructions, `GEMINI.md` for Gemini; Codex and VS Code read `AGENTS.md` directly).
+When Envoy starts, it always generates an `AGENTS.md` file in your project root with TD development patterns and project-specific guidance. It also writes a client-specific config for whichever assistant you select in the `Aiclient` parameter (`CLAUDE.md` + `.claude/` for Claude Code, Cursor/Windsurf rules, Copilot instructions, `GEMINI.md` for Gemini; Codex reads `AGENTS.md` directly).
 
 ---
 
@@ -158,7 +158,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **76 test suites** (1,761 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **85 test suites** (1,906 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -189,6 +189,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.83**: Multi-session Envoy coordination, 52 MCP tools, and TDN stability hardening. Envoy now tracks live sessions, exposes `claim_scope` / `release_scope`, annotates responses with peer-session advisories, and gates destructive operations such as `delete_op`, `import_network(clear_first=True)`, `run_tests`, and `batch_operations` unless the caller opts in with `override=True`. TDN round-trips are safer: malformed imports validate before clearing, editable DAT capture no longer mutates the network, flag defaults round-trip more cleanly, stale cleanup only removes tracked `.tdn` files, ad-hoc exports stay untracked, and orphan shell recovery is preserved. The Setup Wizard client picker no longer shows a forced scrollbar, and the text layout has more right-side padding. The standalone VS Code AI-client token was removed; GitHub Copilot remains supported through VS Code. Release artifacts regenerated as `Embody-v6.0.83.tox`; docs and generated agent config now include the multi-session rules. Test sources now include **85 suites / 1,906 tests**.
 - **6.0.69**: A new **Dropped .tox Expression** control plus a **test-harness data-safety hardening**. `Toxdropexpr` (Embody page) governs how the continuity sweep treats the default expression TouchDesigner writes into a COMP's External .tox on drag-in (`me.parent().fileFolder + ...`): `Ask` prompts with a truncated list and **Clean / Ignore / Always Clean / Always Ignore** (the "Always" choices persist); Embody's own descendants are always cleaned. The bigger change is data safety: destructive whole-project test suites (those calling `Disable`/`ExternalizeProject`/`Reset` on the entire live project) now carry `DESTRUCTIVE = True`, are **excluded from every normal run**, and run only via the opt-in, save-gated `RunDestructiveTests(confirm_saved=True)` -- so a full `RunTests()` can never mutate your live project (new rule `rules/destructive-tests.md`). Also: removed `_ensureAutosaveParams`/`_ensureVizParams` self-heal bloat, hardened `checkOpsForContinuity` to never touch Embody's own subtree, re-entrancy-guarded `Filecleanup` so it can't get stuck at `delete`, and restored the `ReconstructTDNComps` export-mode log. New `test_toxdrop_expr` (10). Test suite **76 suites / 1,761 tests**.
 - **6.0.66**: A one-click **Launch AI Client** button on Embody's Envoy page -- pick your assistant in the `Aiclient` menu and Embody opens it at the project root: editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the folder as a workspace, terminal CLIs (Claude Code, Codex, Gemini) open in a new terminal. It resolves the REAL app/exe (macOS LaunchServices via `/usr/bin/open -b <bundle>`; Windows the real `Code.exe`/`Cursor.exe` from install dirs) -- never a hijackable `code` shim -- and runs CLIs through a login-shell terminal so `~/.local/bin` tools resolve despite TD's Dock-truncated PATH. Fixes the Electron "dock bounces then closes" bug (TD sets `ELECTRON_RUN_AS_NODE=1`, forwarded by `open`; a new `_launchEnv()` strips it -- verified live with Cursor). Adds Gemini config (`GEMINI.md` importing `AGENTS.md`), `codex`/`gemini`/`vscode` menu tokens, per-tool install hints, and gitignores other clients' generated configs. Hardened by a **10-agent codex cross-platform review** (crash-safety, `bool` helper contracts, Windows shim `shutil.which` + cmd doubled-quote metachar-safety, `${SHELL:-/bin/zsh}`); macOS verified live, Windows review-verified. New `test_launch_aiclient` (17) + 7 `test_claude_config` tests. Test suite **75 suites / 1,751 tests**.
 - **6.0.62**: A performance-rule expansion shipped in the `.tox`. `rules/performance.md` (and its `text_rule_performance.md` template) gains a complete **Movie Export / Offline Rendering** playbook so an AI agent recording a movie never ships a juddered file: the **Realtime flag** (`project.realTime`, ON by default) silently *replicates* any frame TD can't cook within the `cookRate` budget -- the file ends up the right LENGTH but full of duplicates -- so the rule mandates going non-realtime, restoring the prior flag through one `_finish(prior)` exit helper (there is no `try/finally` across the async `run(delayFrames=...)` driver), monitoring the Movie File Out Info CHOP `total_frames_dropped` **during** the render and aborting on the first drop, and proving the result with SEPARATE length and uniqueness checks (`total_frames_dropped == 0` + `ffmpeg mpdecimate` / `framemd5`). Plus a deterministic per-frame export recipe and a correction that `performLongOperation` is not a real API. Agent guidance shipped in the build; test suite unchanged at **74 suites / 1,727 tests**.

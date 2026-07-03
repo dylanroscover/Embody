@@ -8,7 +8,7 @@ This project uses **[Embody](https://github.com/dylanroscover/Embody)** (TouchDe
 - Envoy provides MCP tools for AI assistants to inspect and modify the live TD network
 - Use the `Aiclient` parameter on the Embody COMP to regenerate these files for your AI tool
 
-> **Note:** For Claude Code users, a `CLAUDE.md` with modular `.claude/rules/` and `.claude/skills/` is also generated. This `AGENTS.md` is the universal fallback read by Cursor, GitHub Copilot, Windsurf, Gemini, and others.
+> **Note:** For Claude Code users, a `CLAUDE.md` with modular `.claude/rules/` and `.claude/skills/` is also generated. This `AGENTS.md` is the universal fallback read by Codex, Cursor, GitHub Copilot, Windsurf, Gemini, and others.
 
 ---
 
