@@ -8,7 +8,7 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 |------|-----------|-------------|
 | `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
-| `delete_op` | `op_path` | Delete an operator |
+| `delete_op` | `op_path`, `override?` | Delete an operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
 | `get_op` | `op_path` | Get full operator info (type, family, parameters, inputs, outputs, children) |
@@ -104,7 +104,7 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDN-tagged COMPs instead of skipping their children (self-contained export) |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdn` file |
+| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdn` file. With `clear_first=True`, gated against live peer sessions like `delete_op` |
 | `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDN networks** -- the live in-memory network vs the on-disk `.tdn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDN COMP, which changed + counts); pass a COMP path OR a `.tdn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` -- Embody installs a `.tdn` diff driver that keeps those clean. Read-only, non-interactive |
 
 ## TOP Capture
@@ -113,15 +113,31 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 |------|-----------|-------------|
 | `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?` | Capture a TOP's output as an image. Saves to a temp file and returns the path — Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. |
 
+## Multi-Session Awareness
+
+Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working on the same project are tracked, warned about each other, and gated away from destroying each other's work. See [Multi-Session Coordination](multi-session.md) for the full picture.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_sessions` | — | List connected AI sessions: label (`repo@branch`), idle time, `recent_scopes` it modified, `claims` it holds, plus `you` (the caller's own session id) |
+| `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative write lease on an op-path prefix, a `file:` path, or a `project:` scope. Peers' overlapping claims are refused while yours is live; their destructive operations on it are gated. Auto-renews on your own writes; expires on TTL or session silence |
+| `release_scope` | `scope` | Release a lease you hold. Polite — expiry also handles it |
+
+!!! info "Auto-piggybacked peer advisories"
+    A `_peers` field rides on any response whose request touches territory another session modified in the last ~10 minutes — one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer *wrote* an overlapping scope within the last minute and your operation is also a write — stop and coordinate.
+
+!!! warning "Destructive-operation gate"
+    `delete_op`, `import_network` with `clear_first=True`, `run_tests`, and batches containing them are refused with a `MULTI-SESSION GATE` error (naming the holder or recent writer) while a live peer session claims the scope or wrote it within the last minute. Pass `override=True` only when you are certain.
+
 ## Logging
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer. Filter by level, source, or use `since_id` for incremental polling |
-| `run_tests` | `suite_name?`, `test_name?` | Run test suites and return results |
+| `run_tests` | `suite_name?`, `test_name?`, `override?` | Run test suites and return results. Gated while a peer session holds `project:tests` |
 
 !!! info "Auto-piggybacked logs"
-    When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`.
+    When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`. Warning cursors are tracked per session, so concurrent AI sessions each receive their own copy — one session polling first no longer consumes a warning meant for everyone.
 
 ## Bridge Meta-Tools
 

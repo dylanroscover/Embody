@@ -40,6 +40,92 @@ ENVOY_VERSION = "1.4.0"
 # for clients that connect without a bridge (direct HTTP).
 _SESSION_CTX = contextvars.ContextVar('envoy_session', default=(None, None))
 
+# --- Multi-session Phase 2: touch map + peer advisories ---
+
+# Operations that MUTATE authored state. Only these record touches in the
+# shared touch map; read operations still RECEIVE advisories but leave no
+# trace themselves.
+_WRITE_OPERATIONS = frozenset({
+    'create_op', 'delete_op', 'set_parameter', 'connect_ops',
+    'disconnect_op', 'copy_op', 'rename_op', 'execute_python',
+    'set_dat_content', 'edit_dat_content', 'set_op_flags',
+    'set_op_position', 'layout_children', 'externalize_op',
+    'remove_externalization_tag', 'save_externalization',
+    'create_extension', 'import_network', 'create_annotation',
+    'set_annotation', 'run_tests', 'batch_operations',
+})
+
+# Coarse scopes for operations whose footprint is not a single op path.
+_SPECIAL_SCOPES = {
+    'execute_python': 'project:python',
+    'run_tests': 'project:tests',
+}
+
+_TOUCH_WINDOW_S = 600     # advisories consider touches this recent
+_CONFLICT_WINDOW_S = 60   # peer WRITE inside this + own WRITE = conflict
+_ADVISORY_DEDUP_S = 300   # same (peer, scope) advisory re-served after this
+_TOUCH_RING_CAP = 8       # touches kept per scope
+_TOUCH_SCOPE_CAP = 200    # scopes kept (evict oldest-touched beyond this)
+
+_PATH_PARAM_KEYS = ('op_path', 'parent_path', 'source_path', 'dest_path',
+                    'target_path', 'comp_path', 'root_path')
+
+
+def _scope_overlaps(a: str, b: str) -> bool:
+    """True when two scopes denote overlapping territory.
+
+    Op-path scopes overlap when one equals the other or is an ancestor,
+    segment-aware ('/a/b' vs '/a/bc' do NOT overlap). file:/project:
+    scopes match exactly.
+    """
+    if a == b:
+        return True
+    if a.startswith('/') and b.startswith('/'):
+        shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+        return longer.startswith(shorter + '/')
+    return False
+
+
+def _scopes_for_operation(operation: str, params: dict, result=None) -> list:
+    """Scope strings an operation touches: op paths from its params (and
+    the created path from its result) plus coarse special scopes. Pure
+    inspection -- file-scope expansion happens on the main thread where
+    the externalizations table lives.
+    """
+    scopes = []
+    special = _SPECIAL_SCOPES.get(operation)
+    if special:
+        scopes.append(special)
+    params = params or {}
+    if operation == 'batch_operations':
+        for sub in (params.get('operations') or [])[:16]:
+            if isinstance(sub, dict):
+                scopes.extend(_scopes_for_operation(
+                    sub.get('tool', ''), sub.get('params') or {}))
+    else:
+        for key in _PATH_PARAM_KEYS:
+            value = params.get(key)
+            if isinstance(value, str) and value.startswith('/'):
+                scopes.append(value)
+        if operation == 'rename_op':
+            base = params.get('op_path')
+            new_name = params.get('new_name')
+            if (isinstance(base, str) and isinstance(new_name, str)
+                    and '/' in base):
+                scopes.append(base.rsplit('/', 1)[0] + '/' + new_name)
+        if isinstance(result, dict):
+            created = result.get('path')
+            if isinstance(created, str) and created.startswith('/'):
+                scopes.append(created)
+    seen = set()
+    deduped = []
+    for s in scopes:
+        if s not in seen:
+            seen.add(s)
+            deduped.append(s)
+    return deduped[:8]
+
+
 class EnvoyMCPServer:
     """
     MCP Server that runs in a worker thread.
@@ -73,7 +159,22 @@ class EnvoyMCPServer:
         existing_sessions = getattr(sys, '_envoy_sessions', None)
         self._sessions: dict = existing_sessions if isinstance(existing_sessions, dict) else {}
         sys._envoy_sessions = self._sessions
-        self._sessions_lock: Lock = Lock()
+        # One shared lock guards _sessions AND _touches; it lives on sys so
+        # the MAIN thread (touch recording, advisory scans) and the worker
+        # (registry, get_sessions) coordinate across reinits.
+        existing_lock = getattr(sys, '_envoy_sessions_lock', None)
+        self._sessions_lock: Lock = existing_lock if existing_lock is not None else Lock()
+        sys._envoy_sessions_lock = self._sessions_lock
+        # Touch map: scope -> ring of {'sid', 'tool', 'ts'} for recent WRITE
+        # operations. Written by the main thread, read by get_sessions.
+        existing_touches = getattr(sys, '_envoy_touches', None)
+        self._touches: dict = existing_touches if isinstance(existing_touches, dict) else {}
+        sys._envoy_touches = self._touches
+        # Claim leases (Phase 3): scope -> {'sid','label','note','ts','ttl'}.
+        # Cooperative write leases; guarded by the same shared lock.
+        existing_claims = getattr(sys, '_envoy_claims', None)
+        self._claims: dict = existing_claims if isinstance(existing_claims, dict) else {}
+        sys._envoy_claims = self._claims
 
         # Import mcp only when server is instantiated (in worker thread)
         from mcp.server.fastmcp import FastMCP, Image
@@ -118,13 +219,108 @@ class EnvoyMCPServer:
         """Presence list for get_sessions. Worker-side pure Python."""
         now = time.time()
         with self._sessions_lock:
+            self._prune_claims_locked(now)
             sessions = [dict(v) for v in self._sessions.values()]
+            claims_by = {}
+            for held_scope, claim in self._claims.items():
+                claims_by.setdefault(claim['sid'], []).append({
+                    'scope': held_scope,
+                    'note': claim.get('note', ''),
+                    'expires_in_s': round(claim['ts'] + claim['ttl'] - now, 1)})
+            touched_by = {}
+            for scope, ring in self._touches.items():
+                for touch in ring:
+                    touched_by.setdefault(touch['sid'], []).append(
+                        (touch['ts'], scope, touch['tool']))
         for e in sessions:
             idle = now - e.get('last_seen', now)
             e['idle_s'] = round(idle, 1)
             e['stale'] = idle > 90
+            recent = sorted(touched_by.get(e['sid'], []), reverse=True)[:5]
+            if recent:
+                e['recent_scopes'] = [
+                    {'scope': scope, 'tool': tool, 'age_s': round(now - ts, 1)}
+                    for ts, scope, tool in recent]
+            held = claims_by.get(e['sid'])
+            if held:
+                e['claims'] = held
         sessions.sort(key=lambda e: e.get('last_seen', 0), reverse=True)
         return {'sessions': sessions, 'count': len(sessions)}
+
+    def _prune_claims_locked(self, now):
+        """Drop expired claims and claims whose holder went silent for 10
+        minutes. Caller holds _sessions_lock."""
+        for held_scope in list(self._claims):
+            claim = self._claims[held_scope]
+            holder = self._sessions.get(claim['sid'])
+            holder_seen = holder.get('last_seen', 0) if holder else 0
+            # '_anon' holders (headerless clients) are never in the
+            # registry -- for them only the TTL applies, or their claims
+            # would evaporate on the next prune.
+            holder_silent = (claim['sid'] != '_anon'
+                             and now - holder_seen > 600)
+            if now > claim['ts'] + claim['ttl'] or holder_silent:
+                del self._claims[held_scope]
+
+    def _claim_scope(self, sid, label, scope, note, ttl):
+        """Grant/refuse a cooperative write lease. Worker-side pure Python."""
+        scope = (scope or '').strip()
+        if not (scope.startswith('/') or scope.startswith('file:')
+                or scope.startswith('project:')):
+            return {'error': "scope must be an op path ('/comp/op'), "
+                             "'file:<repo-relative-path>', or 'project:<name>'"}
+        if scope.startswith('/') and len(scope) > 1:
+            scope = scope.rstrip('/')
+        try:
+            ttl = max(30, min(3600, int(ttl)))
+        except Exception:
+            ttl = 300
+        me = sid or '_anon'
+        now = time.time()
+        with self._sessions_lock:
+            self._prune_claims_locked(now)
+            for held_scope, claim in self._claims.items():
+                if claim['sid'] == me:
+                    continue
+                if _scope_overlaps(scope, held_scope):
+                    return {'granted': False,
+                            'holder': {
+                                'label': claim.get('label') or claim['sid'],
+                                'scope': held_scope,
+                                'note': claim.get('note', ''),
+                                'age_s': round(now - claim['ts'], 1),
+                                'expires_in_s': round(
+                                    claim['ts'] + claim['ttl'] - now, 1)},
+                            'hint': 'Coordinate with the holder, work in a '
+                                    'different subtree, or wait for expiry.'}
+            self._claims[scope] = {'sid': me, 'label': label or me,
+                                   'note': (note or '')[:200],
+                                   'ts': now, 'ttl': ttl}
+            if len(self._claims) > 64:
+                oldest_first = sorted(self._claims.items(),
+                                      key=lambda kv: kv[1]['ts'])
+                for stale_scope, _claim in oldest_first[:len(self._claims) - 64]:
+                    del self._claims[stale_scope]
+        return {'granted': True, 'scope': scope, 'ttl': ttl,
+                'renewal': 'your own tool calls touching this scope renew '
+                           'the lease; it expires on TTL or session silence'}
+
+    def _release_scope(self, sid, scope):
+        """Release a lease held by this session. Worker-side pure Python."""
+        me = sid or '_anon'
+        scope = (scope or '').strip()
+        if scope.startswith('/') and len(scope) > 1:
+            scope = scope.rstrip('/')
+        with self._sessions_lock:
+            claim = self._claims.get(scope)
+            if claim is None:
+                return {'released': False, 'reason': 'no claim on that scope'}
+            if claim['sid'] != me:
+                return {'released': False,
+                        'reason': 'held by another session',
+                        'holder': claim.get('label') or claim['sid']}
+            del self._claims[scope]
+        return {'released': True, 'scope': scope}
 
     def _execute_in_td(self, operation: str, params: dict,
                        timeout: float = 30.0) -> dict:
@@ -211,17 +407,20 @@ class EnvoyMCPServer:
             })
 
         @self.mcp.tool()
-        def delete_op(op_path: str) -> dict:
+        def delete_op(op_path: str, override: bool = False) -> dict:
             """
             Delete an operator.
 
             Args:
                 op_path: Full path to the operator (e.g., "/project1/base1")
+                override: Bypass the multi-session gate when another live
+                    session claimed this scope or wrote it very recently.
 
             Returns:
                 Dict with success status
             """
-            return self._execute_in_td('delete_op', {'op_path': op_path})
+            return self._execute_in_td('delete_op', {'op_path': op_path,
+                                                     'override': override})
 
         @self.mcp.tool()
         def get_op(op_path: str) -> dict:
@@ -1154,7 +1353,8 @@ class EnvoyMCPServer:
 
         @self.mcp.tool()
         def import_network(target_path: str, tdn: dict,
-                          clear_first: bool = False) -> dict:
+                          clear_first: bool = False,
+                          override: bool = False) -> dict:
             """
             Import a .tdn network into a TouchDesigner COMP, recreating all operators.
 
@@ -1162,6 +1362,9 @@ class EnvoyMCPServer:
                 target_path: Destination COMP path to import into
                 tdn: The .tdn JSON document (full document or just the operators array)
                 clear_first: If True, delete all existing children before importing
+                override: Bypass the multi-session gate when another live
+                    session claimed this COMP or wrote it very recently
+                    (applies only with clear_first=True)
 
             Returns:
                 Dict with import results and created operator paths
@@ -1170,6 +1373,7 @@ class EnvoyMCPServer:
                 'target_path': target_path,
                 'tdn': tdn,
                 'clear_first': clear_first,
+                'override': override,
             })
 
         @self.mcp.tool()
@@ -1360,9 +1564,16 @@ class EnvoyMCPServer:
             Returns:
                 Dict with 'sessions' (newest-activity first: sid, label,
                 pid, first_seen, last_seen, idle_s, requests, last_tool,
-                stale = no traffic for >90s), 'count', and 'you' (the
-                caller's own sid, or null for clients that connect without
-                a bridge). Sessions silent for over an hour are dropped.
+                recent_scopes = op paths/files this session recently
+                modified, claims = scopes this session holds via
+                claim_scope, stale = no traffic for >90s), 'count', and 'you'
+                (the caller's own sid, or null for clients that connect
+                without a bridge). Sessions silent for over an hour are
+                dropped. Responses to ANY tool also carry a '_peers'
+                advisory list automatically when your request overlaps
+                territory another session touched recently; an entry with
+                conflict=true means a peer WROTE there within the last
+                minute -- stop and coordinate before proceeding.
             """
             # Answered on the worker thread from pure-Python state -- no
             # TD access, so no main-thread round-trip (mcp-safety).
@@ -1372,13 +1583,62 @@ class EnvoyMCPServer:
             return snapshot
 
         @self.mcp.tool()
-        def run_tests(suite_name: str = None, test_name: str = None) -> dict:
+        def claim_scope(scope: str, note: str = "", ttl: int = 300) -> dict:
+            """
+            Claim a work scope so concurrent AI sessions steer clear of it.
+
+            A cooperative WRITE lease, not a read lock: peers see your
+            claim in get_sessions, their overlapping claim_scope calls are
+            refused while yours is live, and their destructive operations
+            on the scope (import_network with clear_first, delete_op,
+            run_tests) are refused unless they pass override=True. Claim
+            BEFORE a large build or before editing an externalized file,
+            with the narrowest scope that covers the work. Your own tool
+            calls touching the scope renew the lease automatically; it
+            expires on TTL or when your session goes silent, so releasing
+            is polite but never required for others to make progress.
+
+            Args:
+                scope: Op path prefix ("/project1/scene"), repo file
+                    ("file:embody/scripts/tools.py"), or special scope
+                    ("project:tests").
+                note: Short intent shown to peers (e.g. "rebuilding camera rig").
+                ttl: Lease seconds, 30-3600 (default 300).
+
+            Returns:
+                {'granted': True, ...}, or {'granted': False, 'holder':
+                {label, scope, note, age_s, expires_in_s}} when a live
+                peer holds an overlapping claim.
+            """
+            # Worker-side pure Python -- no TD access (mcp-safety).
+            sid, label = _SESSION_CTX.get()
+            return self._claim_scope(sid, label, scope, note, ttl)
+
+        @self.mcp.tool()
+        def release_scope(scope: str) -> dict:
+            """
+            Release a scope you claimed with claim_scope.
+
+            Args:
+                scope: The exact scope string you claimed.
+
+            Returns:
+                {'released': bool} plus a reason when not released.
+            """
+            sid, _label = _SESSION_CTX.get()
+            return self._release_scope(sid, scope)
+
+        @self.mcp.tool()
+        def run_tests(suite_name: str = None, test_name: str = None,
+                      override: bool = False) -> dict:
             """
             Run Embody test suites and return results.
 
             Args:
                 suite_name: Run only this suite (e.g., "test_path_utils"). Omit to run all.
                 test_name: Run only this test method within the suite.
+                override: Bypass the multi-session gate when another live
+                    session holds project:tests or wrote very recently.
 
             Returns:
                 Dict with passed/failed/error/skip counts and full results list
@@ -1397,7 +1657,9 @@ class EnvoyMCPServer:
             self.add_to_refresh_queue({
                 'id': -1,  # Sentinel -- no normal response expected
                 'operation': 'run_tests',
-                'params': {'suite_name': suite_name, 'test_name': test_name},
+                'params': {'suite_name': suite_name, 'test_name': test_name,
+                           'override': override},
+                'sid': _SESSION_CTX.get()[0],
             })
 
             # Block worker thread until tests finish, timeout, or shutdown.
@@ -1422,7 +1684,7 @@ class EnvoyMCPServer:
         # --- Batch Operations ---
 
         @self.mcp.tool()
-        def batch_operations(operations: list) -> dict:
+        def batch_operations(operations: list, override: bool = False) -> dict:
             """
             Execute multiple operations in a single request.
 
@@ -1437,7 +1699,10 @@ class EnvoyMCPServer:
             Returns:
                 Dict with 'results' (list in same order), 'count', and 'success' (false if any failed)
             """
-            return self._execute_in_td('batch_operations', {'operations': operations})
+            return self._execute_in_td('batch_operations', {
+                'operations': operations,
+                'override': override,
+            })
 
     def run(self) -> None:
         """Run the MCP server (blocking) with graceful shutdown support"""
@@ -1692,6 +1957,9 @@ class EnvoyExt:
         # CONSUME warnings meant for everyone (multi-session bug); each
         # session now tracks its own position in the log ring.
         self._log_cursors: dict = {}
+        # Advisory dedup: sid -> {(peer_sid, scope): last_served_ts}. Keeps
+        # _peers token-lean; conflicts bypass it. Reset on reinit is fine.
+        self._advisories_served: dict = {}
         self._restart_count: int = 0
         self._deadTicks: int = 0  # consecutive watchdog ticks seeing a dead/refused socket
         self._last_start_time: float = 0.0  # time.time() when Start() was called
@@ -2726,6 +2994,258 @@ class EnvoyExt:
 
     # === Thread Manager Callbacks (run on main thread) ===
 
+    _GATED_OPERATIONS = ('delete_op', 'import_network', 'run_tests',
+                         'batch_operations')
+
+    def _destructiveTargets(self, operation, params):
+        """(scopes, reason) the destructive gate protects for this
+        operation, or ([], '') when nothing is gated."""
+        params = params or {}
+        if operation == 'delete_op':
+            target = params.get('op_path')
+            if isinstance(target, str) and target.startswith('/'):
+                return [target], 'delete_op'
+            return [], ''
+        if operation == 'import_network':
+            if not params.get('clear_first'):
+                return [], ''
+            target = params.get('target_path')
+            if isinstance(target, str) and target.startswith('/'):
+                return [target], 'import_network(clear_first=True)'
+            return [], ''
+        if operation == 'run_tests':
+            return ['project:tests'], 'run_tests'
+        if operation == 'batch_operations':
+            gated = []
+            for sub in (params.get('operations') or [])[:32]:
+                if not isinstance(sub, dict):
+                    continue
+                sub_params = sub.get('params') or {}
+                if sub_params.get('override'):
+                    continue
+                sub_scopes, _reason = self._destructiveTargets(
+                    sub.get('tool', ''), sub_params)
+                gated.extend(sub_scopes)
+            if gated:
+                return gated, 'batch_operations (destructive sub-operations)'
+            return [], ''
+        return [], ''
+
+    def _checkDestructiveGate(self, sid, operation, params):
+        """Refuse a destructive operation when a LIVE peer session claimed
+        an overlapping scope or wrote it within the conflict window, unless
+        override=True. Returns the error dict to send back, or None to
+        proceed. Advisory-first design: everything else only warns."""
+        if operation not in self._GATED_OPERATIONS:
+            return None
+        if (params or {}).get('override'):
+            return None
+        targets, reason = self._destructiveTargets(operation, params)
+        if not targets:
+            return None
+        lock, touches, sessions = self._touchStores()
+        claims = getattr(sys, '_envoy_claims', None)
+        if lock is None:
+            return None
+        me = sid or '_anon'
+        now = time.time()
+        with lock:
+            live = {s for s, v in (sessions or {}).items()
+                    if now - v.get('last_seen', 0) < 600}
+            for held_scope, claim in (claims or {}).items():
+                if claim['sid'] == me or claim['sid'] not in live:
+                    continue
+                if now > claim['ts'] + claim['ttl']:
+                    continue
+                if not any(_scope_overlaps(target, held_scope)
+                           for target in targets):
+                    continue
+                holder = (sessions or {}).get(claim['sid']) or {}
+                label = holder.get('label') or claim.get('label') or claim['sid']
+                note = claim.get('note', '') or 'no note'
+                self._log(
+                    'MULTI-SESSION GATE: refused ' + reason + ' -- "' + label
+                    + '" holds ' + held_scope + ' (' + note + ')', 'WARNING')
+                return {'error': 'MULTI-SESSION GATE: ' + reason
+                                 + ' refused -- session "' + label
+                                 + '" holds a claim on ' + held_scope
+                                 + ' (' + note + ', expires in '
+                                 + str(round(claim['ts'] + claim['ttl'] - now))
+                                 + 's). Coordinate, work in another subtree,'
+                                 + ' wait for expiry, or pass override=True'
+                                 + ' if you are certain.',
+                        'holder': {'label': label, 'scope': held_scope,
+                                   'note': claim.get('note', '')}}
+            for scope, ring in (touches or {}).items():
+                if not any(_scope_overlaps(target, scope)
+                           for target in targets):
+                    continue
+                for touch in reversed(ring):
+                    if touch['sid'] == me:
+                        continue
+                    age = now - touch['ts']
+                    if age > _CONFLICT_WINDOW_S:
+                        break  # ring is chronological; older ones only
+                    peer = (sessions or {}).get(touch['sid']) or {}
+                    label = peer.get('label') or touch['sid']
+                    self._log(
+                        'MULTI-SESSION GATE: refused ' + reason + ' -- "'
+                        + label + '" wrote ' + scope + ' '
+                        + str(round(age, 1)) + 's ago', 'WARNING')
+                    return {'error': 'MULTI-SESSION GATE: ' + reason
+                                     + ' refused -- session "' + label
+                                     + '" wrote ' + scope + ' only '
+                                     + str(round(age, 1)) + 's ago. Check'
+                                     + ' get_sessions, coordinate, or pass'
+                                     + ' override=True if you are certain.',
+                            'peer': {'label': label, 'scope': scope,
+                                     'tool': touch['tool'],
+                                     'age_s': round(age, 1)}}
+        return None
+    @staticmethod
+    def _touchStores():
+        """Shared multi-session stores (created by the worker; None-safe
+        before the first server start)."""
+        return (getattr(sys, '_envoy_sessions_lock', None),
+                getattr(sys, '_envoy_touches', None),
+                getattr(sys, '_envoy_sessions', None))
+
+    def _expandFileScopes(self, scopes):
+        """Append file: scopes for op-path scopes covered by the
+        externalizations table (the op's own row, or a tracked ancestor
+        such as a TDN COMP). Main thread only -- reads the live table."""
+        out = list(scopes)
+        try:
+            table = op.Embody.ext.Embody.Externalizations
+            if not table or table.numRows < 2:
+                return out
+            rows = []
+            for r in range(1, table.numRows):
+                tracked_path = table[r, 'path'].val
+                rel_file = table[r, 'rel_file_path'].val
+                if tracked_path and rel_file:
+                    rows.append((tracked_path, rel_file))
+            for scope in scopes:
+                if not scope.startswith('/'):
+                    continue
+                matches = [(tracked_path, rel_file)
+                           for tracked_path, rel_file in rows
+                           if scope == tracked_path
+                           or scope.startswith(tracked_path + '/')]
+                # Most specific first; keep at most 2 (the op's own file +
+                # its nearest tracked ancestor, e.g. the enclosing .tdn).
+                # Broader ancestors (a project-root .tdn) would make every
+                # write in the project overlap every other one.
+                matches.sort(key=lambda m: len(m[0]), reverse=True)
+                for _tracked, rel_file in matches[:2]:
+                    file_scope = 'file:' + rel_file.replace('\\', '/')
+                    if file_scope not in out:
+                        out.append(file_scope)
+        except Exception:
+            pass
+        return out[:12]
+
+    def _recordTouches(self, sid, operation, scopes):
+        """Record a WRITE operation's scopes in the shared touch map."""
+        if operation not in _WRITE_OPERATIONS or not scopes:
+            return
+        lock, touches, _sessions = self._touchStores()
+        if lock is None or touches is None:
+            return
+        entry = {'sid': sid or '_anon', 'tool': operation, 'ts': time.time()}
+        with lock:
+            # Lease renewal: the holder's own writes refresh their claims.
+            claims = getattr(sys, '_envoy_claims', None)
+            if claims:
+                for held_scope, claim in claims.items():
+                    if claim['sid'] == entry['sid'] and any(
+                            _scope_overlaps(s, held_scope) for s in scopes):
+                        claim['ts'] = entry['ts']
+            for scope in scopes:
+                ring = touches.setdefault(scope, [])
+                ring.append(entry)
+                del ring[:-_TOUCH_RING_CAP]
+            if len(touches) > _TOUCH_SCOPE_CAP:
+                oldest_first = sorted(touches.items(),
+                                      key=lambda kv: kv[1][-1]['ts'])
+                for stale_scope, _ring in oldest_first[:len(touches) - _TOUCH_SCOPE_CAP]:
+                    del touches[stale_scope]
+
+    def _attachPeerAdvisories(self, result, sid, operation, scopes):
+        """Attach _peers: recent overlapping WRITE activity by OTHER
+        sessions. conflict=true when both sides are writes within
+        _CONFLICT_WINDOW_S -- the response-side half of the relay (the
+        shipped rule tells agents to treat a conflict as a hard stop,
+        same contract as LAYOUT WARNING)."""
+        if not scopes or not isinstance(result, dict):
+            return
+        lock, touches, sessions = self._touchStores()
+        if lock is None or touches is None:
+            return
+        me = sid or '_anon'
+        now = time.time()
+        is_write = operation in _WRITE_OPERATIONS
+        candidates = []
+        with lock:
+            served = self._advisories_served.setdefault(me, {})
+            for scope, ring in touches.items():
+                if not any(_scope_overlaps(s, scope) for s in scopes):
+                    continue
+                for touch in reversed(ring):
+                    peer_sid = touch['sid']
+                    if peer_sid == me:
+                        continue
+                    age = now - touch['ts']
+                    if age > _TOUCH_WINDOW_S:
+                        continue
+                    conflict = is_write and age < _CONFLICT_WINDOW_S
+                    dedup_key = (peer_sid, scope)
+                    if (not conflict and
+                            now - served.get(dedup_key, 0) < _ADVISORY_DEDUP_S):
+                        continue
+                    peer = (sessions or {}).get(peer_sid) or {}
+                    candidates.append({
+                        '_sid': peer_sid,
+                        '_key': dedup_key,
+                        'label': peer.get('label', peer_sid),
+                        'scope': scope,
+                        'tool': touch['tool'],
+                        'age_s': round(age, 1),
+                        'conflict': conflict,
+                    })
+                    break  # newest relevant touch per scope suffices
+            # One entry per peer: conflicts first, then op-path scopes over
+            # file: scopes (more actionable), then newest. Extra scopes for
+            # the same peer are redundant token weight. Mark served ONLY
+            # what is actually emitted, so collapsed entries surface later.
+            candidates.sort(key=lambda a: (
+                not a['conflict'],
+                0 if a['scope'].startswith('/') else 1,
+                a['age_s']))
+            advisories = []
+            seen_peers = set()
+            for cand in candidates:
+                if cand['_sid'] in seen_peers:
+                    continue
+                seen_peers.add(cand['_sid'])
+                served[cand['_key']] = now
+                advisories.append({k: v for k, v in cand.items()
+                                   if not k.startswith('_')})
+                if len(advisories) >= 3:
+                    break
+            if len(served) > 128:
+                for old_key in sorted(served, key=served.get)[:64]:
+                    del served[old_key]
+        if advisories:
+            result['_peers'] = advisories
+            if any(a['conflict'] for a in advisories):
+                worst = advisories[0]
+                self._log(
+                    'CONFLICT WARNING: session "{}" wrote {} ({}s ago) -- '
+                    'coordinate before continuing'.format(
+                        worst['label'], worst['scope'], worst['age_s']),
+                    'WARNING')
+
     def _baselineLogCursor(self, sid):
         """On first sight of a session (main thread, BEFORE executing its
         operation), start its cursor at the current end of the log ring so
@@ -2818,14 +3338,51 @@ class EnvoyExt:
             # response carries the warnings THIS operation generates.
             self._baselineLogCursor(sid)
 
+            # Multi-session Phase 3: destructive-op gate. Refusal is
+            # instant and skips execution entirely.
+            try:
+                gate = self._checkDestructiveGate(sid, operation, params)
+            except Exception:
+                gate = None
+            if gate is not None:
+                if isinstance(request_id, int) and request_id >= 0:
+                    self._send_response(request_id, gate, sid)
+                else:
+                    # Deferred op (run_tests uses the -1 sentinel): deliver
+                    # the refusal through its dedicated event holder.
+                    pending = getattr(sys, '_envoy_pending_test', None)
+                    if pending:
+                        pending['holder']['result'] = gate
+                        pending['event'].set()
+                continue
+
             self._log(f'Processing: {operation}')
 
             result = self._execute_operation(operation, params)
+
+            # Multi-session Phase 2: record write touches and gather peer
+            # advisories. Never let awareness break the operation itself.
+            try:
+                scopes = self._expandFileScopes(
+                    _scopes_for_operation(operation, params, result))
+                # Failed operations didn't mutate -- don't record them as
+                # writes. Exception: a failed batch may have partially
+                # succeeded (stops on first error), so it still counts.
+                failed = isinstance(result, dict) and 'error' in result
+                if not failed or operation == 'batch_operations':
+                    self._recordTouches(sid, operation, scopes)
+            except Exception:
+                scopes = []
 
             # Deferred operations (e.g. run_tests) return None --
             # the worker thread handles its own response via Event
             if result is None:
                 continue
+
+            try:
+                self._attachPeerAdvisories(result, sid, operation, scopes)
+            except Exception:
+                pass
 
             self._send_response(request_id, result, sid)
 
@@ -2897,6 +3454,11 @@ class EnvoyExt:
 
     def _execute_operation(self, operation: str, params: dict) -> dict:
         """Route operation to appropriate handler"""
+        # 'override' belongs to the multi-session gate, not the handlers
+        # (dispatch is handler(**params)); strip it here so batch
+        # sub-operations that loop back through are covered too.
+        if params and 'override' in params:
+            params = {k: v for k, v in params.items() if k != 'override'}
         handlers = {
             'create_op': self._create_op,
             'delete_op': self._delete_op,

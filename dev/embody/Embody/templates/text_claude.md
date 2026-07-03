@@ -63,7 +63,7 @@ Manual configuration if needed:
 
 To reduce tool-approval prompts, Embody deploys a `.claude/settings.local.json` that pre-allows the Envoy MCP tools (inspect tools like `get_op`/`query_network` AND write tools like `create_op`, `set_parameter`, `execute_python`, `import_network`, plus `Bash` and `WebFetch`). It is written only if the file is missing — Embody never overwrites or regenerates your customizations, so edit its `permissions.allow` list to tighten or loosen access:
 
-`get_op`, `get_parameter`, `get_connections`, `get_annotations`, `get_enclosed_ops`, `get_op_position`, `get_op_flags`, `get_op_performance`, `get_op_errors`, `get_dat_content`, `get_td_info`, `get_td_classes`, `get_td_class_details`, `get_logs`, `get_externalizations`, `get_externalization_status`, `get_module_help`, `get_sessions`, `query_network`, `find_children`, `create_op`, `delete_op`, `connect_ops`, `set_parameter`, `execute_python`, `import_network`, `externalize_op`
+`get_op`, `get_parameter`, `get_connections`, `get_annotations`, `get_enclosed_ops`, `get_op_position`, `get_op_flags`, `get_op_performance`, `get_op_errors`, `get_dat_content`, `get_td_info`, `get_td_classes`, `get_td_class_details`, `get_logs`, `get_externalizations`, `get_externalization_status`, `get_module_help`, `get_sessions`, `claim_scope`, `release_scope`, `query_network`, `find_children`, `create_op`, `delete_op`, `connect_ops`, `set_parameter`, `execute_python`, `import_network`, `externalize_op`
 
 ## Extension Conventions
 

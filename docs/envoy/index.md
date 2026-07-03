@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **49 MCP tools** across 15 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
+Envoy exposes **52 MCP tools** across 16 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
 
 ### Operator Management
 
@@ -185,6 +185,16 @@ By default (`inline=False`) the image is saved to a temp file and the path is re
 | Tool | Description |
 |---|---|
 | `capture_top` | Capture a TOP's current output as an image; returns a temp-file path by default (`inline=True` also embeds a small preview) |
+
+### Multi-Session Awareness
+
+Several AI sessions can work on the same project at once without clobbering each other. Envoy identifies each session (`repo@branch` labels), tracks what territory each one touches, warns on overlap via `_peers` advisories, and refuses destructive operations on a live peer's turf. See [Multi-Session Coordination](multi-session.md).
+
+| Tool | Description |
+|---|---|
+| `get_sessions` | List connected sessions: labels, activity, recent scopes, claims |
+| `claim_scope` | Cooperative write lease on an op subtree, file, or project scope |
+| `release_scope` | Release a held lease (expiry also handles it) |
 
 ### Logging
 

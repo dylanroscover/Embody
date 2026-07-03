@@ -658,12 +658,10 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
 
-	def test_E15_codex_and_vscode_never_missing(self):
-		"""codex/vscode: covered by the always-written AGENTS.md, so never 'missing'."""
+	def test_E15_codex_never_missing(self):
+		"""codex: covered by the always-written AGENTS.md, so never 'missing'."""
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'codex'))
-		self.assertFalse(
-			self.embody_ext._clientFilesMissing(self._temp_dir, 'vscode'))
 
 	# ------------------------------------------------------------------
 	# Group F: _findProjectRoot()

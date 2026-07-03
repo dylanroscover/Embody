@@ -190,6 +190,10 @@ SKIP_STORAGE_KEYS = {
 	'_tdn_stripped_paths', '_git_root',
 	'envoy_running', 'envoy_shutdown_event',
 	'expanded_paths', 'manage_file_path', 'visible_count', 'hover',
+	# Embody-managed recovery/restore markers -- live on the COMP shell in
+	# the .toe, never inside the .tdn (serializing _tdn_rel_path would make
+	# every pasted/imported copy claim the original's file).
+	'_tdn_rel_path', '_pending_tox_restore',
 }
 _SYSTEM_PATH_PREFIXES = tuple(p + '/' for p in SYSTEM_PATHS)
 
@@ -301,6 +305,13 @@ class TDNExt:
 		self._divergent_loaded: bool = False
 		# On-the-fly fallback cache for unknown TD builds.
 		self._runtime_creation_cache: dict[str, dict[str, Any]] = {}
+		# Per-OPType creation FLAG values. Flag defaults vary by type --
+		# object COMPs (geometryCOMP etc.) create with render/display ON,
+		# so the global DEFAULT_FLAGS table alone would silently drop a
+		# user's render-off through the round-trip. Populated lazily by
+		# _getCreationFlagDefaults; deliberately NOT cleared per export
+		# (creation defaults are stable for a TD session).
+		self._flag_defaults_cache: dict[str, dict[str, bool]] = {}
 		self._scan_workspace: Optional['COMP'] = None
 		# Palette component catalog: {name: {'type': op_type, 'min_children': N}}.
 		# Populated by CatalogManagerExt after palette scan completes.
@@ -1123,6 +1134,9 @@ class TDNExt:
 				if not skip_cleanup:
 					before_tdn = TDNExt._collectExistingTDNFiles(
 						scan_folder, root_path)
+					# Only files Embody tracks are deletion candidates --
+					# never reclaim a stray the user placed themselves.
+					before_tdn = self._restrictToTrackedTDN(before_tdn)
 
 				write_result = TDNExt._safe_write_tdn(
 					filepath, content, scan_folder)
@@ -1249,6 +1263,11 @@ class TDNExt:
 			proj_folder = metadata['project_folder']
 			before_tdn = TDNExt._collectExistingTDNFiles(
 				proj_folder, root_path)
+			# Only files Embody tracks are deletion candidates -- never
+			# reclaim a stray the user placed themselves. Computed on the
+			# main thread, BEFORE the write/track step, so a re-pathed
+			# row's OLD file is still reclaimed.
+			before_tdn = self._restrictToTrackedTDN(before_tdn)
 			# Protect .tdn files belonging to other tracked TDN COMPs
 			# so the stale-file cleanup doesn't delete them.
 			protected_files = list(
@@ -1633,6 +1652,31 @@ class TDNExt:
 		root_path = self._reexport_queue.pop(0)
 		self.ExportNetworkAsync(root_path=root_path, output_file='auto')
 
+	@staticmethod
+	def _validateOpDefs(op_defs, path='operators'):
+		"""Structural validation of an operators list, pre-import.
+
+		Returns an error string describing the first malformed entry, or
+		None when the structure is sound. Checks only SHAPE (every entry a
+		mapping, every children value a list, recursively) -- per-field
+		tolerance stays with the phases, which skip/warn per item. This
+		runs before clear_first so a malformed document can never destroy
+		children and then fail. Pure; unit-testable without TD.
+		"""
+		if not isinstance(op_defs, list):
+			return f'{path} must be a list, got {type(op_defs).__name__}'
+		for i, op_def in enumerate(op_defs):
+			if not isinstance(op_def, dict):
+				return (f'{path}[{i}] must be a mapping, got '
+						f'{type(op_def).__name__}')
+			children = op_def.get('children')
+			if children is not None:
+				err = TDNExt._validateOpDefs(
+					children, f'{path}[{i}].children')
+				if err:
+					return err
+		return None
+
 	def ImportNetwork(self, target_path: str, tdn: Union[dict[str, Any], list[dict[str, Any]]],
 					  clear_first: bool = False, restore_file_links: bool = False) -> dict[str, Any]:
 		"""
@@ -1696,94 +1740,62 @@ class TDNExt:
 			ui.status = f'TDN Import: {msg}'
 			return {'error': msg}
 
-		# Capture external wires on dest's own connectors before clear
-		# so they can be re-wired after the rebuild. When dest has no
-		# live wires (cold open, or already-stripped comp during post-save),
-		# fall back to wires stashed on dest via comp.store() by
-		# StripCompChildren.
-		captured_externals = []
-		if clear_first:
-			try:
-				captured_externals = self._captureExternalConnections(dest)
-			except Exception as e:
-				self._log(
-					f'External capture failed on {target_path}: {e}', 'DEBUG')
-			if not captured_externals:
-				try:
-					stashed = dest.fetch(
-						'_tdn_external_wires', [], search=False)
-					if stashed:
-						captured_externals = list(stashed)
-				except Exception:
-					pass
+		# Structural validation BEFORE anything destructive. Hand-edited
+		# .tdn files (an explicitly supported workflow) can carry stray
+		# scalars or malformed nesting; the dict-walking pre-phases below
+		# would raise on those, and with the old ordering that raise
+		# landed AFTER clear_first had already destroyed the children --
+		# leaving the COMP empty with no error result. Reject cheaply
+		# here, while the network is still untouched.
+		structure_error = TDNExt._validateOpDefs(op_defs)
+		if structure_error:
+			msg = f'Malformed TDN document: {structure_error}'
+			ui.status = f'TDN Import: {msg}'
+			self._log(msg, 'ERROR')
+			return {'error': msg}
 
-		if clear_first:
-			# Excluded COMPs are invisible to TDN -- the owning app owns
-			# their lifecycle. Never destroy them during clear_first: they
-			# are absent from the .tdn, so reconstruction would not recreate
-			# them, making destruction permanent data loss.
-			excluded_children = {
-				c.path for c in dest.children if self._hasExcludeTag(c)}
-			if excluded_children:
-				self._log(
-					f'Preserving {len(excluded_children)} excluded COMP(s) '
-					f'during clear of {dest.path}', 'DEBUG')
-			# Clear dock relationships pointing INTO the destroy set before
-			# destroying -- TD's engine raises an uncatchable tdError if a
-			# dock target is destroyed before its docked operator. This MUST
-			# include a preserved excluded child docked to a soon-destroyed
-			# sibling, else the preservation reintroduces that crash. Docks
-			# between two preserved excluded children are left intact.
-			for child in list(dest.children):
-				try:
-					if (child.dock is not None
-							and child.dock.path not in excluded_children):
-						child.dock = None
-				except Exception:
-					pass
-			for child in list(dest.children):
-				if child.path in excluded_children:
-					continue
-				try:
-					child.destroy()
-				except Exception as e:
-					self._log(f'Failed to destroy {child.path}: {e}', 'WARNING')
-			# Also destroy utility operators (annotations) which .children skips
-			try:
-				for u_op in dest.findChildren(depth=1, includeUtility=True):
-					if u_op.type == 'annotate':
-						try:
-							u_op.destroy()
-						except Exception as e:
-							self._log(f'Failed to destroy annotation {u_op.path}: {e}', 'WARNING')
-			except Exception:
-				pass
+		# ------------------------------------------------------------------
+		# PURE PRE-PHASES -- dict-only transforms that need no live network
+		# state. All of these run BEFORE clear_first so any surprise in the
+		# document can still abort the import with the children intact.
+		# ------------------------------------------------------------------
 
 		# Pre-phase: Resolve templates and merge type defaults
 		if isinstance(tdn, dict):
 			par_templates = tdn.get('par_templates', {})
 			type_defaults = tdn.get('type_defaults', {})
+			if par_templates and not isinstance(par_templates, dict):
+				self._log(
+					f'Ignoring malformed par_templates '
+					f'({type(par_templates).__name__})', 'WARNING')
+				par_templates = {}
+			if type_defaults and not isinstance(type_defaults, dict):
+				self._log(
+					f'Ignoring malformed type_defaults '
+					f'({type(type_defaults).__name__})', 'WARNING')
+				type_defaults = {}
 			if par_templates:
 				TDNExt._resolve_par_templates(op_defs, par_templates)
 			if type_defaults:
 				TDNExt._merge_type_defaults(op_defs, type_defaults)
 
-		# Pre-phase: Never overwrite a preserved excluded child. A live
-		# excluded COMP is kept by the clear_first pass above; if a stale
-		# .tdn still lists an op with the same name, drop that entry so the
-		# later create/merge phases don't reuse and mutate the app-owned COMP.
-		if dest is not None:
-			excluded_names = {c.name for c in dest.children
-							  if self._hasExcludeTag(c)}
-			if excluded_names:
-				before = len(op_defs)
-				op_defs = [d for d in op_defs
-						   if d.get('name') not in excluded_names]
-				if len(op_defs) != before:
-					self._log(
-						f'Skipping {before - len(op_defs)} stale import '
-						f'entry(ies) matching preserved excluded COMP(s) in '
-						f'{target_path}', 'INFO')
+		# Pre-phase: Never overwrite a preserved excluded child. Excluded
+		# COMPs survive the clear_first pass below; if a stale .tdn still
+		# lists an op with the same name, drop that entry so the later
+		# create/merge phases don't reuse and mutate the app-owned COMP.
+		# Computed from live children BEFORE the clear -- the destroy pass
+		# preserves exactly the excluded set, so the names are identical.
+		excluded_names = {c.name for c in dest.children
+						  if self._hasExcludeTag(c)}
+		if excluded_names:
+			before = len(op_defs)
+			op_defs = [d for d in op_defs
+					   if d.get('name') not in excluded_names]
+			if len(op_defs) != before:
+				self._log(
+					f'Skipping {before - len(op_defs)} stale import '
+					f'entry(ies) matching preserved excluded COMP(s) in '
+					f'{target_path}', 'INFO')
 
 		# Pre-phase: Skip children of nested TDN-externalized COMPs.
 		# If a child COMP has its own .tdn entry in the externalizations table,
@@ -1824,7 +1836,76 @@ class TDNExt:
 		for w in tox_ref_warnings:
 			self._log(w, 'WARNING')
 
+		# ------------------------------------------------------------------
+		# MUTATING SECTION -- from here on the live network is touched.
+		# Everything below runs inside the error boundary so any failure
+		# returns {'error': ...} (which reconstruction/post-save callers
+		# use to trigger backup rollback) instead of escaping.
+		# ------------------------------------------------------------------
+		captured_externals = []
 		try:
+			# Capture external wires on dest's own connectors before clear
+			# so they can be re-wired after the rebuild. When dest has no
+			# live wires (cold open, or already-stripped comp during
+			# post-save), fall back to wires stashed on dest via
+			# comp.store() by StripCompChildren.
+			if clear_first:
+				try:
+					captured_externals = self._captureExternalConnections(dest)
+				except Exception as e:
+					self._log(
+						f'External capture failed on {target_path}: {e}', 'DEBUG')
+				if not captured_externals:
+					try:
+						stashed = dest.fetch(
+							'_tdn_external_wires', [], search=False)
+						if stashed:
+							captured_externals = list(stashed)
+					except Exception:
+						pass
+
+			if clear_first:
+				# Excluded COMPs are invisible to TDN -- the owning app owns
+				# their lifecycle. Never destroy them during clear_first: they
+				# are absent from the .tdn, so reconstruction would not recreate
+				# them, making destruction permanent data loss.
+				excluded_children = {
+					c.path for c in dest.children if self._hasExcludeTag(c)}
+				if excluded_children:
+					self._log(
+						f'Preserving {len(excluded_children)} excluded COMP(s) '
+						f'during clear of {dest.path}', 'DEBUG')
+				# Clear dock relationships pointing INTO the destroy set before
+				# destroying -- TD's engine raises an uncatchable tdError if a
+				# dock target is destroyed before its docked operator. This MUST
+				# include a preserved excluded child docked to a soon-destroyed
+				# sibling, else the preservation reintroduces that crash. Docks
+				# between two preserved excluded children are left intact.
+				for child in list(dest.children):
+					try:
+						if (child.dock is not None
+								and child.dock.path not in excluded_children):
+							child.dock = None
+					except Exception:
+						pass
+				for child in list(dest.children):
+					if child.path in excluded_children:
+						continue
+					try:
+						child.destroy()
+					except Exception as e:
+						self._log(f'Failed to destroy {child.path}: {e}', 'WARNING')
+				# Also destroy utility operators (annotations) which .children skips
+				try:
+					for u_op in dest.findChildren(depth=1, includeUtility=True):
+						if u_op.type == 'annotate':
+							try:
+								u_op.destroy()
+							except Exception as e:
+								self._log(f'Failed to destroy annotation {u_op.path}: {e}', 'WARNING')
+				except Exception:
+					pass
+
 			created = []
 
 			# Snapshot pre-existing children so Phase 1 can distinguish
@@ -2488,6 +2569,54 @@ class TDNExt:
 		self._runtime_creation_cache[op_type] = vals
 		return vals
 
+	def _getCreationFlagDefaults(self, target):
+		"""Per-OPType creation values for the DEFAULT_FLAGS set.
+
+		TD's flag defaults vary by operator type: a fresh geometryCOMP has
+		render=True and display=True, a fresh cameraCOMP has display=True
+		(verified live 2026-07-03), while most families match the global
+		DEFAULT_FLAGS table. Comparing every op against DEFAULT_FLAGS made
+		"render off" on an object COMP look like the default -- it was
+		omitted from export and came back ON after a round-trip (hidden
+		scene objects reappearing in renders).
+
+		Probes one throwaway instance per OPType (same pattern and
+		workspace as _getCreationValueOnTheFly), cached for the extension
+		lifetime. Falls back to DEFAULT_FLAGS on any probe failure.
+		"""
+		op_type = target.OPType
+		cached = self._flag_defaults_cache.get(op_type)
+		if cached is not None:
+			return cached
+
+		defaults = dict(DEFAULT_FLAGS)
+		try:
+			if self._scan_workspace is None or not self._scan_workspace.valid:
+				self._scan_workspace = self.ownerComp.create(
+					baseCOMP, '_defaults_workspace')
+				self._scan_workspace.viewer = False
+			import td as _td
+			cls = getattr(_td, op_type, None)
+			if cls is not None:
+				temp = self._scan_workspace.create(cls, '_flagprobe')
+				try:
+					for flag_name in DEFAULT_FLAGS:
+						if flag_name == 'allowCooking' and not temp.isCOMP:
+							continue
+						try:
+							defaults[flag_name] = bool(getattr(temp, flag_name))
+						except Exception:
+							pass
+				finally:
+					temp.destroy()
+		except Exception as e:
+			self._log(
+				f'Creation flag-default probe failed for {op_type}: {e}',
+				'DEBUG')
+
+		self._flag_defaults_cache[op_type] = defaults
+		return defaults
+
 	def _cleanupScanWorkspace(self):
 		"""Destroy the on-the-fly scan workspace if it exists."""
 		if self._scan_workspace is not None:
@@ -2860,10 +2989,16 @@ class TDNExt:
 
 		Flags with a default of False are listed by name when True.
 		Flags with a default of True are listed with a '-' prefix when False.
-		Example: ['viewer', 'display'] or ['-expose']
+		Example: ['viewer', 'display'] or ['-expose', '-render']
+
+		Defaults are per-OPType creation values (_getCreationFlagDefaults),
+		not the global DEFAULT_FLAGS table -- object COMPs create with
+		render/display ON, so only a per-type baseline round-trips a
+		user's render-off/display-off correctly.
 		"""
 		flags = []
-		for flag_name, default_val in DEFAULT_FLAGS.items():
+		defaults = self._getCreationFlagDefaults(target)
+		for flag_name, default_val in defaults.items():
 			if flag_name == 'allowCooking' and not target.isCOMP:
 				continue
 			try:
@@ -3271,20 +3406,31 @@ class TDNExt:
 		return restored
 
 	def _isDATEditable(self, dat_op):
-		"""Test whether a DAT's text content is writable.
+		"""Test whether a DAT's content is writable, WITHOUT mutating it.
 
 		Some auto-created companion DATs (e.g. glsl1_info, popto1) are
 		read-only -- TD auto-generates their content and rejects writes
-		with "The operator is not editable".  This probe is per-instance
+		with "The operator is not editable". This check is per-instance
 		(not per-OPType) because read-only companions share OPType
 		'textDAT' with regular editable text DATs.
+
+		Uses TD's native `DAT.isEditable`. The previous write-probe
+		(`dat.text = dat.text`) CORRUPTED live table DATs: a table's
+		`.text` is its tab/newline-delimited flattening, which cannot
+		represent cells containing embedded newlines or tabs, so writing
+		it back destroyed those characters in the live network on every
+		export (verified 2026-07-03). isEditable matches the old probe's
+		semantics exactly -- True for locked DATs (content still exports),
+		False for wired and auto-generated DATs -- with zero side effects.
+
+		Fail-open on any error: the import side already downgrades
+		"not editable" write failures gracefully, while returning False
+		here would silently drop user content from the export.
 		"""
 		try:
-			original = dat_op.text
-			dat_op.text = original
-			return True
+			return bool(dat_op.isEditable)
 		except Exception:
-			return False
+			return True
 
 	# TD's default compute-shader template, used as a FALLBACK only when live
 	# capture fails. Live capture (below) is authoritative -- TD's default could
@@ -4581,6 +4727,46 @@ class TDNExt:
 	# STALE FILE CLEANUP
 	# =========================================================================
 
+	def _restrictToTrackedTDN(self, files: set) -> set:
+		"""Restrict stale-cleanup deletion candidates to files Embody tracks.
+
+		The stale sweep previously treated EVERY pre-existing .tdn under
+		the scan folder as a deletion candidate; anything not just
+		re-written and not in cleanup_protected was unlinked. For a
+		whole-project ('/') export that deleted files Embody never owned
+		(manual snapshots, downloaded specimens awaiting import), and for
+		sub-COMP exports it overrode an explicit "Keep Files" continuity
+		decision (an untracked-but-kept file inside the export subtree).
+
+		A file Embody never tracked is never Embody's to delete: deletion
+		candidates are the intersection with the externalizations table's
+		.tdn paths. Callers intersect BEFORE the write/track step, so a
+		row whose path is about to change still contributes its OLD file
+		as a legitimate candidate. Untracked orphans are left on disk
+		(clutter over data loss); recovery is tsv-driven and ignores them.
+		"""
+		if not files:
+			return set()
+		try:
+			tracked = self.ownerComp.ext.Embody._getAllTrackedTDNFiles()
+		except Exception:
+			# No table -> nothing is provably Embody's -> delete nothing.
+			return set()
+		resolved_tracked = set()
+		for p in tracked:
+			try:
+				resolved_tracked.add(str(Path(p).resolve()))
+			except Exception:
+				pass
+		kept = set()
+		for f in files:
+			try:
+				if str(Path(f).resolve()) in resolved_tracked:
+					kept.add(f)
+			except Exception:
+				pass
+		return kept
+
 	@staticmethod
 	def _collectExistingTDNFiles(base_folder, root_path='/'):
 		"""Collect existing .tdn files under base_folder for a given export root.
@@ -5658,7 +5844,21 @@ class TDNExt:
 		return str(output_file)
 
 	def _trackTDNExport(self, root_path, file_path, build_num=None, touch_build=None):
-		"""Add/update a TDN entry in the externalizations table."""
+		"""Add/update a TDN entry in the externalizations table.
+
+		Enrollment is deliberate, not a side effect: a NEW row is appended
+		only for COMPs carrying the TDN tag (plus the whole-project root
+		'/', which cannot carry tags and is excluded from strip/reconstruct
+		by _getTDNStrategyComps anyway). Previously ANY ad-hoc file export
+		inside the project folder appended a strategy='tdn' row, silently
+		subscribing an untagged COMP to the full save-strip/reconstruction
+		lifecycle. Updates to EXISTING rows are always applied.
+
+		Tracked COMPs also get a `_tdn_rel_path` storage pointer stamped on
+		the COMP itself -- a redundant recovery breadcrumb that survives in
+		the .toe shell even if the externalizations table is lost (see
+		EmbodyExt.RecoverOrphanShells).
+		"""
 		try:
 			table = self.ownerComp.ext.Embody.Externalizations
 			if not table:
@@ -5672,6 +5872,18 @@ class TDNExt:
 
 			build_str = str(build_num) if build_num is not None else ''
 			tb_str = str(touch_build) if touch_build is not None else ''
+
+			target = op(root_path)
+
+			def _stamp_recovery_pointer():
+				# Skip '/' -- root cannot go missing, and its storage is
+				# the project's own.
+				if target is None or root_path == '/':
+					return
+				try:
+					target.store('_tdn_rel_path', rel_path)
+				except Exception:
+					pass
 
 			# Check for strategy column (new schema)
 			headers = [table[0, c].val for c in range(table.numCols)]
@@ -5693,18 +5905,35 @@ class TDNExt:
 					table[i, 'dirty'] = ''
 					table[i, 'build'] = build_str
 					table[i, 'touch_build'] = tb_str
+					_stamp_recovery_pointer()
+					return
+
+			# New rows require deliberate enrollment: the TDN tag (or the
+			# whole-project root). An ad-hoc export of an untagged COMP
+			# writes its file but does NOT join the lifecycle.
+			if root_path != '/':
+				try:
+					tdn_tag = self.ownerComp.par.Tdntag.val
+				except Exception:
+					tdn_tag = ''
+				if not (target is not None and tdn_tag
+						and tdn_tag in target.tags):
+					self._log(
+						f'Ad-hoc TDN export of untagged {root_path} not '
+						f'tracked -- file written but not enrolled in the '
+						f'save/reconstruct lifecycle (tag it to enroll)',
+						'INFO')
 					return
 
 			# Add new row (schema-aware)
 			if has_strategy:
-				# Determine COMP type
-				target = op(root_path)
 				comp_type = target.type if target else 'base'
 				table.appendRow([root_path, comp_type, 'tdn', rel_path,
 								 timestamp, '', build_str, tb_str])
 			else:
 				table.appendRow([root_path, 'tdn', rel_path, timestamp,
 								 '', build_str, tb_str])
+			_stamp_recovery_pointer()
 		except Exception as e:
 			self._log(f'Failed to track TDN export: {e}', 'WARNING')
 

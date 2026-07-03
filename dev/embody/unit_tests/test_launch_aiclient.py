@@ -38,7 +38,7 @@ class TestLaunchAIClient(EmbodyTestCase):
 	def test_A01_table_covers_all_launchable_tokens(self):
 		"""Every launchable Aiclient token is in the table ('none' excluded)."""
 		table = self.embody_ext._AICLIENT_LAUNCH
-		for token in ('claudecode', 'codex', 'gemini', 'vscode',
+		for token in ('claudecode', 'codex', 'gemini',
 					  'cursor', 'copilot', 'windsurf'):
 			self.assertIn(token, table, f'{token} missing from launch table')
 
@@ -63,16 +63,16 @@ class TestLaunchAIClient(EmbodyTestCase):
 		self.assertEqual(table['gemini']['cli'], 'gemini')
 
 	def test_A05_editors_are_editors(self):
-		"""vscode/cursor/copilot/windsurf are all editor-kind."""
+		"""cursor/copilot/windsurf are all editor-kind."""
 		table = self.embody_ext._AICLIENT_LAUNCH
-		for editor in ('vscode', 'cursor', 'copilot', 'windsurf'):
+		for editor in ('cursor', 'copilot', 'windsurf'):
 			self.assertEqual(table[editor]['kind'], 'editor', editor)
 
 	def test_A06_copilot_opens_vscode(self):
-		"""Copilot lives inside VS Code -> its launch spec IS VS Code's."""
+		"""Copilot lives inside VS Code -> its launch spec is the VS Code app."""
 		table = self.embody_ext._AICLIENT_LAUNCH
 		self.assertEqual(table['copilot']['app'], 'Visual Studio Code')
-		self.assertIs(table['copilot'], table['vscode'])
+		self.assertIs(table['copilot'], self.embody_ext._VSCODE_LAUNCH)
 
 	def test_A07_cli_names_are_barewords(self):
 		"""CLI tokens must be single shell-safe barewords (no spaces/flags)."""

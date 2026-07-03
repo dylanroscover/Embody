@@ -58,6 +58,10 @@ def onStart():
 	run(f"op('{parent.Embody}').ReconstructTDNComps()", delayFrames=60)
 	# Reconcile metadata for operators that exist but lost tags/colors/file params
 	run(f"op('{parent.Embody}').ext.Embody.ReconcileMetadata()", delayFrames=75)
+	# Offer to restore TDN-tagged empty shells whose table row was lost
+	# (tsv truncation/crash) but whose .tdn survives on disk. Additive +
+	# consent-gated; after ReconcileMetadata so tags are re-applied first.
+	run(f"op('{parent.Embody}').ext.Embody.RecoverOrphanShells()", delayFrames=90)
 	# Pin current TD build into .embody/project.json so the Envoy bridge can
 	# pick a matching install on fresh clones (committed; survives git clone).
 	run(f"op('{parent.Embody}').ext.Embody._writeProjectJson()", delayFrames=80)
@@ -210,6 +214,10 @@ def _runPreSaveExternalization():
 			scan_folder = str(project.folder)
 			before_tdn = parent.Embody.ext.TDN._collectExistingTDNFiles(
 				scan_folder, comp_path)
+			# Only files Embody tracks are deletion candidates -- never
+			# reclaim a stray the user placed themselves.
+			before_tdn = parent.Embody.ext.TDN._restrictToTrackedTDN(
+				before_tdn)
 			content = parent.Embody.ext.TDN._compact_json_dumps(new_tdn)
 			write_result = parent.Embody.ext.TDN._safe_write_tdn(
 				abs_path, content, scan_folder)

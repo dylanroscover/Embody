@@ -91,7 +91,9 @@ description: "MUST READ before first MCP tool call in a session. Complete Envoy 
 | `get_td_classes` | _(none)_ | List all Python classes in `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, docs for a TD class |
 | `get_module_help` | `module_name` | Python help text for a module |
-| `get_sessions` | _(none)_ | List AI client sessions connected to this Envoy (sid, label, pid, idle, last tool, stale flag) plus `you` = caller's own sid. Check at session start and before large or destructive operations so concurrent sessions don't clobber each other |
+| `get_sessions` | _(none)_ | List AI client sessions connected to this Envoy (sid, label, pid, idle, last tool, `recent_scopes` = op paths/files recently modified, `claims` = scopes held, stale flag) plus `you` = caller's own sid. Check at session start and before large or destructive operations so concurrent sessions don't clobber each other |
+| `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative WRITE lease on an op-path prefix, `file:<repo-relative>` path, or `project:<name>` scope. Peers' overlapping claims are refused while yours is live; their destructive ops on it are gated. Auto-renews on your own writes; expires on TTL or session silence |
+| `release_scope` | `scope` | Release a lease you hold (polite; expiry also handles it) |
 
 ## MCP Prompts
 
@@ -141,7 +143,11 @@ For visual work, success is verified by capturing and judging the output TOP, no
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer |
 
-**Auto-piggybacked logs**: A `_logs` field rides along **only when a WARNING or ERROR was logged during the call** (capped at ~8) -- routine INFO/DEBUG/SUCCESS history is omitted to keep responses token-lean. Warning cursors are **per session** (from the bridge's identity headers), so concurrent sessions each receive their own copy of a warning -- one session polling first no longer consumes it for the others. Call `get_logs` for the full history, or read the log files in Embody's logs directory (see the `Logfolder` parameter on the Embody COMP).
+**Auto-piggybacked logs**: A `_logs` field rides along **only when a WARNING or ERROR was logged during the call** (capped at ~8) -- routine INFO/DEBUG/SUCCESS history is omitted to keep responses token-lean. Warning cursors are **per session** (from the bridge's identity headers), so concurrent sessions each receive their own copy of a warning -- one session polling first no longer consumes it for the others.
+
+**Auto-piggybacked peer advisories**: a `_peers` field rides along when your request touches territory another session modified recently (last ~10 min) -- one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer WROTE an overlapping scope within the last minute AND your operation is also a write -- **treat it as a hard stop**: check `get_sessions`, coordinate (or divide work by COMP subtree), and only then proceed. Non-conflict advisories are informational and deduped per (peer, scope) for ~5 min; conflicts always ride.
+
+**Destructive-op gate**: `delete_op`, `import_network` with `clear_first=True`, `run_tests`, and batches containing them are REFUSED (`MULTI-SESSION GATE` error naming the holder/peer) while a live peer session claims the scope or wrote it within the last minute. Pass `override=True` only when certain, and say so. Call `get_logs` for the full history, or read the log files in Embody's logs directory (see the `Logfolder` parameter on the Embody COMP).
 
 ## Bridge Meta-Tools
 

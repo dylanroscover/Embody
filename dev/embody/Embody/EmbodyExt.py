@@ -41,6 +41,7 @@ class EmbodyExt:
         'text_rule_parameters':              'parameters',
         'text_rule_performance':             'performance',
         'text_rule_td_connectivity':         'td-connectivity',
+        'text_rule_multi_session':           'multi-session',
     }
 
     # Skill DAT name -> slug (Claude Code only)
@@ -116,7 +117,6 @@ class EmbodyExt:
                        'install': 'npm install -g @google/gemini-cli  '
                                   '(or brew install gemini-cli)  '
                                   'docs https://github.com/google-gemini/gemini-cli'},
-        'vscode':     _VSCODE_LAUNCH,
         'copilot':    _VSCODE_LAUNCH,   # Copilot lives inside VS Code
         'cursor': {
             'kind': 'editor', 'app': 'Cursor',
@@ -1940,8 +1940,8 @@ class EmbodyExt:
                 self._writeWindsurfRules(target_dir)
             elif client == 'gemini':
                 self._writeGeminiConfig(target_dir)
-            # 'codex', 'vscode', 'none': AGENTS.md only (Codex reads AGENTS.md;
-            # VS Code has no native rules file -- Copilot config is its own token).
+            # 'codex', 'none': AGENTS.md only (Codex reads AGENTS.md;
+            # Copilot config is its own token).
 
         # Advanced mode: confirm before (re)writing AI assistant config files.
         details = [f'{target_dir}/AGENTS.md'] + [
@@ -7861,13 +7861,21 @@ class EmbodyExt:
                     errors_total += 1
                     continue
 
-            # Import from TDN (phases 1-7 + phase 8 file-link restore)
-            result = self.my.ext.TDN.ImportNetwork(
-                target_path=comp_path,
-                tdn=tdn_doc,
-                clear_first=True,
-                restore_file_links=True,
-            )
+            # Import from TDN (phases 1-7 + phase 8 file-link restore).
+            # Guarded per-COMP: ImportNetwork returns {'error'} on its own
+            # failures, but an unexpected raise here must not abort the
+            # WHOLE loop -- one bad file would leave every remaining TDN
+            # COMP an empty shell for the session. Convert to an error
+            # result so the backup-rollback path below still runs.
+            try:
+                result = self.my.ext.TDN.ImportNetwork(
+                    target_path=comp_path,
+                    tdn=tdn_doc,
+                    clear_first=True,
+                    restore_file_links=True,
+                )
+            except Exception as e:
+                result = {'error': f'Import raised: {e}'}
 
             if result.get('error'):
                 self.Log(f'Reconstruction failed for {comp_path}: {result["error"]}', 'ERROR')
@@ -7987,6 +7995,148 @@ class EmbodyExt:
         if recovered:
             self.Log(f'Auto-save recovery: rebuilt {recovered} unsaved COMP(s) '
                      f'from .tdn (crash-before-save)', 'SUCCESS')
+
+    def RecoverOrphanShells(self, auto: bool = False) -> dict:
+        """Detect and restore TDN-tagged empty COMPs that lost their table row.
+
+        The externalizations table is the single driver of reconstruction: a
+        stripped COMP whose row is lost (tsv truncation after a crash, a table
+        reset) opens as an EMPTY shell and is silently ignored -- its .tdn on
+        disk is intact, but tsv-driven recovery never resurrects a no-row
+        orphan. This sweep closes that gap using the two breadcrumbs that
+        survive inside the .toe itself: the TDN tag on the shell, and the
+        `_tdn_rel_path` storage pointer stamped by _trackTDNExport (falling
+        back to the mirror-path convention <project>/<comp path>.tdn).
+
+        Additive and consent-gated: only empty, tagged, untracked, non-excluded
+        COMPs qualify; nothing with content is ever touched. Runs on project
+        open after ReconcileMetadata.
+
+        Args:
+            auto: True restores without prompting (tests / headless callers).
+                False prompts via _messageBox, which self-suppresses during
+                saves and test runs (returns -1 -> deferred to next open).
+
+        Returns:
+            {'found': [paths], 'restored': [paths], 'failed': [paths]}
+        """
+        results = {'found': [], 'restored': [], 'failed': []}
+        if self._tdnMode() == 'off':
+            return results
+        tdn_tag = self.my.par.Tdntag.val
+        if not tdn_tag:
+            return results
+
+        # Tracked TDN paths -- a rowed COMP is the normal reconstruction
+        # path, not an orphan.
+        tracked = set()
+        table = self.Externalizations
+        if table and table[0, 'strategy'] is not None:
+            for i in range(1, table.numRows):
+                if self._cellVal(i, 'strategy') == 'tdn':
+                    tracked.add(self._cellVal(i, 'path'))
+
+        embody_path = self.my.path
+        try:
+            tagged = self.root.findChildren(type=COMP, tags=[tdn_tag])
+        except Exception:
+            tagged = []
+        candidates = []
+        for comp in tagged:
+            p = comp.path
+            if (p == '/' or p == embody_path
+                    or p.startswith(embody_path + '/')
+                    or embody_path.startswith(p + '/')):
+                continue
+            if p in tracked:
+                continue
+            if self.my.ext.TDN._hasExcludeTag(comp):
+                continue
+            if comp.findChildren(depth=1):
+                continue  # has content -- not a lost shell
+            # Locate the .tdn: storage pointer first, then mirror convention.
+            rel = None
+            try:
+                rel = comp.fetch('_tdn_rel_path', None, search=False)
+            except Exception:
+                rel = None
+            abs_path = None
+            if rel:
+                try:
+                    cand = self.buildAbsolutePath(self.normalizePath(rel))
+                    if cand.is_file():
+                        abs_path = cand
+                except Exception:
+                    abs_path = None
+            if abs_path is None:
+                conv = Path(project.folder) / (p.lstrip('/') + '.tdn')
+                if conv.is_file():
+                    abs_path = conv
+            if abs_path is not None:
+                candidates.append((p, abs_path))
+
+        if not candidates:
+            return results
+        results['found'] = [p for p, _ in candidates]
+        self.Log(
+            f"Found {len(candidates)} TDN-tagged empty COMP(s) with a "
+            f"recoverable .tdn but no tracking row: "
+            f"{', '.join(results['found'])}", 'WARNING')
+
+        if not auto:
+            listing = '\n'.join(f'  - {p}' for p, _ in candidates[:15])
+            if len(candidates) > 15:
+                listing += f'\n  ... and {len(candidates) - 15} more'
+            choice = self._messageBox(
+                'Embody -- Recoverable TDN COMPs',
+                f'{len(candidates)} TDN-tagged COMP(s) are empty and missing '
+                f'from the externalizations table, but their .tdn files still '
+                f'exist on disk (the table may have been lost in a crash):'
+                f'\n\n{listing}\n\n'
+                f'Restore their contents from the .tdn files and re-track '
+                f'them?',
+                buttons=['Restore All', 'Skip'])
+            if choice != 0:
+                if choice == -1:
+                    self.Log('Orphan-shell recovery deferred (dialogs '
+                             'suppressed); will re-offer next open', 'INFO')
+                return results
+
+        # Parent-before-child so nested shells restore in order.
+        candidates.sort(key=lambda c: c[0].count('/'))
+        for comp_path, abs_path in candidates:
+            try:
+                tdn_doc = self.my.ext.TDN.tdn_load(
+                    abs_path.read_text(encoding='utf-8'))
+                res = self.my.ext.TDN.ImportNetwork(
+                    target_path=comp_path, tdn=tdn_doc,
+                    clear_first=True, restore_file_links=True)
+                if res.get('success'):
+                    # Tag is present (that's how we found it), so the row
+                    # append passes _trackTDNExport's enrollment gate.
+                    self.my.ext.TDN._trackTDNExport(
+                        comp_path, str(abs_path),
+                        build_num=tdn_doc.get('build'),
+                        touch_build=tdn_doc.get('td_build'))
+                    shell = op(comp_path)
+                    if shell:
+                        self._reconstructAboutPage(shell, comp_path)
+                        self.param_tracker.updateParamStore(shell)
+                        self._storeTDNFingerprint(shell)
+                    results['restored'].append(comp_path)
+                else:
+                    results['failed'].append(comp_path)
+                    self.Log(f'Orphan-shell restore failed for {comp_path}: '
+                             f'{res.get("error")}', 'ERROR')
+            except Exception as e:
+                results['failed'].append(comp_path)
+                self.Log(f'Orphan-shell restore error for {comp_path}: {e}',
+                         'ERROR')
+        if results['restored']:
+            self.Log(f"Orphan-shell recovery restored "
+                     f"{len(results['restored'])} COMP(s) and re-tracked them",
+                     'SUCCESS')
+        return results
 
     # Params visible only in 'full' mode (strip/reconstruction concepts).
     _TDN_FULL_ONLY_PARAMS = {'Tdnstriponsave', 'Tdncreateonstart'}
@@ -8355,6 +8505,7 @@ class EmbodyExt:
         '_tdn_restore_failures',
         '_tdn_mode_migration_shown', '_tdn_migration_scheduled',
         '_tdn_migration_prev_enable',
+        '_tdn_rel_path', '_pending_tox_restore',
         'pressed',
     }
 
@@ -9436,7 +9587,7 @@ class EmbodyExt:
     def LaunchAIClient(self) -> None:
         """Open the AI client selected in the Aiclient menu at the project root.
 
-        Editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the root as
+        Editors (Cursor, Windsurf; Copilot -> VS Code) open the root as
         a workspace. CLI tools (Claude, Codex, Gemini) open in a new terminal at
         the root. Driven by the _AICLIENT_LAUNCH table. Launch CWD is
         _findProjectRoot() (honors Aiprojectroot). Fire-and-forget: opens a
@@ -9502,7 +9653,7 @@ class EmbodyExt:
         variables removed, so externally launched apps/terminals get a clean env.
 
         TD sets ELECTRON_RUN_AS_NODE=1 -- which makes a freshly launched Electron
-        editor (VS Code, Cursor, Windsurf) run headless-as-Node and quit instantly
+        editor (Cursor, Windsurf, or Copilot's VS Code) run headless-as-Node and quit instantly
         (the "dock icon bounces, then closes" bug) -- plus LD_LIBRARY_PATH/DYLD_*
         and PYTHON* pointing into TD's own bundle. `open` forwards the caller's
         environment to the launched app, so these must be stripped here.
