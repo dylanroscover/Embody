@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 14
-generator: Embody/6.0.25
+build: 15
+generator: Embody/6.0.80
 td_build: 099.2025.32820
-source_file: Embody-6.25.toe
-exported_at: '2026-06-13T05:52:37Z'
+source_file: Embody-6.80.toe
+exported_at: '2026-07-03T17:26:41Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -100,6 +100,14 @@ operators:
     file: embody/Embody/templates/text_skill_externalize.md
     extension: md
   position: [600, -400]
+  tags:
+  - md
+- name: text_rule_multi_session
+  type: textDAT
+  parameters:
+    file: embody/Embody/templates/text_rule_multi_session.md
+    extension: md
+  position: [2700, 400]
   tags:
   - md
 - name: text_rule_github_release

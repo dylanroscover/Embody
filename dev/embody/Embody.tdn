@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 672
-generator: Embody/6.0.70
+build: 679
+generator: Embody/6.0.82
 td_build: 099.2025.32820
-source_file: Embody-6.70.toe
-exported_at: '2026-07-02T08:24:25Z'
+source_file: Embody-6.82.toe
+exported_at: '2026-07-03T19:02:04Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -14,26 +14,47 @@ type_defaults:
     parameters:
       resizecomp: =me
       repocomp: =me
-    color: [0.3, 0.5, 0.9]
-    tags:
-    - tdn
-  textDAT:
+  textCOMP:
     parameters:
-      syncfile: true
-      language: python
+      hmode: fill
+      clickthrough: true
+      resizecomp: =me
+      repocomp: =me
+  panelexecuteDAT:
+    parameters:
+      fromop: =parent()
+  buttonCOMP:
+    parameters:
+      hmode: fill
+      resizecomp: =me
+      repocomp: =me
+      bgalpha: 1
+      clone: =op.TDTox.op('defaultCOMPs/button')
+    size: [160, 134]
+  outCHOP:
+    parameters:
+      label: =me.name
+      autoexportroot: =parent()
+    flags:
+    - viewer
     size: [130, 90]
-    color: [0.9, 0.3, 0.4]
+  parameterCHOP:
+    parameters:
+      parameters: value0
+      custom: false
+      builtin: true
+      renameto: v1
+      autoexportroot: =parent()
+    flags:
+    - viewer
+    size: [130, 90]
+  parameterexecuteDAT:
+    parameters:
+      fromop: =parent()
+      op: ..
+      defaultreadencoding: cp1252
   baseCOMP:
     size: [160, 130]
-  windowCOMP:
-    parameters:
-      title: =me
-      borders: false
-      includedialog: false
-      reloadbuiltin: false
-    color: [0.3, 0.5, 0.9]
-    tags:
-    - tdn
   tableDAT:
     parameters:
       syncfile: true
@@ -44,6 +65,11 @@ type_defaults:
 type: containerCOMP
 custom_pars:
   Embody:
+  - name: Status
+    style: Str
+    readOnly: true
+    help: Current Embody status (read-only). Shows whether Embody is initialized and running.
+    value: Enabled
   - name: Embodymode
     style: Menu
     label: Mode
@@ -53,20 +79,20 @@ custom_pars:
     - auto
     - advanced
     menuLabels:
-    - Auto -- manage everything
-    - Advanced -- ask first
+    - Auto - manage everything
+    - Advanced - ask first
     help: How Embody handles invasive, project-level changes (git config, .venv, MCP/AI config files, network ops). 'Auto' manages everything silently -- recommended for most users. 'Advanced' asks before each such change and keeps the footprint minimal -- for users who want full control.
-  - name: Status
-    style: Str
-    readOnly: true
-    help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-    value: Testing
+  - name: Setupwizard
+    style: Pulse
+    label: Setup Wizard
+    help: Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written.
   - name: Disable
     style: Pulse
+    startSection: true
     help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
   - name: Update
     style: Pulse
-    label: Enable/Update
+    label: Enable / Update
     help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
   - name: Refresh
     style: Pulse
@@ -74,23 +100,10 @@ custom_pars:
   - name: Performmode
     style: Toggle
     label: Perform Mode
-  - name: Createexternalizationstable
-    style: Pulse
-    label: Create Externalizations Table
     startSection: true
-    help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
-  - name: Externalizations
-    style: DAT
-    label: Externalizations Table
-    help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
-    value: /embody/externalizations
-  - name: Openexternalizationstable
-    style: Pulse
-    label: Open Externalizations Table
-    help: Opens the externalizations tracking table in a floating viewer window.
   - name: Folder
     style: Folder
-    label: Externalizations Folder
+    label: Ext. Folder (Relative to Project)
     startSection: true
     help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
   - name: Externalizeproject
@@ -98,83 +111,6 @@ custom_pars:
     label: Externalize Full Project
     startSection: true
     help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
-  - name: Detectduplicatepaths
-    style: Toggle
-    label: Detect Duplicate Paths
-    help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
-    value: true
-  - name: Templatemaster
-    style: Str
-    label: Template Master Name
-    default: __template__
-    help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
-  - name: Localtimestamps
-    style: Toggle
-    label: Local Timestamps
-    default: true
-    help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
-  - name: Toxrestoreonstart
-    style: Toggle
-    label: Restore toxes on Start
-    help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
-    value: true
-  - name: Datrestoreonstart
-    style: Toggle
-    label: Restore DATs on Start
-    default: true
-    help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
-  - name: Filecleanup
-    style: Menu
-    label: File Cleanup
-    startSection: true
-    default: ask
-    menuNames:
-    - ask
-    - keep
-    - delete
-    menuLabels:
-    - Ask
-    - Always Keep Files
-    - Always Delete Files
-    help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
-  - name: Toxdropexpr
-    style: Menu
-    label: Dropped .tox Expression
-    startSection: true
-    default: ask
-    menuNames:
-    - ask
-    - clean
-    - ignore
-    menuLabels:
-    - Ask
-    - Always Clean
-    - Always Ignore
-    help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-    value: ignore
-  - name: Tdndatsafety
-    style: Menu
-    label: Content Safety
-    default: ask
-    menuNames:
-    - ask
-    - externalize
-    - ignore
-    menuLabels:
-    - Ask Each Save
-    - Always Externalize
-    - Never Ask
-    help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
-  - name: Openmanager
-    style: Pulse
-    label: Open Manager
-    startSection: true
-    help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
-  - name: Closemanager
-    style: Pulse
-    label: Close Manager
-    help: Closes the Embody Manager window.
   Tags:
   - name: Toxtags
     style: Header
@@ -359,7 +295,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 21:17:42 UTC
+    value: Saved 19:02:03 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -402,7 +338,6 @@ custom_pars:
     - claudecode
     - codex
     - gemini
-    - vscode
     - cursor
     - windsurf
     - copilot
@@ -411,7 +346,6 @@ custom_pars:
     - Claude Code
     - Codex
     - Gemini
-    - VS Code
     - Cursor
     - Windsurf
     - GitHub Copilot
@@ -449,9 +383,8 @@ custom_pars:
   - name: Envoyport
     style: Int
     label: Envoy Port
-    default: 9876
+    default: 9870
     help: 'Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.'
-    value: 9870
   - name: Embotenable
     style: Toggle
     label: Embot
@@ -463,13 +396,29 @@ custom_pars:
     label: Envoy Follow
     default: true
     help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
+  - name: Autoexternalize
+    style: Menu
+    label: Auto-Externalize New Ops
+    startSection: true
+    default: neither
+    menuNames:
+    - neither
+    - dats
+    - comps
+    - both
+    menuLabels:
+    - Neither
+    - DATs
+    - COMPs
+    - DATs and COMPs
+    help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
   - name: Envoystatus
     style: Str
     label: Envoy Status
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Starting...
+    value: Running on port 9870
   Logs:
   - name: Verbose
     style: Toggle
@@ -491,9 +440,18 @@ custom_pars:
     help: Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.
     value: logs
   UI:
+  - name: Openmanager
+    style: Pulse
+    label: Open Manager
+    help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
+  - name: Closemanager
+    style: Pulse
+    label: Close Manager
+    help: Closes the Embody Manager window.
   - name: Enablekeyboardshortcuts
     style: Toggle
     label: Enable Keyboard Shortcuts
+    startSection: true
     help: Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.
     value: true
   - name: Addtagshort
@@ -600,13 +558,96 @@ custom_pars:
     label: TDN Saved Color
     help: Color indicator for TDN-strategy operators that are saved and up-to-date.
     values: [0.153552, 0.376081, 0.457, 1]
+  Advanced:
+  - name: Createexternalizationstable
+    style: Pulse
+    label: Create Externalizations Table
+    startSection: true
+    help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
+  - name: Externalizations
+    style: DAT
+    label: Externalizations Table
+    help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
+    value: /embody/externalizations
+  - name: Openexternalizationstable
+    style: Pulse
+    label: Open Externalizations Table
+    help: Opens the externalizations tracking table in a floating viewer window.
+  - name: Detectduplicatepaths
+    style: Toggle
+    label: Detect Duplicate Paths
+    startSection: true
+    help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
+    value: true
+  - name: Templatemaster
+    style: Str
+    label: Template Master Name
+    default: __template__
+    help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
+  - name: Localtimestamps
+    style: Toggle
+    label: Local Timestamps
+    default: true
+    help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
+  - name: Toxrestoreonstart
+    style: Toggle
+    label: Restore toxes on Start
+    help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
+    value: true
+  - name: Datrestoreonstart
+    style: Toggle
+    label: Restore DATs on Start
+    default: true
+    help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
+  - name: Filecleanup
+    style: Menu
+    label: File Cleanup
+    startSection: true
+    default: ask
+    menuNames:
+    - ask
+    - keep
+    - delete
+    menuLabels:
+    - Ask
+    - Always Keep Files
+    - Always Delete Files
+    help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
+    value: keep
+  - name: Toxdropexpr
+    style: Menu
+    label: Dropped .tox Expression
+    startSection: true
+    default: ask
+    menuNames:
+    - ask
+    - clean
+    - ignore
+    menuLabels:
+    - Ask
+    - Always Clean
+    - Always Ignore
+    help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+  - name: Tdndatsafety
+    style: Menu
+    label: Content Safety
+    default: ask
+    menuNames:
+    - ask
+    - externalize
+    - ignore
+    menuLabels:
+    - Ask Each Save
+    - Always Externalize
+    - Never Ask
+    help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
   About:
   - name: Version
     style: Str
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.70
+    value: 6.0.82
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -623,7 +664,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 672
+    value: 679
   - name: Github
     style: Pulse
     label: GitHub
@@ -634,7 +675,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-02 08:24:25 UTC
+    value: 2026-07-03 13:30:17 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -684,20 +725,22 @@ storage:
   expand_order: []
   _start_in_progress: true
   git_status:
-    /specimen_lab/waveform_stack: ' M'
-    /specimen_lab/vertical_fibers: ' M'
-    /specimen_lab/plasma_interference: ' M'
-    /specimen_lab/murmuration: ' M'
-    /specimen_lab/mandelbulb_march: ' M'
-    /specimen_lab/kaleidoscope: ' M'
-    /specimen_lab/essence_streams: ' M'
-    /specimen_lab/crosspoint_matrix/glsl_matrix_pixel: ' M'
-    /specimen_lab/crosspoint_matrix: ' M'
-    /specimen_lab: ' M'
+    /embody/externalizations: ' M'
     /embody/unit_tests/test_sandbox: ' M'
+    /embody/unit_tests: ' M'
+    /embody/Embody/templates/text_skill_mcp_tools_reference: ' M'
+    /embody/Embody/templates/text_settings_local: ' M'
+    /embody/Embody/templates/text_claude: ' M'
+    /embody/Embody/templates: ' M'
+    /embody/Embody/execute: ' M'
+    /embody/Embody/TDNExt: ' M'
     /embody/Embody/EnvoyExt: ' M'
     /embody/Embody/EmbodyExt: ' M'
-  _watchdog_gen: 516
+    /embody/Embody: ' M'
+    /embody: ' M'
+    /embody/unit_tests/test_envoy_sessions: ' M'
+    /embody/Embody/templates/text_rule_multi_session: ??
+  _watchdog_gen: 655
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -839,10 +882,8 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 281
+  _clip_watch_gen: 420
   _init_complete: true
-  _smoke_test_responses:
-    Embody - AI Coding Assistant Integration: 0
 operators:
 - name: help
   type: opviewerCOMP
@@ -885,6 +926,9 @@ operators:
     reloadbuiltin: false
   position: [250, 50]
   size: [257, 250]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/list.tdn
@@ -910,7 +954,11 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/TDNExt.py
+    syncfile: true
+    language: python
   position: [-300, 400]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: tagger
@@ -931,6 +979,9 @@ operators:
     reloadbuiltin: false
   position: [900, 225]
   size: [108, 155]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/tagger.tdn
 - name: timer1
   type: timerCHOP
@@ -950,6 +1001,1875 @@ operators:
     autoexportroot: =parent()
   position: [-625, -275]
   size: [130, 90]
+- name: wizard
+  type: containerCOMP
+  parameters:
+    w: 500
+    h: 640
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+    align: verttb
+    spacing: 14
+  position: [1200, 225]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+  storage:
+    step: 0
+    sel:
+      mode: advanced
+    step_id: mode
+    sel_mode: auto
+    sel_assistant: claudecode
+    sel_client: ''
+    sel_root: gitroot
+  children:
+  - name: hint
+    type: textCOMP
+    parameters:
+      text: Choose one, then Next.
+      type: multiline
+      wordwrap: true
+      callbacks: hint_callbacks
+      fontsize: 11
+      fontcolorr: 0.6
+      fontcolorg: 0.61
+      fontcolorb: 0.6
+      textoffsetx: 24
+      textpaddingr: 36
+      alignx: left
+      aligny: top
+      w: 452
+      h: 16
+      alignorder: 3
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: logic
+    type: textDAT
+    position: [240, 0]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: title
+    type: textCOMP
+    parameters:
+      text: How should Embody manage your project?
+      wordwrap: true
+      callbacks: title_callbacks
+      fontsize: 18
+      fontcolorr: 0.92
+      fontcolorg: 0.92
+      fontcolorb: 0.92
+      textoffsetx: 24
+      textpaddingr: 36
+      alignx: left
+      h: 30
+      alignorder: 2
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+    position: [480, 0]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: track
+    type: containerCOMP
+    parameters:
+      h: 4
+      hmode: fill
+      alignorder: 1
+      bgcolorr: 0.2
+      bgcolorg: 0.21
+      bgcolorb: 0.205
+      bgalpha: 1
+      marginl: 24
+      marginr: 36
+    position: [0, -150]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: fill
+      type: containerCOMP
+      parameters:
+        w: 150
+        h: 4
+        bgcolorr: 0.24
+        bgcolorg: 0.52
+        bgcolorb: 0.35
+        bgalpha: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+  - name: clicks
+    type: panelexecuteDAT
+    parameters:
+      panels: /embody/Embody/wizard/footer/btn_back /embody/Embody/wizard/footer/btn_next /embody/Embody/wizard/grp_mode/opt_auto /embody/Embody/wizard/grp_mode/opt_advanced /embody/Embody/wizard/grp_client/opt_codex /embody/Embody/wizard/grp_client/opt_cursor /embody/Embody/wizard/grp_client/opt_gemini /embody/Embody/wizard/grp_client/opt_vscode /embody/Embody/wizard/grp_client/opt_copilot /embody/Embody/wizard/grp_client/opt_windsurf /embody/Embody/wizard/grp_assistant/opt_none /embody/Embody/wizard/grp_assistant/opt_other /embody/Embody/wizard/grp_assistant/opt_claudecode /embody/Embody/wizard/grp_footprint/opt_custom /embody/Embody/wizard/grp_footprint/opt_gitroot /embody/Embody/wizard/grp_footprint/opt_projectfolder
+      ontooff: true
+    position: [240, -150]
+    size: [130, 90]
+    color: [0.67, 0.67, 0.67]
+  - name: footer
+    type: containerCOMP
+    parameters:
+      h: 40
+      hmode: fill
+      alignorder: 5
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+      align: horizlr
+      spacing: 10
+      marginl: 24
+      marginr: 36
+      marginb: 22
+      margint: 10
+    position: [480, -150]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: btn_back
+      type: buttonCOMP
+      parameters:
+        buttontype: momentary
+        h: 36
+        bgcolorr: 0.19
+        bgcolorg: 0.2
+        bgcolorb: 0.195
+      position: [25, 100]
+      children:
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Not now
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 13
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.34
+          fontcolorg: 0.35
+          fontcolorb: 0.34
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          bgalpha: 1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          leftborder: bordera
+          rightborder: bordera
+          bottomborder: bordera
+          topborder: bordera
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+    - name: btn_next
+      type: buttonCOMP
+      parameters:
+        buttontype: momentary
+        h: 36
+        bgcolorr: 0.24
+        bgcolorg: 0.52
+        bgcolorb: 0.35
+      position: [25, 100]
+      children:
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Next
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 13
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.97
+          fontcolorg: 0.99
+          fontcolorb: 0.97
+          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          bgalpha: 1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          leftborder: bordera
+          rightborder: bordera
+          bottomborder: bordera
+          topborder: bordera
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+  - name: spacer
+    type: containerCOMP
+    parameters:
+      hmode: fill
+      vmode: fill
+      alignorder: 4.5
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+    position: [0, -300]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: divider
+    type: containerCOMP
+    parameters:
+      h: 1
+      hmode: fill
+      alignorder: 4.9
+      bgcolorr: 0.24
+      bgcolorg: 0.25
+      bgcolorb: 0.245
+      bgalpha: 1
+      marginl: 24
+      marginr: 36
+    position: [240, -300]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: grp_mode
+    type: containerCOMP
+    parameters:
+      h: 134
+      hmode: fill
+      alignorder: 4
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+      align: verttb
+      spacing: 8
+      marginl: 24
+      marginr: 36
+    position: [480, -300]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: opt_auto
+      type: buttonCOMP
+      parameters:
+        value0: true
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [25, 100]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Manages everything on its own. Recommended for most projects.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 24
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Auto
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_advanced
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        alignorder: 1
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [25, 100]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Asks before touching git, your Python env, config files, or your network.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 24
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Advanced
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+  - name: botspacer
+    type: containerCOMP
+    parameters:
+      h: 26
+      hmode: fill
+      alignorder: 6
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+    position: [0, -450]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: steplabel
+    type: textCOMP
+    parameters:
+      text: Step 1 of 3
+      callbacks: steplabel_callbacks
+      fontsize: 11
+      fontcolorr: 0.6
+      fontcolorg: 0.61
+      fontcolorb: 0.6
+      textoffsetx: 24
+      textpaddingr: 36
+      alignx: left
+      h: 16
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+      margint: 6
+    position: [240, -450]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: topspacer
+    type: containerCOMP
+    parameters:
+      h: 14
+      hmode: fill
+      alignorder: -1
+      bgcolorr: 0.11
+      bgcolorg: 0.12
+      bgcolorb: 0.115
+      bgalpha: 1
+    position: [480, -450]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  - name: grp_client
+    type: containerCOMP
+    parameters:
+      h: 216
+      hmode: fill
+      vmode: fill
+      vfillweight: 999
+      alignorder: 4
+      display: false
+      align: verttb
+      spacing: 8
+      marginl: 24
+      marginr: 36
+    position: [960, -600]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: opt_codex
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 52
+        alignorder: 2
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -200]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Generates Codex / AGENTS config.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 22
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Codex
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_cursor
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 52
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Generates .cursor config.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 22
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Cursor
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_gemini
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 52
+        alignorder: 3
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -300]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Generates GEMINI.md.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 22
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Gemini
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_copilot
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 52
+        alignorder: 5
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -500]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Generates Copilot config.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 22
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: GitHub Copilot
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_windsurf
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 52
+        alignorder: 1
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -100]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Generates Windsurf config.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 22
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Windsurf
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+  - name: grp_assistant
+    type: containerCOMP
+    parameters:
+      h: 190
+      hmode: fill
+      alignorder: 4
+      display: false
+      align: verttb
+      spacing: 8
+      marginl: 24
+      marginr: 36
+    position: [700, -600]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: opt_none
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -100]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: No .venv, server, or config. Embody still keeps your project diff-friendly.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 28
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: None - externalization only
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_other
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -200]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Cursor, Windsurf, Codex, Gemini, VS Code, or Copilot.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 28
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Other AI tool
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_claudecode
+      type: buttonCOMP
+      parameters:
+        value0: true
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Recommended. Generates .mcp.json plus .claude rules and skills.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 28
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Claude Code
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+  - name: grp_footprint
+    type: containerCOMP
+    parameters:
+      h: 190
+      hmode: fill
+      alignorder: 4
+      display: false
+      align: verttb
+      spacing: 8
+      marginl: 24
+      marginr: 36
+    position: [1220, -600]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    children:
+    - name: opt_custom
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -200]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Pick a folder now.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 28
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Custom folder
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_gitroot
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Write config at the top of the git repo.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 28
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Git root (recommended)
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+    - name: opt_projectfolder
+      type: buttonCOMP
+      parameters:
+        buttontype: radiodown
+        colorr: 0.2
+        colorg: 0.42
+        colorb: 0.28
+        h: 58
+        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        align: verttb
+        spacing: 6
+      position: [0, -100]
+      children:
+      - name: desc
+        type: textCOMP
+        parameters:
+          text: Use when the .toe is a subfolder you open as your workspace.
+          wordwrap: true
+          callbacks: desc_callbacks
+          fontsize: 11
+          fontcolorr: 0.62
+          fontcolorg: 0.63
+          fontcolorb: 0.62
+          textoffsetx: 16
+          alignx: left
+          aligny: top
+          h: 28
+          vmode: fill
+          alignorder: 1
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+      - name: out1
+        type: outCHOP
+        position: [275, 175]
+        inputs:
+        - par1
+      - name: par1
+        type: parameterCHOP
+        position: [65, 175]
+      - name: text
+        type: textCOMP
+        parameters:
+          text: Project folder
+          type: multiline
+          legacyfontselection: true
+          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+          fontsize: 14
+          linespacing: =parent().par[me.curPar.name] or me.curPar.val
+          fontcolorr: 0.93
+          fontcolorg: 0.93
+          fontcolorb: 0.93
+          textoffsetx: 16
+          alignx: left
+          aligny: bottom
+          h: 28
+          vmode: fill
+          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+          borderover: false
+        flags:
+        - viewer
+        position: [74, 26]
+        size: [113, 96]
+      - name: parexec1
+        type: parameterexecuteDAT
+        parameters:
+          pars: value0
+          onpulse: false
+          loadonstart: true
+        flags:
+        - viewer
+        position: [66, -83]
+        size: [128, 66]
+      - name: panelexec1
+        type: panelexecuteDAT
+        parameters:
+          panels: =parent()
+          panelvalue: state
+          offtoon: false
+          valuechange: true
+          defaultreadencoding: cp1252
+          loadonstart: true
+        flags:
+        - viewer
+        position: [247, -81]
+        size: [126, 62]
+      - name: desc_callbacks
+        type: textDAT
+        parameters:
+          language: python
+        flags:
+        - viewer
+        position: [0, -160]
+        size: [160, 130]
+        color: [0.67, 0.67, 0.67]
+        dock: desc
+  - name: hint_callbacks
+    type: textDAT
+    parameters:
+      language: python
+    flags:
+    - viewer
+    position: [0, -600]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    dock: hint
+  - name: title_callbacks
+    type: textDAT
+    parameters:
+      language: python
+    flags:
+    - viewer
+    position: [240, -600]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    dock: title
+  - name: steplabel_callbacks
+    type: textDAT
+    parameters:
+      language: python
+    flags:
+    - viewer
+    position: [480, -600]
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+    dock: steplabel
 - name: execute
   type: executeDAT
   parameters:
@@ -994,15 +2914,15 @@ operators:
     reloadbuiltin: false
   position: [650, 250]
   size: [160, 92]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/manager.tdn
 - name: parexec
   type: parameterexecuteDAT
   parameters:
-    fromop: =parent()
-    op: ..
     pars: '*'
     file: embody/Embody/parexec.py
-    defaultreadencoding: cp1252
     syncfile: true
     language: input
   position: [-300, 100]
@@ -1046,6 +2966,9 @@ operators:
       promote: true
   position: [300, 350]
   size: [160, 76]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   storage:
     _tip_trace:
       btn: close
@@ -1068,7 +2991,11 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/EnvoyExt.py
+    syncfile: true
+    language: python
   position: [-300, 500]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - TDExtension
   - py
@@ -1086,8 +3013,12 @@ operators:
   parameters:
     file: embody/Embody/EmbodyExt.py
     defaultreadencoding: cp1252
+    syncfile: true
+    language: python
     extension: py
   position: [-300, 600]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: templates
@@ -1148,9 +3079,24 @@ operators:
       value: /embody/Embody/window_manager
   position: [300, 475]
   size: [160, 130]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   comp_inputs:
   - manager
   tdn_ref: embody/Embody/windowHeader.tdn
+- name: window_wizard
+  type: windowCOMP
+  parameters:
+    winop: wizard
+    title: Set up Embody
+    justifyh: center
+    justifyv: center
+    winw: 500
+    winh: 680
+  position: [1200, 675]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
 - name: _envoy_perform
   type: performCHOP
   parameters:
@@ -1177,7 +3123,7 @@ operators:
   - embody_internal
 - name: embot_template
   type: baseCOMP
-  position: [-1400, -1400]
+  position: [-700, -1200]
   color: [0.67, 0.67, 0.67]
   annotations:
   - name: envoy_bot_arm_l
@@ -1232,19 +3178,30 @@ operators:
   type: windowCOMP
   parameters:
     winop: manager
+    title: =me
     ignoretaskbar: false
     justifyh: center
     justifyv: center
     winoffsetx: -12
+    borders: false
     cursorvisible: alwaysvisible
+    includedialog: false
+    reloadbuiltin: false
   position: [500, 675]
   size: [154, 89]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/window_manager.tdn
 - name: fifo1_callbacks
   type: textDAT
   parameters:
     file: embody/Embody/fifo1_callbacks.py
+    syncfile: true
+    language: python
   position: [-700, 300]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
   dock: fifo1
@@ -1258,7 +3215,11 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/timer_callbacks.py
+    syncfile: true
+    language: python
   position: [-625, -375]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
   dock: timer1
@@ -1266,7 +3227,11 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/CatalogManagerExt.py
+    syncfile: true
+    language: python
   position: [-300, 300]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
 - name: divergent_defaults
@@ -1279,11 +3244,18 @@ operators:
   type: windowCOMP
   parameters:
     winop: tagger
+    title: =me
     justifyh: mouse
     justifyv: mouse
     winoffsetx: 110
+    borders: false
+    includedialog: false
+    reloadbuiltin: false
   position: [900, 675]
   size: [110, 157]
+  color: [0.3, 0.5, 0.9]
+  tags:
+  - tdn
   tdn_ref: embody/Embody/window_tagging_menu.tdn
 - name: chopexec_exit_tagger
   type: chopexecuteDAT
@@ -1305,14 +3277,18 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/keyboardin_callbacks.py
+    syncfile: true
+    language: python
   position: [-325, -375]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
   tags:
   - py
   dock: keyboardin1
 annotations:
 - name: annotate1
   mode: annotate
-  title: Claude Config
+  title: Envoy Config
   text: CLAUDE.md template and .claude/ rule/skill templates for user-project generation.
   position: [-770, -1270]
   size: [600, 370]
@@ -1344,7 +3320,7 @@ annotations:
   mode: annotate
   title: UI
   text: 'All user-facing components: toolbar, list view, tagger panel, manager window, and popup windows.'
-  size: [1300, 1000]
+  size: [1620, 1000]
   color: [0.45, 0.45, 0.45]
   opacity: 0.9
 - name: annotation_windows
@@ -1352,6 +3328,6 @@ annotations:
   title: Windows
   text: Popup windows for the tagging menu and externalization manager UI.
   position: [100, 600]
-  size: [1140, 310]
+  size: [1398, 310]
   color: [0.574, 0.574, 0.574]
   opacity: 0.9
