@@ -1,63 +1,16 @@
 # TouchDesigner Connectivity
 
-## Session Start — ALWAYS do this first
+## Session Start -- ALWAYS do this first
 
 Before any MCP tool call, verify TD is running and reachable:
 
-1. **Check for MCP tools**: Search for `get_td_status` or any Envoy tool. The bridge v2 disk cache means tools are always available at session start — even if TD is down, bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`) are served from cache.
+1. **Check for MCP tools**: Search for `get_td_status` or any Envoy tool. The bridge v2 disk cache means tools are always available at session start -- even if TD is down, bridge meta-tools (`get_td_status`, `launch_td`, `restart_td`, `switch_instance`) are served from cache.
 2. **If tools exist**: Call `get_td_status`. If TD is not running, call `launch_td`. The bridge's reconciler auto-detects TD state changes every 1-5 seconds and handles reconnection automatically.
 
-## How the Bridge Works (v2)
+## Self-Heal First
 
-The bridge runs a background reconciler thread that continuously manages connectivity:
+Connectivity self-heals at two independent layers: the bridge reconciler reconnects the client-side STDIO bridge to a live Envoy, and the TD-side Envoy liveness watchdog revives an enabled-but-down server socket without restarting TD.
 
-- **Config polling** (every 1s): Watches `.embody/envoy.json` for mtime changes. Automatically switches to the new active instance when the config is updated.
-- **Heartbeat** (every 3-30s, dynamic): Pings the backend to detect connect/disconnect transitions. Fast cadence (3s) while disconnected, slow cadence (30s) once stable.
-- **Process discovery**: Detects new and exited TD processes via `find_all_td_pids()`. Forces a config re-read when new TDs appear.
-- **Tool cache**: Persists the tool list to disk so new sessions start with full tools immediately, without waiting for a backend round-trip.
-- **Single-attempt forwarding**: Failed requests return an error immediately — no per-request retry loop. The reconciler handles recovery in the background.
-
-## The Envoy Liveness Watchdog (TD-side)
-
-Connectivity self-heals at two independent layers, so a dropped connection almost never needs manual recovery:
-
-- **The bridge reconciler** (client-side, described above) reconnects the STDIO bridge to a live Envoy.
-- **The Envoy liveness watchdog** (TD-side, in EnvoyExt) revives the Envoy MCP server itself. It is a pure `run()`-loop that probes the server socket every ~4s and revives whenever Envoy is enabled-but-down -- a dead socket while TD keeps running, OR a `project.save()` / extension reinit that took the server down -- force-freeing port 9870 if it is still held and rebinding in seconds. No operator, no timer. It is armed from EnvoyExt's `__init__` and tied to the instance lifetime (one loop per instance, dying only when a reinit replaces the instance, whose `__init__` then arms a fresh one), so a save/reinit whose post-reinit auto-start never completes still leaves a live watchdog to recover Envoy.
-
-This is verified, not aspirational: killing the live listener socket self-heals in ~6s, and two `project.save()` cycles each had the watchdog fire (`running=False`), force-free the still-held port, and rebind in ~1s -- all with no restart, after which the bridge returns to `connected:true` on its own.
-
-## Recovery — Manual Intervention
-
-Most connectivity issues self-heal (see the two layers above). Before any manual action, read `get_td_status` and distinguish the cause:
-
-- **`connected:false` while `td_process_alive:true`** (Envoy unreachable but TD still running) is the dropped-socket zombie. The TD-side watchdog self-heals it in ~6-8s. **WAIT ~10s and re-check `get_td_status`** (or probe the port directly: `python3 -c "import socket; socket.create_connection(('127.0.0.1',9870),0.4)"`). **Do NOT `restart_td`, relaunch TD, or toggle Envoy for this** -- it defeats the watchdog and is almost never necessary. Only escalate if it genuinely has not recovered after ~15s.
-- Editing an extension `.py` (EnvoyExt / EmbodyExt / TDNExt) does NOT need a restart either -- the source DATs have `syncfile=True` and reinit on change, so edits go live on their own.
-
-Manual recovery below is only for when TD is actually down or the bridge process itself is broken:
-
-1. **Call `get_td_status`**: This is always available (even when TD is down). It shows connection state, process liveness, instance registry, and any unregistered TD processes.
-2. **If TD is not running**: Call `launch_td`. The bridge will launch TD with the configured `.toe` file and wait for Envoy to become reachable.
-3. **If the wrong instance is active**: Call `switch_instance` to list or switch instances. The reconciler also auto-switches when `.embody/envoy.json` is edited.
-4. **If the bridge process is stuck**: Tell the user to **reopen this session/conversation** — this is always the first recovery step. Only if that fails, suggest restarting the MCP server as a fallback.
-
-### Common failure: stale active instance
-
-The most frequent cause of connectivity issues is `.embody/envoy.json` having `active` set to an instance whose TD process is no longer running. The bridge's reconciler detects this automatically via heartbeat failures and reports it in `get_td_status`. Use `launch_td` or `switch_instance` to recover.
-
-### Common failure: broken venv
-
-**Symptoms**: Bridge process doesn't start at all, or starts and immediately exits. The `envoy-bridge.log` file inside Embody's logs directory (see the `Logfolder` parameter on the Embody COMP) is empty or shows a Python traceback about a missing interpreter. `.mcp.json` command points to a `.venv/` Python that doesn't work.
-
-**Cause**: The venv was created from a TD Python installation that has since been upgraded or removed. The `home` key in `.venv/pyvenv.cfg` points to a dead path (common on Windows with versioned TD directories like `TouchDesigner.2025.32460/`).
-
-**Diagnosis**:
-1. Read `.mcp.json` — find the `command` path for the envoy server.
-2. Test it: run `<command> -c "print(1)"` via Bash. If it fails with "No Python at ..." or similar, the venv is broken.
-3. Confirm by reading `.venv/pyvenv.cfg` — check if the `home` path points to an existing directory.
-
-**Fix**:
-1. Delete the broken venv: `rm -rf <project_dir>/.venv`
-2. Envoy will recreate it on next startup. Tell the user to toggle Envoy off and on in TD, or restart TD.
-3. After recreation, reopen the Claude Code session so the bridge reconnects with the new venv Python.
-
-**Prevention**: Envoy validates the venv Python on startup and logs a warning if broken. Check TD textport for "failed to execute" warnings after TD upgrades.
+- If `connected:false` while `td_process_alive:true`, WAIT ~10s and re-check `get_td_status`; do NOT `restart_td`, relaunch TD, or toggle Envoy unless it genuinely has not recovered after ~15s.
+- Editing an extension `.py` (EnvoyExt / EmbodyExt / TDNExt) does NOT need a restart; source DATs have `syncfile=True` and reinit on change.
+- Connectivity broken beyond ~15s of self-heal waiting -> MUST load /td-recovery before manual intervention.

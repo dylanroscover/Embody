@@ -159,6 +159,43 @@ class TestEnvoyToolGuards(EmbodyTestCase):
             self.skip('ui.undo final undo failed in this harness: {}'.format(e))
         self.assertIsNone(op(created_path))
 
+    def test_first_peer_advisory_carries_etiquette_hint_once(self):
+        import sys as _sys
+        ext = op.Embody.ext.Envoy
+        lock = getattr(_sys, '_envoy_sessions_lock', None)
+        touches = getattr(_sys, '_envoy_touches', None)
+        self.assertIsNotNone(lock, 'shared lock missing')
+        self.assertIsNotNone(touches, 'touch store missing')
+
+        sid = self._unique('_tc_hint_sid')
+        peer_sid = self._unique('_tc_hint_peer')
+        scope = '/_tc_hint_scope_{}'.format(int(time.time() * 1000))
+
+        try:
+            ext._advisories_served.pop(sid, None)
+            if hasattr(ext, '_peer_hint_served'):
+                ext._peer_hint_served.discard(sid)
+            with lock:
+                touches.pop(scope, None)
+
+            ext._recordTouches(peer_sid, 'set_parameter', [scope])
+
+            first = {}
+            ext._attachPeerAdvisories(first, sid, 'set_parameter', [scope])
+            self.assertIn('_peers', first)
+            self.assertEqual(first.get('_hint'), 'load /multi-session-etiquette')
+
+            second = {}
+            ext._attachPeerAdvisories(second, sid, 'set_parameter', [scope])
+            self.assertIn('_peers', second)
+            self.assertNotIn('_hint', second)
+        finally:
+            ext._advisories_served.pop(sid, None)
+            if hasattr(ext, '_peer_hint_served'):
+                ext._peer_hint_served.discard(sid)
+            with lock:
+                touches.pop(scope, None)
+
     # -----------------------------------------------------------------
     # Menu validation
     # -----------------------------------------------------------------

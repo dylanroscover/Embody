@@ -18,10 +18,10 @@ description: "MUST READ before writing TD Python via execute_python, set_dat_con
 ## Parameter Access Patterns
 
 ```python
-# CORRECT — always use .eval() for the current runtime value:
+# CORRECT -- always use .eval() for the current runtime value:
 value = op('geo1').par.tx.eval()
 
-# WRONG — .val only works in constant mode:
+# WRONG -- .val only works in constant mode:
 value = op('geo1').par.tx.val
 
 # Setting values:
@@ -39,7 +39,7 @@ me.par.tx.hex()         # WRONG
 
 ## Creating Custom Parameters
 
-All `append*` methods return a **ParGroup** (tuple-like), not a single Par — always index with `[0]`.
+All `append*` methods return a **ParGroup** (tuple-like), not a single Par -- always index with `[0]`.
 
 ```python
 page = comp.appendCustomPage('Controls')
@@ -55,7 +55,7 @@ p.startSection = True           # Draw separator line above
 page.appendInt('Count')
 page.appendToggle('Active')
 page.appendStr('Label')
-page.appendMenu('Mode')        # Creates EMPTY menu — set .menuNames/.menuLabels separately
+page.appendMenu('Mode')        # Creates EMPTY menu -- set .menuNames/.menuLabels separately
 page.appendPulse('Reset')
 page.appendRGB('Color')        # Creates Color1r, Color1g, Color1b
 page.appendXYZ('Pos')          # Creates Pos1, Pos2, Pos3
@@ -80,8 +80,8 @@ par.Speed.destroy()            # Remove single custom par
 ## `op()` vs `opex()`
 
 ```python
-node = op('/nonexistent/path')   # Returns None — silent failure
-node = opex('/nonexistent/path') # Raises tdError — clear message
+node = op('/nonexistent/path')   # Returns None -- silent failure
+node = opex('/nonexistent/path') # Raises tdError -- clear message
 
 all_noises = ops('noise*')       # Returns a LIST (supports wildcards)
 ```
@@ -103,7 +103,7 @@ Never call `op()`, `parent()`, or access TD objects at module level. They execut
 # WRONG:
 my_op = op('base1')  # May be None during init
 
-# CORRECT — defer to methods:
+# CORRECT -- defer to methods:
 class MyExt:
     def doSomething(self):
         my_op = op('base1')  # Resolved at call time
@@ -121,8 +121,8 @@ mod.utils.myFunction()
 
 # In a script (decreasing performance):
 import utils                         # Fastest
-m = mod.utils; m.func()              # OK — cache the reference
-mod.utils.func()                     # Slowest — re-resolves every call
+m = mod.utils; m.func()              # OK -- cache the reference
+mod.utils.func()                     # Slowest -- re-resolves every call
 
 # Access by path:
 mod('/project1/utils').myFunction()
@@ -139,6 +139,24 @@ op('myDat').module.myFunction()
 parent().MyExtensionProperty if parent().extensionsReady else 0
 ```
 
+## onInitTD and TDN Import Timing
+
+**Any initialization that sets up state inside a TDN-strategy COMP will be destroyed when TDN import runs.** TDN reconstruction (`ReconstructTDNComps`) calls `ImportNetwork` with `clear_first=True`, which deletes all children and recreates them from the `.tdn` file. If an extension's `onInitTD` creates operators, sets parameters, stores values, or builds internal state inside a TDN COMP, that work is wiped out by the import.
+
+This applies to:
+
+- **Project open**: `ReconstructTDNComps` runs at frame 60. Extensions inside TDN COMPs initialize earlier (when the COMP shell is created), so `onInitTD` fires before the import overwrites everything.
+- **Ctrl+S / `project.save()`**: The strip/restore cycle deletes children pre-save, then re-imports them post-save. Extensions reinitialize after the restore, but the import may still be completing.
+
+**Rules:**
+
+1. **Defer initialization that depends on network state.** Use `run('self.mySetup()', delayFrames=5)` in `onInitTD` so the setup executes after the TDN import completes. The delay must be long enough for all import phases to finish.
+2. **Never assume `onInitTD` runs once.** Inside TDN COMPs, extensions may reinitialize multiple times: on project open, after every save (strip/restore), and on manual TDN reimport. `onInitTD` must be idempotent.
+3. **Guard against missing children.** During the strip phase of a save, the COMP's children are temporarily gone. If `onInitTD` fires during this window, `op('child')` returns `None`. Always null-check operators before accessing them.
+4. **Store persistent state outside the TDN boundary.** If an extension needs state that survives reimport, use `store()` on the COMP itself (storage is preserved through TDN import) or on an ancestor outside the TDN COMP.
+
+
+
 ## Operator Storage
 
 ```python
@@ -148,15 +166,15 @@ op('base1').unstore('count')
 op('base1').storeStartupValue('version', 1)  # Restored on project load
 ```
 
-**Gotchas:** `fetch()` searches UP hierarchy by default — use `search=False` for local-only. `store()` triggers recooks. Cannot store TD operator references — use path strings.
+**Gotchas:** `fetch()` searches UP hierarchy by default -- use `search=False` for local-only. `store()` triggers recooks. Cannot store TD operator references -- use path strings.
 - Docs: https://docs.derivative.ca/Storage
 
 ## `tdu.Dependency` for Reactive Values
 
 ```python
 dep = tdu.Dependency(0)
-dep.val = 5          # CORRECT — triggers recooks
-dep = 5              # WRONG — destroys the Dependency object
+dep.val = 5          # CORRECT -- triggers recooks
+dep = 5              # WRONG -- destroys the Dependency object
 
 current = dep.peekVal  # Read without creating dependency
 
@@ -190,16 +208,16 @@ n[1,2] + 1          # 4 (auto-cast)
 n[1,2].val + 1      # TypeError: str + int
 ```
 
-- `dat.text` — tab/newline delimited; **strips multi-line cell content**. Use `dat.csv` for cells with newlines
-- `dat.jsonObject` — parses as JSON directly (no `json.loads()` needed)
-- `dat.module` — access as Python module
-- `dat.write(content)` — **appends** (does not overwrite)
+- `dat.text` -- tab/newline delimited; **strips multi-line cell content**. Use `dat.csv` for cells with newlines
+- `dat.jsonObject` -- parses as JSON directly (no `json.loads()` needed)
+- `dat.module` -- access as Python module
+- `dat.write(content)` -- **appends** (does not overwrite)
 - Docs: https://docs.derivative.ca/DAT_Class
 
 ## CHOP Channel Access
 
 ```python
-ch = op('noise1')['chan1']        # By name — NO wildcard
+ch = op('noise1')['chan1']        # By name -- NO wildcard
 chs = op('noise1').chans('tx*')  # Pattern matching
 val = ch.eval()                   # Current value
 
@@ -213,7 +231,7 @@ arr = op('noise1').numpyArray()   # Shape: (numChans, numSamples)
 
 **Coordinate system:** TD places **(0, 0) at the bottom-left, with Y increasing upward** for all texture operations. `TOP.numpyArray()` is the exception: it returns rows top-to-bottom (numpy convention).
 
-`TOP.sample(x, y)` downloads the **entire texture** from GPU — extremely expensive. Never in loops.
+`TOP.sample(x, y)` downloads the **entire texture** from GPU -- extremely expensive. Never in loops.
 
 ```python
 # sample() uses TD texture coords: y=0 is BOTTOM of image
@@ -221,7 +239,7 @@ r, g, b, a = op('noise1').sample(x=0.5, y=0.5)  # Center of texture
 r, g, b, a = op('noise1').sample(x=0, y=0)       # Bottom-left corner
 
 # numpyArray() returns rows TOP-to-BOTTOM (opposite of TD texture coords)
-arr = op('noise1').numpyArray()  # [height, width, channels] — NOT [width, height]
+arr = op('noise1').numpyArray()  # [height, width, channels] -- NOT [width, height]
 # arr[0] is the TOP of the image (highest TD Y)
 # arr[-1] is the BOTTOM of the image (TD y=0)
 
@@ -231,7 +249,7 @@ arr_td = np.flipud(arr)
 
 **Color domain: `numpyArray()` is NOT sRGB file bytes.** `TOP.numpyArray()` returns the TOP's raw pixel values -- linearized/linear-light floats for a float TOP -- NOT the sRGB-gamma-encoded 8-bit bytes that `cv2`/`PIL` read from a `.png`/`.jpg`. A direct pixel diff across the two domains is invalid: it shows a ~0.1-0.4 baseline difference that swamps any real per-pixel change. For any pixel-comparison or frame-exactness workflow (e.g. verifying a movie encode), compare **same-domain only** -- reader `numpyArray()` vs reader `numpyArray()` -- or convert one side (apply/remove the sRGB transfer) before comparing. This is why in-TD readback and out-of-process file decodes must not be diffed against each other directly.
 
-## POPs — GPU-Accelerated Point Operators
+## POPs -- GPU-Accelerated Point Operators
 
 POPs process 3D geometry on the GPU (analogous to SOPs but GPU-accelerated).
 
@@ -243,10 +261,10 @@ bounds = pop_op.bounds(delayed=True)  # Non-blocking
 attrs = pop_op.pointAttributes        # Set of attribute names
 ```
 
-Common types: `gridPOP`, `noisePOP`, `transformPOP`, `particlePOP`, `spherePOP`, `linePOP`, `mergePOP`, `nullPOP`, `selectPOP`, `mathPOP`, `cachePOP`, `glslPOP`. For files: `fileinPOP` (File In POP — meshes/geometry) vs `pointfileinPOP` (Point File In POP — 3D point clouds: `.ply`/`.pts`/`.xyz`/`.e57`, Gaussian splats) are **distinct** operators.
+Common types: `gridPOP`, `noisePOP`, `transformPOP`, `particlePOP`, `spherePOP`, `linePOP`, `mergePOP`, `nullPOP`, `selectPOP`, `mathPOP`, `cachePOP`, `glslPOP`. For files: `fileinPOP` (File In POP -- meshes/geometry) vs `pointfileinPOP` (Point File In POP -- 3D point clouds: `.ply`/`.pts`/`.xyz`/`.e57`, Gaussian splats) are **distinct** operators.
 - Docs: https://docs.derivative.ca/POP_Class
 
-## `run()` — Delayed Code Execution
+## `run()` -- Delayed Code Execution
 
 ```python
 run("op('/project1/base1').cook(force=True)", delayFrames=1)
@@ -259,7 +277,26 @@ run("me.cook(force=True)", fromOP=op('/project1/base1'), delayFrames=1)
 
 ## Background and Long-Running Work
 
-The full decision ladder (when to use what; threading is the last resort) and the ironclad rule ("never touch a TD object - or call `run()` - from a worker thread; a read is as fatal as a write") live in `rules/td-python.md` (Threading and Background Work). This section is the code.
+**Ironclad rule (a read is treated exactly like a write).** From any thread but the main thread, NEVER touch a main-thread-owned TD object: `op()`/`opex()`, a `Par`/`ParGroup` (read OR write, including `.eval()`/`.val` on a live parameter), DAT/CHOP/SOP/TOP content, `storage` (`fetch`/`store`), `tdu.Dependency` (setting `.val` recooks on the main thread), or `debug()`/`print()` (they route to the Textport / a DAT). **Never call `run()`/`td.run()` from a worker** - it raises `tdError`; this is exactly what froze TD in the field. A worker may use ONLY: pure Python (`math`, `json`, `requests`), `tdu` math/value utilities (`tdu.clamp`/`remap`/`Vector`/`Matrix` - they do not reference TD data), parameter VALUES evaluated on the main thread and passed in, `queue.Queue`, `threading.Event`/`Lock`, `td.isMainThread()` as a guard, and the Thread Manager's `InfoQueue`/`Get/Set*Safe`/`SafeLogger`. Resolve every op path and value on the main thread BEFORE spawning the worker; the worker returns plain data for a main-thread callback to apply.
+
+**Do NOT reach for threading first.** Match the rung to the problem TYPE (these are routes, not a strict escalation); threading is the LAST resort:
+
+0. **Prototype synchronously** to prove the URL/auth/parse - one-shot only, short explicit timeout, never in a per-frame callback or on project open, never shipped.
+1. **Fast, TD-only, no I/O -> run it inline.** Any network/disk/subprocess call is NEVER this step (latency is unbounded).
+2. **Fetch data -> a native TD I/O operator, NOT Python threading.** HTTP one-shot or streaming -> **Web Client DAT**: `op('webclient1').request(url, 'GET', timeout=8000)` returns a connection id immediately and never blocks the frame; the `onResponse` callback fires on the MAIN thread, so write the result there. Parse with a **JSON DAT** (or `dat.jsonObject`) and bridge numbers to channels with **DAT to CHOP** (there is no Web Client CHOP). `ws://` -> WebSocket DAT; inbound/host -> Web Server DAT; control -> OSC; files -> File In / Folder DAT.
+3. **Long main-thread (TD-touching) work -> chunk with `run(delayFrames=N)`**, each chunk small enough to fit one frame. `run()` controls WHEN, not HOW MUCH; it is not a thread and is main-thread-only (a single heavy parse deferred with `run()` still blocks whatever frame it lands on).
+4. **Blocking pure-Python work (custom auth, file/disk, subprocess, heavy CPU) -> the Thread Manager.** Prefer the Palette **Thread Manager Client**; advanced: `op.TDResources.ThreadManager` + a `TDTask` whose `target` touches ZERO TD objects, applying results only in its main-thread hooks. Never call `EnqueueTask()` from a worker (ThreadManager is itself a TD COMP).
+5. **Long-lived server/loop -> ThreadManager `standalone=True`** (Envoy's own MCP server, drained by its `RefreshHook` on the main thread) **or a top-level `threading.Thread`** that touches ZERO TD objects, never calls `run()`, and hands results to a `queue.Queue` drained every frame by a main-thread callback (an Execute DAT `onFrameStart` or a ThreadManager `RefreshHook`). A worker spawning a `run()`-calling sub-thread is the crash, not a rung.
+
+Engine COMP / TouchEngine offloads heavy COOKING to a separate process (TOP/CHOP/DAT I/O only) - never use it for an I/O fetch. Stock `asyncio` blocks the frame loop; a worker-hosted loop still needs zero TD access and a queue handoff.
+
+**Triggers.** Prefer a user-driven Pulse parameter (`onPulse` / `Par.pulse()`) for a one-shot/manual fetch, or a **Timer CHOP** for genuine intervals (fire one request per tick). Never a `sleep` loop, a self-rescheduling `run()` poller, or an auto-fetch on project open unless asked; do not start a new request while one is still pending.
+
+**Gates.** Do not pre-optimize: a synchronous fetch that does not measurably drop a frame may not need anything above Step 2 (measurement decides whether a callback needs chunking or a worker - it never makes shipped blocking I/O acceptable on the main thread). After wiring, verify with primary evidence: `get_project_performance` shows fps/frameTime held vs baseline and `droppedFrames` flat, AND the result actually arrived (read the DAT/CHOP back; branch on `statusCode['code']` - a callback that never fires leaves TD running but empty).
+
+For code patterns (Web Client DAT example, Thread Manager Client, polling, large payloads), load `/td-api-reference`.
+
+### Code patterns
 
 ### Fetch data: Web Client DAT (no threading)
 
@@ -336,6 +373,13 @@ A large response is delivered to `onResponse` on the MAIN thread, so a heavy par
 
 ### Not for fetching
 Engine COMP / TouchEngine runs a `.tox` in a separate PROCESS to parallelize heavy COOKING (sims, geometry, render) - it exchanges only TOP/CHOP/DAT across the boundary and does no network I/O, so it is the wrong tool for a fetch. Stock `asyncio` blocks TD's frame loop; if an advanced worker hosts an asyncio loop it still obeys the zero-TD-access + queue-handoff rules.
+
+
+## Pre-Installed Packages
+
+Commonly importable without installation: `numpy`, `cv2` (OpenCV), `requests`, `yaml` (PyYAML), `cryptography`, `attrs` (only `numpy` and `cv2` are documented as bundled; verify the rest in your build before relying on them). Auto-imported stdlib: `math`, `re`, `sys`, `collections`, `enum`, `inspect`, `traceback`, `warnings`.
+
+**`requests` blocks the frame - see the Threading ladder above.** `execute_python`, parameter expressions, and operator/cook callbacks all run on TD's main thread, so a synchronous `requests.get(...)` (or `urllib`/`socket`, a large file read, `subprocess.run`, or a blocking DB call) freezes the whole UI/cook cycle for the round-trip - on a slow endpoint it can hang TD or exceed the 30s MCP timeout. `requests` has no default timeout; always pass `timeout=(connect, read)` in seconds. To fetch data, use the Web Client DAT (async, never blocks); if you must use `requests`, run it in a Thread Manager worker.
 
 ## Explicit Type Conversion
 

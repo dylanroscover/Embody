@@ -55,9 +55,9 @@ class TestClaudeConfig(EmbodyTestCase):
 		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
 		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)
 
-	def test_A02_skills_map_has_9_entries(self):
-		"""_TEMPLATE_MAP_SKILLS should have exactly 9 skill entries."""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 9)
+	def test_A02_skills_map_has_13_entries(self):
+		"""_TEMPLATE_MAP_SKILLS should have exactly 13 skill entries."""
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 13)
 
 	def test_A03_templates_comp_exists(self):
 		"""The templates COMP should exist inside Embody."""

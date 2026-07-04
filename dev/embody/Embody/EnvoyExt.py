@@ -2224,6 +2224,7 @@ class EnvoyExt:
         # Advisory dedup: sid -> {(peer_sid, scope): last_served_ts}. Keeps
         # _peers token-lean; conflicts bypass it. Reset on reinit is fine.
         self._advisories_served: dict = {}
+        self._peer_hint_served: set = set()
         self._restart_count: int = 0
         self._deadTicks: int = 0  # consecutive watchdog ticks seeing a dead/refused socket
         self._last_start_time: float = 0.0  # time.time() when Start() was called
@@ -3507,6 +3508,9 @@ class EnvoyExt:
                     del served[old_key]
         if advisories:
             result['_peers'] = advisories
+            if me not in self._peer_hint_served:
+                result['_hint'] = 'load /multi-session-etiquette'
+                self._peer_hint_served.add(me)
             if any(a['conflict'] for a in advisories):
                 worst = advisories[0]
                 self._log(

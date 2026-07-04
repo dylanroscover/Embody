@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 703
-generator: Embody/6.0.89
+build: 707
+generator: Embody/6.0.90
 td_build: 099.2025.32820
-source_file: Embody-6.90.toe
-exported_at: '2026-07-04T11:18:23Z'
+source_file: Embody-6.91.toe
+exported_at: '2026-07-04T11:49:28Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -295,7 +295,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 11:18:01 UTC
+    value: Saved 11:49:16 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -649,7 +649,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.89
+    value: 6.0.90
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -666,7 +666,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 703
+    value: 707
   - name: Github
     style: Pulse
     label: GitHub
@@ -677,7 +677,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-04 11:18:23 UTC
+    value: 2026-07-04 11:49:28 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -728,19 +728,24 @@ storage:
   _start_in_progress: true
   git_status:
     /embody/externalizations: ' M'
-    /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests/test_mcp_parameters: ' M'
-    /embody/unit_tests/test_mcp_flags_position: ' M'
-    /embody/unit_tests/test_envoy_bridge: ' M'
-    /embody/Embody/templates/text_skill_visual_aesthetics: ' M'
-    /embody/Embody/templates/text_skill_mcp_tools_reference: ' M'
+    /embody/unit_tests/test_claude_config: ' M'
+    /embody/Embody/templates/text_skill_td_api_reference: ' M'
+    /embody/Embody/templates/text_rule_td_python: ' M'
+    /embody/Embody/templates/text_rule_td_connectivity: ' M'
+    /embody/Embody/templates/text_rule_performance: ' M'
+    /embody/Embody/templates/text_rule_parameters: ' M'
     /embody/Embody/templates/text_claude: ' M'
-    /embody/Embody/templates/text_agents_md: ' M'
-    /embody/Embody/TDNExt: ' M'
+    /embody/Embody/templates: ' M'
     /embody/Embody/EnvoyExt: ' M'
+    /embody/Embody/EmbodyExt: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
-  _watchdog_gen: 683
+    /embody/Embody/templates/text_rule_multi_session: ' M'
+    /embody/Embody/templates/text_skill_movie_export: ??
+    /embody/Embody/templates/text_skill_parameter_design: ??
+    /embody/Embody/templates/text_skill_td_recovery: ??
+    /embody/Embody/templates/text_skill_multi_session_etiquette: ??
+  _watchdog_gen: 687
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -882,7 +887,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 448
+  _clip_watch_gen: 452
   _suppress_dialogs: true
 operators:
 - name: help

@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.91
+
+Rules diet: the always-loaded rule files shrink ~60 percent by relocating reference depth into four new on-demand skills -- every hard law stays inline, every moved section leaves a MUST-load trigger behind.
+
+- **Four new shipped skills (13 total):** `/movie-export` (the Realtime trap, zero-drop verification, deterministic export, async-reader staleness -- loaded only when actually rendering), `/parameter-design` (pages/styles/ranges/help-text catalog), `/td-recovery` (bridge internals + manual recovery runbooks), `/multi-session-etiquette` (advisory contract, claim leases, gates).
+- **Thinned always-loaded rules:** performance.md 21.0k -> 9.7k bytes, td-python.md 20.1k -> 15.2k, parameters.md 5.3k -> 1.5k, td-connectivity.md 6.1k -> 1.3k, multi-session.md 3.1k -> 0.9k -- roughly 10k tokens reclaimed per session, and per-project relevance: a project that never exports movies never loads the movie-export saga. Threading/cook depth moved into `/td-api-reference`, which was already mandatory before writing TD Python, so enforcement is unchanged by construction.
+- **Relocation verified mechanically:** all 263 substantive lines from the original rules confirmed present in either the thinned rule or its destination skill (zero content lost).
+- **Peers hint:** the FIRST multi-session advisory served to each session now carries a `_hint` pointing at `/multi-session-etiquette`, so coordination guidance arrives exactly when a second session appears.
+
 ## v6.0.90
 
 Token and latency quick wins from the efficiency audit, plus the output-first visual convention.
