@@ -327,6 +327,76 @@ class TestEnvoyToolGuards(EmbodyTestCase):
         self._assert_error_contains(result, 'Provide par_name')
 
     # -----------------------------------------------------------------
+    # Compact response payloads
+    # -----------------------------------------------------------------
+
+    def test_get_op_omits_default_parameters_by_default(self):
+        # constantTOP, not baseCOMP: base COMPs have no transform pars at all
+        # (only Object COMPs do), so par.tx raised. colorr/colorg are real
+        # constantTOP pars with known defaults.
+        top = self.sandbox.create(constantTOP, 'compact_get_op')
+        top.par.colorr = 0.25
+
+        compact = op.Embody.ext.Envoy._get_op(top.path)
+
+        self.assertDictHasKey(compact, 'parameters')
+        self.assertDictHasKey(compact['parameters'], 'colorr')
+        self.assertNotIn('colorg', compact['parameters'])
+        self.assertGreater(compact.get('parameters_omitted', 0), 0)
+
+        full = op.Embody.ext.Envoy._get_op(
+            top.path, include_defaults=True)
+
+        self.assertDictHasKey(full['parameters'], 'colorr')
+        self.assertDictHasKey(full['parameters'], 'colorg')
+        self.assertFalse(full.get('parameters_omitted', 0))
+
+    def test_get_parameter_compact_and_details_modes(self):
+        noise = self.sandbox.create(noiseTOP, 'compact_get_parameter')
+        if not getattr(noise.par.type, 'isMenu', False):
+            self.skip('noiseTOP type is not a Menu parameter in this TD build')
+
+        compact = op.Embody.ext.Envoy._get_parameter(
+            noise.path, par_name='type')
+
+        self.assertDictHasKey(compact, 'menuNames')
+        self.assertNotIn('style', compact)
+        self.assertNotIn('menuLabels', compact)
+
+        details = op.Embody.ext.Envoy._get_parameter(
+            noise.path, par_name='type', details=True)
+
+        self.assertDictHasKey(details, 'style')
+        self.assertDictHasKey(details, 'menuLabels')
+
+    def test_query_network_child_rows_lack_name(self):
+        self.sandbox.create(baseCOMP, 'compact_query_child')
+
+        result = op.Embody.ext.Envoy._query_network(
+            parent_path=self.sandbox.path)
+
+        self.assertGreaterEqual(result['count'], 1)
+        self.assertNotIn('name', result['operators'][0])
+
+    def test_get_network_layout_compact_shape_and_annotation_text_cap(self):
+        parent = self.sandbox.create(baseCOMP, 'compact_layout')
+        parent.create(baseCOMP, 'layout_child')
+        long_text = 'x' * 200
+        annotation = op.Embody.ext.Envoy._create_annotation(
+            parent.path, text=long_text, x=-200, y=-200,
+            width=400, height=200)
+        self.assertTrue(annotation.get('success'), repr(annotation))
+
+        result = op.Embody.ext.Envoy._get_network_layout(parent.path)
+
+        self.assertDictHasKey(result, 'operators')
+        self.assertNotIn('name', result['operators'][0])
+        self.assertNotIn('nodeCenterX', result['operators'][0])
+        self.assertDictHasKey(result, 'annotations')
+        self.assertTrue(result['annotations'], repr(result))
+        self.assertLessEqual(len(result['annotations'][0]['text']), 163)
+
+    # -----------------------------------------------------------------
     # execute_python rollback
     # -----------------------------------------------------------------
 

@@ -1483,7 +1483,15 @@ def augment_tools_list(response):
     if (response
             and "result" in response
             and "tools" in response["result"]):
-        response["result"]["tools"].extend(BRIDGE_TOOLS)
+        tools = response["result"]["tools"]
+        existing = {
+            tool.get("name") for tool in tools
+            if isinstance(tool, dict)
+        }
+        tools.extend(
+            tool for tool in BRIDGE_TOOLS
+            if tool.get("name") not in existing
+        )
     return response
 
 

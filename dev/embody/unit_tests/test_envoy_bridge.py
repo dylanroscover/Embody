@@ -1777,6 +1777,20 @@ class TestBridgeToolListAugmentation(EmbodyTestCase):
         self.assertIn('get_td_status', names)
         self.assertIn('launch_td', names)
 
+    def test_augment_tools_list_is_idempotent(self):
+        response = {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'result': {'tools': [{'name': 'create_op'}]}
+        }
+
+        bridge.augment_tools_list(response)
+        bridge.augment_tools_list(response)
+
+        names = [t['name'] for t in response['result']['tools']]
+        self.assertEqual(names.count('get_td_status'), 1)
+        self.assertEqual(names.count('launch_td'), 1)
+
     def test_augment_no_result_key(self):
         response = {'jsonrpc': '2.0', 'id': 1, 'error': {'code': -1}}
         bridge.augment_tools_list(response)  # Should not crash
@@ -2381,6 +2395,11 @@ class TestBridgeToolsListCache(EmbodyTestCase):
         self.assertGreaterEqual(
             len(tools_list_responses), 2,
             'Expected two tools/list responses (both should succeed)')
+
+        for response in tools_list_responses:
+            names = [t['name'] for t in response['result']['tools']]
+            self.assertEqual(names.count('get_td_status'), 1)
+            self.assertEqual(names.count('launch_td'), 1)
 
         self.assertEqual(
             tools_list_forward_count[0], 1,

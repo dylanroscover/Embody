@@ -17,8 +17,8 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | `delete_op` | `op_path` | Delete an operator |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
-| `get_op` | `op_path` | Get full operator info (type, family, parameters, inputs, outputs, children) |
-| `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container |
+| `get_op` | `op_path`, `include_defaults?` | Returns NON-DEFAULT parameters by default (`include_defaults=True` for all); parameter-heavy COMPs are expensive (~3k+ tokens full) -- prefer `read_tdn` for structure reads |
+| `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | Compact operator list: path/type/family/depth; name = last path segment. Set `include_utility=True` to include annotations |
 | `find_children` | `op_path`, `name?`, `type?`, `depth?`, `tags?`, `text?`, `comment?`, `include_utility?` | Advanced search using TD's `findChildren` |
 | `cook_op` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
 
@@ -27,15 +27,15 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set value, expression, bind expression, or mode; rejects invalid Menu values with valid `menuNames`; sequence-block names auto-grow (`const5name` -> 6 blocks) |
-| `get_parameter` | `op_path`, `par_name?`, `search?`, `search_in?`, `depth?`, `max_results?` | Get one parameter or search by glob/substring across a subtree (`search_in`: `name`, `value`, `expr`, `any`) |
+| `get_parameter` | `op_path`, `par_name?`, `search?`, `search_in?`, `depth?`, `max_results?`, `details?` | Single-parameter mode is compact by default (`path`, `parameter`, `value`, `mode`, `label`, mode-specific refs, `menuNames`); `details=True` restores default/style/range/menuLabels/menuIndex. Search ignores `details` |
 
 ## DAT Content
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_dat_content` | `op_path`, `format?` | Get DAT text or table data (`"text"`, `"table"`, `"auto"`) |
-| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. **Wipe guardrail**: calls that would leave the DAT empty (`text=""`, `rows=[]`, or `clear=True` with no content) are refused unless `confirm_wipe=True`. **For partial edits to text DATs, prefer `edit_dat_content`** -- it sends only the changed substring (much cheaper for large DATs). Use `set_dat_content` for tables, full rewrites, or intentional wipes. |
-| `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a DAT -- replaces `old_string` with `new_string`. Mirrors Claude Code's Edit tool: `old_string` must appear exactly once by default; widen with surrounding context for uniqueness, or pass `replace_all=True` to replace every occurrence. Token-efficient -- only the changed substring crosses the wire. **Text DATs only**; tables go through `set_dat_content(rows=...)`. Refuses empty `old_string`, identical strings, and edits that would wipe the DAT (unless `confirm_wipe=True`). |
+| `set_dat_content` | `op_path`, `text?`, `rows?`, `clear?`, `confirm_wipe?` | Full-replace DAT content. Refuses no-action calls and wipes (`text=""`, `rows=[]`, or `clear=True` with no content) unless `confirm_wipe=True`. For partial text edits prefer `edit_dat_content`; use this for tables, full rewrites, or intentional wipes. |
+| `edit_dat_content` | `op_path`, `old_string`, `new_string`, `replace_all?`, `confirm_wipe?` | Surgical text edit on a text DAT. `old_string` must appear exactly once by default; widen with context or pass `replace_all=True`. Refuses empty/identical strings and wipes unless `confirm_wipe=True`; not-found errors include diagnostics. Tables go through `set_dat_content(rows=...)`. |
 
 ## Operator Flags
 
@@ -49,7 +49,7 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_position` | `op_path` | Get position, size, color, and comment |
-| `get_network_layout` | `comp_path`, `include_annotations?` | Get positions of ALL operators (and annotations) in a COMP in one call. Returns bounding_box. Use instead of repeated `get_op_position` calls |
+| `get_network_layout` | `comp_path`, `include_annotations?` | Compact layout for all children in a COMP: path/type/nodeX/nodeY/nodeWidth/nodeHeight plus bounding_box. Centers are `nodeX+nodeWidth/2`; annotation text is capped at 160 chars. Use instead of repeated `get_op_position` calls |
 | `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set position, size, color (`[r,g,b]` 0-1), or comment |
 | `layout_children` | `op_path` | Auto-layout all children in a COMP |
 
@@ -136,7 +136,7 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP's output as an image. Pass `sample_grid>=2` for numeric NxN RGBA grid + channel stats instead of an image -- token-cheap verification. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP output. Returns a temp file path by default; `inline=True` embeds a small preview. `sample_grid>=2` returns numeric NxN RGBA cells + channel stats instead of an image, clamped 2..32 with origin at top-left. |
 
 For visual work, success is verified by capturing and judging the output TOP, not by a clean network alone; see `/visual-aesthetics`.
 

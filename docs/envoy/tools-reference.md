@@ -4,6 +4,8 @@ Envoy exposes 53 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 
 Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
 
+Responses are compact by default; opt-in flags such as `include_defaults` and `details` return full detail when needed.
+
 ## Operator Management
 
 | Tool | Parameters | Description |
@@ -13,8 +15,8 @@ Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. 
 | `delete_op` | `op_path`, `override?` | Delete an operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
-| `get_op` | `op_path` | Get full operator info (type, family, parameters, inputs, outputs, children) |
-| `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container. Set `include_utility=True` to include annotations |
+| `get_op` | `op_path`, `include_defaults?` | Get operator info. Parameters are NON-DEFAULT only by default; pass `include_defaults=True` for all parameters. Parameter-heavy COMPs are expensive in full detail, so prefer `read_tdn` for structure reads |
+| `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container. Child rows are compact: `path`, `type`, `family`, `depth` (`name` is derivable from the last path segment). Set `include_utility=True` to include annotations |
 | `find_children` | `op_path`, `name?`, `type?`, `depth?`, `tags?`, `text?`, `comment?`, `include_utility?` | Advanced search using TD's `findChildren` — filter by name pattern, type, depth, tags, text content, or comment |
 | `cook_op` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
 
@@ -23,11 +25,13 @@ Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`). Invalid Menu values are rejected with valid `menuNames`; sequence-block names auto-grow their sequence (`const5name` grows `numBlocks` to 6) |
-| `get_parameter` | `op_path`, `par_name?`, `search?`, `search_in?`, `depth?`, `max_results?` | Get one parameter, or search parameters by glob/substring across a subtree. Search fields: `name`, `value`, `expr`, or `any` |
+| `get_parameter` | `op_path`, `par_name?`, `search?`, `search_in?`, `depth?`, `max_results?`, `details?` | Get one parameter compactly, or search parameters by glob/substring across a subtree. Search fields: `name`, `value`, `expr`, or `any` |
 
 Search mode omits `par_name` and passes `search`. It scans the target operator and children to `depth` (default 2) using fnmatch glob semantics; patterns without `*?[` become contains searches. Results are `{root, pattern, search_in, count, results, truncated?}`, where each hit includes `op`, `par`, `value`, `mode`, and `expr` or `bindExpr` when present.
 
 `search_in='value'` evaluates every parameter it scans (expressions included), so expression side effects and cooking cost are on the caller; `search_in='any'` only evaluates constant-mode values and matches expression/bind parameters by text.
+
+Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mode-specific refs (`expression`, `bindExpr`, `bindMaster`, `exportOP`), and `menuNames` for Menu parameters. Pass `details=True` to include defaults, custom/read-only/style metadata, numeric ranges, `menuLabels`, and `menuIndex`. Search mode ignores `details`.
 
 **Example** -- find expressions under `/project1` that reference absolute paths in that subtree:
 
@@ -55,7 +59,7 @@ Search mode omits `par_name` and passes `search`. It scans the target operator a
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_position` | `op_path` | Get operator position, size, color, and comment |
-| `get_network_layout` | `comp_path`, `include_annotations?` | Get positions of ALL operators (and annotations) in a COMP in one call. Returns bounding_box. Use instead of repeated `get_op_position` calls |
+| `get_network_layout` | `comp_path`, `include_annotations?` | Get compact positions of ALL operators (and annotations) in a COMP in one call. Operators include `path`, `type`, `nodeX`, `nodeY`, `nodeWidth`, `nodeHeight`; centers are derivable as `nodeX+nodeWidth/2` and `nodeY+nodeHeight/2`. Annotation text is capped at 160 chars. Returns `bounding_box` |
 | `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set operator position, size, color (`[r,g,b]` floats 0-1), or comment |
 | `layout_children` | `op_path` | Auto-layout all children in a COMP |
 

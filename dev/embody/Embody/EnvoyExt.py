@@ -391,8 +391,23 @@ class EnvoyMCPServer:
             del self.pending_requests[request_id]
         return result
 
-    def check_responses(self) -> None:
+    def check_responses(self, first_response: dict = None) -> None:
         """Check for responses from main thread"""
+        def process_response(response):
+            request_id = response['id']
+            with self.lock:
+                pending = self.pending_requests.get(request_id)
+            if pending is not None:
+                pending['result'] = response['result']
+                pending['event'].set()
+            else:
+                # Orphaned response -- request already timed out and was removed
+                print(f'[Envoy][WARNING] Orphaned response for request {request_id} '
+                      f'(likely timed out). Operation still executed on main thread.')
+
+        if first_response is not None:
+            process_response(first_response)
+
         while True:
             try:
                 response = self.response_queue.get_nowait()
@@ -407,16 +422,7 @@ class EnvoyMCPServer:
                 if not expected:
                     print(f'[Envoy][WARNING] check_responses unexpected error: {type(e).__name__}: {e}')
                 break
-            request_id = response['id']
-            with self.lock:
-                pending = self.pending_requests.get(request_id)
-            if pending is not None:
-                pending['result'] = response['result']
-                pending['event'].set()
-            else:
-                # Orphaned response -- request already timed out and was removed
-                print(f'[Envoy][WARNING] Orphaned response for request {request_id} '
-                      f'(likely timed out). Operation still executed on main thread.')
+            process_response(response)
 
     def _register_tools(self):
         """Register all MCP tools"""
@@ -457,17 +463,21 @@ class EnvoyMCPServer:
                                                      'override': override})
 
         @self.mcp.tool()
-        def get_op(op_path: str) -> dict:
+        def get_op(op_path: str, include_defaults: bool = False) -> dict:
             """
-            Get detailed information about an operator.
+            Get operator info; parameters are non-default only by default.
 
             Args:
                 op_path: Full path to the operator
+                include_defaults: True returns all parameters
 
             Returns:
-                Dict with operator info including type, family, parameters, inputs, outputs
+                Dict with type, family, parameters, inputs, outputs, children
             """
-            return self._execute_in_td('get_op', {'op_path': op_path})
+            return self._execute_in_td('get_op', {
+                'op_path': op_path,
+                'include_defaults': include_defaults,
+            })
 
         @self.mcp.tool()
         def set_parameter(op_path: str, par_name: str, value: str = None,
@@ -504,19 +514,14 @@ class EnvoyMCPServer:
         @self.mcp.tool()
         def get_parameter(op_path: str, par_name: str = None,
                          search: str = None, search_in: str = 'any',
-                         depth: int = 2, max_results: int = 50) -> dict:
+                         depth: int = 2, max_results: int = 50,
+                         details: bool = False) -> dict:
             """
-            Get a single parameter value, or search parameters by glob.
+            Read one parameter compactly, or search parameters by glob/substring.
 
-            Single-parameter mode requires par_name. Search mode scans the
-            target operator and children to depth using fnmatch glob semantics;
-            patterns without *?[ are treated as contains searches. search_in
-            may be "name", "value", "expr", or "any". Example: search
-            absolute-path expressions with search="*/project1/*",
-            search_in="expr".
-            search_in='value' evaluates every parameter it scans (expressions
-            included) -- expression side effects and cooking cost are on the
-            caller; 'any' only evaluates constant-mode values.
+            Single-parameter mode is compact by default; details=True restores
+            full metadata. Search mode ignores details. search_in='value'
+            evaluates scanned values; search_in='any' evaluates constants only.
 
             Args:
                 op_path: Full path to the operator
@@ -525,10 +530,10 @@ class EnvoyMCPServer:
                 search_in: Field to search: name, value, expr, or any
                 depth: Child search depth
                 max_results: Maximum search hits to return
+                details: True returns full metadata in single-parameter mode
 
             Returns:
-                Single-parameter details, or search results with op, par,
-                value, mode, and expression/bind expression fields when present
+                Compact parameter info or search hits
             """
             return self._execute_in_td('get_parameter', {
                 'op_path': op_path,
@@ -536,7 +541,8 @@ class EnvoyMCPServer:
                 'search': search,
                 'search_in': search_in,
                 'depth': depth,
-                'max_results': max_results
+                'max_results': max_results,
+                'details': details,
             })
 
         @self.mcp.tool()
@@ -589,7 +595,7 @@ class EnvoyMCPServer:
                          op_type: str = None,
                          include_utility: bool = False) -> dict:
             """
-            List all operators in a network/container.
+            List operators in a network/container.
 
             Args:
                 parent_path: Path to parent COMP to search in (default "/")
@@ -598,7 +604,7 @@ class EnvoyMCPServer:
                 include_utility: If True, include utility operators like annotations (default False)
 
             Returns:
-                Dict with list of operators and their basic info
+                Dict with operator path/type/family/depth; name = last path segment
             """
             return self._execute_in_td('query_network', {
                 'parent_path': parent_path,
@@ -841,40 +847,16 @@ class EnvoyMCPServer:
                            rows: list = None, clear: bool = False,
                            confirm_wipe: bool = False) -> dict:
             """
-            Full-replace the content of a DAT operator. NOT incremental --
-            the entire DAT is replaced by what you send.
+            Replace a DAT's entire text or table content.
 
-            For partial edits to text DATs, prefer edit_dat_content --
-            it takes old_string/new_string and only sends the changed
-            substring across the wire (much cheaper for large DATs).
-
-            Workflow for full replace:
-              1. get_dat_content(op_path) to read the current content
-              2. Modify the returned content in memory
-              3. set_dat_content(op_path, text=full_modified_content)
-
-            Sending only the part you changed will destroy everything else.
-
-            Guardrails:
-              - No-content guard: refuses calls with no actionable args
-                (text=None, rows=None, clear=False -- you passed nothing).
-              - Wipe guard: refuses calls that would leave the DAT empty
-                (text="", rows=[], or clear=True with no replacement
-                content) unless confirm_wipe=True. Most "wipe" calls are
-                accidents from malformed input -- the guard interrupts
-                so you can verify intent before destroying content.
+            Refuses no-content calls and any wipe unless confirm_wipe=True.
 
             Args:
                 op_path: Path to the DAT operator
-                text: Full text content to set (replaces entire DAT)
-                rows: List of lists to set as table rows (replaces entire table)
-                clear: Optional. Redundant when text/rows is also provided
-                    (assignment already replaces the entire content).
-                    Use alone with confirm_wipe=True to explicitly empty
-                    a DAT (e.g. resetting a FIFO log).
-                confirm_wipe: Safety flag. Set True ONLY when you have
-                    explicitly verified the DAT should become empty.
-                    Default False refuses wipes.
+                text: Full text replacement; text="" is a wipe
+                rows: Full table replacement; rows=[] is a wipe
+                clear: Empty the DAT; redundant when text/rows is provided
+                confirm_wipe: Required when the result would be empty
 
             Returns:
                 Dict with success status, or {'error': ...} if a guard trips
@@ -892,52 +874,20 @@ class EnvoyMCPServer:
                              new_string: str, replace_all: bool = False,
                              confirm_wipe: bool = False) -> dict:
             """
-            Surgical text edit on a DAT -- replaces old_string with
-            new_string. Token-efficient alternative to set_dat_content
-            for partial edits: only the changed substring crosses the
-            wire, not the whole DAT.
+            Replace text in a DAT without sending the whole DAT.
 
-            Mirrors Claude Code's Edit tool semantics:
-              - old_string must appear exactly once by default. If it
-                appears multiple times, either widen old_string with
-                surrounding context or pass replace_all=True.
-              - old_string and new_string must differ.
-              - old_string must be non-empty.
-
-            Text-only. For tables, use set_dat_content(rows=...) --
-            string matching across cells is a different beast.
-
-            Workflow for partial text edits:
-              1. (Optional) get_dat_content(op_path) to inspect current
-                 content if you don't already know what's there.
-              2. edit_dat_content(op_path, old_string=..., new_string=...)
-              No second round-trip needed for the write.
-
-            Guardrails:
-              - Refuses non-text DATs (use set_dat_content for tables).
-              - Refuses empty old_string (would match every position).
-              - Refuses old_string == new_string (no-op).
-              - Wipe guard: if the resulting text would be empty,
-                requires confirm_wipe=True (mirrors set_dat_content).
-              - Not-found error includes diagnostics (DAT length, row
-                count, case-insensitive hint) so the caller can
-                self-correct without another round-trip.
+            Text DATs only. old_string must appear exactly once unless
+            replace_all=True. Refuses wipes without confirm_wipe=True.
 
             Args:
                 op_path: Path to the DAT operator
-                old_string: Text to find. Must be unique unless
-                    replace_all=True. Must not be empty.
-                new_string: Replacement text. Must differ from
-                    old_string.
-                replace_all: When True, replaces every occurrence.
-                    When False (default), requires unique match.
-                confirm_wipe: Safety flag. Set True ONLY when the
-                    edit is intended to leave the DAT empty.
+                old_string: Text to find; non-empty and unique by default
+                new_string: Replacement text; must differ from old_string
+                replace_all: True replaces every occurrence
+                confirm_wipe: Required when the edit would leave the DAT empty
 
             Returns:
-                Dict with success, path, replacements (count of
-                substitutions made), numRows, numCols. Or
-                {'error': ...} if a guard trips.
+                Dict with success, path, replacements, numRows, and numCols
             """
             return self._execute_in_td('edit_dat_content', {
                 'op_path': op_path,
@@ -969,18 +919,18 @@ class EnvoyMCPServer:
                         expose: bool = None, allowCooking: bool = None,
                         selected: bool = None) -> dict:
             """
-            Set flags/properties on an operator.
+            Set one or more flags/properties on an operator.
 
             Args:
                 op_path: Path to the operator
-                bypass: Bypass flag (operator is skipped in chain)
-                lock: Lock flag (DAT contents locked from editing/cooking)
-                display: Display flag (blue flag, marks output for display)
-                render: Render flag (purple flag, marks for rendering)
-                viewer: Viewer flag (shows viewer on node tile)
+                bypass: Bypass flag
+                lock: Lock flag
+                display: Display flag
+                render: Render flag
+                viewer: Viewer flag
                 current: Current flag (yellow flag)
-                expose: Expose flag (hides node from network view when False)
-                allowCooking: Allow cooking flag (COMPs only)
+                expose: Expose flag
+                allowCooking: Allow cooking flag
                 selected: Selected flag in network editor
 
             Returns:
@@ -1017,16 +967,15 @@ class EnvoyMCPServer:
         @self.mcp.tool()
         def get_network_layout(comp_path: str, include_annotations: bool = True) -> dict:
             """
-            Get positions and sizes of all operators (and optionally annotations) in a COMP.
-            Use this instead of calling get_op_position repeatedly for each operator.
+            Get compact positions and sizes for all children in a COMP.
 
             Args:
                 comp_path: Path to the parent COMP
                 include_annotations: Whether to include annotation positions (default True)
 
             Returns:
-                Dict with operators list (path, name, type, nodeX, nodeY, nodeWidth, nodeHeight,
-                nodeCenterX, nodeCenterY), annotations list, and bounding_box of all operators
+                Dict with operator path/type/nodeX/nodeY/nodeWidth/nodeHeight;
+                centers are nodeX+nodeWidth/2 and nodeY+nodeHeight/2
             """
             return self._execute_in_td('get_network_layout', {
                 'comp_path': comp_path,
@@ -1085,20 +1034,19 @@ class EnvoyMCPServer:
                               color: list = None, opacity: float = None,
                               name: str = None) -> dict:
             """
-            Create an annotation (Comment, Network Box, or Annotate) in the network editor.
-            Annotations are visual documentation elements for grouping, labeling, or documenting operators.
+            Create a Comment, Network Box, or Annotate in the network editor.
 
             Args:
-                parent_path: Path to parent COMP where the annotation will be created
-                mode: Annotation mode - "annotate" (default, has title bar), "comment", or "networkbox"
+                parent_path: Path to parent COMP
+                mode: "annotate" (default), "comment", or "networkbox"
                 text: Body text content
-                title: Title bar text (for Network Box and Annotate modes)
+                title: Title bar text
                 x: X position in the network editor
                 y: Y position in the network editor
                 width: Width of the annotation
                 height: Height of the annotation
-                color: Background color as [r, g, b] floats (0.0-1.0)
-                opacity: Opacity of the annotation (0.0-1.0)
+                color: Background color as [r, g, b] floats
+                opacity: Opacity from 0.0 to 1.0
                 name: Optional name for the annotation operator
 
             Returns:
@@ -1374,19 +1322,17 @@ class EnvoyMCPServer:
                              ext_index: int = None,
                              existing_comp: bool = False) -> dict:
             """
-            Create a TouchDesigner extension: a baseCOMP with a text DAT
-            containing a Python extension class, wired up and initialized.
+            Create or attach a TouchDesigner extension COMP and code DAT.
 
             Args:
-                parent_path: Where to create the new COMP, OR path to an
-                             existing COMP if existing_comp=True
-                class_name: Python class name (e.g., "MyExtension")
-                name: COMP name (defaults to class_name). Ignored if existing_comp=True
-                code: Full Python class code. If omitted, generates minimal boilerplate
-                promote: Promote capitalized methods to COMP level (default True)
-                ext_name: Custom extension name (defaults to class_name)
-                ext_index: Extension slot 0-3 (auto-detects first empty if omitted)
-                existing_comp: If True, parent_path IS the target COMP (no new COMP created)
+                parent_path: Parent COMP path, or target COMP when existing_comp=True
+                class_name: Python class name
+                name: New COMP name; ignored when existing_comp=True
+                code: Full class code; omitted generates boilerplate
+                promote: Promote capitalized methods to COMP level
+                ext_name: Custom extension name
+                ext_index: Extension slot 0-3; omitted auto-detects
+                existing_comp: True attaches to parent_path instead of creating
 
             Returns:
                 Dict with comp_path, dat_path, class_name, ext_index, success status
@@ -1464,35 +1410,19 @@ class EnvoyMCPServer:
                      max_depth: int = None,
                      embed_all: bool = False) -> dict:
             """
-            Read the network under comp_path as a TDN dict (live in-memory
-            state, never written to disk). Prefer this over get_op /
-            query_network when exploring more than ~3 operators -- it's
-            typically 20-90x fewer tokens thanks to default-omission,
-            type_defaults, and par_templates compaction.
+            Read live authored state under comp_path as a compact TDN dict.
 
-            Scope cost by passing a specific comp_path. Pass max_depth to
-            cap nesting if you're reading a large root. Works in all
-            Tdnmode values (Off / Export / Full) -- reads live state,
-            not the .tdn files on disk.
-
-            When NOT to use: if you need evaluated-expression runtime
-            values, cook errors, DAT/CHOP/TOP output data, cook timing,
-            or operator flag state after runtime mutation. Use
-            get_parameter, get_op_errors, get_dat_content, capture_top,
-            or get_op_flags respectively for those.
+            This is authored-state, not runtime: use runtime probes for
+            evaluated values, cook errors, output pixels/data, timing, or flags.
 
             Args:
                 comp_path: Root COMP to read (default "/" for entire project)
                 include_dat_content: Include DAT text/table content
-                    (default None = use Embeddatsintdns toggle)
                 max_depth: Maximum recursion depth (None = unlimited)
-                embed_all: If True, recurse into TDN-tagged COMPs instead
-                    of skipping their children. Produces a self-contained
-                    view of the entire subtree.
+                embed_all: Recurse into TDN-tagged COMPs instead of skipping
 
             Returns:
-                Dict with the .tdn JSON document under 'tdn' on success,
-                or 'error' on failure.
+                Dict with the TDN document under 'tdn', or {'error': ...}
             """
             return self._execute_in_td('read_tdn', {
                 'comp_path': comp_path,
@@ -1504,43 +1434,18 @@ class EnvoyMCPServer:
         def diff_tdn(target: str = "",
                      max_changed_ops: int = 200,
                      max_bytes: int = 60000) -> dict:
-            """Show what is UNSAVED in TouchDesigner's TDN networks: the live
-            in-memory network(s) vs the on-disk .tdn file(s).
+            """Diff live in-memory TDN state against on-disk .tdn files.
 
-            THIS is the tool to answer "what changed in <X>.tdn?", "what changed
-            in this COMP?", "what have I/you not saved yet?", or "what's changed
-            across the project?" for TDN-externalized COMPs. It sees what git
-            cannot: git only reads files on disk; this reads TD's live state.
-            (For committed/history diffs, use git -- the .tdn diff driver Embody
-            installs keeps those clean too.)
-
-            Scope by `target`:
-              - omit it (or pass ""/"/"/"project") -> PROJECT-WIDE: every live
-                TDN COMP, summarized (which ones changed + counts). Use this for
-                "what's changed in the project / what haven't I saved."
-              - a COMP path ("/project1/scene") OR a .tdn file path / bare
-                filename ("tooltip.tdn", resolved to its COMP) -> that one COMP
-                in full per-field detail.
-
-            Read-only, non-interactive, pull-only: never prompts, never mutates
-            TD, not auto-run.
+            Empty target (or "/" / "project") returns a project summary; a
+            COMP path or .tdn filename returns that COMP in detail. Read-only.
 
             Args:
-                target: empty = whole project; else a COMP path or .tdn file.
-                max_changed_ops: Cap on reported changed operators; an honest
-                    'truncated' flag is set when exceeded.
-                max_bytes: Soft cap on envelope size; past it, per-field change
-                    bodies are dropped (changed_keys retained).
+                target: Empty for whole project, else COMP path or .tdn file
+                max_changed_ops: Cap reported changed operators
+                max_bytes: Soft response cap; changed_keys remain when trimmed
 
             Returns:
-                Single COMP: a diff envelope -- schema_version, baseline
-                ('disk'), comp_path, file, file_exists, changed,
-                counts{added,removed,modified}, added[], removed[],
-                modified[{path,name,type,kind,changed_keys,changes}] where each
-                change is {old,new} (old=disk, new=live), truncated, warnings.
-                Project-wide: {scope:'project', changed_count, clean_count,
-                skipped_count, changed:[<envelope per changed COMP>], skipped,
-                truncated}. On failure: {'error': ...}.
+                Diff envelope, project summary, or {'error': ...}
             """
             return self._execute_in_td('diff_tdn', {
                 'target': target,
@@ -1556,30 +1461,22 @@ class EnvoyMCPServer:
                         max_resolution: int = 640, inline: bool = False,
                         sample_grid: int = 0) -> list:
             """
-            Capture a TOP operator's output as an image.
+            Capture a TOP as a temp image file or sampled RGBA grid.
 
-            Returns the image saved to a temp file; Read that path to view it.
-            Inline base64 previews are token-heavy, so they are OFF by default --
-            pass inline=True to also embed a small preview in the response.
-
-            When sample_grid >= 2, no image is captured or saved. Instead the
-            tool returns a downsampled NxN RGBA grid (row 0 = TOP of the image)
-            with per-channel min/max/mean computed over the full-resolution
-            texture. format/quality/max_resolution/inline are ignored in this
-            mode. Values are floats rounded to 4 decimals, NaN/Inf are
-            sanitized to 0.0, and the requested grid is clamped to 2..32.
+            File path is returned by default; inline=True embeds a small preview.
+            sample_grid>=2 returns an NxN RGBA grid instead, clamped 2..32 with
+            row 0 at image top-left; image format args are ignored.
 
             Args:
-                op_path: Path to a TOP operator (e.g., "/project1/null1")
-                format: Image format - "jpeg" (smaller, lossy) or "png" (lossless)
-                quality: JPEG compression quality 0.0-1.0 (ignored for PNG)
-                max_resolution: Max pixels on longest edge. 0 = native resolution.
-                inline: If True, also embed a small base64 preview (token-heavy).
-                sample_grid: If >= 2, return an NxN RGBA sample grid instead of an image.
+                op_path: Path to a TOP operator
+                format: "jpeg" or "png"
+                quality: JPEG compression quality 0.0-1.0
+                max_resolution: Max pixels on longest edge; 0 = native
+                inline: True embeds a small base64 preview
+                sample_grid: >=2 returns an RGBA sample grid
 
             Returns:
-                Text metadata with the saved file path; plus an inline image if inline=True.
-                In sample_grid mode, a dict with cells and channel stats.
+                Saved path text, inline image content, or sample-grid dict
             """
             import base64
             import os
@@ -1686,30 +1583,18 @@ class EnvoyMCPServer:
         @self.mcp.tool()
         def claim_scope(scope: str, note: str = "", ttl: int = 300) -> dict:
             """
-            Claim a work scope so concurrent AI sessions steer clear of it.
+            Claim a cooperative write lease so peer sessions avoid a scope.
 
-            A cooperative WRITE lease, not a read lock: peers see your
-            claim in get_sessions, their overlapping claim_scope calls are
-            refused while yours is live, and their destructive operations
-            on the scope (import_network with clear_first, delete_op,
-            run_tests) are refused unless they pass override=True. Claim
-            BEFORE a large build or before editing an externalized file,
-            with the narrowest scope that covers the work. Your own tool
-            calls touching the scope renew the lease automatically; it
-            expires on TTL or when your session goes silent, so releasing
-            is polite but never required for others to make progress.
+            Overlapping claims and destructive ops are refused while the lease
+            is live; own writes renew it and silence/TTL expires it.
 
             Args:
-                scope: Op path prefix ("/project1/scene"), repo file
-                    ("file:embody/scripts/tools.py"), or special scope
-                    ("project:tests").
-                note: Short intent shown to peers (e.g. "rebuilding camera rig").
+                scope: Op path prefix, file:<repo-relative>, or project:<name>
+                note: Short intent shown to peers
                 ttl: Lease seconds, 30-3600 (default 300).
 
             Returns:
-                {'granted': True, ...}, or {'granted': False, 'holder':
-                {label, scope, note, age_s, expires_in_s}} when a live
-                peer holds an overlapping claim.
+                {'granted': True, ...} or {'granted': False, 'holder': {...}}
             """
             # Worker-side pure Python -- no TD access (mcp-safety).
             sid, label = _SESSION_CTX.get()
@@ -2156,12 +2041,18 @@ class EnvoyMCPServer:
 
         # Response checker is pure Python (no TD objects), so a plain thread is fine
         def response_checker():
-            import time  # local import survives DAT recompilation
             while self.running and not self.shutdown_event.is_set():
                 try:
-                    self.check_responses()
-                    time.sleep(0.01)
+                    # Was a 10ms poll adding ~5ms mean latency per call (audit finding).
+                    response = self.response_queue.get(timeout=0.25)
+                    self.check_responses(response)
                 except Exception as e:
+                    try:
+                        expected = isinstance(e, Empty)
+                    except NameError:
+                        expected = type(e).__name__ == 'Empty'
+                    if expected:
+                        continue
                     if not self.shutdown_event.is_set():
                         print(f'[Envoy][WARNING] response_checker exiting: {e}')
                     break
@@ -2481,7 +2372,9 @@ class EnvoyExt:
         # proceeds; the rest exit as stale -- one live loop per save, not ~N.
         _wd_gen = self.ownerComp.fetch('_watchdog_gen', 0) + 1
         self.ownerComp.store('_watchdog_gen', _wd_gen)
-        run(f"op('{self.ownerComp.path}').ext.Envoy._watchdogTick({_wd_gen})",
+        # Pending run() calls can outlive COMP replacement during upgrades.
+        run("o = op(%r)\nif o and o.valid: o.ext.Envoy._watchdogTick(%d)" %
+            (self.ownerComp.path, _wd_gen),
             delayMilliSeconds=4000)
 
         # If a deferred test run was in progress, unblock the old worker
@@ -3212,7 +3105,9 @@ class EnvoyExt:
 
         # Always reschedule -- the loop is instance-tied; only the identity guard
         # above ends it. A transient tick error never kills self-healing.
-        run(f"op({self.ownerComp.path!r}).ext.Envoy._watchdogTick({gen})",
+        # Pending run() calls can outlive COMP replacement during upgrades.
+        run("o = op(%r)\nif o and o.valid: o.ext.Envoy._watchdogTick(%d)" %
+            (self.ownerComp.path, gen),
             fromOP=self.ownerComp, delayMilliSeconds=4000)
 
     def _probeAlive(self) -> bool:
@@ -5299,7 +5194,7 @@ class EnvoyExt:
         except Exception as e:
             return {'error': f'Failed to delete operator: {e}'}
 
-    def _get_op(self, op_path: str) -> dict:
+    def _get_op(self, op_path: str, include_defaults: bool = False) -> dict:
         """Get operator information"""
         target = op(op_path)
         if not target:
@@ -5315,7 +5210,35 @@ class EnvoyExt:
 
         # Get parameters
         params = {}
+        parameters_omitted = 0
         for p in target.pars():
+            if not include_defaults:
+                include_param = True
+                try:
+                    mode_name = p.mode.name
+                except Exception:
+                    mode_name = str(getattr(p, 'mode', ''))
+                if mode_name == 'CONSTANT':
+                    include_param = False
+                    is_pulse = False
+                    try:
+                        is_pulse = bool(getattr(p, 'isPulse', False))
+                    except Exception:
+                        is_pulse = False
+                    if not is_pulse:
+                        try:
+                            style = str(getattr(p, 'style', ''))
+                            is_pulse = style == 'Pulse' or style.endswith('.Pulse')
+                        except Exception:
+                            is_pulse = False
+                    if not is_pulse:
+                        try:
+                            include_param = p.val != p.default
+                        except Exception:
+                            include_param = True
+                if not include_param:
+                    parameters_omitted += 1
+                    continue
             try:
                 params[p.name] = {
                     'value': str(p.eval()),
@@ -5326,6 +5249,8 @@ class EnvoyExt:
                 self._log(f'Could not read parameter {p.name} on {op_path}: {e}', 'DEBUG')
                 params[p.name] = {'value': 'N/A', 'mode': 'N/A'}
         info['parameters'] = params
+        if parameters_omitted > 0:
+            info['parameters_omitted'] = parameters_omitted
 
         # Get inputs/outputs
         info['inputs'] = [inp.path if inp else None for inp in target.inputs]
@@ -5449,7 +5374,8 @@ class EnvoyExt:
 
     def _get_parameter(self, op_path: str, par_name: str = None,
                       search: str = None, search_in: str = 'any',
-                      depth: int = 2, max_results: int = 50) -> dict:
+                      depth: int = 2, max_results: int = 50,
+                      details: bool = False) -> dict:
         """Get a parameter value with full details"""
         target = op(op_path)
         if not target:
@@ -5578,11 +5504,14 @@ class EnvoyExt:
                 'value': str(par.eval()),
                 'mode': str(par.mode),
                 'label': par.label,
-                'default': str(par.default),
-                'isCustom': par.isCustom,
-                'readOnly': par.readOnly,
-                'style': par.style,
             }
+            if details:
+                result.update({
+                    'default': str(par.default),
+                    'isCustom': par.isCustom,
+                    'readOnly': par.readOnly,
+                    'style': par.style,
+                })
 
             # Mode-specific details
             if par.mode.name == 'EXPRESSION':
@@ -5592,10 +5521,11 @@ class EnvoyExt:
                 result['bindMaster'] = par.bindMaster.path if par.bindMaster else None
             elif par.mode.name == 'EXPORT':
                 result['exportOP'] = par.exportOP.path if par.exportOP else None
-                result['exportSource'] = str(par.exportSource) if par.exportSource else None
+                if details:
+                    result['exportSource'] = str(par.exportSource) if par.exportSource else None
 
             # Numeric range info
-            if par.isNumber:
+            if details and par.isNumber:
                 result['min'] = par.min
                 result['max'] = par.max
                 result['clampMin'] = par.clampMin
@@ -5606,8 +5536,9 @@ class EnvoyExt:
             # Menu info
             if par.isMenu:
                 result['menuNames'] = par.menuNames
-                result['menuLabels'] = par.menuLabels
-                result['menuIndex'] = par.menuIndex
+                if details:
+                    result['menuLabels'] = par.menuLabels
+                    result['menuIndex'] = par.menuIndex
 
             return result
         except Exception as e:
@@ -5702,7 +5633,6 @@ class EnvoyExt:
 
                 info = {
                     'path': child.path,
-                    'name': child.name,
                     'type': child.OPType,
                     'family': child.family,
                     'depth': depth
@@ -6815,15 +6745,11 @@ class EnvoyExt:
             for child in parent_op.children:
                 entry = {
                     'path': child.path,
-                    'name': child.name,
                     'type': child.OPType,
-                    'family': child.family,
                     'nodeX': child.nodeX,
                     'nodeY': child.nodeY,
                     'nodeWidth': child.nodeWidth,
                     'nodeHeight': child.nodeHeight,
-                    'nodeCenterX': child.nodeCenterX,
-                    'nodeCenterY': child.nodeCenterY,
                 }
                 operators.append(entry)
                 min_x = min(min_x, child.nodeX)
@@ -6850,6 +6776,10 @@ class EnvoyExt:
             if include_annotations:
                 annotations = []
                 for child in parent_op.findChildren(type=annotateCOMP, includeUtility=True, depth=1):
+                    text = child.par.text.eval() if hasattr(child.par, 'text') else ''
+                    text = '' if text is None else str(text)
+                    if len(text) > 160:
+                        text = text[:160] + '...'
                     annotations.append({
                         'path': child.path,
                         'name': child.name,
@@ -6857,7 +6787,7 @@ class EnvoyExt:
                         'nodeY': child.nodeY,
                         'nodeWidth': child.nodeWidth,
                         'nodeHeight': child.nodeHeight,
-                        'text': child.par.text.eval() if hasattr(child.par, 'text') else '',
+                        'text': text,
                     })
                 result['annotations'] = annotations
 

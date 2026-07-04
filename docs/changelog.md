@@ -1,5 +1,18 @@
 # Changelog
 
+## v6.0.90
+
+Token and latency quick wins from the efficiency audit, plus the output-first visual convention.
+
+- **get_op on a diet.** Returns NON-DEFAULT parameters only by default (include_defaults=True restores everything; parameters_omitted reports the filtered count). A parameter-heavy COMP read drops from ~13.7k chars to a few hundred -- the single largest per-call token sink, and it aligns with the non-default behavior users compared us against.
+- **Compact read shapes.** query_network drops the redundant name field (derivable from path); get_network_layout drops name/family/node centers (centers = nodeX + nodeWidth/2, the math the layout rules already teach) and caps annotation text at 160 chars; get_parameter gains details=True with a lean default (keeps value/mode/expressions/menuNames).
+- **Docstring diet: -14.1k chars from tools/list.** The 10 heaviest tool schemas trimmed from 20,902 to 6,754 chars -- eager-loading clients (Gemini CLI, Codex) stop paying ~3.5k tokens of teaching prose per session; the teaching lives in the mcp-tools-reference skill.
+- **~5ms off every call.** The worker's response delivery is now event-driven (blocking queue get) instead of a 10ms poll.
+- **Bridge tools/list no longer double-appends meta-tools** on cache hits.
+- **Upgrade tracebacks silenced.** The Envoy watchdog and TDN clipboard-watch reschedulers now null-guard their deferred callbacks, so replacing/upgrading the Embody COMP no longer prints AttributeError tracebacks from orphaned run() loops.
+- **Output-first visual convention (new).** The visual-aesthetics skill, generated CLAUDE/AGENTS guidance, and dev docs now direct agents to create an Out TOP named out1 FIRST, turn on its display flag, and keep the working chain wired into it -- the user watches the piece take shape live in the network backdrop while the agent works.
+- **AGENTS.md parity.** The non-Claude guidance gains the batch-operations rule and group-level (not per-op) verify cadence, matching CLAUDE.md.
+
 ## v6.0.89
 
 Launch AI Client fixes: Windows parity and visible errors.

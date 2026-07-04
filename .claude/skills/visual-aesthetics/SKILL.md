@@ -14,6 +14,17 @@ Operator and parameter names in this skill are verified against the official Der
 
 Load before building or refining any network whose purpose is visual output: generative art, VJ visuals, shaders, render scenes, projection content, UI visuals, or captured TOP output. Pair it with `capture_top` to evaluate the actual result against the rubric at the end.
 
+## Output-first: show the work in the backdrop
+
+Before building any TOP chain, create the terminal Out TOP named `out1` and position it per network-layout rules.
+Immediately call `set_op_flags(op_path, display=True)` on `out1`.
+A TOP with its Display flag on renders as the network editor backdrop when the pane's Display > Backdrop TOPs option is enabled; TD defaults this on.
+As soon as any stage produces pixels, wire the current chain end into `out1`.
+Keep `out1` wired while iterating, including while replacing, inserting, or bypassing intermediate nodes.
+The user should watch progress live behind the network, not wait for a final capture.
+The final deliverable stays terminated in `out1`, matching the existing output terminal convention.
+Use `capture_top` on `out1` for verification passes.
+
 ## The Working Loop (mandatory)
 
 1. **Write a 3-line intent brief before creating any operator**: the subject (what the eye lands on first), the mood and palette (name one from Color, or design one), and the motion character (calm drift / pulsing energy / mechanical precision / still). If the user's request doesn't specify, propose a brief and build to it. Never start assembling operators with no target look -- that is how default-looking output happens.

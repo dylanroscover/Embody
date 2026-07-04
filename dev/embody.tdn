@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 475
-generator: Embody/6.0.87
+build: 487
+generator: Embody/6.0.89
 td_build: 099.2025.32820
-source_file: Embody-6.88.toe
-exported_at: '2026-07-04T09:40:58Z'
+source_file: Embody-6.90.toe
+exported_at: '2026-07-04T11:18:24Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -303,7 +303,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 23:18:42 UTC
+      value: Saved 11:18:01 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -361,7 +361,7 @@ operators:
       - GitHub Copilot
       - None
       help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
-      value: claudecode
+      value: gemini
     - name: Launchaiclient
       style: Pulse
       label: Launch AI Client
@@ -657,7 +657,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.87
+      value: 6.0.89
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -674,7 +674,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 696
+      value: 703
     - name: Github
       style: Pulse
       label: GitHub
@@ -685,7 +685,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-04 09:40:56 UTC
+      value: 2026-07-04 11:18:23 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -702,8 +702,21 @@ operators:
     - /embody/base1
     expand_order: []
     _start_in_progress: true
-    git_status: {}
-    _watchdog_gen: 668
+    git_status:
+      /embody/externalizations: ' M'
+      /embody/unit_tests/test_sandbox: ' M'
+      /embody/unit_tests/test_mcp_parameters: ' M'
+      /embody/unit_tests/test_mcp_flags_position: ' M'
+      /embody/unit_tests/test_envoy_bridge: ' M'
+      /embody/Embody/templates/text_skill_visual_aesthetics: ' M'
+      /embody/Embody/templates/text_skill_mcp_tools_reference: ' M'
+      /embody/Embody/templates/text_claude: ' M'
+      /embody/Embody/templates/text_agents_md: ' M'
+      /embody/Embody/TDNExt: ' M'
+      /embody/Embody/EnvoyExt: ' M'
+      /embody/Embody: ' M'
+      /embody: ' M'
+    _watchdog_gen: 683
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -845,7 +858,7 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 433
+    _clip_watch_gen: 448
     _suppress_dialogs: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn

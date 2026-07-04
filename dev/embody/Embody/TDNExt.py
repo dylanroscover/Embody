@@ -329,7 +329,9 @@ class TDNExt:
 		try:
 			_clip_gen = self.ownerComp.fetch('_clip_watch_gen', 0) + 1
 			self.ownerComp.store('_clip_watch_gen', _clip_gen)
-			run(f"op({self.ownerComp.path!r}).ext.TDN._clipboardWatchTick({_clip_gen})",
+			# Pending run() calls can outlive COMP replacement during upgrades.
+			run("o = op(%r)\nif o and o.valid: o.ext.TDN._clipboardWatchTick(%d)" %
+				(self.ownerComp.path, _clip_gen),
 				fromOP=self.ownerComp, delayMilliSeconds=2500)
 		except Exception:
 			pass
@@ -6286,7 +6288,9 @@ class TDNExt:
 			self._clipboardWatchPoll()
 		except Exception:
 			pass
-		run(f"op({self.ownerComp.path!r}).ext.TDN._clipboardWatchTick({gen})",
+		# Pending run() calls can outlive COMP replacement during upgrades.
+		run("o = op(%r)\nif o and o.valid: o.ext.TDN._clipboardWatchTick(%d)" %
+			(self.ownerComp.path, gen),
 			fromOP=self.ownerComp, delayMilliSeconds=1500)
 
 	def _tdWindowActive(self) -> bool:
