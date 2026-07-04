@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.89
+
+Launch AI Client fixes: Windows parity and visible errors.
+
+- **Windows terminal launches now guard for a missing CLI.** Launching Claude Code / Codex / Gemini on Windows generated a raw `cmd /K "gemini"` -- an uninstalled CLI produced cmd's cryptic "not recognized" error instead of guidance. Windows now gets a generated `.bat` twin of the macOS `.command` script: a `where` guard that prints the same install instructions and keeps the console open. Pure builder, unit-tested (goto-flow so hints with parentheses cannot corrupt cmd block parsing; CRLF).
+- **"VS Code" launches again.** The Aiclient menu and wizard offer VS Code, but the launch table only wired `copilot` to the VS Code launcher -- selecting VS Code logged "No launcher" and did nothing on any platform. Added the missing `vscode` mapping.
+- **Launch failures now show a dialog.** Every failure path of the Launch AI Client pulse (no launcher wired, editor not installed, terminal failed, unexpected error) raises a message box with the install hint, in addition to the log line -- the message also now names the selected client instead of the parameter ("VS Code", not "AI Client"). The Windows missing-CLI case keeps its instructions in the opened terminal (no double dialog).
+- **Launcher suite grows to 29 tests** (Windows batch builder content, vscode mapping, dialog consumption, label regression).
+
 ## v6.0.88
 
 Setup-wizard hotfix on top of the v6.0.87 feature release (below): the wizard's buttons were dead in every user project.

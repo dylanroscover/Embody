@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.88-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.89-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -158,7 +158,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **87 test suites** (1,940 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **87 test suites** (1,951 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -189,6 +189,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.89**: Launch AI Client fixes -- Windows missing-CLI guard with install instructions (was a raw cmd error), missing VS Code launcher mapping, and failure dialogs on the pulse button.
 - **6.0.88**: Setup-wizard hotfix -- wizard buttons were dead in user projects (absolute panel-watcher paths, broken since 6.0.74); now relative + regression-tested.
 - **6.0.87**: Envoy hardening + 53 MCP tools: mutating MCP operations now sit in TD undo blocks (one `batch_operations` call = one Ctrl+Z step), new `get_docs` looks up official TouchDesigner docs from the version-exact offline mirror with docs.derivative.ca fallback, `capture_top(sample_grid=...)` returns token-cheap numeric RGBA grids + channel stats for visual verification, and transport security now pins FastMCP Host/Origin validation for DNS-rebinding/CSRF defense. New shipped `/pop-networks` skill adds POP-family builder guidance adapted from Derivative's TDMCPSkills with permission. Test sources now include **87 suites / 1,940 tests**.
 - **6.0.83**: Multi-session Envoy coordination, 52 MCP tools, and TDN stability hardening. Envoy now tracks live sessions, exposes `claim_scope` / `release_scope`, annotates responses with peer-session advisories, and gates destructive operations such as `delete_op`, `import_network(clear_first=True)`, `run_tests`, and `batch_operations` unless the caller opts in with `override=True`. TDN round-trips are safer: malformed imports validate before clearing, editable DAT capture no longer mutates the network, flag defaults round-trip more cleanly, stale cleanup only removes tracked `.tdn` files, ad-hoc exports stay untracked, and orphan shell recovery is preserved. The Setup Wizard client picker no longer shows a forced scrollbar, and the text layout has more right-side padding. The standalone VS Code AI-client token was removed; GitHub Copilot remains supported through VS Code. Release artifacts regenerated as `Embody-v6.0.83.tox`; docs and generated agent config now include the multi-session rules. Test sources now include **85 suites / 1,906 tests**.

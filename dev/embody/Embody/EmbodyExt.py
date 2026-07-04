@@ -13,6 +13,7 @@ Author: Dylan Roscover
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import shlex
@@ -119,6 +120,7 @@ class EmbodyExt:
                                   '(or brew install gemini-cli)  '
                                   'docs https://github.com/google-gemini/gemini-cli'},
         'copilot':    _VSCODE_LAUNCH,   # Copilot lives inside VS Code
+        'vscode':     _VSCODE_LAUNCH,   # VS Code uses the same launcher as Copilot
         'cursor': {
             'kind': 'editor', 'app': 'Cursor',
             'bundle': 'com.todesktop.230313mzl4w4u92',
@@ -9598,11 +9600,14 @@ class EmbodyExt:
         # this is a button callback -- a launch problem must log, never crash TD.
         try:
             client = self.my.par.Aiclient.eval()
-            label = self.my.par.Aiclient.label
+            label = self._aiClientLabel()
             spec = self._AICLIENT_LAUNCH.get(client)
             cwd = self._findProjectRoot()
+            title = 'Embody -- Launch AI Client'
             if spec is None:
+                msg = f'No launcher is wired for "{label}". Open your AI tool manually at {cwd}.'
                 self.Log(f'No launcher for "{label}". Open it manually at {cwd}.', 'INFO')
+                self._messageBox(title, msg, ['OK'])
                 return
             if spec['kind'] == 'editor':
                 if self._launchEditor(
@@ -9612,10 +9617,23 @@ class EmbodyExt:
                         mac_alt_names=spec.get('alt_names', ()),
                         install=spec.get('install')):
                     self.Log(f'Launched {label} at {cwd}', 'SUCCESS')
+                else:
+                    msg = f'Could not open {label}. Is it installed?'
+                    if spec.get('install'):
+                        msg += f'\n\nInstall: {spec.get("install")}'
+                    msg += f'\n\nProject root: {cwd}'
+                    self._messageBox(title, msg, ['OK'])
             elif self._launchTerminal(cwd, spec['cli'], install=spec.get('install')):
                 self.Log(f'Opened a terminal for {label} at {cwd}', 'INFO')
+            else:
+                msg = f'Could not open a terminal for {label}. Is it installed?'
+                if spec.get('install'):
+                    msg += f'\n\nInstall: {spec.get("install")}'
+                msg += f'\n\nProject root: {cwd}'
+                self._messageBox(title, msg, ['OK'])
         except Exception as e:
             self.Log(f'Failed to launch AI client: {e}', 'ERROR')
+            self._messageBox('Embody -- Launch AI Client', str(e), ['OK'])
 
     def _resolveCliAbs(self, cli: str) -> Optional[str]:
         """Absolute path to a CLI via fast filesystem probes, or None.
@@ -9756,6 +9774,32 @@ class EmbodyExt:
             lines.append(f'exec "${{SHELL:-/bin/zsh}}" -ilc {shlex.quote(cli)}')
         return '\n'.join(lines) + '\n'
 
+    def _buildTerminalScriptWin(self, cwd, cli, abs_cli, install=None) -> str:
+        """Windows twin of _buildTerminalScript: the .bat run via cmd /K.
+        Pure (no I/O) so the correctness-critical content is unit-testable."""
+        d = str(cwd).replace('"', '')
+        lines = ['@echo off',
+                 f'cd /d "{d}"',
+                 'if errorlevel 1 echo launch dir missing.']
+        if abs_cli:
+            lines.append(f'"{str(abs_cli).replace(chr(34), "")}"')
+        else:
+            hint = ''.join(c for c in (install or 'see the tool website')
+                           if re.match(r"[A-Za-z0-9 ._:/@()+=,'-]", c))
+            hint = ' '.join(hint.split()) or 'see the tool website'
+            lines += [
+                f'where {cli} >nul 2>nul',
+                'if errorlevel 1 goto :missing',
+                cli,
+                'goto :done',
+                ':missing',
+                f'echo {cli} not found on PATH.',
+                f'echo Install:  {hint}',
+                'echo Then close this window and press Launch AI Client again.',
+                ':done',
+            ]
+        return '\r\n'.join(lines) + '\r\n'
+
     def _launchTerminal(self, cwd, cli, install=None) -> bool:
         """Open a new terminal at cwd running <cli>. Returns True if a terminal was
         launched, False on failure or an unsupported OS (so the caller only logs
@@ -9785,10 +9829,13 @@ class EmbodyExt:
                     return False
                 return True
             if sys.platform.startswith('win'):
-                target = self._resolveCliAbs(cli) or cli
-                # Doubled-quote form keeps a resolved .cmd path literally quoted
-                # through cmd /K so a metachar (& | etc.) is not re-parsed; a
-                # bareword cli resolves via PATH the same.
+                body = self._buildTerminalScriptWin(cwd, cli, self._resolveCliAbs(cli), install)
+                scripts_dir = Path(cwd) / '.embody'
+                scripts_dir.mkdir(parents=True, exist_ok=True)
+                script = scripts_dir / f'launch_{cli}.bat'
+                script.write_text(body, encoding='utf-8', newline='')
+                # Do NOT delete: cmd /K returns after starting the console, and
+                # the console reads this file after Popen returns.
                 #
                 # NO std-handle redirection here. The CLIs are interactive
                 # Ink/Node TUIs (claude/codex/gemini) that need a real console
@@ -9800,7 +9847,7 @@ class EmbodyExt:
                 # exactly the "blank terminal, login browser flashes then closes"
                 # bug on Windows. With CREATE_NEW_CONSOLE and no redirection, the
                 # fresh console owns fully-working stdin/stdout/stderr.
-                subprocess.Popen(f'cmd /K ""{target}""', cwd=d,
+                subprocess.Popen(f'cmd /K ""{script}""', cwd=d,
                                  creationflags=subprocess.CREATE_NEW_CONSOLE, env=env)
                 return True
         except OSError as e:
