@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.92-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.99-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -158,7 +158,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **87 test suites** (1956 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **87 test suites** (1,959 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -189,6 +189,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.99**: Setup-wizard layout polish -- option-button title/subtitle vertical centering and left alignment across all screens, the "Review" hint constrained to the content column (no right-edge clipping, no dead gap), and de-overlapped button tiles -- plus a new size-aware network-spacing rule (`step = size + gap`, both axes, panel widgets included).
 - **6.0.92**: Wizard title/subtitle ink alignment (renderer parity + bearing compensation, pixel-verified) and the post-install import gate moved off the main thread (no more multi-second freeze; 'Preparing Python environment...' status instead).
 - **6.0.91**: Rules diet -- always-loaded rules shrink ~60 percent into four new on-demand skills (movie-export, parameter-design, td-recovery, multi-session-etiquette; 13 shipped skills total), ~10k tokens reclaimed per session with every hard law kept inline behind MUST-load triggers.\n- **6.0.90**: Token/latency quick wins -- get_op non-default-only (~10k chars saved per COMP read), compact read shapes, 14k-char docstring diet, event-driven responses (~5ms/call), upgrade-traceback guards, and the new output-first visual convention (out1 + display flag = live backdrop while agents work).
 - **6.0.89**: Launch AI Client fixes -- Windows missing-CLI guard with install instructions (was a raw cmd error), missing VS Code launcher mapping, and failure dialogs on the pulse button.

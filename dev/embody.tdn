@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 491
-generator: Embody/6.0.90
+build: 495
+generator: Embody/6.0.98
 td_build: 099.2025.32820
-source_file: Embody-6.91.toe
-exported_at: '2026-07-04T11:49:29Z'
+source_file: Embody-6.99.toe
+exported_at: '2026-07-04T14:19:12Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -73,15 +73,13 @@ operators:
     - {}
   custom_pars:
     Embody:
-    - name: Status
-      style: Str
-      readOnly: true
-      help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-      value: Enabled
+    - name: Setupwizard
+      style: Pulse
+      label: Setup Wizard
+      help: Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written.
     - name: Embodymode
       style: Menu
       label: Mode
-      startSection: true
       default: auto
       menuNames:
       - auto
@@ -90,10 +88,16 @@ operators:
       - Auto - manage everything
       - Advanced - ask first
       help: How Embody handles invasive, project-level changes (git config, .venv, MCP/AI config files, network ops). 'Auto' manages everything silently -- recommended for most users. 'Advanced' asks before each such change and keeps the footprint minimal -- for users who want full control.
-    - name: Setupwizard
+    - name: Folder
+      style: Folder
+      label: Ext. Folder (Rel. to Project)
+      startSection: true
+      help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
+    - name: Externalizeproject
       style: Pulse
-      label: Setup Wizard
-      help: Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written.
+      label: Externalize Full Project
+      startSection: true
+      help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
     - name: Disable
       style: Pulse
       startSection: true
@@ -109,16 +113,13 @@ operators:
       style: Toggle
       label: Perform Mode
       startSection: true
-    - name: Folder
-      style: Folder
-      label: Ext. Folder (Relative to Project)
+    - name: Status
+      style: Str
+      label: Embody Status
       startSection: true
-      help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
-    - name: Externalizeproject
-      style: Pulse
-      label: Externalize Full Project
-      startSection: true
-      help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
+      readOnly: true
+      help: Current Embody status (read-only). Shows whether Embody is initialized and running.
+      value: Enabled
     Tags:
     - name: Toxtags
       style: Header
@@ -361,7 +362,7 @@ operators:
       - GitHub Copilot
       - None
       help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
-      value: gemini
+      value: claudecode
     - name: Launchaiclient
       style: Pulse
       label: Launch AI Client
@@ -376,7 +377,7 @@ operators:
       - projectfolder
       - custom
       menuLabels:
-      - Git root
+      - Git repository root
       - Project folder (.toe directory)
       - Custom
       help: Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). "Git root" (default) writes at the top of the git repo. "Project folder" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace.
@@ -657,7 +658,7 @@ operators:
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.90
+      value: 6.0.98
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -674,7 +675,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 707
+      value: 711
     - name: Github
       style: Pulse
       label: GitHub
@@ -685,7 +686,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-04 11:49:28 UTC
+      value: 2026-07-04 14:19:11 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -704,24 +705,10 @@ operators:
     _start_in_progress: true
     git_status:
       /embody/externalizations: ' M'
-      /embody/unit_tests/test_claude_config: ' M'
-      /embody/Embody/templates/text_skill_td_api_reference: ' M'
-      /embody/Embody/templates/text_rule_td_python: ' M'
-      /embody/Embody/templates/text_rule_td_connectivity: ' M'
-      /embody/Embody/templates/text_rule_performance: ' M'
-      /embody/Embody/templates/text_rule_parameters: ' M'
-      /embody/Embody/templates/text_claude: ' M'
-      /embody/Embody/templates: ' M'
-      /embody/Embody/EnvoyExt: ' M'
-      /embody/Embody/EmbodyExt: ' M'
+      /embody/Embody/templates/text_rule_network_layout: ' M'
       /embody/Embody: ' M'
       /embody: ' M'
-      /embody/Embody/templates/text_rule_multi_session: ' M'
-      /embody/Embody/templates/text_skill_movie_export: ??
-      /embody/Embody/templates/text_skill_parameter_design: ??
-      /embody/Embody/templates/text_skill_td_recovery: ??
-      /embody/Embody/templates/text_skill_multi_session_etiquette: ??
-    _watchdog_gen: 687
+    _watchdog_gen: 734
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -863,7 +850,7 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 452
+    _clip_watch_gen: 499
     _suppress_dialogs: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn

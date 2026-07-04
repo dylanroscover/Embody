@@ -20,11 +20,14 @@ description: "Grid spacing, signal flow, operator placement, and annotation rule
 
 ## Grid and Spacing
 
-- **200-unit grid**: All positions snap to multiples of 200. No arbitrary coordinates.
-- **Horizontal spacing**: At least 200 units between the **right edge** of one operator and the **left edge** of the next. Formula: `next_x = prev_nodeX + prev_nodeWidth + 200` (round up to next 200 multiple). Do NOT use a fixed "+300 from nodeX" — operators vary in width.
-- **400 units vertical** between parallel chains or annotation groups.
+- **Spacing is `size + gap`, BOTH axes, ALWAYS -- never a fixed step.** This is the #1 overlap bug: stepping by a constant (e.g. `nodeY - 100`, `nodeX + 300`) while the tiles are bigger than the step (a 134-tall node stepped by 100 overlaps by 34). The step MUST be computed from the ACTUAL node extent on that axis plus a gap, then snapped up to the grid:
+  - **Horizontal**: `next_x = prev_nodeX + prev_nodeWidth + gap` (gap >= 200), rounded up to the next 200 multiple.
+  - **Vertical**: `next_y = prev_nodeY - (prev_nodeHeight + gap)`, rounded so the step clears the tile. For a stack of same-size tiles: `step = ceil((maxNodeHeight + gap) / 200) * 200` and place tile `i` at `y = -i * step`. A 134-tall stack -> `step = 200` (66 gap); a 260-tall stack -> `step = 400`. Bigger nodes => bigger spacing, mechanically.
+- **200-unit grid**: All positions snap to multiples of 200. No arbitrary coordinates. The grid is the SNAP target, not the step size -- when a node is taller/wider than 200, the step is 400/600/... (the next multiple that clears `size + gap`), NEVER a flat 200.
+- **400 units vertical** between parallel chains or annotation groups (this is a MINIMUM; widen it too when the chains' tiles are tall).
 - **Y-axis increases upward**. New rows go downward (decreasing Y). Primary chain at top, secondary chains below.
-- **Always use actual dimensions**: `get_network_layout` returns `nodeWidth` and `nodeHeight` for every operator. Use these values, not assumptions.
+- **Always use actual dimensions**: `get_network_layout` returns `nodeWidth` and `nodeHeight` for every operator. Compute EVERY offset from these, never from an assumed tile size. COMPs (~160+ wide) and panel widgets (often 130-160 wide x 130+ tall) are much bigger than a bare TOP (~120 sq) -- a step that clears one overlaps the other.
+- **Panel-COMP widgets stack too.** Buttons/fields/containers inside an `align`-driven panel (a Container/Button laid out `verttb`/`horizlr`) render by their `align` + `order` pars, so their `nodeX`/`nodeY` are cosmetic to the UI -- BUT they still get their own network tiles, and a `verttb` container full of 134-tall buttons stepped by 100 overlaps in the editor exactly like data-flow ops do. Apply the same `size + gap` stepping to panel-widget tiles (stack them by their panel `order`) so the network stays readable; it never affects the rendered panel. This is the one layout class the `LAYOUT WARNING` lint does NOT police (it targets wired data-flow ops), so it is on you to tidy.
 
 ## Signal Flow
 

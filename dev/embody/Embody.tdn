@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 707
-generator: Embody/6.0.90
+build: 711
+generator: Embody/6.0.98
 td_build: 099.2025.32820
-source_file: Embody-6.91.toe
-exported_at: '2026-07-04T11:49:28Z'
+source_file: Embody-6.99.toe
+exported_at: '2026-07-04T14:19:11Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -16,7 +16,6 @@ type_defaults:
       repocomp: =me
   textCOMP:
     parameters:
-      hmode: fill
       clickthrough: true
       resizecomp: =me
       repocomp: =me
@@ -65,15 +64,13 @@ type_defaults:
 type: containerCOMP
 custom_pars:
   Embody:
-  - name: Status
-    style: Str
-    readOnly: true
-    help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-    value: Enabled
+  - name: Setupwizard
+    style: Pulse
+    label: Setup Wizard
+    help: Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written.
   - name: Embodymode
     style: Menu
     label: Mode
-    startSection: true
     default: auto
     menuNames:
     - auto
@@ -82,10 +79,16 @@ custom_pars:
     - Auto - manage everything
     - Advanced - ask first
     help: How Embody handles invasive, project-level changes (git config, .venv, MCP/AI config files, network ops). 'Auto' manages everything silently -- recommended for most users. 'Advanced' asks before each such change and keeps the footprint minimal -- for users who want full control.
-  - name: Setupwizard
+  - name: Folder
+    style: Folder
+    label: Ext. Folder (Rel. to Project)
+    startSection: true
+    help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
+  - name: Externalizeproject
     style: Pulse
-    label: Setup Wizard
-    help: Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written.
+    label: Externalize Full Project
+    startSection: true
+    help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
   - name: Disable
     style: Pulse
     startSection: true
@@ -101,16 +104,13 @@ custom_pars:
     style: Toggle
     label: Perform Mode
     startSection: true
-  - name: Folder
-    style: Folder
-    label: Ext. Folder (Relative to Project)
+  - name: Status
+    style: Str
+    label: Embody Status
     startSection: true
-    help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
-  - name: Externalizeproject
-    style: Pulse
-    label: Externalize Full Project
-    startSection: true
-    help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
+    readOnly: true
+    help: Current Embody status (read-only). Shows whether Embody is initialized and running.
+    value: Enabled
   Tags:
   - name: Toxtags
     style: Header
@@ -353,7 +353,7 @@ custom_pars:
     - GitHub Copilot
     - None
     help: Selects the AI client used with Envoy. Determines which MCP configuration file format is generated (e.g. .mcp.json for Claude Code).
-    value: gemini
+    value: claudecode
   - name: Launchaiclient
     style: Pulse
     label: Launch AI Client
@@ -368,7 +368,7 @@ custom_pars:
     - projectfolder
     - custom
     menuLabels:
-    - Git root
+    - Git repository root
     - Project folder (.toe directory)
     - Custom
     help: Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). "Git root" (default) writes at the top of the git repo. "Project folder" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace.
@@ -649,7 +649,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.90
+    value: 6.0.98
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -666,7 +666,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 707
+    value: 711
   - name: Github
     style: Pulse
     label: GitHub
@@ -677,7 +677,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-04 11:49:28 UTC
+    value: 2026-07-04 14:19:11 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -728,24 +728,10 @@ storage:
   _start_in_progress: true
   git_status:
     /embody/externalizations: ' M'
-    /embody/unit_tests/test_claude_config: ' M'
-    /embody/Embody/templates/text_skill_td_api_reference: ' M'
-    /embody/Embody/templates/text_rule_td_python: ' M'
-    /embody/Embody/templates/text_rule_td_connectivity: ' M'
-    /embody/Embody/templates/text_rule_performance: ' M'
-    /embody/Embody/templates/text_rule_parameters: ' M'
-    /embody/Embody/templates/text_claude: ' M'
-    /embody/Embody/templates: ' M'
-    /embody/Embody/EnvoyExt: ' M'
-    /embody/Embody/EmbodyExt: ' M'
+    /embody/Embody/templates/text_rule_network_layout: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
-    /embody/Embody/templates/text_rule_multi_session: ' M'
-    /embody/Embody/templates/text_skill_movie_export: ??
-    /embody/Embody/templates/text_skill_parameter_design: ??
-    /embody/Embody/templates/text_skill_td_recovery: ??
-    /embody/Embody/templates/text_skill_multi_session_etiquette: ??
-  _watchdog_gen: 687
+  _watchdog_gen: 734
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -887,7 +873,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 452
+  _clip_watch_gen: 499
   _suppress_dialogs: true
 operators:
 - name: help
@@ -1016,7 +1002,7 @@ operators:
     bgcolorb: 0.115
     bgalpha: 1
     align: verttb
-    spacing: 14
+    spacing: 10
   position: [1200, 225]
   size: [160, 130]
   color: [0.67, 0.67, 0.67]
@@ -1024,7 +1010,7 @@ operators:
     step: 0
     sel:
       mode: advanced
-    step_id: mode
+    step_id: summary
     sel_mode: auto
     sel_assistant: claudecode
     sel_client: ''
@@ -1033,7 +1019,9 @@ operators:
   - name: hint
     type: textCOMP
     parameters:
-      text: Choose one, then Next.
+      text: |-
+        Mode: auto. AI assistant: on (Claude Code).
+        Nothing has changed yet - click Set up Embody to apply.
       type: multiline
       wordwrap: true
       callbacks: hint_callbacks
@@ -1042,10 +1030,11 @@ operators:
       fontcolorg: 0.61
       fontcolorb: 0.6
       textoffsetx: 24
+      textpaddingr: 20
       alignx: left
       aligny: top
       w: 452
-      h: 16
+      h: 60
       alignorder: 3
       bgcolorr: 0.11
       bgcolorg: 0.12
@@ -1061,7 +1050,7 @@ operators:
   - name: title
     type: textCOMP
     parameters:
-      text: How should Embody manage your project?
+      text: Ready to set up Embody
       wordwrap: true
       callbacks: title_callbacks
       fontsize: 18
@@ -1071,6 +1060,7 @@ operators:
       textoffsetx: 24
       alignx: left
       h: 30
+      hmode: fill
       alignorder: 2
       bgcolorr: 0.11
       bgcolorg: 0.12
@@ -1098,7 +1088,7 @@ operators:
     - name: fill
       type: containerCOMP
       parameters:
-        w: 150
+        w: 452
         h: 4
         bgcolorr: 0.24
         bgcolorg: 0.52
@@ -1119,6 +1109,7 @@ operators:
     parameters:
       h: 40
       hmode: fill
+      bottomanchor: 0.923
       alignorder: 5
       bgcolorr: 0.11
       bgcolorg: 0.12
@@ -1128,9 +1119,8 @@ operators:
       spacing: 10
       marginl: 24
       marginr: 24
-      marginb: 22
-      margint: 10
-    position: [480, -150]
+      margint: 4
+    position: [250, -700]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
     children:
@@ -1142,7 +1132,6 @@ operators:
         bgcolorr: 0.19
         bgcolorg: 0.2
         bgcolorb: 0.195
-      position: [25, 100]
       children:
       - name: out1
         type: outCHOP
@@ -1155,19 +1144,20 @@ operators:
       - name: text
         type: textCOMP
         parameters:
-          text: Not now
+          text: Back
           type: multiline
           legacyfontselection: true
           scaletofit: =parent().par[me.curPar.name] or me.curPar.val
           fontsize: 13
           linespacing: =parent().par[me.curPar.name] or me.curPar.val
-          fontcolorr: 0.34
-          fontcolorg: 0.35
-          fontcolorb: 0.34
+          fontcolorr: 0.92
+          fontcolorg: 0.92
+          fontcolorb: 0.92
           textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -1216,7 +1206,7 @@ operators:
         bgcolorr: 0.24
         bgcolorg: 0.52
         bgcolorb: 0.35
-      position: [25, 100]
+      position: [400, 0]
       children:
       - name: out1
         type: outCHOP
@@ -1229,7 +1219,7 @@ operators:
       - name: text
         type: textCOMP
         parameters:
-          text: Next
+          text: Set up Embody
           type: multiline
           legacyfontselection: true
           scaletofit: =parent().par[me.curPar.name] or me.curPar.val
@@ -1242,6 +1232,7 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -1288,6 +1279,7 @@ operators:
       hmode: fill
       vmode: fill
       alignorder: 4.5
+      display: false
       bgcolorr: 0.11
       bgcolorg: 0.12
       bgcolorb: 0.115
@@ -1313,9 +1305,10 @@ operators:
   - name: grp_mode
     type: containerCOMP
     parameters:
-      h: 134
+      h: 235
       hmode: fill
       alignorder: 4
+      display: false
       bgcolorr: 0.11
       bgcolorg: 0.12
       bgcolorb: 0.115
@@ -1324,7 +1317,7 @@ operators:
       spacing: 8
       marginl: 24
       marginr: 24
-    position: [480, -300]
+    position: [450, -800]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
     children:
@@ -1349,22 +1342,23 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [25, 100]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Manages everything on its own. Recommended for most projects.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 24
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1396,6 +1390,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -1462,22 +1457,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [25, 100]
+      position: [0, -200]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Asks before touching git, your Python env, config files, or your network.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 24
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1509,6 +1506,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -1570,7 +1568,7 @@ operators:
   - name: steplabel
     type: textCOMP
     parameters:
-      text: Step 1 of 3
+      text: Step 3 of 3
       callbacks: steplabel_callbacks
       fontsize: 11
       fontcolorr: 0.6
@@ -1579,12 +1577,13 @@ operators:
       textoffsetx: 24
       alignx: left
       h: 16
+      hmode: fill
       bgcolorr: 0.11
       bgcolorg: 0.12
       bgcolorb: 0.115
       bgalpha: 1
       margint: 6
-    position: [240, -450]
+    position: [225, 200]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
   - name: topspacer
@@ -1603,16 +1602,16 @@ operators:
   - name: grp_client
     type: containerCOMP
     parameters:
-      h: 216
-      hmode: fill
+      w: 473
+      h: 235
       alignorder: 4
       display: false
       align: verttb
       spacing: 8
       marginl: 24
-      marginr: 24
+      marginr: 5
       pvscrollbar: 'on'
-    position: [960, -600]
+    position: [935, -800]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
     children:
@@ -1637,22 +1636,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -200]
+      position: [0, -400]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Generates Codex / AGENTS config.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 22
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1684,6 +1685,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -1754,16 +1756,18 @@ operators:
         type: textCOMP
         parameters:
           text: Generates .cursor config.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 22
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1795,6 +1799,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -1861,22 +1866,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -300]
+      position: [0, -600]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Generates GEMINI.md.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 22
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -1908,6 +1915,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -1974,22 +1982,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -400]
+      position: [0, -800]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Generates VS Code MCP config.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 22
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2021,6 +2031,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2087,22 +2098,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -500]
+      position: [0, -1000]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Generates Copilot config.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 22
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2134,6 +2147,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2200,22 +2214,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -100]
+      position: [0, -200]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Generates Windsurf config.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 22
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2247,6 +2263,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2295,7 +2312,7 @@ operators:
   - name: grp_assistant
     type: containerCOMP
     parameters:
-      h: 190
+      h: 235
       hmode: fill
       alignorder: 4
       display: false
@@ -2303,7 +2320,7 @@ operators:
       spacing: 8
       marginl: 24
       marginr: 24
-    position: [700, -600]
+    position: [675, -800]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
     children:
@@ -2327,22 +2344,25 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -100]
+      position: [0, -200]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: No .venv, server, or config. Embody still keeps your project diff-friendly.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
+          textoffsety: -4
           alignx: left
           aligny: top
           h: 28
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2367,6 +2387,7 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textoffsety: -4
           textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
@@ -2374,6 +2395,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2384,7 +2406,7 @@ operators:
           borderover: false
         flags:
         - viewer
-        position: [74, 26]
+        position: [225, 25]
         size: [113, 96]
       - name: parexec1
         type: parameterexecuteDAT
@@ -2439,22 +2461,25 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -200]
+      position: [0, -400]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Cursor, Windsurf, Codex, Gemini, VS Code, or Copilot.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
+          textoffsety: -4
           alignx: left
           aligny: top
           h: 28
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2479,6 +2504,7 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textoffsety: -4
           textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
@@ -2486,6 +2512,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2496,7 +2523,7 @@ operators:
           borderover: false
         flags:
         - viewer
-        position: [74, 26]
+        position: [250, 25]
         size: [113, 96]
       - name: parexec1
         type: parameterexecuteDAT
@@ -2557,16 +2584,19 @@ operators:
         type: textCOMP
         parameters:
           text: Recommended. Generates .mcp.json plus .claude rules and skills.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
+          textoffsety: -4
           alignx: left
           aligny: top
           h: 28
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2591,6 +2621,7 @@ operators:
           fontcolorg: 0.93
           fontcolorb: 0.93
           textoffsetx: 16
+          textoffsety: -4
           textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
@@ -2598,6 +2629,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2608,7 +2640,7 @@ operators:
           borderover: false
         flags:
         - viewer
-        position: [74, 26]
+        position: [250, 25]
         size: [113, 96]
       - name: parexec1
         type: parameterexecuteDAT
@@ -2646,7 +2678,7 @@ operators:
   - name: grp_footprint
     type: containerCOMP
     parameters:
-      h: 190
+      h: 191
       hmode: fill
       alignorder: 4
       display: false
@@ -2654,7 +2686,7 @@ operators:
       spacing: 8
       marginl: 24
       marginr: 24
-    position: [1220, -600]
+    position: [1195, -800]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
     children:
@@ -2678,22 +2710,23 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -200]
       children:
       - name: desc
         type: textCOMP
         parameters:
-          text: Pick a folder now.
+          text: Pick a folder next.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 28
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2725,6 +2758,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2790,21 +2824,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
+      position: [0, -200]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Write config at the top of the git repo.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 28
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2836,6 +2873,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -2901,22 +2939,24 @@ operators:
         topborder: bordera
         align: verttb
         spacing: 1
-      position: [0, -100]
+      position: [0, -400]
       children:
       - name: desc
         type: textCOMP
         parameters:
           text: Use when the .toe is a subfolder you open as your workspace.
+          type: multiline
           wordwrap: true
           callbacks: desc_callbacks
           fontsize: 11
           fontcolorr: 0.62
           fontcolorg: 0.63
           fontcolorb: 0.62
-          textoffsetx: 16
+          textoffsetx: 18
           alignx: left
           aligny: top
           h: 28
+          hmode: fill
           alignorder: 1
         size: [160, 130]
         color: [0.67, 0.67, 0.67]
@@ -2948,6 +2988,7 @@ operators:
           alignx: left
           aligny: bottom
           h: 28
+          hmode: fill
           vmode: fill
           bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
           bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
@@ -3019,7 +3060,7 @@ operators:
       language: python
     flags:
     - viewer
-    position: [480, -600]
+    position: [465, 50]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
     dock: steplabel

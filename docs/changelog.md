@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.99
+
+Setup-wizard layout polish and a size-aware network-spacing rule.
+
+- **Wizard option buttons: consistent vertical centering and left alignment.** Every option button's title and subtitle now share one left edge and sit centered in the button on every screen (button text offsets normalized). Fixes the assistant/client/footprint buttons reading top-heavy while the mode buttons looked centered.
+- **"Review what Embody will add" hint fixed.** The description text was `hmode='fill'` -- spanning the full window with no right margin -- so long copy ran off the right edge and clipped, and it reserved a fixed 88px block that left a dead gap above the options. It is now constrained to the 452px content column (wraps cleanly inside the panel, no clipping) with a height that fits the wrapped text.
+- **De-overlapped wizard button tiles in the network editor.** The panel-widget button COMPs were stacked 100px apart while their tiles are 134px tall, so they overlapped in the editor (cosmetic -- panel layout is align-driven -- but messy). Tiles are now spaced by actual node height, zero overlap.
+- **New layout rule: spacing is `size + gap`, both axes, never a fixed step.** `network-layout.md` (and its shipped template) now specify computing every offset from actual `nodeWidth`/`nodeHeight`, with the vertical formula `step = ceil((maxNodeHeight + gap) / 200) * 200`, and explicitly cover panel-COMP widget tiles (which the LAYOUT WARNING lint does not police). This is the rule that prevents the tile-overlap class of bug above.
+
 ## v6.0.92
 
 Setup-wizard text alignment (for real this time) and the last main-thread freeze removed from Envoy startup.
