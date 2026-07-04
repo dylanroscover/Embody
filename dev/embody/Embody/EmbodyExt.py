@@ -346,6 +346,56 @@ class EmbodyExt:
             pass
         return False
 
+    def _wirePythonPaths(self, spec: Optional[dict] = None) -> bool:
+        """Wire the Envoy venv paths into this interpreter.
+
+        Worker-thread safe when ``spec`` is provided: touches only os/sys state
+        and never reads TD objects or logs. ``spec=None`` preserves the legacy
+        main-thread convenience path by resolving _venvPaths() first.
+        """
+        spec = spec or self._venvPaths()
+        venv_dir = spec.get('venv_dir')
+        site_packages = spec.get('site_packages')
+        if not venv_dir or not os.path.isdir(venv_dir):
+            return False
+        if not site_packages or not os.path.isdir(site_packages):
+            return False
+        self._addSitePackages(site_packages)
+        return True
+
+    @staticmethod
+    def _importGateCheck() -> tuple[bool, str]:
+        """Pure import gate for Envoy's MCP stack.
+
+        Safe to call from a background thread: no TD objects, no logging, no
+        parameter access. Returns ``(True, '')`` when ``mcp.server`` imports.
+        """
+        if 'mcp.server' in sys.modules:
+            sys._envoy_import_gate_ok = True
+            return True, ''
+        try:
+            import importlib
+            # First import attempt of this session, or recovery from a prior
+            # failed import: clear any half-loaded mcp.* entries so the loader
+            # genuinely re-runs (a failed import leaves the parent package
+            # behind but not the submodule).
+            for mod in list(sys.modules):
+                if mod == 'mcp' or mod.startswith('mcp.'):
+                    del sys.modules[mod]
+            importlib.import_module('mcp.server')
+            sys._envoy_import_gate_ok = True
+            return True, ''
+        except BaseException as e:
+            return False, str(e) or e.__class__.__name__
+
+    @staticmethod
+    def _importGateFailureMessage(site_packages, message):
+        return (
+            f'Dependencies installed but mcp.server failed to import: {message}. '
+            f'Inspect {site_packages} for partial installs and try deleting '
+            f'.venv/ to force a clean rebuild.'
+        )
+
     def _setupEnvironment(self):
         """
         Set up a Python virtual environment using uv for Envoy dependencies.
@@ -357,12 +407,11 @@ class EmbodyExt:
         this -- continuing past a False return produces an inscrutable
         'No module named mcp.server' traceback at server-start time.
 
-        Synchronous. The slow install runs on the calling thread, so this is
-        only safe to call inline when _environmentNeedsInstall() is False (the
-        fast path) or when blocking is acceptable (the venv-recreate recovery
-        path in EnvoyExt._configureMCPClient). EnvoyExt.Start() routes the
-        install-needed case through a background thread instead -- see
-        _installDependencies and EnvoyExt._beginAsyncBootstrap.
+        Synchronous. The slow install and import gate run on the calling thread,
+        so this is only safe when blocking is acceptable. EnvoyExt.Start()
+        routes both the install-needed case and the first import gate through
+        background threads instead -- see _installDependencies,
+        _wirePythonPaths, _importGateCheck, and EnvoyExt._beginAsyncBootstrap.
         """
         spec = self._venvPaths()
         site_packages = spec['site_packages']
@@ -379,7 +428,13 @@ class EmbodyExt:
             if not venv_existed and os.path.isdir(spec['venv_dir']):
                 self._manifestRecordVenv(self._findProjectRoot(), spec['venv_dir'])
 
-        self._addSitePackages(site_packages)
+        if not self._wirePythonPaths(spec):
+            self.Log(
+                self._importGateFailureMessage(
+                    site_packages, 'venv site-packages path is missing'),
+                'ERROR',
+            )
+            return False
         if sys.platform.startswith('win'):
             self._fixPywin32Dlls(site_packages)
 
@@ -402,9 +457,9 @@ class EmbodyExt:
         parameters (illegal off the main thread). Returns True if uv, the venv,
         and the dependencies all installed cleanly.
 
-        Does NOT touch sys.path or import mcp -- callers do that on the main
-        thread afterward (see _setupEnvironment / EnvoyExt._pollBootstrap), so
-        the delicate pydantic_core import stays where it belongs.
+        Does NOT touch sys.path or import mcp -- callers do that separately
+        (see _setupEnvironment / EnvoyExt._beginAsyncBootstrap), so the
+        delicate pydantic_core import can run off the TD main thread.
         """
         venv_dir = spec['venv_dir']
         venv_python = spec['venv_python']
@@ -463,27 +518,12 @@ class EmbodyExt:
         validator and abort() the process with no Python traceback -- the
         "TD just closes on Envoy toggle off/on" crash users hit on 5.0.393+.
         """
-        if 'mcp.server' in sys.modules:
+        ok, message = self._importGateCheck()
+        if ok:
+            sys._envoy_import_gate_ok = True
             return True
-        try:
-            import importlib
-            # First import attempt of this session, or recovery from a prior
-            # failed import: clear any half-loaded mcp.* entries so the loader
-            # genuinely re-runs (a failed import leaves the parent package
-            # behind but not the submodule).
-            for mod in list(sys.modules):
-                if mod == 'mcp' or mod.startswith('mcp.'):
-                    del sys.modules[mod]
-            importlib.import_module('mcp.server')
-            return True
-        except Exception as e:
-            self.Log(
-                f'Dependencies installed but mcp.server failed to import: {e}. '
-                f'Inspect {site_packages} for partial installs and try deleting '
-                f'.venv/ to force a clean rebuild.',
-                'ERROR',
-            )
-            return False
+        self.Log(self._importGateFailureMessage(site_packages, message), 'ERROR')
+        return False
 
     def _findOrInstallUv(self, python_exe, log=None):
         """Find uv on PATH, or install it via pip --user. Returns path to uv executable or None.

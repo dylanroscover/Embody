@@ -2255,10 +2255,15 @@ class EnvoyExt:
         self._venv_recreated: bool = False  # Guard: only auto-recreate venv once per session
         # Background dependency-bootstrap state (see Start / _beginAsyncBootstrap).
         # _bootstrap_result is None while the worker runs, then (ok, [(level, msg)..])
-        # once it finishes; the main-thread poll reads it. _bootstrapping guards
-        # against overlapping bootstraps from repeated Start() calls.
+        # plus import-gate status once it finishes; the main-thread poll reads
+        # it. _bootstrapping guards against overlapping bootstraps from repeated
+        # Start() calls.
         self._bootstrap_result: Optional[tuple] = None
         self._bootstrapping: bool = False
+        # Background first-import warmup for the ready-venv fast path. Kept
+        # separate from dependency bootstrap because no install work is needed.
+        self._import_gate_result: Optional[tuple] = None
+        self._import_gate_running: bool = False
         self._undo_active: bool = False  # re-entrancy guard: batch sub-ops must not nest undo blocks
 
         # --- Live build visualization (smooth follow of the active op) ---
@@ -2674,6 +2679,9 @@ class EnvoyExt:
         if self._bootstrapping:
             self._log('Dependency install already in progress (Start ignored)', 'DEBUG')
             return
+        if self._import_gate_running:
+            self._log('Import gate warm-up already in progress (Start ignored)', 'DEBUG')
+            return
 
         # Resolve git root silently -- Start() never prompts. Dialogs belong only
         # in _enableEnvoy() / InitGit() which are explicitly user-initiated.
@@ -2696,13 +2704,17 @@ class EnvoyExt:
             self._beginAsyncBootstrap(git_root, spec)
             return
 
-        # Fast path: environment already usable. _setupEnvironment here is the
-        # cheap branch (sys.path wiring + the mcp.server import gate); no install
-        # happens. A False return means the venv is present but broken -- abort,
-        # because continuing would crash _runServer with an inscrutable
-        # 'No module named mcp.server' traceback.
-        if not Embody._setupEnvironment():
+        # Fast path: environment already usable. Wire sys.path inline because
+        # that is cheap, but run the first mcp.server import gate on a worker
+        # thread. Cold-importing MCP pulls in pydantic/starlette/uvicorn and can
+        # freeze TD for several seconds on first open after install/upgrade.
+        if not Embody._wirePythonPaths(spec):
             self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                Embody._importGateFailureMessage(
+                    spec['site_packages'], 'venv site-packages path is missing'),
+                'ERROR',
+            )
             self._log(
                 'Aborting Envoy start -- Python environment is not ready. '
                 'See textport above for the underlying failure.',
@@ -2710,6 +2722,78 @@ class EnvoyExt:
             )
             return
 
+        if getattr(sys, '_envoy_import_gate_ok', False):
+            self._continueStart(git_root)
+            return
+
+        self._beginAsyncImportGate(git_root, spec)
+
+    def _beginAsyncImportGate(self, git_root, spec) -> None:
+        """Warm the MCP import stack on a worker thread for the ready-venv path."""
+        self._import_gate_running = True
+        self._import_gate_result = None
+        self.ownerComp.par.Envoystatus = 'Preparing Python environment...'
+        self._log(
+            'Warming the MCP Python stack on a background thread -- first open '
+            'after install/upgrade can take a few seconds; TD stays responsive.',
+            'INFO',
+        )
+        import_gate_check = op.Embody.ext.Embody._importGateCheck
+
+        def worker():
+            try:
+                result = import_gate_check()
+            except BaseException as e:
+                result = (False, str(e) or e.__class__.__name__)
+            # Atomic publish: the main-thread poll reads this single attribute.
+            self._import_gate_result = result
+
+        Thread(target=worker, daemon=True).start()
+        run('args[0]._pollImportGate(args[1], args[2])',
+            self, git_root, spec, delayFrames=15)
+
+    def _pollImportGate(self, git_root, spec) -> None:
+        """Main-thread poll for the fast-path background MCP import gate."""
+        # Stale-instance guard: a save/recompile may have replaced this EnvoyExt
+        # while the worker ran. The fresh instance owns startup now.
+        try:
+            if self.ownerComp.ext.Envoy is not self:
+                return
+        except Exception:
+            return
+
+        result = self._import_gate_result
+        if result is None:
+            run('args[0]._pollImportGate(args[1], args[2])',
+                self, git_root, spec, delayFrames=15)
+            return
+
+        self._import_gate_running = False
+        ok, message = result
+
+        # The user may have toggled Envoy off while the import gate warmed.
+        if not self.ownerComp.par.Envoyenable.eval():
+            self._log('Envoy disabled during Python environment prep -- not starting.', 'DEBUG')
+            if not str(self.ownerComp.par.Envoystatus.eval()).startswith(
+                    ('Error', 'Disabled', 'Off')):
+                self.ownerComp.par.Envoystatus = 'Disabled'
+            return
+
+        if not ok:
+            self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                op.Embody.ext.Embody._importGateFailureMessage(
+                    spec['site_packages'], message),
+                'ERROR',
+            )
+            self._log(
+                'Aborting Envoy start -- Python environment is not ready. '
+                'See textport above for the underlying failure.',
+                'ERROR',
+            )
+            return
+
+        sys._envoy_import_gate_ok = True
         self._continueStart(git_root)
 
     def _beginAsyncBootstrap(self, git_root, spec) -> None:
@@ -2718,9 +2802,10 @@ class EnvoyExt:
 
         Keeps TouchDesigner responsive during the venv build / pip install that
         a fresh install or a version upgrade triggers. The worker runs
-        EmbodyExt._installDependencies (which touches no TD objects); its log
-        lines are captured and replayed on the main thread by _pollBootstrap,
-        because EmbodyExt.Log writes the FIFO DAT and reads parameters.
+        EmbodyExt._installDependencies, wires sys.path, and warms the MCP import
+        gate; its log lines are captured and replayed on the main thread by
+        _pollBootstrap, because EmbodyExt.Log writes the FIFO DAT and reads
+        parameters.
         """
         self._bootstrapping = True
         self._bootstrap_result = None
@@ -2732,22 +2817,35 @@ class EnvoyExt:
             'setup). TouchDesigner stays responsive; MCP will connect when this '
             'finishes.')
         Embody = op.Embody.ext.Embody
+        wire_python_paths = Embody._wirePythonPaths
+        import_gate_check = Embody._importGateCheck
 
         def worker():
             msgs = []
+            gate_ok = False
+            gate_msg = ''
             try:
                 ok = Embody._installDependencies(
                     spec, log=lambda m, lvl='INFO': msgs.append((lvl, m)))
-            except Exception as e:
+            except BaseException as e:
                 ok = False
                 msgs.append(('ERROR', f'Dependency install crashed: {e}'))
+            if ok:
+                try:
+                    if wire_python_paths(spec):
+                        gate_ok, gate_msg = import_gate_check()
+                    else:
+                        gate_msg = 'venv site-packages path is missing'
+                except BaseException as e:
+                    gate_msg = str(e) or e.__class__.__name__
             # Atomic publish: the main-thread poll reads this single attribute.
-            self._bootstrap_result = (ok, msgs)
+            self._bootstrap_result = (ok, msgs, gate_ok, gate_msg)
 
         Thread(target=worker, daemon=True).start()
-        run('args[0]._pollBootstrap(args[1])', self, git_root, delayFrames=30)
+        run('args[0]._pollBootstrap(args[1], args[2])',
+            self, git_root, spec, delayFrames=30)
 
-    def _pollBootstrap(self, git_root) -> None:
+    def _pollBootstrap(self, git_root, spec) -> None:
         """Main-thread poll for the background dependency install (see
         _beginAsyncBootstrap). Replays captured log lines, honors a mid-install
         Envoy-disable, then finishes the start or reports failure."""
@@ -2762,11 +2860,12 @@ class EnvoyExt:
         result = self._bootstrap_result
         if result is None:
             # Worker still installing -- check again shortly.
-            run('args[0]._pollBootstrap(args[1])', self, git_root, delayFrames=30)
+            run('args[0]._pollBootstrap(args[1], args[2])',
+                self, git_root, spec, delayFrames=30)
             return
 
         self._bootstrapping = False
-        ok, msgs = result
+        ok, msgs, gate_ok, gate_msg = result
         for lvl, m in msgs:
             self._log(m, lvl)
 
@@ -2796,21 +2895,25 @@ class EnvoyExt:
         except Exception:
             pass
 
-        # Install done. Confirm the import on the main thread (preserves the
-        # careful pydantic_core handling in _verifyMcpImportable); deps are now
-        # current so _setupEnvironment takes its fast branch -- no second install.
-        if not op.Embody.ext.Embody._setupEnvironment():
+        if not gate_ok:
             self.ownerComp.par.Envoystatus = 'Error: Python environment not ready'
+            self._log(
+                op.Embody.ext.Embody._importGateFailureMessage(
+                    spec['site_packages'], gate_msg),
+                'ERROR',
+            )
             return
+        sys._envoy_import_gate_ok = True
         self._continueStart(git_root)
 
     def _continueStart(self, git_root) -> None:
         """Finish Envoy startup once the Python environment is confirmed ready.
 
-        Runs on the main thread -- either inline from Start() (fast path) or
-        from _pollBootstrap() after a background dependency install. Allocates
-        the port, spawns the server worker via the Thread Manager, and writes
-        the MCP / git config files.
+        Runs on the main thread -- either inline from Start() after the session
+        import-gate flag is already warm, from _pollImportGate(), or from
+        _pollBootstrap() after a background dependency install. Allocates the
+        port, spawns the server worker via the Thread Manager, and writes the
+        MCP / git config files.
         """
         base_port = self.ownerComp.par.Envoyport.eval()
         port = self._findAvailablePort(base_port)

@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.92
+
+Setup-wizard text alignment (for real this time) and the last main-thread freeze removed from Envoy startup.
+
+- **Wizard option titles and subtitles are ink-aligned on every platform.** Two stacked causes: the title used the multiline field renderer while the subtitle used the string label renderer (identical insets on macOS -- which is why it looked fixed there -- but divergent on Windows), and a size-14 first glyph carries ~2px more left bearing than a size-11 one. All 28 title/subtitle Text COMPs now share the multiline renderer (which also un-breaks subtitle word wrap, silently dead under string type), and subtitles carry a +2px offset compensation. Verified by pixel measurement: title and subtitle ink both start at column 19 on the Claude Code option.
+- **No more multi-second freeze after dependency install.** The pip/venv install was already threaded, but the post-install import gate (mcp + pydantic + starlette + uvicorn, cold pyc compile) ran on TD's main thread -- field logs showed the frame counter pinned for ~6s. The gate now runs on a worker thread in both the first-install and every-open paths, with Envoy Status showing "Preparing Python environment..." during the warm-up and a once-per-TD-session flag so saves and server restarts skip it entirely. Verified live: server restart ran the new flow and recovered with the gate flag set.
+- Setup-environment suite adapted and extended (thread-callable import gate, idempotent path wiring, session flag): 1,959 tests total.
+
 ## v6.0.91
 
 Rules diet: the always-loaded rule files shrink ~60 percent by relocating reference depth into four new on-demand skills -- every hard law stays inline, every moved section leaves a MUST-load trigger behind.
