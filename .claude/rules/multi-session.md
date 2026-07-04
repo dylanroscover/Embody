@@ -1,0 +1,10 @@
+# Multi-Session Awareness
+
+Multiple AI sessions can work on the same live TD network, externalized files, and git tree. Envoy coordinates them; these are the always-loaded stop rules.
+
+- At session start: call `get_sessions` once early and note active peers, their recent scopes, and claims.
+- Advisories come to you: any tool response may carry `_peers`; read it before continuing.
+- `conflict:true` = HARD STOP: do not keep mutating that scope; check `get_sessions`, report who is working there, and coordinate or get explicit user direction.
+- Claim before big or destructive work with `claim_scope`, using the narrowest op path, file scope, or special project scope that covers the work.
+- Destructive operations are gated; never use `override=True` silently.
+- The moment a `_peers` advisory or a second session appears -> MUST load /multi-session-etiquette for the full protocol.

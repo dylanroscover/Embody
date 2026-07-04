@@ -1,5 +1,5 @@
 ---
-description: "Procedure for preparing version release commits — changelog, README, templates, versioning"
+description: "Procedure for preparing version release commits -- changelog, README, templates, versioning"
 ---
 
 # Release Commit Procedure
@@ -8,11 +8,11 @@ When the user asks to prepare a release commit (e.g., "prep a commit for v217"),
 
 ## 0. Save the Project
 
-The entire save call is `project.save()` — no arguments. TD increments the `.toe` filename's trailing build, the `onProjectPreSave` hook in `dev/embody/execute_src_ctrl.py` bumps `par.Version`, deletes the prior release `.tox`, and exports the new one. Filename and `par.Version` stay in lock-step.
+The entire save call is `project.save()` -- no arguments. TD increments the `.toe` filename's trailing build, the `onProjectPreSave` hook in `dev/embody/execute_src_ctrl.py` bumps `par.Version`, deletes the prior release `.tox`, and exports the new one. Filename and `par.Version` stay in lock-step.
 
 Don't pass a path (TD increments from *your* path's build, desyncing by one). Don't pre-set `par.Version`. Don't call `ExportPortableTox` directly.
 
-If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, then have the user close TD without saving and reopen. Do **not** save again — the hook will delete the just-correct release `.tox`.
+If you've already mis-saved: rename the off-by-one `.toe` on disk to match `par.Version`, then have the user close TD without saving and reopen. Do **not** save again -- the hook will delete the just-correct release `.tox`.
 
 ## 1. Audit All Changes
 
@@ -44,7 +44,7 @@ Each bullet should describe the change clearly enough that a user who didn't wri
 
 ## 4. Verify Template Sync
 
-**When updating a rule or skill in `.claude/`, also update the corresponding template DAT in `dev/embody/Embody/templates/` if one exists.** This applies on every edit, not just at release time — drift between source and template ships stale guidance to user projects.
+**When updating a rule or skill in `.claude/`, also update the corresponding template DAT in `dev/embody/Embody/templates/` if one exists.** This applies on every edit, not just at release time -- drift between source and template ships stale guidance to user projects.
 
 Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claude/` counterparts:
 
@@ -55,15 +55,25 @@ Templates in `dev/embody/Embody/templates/` must stay in sync with their `.claud
 | `rules/mcp-safety.md` | `templates/text_rule_mcp_safety.md` |
 | `rules/network-layout.md` | `templates/text_rule_network_layout.md` |
 | `rules/td-connectivity.md` | `templates/text_rule_td_connectivity.md` |
+| `rules/multi-session.md` | `templates/text_rule_multi_session.md` |
+| `rules/performance.md` | `templates/text_rule_performance.md` |
 | `skills/td-api-reference/SKILL.md` | `templates/text_skill_td_api_reference.md` |
+| `skills/movie-export/SKILL.md` | `templates/text_skill_movie_export.md` |
+| `skills/parameter-design/SKILL.md` | `templates/text_skill_parameter_design.md` |
+| `skills/td-recovery/SKILL.md` | `templates/text_skill_td_recovery.md` |
+| `skills/multi-session-etiquette/SKILL.md` | `templates/text_skill_multi_session_etiquette.md` |
 | `skills/create-operator/SKILL.md` | `templates/text_skill_create_operator.md` |
 | `skills/debug-operator/SKILL.md` | `templates/text_skill_debug_operator.md` |
 | `skills/externalize-operator/SKILL.md` | `templates/text_skill_externalize.md` |
 | `skills/create-extension/SKILL.md` | `templates/text_skill_create_extension.md` |
 | `skills/manage-annotations/SKILL.md` | `templates/text_skill_manage_annotations.md` |
 | `skills/mcp-tools-reference/SKILL.md` | `templates/text_skill_mcp_tools_reference.md` |
+| `skills/pop-networks/SKILL.md` | `templates/text_skill_pop_networks.md` |
+| `skills/visual-aesthetics/SKILL.md` | `templates/text_skill_visual_aesthetics.md` |
 
-Templates have a BOM (`﻿`) and an Embody/Envoy generated-by HTML comment but otherwise must match their `.claude/` counterpart in content. Diff them and fix any drift.
+This table is the source of truth for what ships; keep it in sync with `_TEMPLATE_MAP_RULES` / `_TEMPLATE_MAP_SKILLS` in `EmbodyExt.py` (the actual shipping map). Template files that exist on disk but are NOT in that map (e.g. `text_rule_commit_push_checklist.md`, `text_rule_github_release.md`, `text_rule_refresh_after_commit.py`) are orphans -- do not add them here.
+
+Templates should be UTF-8 with LF line endings and no BOM. Each template carries an Embody/Envoy generated-by HTML comment, and otherwise must match its `.claude/` counterpart in content -- diff them (normalizing any legacy BOM + line endings) and fix any drift.
 
 Dev-only rules and skills (e.g. `.claude/rules/commit-push-checklist.md`, `.claude/rules/github-release.md`, `.claude/rules/release-commits.md`, `.claude/rules/skill-prerequisites.md`, `.claude/skills/add-mcp-tool/`, `.claude/skills/run-tests/`) live under `.claude/` for Embody developers only and are NOT shipped to user projects -- they have no template counterpart. The root `CLAUDE.md` and `dev/embody/Embody/templates/text_claude.md` serve different audiences and are maintained independently.
 

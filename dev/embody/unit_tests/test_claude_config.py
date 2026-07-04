@@ -34,13 +34,30 @@ class TestClaudeConfig(EmbodyTestCase):
 	# Group A: Template DAT integrity
 	# ------------------------------------------------------------------
 
+	def test_A00_no_absolute_paths_in_panel_watchers(self):
+		"""No panelexecuteDAT inside Embody may watch ABSOLUTE op paths.
+
+		Absolute paths only resolve at the dev project's install location
+		(/embody/Embody); in a user project the tox lands at /Embody and the
+		watcher silently resolves to nothing -- every wizard/UI click dies
+		with no error. This shipped broken in v6.0.74-87 (the setup wizard's
+		Next button did nothing in user projects) because the dev project
+		masked it. Parameter op-paths must be relative, per rules/td-python.md.
+		"""
+		offenders = []
+		for d in self.embody_ext.my.findChildren(type=panelexecuteDAT, maxDepth=8):
+			raw = d.par.panels.val
+			if any(tok.startswith('/') for tok in raw.split()):
+				offenders.append(d.path)
+		self.assertListEqual(offenders, [])
+
 	def test_A01_rules_map_has_expected_entries(self):
 		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
 		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)
 
-	def test_A02_skills_map_has_8_entries(self):
-		"""_TEMPLATE_MAP_SKILLS should have exactly 8 skill entries."""
-		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 8)
+	def test_A02_skills_map_has_13_entries(self):
+		"""_TEMPLATE_MAP_SKILLS should have exactly 13 skill entries."""
+		self.assertLen(self.embody_ext._TEMPLATE_MAP_SKILLS, 13)
 
 	def test_A03_templates_comp_exists(self):
 		"""The templates COMP should exist inside Embody."""
@@ -352,11 +369,11 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertLen(rule_files, len(self.embody_ext._TEMPLATE_MAP_RULES))
 
 	def test_D05_skills_directories_count(self):
-		"""Eight skill directories should be created in .claude/skills/."""
+		"""One skill directory per _TEMPLATE_MAP_SKILLS entry in .claude/skills/."""
 		self._run_claude_pipeline()
 		skills_dir = self._temp_dir / '.claude' / 'skills'
 		skill_dirs = [d for d in skills_dir.iterdir() if d.is_dir()]
-		self.assertLen(skill_dirs, 8)
+		self.assertLen(skill_dirs, len(self.embody_ext._TEMPLATE_MAP_SKILLS))
 
 	def test_D06_idempotent_rerun(self):
 		"""Running the Claude pipeline twice should produce identical files."""
@@ -658,12 +675,10 @@ class TestClaudeConfig(EmbodyTestCase):
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'gemini'))
 
-	def test_E15_codex_and_vscode_never_missing(self):
-		"""codex/vscode: covered by the always-written AGENTS.md, so never 'missing'."""
+	def test_E15_codex_never_missing(self):
+		"""codex: covered by the always-written AGENTS.md, so never 'missing'."""
 		self.assertFalse(
 			self.embody_ext._clientFilesMissing(self._temp_dir, 'codex'))
-		self.assertFalse(
-			self.embody_ext._clientFilesMissing(self._temp_dir, 'vscode'))
 
 	# ------------------------------------------------------------------
 	# Group F: _findProjectRoot()

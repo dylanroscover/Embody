@@ -13,6 +13,7 @@ Author: Dylan Roscover
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import shlex
@@ -41,6 +42,7 @@ class EmbodyExt:
         'text_rule_parameters':              'parameters',
         'text_rule_performance':             'performance',
         'text_rule_td_connectivity':         'td-connectivity',
+        'text_rule_multi_session':           'multi-session',
     }
 
     # Skill DAT name -> slug (Claude Code only)
@@ -51,7 +53,12 @@ class EmbodyExt:
         'text_skill_create_extension':    'create-extension',
         'text_skill_manage_annotations':  'manage-annotations',
         'text_skill_td_api_reference':    'td-api-reference',
+        'text_skill_movie_export':        'movie-export',
+        'text_skill_parameter_design':    'parameter-design',
+        'text_skill_td_recovery':         'td-recovery',
+        'text_skill_multi_session_etiquette': 'multi-session-etiquette',
         'text_skill_mcp_tools_reference': 'mcp-tools-reference',
+        'text_skill_pop_networks':        'pop-networks',
         'text_skill_visual_aesthetics':   'visual-aesthetics',
     }
 
@@ -74,6 +81,7 @@ class EmbodyExt:
         # Behavior
         'Logfolder', 'Logtofile', 'Verbose', 'Print',
         'Detectduplicatepaths', 'Templatemaster', 'Localtimestamps',
+        'Embodymode', 'Autoexternalize',
         # TDN
         'Tdnmode',
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
@@ -115,8 +123,8 @@ class EmbodyExt:
                        'install': 'npm install -g @google/gemini-cli  '
                                   '(or brew install gemini-cli)  '
                                   'docs https://github.com/google-gemini/gemini-cli'},
-        'vscode':     _VSCODE_LAUNCH,
         'copilot':    _VSCODE_LAUNCH,   # Copilot lives inside VS Code
+        'vscode':     _VSCODE_LAUNCH,   # VS Code uses the same launcher as Copilot
         'cursor': {
             'kind': 'editor', 'app': 'Cursor',
             'bundle': 'com.todesktop.230313mzl4w4u92',
@@ -184,8 +192,7 @@ class EmbodyExt:
         self._last_checkpoint_activity = 0.0   # time.monotonic()
         self._autosave_gen = 0
         self._autosave_armed = False
-        self._ensureAutosaveParams()  # self-heal the toggle + status if missing
-        
+
         # Logging configuration
         self.header = 'Embody >'
         self.debug_mode = False  # Set to True for verbose path logging
@@ -339,6 +346,56 @@ class EmbodyExt:
             pass
         return False
 
+    def _wirePythonPaths(self, spec: Optional[dict] = None) -> bool:
+        """Wire the Envoy venv paths into this interpreter.
+
+        Worker-thread safe when ``spec`` is provided: touches only os/sys state
+        and never reads TD objects or logs. ``spec=None`` preserves the legacy
+        main-thread convenience path by resolving _venvPaths() first.
+        """
+        spec = spec or self._venvPaths()
+        venv_dir = spec.get('venv_dir')
+        site_packages = spec.get('site_packages')
+        if not venv_dir or not os.path.isdir(venv_dir):
+            return False
+        if not site_packages or not os.path.isdir(site_packages):
+            return False
+        self._addSitePackages(site_packages)
+        return True
+
+    @staticmethod
+    def _importGateCheck() -> tuple[bool, str]:
+        """Pure import gate for Envoy's MCP stack.
+
+        Safe to call from a background thread: no TD objects, no logging, no
+        parameter access. Returns ``(True, '')`` when ``mcp.server`` imports.
+        """
+        if 'mcp.server' in sys.modules:
+            sys._envoy_import_gate_ok = True
+            return True, ''
+        try:
+            import importlib
+            # First import attempt of this session, or recovery from a prior
+            # failed import: clear any half-loaded mcp.* entries so the loader
+            # genuinely re-runs (a failed import leaves the parent package
+            # behind but not the submodule).
+            for mod in list(sys.modules):
+                if mod == 'mcp' or mod.startswith('mcp.'):
+                    del sys.modules[mod]
+            importlib.import_module('mcp.server')
+            sys._envoy_import_gate_ok = True
+            return True, ''
+        except BaseException as e:
+            return False, str(e) or e.__class__.__name__
+
+    @staticmethod
+    def _importGateFailureMessage(site_packages, message):
+        return (
+            f'Dependencies installed but mcp.server failed to import: {message}. '
+            f'Inspect {site_packages} for partial installs and try deleting '
+            f'.venv/ to force a clean rebuild.'
+        )
+
     def _setupEnvironment(self):
         """
         Set up a Python virtual environment using uv for Envoy dependencies.
@@ -350,15 +407,15 @@ class EmbodyExt:
         this -- continuing past a False return produces an inscrutable
         'No module named mcp.server' traceback at server-start time.
 
-        Synchronous. The slow install runs on the calling thread, so this is
-        only safe to call inline when _environmentNeedsInstall() is False (the
-        fast path) or when blocking is acceptable (the venv-recreate recovery
-        path in EnvoyExt._configureMCPClient). EnvoyExt.Start() routes the
-        install-needed case through a background thread instead -- see
-        _installDependencies and EnvoyExt._beginAsyncBootstrap.
+        Synchronous. The slow install and import gate run on the calling thread,
+        so this is only safe when blocking is acceptable. EnvoyExt.Start()
+        routes both the install-needed case and the first import gate through
+        background threads instead -- see _installDependencies,
+        _wirePythonPaths, _importGateCheck, and EnvoyExt._beginAsyncBootstrap.
         """
         spec = self._venvPaths()
         site_packages = spec['site_packages']
+        venv_existed = os.path.isdir(spec['venv_dir'])  # only record a venv Embody creates
 
         if self._environmentNeedsInstall(spec):
             msgs = []
@@ -368,8 +425,16 @@ class EmbodyExt:
                 self.Log(m, lvl)
             if not ok:
                 return False
+            if not venv_existed and os.path.isdir(spec['venv_dir']):
+                self._manifestRecordVenv(self._findProjectRoot(), spec['venv_dir'])
 
-        self._addSitePackages(site_packages)
+        if not self._wirePythonPaths(spec):
+            self.Log(
+                self._importGateFailureMessage(
+                    site_packages, 'venv site-packages path is missing'),
+                'ERROR',
+            )
+            return False
         if sys.platform.startswith('win'):
             self._fixPywin32Dlls(site_packages)
 
@@ -392,9 +457,9 @@ class EmbodyExt:
         parameters (illegal off the main thread). Returns True if uv, the venv,
         and the dependencies all installed cleanly.
 
-        Does NOT touch sys.path or import mcp -- callers do that on the main
-        thread afterward (see _setupEnvironment / EnvoyExt._pollBootstrap), so
-        the delicate pydantic_core import stays where it belongs.
+        Does NOT touch sys.path or import mcp -- callers do that separately
+        (see _setupEnvironment / EnvoyExt._beginAsyncBootstrap), so the
+        delicate pydantic_core import can run off the TD main thread.
         """
         venv_dir = spec['venv_dir']
         venv_python = spec['venv_python']
@@ -453,27 +518,12 @@ class EmbodyExt:
         validator and abort() the process with no Python traceback -- the
         "TD just closes on Envoy toggle off/on" crash users hit on 5.0.393+.
         """
-        if 'mcp.server' in sys.modules:
+        ok, message = self._importGateCheck()
+        if ok:
+            sys._envoy_import_gate_ok = True
             return True
-        try:
-            import importlib
-            # First import attempt of this session, or recovery from a prior
-            # failed import: clear any half-loaded mcp.* entries so the loader
-            # genuinely re-runs (a failed import leaves the parent package
-            # behind but not the submodule).
-            for mod in list(sys.modules):
-                if mod == 'mcp' or mod.startswith('mcp.'):
-                    del sys.modules[mod]
-            importlib.import_module('mcp.server')
-            return True
-        except Exception as e:
-            self.Log(
-                f'Dependencies installed but mcp.server failed to import: {e}. '
-                f'Inspect {site_packages} for partial installs and try deleting '
-                f'.venv/ to force a clean rebuild.',
-                'ERROR',
-            )
-            return False
+        self.Log(self._importGateFailureMessage(site_packages, message), 'ERROR')
+        return False
 
     def _findOrInstallUv(self, python_exe, log=None):
         """Find uv on PATH, or install it via pip --user. Returns path to uv executable or None.
@@ -857,19 +907,21 @@ class EmbodyExt:
             'Enable Envoy?\n\n'
             'Envoy is an MCP server that lets AI coding assistants\n'
             'create, modify, and query TouchDesigner operators.\n\n'
-            'This will:\n'
-            '  - Install Python dependencies (~30 MB)\n'
-            '  - Start a local MCP server on port '
+            'Enabling it sets up the following in your project:\n'
+            '  - a Python virtualenv (.venv) for the MCP bridge (~30 MB)\n'
+            '  - a local MCP server on port '
             f'{self.my.par.Envoyport.eval()}\n'
-            '  - Generate AI config files in your project root\n'
-            '    (CLAUDE.md, AGENTS.md, .mcp.json, .claude/ rules + skills)\n\n'
-            'All Envoy MCP tools are auto-authorized for convenience.\n'
-            'To adjust permissions, edit .claude/settings.local.json\n'
-            'in your project root after setup.\n\n'
+            '  - AI config files: CLAUDE.md, AGENTS.md, .claude/ rules + skills\n'
+            '  - .mcp.json + .embody/ (bridge, config, runtime state)\n'
+            '  - .gitignore / .gitattributes entries + a .tdn git diff driver\n\n'
+            'All Envoy MCP tools are auto-authorized for convenience\n'
+            '(edit .claude/settings.local.json to tighten this).\n\n'
+            'Fully reversible: run PreviewUninstall to see exactly what would\n'
+            'be removed, then Uninstall to undo everything above.\n\n'
             'Works with Claude Code, Cursor, Windsurf, and other MCP clients.\n'
-            'You can change this later via the Envoyenable parameter.\n\n'
+            'Change this later via the Envoyenable parameter.\n\n'
             'Note: TD will be unresponsive for a few seconds while\n'
-            'dependencies are installed.',
+            'dependencies install.',
             buttons=['Skip', 'Enable Envoy'])
 
         # choice == -1 means _messageBox suppressed the dialog (a test run OR a
@@ -914,6 +966,167 @@ class EmbodyExt:
         self.Log(
             f'Envoy enabled! Config generated for {client_label}. '
             f'Connect your AI coding assistant via MCP.',
+            'SUCCESS'
+        )
+
+    # === Setup wizard (native panel onboarding) ==============================
+    # The wizard (op.Embody.op('wizard') shown via 'window_wizard') is the
+    # first-run / re-openable onboarding surface. It collects the user's posture
+    # and AI preferences one screen at a time, then calls _applyWizardSetup().
+    # See dev/embody/plan-init-deinit-wizard.md sec 4.
+
+    def _openSetupWizard(self):
+        """Open the setup-wizard window (first run, or re-run via Setupwizard).
+
+        Respects the same suppression as every onboarding surface: never opens
+        during a test run or a project save (_suppressDialogs), so it cannot
+        surprise-pop during automation. Falls back to the classic _promptEnvoy
+        dialog when the wizard sub-network is absent (older / headless builds)."""
+        if self._suppressDialogs():
+            return
+        win = self.my.op('window_wizard')
+        wiz = self.my.op('wizard')
+        if win is None or wiz is None:
+            self.Log('Setup wizard UI not found -- using the classic Envoy '
+                     'prompt.', 'DEBUG')
+            self._promptEnvoy()
+            return
+        logic = wiz.op('logic')
+        if logic is not None and hasattr(logic.module, 'start'):
+            try:
+                logic.module.start()   # reset to step 1 + preselect from live params
+            except Exception as e:
+                # Never let a render glitch swallow onboarding: still show the
+                # window (in whatever state) rather than produce no dialog.
+                self.Log(f'Setup wizard start() failed: {e}', 'WARNING')
+        win.par.winopen.pulse()
+
+    def _applyWizardSetup(self, mode='auto', assistant='claudecode',
+                          client='', root='gitroot', custom_root=''):
+        """Apply the setup-wizard selections and enable (or skip) Envoy.
+
+        The single backend entry point the wizard's finish() calls. Because the
+        wizard already obtained consent (the footprint step discloses everything
+        Embody adds; the summary step confirms), the enable path is modal-free:
+        _enableEnvoyResolved sets _consent_bulk so the config writes -- both the
+        synchronous ones here AND the git/MCP writes in the deferred Start() --
+        apply silently without re-prompting, in either mode. Embodymode still
+        governs LATER, un-disclosed invasive actions (InitGit/InitEnvoy, a
+        startup repair) via _guardFileWrite.
+
+          mode:        'auto' | 'advanced'
+          assistant:   'claudecode' | 'other' | 'none'
+          client:      Aiclient menu value, used when assistant == 'other'
+          root:        'gitroot' | 'projectfolder' | 'custom'
+          custom_root: absolute path, used when root == 'custom'
+        """
+        # Whitelist the assistant token: an unrecognized value (a typo, a
+        # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
+        # Envoy -- the opposite of intent.
+        assistant = (assistant or '').strip().lower()
+        if assistant not in ('claudecode', 'other', 'none'):
+            self.Log(f'Setup wizard: unrecognized assistant "{assistant}" -- no '
+                     f'change made.', 'WARNING')
+            return
+
+        # 1. Posture.
+        if mode in ('auto', 'advanced'):
+            self.my.par.Embodymode = mode
+
+        # 2. Config-file location. Assigning Aiprojectroot fires parexec's
+        #    _migrateRootFiles UNCONDITIONALLY (only the InitEnvoy regen is
+        #    Envoyenable-gated). On first run that is benign -- nothing is at the
+        #    old root yet. Set the custom PATH BEFORE flipping the mode to
+        #    'custom' so the single migration resolves the real custom directory
+        #    rather than the empty-path project-folder fallback.
+        if root == 'custom' and custom_root:
+            self.my.par.Aiprojectrootcustom = custom_root
+        if root in ('gitroot', 'projectfolder', 'custom'):
+            self.my.par.Aiprojectroot = root
+
+        # 3. AI client / assistant.
+        if assistant == 'none':
+            self.my.par.Aiclient = 'none'
+            self.my.par.Envoyenable = False
+            self.Log('Embody is set up for externalization only. Turn on the AI '
+                     'assistant anytime via the Envoyenable parameter or by '
+                     're-running setup (the Setup Wizard button).', 'SUCCESS')
+            return
+        if assistant == 'claudecode':
+            self.my.par.Aiclient = 'claudecode'
+        elif assistant == 'other' and client:
+            try:
+                self.my.par.Aiclient = client
+            except Exception:
+                self.Log(f'Unknown AI client "{client}" -- keeping the current '
+                         f'selection.', 'WARNING')
+
+        # 4. Enable (first run) or restart-to-apply (re-run), modal-free.
+        self._enableEnvoyResolved()
+
+    def _enableEnvoyResolved(self):
+        """Modal-free Envoy enable/refresh, used by the setup wizard.
+
+        Skips the interactive git modal that _enableEnvoy() pops: the wizard
+        already chose the config location (Aiprojectroot) and disclosed the git
+        changes, so consent exists. Resolves the git root silently (via
+        _findGitRootSync -- Start() re-resolves the same way). If the project is
+        not in a git repo, MCP + AI config are still generated, with no
+        .gitignore / .gitattributes edits.
+
+        Two paths:
+        - FIRST RUN (Envoy off): write AI config, then flip Envoyenable so
+          parexec launches Start(), whose async bootstrap builds the venv OFF
+          the main thread (do NOT call _setupEnvironment() here -- that is the
+          blocking path _enableEnvoy uses).
+        - RE-RUN (Envoy already on, via the Setup Wizard button): the param
+          changes above already regenerated config through parexec; a
+          `Envoyenable = True` would be a no-op and never restart the server, so
+          the running server would keep its OLD port/root/client. RESTART it
+          explicitly so the new selections take effect, and only then set the
+          'Starting...' status (setting it on a no-op would lie forever)."""
+        already_on = bool(self.my.par.Envoyenable.eval())
+
+        # Resolve + record the git root without a prompt so _extractAIConfig's
+        # _findProjectRoot('gitroot') and Start() agree on one location.
+        git_root = self._findGitRootSync()  # Path or 'no-git'
+        self.my.store('_git_root', str(git_root))
+        if git_root == 'no-git':
+            self.Log('No git repo found -- generating MCP + AI config only (no '
+                     '.gitignore / .gitattributes). Run op.Embody.InitGit() '
+                     'later to add git integration.', 'INFO')
+
+        if already_on:
+            # Re-run: config already regenerated by parexec on the param changes.
+            # Restart so the runtime binds the new port/root/client.
+            self.Log('Re-applying Envoy setup...', 'INFO')
+            self.my.ext.Envoy.Stop()
+            self.my.par.Envoystatus = 'Starting...'
+            run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=10)
+            self.Log(f'Envoy setup updated for {self._aiClientLabel()}.',
+                     'SUCCESS')
+            return
+
+        # First enable. The wizard's footprint step disclosed + the user
+        # confirmed the whole set, so consent the initial writes as a batch: set
+        # _consent_bulk so this sync _extractAIConfig AND the git/MCP writes in
+        # the DEFERRED Start() apply silently (no double-prompt; the enable stays
+        # atomic -- config can't be declined while Envoyenable flips True).
+        # _continueStart clears the flag once its writes finish; a bounded timer
+        # is the backstop so it can never stick (which would silence all guards).
+        self.Log('Setting up Envoy...', 'INFO')
+        self._consent_bulk = True
+        run(f"op('{self.my}').ext.Embody._consent_bulk = False", delayFrames=7200)
+        # AI config now (fast, no venv needed). The heavy venv build + pip
+        # install runs asynchronously inside Start() (_beginAsyncBootstrap).
+        self._extractAIConfig()
+        # Flip Envoyenable -> parexec kicks Envoy.Start() (async bootstrap); its
+        # git/MCP writes run under the still-set _consent_bulk.
+        self.my.par.Envoyenable = True
+        self.my.par.Envoystatus = 'Starting...'
+        self.Log(
+            f'Envoy enabled! Config generated for {self._aiClientLabel()}. '
+            f'Dependencies install in the background; MCP connects when ready.',
             'SUCCESS'
         )
 
@@ -1272,26 +1485,519 @@ class EmbodyExt:
         if deleted:
             self.Log(f'Removed {deleted} Embody-generated file(s) at {old_root}', 'INFO')
 
+    # === Mode + consent (Auto vs Advanced) ===================================
+    # Embodymode governs Embody's posture toward invasive, project-level actions:
+    #   auto (default) -- manage everything, act silently (today's behavior)
+    #   advanced       -- ask before each such action (a batched confirm)
+    # _guard is the single chokepoint every gated action flows through, so the
+    # two postures stay ONE code path (cheap to maintain + test). It reads the
+    # mode via getattr, so it degrades to 'auto' until the Embodymode param is
+    # authored on the COMP (which needs a save).
+    # See dev/embody/plan-init-deinit-wizard.md sec 1c.
+
+    def _embodyMode(self):
+        """Current posture: 'auto' (default) or 'advanced'. Falls back to 'auto'
+        until the Embodymode param is authored, so behavior is unchanged today."""
+        par = getattr(self.my.par, 'Embodymode', None)
+        return par.eval() if par is not None else 'auto'
+
+    def _guard(self, title, message, apply_fn, mode=None):
+        """Gate ONE invasive action by Embody mode. Returns True if applied.
+
+          auto     -> apply immediately (silent).
+          advanced -> confirm via _messageBox (Apply/Skip); apply only on Apply.
+
+        A suppressed / headless dialog (_messageBox -> -1) DECLINES in advanced:
+        when the user asked to be consulted, never act without an explicit yes.
+        In auto, headless still applies (safe managed default). This respects the
+        existing test/save dialog suppression -- it never opens a modal in a
+        context where _messageBox is gated."""
+        mode = mode if mode is not None else self._embodyMode()
+        if mode != 'advanced':
+            apply_fn()
+            return True
+        if self._messageBox(title, message, ['Apply', 'Skip']) == 0:
+            apply_fn()
+            return True
+        return False
+
+    # _consent_bulk: set by an orchestrator (InitGit / InitEnvoy) or the setup
+    # wizard once it has shown ONE combined confirm for a whole category, so the
+    # individual _guardFileWrite sub-calls it makes apply silently instead of
+    # each popping its own dialog. This keeps Advanced mode's per-category prompt
+    # from fragmenting into one-dialog-per-file. Set/cleared in a try/finally (or,
+    # for the wizard's async span, cleared in _continueStart + a bounded timer)
+    # so it can never stay stuck (which would silence all guards).
+    _consent_bulk = False
+    # _startup_config_pass: set by _continueStart / _upgradeEnvoy around the
+    # auto-config writes that run on project OPEN. In Advanced mode a modal must
+    # NOT pop there (it would block the frame-30..80 restore chain), so guards
+    # DEFER with a breadcrumb instead of prompting.
+    _startup_config_pass = False
+
+    def _guardFileWrite(self, category, action, details, apply_fn, mode=None):
+        """Gate an invasive write to the USER'S repo, showing EXACTLY which
+        files/entries change so Advanced mode never surprises them.
+
+        Call ONLY when a real change is pending (after the idempotency check),
+        so a no-op never prompts. Behavior:
+          consented batch (_consent_bulk) -> apply_fn() silently.
+          auto                            -> apply_fn() silently.
+          advanced + startup Start        -> DEFER + breadcrumb (never a modal on
+                                             open; never a silent write).
+          advanced + interactive          -> Apply/Skip listing `details`.
+          advanced + save/test            -> DECLINE via _guard (_messageBox -1).
+
+        category: short noun for the dialog title (e.g. 'Git config').
+        action:   verb phrase naming the effect + location ('update .gitignore
+                  at /repo').
+        details:  list of strings shown as bullets -- the exact file paths, or
+                  the exact lines/entries being written.
+        Returns True if applied."""
+        if self._consent_bulk:
+            apply_fn()
+            return True
+        mode = mode if mode is not None else self._embodyMode()
+        if mode != 'advanced':
+            apply_fn()
+            return True
+        if self._startup_config_pass:
+            # Startup Start on open: never block, never write silently -- defer
+            # with an actionable breadcrumb (only reached when a real change is
+            # pending, so clean opens stay quiet).
+            self.Log(f'Advanced mode: deferred a repo change on open ({action}). '
+                     f'Nothing was written -- run op.Embody.InitEnvoy() / '
+                     f'InitGit(), or set Embodymode to Auto, to apply it.', 'INFO')
+            return False
+        bullets = '\n'.join(f'  - {d}' for d in details) if details else ''
+        msg = (f'Embody will {action}:\n\n{bullets}\n\nApply this change?'
+               if bullets else
+               f'Embody will {action}.\n\nApply this change?')
+        return self._guard(f'Embody - {category}', msg, apply_fn, mode='advanced')
+
+    # === Uninstall / Deinit ==================================================
+    # A reversible teardown of Embody's project footprint. This is the
+    # NON-DESTRUCTIVE planner: _computeUninstallPlan reads the install manifest
+    # (precise) plus a marker-scan fallback (pre-manifest installs) and returns
+    # exactly what a full Uninstall WOULD do -- nothing is removed here. The
+    # executor (built next) consumes THIS plan, so the preview can never drift
+    # from what runs. Conservative: anything not provably Embody-owned is
+    # classed 'review' (KEPT + flagged), never silently deleted.
+    # See dev/embody/plan-init-deinit-wizard.md sec 5.
+
+    _UNINSTALL_MARKER_FILES = ('AGENTS.md', 'CLAUDE.md', 'ENVOY.md', 'GEMINI.md')
+    _UNINSTALL_MARKER_TREES = ('.claude/rules', '.claude/skills', '.cursor/rules',
+                               '.github/instructions', '.windsurf/rules')
+    _UNINSTALL_MARKER_SINGLES = ('.github/copilot-instructions.md',)
+
+    def _uninstallClassifyMarker(self, path, root, hashes):
+        """Classify a candidate file: 'delete' (Embody-generated + unmodified),
+        'review' (marker present but edited -> keep + flag), or None (no marker
+        -> not ours, ignore)."""
+        try:
+            content = path.read_text(encoding='utf-8', errors='ignore')
+        except OSError:
+            return None
+        if self._EMBODY_MARKER not in content:
+            return None
+        try:
+            rel = path.resolve().relative_to(root).as_posix()
+        except Exception:
+            rel = path.name
+        stored = hashes.get(rel)
+        if stored is None or self._contentHash(content) == stored:
+            return 'delete'
+        return 'review'  # user edited a generated file -> preserve it
+
+    def _computeUninstallPlan(self, target_dir=None):
+        """NON-DESTRUCTIVE. Return exactly what Uninstall would remove/strip so
+        it can be reviewed before any deletion. Manifest-driven, with a
+        marker-scan fallback for pre-manifest installs.
+
+        Plan dict:
+          root, sources[list],
+          delete  [{path,kind,why}]        provably Embody's -> remove
+          strip   [{path,kind,marker,why}] git block / .mcp.json key -> reverse only that
+          unset   [keys]                   repo git config to un-set
+          review  [{path,why}]             exists, not provably ours -> KEPT, flagged
+          missing [paths]                  recorded but already gone
+        """
+        root = (Path(target_dir).resolve() if target_dir
+                else Path(self._findProjectRoot()).resolve())
+        m = self._loadInstallManifest(str(root))
+        hashes = self._loadHashManifest(str(root))
+        plan = {'root': str(root), 'sources': [],
+                'delete': [], 'strip': [], 'unset': [], 'review': [], 'missing': []}
+        seen = set()
+
+        def _abs(stored):
+            p = Path(stored)
+            return p if p.is_absolute() else (root / p)
+
+        def _rel(p):
+            try:
+                return p.resolve().relative_to(root).as_posix()
+            except Exception:
+                return str(p)
+
+        def _add(bucket, p, **kw):
+            rp = str(p.resolve() if hasattr(p, 'resolve') else p)
+            if rp in seen:
+                return False
+            seen.add(rp)
+            entry = {'path': _rel(p)}
+            entry.update(kw)
+            plan[bucket].append(entry)
+            return True
+
+        def _add_strip(p, kind, marker, why):
+            rp = str(p.resolve())
+            if any(s['path'] == _rel(p) for s in plan['strip']):
+                return
+            seen.add(rp)
+            plan['strip'].append({'path': _rel(p), 'kind': kind,
+                                  'marker': marker, 'why': why})
+
+        def _classify_into(p):
+            cls = self._uninstallClassifyMarker(p, root, hashes)
+            if cls == 'delete':
+                _add('delete', p, kind='file', why='Embody-generated, unmodified')
+            elif cls == 'review':
+                _add('review', p, why='you edited this generated file -- kept')
+
+        # ---- manifest (precise) ----
+        if any((m.get('files_created'), m.get('files_appended'),
+                m.get('git_config'), m.get('venv'))):
+            plan['sources'].append('manifest')
+
+        for stored in m.get('files_created', []):
+            p = _abs(stored)
+            if p.name == '.mcp.json':
+                if p.exists():
+                    _add_strip(p, 'json_key', 'mcpServers.envoy',
+                               'remove Embody server; delete file only if none remain')
+                continue
+            if not p.exists():
+                plan['missing'].append(stored); continue
+            if p.name == 'settings.local.json':
+                _add('review', p,
+                     why='created by Embody but may hold your permission edits -- kept')
+                continue
+            _classify_into(p)
+
+        for e in m.get('files_appended', []):
+            p = _abs(e['path'])
+            if not p.exists():
+                plan['missing'].append(e['path']); continue
+            _add_strip(p, e.get('kind', 'block'), e.get('marker', ''),
+                       "strip only Embody's block/key -- your file is kept")
+
+        plan['unset'] = list(m.get('git_config', []))
+
+        v = m.get('venv')
+        if v:
+            p = _abs(v['path'])
+            if p.exists():
+                _add('delete', p, kind='dir', why='Embody-created virtual environment')
+            else:
+                plan['missing'].append(v['path'])
+
+        # ---- marker-scan FALLBACK (pre-manifest installs / anything missed) ----
+        before = sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset'])
+        for name in self._UNINSTALL_MARKER_FILES:
+            p = root / name
+            if p.is_file():
+                _classify_into(p)
+        for sub in self._UNINSTALL_MARKER_TREES:
+            d = root / sub
+            if d.is_dir():
+                for p in d.rglob('*'):
+                    if p.is_file():
+                        _classify_into(p)
+        for single in self._UNINSTALL_MARKER_SINGLES:
+            p = root / single
+            if p.is_file():
+                _classify_into(p)
+        mcp = root / '.mcp.json'
+        if mcp.is_file() and str(mcp.resolve()) not in seen:
+            try:
+                if 'envoy' in json.loads(
+                        mcp.read_text(encoding='utf-8')).get('mcpServers', {}):
+                    _add_strip(mcp, 'json_key', 'mcpServers.envoy',
+                               'remove Embody server; delete file only if none remain')
+            except Exception:
+                pass
+        for gname, marker in (('.gitignore', '# Embody / Envoy'),
+                              ('.gitattributes', 'Embody / Envoy')):
+            gp = root / gname
+            if gp.is_file() and str(gp.resolve()) not in seen:
+                try:
+                    if marker in gp.read_text(encoding='utf-8'):
+                        _add_strip(gp, 'block', marker,
+                                   "strip only Embody's block -- your file is kept")
+                except Exception:
+                    pass
+        # git config (read-only query) for pre-manifest installs
+        if not plan['unset']:
+            for key in ('diff.tdn.textconv', 'diff.tdn.cachetextconv'):
+                try:
+                    r = subprocess.run(['git', 'config', '--get', key],
+                                       cwd=str(root), capture_output=True,
+                                       text=True, timeout=5,
+                                       stdin=subprocess.DEVNULL)
+                    if r.returncode == 0 and (r.stdout or '').strip():
+                        plan['unset'].append(key)
+                except Exception:
+                    pass
+        # venv not captured by the manifest -> flag for review (can't prove
+        # Embody created it without the record, so never auto-delete it). Prefer
+        # the authoritative venv location (under project.folder) -- which can sit
+        # in a subdir of the manifest root -- but ONLY when it falls under the
+        # root being planned, so a plan for an unrelated root (a test/other
+        # project) never picks up the LIVE project's venv.
+        venv_dir = root / '.venv'
+        try:
+            cand = Path(self._venvPaths()['venv_dir']).resolve()
+            cand.relative_to(root)  # raises if not under this root
+            venv_dir = cand
+        except Exception:
+            pass
+        if venv_dir.is_dir() and str(venv_dir.resolve()) not in seen:
+            _add('review', venv_dir, kind='dir',
+                 why="looks like Embody's virtualenv but was not recorded -- review before removing")
+        if sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset']) > before:
+            plan['sources'].append('fallback')
+
+        # ---- .embody/ (Embody-owned state) removable wholesale ----
+        embody_dir = root / '.embody'
+        if embody_dir.is_dir():
+            _add('delete', embody_dir, kind='dir',
+                 why='Embody runtime state (manifest, bridge, config, hashes)')
+
+        return plan
+
+    def PreviewUninstall(self, target_dir=None):
+        """Log + return a NON-DESTRUCTIVE preview of a full Uninstall. Nothing is
+        removed. Use this to review the reversal plan before running Uninstall."""
+        plan = self._computeUninstallPlan(target_dir)
+        src = ', '.join(plan['sources']) or 'none -- nothing recorded/found'
+        lines = [f'Uninstall preview for {plan["root"]} (sources: {src})']
+        if plan['delete']:
+            lines.append(f'  REMOVE ({len(plan["delete"])}):')
+            for a in plan['delete']:
+                lines.append(f'    - {a["path"]}  [{a.get("kind","file")}] -- {a["why"]}')
+        if plan['strip']:
+            lines.append(f'  MODIFY ({len(plan["strip"])}) -- your file kept, only Embody\'s part reversed:')
+            for a in plan['strip']:
+                lines.append(f'    ~ {a["path"]}  ({a["kind"]}: {a["marker"]})')
+        if plan['unset']:
+            lines.append(f'  GIT CONFIG un-set: {", ".join(plan["unset"])}')
+        if plan['review']:
+            lines.append(f'  REVIEW ({len(plan["review"])}) -- KEPT (may hold your edits):')
+            for a in plan['review']:
+                lines.append(f'    ? {a["path"]} -- {a["why"]}')
+        if plan['missing']:
+            lines.append(f'  already gone: {len(plan["missing"])}')
+        self.Log('\n'.join(lines), 'INFO')
+        return plan
+
+    # ---- executor (destructive) -- consumes a plan from _computeUninstallPlan --
+
+    def _removeTreeWithin(self, path, root):
+        """Recursively remove a directory, but ONLY if it resolves INSIDE root
+        (guard against a catastrophic path). Bottom-up unlink + rmdir -- a
+        scoped, explicit walk, never a blind rmtree of an arbitrary path.
+        Returns files removed."""
+        path = Path(path).resolve()
+        root = Path(root).resolve()
+        try:
+            path.relative_to(root)  # raises if path is not under root
+        except ValueError:
+            self.Log(f'Uninstall: refusing to remove {path} -- outside {root}',
+                     'WARNING')
+            return 0
+        if not path.is_dir():
+            return 0
+        removed = 0
+        # deepest-first so a dir is empty by the time we rmdir it
+        for child in sorted(path.rglob('*'),
+                            key=lambda p: len(p.parts), reverse=True):
+            try:
+                if child.is_file() or child.is_symlink():
+                    child.unlink(); removed += 1
+                elif child.is_dir():
+                    child.rmdir()
+            except OSError as e:
+                self.Log(f'Uninstall: could not remove {child}: {e}', 'DEBUG')
+        try:
+            path.rmdir()
+        except OSError as e:
+            self.Log(f'Uninstall: could not remove {path}: {e}', 'DEBUG')
+        return removed
+
+    def _stripMarkedBlock(self, text, marker):
+        """Return text with Embody's marked comment block removed -- the header
+        comment line containing `marker` plus its consecutive non-blank entry
+        lines (and a single preceding blank separator). User content is kept."""
+        lines = text.split('\n')
+        out = []
+        i, n = 0, len(lines)
+        while i < n:
+            if marker in lines[i] and lines[i].lstrip().startswith('#'):
+                if out and out[-1] == '':
+                    out.pop()               # drop the blank separator we added
+                i += 1
+                while i < n and lines[i].strip() != '':
+                    i += 1                  # skip the block's entry lines
+                continue
+            out.append(lines[i]); i += 1
+        return '\n'.join(out)
+
+    def _stripMcpEnvoy(self, path):
+        """Remove only the 'envoy' server from a .mcp.json. Delete the file only
+        if that leaves no servers AND no other top-level keys -- the user's other
+        servers/keys are always preserved."""
+        try:
+            cfg = json.loads(path.read_text(encoding='utf-8'))
+        except (json.JSONDecodeError, OSError):
+            return
+        servers = cfg.get('mcpServers', {})
+        servers.pop('envoy', None)
+        other_keys = [k for k in cfg if k != 'mcpServers']
+        if servers:
+            cfg['mcpServers'] = servers
+            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
+        elif other_keys:
+            cfg['mcpServers'] = {}
+            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
+        else:
+            path.unlink()  # the file held only Embody's server -> remove it
+
+    def _executeUninstallPlan(self, plan, include_review=False):
+        """Execute a plan from _computeUninstallPlan. Filesystem + git only.
+        'review' items are KEPT unless include_review=True. Returns a summary
+        dict. This is the one place that actually removes/modifies files."""
+        root = Path(plan['root'])
+
+        def _abs(rel):
+            p = Path(rel)
+            return p if p.is_absolute() else (root / p)
+
+        summary = {'deleted': 0, 'stripped': 0, 'unset': 0,
+                   'kept_review': 0, 'errors': 0}
+
+        def _remove(entry):
+            p = _abs(entry['path'])
+            try:
+                if entry.get('kind') == 'dir':
+                    if p.is_dir():
+                        self._removeTreeWithin(p, root)
+                        summary['deleted'] += 1
+                elif p.exists():
+                    p.unlink(); summary['deleted'] += 1
+            except OSError as e:
+                summary['errors'] += 1
+                self.Log(f'Uninstall: could not remove {p}: {e}', 'WARNING')
+
+        for entry in plan['delete']:
+            _remove(entry)
+
+        for a in plan['strip']:
+            p = _abs(a['path'])
+            if not p.exists():
+                continue
+            try:
+                if a['kind'] == 'json_key':
+                    self._stripMcpEnvoy(p)
+                else:
+                    p.write_text(
+                        self._stripMarkedBlock(
+                            p.read_text(encoding='utf-8'), a['marker']),
+                        encoding='utf-8')
+                summary['stripped'] += 1
+            except OSError as e:
+                summary['errors'] += 1
+                self.Log(f'Uninstall: could not strip {p}: {e}', 'WARNING')
+
+        for key in plan['unset']:
+            try:
+                subprocess.run(['git', 'config', '--unset', key],
+                               cwd=str(root), capture_output=True, text=True,
+                               timeout=5, stdin=subprocess.DEVNULL)
+                summary['unset'] += 1
+            except Exception as e:
+                self.Log(f'Uninstall: could not un-set {key}: {e}', 'DEBUG')
+
+        if include_review:
+            for entry in plan['review']:
+                _remove(entry)
+        else:
+            summary['kept_review'] = len(plan['review'])
+
+        return summary
+
+    def Uninstall(self, confirm=False, include_review=False, target_dir=None):
+        """Reverse Embody's project footprint. DESTRUCTIVE -- requires
+        confirm=True (review PreviewUninstall() first). Stops Envoy, then
+        removes/strips per the plan. 'review' items (files you edited, an
+        unrecorded venv) are KEPT unless include_review=True; user files are
+        never deleted -- only Embody's own additions."""
+        if not confirm:
+            self.Log('Uninstall is destructive. Review PreviewUninstall() first, '
+                     'then call Uninstall(confirm=True). Nothing was changed.',
+                     'WARNING')
+            return {'ran': False, 'reason': 'confirm required'}
+        plan = self._computeUninstallPlan(target_dir)
+        try:  # stop Envoy so its venv/config aren't in use during removal
+            if self.my.par.Envoyenable.eval():
+                self.my.par.Envoyenable = 0
+        except Exception:
+            pass
+        summary = self._executeUninstallPlan(plan, include_review=include_review)
+        summary['ran'] = True
+        self.Log(f'Uninstall complete: {summary}', 'SUCCESS')
+        return summary
+
+    # AI-client tokens -> the config files _extractAIConfig writes for them (on
+    # top of AGENTS.md, which is always written). Used to list the exact files
+    # in the Advanced-mode confirm.
+    _AI_CONFIG_FILES = {
+        'claudecode': ['CLAUDE.md (or ENVOY.md)', '.claude/rules/', '.claude/skills/'],
+        'cursor':     ['.cursor/rules/'],
+        'copilot':    ['.github/copilot-instructions.md'],
+        'windsurf':   ['.windsurf/rules/'],
+        'gemini':     ['GEMINI.md'],
+    }
+
     def _extractAIConfig(self):
         """Extract AI coding assistant config files based on par.Aiclient."""
         target_dir = self._findProjectRoot()
         client = self.my.par.Aiclient.eval()
 
-        # Always: AGENTS.md (universal standard, read by all major AI tools)
-        self._writeAgentsMd(target_dir)
+        def _write():
+            # Always: AGENTS.md (universal standard, read by all major AI tools)
+            self._writeAgentsMd(target_dir)
+            if client == 'claudecode':
+                self._writeClaudeCodeConfig(target_dir)
+            elif client == 'cursor':
+                self._writeCursorRules(target_dir)
+            elif client == 'copilot':
+                self._writeCopilotInstructions(target_dir)
+            elif client == 'windsurf':
+                self._writeWindsurfRules(target_dir)
+            elif client == 'gemini':
+                self._writeGeminiConfig(target_dir)
+            # 'codex', 'none': AGENTS.md only (Codex reads AGENTS.md;
+            # Copilot config is its own token).
 
-        if client == 'claudecode':
-            self._writeClaudeCodeConfig(target_dir)
-        elif client == 'cursor':
-            self._writeCursorRules(target_dir)
-        elif client == 'copilot':
-            self._writeCopilotInstructions(target_dir)
-        elif client == 'windsurf':
-            self._writeWindsurfRules(target_dir)
-        elif client == 'gemini':
-            self._writeGeminiConfig(target_dir)
-        # 'codex', 'vscode', 'none': AGENTS.md only (Codex reads AGENTS.md;
-        # VS Code has no native rules file -- Copilot config is its own token).
+        # Advanced mode: confirm before (re)writing AI assistant config files.
+        details = [f'{target_dir}/AGENTS.md'] + [
+            f'{target_dir}/{f}' for f in self._AI_CONFIG_FILES.get(client, [])]
+        self._guardFileWrite(
+            'AI config',
+            f'write AI assistant config for {self._aiClientLabel()} in '
+            f'{target_dir}',
+            details, _write)
 
     def _writeAgentsMd(self, target_dir):
         """Write AGENTS.md -- universal AI instructions read by all major AI tools."""
@@ -1555,6 +2261,111 @@ class EmbodyExt:
         path.write_text(
             json.dumps(manifest, indent=2, sort_keys=True), encoding='utf-8')
 
+    # --- Install manifest -----------------------------------------------------
+    # Records Embody's project footprint so Uninstall/Deinit can reverse it
+    # PRECISELY and SAFELY -- above all, never delete a file that predated
+    # Embody. Additive + best-effort: a manifest write must never break the
+    # footprint action it records. See dev/embody/plan-init-deinit-wizard.md #6.
+    _INSTALL_MANIFEST = '.embody/manifest.json'
+
+    def _installManifestSkeleton(self):
+        return {'version': 1, 'files_created': [], 'files_appended': [],
+                'git_config': [], 'venv': None, 'network_ops': []}
+
+    def _loadInstallManifest(self, target_dir):
+        path = Path(target_dir) / self._INSTALL_MANIFEST
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding='utf-8'))
+                skel = self._installManifestSkeleton()
+                if isinstance(data, dict):
+                    skel.update(data)  # tolerate older/partial manifests
+                return skel
+            except Exception:
+                pass
+        return self._installManifestSkeleton()
+
+    def _saveInstallManifest(self, target_dir, manifest):
+        path = Path(target_dir) / self._INSTALL_MANIFEST
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True), encoding='utf-8')
+
+    def _manifestRelPath(self, target_dir, path):
+        """Stored form for a footprint path: POSIX-relative to the manifest root
+        when the path lives under it, else an absolute POSIX path (so files
+        outside the project root -- e.g. a repo .gitignore when the project is a
+        subdir -- still record cleanly). Accepts a path already relative to
+        target_dir OR an absolute path."""
+        try:
+            base = Path(target_dir).resolve()
+            p = Path(path)
+            if not p.is_absolute():
+                p = base / p
+            p = p.resolve()
+            try:
+                return p.relative_to(base).as_posix()
+            except ValueError:
+                return p.as_posix()
+        except Exception:
+            return str(path).replace('\\', '/')
+
+    def _manifestRecordCreatedFile(self, target_dir, path):
+        """Record a file Embody CREATED (did not previously exist) so Uninstall
+        can safely remove ONLY Embody's own additions. Best-effort; never raises."""
+        try:
+            rel = self._manifestRelPath(target_dir, path)
+            m = self._loadInstallManifest(target_dir)
+            if rel not in m['files_created']:
+                m['files_created'].append(rel)
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest record failed for {path}: {e}', 'DEBUG')
+
+    def _manifestRecordAppendedFile(self, target_dir, path, marker, kind='block'):
+        """Record a SHARED file Embody modified in place -- a git file it
+        appended a marked BLOCK to (kind='block', marker = block header), or a
+        JSON file it added a KEY to (kind='json_key', marker = the dotted key,
+        e.g. 'mcpServers.envoy'). Uninstall reverses ONLY that unit; it NEVER
+        deletes the user's file. Best-effort; never raises."""
+        try:
+            rel = self._manifestRelPath(target_dir, path)
+            m = self._loadInstallManifest(target_dir)
+            if not any(e.get('path') == rel for e in m['files_appended']):
+                m['files_appended'].append(
+                    {'path': rel, 'marker': marker, 'kind': kind})
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest append record failed for {path}: {e}',
+                     'DEBUG')
+
+    def _manifestRecordVenv(self, target_dir, venv_path):
+        """Record that Embody CREATED the venv (safe to remove on uninstall)."""
+        try:
+            rel = self._manifestRelPath(target_dir, venv_path)
+            m = self._loadInstallManifest(target_dir)
+            if not m.get('venv'):
+                m['venv'] = {'path': rel, 'created': True}
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest venv record failed: {e}', 'DEBUG')
+
+    def _manifestRecordGitConfig(self, target_dir, keys):
+        """Record git config keys Embody set (un-set on uninstall)."""
+        try:
+            if isinstance(keys, str):
+                keys = [keys]
+            m = self._loadInstallManifest(target_dir)
+            changed = False
+            for k in keys:
+                if k not in m['git_config']:
+                    m['git_config'].append(k)
+                    changed = True
+            if changed:
+                self._saveInstallManifest(target_dir, m)
+        except Exception as e:
+            self.Log(f'Install-manifest git-config record failed: {e}', 'DEBUG')
+
     def _writeTemplate(self, target_dir, rel_path, content):
         """Write a single template file, respecting the Embody/Envoy marker.
 
@@ -1574,6 +2385,7 @@ class EmbodyExt:
         Returns True if the file was written, False if skipped.
         """
         target_path = Path(target_dir) / rel_path
+        was_new = not target_path.exists()  # pre-existence -> install-manifest safe-delete record
         manifest = self._loadHashManifest(target_dir)
         if target_path.exists():
             existing = target_path.read_text(encoding='utf-8')
@@ -1590,17 +2402,29 @@ class EmbodyExt:
         target_path.write_text(content, encoding='utf-8')
         manifest[rel_path] = self._contentHash(content)
         self._saveHashManifest(target_dir, manifest)
+        if was_new:
+            self._manifestRecordCreatedFile(target_dir, rel_path)
         return True
 
     def _upgradeEnvoy(self):
-        """Silently extract AI config if Envoy is enabled but files are missing."""
+        """Restore AI config on open if Envoy is enabled but files are missing.
+
+        Auto restores silently (the managed default). Advanced defers with a
+        breadcrumb: _extractAIConfig runs under _startup_config_pass so its guard
+        DEFERS instead of popping a modal that would block the restore chain."""
         if not self.my.par.Envoyenable.eval():
             return
         target_dir = self._findProjectRoot()
         client = self.my.par.Aiclient.eval()
         agents_md_missing = not (target_dir / 'AGENTS.md').exists()
-        if agents_md_missing or self._clientFilesMissing(target_dir, client):
+        if not (agents_md_missing or self._clientFilesMissing(target_dir, client)):
+            return
+        prior = self._startup_config_pass
+        self._startup_config_pass = True
+        try:
             self._extractAIConfig()
+        finally:
+            self._startup_config_pass = prior
 
     def _clientFilesMissing(self, target_dir, client):
         """Return True if the primary config files for the selected client are absent."""
@@ -1615,6 +2439,15 @@ class EmbodyExt:
             'none':       lambda d: False,
         }
         return checks.get(client, lambda d: False)(target_dir)
+
+    def _aiClientLabel(self):
+        """Human label of the SELECTED Aiclient option (e.g. 'Claude Code') --
+        NOT the parameter's own label ('AI Client')."""
+        p = self.my.par.Aiclient
+        try:
+            return p.menuLabels[p.menuIndex]
+        except Exception:
+            return p.eval()
 
     def InitEnvoy(self) -> None:
         """(Re)generate all Envoy and AI client config files.
@@ -1647,15 +2480,29 @@ class EmbodyExt:
         else:
             port = self.my.par.Envoyport.eval()
 
-        envoy._configureMCPClient(port, target_dir=target_dir)
+        # ONE combined Advanced-mode confirm for the whole config regen (MCP +
+        # AI); the sub-calls apply silently under _consent_bulk so this never
+        # fragments into a dialog per file.
+        client_label = self._aiClientLabel()
 
-        # AI client config (CLAUDE.md, AGENTS.md, rules, skills, etc.)
-        self._extractAIConfig()
+        def _apply():
+            prior = self._consent_bulk
+            self._consent_bulk = True
+            try:
+                envoy._configureMCPClient(port, target_dir=target_dir)
+                self._extractAIConfig()  # AI client config
+            finally:
+                self._consent_bulk = prior
+            self.Log(
+                f'Envoy config regenerated for {client_label} at {target_dir}',
+                'SUCCESS')
 
-        client_label = self.my.par.Aiclient.label
-        self.Log(
-            f'Envoy config regenerated for {client_label} at {target_dir}',
-            'SUCCESS')
+        self._guardFileWrite(
+            'AI & MCP config',
+            f'(re)write MCP + AI client config for {client_label} in {target_dir}',
+            [f'{target_dir}/.mcp.json', f'{target_dir}/AGENTS.md',
+             f'{target_dir}/ (rules/instructions for {client_label})'],
+            _apply)
 
     def InitGit(self) -> None:
         """Initialize or reconnect to a git repository, then generate
@@ -1687,12 +2534,24 @@ class EmbodyExt:
         # Store git root so Envoy can find it later (e.g. for deregistration)
         self.my.store('_git_root', git_root)
 
-        # Git-specific config
-        envoy._configureGitignore(git_root)
-        envoy._configureGitattributes(git_root)
-        self.Log(f'Git config generated at {git_root}', 'SUCCESS')
+        # Git-specific config -- ONE combined Advanced-mode confirm (sub-calls
+        # apply silently under _consent_bulk so this doesn't fragment per file).
+        def _apply():
+            prior = self._consent_bulk
+            self._consent_bulk = True
+            try:
+                envoy._configureGitignore(git_root)
+                envoy._configureGitattributes(git_root)
+            finally:
+                self._consent_bulk = prior
+            self.Log(f'Git config generated at {git_root}', 'SUCCESS')
 
-        # Regenerate MCP + AI config so paths point to git root
+        self._guardFileWrite(
+            'Git config', f'update git config in {git_root}',
+            [f'{git_root}/.gitignore', f'{git_root}/.gitattributes'],
+            _apply)
+
+        # Regenerate MCP + AI config so paths point to git root (own confirm)
         self.InitEnvoy()
 
     # ==========================================================================
@@ -2673,12 +3532,14 @@ class EmbodyExt:
         if not suppress_refresh:
             run(f"op('{self.my}').par.Refresh.pulse()", delayFrames=1)
 
-        # Chain the Envoy opt-in prompt AFTER init completes.
-        # Verify() sets this flag; we consume it here so the Envoy dialog
-        # appears only after deprecated-pattern and re-scan dialogs resolve.
+        # Chain the first-run setup wizard AFTER init completes.
+        # Verify() sets this flag; we consume it here so the wizard opens only
+        # after deprecated-pattern and re-scan dialogs resolve. _openSetupWizard
+        # respects _suppressDialogs (never opens during a test/save) and falls
+        # back to the classic _promptEnvoy dialog if the wizard UI is absent.
         if getattr(self, '_pending_envoy_prompt', False):
             self._pending_envoy_prompt = False
-            run(f"op('{self.my}').ext.Embody._promptEnvoy()", delayFrames=5)
+            run(f"op('{self.my}').ext.Embody._openSetupWizard()", delayFrames=5)
 
     def _reportResults(self, dirties, additions, subtractions):
         """Report update results to log."""
@@ -3214,43 +4075,6 @@ class EmbodyExt:
                 p.val = msg
             except Exception:
                 pass
-
-    def _ensureAutosaveParams(self) -> None:
-        """Create the Autosave toggle + status readout on the TDN page if missing.
-
-        Self-heal so the feature is controllable on a fresh install of the shipped
-        .tox / an older .toe that predates these params (the engine itself
-        defaults ON when the param is absent, so this only adds the control
-        surface). Idempotent; the params bake into the .toe + Embody.tdn on save.
-        Called once from __init__; never raises."""
-        try:
-            tdn_page = None
-            for pg in self.my.customPages:
-                if pg.name == 'TDN':
-                    tdn_page = pg
-                    break
-            if tdn_page is None:
-                return
-            if not hasattr(self.my.par, 'Autosave'):
-                p = tdn_page.appendToggle('Autosave', label='Auto-Save Checkpoints')[0]
-                p.default = True
-                p.val = True
-                p.startSection = True
-                p.help = (
-                    'When on, after the agent (or you) goes idle Embody writes '
-                    'changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- '
-                    'no full project save, no strip/restore, no freeze -- so a '
-                    'crash loses little unsaved work. Checkpointed COMPs are '
-                    'rebuilt on next open. Skips during Perform Mode and saves.')
-            if not hasattr(self.my.par, 'Autosavestatus'):
-                s = tdn_page.appendStr('Autosavestatus', label='Auto-Save Status')[0]
-                s.readOnly = True
-                s.default = ''
-                s.val = 'Idle'
-                s.help = ('Read-only auto-save state: Idle / Saved <time> / '
-                          'Bypassed (Perform Mode) / Disabled.')
-        except Exception as e:
-            self.Log(f'_ensureAutosaveParams failed: {e}', 'DEBUG')
 
     def _preRiskyCheckpoint(self, operation: str, params: dict) -> None:
         """Synchronously checkpoint the touched TDN root BEFORE a destructive
@@ -4346,9 +5170,21 @@ class EmbodyExt:
             headers = [self._cellVal(0, c)
                        for c in range(self.Externalizations.numCols)]
             has_strategy = 'strategy' in headers
+            embody_root = self.my.path
             for i in range(1, self.Externalizations.numRows):
                 row_path = self._cellVal(i, 'path')
                 if row_path:
+                    # HARD INVARIANT: the continuity sweep must NEVER touch
+                    # Embody's own subtree. Its externalization is managed
+                    # specially (excluded from TDN strip/reconstruction). During
+                    # heavy strip/restore thrashing these rows can transiently
+                    # look "missing"/"replaced" and get deleted or re-externalized
+                    # (observed: a TDN->TOX flip that destroyed Embody's own .tdn
+                    # files). Skipping them here closes that gap; the normal case
+                    # was already a no-op, so nothing legitimate is lost.
+                    if (row_path == embody_root
+                            or row_path.startswith(embody_root + '/')):
+                        continue
                     rel_file_path = self.normalizePath(self._cellVal(i, 'rel_file_path'))
                     row_type = self._cellVal(i, 'type')
                     strategy = self._cellVal(i, 'strategy') if has_strategy else ''
@@ -4491,8 +5327,31 @@ class EmbodyExt:
         except Exception as e:
             self.Log("Error in checkOpsForContinuity", "ERROR", str(e))
 
+    # Dropped-.tox prompt: cap the paths listed in the dialog body so a project
+    # with dozens/hundreds of dragged-in COMPs cannot grow the message so tall
+    # that the buttons get pushed off-screen. Overflow collapses to "... and N
+    # more". Mirrors the truncation in _warnLockedNonDATs.
+    _MAX_TOXDROP_LISTED = 15
+
+    def _resetToxdropExpr(self, comp) -> None:
+        """Clear TD's default drag-in expression from a COMP's External .tox."""
+        try:
+            comp.par.externaltox.expr = ''
+            comp.par.externaltox = ''
+            self.Log(f"Reset externaltox for '{comp.path}'", "SUCCESS")
+        except Exception as e:
+            self.Log(f"Error resetting '{comp.path}'", "ERROR", str(e))
+
     def _checkExternalToxPar(self):
-        """Check for COMPs using deprecated fileFolder pattern."""
+        """Handle COMPs carrying TD's default drag-in externaltox expression.
+
+        When a .tox is dragged into a network, TouchDesigner auto-writes a
+        default expression into the COMP's External .tox parameter
+        (``me.parent().fileFolder + '/' + ...``). Embody's own descendants are
+        always cleaned silently -- that expression there is never intentional.
+        User COMPs are routed to _resolveToxdropExternals, which applies the
+        ``Toxdropexpr`` preference (clean / ignore / ask).
+        """
         comps_with_filefolder = self.root.findChildren(
             type=COMP,
             key=lambda x: (
@@ -4512,27 +5371,74 @@ class EmbodyExt:
             else:
                 external.append(comp)
 
-        def _reset(comp):
-            try:
-                comp.par.externaltox.expr = ''
-                comp.par.externaltox = ''
-                self.Log(f"Reset externaltox for '{comp.path}'", "SUCCESS")
-            except Exception as e:
-                self.Log(f"Error resetting '{comp.path}'", "ERROR", str(e))
-
+        # Embody's own descendants: always clean, regardless of preference.
         for comp in internal:
-            _reset(comp)
+            self._resetToxdropExpr(comp)
 
-        # Skip this prompt while dialogs are suppressed (test run or save in
-        # progress) -- a modal mid-save freezes TD. The deprecated-path reset is
-        # advisory and is re-offered on the next continuity check.
-        if external and not self._suppressDialogs():
-            message = "Found COMPs using deprecated 'me.parent().fileFolder':\n\n"
-            message += "\n".join([f"- {comp.path}" for comp in external])
-            message += "\n\nReset these paths?"
-            if ui.messageBox('Embody', message, buttons=['No', 'Yes']) == 1:
-                for comp in external:
-                    _reset(comp)
+        self._resolveToxdropExternals(external)
+
+    def _resolveToxdropExternals(self, external) -> None:
+        """Apply the Toxdropexpr preference to a list of user COMPs carrying
+        TD's default drag-in externaltox expression.
+
+          - ``clean``  -> silently clear the expression on each
+          - ``ignore`` -> silently leave them (never prompt)
+          - ``ask``    -> prompt with a truncated list (capped at
+                          _MAX_TOXDROP_LISTED so the buttons stay reachable) and
+                          a 4-button dialog: Clean / Ignore / Always Clean /
+                          Always Ignore. The two "Always" buttons persist the
+                          choice into ``Toxdropexpr`` so the user is not
+                          re-prompted.
+
+        Operates ONLY on the COMPs passed in -- never re-scans the project --
+        so callers (and tests) control the blast radius.
+        """
+        if not external:
+            return
+
+        par = getattr(self.my.par, 'Toxdropexpr', None)
+        preference = par.eval() if par else 'ask'
+
+        if preference == 'ignore':
+            return
+        if preference == 'clean':
+            for comp in external:
+                self._resetToxdropExpr(comp)
+            return
+
+        # preference == 'ask' -- prompt. _messageBox self-suppresses during
+        # saves and test runs (returning -1), so no modal escapes; when
+        # suppressed we do nothing and the sweep re-offers on the next pass.
+        count = len(external)
+        shown = external[:self._MAX_TOXDROP_LISTED]
+        op_list = '\n'.join(f'  - {comp.path}' for comp in shown)
+        if count > self._MAX_TOXDROP_LISTED:
+            op_list += f'\n  ... and {count - self._MAX_TOXDROP_LISTED} more'
+        noun = 'COMP' if count == 1 else 'COMPs'
+        verb = 'uses' if count == 1 else 'use'
+        message = (
+            f'{count} {noun} {verb} the default expression TouchDesigner writes '
+            f"into External .tox on drag-in (me.parent().fileFolder + '/' + "
+            f'...):\n\n{op_list}\n\n'
+            f'Clean clears that expression; Ignore leaves it. '
+            f'Choose an "Always" option to stop being asked.')
+        choice = self._messageBox(
+            'Dropped .tox Expression Detected',
+            message,
+            buttons=['Clean', 'Ignore', 'Always Clean', 'Always Ignore'])
+
+        # 0 Clean, 1 Ignore, 2 Always Clean, 3 Always Ignore, -1 suppressed/closed.
+        if choice in (0, 2):
+            for comp in external:
+                self._resetToxdropExpr(comp)
+        if choice == 2 and par:
+            self.my.par.Toxdropexpr = 'clean'
+            self.Log('Dropped .tox expression handling set to Always Clean',
+                     'INFO')
+        elif choice == 3 and par:
+            self.my.par.Toxdropexpr = 'ignore'
+            self.Log('Dropped .tox expression handling set to Always Ignore',
+                     'INFO')
 
     def _updateOpTimestamp(self, oper):
         """Update timestamp for an operator from file system."""
@@ -6247,6 +7153,205 @@ class EmbodyExt:
 
         return True
 
+    # ==========================================================================
+    # AUTO-EXTERNALIZATION (Envoy-created ops)
+    # ==========================================================================
+
+    def AutoExternalizeNewOp(self, oper: OP) -> Optional[str]:
+        """Auto-tag a newly Envoy-created op for externalization, per the
+        'Autoexternalize' preference on the Envoy page.
+
+        Called by Envoy's create_op (the single creation chokepoint) right
+        after a successful create. This is deliberately the ONLY trigger: the
+        LLM is never asked to "remember to externalize" -- tagging rides along
+        on the create it already performs, so an unreliable model cannot skip a
+        step it never takes.
+
+        Strictly ADDITIVE and boundary-scoped. It only ever ADDS a tag (never
+        deletes a file or un-tags), and it tags a COMP/DAT only when that op is
+        its own externalization unit:
+
+          - the preference gates the family (Neither / DATs / COMPs / both)
+          - COMP -> TDN tag (the diffable strategy); DAT -> inferred source tag
+          - skip non-processable ops (clone/replicant/local/engine/time/annotate)
+          - skip Embody's own subtree (managed specially, never externalized here)
+          - skip palette/vendor clones and anything inside one
+          - skip if ANY ancestor COMP is already externalized -- that ancestor's
+            .tdn/.tox already captures this op (outermost boundary wins), which
+            also keeps us clear of the TDN parent/child collision
+
+        The write is handled by the existing reconciler: applying the TDN tag
+        exports the .tdn synchronously (_handleTDNAddition); a loose DAT's file
+        is written by a single coalesced, settle-debounced Update() so a batch
+        of creates costs one sweep, not one per op. Returns the applied tag
+        string, or None if the op was skipped. Never raises -- a failure here
+        must never break op creation.
+        """
+        try:
+            tag = self._autoExternalizeTagFor(oper)
+            if not tag:
+                return None
+            self.applyTagToOperator(oper, tag)
+            # COMPs export synchronously inside _handleTDNAddition. A loose DAT's
+            # file is written by the addition sweep -- coalesce that into one
+            # settle-debounced Update() so a batch of DAT creates costs one sweep.
+            if oper.family == 'DAT':
+                self._scheduleAutoExternalizeFlush()
+            self.Log(f"Auto-externalized {oper.family} '{oper.path}' ({tag})", "INFO")
+            return tag
+        except Exception as e:
+            self.Log(f"AutoExternalizeNewOp failed for "
+                     f"{getattr(oper, 'path', '?')}: {e}", "WARNING")
+            return None
+
+    def _autoExternalizeTagFor(self, oper: OP) -> Optional[str]:
+        """Pure decision behind AutoExternalizeNewOp: the tag that WOULD be
+        applied to a newly-created `oper` under the current 'Autoexternalize'
+        preference, or None if the op should be skipped. No side effects -- the
+        whole boundary matrix is unit-testable without any file I/O.
+
+        Skips (return None): preference off / family not selected; a
+        non-externalizable family; a non-processable op; Embody's own subtree; a
+        palette/vendor clone (the op or any ancestor); an op with any already-
+        externalized ancestor COMP (that ancestor's .tdn/.tox already captures
+        it); or an op that already carries the tag (idempotent).
+        """
+        if oper is None or not oper.valid:
+            return None
+
+        mode = self.my.par.Autoexternalize.eval()
+        dats_on = mode in ('dats', 'both')
+        comps_on = mode in ('comps', 'both')
+
+        # Family gate -- only COMPs and DATs are externalizable at all.
+        if oper.family == 'COMP':
+            if not comps_on:
+                return None
+        elif oper.family == 'DAT':
+            if not dats_on:
+                return None
+        else:
+            return None
+
+        # Never externalize non-processable ops or Embody's own subtree.
+        if not self.isOpProcessable(oper):
+            return None
+        embody_root = self.my.path
+        if oper.path == embody_root or oper.path.startswith(embody_root + '/'):
+            return None
+
+        # Skip palette/vendor clones -- the op itself or any COMP ancestor
+        # (a clone's internals are regenerable palette boilerplate).
+        node = oper if oper.family == 'COMP' else oper.parent()
+        while node is not None and node.path != '/':
+            if node.family == 'COMP' and self.my.ext.TDN._isPaletteClone(node):
+                return None
+            node = node.parent()
+
+        # Boundary: if any ancestor COMP is already externalized, this op is
+        # already captured by that ancestor's .tdn/.tox -- don't double-manage
+        # (and don't collide with the TDN parent/child model).
+        tox_tag = self.my.par.Toxtag.val
+        tdn_tag = self.my.par.Tdntag.val
+        ancestor = oper.parent()
+        while ancestor is not None and ancestor.path != '/':
+            if (tox_tag in ancestor.tags or tdn_tag in ancestor.tags
+                    or self._findExternalizedComp(ancestor.path)):
+                return None
+            ancestor = ancestor.parent()
+
+        # COMP -> TDN (diffable); DAT -> inferred source type.
+        tag = tdn_tag if oper.family == 'COMP' else self._inferDATTagValue(oper)
+
+        # Idempotent: already carries this tag -> nothing to do.
+        if tag in oper.tags:
+            return None
+        return tag
+
+    def _scheduleAutoExternalizeFlush(self) -> None:
+        """Coalesce loose-DAT externalization into one settle-debounced Update().
+        Multiple auto-tagged DATs in a batch collapse to a single sweep."""
+        if getattr(self, '_auto_ext_flush_pending', False):
+            return
+        self._auto_ext_flush_pending = True
+        run(f"op('{self.my}').ext.Embody._autoExternalizeFlush()",
+            delayFrames=8, fromOP=self.my)
+
+    def _autoExternalizeFlush(self) -> None:
+        """Deferred reconcile that writes newly auto-tagged DAT files. Re-arms
+        itself while a save is mid-flight (mutating the table then is fatal)."""
+        self._auto_ext_flush_pending = False
+        if self._performMode:
+            return
+        if self.my.fetch('_suppress_dialogs', False, search=False):
+            self._scheduleAutoExternalizeFlush()  # save window -- wait it out
+            return
+        self.Update()
+
+    def AutoExternalizeCopiedOp(self, oper: OP) -> Optional[str]:
+        """Auto-externalize a COPIED op (copy_op), per the Autoexternalize
+        preference. A copy made with COMP.copy() inherits the SOURCE's
+        externalization tags -- and a copied DAT inherits its `file` par pointing
+        at the SOURCE's file. That stale state must be cleared first, otherwise
+        the copy looks 'already tagged' (so it is skipped) yet is untracked with
+        no file of its own, and a copied DAT would share/overwrite the source's
+        .py via syncfile. So: gate on preference+family, clear the copy's
+        inherited externalization state (recursively for a COMP, so its TDN
+        export is fully self-contained and references none of the source's
+        files), then defer to the normal fresh-op path. Never raises."""
+        try:
+            if oper is None or not oper.valid:
+                return None
+            mode = self.my.par.Autoexternalize.eval()
+            if oper.family == 'COMP' and mode not in ('comps', 'both'):
+                return None
+            if oper.family == 'DAT' and mode not in ('dats', 'both'):
+                return None
+            if oper.family not in ('COMP', 'DAT'):
+                return None
+            self._resetInheritedExternalization(oper)
+            return self.AutoExternalizeNewOp(oper)
+        except Exception as e:
+            self.Log(f"AutoExternalizeCopiedOp failed for "
+                     f"{getattr(oper, 'path', '?')}: {e}", "WARNING")
+            return None
+
+    def _resetInheritedExternalization(self, oper: OP) -> None:
+        """Clear externalization tags + file references a COPY inherited from its
+        source, so it externalizes fresh at its OWN path and never points at the
+        source's files. Recurses through a copied COMP's descendants so a TDN
+        export captures live content only (no stale source-file references)."""
+        tox = self.my.par.Toxtag.val
+        tdn = self.my.par.Tdntag.val
+        dat_tag_set = set(self.getTags('DAT'))
+
+        def clear(o):
+            try:
+                if o.family == 'COMP':
+                    for t in (tox, tdn):
+                        if t in o.tags:
+                            o.tags.remove(t)
+                    p = getattr(o.par, 'externaltox', None)
+                    if p is not None and p.eval():
+                        p.val = ''
+                elif o.family == 'DAT':
+                    for t in list(o.tags):
+                        if t in dat_tag_set:
+                            o.tags.remove(t)
+                    fp = getattr(o.par, 'file', None)
+                    if fp is not None:
+                        fp.readOnly = False
+                        if fp.eval():
+                            fp.val = ''
+            except Exception:
+                pass
+
+        clear(oper)
+        if oper.family == 'COMP':
+            for child in oper.findChildren(maxDepth=100):
+                if child.family in ('COMP', 'DAT'):
+                    clear(child)
+
     def TagExiter(self) -> None:
         """Close tagging menu and reset mode."""
         self._tagger_mode = 'tag'
@@ -6765,6 +7870,8 @@ class EmbodyExt:
             # no .toe truth to honor -- rebuild it from its .tdn. Additive: never
             # clear_first an existing COMP. tsv-driven, so an orphan .tdn with no
             # row is invisible. (Spike-verified 2026-06-27.)
+            self.Log('TDN mode=export -- additive recovery only, existing '
+                     'COMPs kept (no full reconstruction)', 'INFO')
             self._recoverMissingTDNComps()
             return
         # mode == 'full' -- repopulate ALL TDN COMPs (loop below)
@@ -6801,13 +7908,21 @@ class EmbodyExt:
                     errors_total += 1
                     continue
 
-            # Import from TDN (phases 1-7 + phase 8 file-link restore)
-            result = self.my.ext.TDN.ImportNetwork(
-                target_path=comp_path,
-                tdn=tdn_doc,
-                clear_first=True,
-                restore_file_links=True,
-            )
+            # Import from TDN (phases 1-7 + phase 8 file-link restore).
+            # Guarded per-COMP: ImportNetwork returns {'error'} on its own
+            # failures, but an unexpected raise here must not abort the
+            # WHOLE loop -- one bad file would leave every remaining TDN
+            # COMP an empty shell for the session. Convert to an error
+            # result so the backup-rollback path below still runs.
+            try:
+                result = self.my.ext.TDN.ImportNetwork(
+                    target_path=comp_path,
+                    tdn=tdn_doc,
+                    clear_first=True,
+                    restore_file_links=True,
+                )
+            except Exception as e:
+                result = {'error': f'Import raised: {e}'}
 
             if result.get('error'):
                 self.Log(f'Reconstruction failed for {comp_path}: {result["error"]}', 'ERROR')
@@ -6927,6 +8042,148 @@ class EmbodyExt:
         if recovered:
             self.Log(f'Auto-save recovery: rebuilt {recovered} unsaved COMP(s) '
                      f'from .tdn (crash-before-save)', 'SUCCESS')
+
+    def RecoverOrphanShells(self, auto: bool = False) -> dict:
+        """Detect and restore TDN-tagged empty COMPs that lost their table row.
+
+        The externalizations table is the single driver of reconstruction: a
+        stripped COMP whose row is lost (tsv truncation after a crash, a table
+        reset) opens as an EMPTY shell and is silently ignored -- its .tdn on
+        disk is intact, but tsv-driven recovery never resurrects a no-row
+        orphan. This sweep closes that gap using the two breadcrumbs that
+        survive inside the .toe itself: the TDN tag on the shell, and the
+        `_tdn_rel_path` storage pointer stamped by _trackTDNExport (falling
+        back to the mirror-path convention <project>/<comp path>.tdn).
+
+        Additive and consent-gated: only empty, tagged, untracked, non-excluded
+        COMPs qualify; nothing with content is ever touched. Runs on project
+        open after ReconcileMetadata.
+
+        Args:
+            auto: True restores without prompting (tests / headless callers).
+                False prompts via _messageBox, which self-suppresses during
+                saves and test runs (returns -1 -> deferred to next open).
+
+        Returns:
+            {'found': [paths], 'restored': [paths], 'failed': [paths]}
+        """
+        results = {'found': [], 'restored': [], 'failed': []}
+        if self._tdnMode() == 'off':
+            return results
+        tdn_tag = self.my.par.Tdntag.val
+        if not tdn_tag:
+            return results
+
+        # Tracked TDN paths -- a rowed COMP is the normal reconstruction
+        # path, not an orphan.
+        tracked = set()
+        table = self.Externalizations
+        if table and table[0, 'strategy'] is not None:
+            for i in range(1, table.numRows):
+                if self._cellVal(i, 'strategy') == 'tdn':
+                    tracked.add(self._cellVal(i, 'path'))
+
+        embody_path = self.my.path
+        try:
+            tagged = self.root.findChildren(type=COMP, tags=[tdn_tag])
+        except Exception:
+            tagged = []
+        candidates = []
+        for comp in tagged:
+            p = comp.path
+            if (p == '/' or p == embody_path
+                    or p.startswith(embody_path + '/')
+                    or embody_path.startswith(p + '/')):
+                continue
+            if p in tracked:
+                continue
+            if self.my.ext.TDN._hasExcludeTag(comp):
+                continue
+            if comp.findChildren(depth=1):
+                continue  # has content -- not a lost shell
+            # Locate the .tdn: storage pointer first, then mirror convention.
+            rel = None
+            try:
+                rel = comp.fetch('_tdn_rel_path', None, search=False)
+            except Exception:
+                rel = None
+            abs_path = None
+            if rel:
+                try:
+                    cand = self.buildAbsolutePath(self.normalizePath(rel))
+                    if cand.is_file():
+                        abs_path = cand
+                except Exception:
+                    abs_path = None
+            if abs_path is None:
+                conv = Path(project.folder) / (p.lstrip('/') + '.tdn')
+                if conv.is_file():
+                    abs_path = conv
+            if abs_path is not None:
+                candidates.append((p, abs_path))
+
+        if not candidates:
+            return results
+        results['found'] = [p for p, _ in candidates]
+        self.Log(
+            f"Found {len(candidates)} TDN-tagged empty COMP(s) with a "
+            f"recoverable .tdn but no tracking row: "
+            f"{', '.join(results['found'])}", 'WARNING')
+
+        if not auto:
+            listing = '\n'.join(f'  - {p}' for p, _ in candidates[:15])
+            if len(candidates) > 15:
+                listing += f'\n  ... and {len(candidates) - 15} more'
+            choice = self._messageBox(
+                'Embody -- Recoverable TDN COMPs',
+                f'{len(candidates)} TDN-tagged COMP(s) are empty and missing '
+                f'from the externalizations table, but their .tdn files still '
+                f'exist on disk (the table may have been lost in a crash):'
+                f'\n\n{listing}\n\n'
+                f'Restore their contents from the .tdn files and re-track '
+                f'them?',
+                buttons=['Restore All', 'Skip'])
+            if choice != 0:
+                if choice == -1:
+                    self.Log('Orphan-shell recovery deferred (dialogs '
+                             'suppressed); will re-offer next open', 'INFO')
+                return results
+
+        # Parent-before-child so nested shells restore in order.
+        candidates.sort(key=lambda c: c[0].count('/'))
+        for comp_path, abs_path in candidates:
+            try:
+                tdn_doc = self.my.ext.TDN.tdn_load(
+                    abs_path.read_text(encoding='utf-8'))
+                res = self.my.ext.TDN.ImportNetwork(
+                    target_path=comp_path, tdn=tdn_doc,
+                    clear_first=True, restore_file_links=True)
+                if res.get('success'):
+                    # Tag is present (that's how we found it), so the row
+                    # append passes _trackTDNExport's enrollment gate.
+                    self.my.ext.TDN._trackTDNExport(
+                        comp_path, str(abs_path),
+                        build_num=tdn_doc.get('build'),
+                        touch_build=tdn_doc.get('td_build'))
+                    shell = op(comp_path)
+                    if shell:
+                        self._reconstructAboutPage(shell, comp_path)
+                        self.param_tracker.updateParamStore(shell)
+                        self._storeTDNFingerprint(shell)
+                    results['restored'].append(comp_path)
+                else:
+                    results['failed'].append(comp_path)
+                    self.Log(f'Orphan-shell restore failed for {comp_path}: '
+                             f'{res.get("error")}', 'ERROR')
+            except Exception as e:
+                results['failed'].append(comp_path)
+                self.Log(f'Orphan-shell restore error for {comp_path}: {e}',
+                         'ERROR')
+        if results['restored']:
+            self.Log(f"Orphan-shell recovery restored "
+                     f"{len(results['restored'])} COMP(s) and re-tracked them",
+                     'SUCCESS')
+        return results
 
     # Params visible only in 'full' mode (strip/reconstruction concepts).
     _TDN_FULL_ONLY_PARAMS = {'Tdnstriponsave', 'Tdncreateonstart'}
@@ -7295,6 +8552,7 @@ class EmbodyExt:
         '_tdn_restore_failures',
         '_tdn_mode_migration_shown', '_tdn_migration_scheduled',
         '_tdn_migration_prev_enable',
+        '_tdn_rel_path', '_pending_tox_restore',
         'pressed',
     }
 
@@ -8376,7 +9634,7 @@ class EmbodyExt:
     def LaunchAIClient(self) -> None:
         """Open the AI client selected in the Aiclient menu at the project root.
 
-        Editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the root as
+        Editors (Cursor, Windsurf; Copilot -> VS Code) open the root as
         a workspace. CLI tools (Claude, Codex, Gemini) open in a new terminal at
         the root. Driven by the _AICLIENT_LAUNCH table. Launch CWD is
         _findProjectRoot() (honors Aiprojectroot). Fire-and-forget: opens a
@@ -8386,11 +9644,14 @@ class EmbodyExt:
         # this is a button callback -- a launch problem must log, never crash TD.
         try:
             client = self.my.par.Aiclient.eval()
-            label = self.my.par.Aiclient.label
+            label = self._aiClientLabel()
             spec = self._AICLIENT_LAUNCH.get(client)
             cwd = self._findProjectRoot()
+            title = 'Embody -- Launch AI Client'
             if spec is None:
+                msg = f'No launcher is wired for "{label}". Open your AI tool manually at {cwd}.'
                 self.Log(f'No launcher for "{label}". Open it manually at {cwd}.', 'INFO')
+                self._messageBox(title, msg, ['OK'])
                 return
             if spec['kind'] == 'editor':
                 if self._launchEditor(
@@ -8400,10 +9661,23 @@ class EmbodyExt:
                         mac_alt_names=spec.get('alt_names', ()),
                         install=spec.get('install')):
                     self.Log(f'Launched {label} at {cwd}', 'SUCCESS')
+                else:
+                    msg = f'Could not open {label}. Is it installed?'
+                    if spec.get('install'):
+                        msg += f'\n\nInstall: {spec.get("install")}'
+                    msg += f'\n\nProject root: {cwd}'
+                    self._messageBox(title, msg, ['OK'])
             elif self._launchTerminal(cwd, spec['cli'], install=spec.get('install')):
                 self.Log(f'Opened a terminal for {label} at {cwd}', 'INFO')
+            else:
+                msg = f'Could not open a terminal for {label}. Is it installed?'
+                if spec.get('install'):
+                    msg += f'\n\nInstall: {spec.get("install")}'
+                msg += f'\n\nProject root: {cwd}'
+                self._messageBox(title, msg, ['OK'])
         except Exception as e:
             self.Log(f'Failed to launch AI client: {e}', 'ERROR')
+            self._messageBox('Embody -- Launch AI Client', str(e), ['OK'])
 
     def _resolveCliAbs(self, cli: str) -> Optional[str]:
         """Absolute path to a CLI via fast filesystem probes, or None.
@@ -8414,6 +9688,9 @@ class EmbodyExt:
         """
         if sys.platform.startswith('win'):
             cands = [
+                # Native installers (claude's recommended install.ps1 lands here
+                # -- the Windows twin of ~/.local/bin below).
+                os.path.expandvars(rf'%USERPROFILE%\.local\bin\{cli}.exe'),
                 os.path.expandvars(rf'%APPDATA%\npm\{cli}.cmd'),
                 os.path.expandvars(rf'%USERPROFILE%\.bun\bin\{cli}.exe'),
                 os.path.expandvars(rf'%LOCALAPPDATA%\Programs\{cli}\{cli}.exe'),
@@ -8439,7 +9716,7 @@ class EmbodyExt:
         variables removed, so externally launched apps/terminals get a clean env.
 
         TD sets ELECTRON_RUN_AS_NODE=1 -- which makes a freshly launched Electron
-        editor (VS Code, Cursor, Windsurf) run headless-as-Node and quit instantly
+        editor (Cursor, Windsurf, or Copilot's VS Code) run headless-as-Node and quit instantly
         (the "dock icon bounces, then closes" bug) -- plus LD_LIBRARY_PATH/DYLD_*
         and PYTHON* pointing into TD's own bundle. `open` forwards the caller's
         environment to the launched app, so these must be stripped here.
@@ -8541,6 +9818,32 @@ class EmbodyExt:
             lines.append(f'exec "${{SHELL:-/bin/zsh}}" -ilc {shlex.quote(cli)}')
         return '\n'.join(lines) + '\n'
 
+    def _buildTerminalScriptWin(self, cwd, cli, abs_cli, install=None) -> str:
+        """Windows twin of _buildTerminalScript: the .bat run via cmd /K.
+        Pure (no I/O) so the correctness-critical content is unit-testable."""
+        d = str(cwd).replace('"', '')
+        lines = ['@echo off',
+                 f'cd /d "{d}"',
+                 'if errorlevel 1 echo launch dir missing.']
+        if abs_cli:
+            lines.append(f'"{str(abs_cli).replace(chr(34), "")}"')
+        else:
+            hint = ''.join(c for c in (install or 'see the tool website')
+                           if re.match(r"[A-Za-z0-9 ._:/@()+=,'-]", c))
+            hint = ' '.join(hint.split()) or 'see the tool website'
+            lines += [
+                f'where {cli} >nul 2>nul',
+                'if errorlevel 1 goto :missing',
+                cli,
+                'goto :done',
+                ':missing',
+                f'echo {cli} not found on PATH.',
+                f'echo Install:  {hint}',
+                'echo Then close this window and press Launch AI Client again.',
+                ':done',
+            ]
+        return '\r\n'.join(lines) + '\r\n'
+
     def _launchTerminal(self, cwd, cli, install=None) -> bool:
         """Open a new terminal at cwd running <cli>. Returns True if a terminal was
         launched, False on failure or an unsupported OS (so the caller only logs
@@ -8570,11 +9873,25 @@ class EmbodyExt:
                     return False
                 return True
             if sys.platform.startswith('win'):
-                target = self._resolveCliAbs(cli) or cli
-                # Doubled-quote form keeps a resolved .cmd path literally quoted
-                # through cmd /K so a metachar (& | etc.) is not re-parsed; a
-                # bareword cli resolves via PATH the same.
-                subprocess.Popen(f'cmd /K ""{target}""', cwd=d, stdin=subprocess.DEVNULL,
+                body = self._buildTerminalScriptWin(cwd, cli, self._resolveCliAbs(cli), install)
+                scripts_dir = Path(cwd) / '.embody'
+                scripts_dir.mkdir(parents=True, exist_ok=True)
+                script = scripts_dir / f'launch_{cli}.bat'
+                script.write_text(body, encoding='utf-8', newline='')
+                # Do NOT delete: cmd /K returns after starting the console, and
+                # the console reads this file after Popen returns.
+                #
+                # NO std-handle redirection here. The CLIs are interactive
+                # Ink/Node TUIs (claude/codex/gemini) that need a real console
+                # TTY on stdin -- claude's OAuth login especially. Passing
+                # stdin=DEVNULL sets STARTF_USESTDHANDLES, which (a) pins the
+                # child's stdin to NUL so Ink cannot enter raw mode, and (b) from
+                # a GUI parent like TD -- which has no valid console handles --
+                # also hands the child bogus stdout/stderr. That combination is
+                # exactly the "blank terminal, login browser flashes then closes"
+                # bug on Windows. With CREATE_NEW_CONSOLE and no redirection, the
+                # fresh console owns fully-working stdin/stdout/stderr.
+                subprocess.Popen(f'cmd /K ""{script}""', cwd=d,
                                  creationflags=subprocess.CREATE_NEW_CONSOLE, env=env)
                 return True
         except OSError as e:

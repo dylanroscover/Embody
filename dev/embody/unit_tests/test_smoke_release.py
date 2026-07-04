@@ -185,7 +185,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """Essential parameters exist on the Embody COMP."""
         required_pars = [
             'Status', 'Version', 'Build', 'Envoyenable', 'Envoyport',
-            'Logtofile', 'Logfolder', 'Filecleanup',
+            'Logtofile', 'Logfolder', 'Filecleanup', 'Toxdropexpr',
             'Tdnstriponsave', 'Refresh',
         ]
         for par_name in required_pars:

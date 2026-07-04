@@ -1,5 +1,129 @@
 # Changelog
 
+## v6.0.99
+
+Setup-wizard layout polish and a size-aware network-spacing rule.
+
+- **Wizard option buttons: consistent vertical centering and left alignment.** Every option button's title and subtitle now share one left edge and sit centered in the button on every screen (button text offsets normalized). Fixes the assistant/client/footprint buttons reading top-heavy while the mode buttons looked centered.
+- **"Review what Embody will add" hint fixed.** The description text was `hmode='fill'` -- spanning the full window with no right margin -- so long copy ran off the right edge and clipped, and it reserved a fixed 88px block that left a dead gap above the options. It is now constrained to the 452px content column (wraps cleanly inside the panel, no clipping) with a height that fits the wrapped text.
+- **De-overlapped wizard button tiles in the network editor.** The panel-widget button COMPs were stacked 100px apart while their tiles are 134px tall, so they overlapped in the editor (cosmetic -- panel layout is align-driven -- but messy). Tiles are now spaced by actual node height, zero overlap.
+- **New layout rule: spacing is `size + gap`, both axes, never a fixed step.** `network-layout.md` (and its shipped template) now specify computing every offset from actual `nodeWidth`/`nodeHeight`, with the vertical formula `step = ceil((maxNodeHeight + gap) / 200) * 200`, and explicitly cover panel-COMP widget tiles (which the LAYOUT WARNING lint does not police). This is the rule that prevents the tile-overlap class of bug above.
+
+## v6.0.92
+
+Setup-wizard text alignment (for real this time) and the last main-thread freeze removed from Envoy startup.
+
+- **Wizard option titles and subtitles are ink-aligned on every platform.** Two stacked causes: the title used the multiline field renderer while the subtitle used the string label renderer (identical insets on macOS -- which is why it looked fixed there -- but divergent on Windows), and a size-14 first glyph carries ~2px more left bearing than a size-11 one. All 28 title/subtitle Text COMPs now share the multiline renderer (which also un-breaks subtitle word wrap, silently dead under string type), and subtitles carry a +2px offset compensation. Verified by pixel measurement: title and subtitle ink both start at column 19 on the Claude Code option.
+- **No more multi-second freeze after dependency install.** The pip/venv install was already threaded, but the post-install import gate (mcp + pydantic + starlette + uvicorn, cold pyc compile) ran on TD's main thread -- field logs showed the frame counter pinned for ~6s. The gate now runs on a worker thread in both the first-install and every-open paths, with Envoy Status showing "Preparing Python environment..." during the warm-up and a once-per-TD-session flag so saves and server restarts skip it entirely. Verified live: server restart ran the new flow and recovered with the gate flag set.
+- Setup-environment suite adapted and extended (thread-callable import gate, idempotent path wiring, session flag): 1,959 tests total.
+
+## v6.0.91
+
+Rules diet: the always-loaded rule files shrink ~60 percent by relocating reference depth into four new on-demand skills -- every hard law stays inline, every moved section leaves a MUST-load trigger behind.
+
+- **Four new shipped skills (13 total):** `/movie-export` (the Realtime trap, zero-drop verification, deterministic export, async-reader staleness -- loaded only when actually rendering), `/parameter-design` (pages/styles/ranges/help-text catalog), `/td-recovery` (bridge internals + manual recovery runbooks), `/multi-session-etiquette` (advisory contract, claim leases, gates).
+- **Thinned always-loaded rules:** performance.md 21.0k -> 9.7k bytes, td-python.md 20.1k -> 15.2k, parameters.md 5.3k -> 1.5k, td-connectivity.md 6.1k -> 1.3k, multi-session.md 3.1k -> 0.9k -- roughly 10k tokens reclaimed per session, and per-project relevance: a project that never exports movies never loads the movie-export saga. Threading/cook depth moved into `/td-api-reference`, which was already mandatory before writing TD Python, so enforcement is unchanged by construction.
+- **Relocation verified mechanically:** all 263 substantive lines from the original rules confirmed present in either the thinned rule or its destination skill (zero content lost).
+- **Peers hint:** the FIRST multi-session advisory served to each session now carries a `_hint` pointing at `/multi-session-etiquette`, so coordination guidance arrives exactly when a second session appears.
+
+## v6.0.90
+
+Token and latency quick wins from the efficiency audit, plus the output-first visual convention.
+
+- **get_op on a diet.** Returns NON-DEFAULT parameters only by default (include_defaults=True restores everything; parameters_omitted reports the filtered count). A parameter-heavy COMP read drops from ~13.7k chars to a few hundred -- the single largest per-call token sink, and it aligns with the non-default behavior users compared us against.
+- **Compact read shapes.** query_network drops the redundant name field (derivable from path); get_network_layout drops name/family/node centers (centers = nodeX + nodeWidth/2, the math the layout rules already teach) and caps annotation text at 160 chars; get_parameter gains details=True with a lean default (keeps value/mode/expressions/menuNames).
+- **Docstring diet: -14.1k chars from tools/list.** The 10 heaviest tool schemas trimmed from 20,902 to 6,754 chars -- eager-loading clients (Gemini CLI, Codex) stop paying ~3.5k tokens of teaching prose per session; the teaching lives in the mcp-tools-reference skill.
+- **~5ms off every call.** The worker's response delivery is now event-driven (blocking queue get) instead of a 10ms poll.
+- **Bridge tools/list no longer double-appends meta-tools** on cache hits.
+- **Upgrade tracebacks silenced.** The Envoy watchdog and TDN clipboard-watch reschedulers now null-guard their deferred callbacks, so replacing/upgrading the Embody COMP no longer prints AttributeError tracebacks from orphaned run() loops.
+- **Output-first visual convention (new).** The visual-aesthetics skill, generated CLAUDE/AGENTS guidance, and dev docs now direct agents to create an Out TOP named out1 FIRST, turn on its display flag, and keep the working chain wired into it -- the user watches the piece take shape live in the network backdrop while the agent works.
+- **AGENTS.md parity.** The non-Claude guidance gains the batch-operations rule and group-level (not per-op) verify cadence, matching CLAUDE.md.
+
+## v6.0.89
+
+Launch AI Client fixes: Windows parity and visible errors.
+
+- **Windows terminal launches now guard for a missing CLI.** Launching Claude Code / Codex / Gemini on Windows generated a raw `cmd /K "gemini"` -- an uninstalled CLI produced cmd's cryptic "not recognized" error instead of guidance. Windows now gets a generated `.bat` twin of the macOS `.command` script: a `where` guard that prints the same install instructions and keeps the console open. Pure builder, unit-tested (goto-flow so hints with parentheses cannot corrupt cmd block parsing; CRLF).
+- **"VS Code" launches again.** The Aiclient menu and wizard offer VS Code, but the launch table only wired `copilot` to the VS Code launcher -- selecting VS Code logged "No launcher" and did nothing on any platform. Added the missing `vscode` mapping.
+- **Launch failures now show a dialog.** Every failure path of the Launch AI Client pulse (no launcher wired, editor not installed, terminal failed, unexpected error) raises a message box with the install hint, in addition to the log line -- the message also now names the selected client instead of the parameter ("VS Code", not "AI Client"). The Windows missing-CLI case keeps its instructions in the opened terminal (no double dialog).
+- **Launcher suite grows to 29 tests** (Windows batch builder content, vscode mapping, dialog consumption, label regression).
+
+## v6.0.88
+
+Setup-wizard hotfix on top of the v6.0.87 feature release (below): the wizard's buttons were dead in every user project.
+
+- **Setup wizard clicks work in user projects again.** The wizard's Panel Execute DAT watched 16 ABSOLUTE op paths (`/embody/Embody/wizard/...`) that only resolve in the dev project; in a user project the tox lands at `/Embody`, the watcher resolved to nothing, and Next/Back silently did nothing (no errors -- the Auto option still looked selected because it is a native radio latch). Broken since the wizard shipped in v6.0.74; masked in dev and never exercised by the smoke harness, caught by the first real Windows click-through. Now uses relative patterns, verified end-to-end with simulated real clicks, and guarded by a new regression test that forbids absolute paths in any Embody panel watcher.
+
+## v6.0.87
+
+Envoy grows to 53 MCP tools with undoable edits, official TD docs lookup, numeric TOP sampling, tighter parameter/script guardrails, explicit transport hardening, and new POP-building guidance.
+
+- **Undoable MCP mutations.** Every mutating Envoy operation in `_UNDOABLE_OPS` now runs inside a TD undo block -- adapted from Derivative's TDMCP with permission -- so one `batch_operations` request collapses to one Ctrl+Z step instead of a pile of per-op edits.
+- **Official TD docs from Envoy.** New `get_docs` tool brings the live TD tool surface to **53 MCP tools** and looks up official TouchDesigner docs by preferring the version-exact offline help mirror under `<Samples>/Learn/offlineHelp`, then falling back to docs.derivative.ca's MediaWiki API. Section drill-down uses `sections_available`, and the HTML/API fetch work happens on the MCP worker thread so TD's frame loop stays clear.
+- **`capture_top(sample_grid=...)`.** `capture_top` can now return a clamped 2..32 NxN RGBA sample grid instead of an image, with row 0 at the top and full-resolution per-channel min/max/mean. It is token-cheap, machine-assertable, preserves HDR values above 1.0 that image capture clips, and sanitizes NaN/Inf values.
+- **Parameter search mode.** `get_parameter` now has glob search over parameter names, evaluated values, expressions, and bind expressions across a bounded subtree (`search`, `search_in`, `depth`, `max_results`), so searches like `search="*/project1/*", search_in="expr"` expose absolute-path expressions.
+- **Safer parameter writes.** `set_parameter` now rejects invalid Menu values with `menuNames` / `menuLabels` instead of accepting TD's silent index-0 coercion, includes a label-to-name hint when the caller sends a label, and auto-grows sequence-block parameters such as `const5name` to 6 blocks.
+- **`execute_python` rollback contract.** A script exception now destroys operators created by that call and reports the rollback count, while mutations to pre-existing operators remain in place; the whole call is still Ctrl+Z-able, and the generated TD UI rule now states that true contract.
+- **Transport security pinned.** Envoy now passes explicit FastMCP `TransportSecuritySettings` for Host/Origin validation and DNS-rebinding/CSRF defense instead of relying on SDK defaults; the security docs now say the localhost bind alone is not the defense.
+- **New `pop-networks` skill.** The ninth shipped skill adds POP-family builder guidance adapted from Derivative's TDMCPSkills `td-pop-family` with permission: POPs vs SOPs, the `geometryCOMP` ritual, particle lifecycle, `glslPOP` discipline, trap list, and Embody's performance/layout/naming/verification gates. The template DAT, `_TEMPLATE_MAP_SKILLS`, release sync table, prerequisite row, and generated Claude list are wired.
+- **New drift and tool-guard tests.** Added `test_envoy_tool_guards` (29 tests: undo wiring including live Ctrl+Z proof, menu/sequence guards, parameter search, `execute_python` rollback, `get_docs` parsing, and `sample_grid`) and `test_template_sync` (5 tests: template map/disk/release-table sync plus orphan allowlist), bringing the source inventory to **87 test suites / 1,940 test methods**.
+- **Stale Envoy tests repaired.** Six stale tests across `test_envoy_thread_comm`, `test_envoy_bridge`, and `test_server_lifecycle` now match the current per-session log-cursor and `_process_is_real_td` contracts; queue-based thread-comm tests use private queues so they no longer inject fake requests into the live MCP queue or drain real sessions' pending calls.
+- **Tool reference sync.** The `mcp-tools-reference` skill/template, docs/envoy tools pages, docs index, and README counts are synced to 53 tools, including `get_docs` and `capture_top`'s `sample_grid` mode.
+
+## v6.0.83
+
+Multi-session Envoy coordination, 52 MCP tools, and a TDN stability pass. This release makes parallel AI/client work more visible and safer, tightens destructive-operation behavior, hardens several TDN edge cases, refreshes the generated agent guidance, and regenerates the 6.0.83 release artifacts.
+
+### Envoy multi-session coordination
+
+- **52 MCP tools.** Envoy now exposes `claim_scope` and `release_scope` alongside the existing `get_sessions` view, bringing the live TD tool surface to 52 tools plus the bridge meta-tools.
+- **Live-session awareness.** `get_sessions` now reports recent scopes and claims so agents can see which peers are active and what part of the project they are working on.
+- **Peer advisories on tool responses.** MCP responses can include `_peers` metadata when another live session is active nearby, giving agents enough context to coordinate before editing the same network area.
+- **Destructive-operation gates.** `delete_op`, `import_network(clear_first=True)`, `run_tests`, and `batch_operations` now refuse risky work when another recent session owns or touched the relevant scope unless the caller passes `override=True`.
+- **Per-session log cursors.** Recent log piggybacking is tracked per session, so one client no longer drains another client's warning/error feed.
+
+### TDN stability
+
+- **Import validates before clearing.** Malformed TDN is rejected before `import_network(clear_first=True)` clears an existing COMP.
+- **DAT editability capture is non-mutating.** Capturing `isEditable` no longer changes the live DAT state while exporting.
+- **Flag defaults round-trip more cleanly.** Object COMP render/display defaults and noise terrain default flags no longer produce avoidable TDN churn.
+- **Stale cleanup is tracking-aware.** Cleanup only removes tracked `.tdn` files; ad-hoc untagged exports no longer enroll themselves into Embody tracking.
+- **Orphan shell recovery remains intact.** `_tdn_rel_path` recovery for orphan shells is preserved across the export/import path.
+- **Malformed templates degrade gracefully.** Bad generated-template content is handled without cascading into broader TDN failure.
+
+### Setup and generated guidance
+
+- **Setup Wizard polish.** The AI-client picker no longer forces a scrollbar now that the option list is shorter, and wizard copy has more right-side padding so text does not crowd the window edge.
+- **AI-client menu reflects current support.** The standalone VS Code client token has been removed; GitHub Copilot remains supported through VS Code.
+- **Agent guidance updated.** The generated multi-session rule/template and default MCP allowlist now include `claim_scope` and `release_scope`.
+
+### Tests and release artifacts
+
+- **New regression coverage.** Added `test_tdn_stability_hardening` and expanded `test_envoy_sessions` for multi-session coordination and destructive-operation behavior.
+- **Current test source inventory.** The repo now contains **85 test suites / 1,906 test methods**.
+- **Release artifacts refreshed.** The development `.toe`, generated `.tdn` files, externalization table, and shipped release artifact were regenerated for **6.0.83**.
+
+## v6.0.69
+
+A new **Dropped .tox Expression** control, plus a **data-safety hardening** of the test harness driven by a real incident: destructive whole-project test suites can no longer run as part of a normal test run, so a full `RunTests()` can never mutate your live project.
+
+### Embody core
+
+- **Dropped .tox Expression (`Toxdropexpr`).** New menu on the Embody page controlling how the continuity sweep treats the default expression TouchDesigner auto-writes into a COMP's External .tox when a `.tox` is dragged in (`me.parent().fileFolder + '/' + ...`). `Ask` (default) prompts on detection with a list that truncates past a cap (so the dialog buttons stay reachable) and four choices -- **Clean**, **Ignore**, **Always Clean**, **Always Ignore**; the two "Always" buttons persist the choice into the parameter so you are not re-prompted. Embody's own descendants are always cleaned. The prompt now routes through the test-seedable `_messageBox` instead of a raw `ui.messageBox`.
+- **Removed self-heal param bloat.** `_ensureAutosaveParams` (EmbodyExt) and `_ensureVizParams` (EnvoyExt) recreated their own custom params on every init -- unnecessary, since params persist in the `.toe`. Both deleted; the params remain baked into the build.
+- **Continuity sweep never touches Embody's own subtree.** `checkOpsForContinuity` now hard-skips rows under Embody's own path, closing a gap where a transiently-missing Embody COMP could be deleted or re-externalized during strip/restore thrashing.
+- **TDN `export` mode announces itself.** `ReconstructTDNComps` now logs its export-mode action (additive recovery only, existing COMPs kept), matching the `off` and `full` branches.
+- **Fixed the shipped `CLAUDE.md` template's accuracy.** `templates/text_claude.md` (which generates a user project's `CLAUDE.md` / `ENVOY.md`) still wrongly called `.tox`/`.toe` "text files" and described the deployed `.claude/settings.local.json` as read-only-only -- it had drifted behind the v6.0.66 accuracy sweep, so regeneration reverted that sweep. Corrected to match: `.tox`/`.toe` are opaque binary (`.tdn` is the text format), and Embody's `settings.local.json` pre-allows the write tools it actually deploys (`create_op`, `set_parameter`, `execute_python`, `import_network`, ...), written only if the file is missing and never overwritten.
+
+### Test-harness data safety
+
+- **Destructive whole-project suites are segregated.** A test suite that calls `Disable` / `ExternalizeProject` / `Reset` on `ext.root` (the ENTIRE live project) now sets `DESTRUCTIVE = True` and is EXCLUDED from every normal run (`RunTests` / `RunTestsSync` / `RunTestsDeferred*`). Such suites run ONLY via the opt-in, save-gated `RunDestructiveTests(confirm_saved=True)`, which refuses on an unsaved project so a recoverable `.toe` always exists. A plain full run can no longer mutate the live project. New dev rule `rules/destructive-tests.md` documents the convention and the incident it prevents.
+- **`Filecleanup` cannot get stuck at `delete`.** The test runner's suppress/restore of `Filecleanup` is now re-entrancy-guarded, so an interrupted or timed-out batch cannot leave it stuck at `delete` -- a stuck value turns any file operation into a silent unlink.
+
+### Tests
+
+- New `test_toxdrop_expr` suite (10 tests: the menu, all four dialog buttons, silent clean/ignore, Embody-descendant always-clean, and dialog-list truncation). `test_dialog_suppression` hardened to diff the log buffer by entry `id` rather than a positional slice on a bounded `deque(maxlen=200)`. Test suite **76 suites / 1,761 tests**; the normal `RunTests()` (1,729 tests, destructive suite excluded) is green with 1 conditional skip, and the 32-test destructive `test_custom_parameters` runs separately via `RunDestructiveTests`.
+
 ## v6.0.66
 
 A one-click **Launch AI Client** button on Embody's Envoy page: pick your assistant in the `Aiclient` menu, press the button, and Embody opens it at the project root -- editors (VS Code, Cursor, Windsurf; Copilot -> VS Code) open the folder as a workspace, terminal CLIs (Claude Code, Codex, Gemini) open in a new terminal. Built to survive the real cross-platform traps and hardened by a 10-agent codex cross-platform review.

@@ -209,22 +209,44 @@ class TestRunnerExt:
         self._deferred_queue = []
         self._deferred_test_filter = None
         self._saved_filecleanup = None
+        self._saved_toxdropexpr = None
 
     def _suppressFileCleanupDialog(self):
-        """Set Filecleanup to 'delete' to prevent modal dialogs during tests."""
+        """Neutralize continuity-sweep dialogs during tests.
+
+        Sets Filecleanup to 'delete' (its dialog uses a raw ui.messageBox that
+        would otherwise open a real modal) and Toxdropexpr to 'ignore' so a
+        test-triggered continuity sweep never prompts about -- or mutates -- real
+        dropped-.tox COMPs in the project. Both are restored afterward."""
+        # Re-entrancy guard: capture the ORIGINAL value only on the first
+        # suppress. If suppress runs again before restore (nested/batched runs),
+        # do NOT overwrite the saved value with the already-suppressed one --
+        # that is how Filecleanup got stuck at 'delete' after an interrupted batch.
         try:
-            par = op.Embody.par.Filecleanup
-            self._saved_filecleanup = par.eval()
+            if self._saved_filecleanup is None:
+                self._saved_filecleanup = op.Embody.par.Filecleanup.eval()
             op.Embody.par.Filecleanup = 'delete'
+        except Exception:
+            pass
+        try:
+            if self._saved_toxdropexpr is None:
+                self._saved_toxdropexpr = op.Embody.par.Toxdropexpr.eval()
+            op.Embody.par.Toxdropexpr = 'ignore'
         except Exception:
             pass
 
     def _restoreFileCleanupDialog(self):
-        """Restore the original Filecleanup preference after tests."""
+        """Restore the original continuity-dialog preferences after tests."""
         try:
             if self._saved_filecleanup is not None:
                 op.Embody.par.Filecleanup = self._saved_filecleanup
                 self._saved_filecleanup = None
+        except Exception:
+            pass
+        try:
+            if self._saved_toxdropexpr is not None:
+                op.Embody.par.Toxdropexpr = self._saved_toxdropexpr
+                self._saved_toxdropexpr = None
         except Exception:
             pass
 
@@ -285,6 +307,61 @@ class TestRunnerExt:
             self._restoreFileCleanupDialog()
 
         self._reportSummary()
+        return self._getSummary()
+
+    def RunDestructiveTests(self, suite_name=None, test_name=None,
+                            confirm_saved=False):
+        """Run the DESTRUCTIVE whole-project suites IN ISOLATION, after a save.
+
+        Suites tagged ``DESTRUCTIVE = True`` mutate the ENTIRE live project
+        (Disable / ExternalizeProject / Reset on ext.root). They are excluded
+        from every normal run (RunTests / RunTestsSync / *Deferred*) and can
+        ONLY be run here. On 2026-07-01 running one of these as part of a full
+        suite deleted the crown-jewel specimen .tdn files project-wide, so this
+        entry point is hard-gated:
+
+          1. It is opt-in -- caller must pass confirm_saved=True.
+          2. It refuses if the project has unsaved changes (project.dirty), so a
+             saved .toe always exists as a recovery point.
+
+        After the run the live network is intentionally mutated -- reopen the
+        saved .toe to restore it. See .claude/rules/destructive-tests.md.
+        """
+        if self._running:
+            self._log('Tests already running', 'WARNING')
+            return {'error': 'Tests already running'}
+        if not confirm_saved:
+            msg = ('RunDestructiveTests is opt-in: SAVE the project first, then '
+                   'call RunDestructiveTests(confirm_saved=True). These suites '
+                   'mutate the WHOLE live project (they deleted the crown-jewel '
+                   '.tdn files on 2026-07-01); the saved .toe is your recovery '
+                   'point. See .claude/rules/destructive-tests.md.')
+            self._log(msg, 'ERROR')
+            return {'error': msg}
+        dirty = getattr(project, 'dirty', None)
+        if dirty is True:
+            msg = ('RunDestructiveTests refused: project has unsaved changes '
+                   '(project.dirty). Save first so there is a recovery point.')
+            self._log(msg, 'ERROR')
+            return {'error': msg}
+
+        self._running = True
+        self._suppressFileCleanupDialog()
+        self._results = []
+        self._initResultsTable()
+        try:
+            suites = self._discoverTestSuites(suite_name, only_destructive=True)
+            self._log(f'Running {len(suites)} DESTRUCTIVE suite(s) in isolation '
+                      f'(save-gated)', 'WARNING')
+            for suite_class, module_name in suites:
+                self._runSuite(suite_class, module_name, test_name)
+        finally:
+            self._running = False
+            self._restoreFileCleanupDialog()
+        self._reportSummary()
+        self._log('DESTRUCTIVE tests complete -- the LIVE project was mutated by '
+                  'design. Reopen the saved .toe to restore the live network '
+                  'before continuing.', 'WARNING')
         return self._getSummary()
 
     def RunTestsDeferred(self, suite_name=None, test_name=None, delay_frames=1):
@@ -498,12 +575,20 @@ class TestRunnerExt:
     # TEST DISCOVERY
     # =========================================================================
 
-    def _discoverTestSuites(self, filter_name=None):
+    def _discoverTestSuites(self, filter_name=None, only_destructive=False):
         """
         Discover test suites by loading .py files from dev/embody/unit_tests/.
 
         Loads externalized test .py files from disk via importlib, injecting
         TD globals and EmbodyTestCase into each module before execution.
+
+        Suites that set the class attribute ``DESTRUCTIVE = True`` mutate the
+        WHOLE LIVE PROJECT (Disable / ExternalizeProject / Reset on ext.root)
+        and can delete/convert every tracked file. They are EXCLUDED from every
+        normal run and only surface when ``only_destructive=True`` (the
+        save-gated RunDestructiveTests batch). This is the guard that stops a
+        plain full run from ever nuking the live project. See
+        .claude/rules/destructive-tests.md.
         """
         import os
         import importlib.util
@@ -586,6 +671,13 @@ class TestRunnerExt:
                     if (isinstance(obj, type) and
                             obj is not EmbodyTestCase and
                             any(m.startswith('test_') for m in dir(obj))):
+                        # Destructive whole-project suites are segregated: they
+                        # ONLY run in the save-gated RunDestructiveTests batch,
+                        # never in a normal run. This is the single guard that
+                        # prevents a full run from nuking the live project.
+                        is_destructive = bool(getattr(obj, 'DESTRUCTIVE', False))
+                        if is_destructive != only_destructive:
+                            continue
                         suites.append((obj, module_name))
 
             except Exception as e:

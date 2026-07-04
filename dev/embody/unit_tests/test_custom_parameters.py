@@ -14,6 +14,15 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 
 class TestCustomParameters(EmbodyTestCase):
 
+    # DESTRUCTIVE: this suite calls Disable(removeTags=True) and
+    # _externalize_project_silent() against ext.root -- the ENTIRE LIVE PROJECT.
+    # That unlinks every tracked file project-wide and re-tags every COMP, which
+    # on 2026-07-01 deleted the crown-jewel specimen .tdn files when this ran as
+    # part of a full suite. The test runner EXCLUDES DESTRUCTIVE suites from all
+    # normal runs; they only run via the save-gated RunDestructiveTests().
+    # See .claude/rules/destructive-tests.md.
+    DESTRUCTIVE = True
+
     # ==================================================================
     # LIFECYCLE HOOKS
     # ==================================================================

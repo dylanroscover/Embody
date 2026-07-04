@@ -69,7 +69,7 @@ class TestMCPParameters(EmbodyTestCase):
     def test_get_parameter_has_metadata(self):
         comp = self.sandbox.create(geometryCOMP, 'meta_par')
         result = self.envoy._get_parameter(
-            op_path=comp.path, par_name='tx')
+            op_path=comp.path, par_name='tx', details=True)
         self.assertDictHasKey(result, 'label')
         self.assertDictHasKey(result, 'default')
 

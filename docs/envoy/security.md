@@ -4,11 +4,11 @@ Envoy is designed as a **local development tool** — it runs on `localhost` and
 
 ## Local-Only by Design
 
-Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0.0.0.0` or any external interface. This means:
+Envoy binds exclusively to `127.0.0.1` (localhost). It does **not** listen on `0.0.0.0` or any external interface, and it validates `Host` and `Origin` headers on every request with explicit FastMCP `TransportSecuritySettings`. This means:
 
 - Only processes running on the same machine can connect
 - It is not accessible from the local network or internet
-- DNS rebinding attacks from malicious websites cannot reach it
+- Browser-driven cross-site requests, including DNS-rebinding attempts from malicious websites, are rejected by `Host`/`Origin` validation rather than relying on the localhost bind alone
 
 !!! danger "Do not expose Envoy to the network"
     Never use port forwarding, SSH tunnels, reverse proxies, or firewall rules to make Envoy's port accessible from other machines. Envoy has **no authentication** — any process that can reach the port has full control over your TouchDesigner session.
@@ -37,7 +37,7 @@ The `execute_python` tool runs arbitrary Python code on TouchDesigner's main thr
 The `exec_op_method` tool can call any callable attribute on any operator, which also provides broad access.
 
 !!! warning "MCP clients have full system access"
-    Any MCP client connected to Envoy (Claude Code, Cursor, etc.) can execute arbitrary code through these tools. Only connect MCP clients you trust, and review operations in their logs if you have concerns.
+    Any MCP client connected to Envoy can execute arbitrary code through these tools. Only connect MCP clients you trust, and review operations in their logs if you have concerns.
 
 ## Recommendations
 

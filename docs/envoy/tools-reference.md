@@ -1,6 +1,10 @@
 # Tools Reference
 
-Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+Envoy exposes 53 MCP tools for interacting with TouchDesigner, plus 4 bridge meta-tools (listed below). All tools use the standard MCP protocol and can be called by any compatible client.
+
+Every mutating TD-authoring tool call is wrapped in a TouchDesigner undo block. Press Ctrl+Z in TD to revert an agent change; a `batch_operations` call is one undo step for the whole batch.
+
+Responses are compact by default; opt-in flags such as `include_defaults` and `details` return full detail when needed.
 
 ## Operator Management
 
@@ -8,11 +12,11 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 |------|-----------|-------------|
 | `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring, initialized and ready to use |
-| `delete_op` | `op_path` | Delete an operator |
+| `delete_op` | `op_path`, `override?` | Delete an operator. Refused while another live session claims the scope or wrote it in the last minute; `override=True` bypasses |
 | `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
-| `get_op` | `op_path` | Get full operator info (type, family, parameters, inputs, outputs, children) |
-| `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container. Set `include_utility=True` to include annotations |
+| `get_op` | `op_path`, `include_defaults?` | Get operator info. Parameters are NON-DEFAULT only by default; pass `include_defaults=True` for all parameters. Parameter-heavy COMPs are expensive in full detail, so prefer `read_tdn` for structure reads |
+| `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | List operators in a container. Child rows are compact: `path`, `type`, `family`, `depth` (`name` is derivable from the last path segment). Set `include_utility=True` to include annotations |
 | `find_children` | `op_path`, `name?`, `type?`, `depth?`, `tags?`, `text?`, `comment?`, `include_utility?` | Advanced search using TD's `findChildren` — filter by name pattern, type, depth, tags, text content, or comment |
 | `cook_op` | `op_path`, `force?`, `recurse?` | Force-cook an operator |
 
@@ -20,8 +24,20 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`) |
-| `get_parameter` | `op_path`, `par_name` | Get parameter value, mode, expression, bind info, export source, label, range, menu entries, and default |
+| `set_parameter` | `op_path`, `par_name`, `value?`, `mode?`, `expr?`, `bind_expr?` | Set a parameter's value, expression, bind expression, or mode (`constant`/`expression`/`export`/`bind`). Invalid Menu values are rejected with valid `menuNames`; sequence-block names auto-grow their sequence (`const5name` grows `numBlocks` to 6) |
+| `get_parameter` | `op_path`, `par_name?`, `search?`, `search_in?`, `depth?`, `max_results?`, `details?` | Get one parameter compactly, or search parameters by glob/substring across a subtree. Search fields: `name`, `value`, `expr`, or `any` |
+
+Search mode omits `par_name` and passes `search`. It scans the target operator and children to `depth` (default 2) using fnmatch glob semantics; patterns without `*?[` become contains searches. Results are `{root, pattern, search_in, count, results, truncated?}`, where each hit includes `op`, `par`, `value`, `mode`, and `expr` or `bindExpr` when present.
+
+`search_in='value'` evaluates every parameter it scans (expressions included), so expression side effects and cooking cost are on the caller; `search_in='any'` only evaluates constant-mode values and matches expression/bind parameters by text.
+
+Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mode-specific refs (`expression`, `bindExpr`, `bindMaster`, `exportOP`), and `menuNames` for Menu parameters. Pass `details=True` to include defaults, custom/read-only/style metadata, numeric ranges, `menuLabels`, and `menuIndex`. Search mode ignores `details`.
+
+**Example** -- find expressions under `/project1` that reference absolute paths in that subtree:
+
+```json
+{"op_path": "/project1", "search": "*/project1/*", "search_in": "expr", "depth": 10, "max_results": 100}
+```
 
 ## DAT Content
 
@@ -43,7 +59,7 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_position` | `op_path` | Get operator position, size, color, and comment |
-| `get_network_layout` | `comp_path`, `include_annotations?` | Get positions of ALL operators (and annotations) in a COMP in one call. Returns bounding_box. Use instead of repeated `get_op_position` calls |
+| `get_network_layout` | `comp_path`, `include_annotations?` | Get compact positions of ALL operators (and annotations) in a COMP in one call. Operators include `path`, `type`, `nodeX`, `nodeY`, `nodeWidth`, `nodeHeight`; centers are derivable as `nodeX+nodeWidth/2` and `nodeY+nodeHeight/2`. Annotation text is capped at 160 chars. Returns `bounding_box` |
 | `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set operator position, size, color (`[r,g,b]` floats 0-1), or comment |
 | `layout_children` | `op_path` | Auto-layout all children in a COMP |
 
@@ -87,6 +103,7 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 | `get_td_classes` | _(none)_ | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | `class_name` | Get methods, properties, and docs for a TD class |
 | `get_module_help` | `module_name` | Get Python help text for a module (supports dotted names like `td.tdu`) |
+| `get_docs` | `query`, `section?`, `source?`, `max_chars?` | Look up official TouchDesigner docs. `source` is `auto` (offline then web), `offline`, or `web`; normal responses carry `title`, `source`, `sections_available`, `content`, and optional `url`/`truncated`; ambiguous offline lookups return `source` + `matches` only |
 
 ## Embody Integration
 
@@ -104,24 +121,40 @@ Envoy exposes 49 MCP tools for interacting with TouchDesigner, plus 4 bridge met
 |------|-----------|-------------|
 | `read_tdn` | `comp_path?`, `include_dat_content?`, `max_depth?`, `embed_all?` | **Preferred for reading ≥3 operators.** Return the live network as a TDN dict (in-memory, never written to disk). ~20-90× fewer tokens than a `get_op` walk thanks to default-omission, `type_defaults`, and `par_templates` compaction |
 | `export_network` | `root_path?`, `include_dat_content?`, `output_file?`, `max_depth?`, `embed_all?` | Write a `.tdn` file to disk. Same payload as `read_tdn` plus file I/O and stale-file cleanup. Set `embed_all=True` to recurse into TDN-tagged COMPs instead of skipping their children (self-contained export) |
-| `import_network` | `target_path`, `tdn`, `clear_first?` | Recreate a network from a `.tdn` file |
+| `import_network` | `target_path`, `tdn`, `clear_first?`, `override?` | Recreate a network from a `.tdn` file. With `clear_first=True`, gated against live peer sessions like `delete_op` |
 | `diff_tdn` | `target?`, `max_changed_ops?`, `max_bytes?` | **What is UNSAVED in TDN networks** -- the live in-memory network vs the on-disk `.tdn`, the view git cannot give. Omit `target` for a whole-project summary (every live TDN COMP, which changed + counts); pass a COMP path OR a `.tdn` file path/bare filename for one COMP in full per-field detail (`old`=disk, `new`=live). For committed/history diffs use plain `git diff` -- Embody installs a `.tdn` diff driver that keeps those clean. Read-only, non-interactive |
 
 ## TOP Capture
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?` | Capture a TOP's output as an image. Saves to a temp file and returns the path — Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP's output as an image. Saves to a temp file and returns the path -- Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. Pass `sample_grid>=2` to return a downsampled NxN RGBA grid instead of an image: row 0 is the top of the image, stats are computed over the full-resolution texture, the requested grid clamps to 2..32, the returned `grid` is further capped to the TOP's width/height and can drop below 2 on tiny textures, and image params are ignored. Channel padding: RG -> b=0/a=1, mono -> replicated/a=1, monoalpha -> replicated + real alpha; `channels` reports the raw plane count. |
+
+## Multi-Session Awareness
+
+Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working on the same project are tracked, warned about each other, and gated away from destroying each other's work. See [Multi-Session Coordination](multi-session.md) for the full picture.
+
+| Tool | Parameters | Description |
+|------|-----------|-------------|
+| `get_sessions` | — | List connected AI sessions: label (`repo@branch`), idle time, `recent_scopes` it modified, `claims` it holds, plus `you` (the caller's own session id) |
+| `claim_scope` | `scope`, `note?`, `ttl?` | Cooperative write lease on an op-path prefix, a `file:` path, or a `project:` scope. Peers' overlapping claims are refused while yours is live; their destructive operations on it are gated. Auto-renews on your own writes; expires on TTL or session silence |
+| `release_scope` | `scope` | Release a lease you hold. Polite — expiry also handles it |
+
+!!! info "Auto-piggybacked peer advisories"
+    A `_peers` field rides on any response whose request touches territory another session modified in the last ~10 minutes — one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer *wrote* an overlapping scope within the last minute and your operation is also a write — stop and coordinate.
+
+!!! warning "Destructive-operation gate"
+    `delete_op`, `import_network` with `clear_first=True`, `run_tests`, and batches containing them are refused with a `MULTI-SESSION GATE` error (naming the holder or recent writer) while a live peer session claims the scope or wrote it within the last minute. Pass `override=True` only when you are certain.
 
 ## Logging
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_logs` | `level?`, `count?`, `since_id?`, `source?` | Get recent log entries from ring buffer. Filter by level, source, or use `since_id` for incremental polling |
-| `run_tests` | `suite_name?`, `test_name?` | Run test suites and return results |
+| `run_tests` | `suite_name?`, `test_name?`, `override?` | Run test suites and return results. Gated while a peer session holds `project:tests` |
 
 !!! info "Auto-piggybacked logs"
-    When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`.
+    When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`. Warning cursors are tracked per session, so concurrent AI sessions each receive their own copy — one session polling first no longer consumes a warning meant for everyone.
 
 ## Bridge Meta-Tools
 

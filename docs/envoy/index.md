@@ -6,7 +6,7 @@
 
 TouchDesigner has no external API. A `.toe` file has no access surface — nothing outside TD can read it, write to it, or interact with what's running inside it. AI assistants hitting this wall have two options: describe what a network *might* look like and hope you can implement it, or stop. Neither is useful when you're mid-session with a half-built network in front of you.
 
-Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 49 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
+Envoy exists to change that. It runs an HTTP server embedded in your `.toe` as a COMP extension, exposes 53 MCP tools that map to live TD operations, and auto-configures your AI client to connect to it on startup. The moment Envoy starts, your AI assistant gains full access to everything running in your session.
 
 ## Key Design Principles
 
@@ -45,7 +45,7 @@ The bridge handles the MCP protocol handshake locally and keeps bridge meta-tool
 
 ## Capabilities
 
-Envoy exposes **49 MCP tools** across 15 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
+Envoy exposes **53 MCP tools** across 16 categories, plus 4 bridge meta-tools that run on the local STDIO bridge.
 
 ### Operator Management
 
@@ -152,6 +152,7 @@ Inspect the live TD Python API, check operator errors, and call operator methods
 | `get_td_classes` | List all Python classes/modules in the `td` module |
 | `get_td_class_details` | Methods, properties, and docs for a TD class |
 | `get_module_help` | Python help text for a module (supports dotted names like `td.tdu`) |
+| `get_docs` | Look up official TouchDesigner docs from the offline help mirror or docs.derivative.ca |
 
 ### Embody Integration
 
@@ -185,6 +186,16 @@ By default (`inline=False`) the image is saved to a temp file and the path is re
 | Tool | Description |
 |---|---|
 | `capture_top` | Capture a TOP's current output as an image; returns a temp-file path by default (`inline=True` also embeds a small preview) |
+
+### Multi-Session Awareness
+
+Several AI sessions can work on the same project at once without clobbering each other. Envoy identifies each session (`repo@branch` labels), tracks what territory each one touches, warns on overlap via `_peers` advisories, and refuses destructive operations on a live peer's turf. See [Multi-Session Coordination](multi-session.md).
+
+| Tool | Description |
+|---|---|
+| `get_sessions` | List connected sessions: labels, activity, recent scopes, claims |
+| `claim_scope` | Cooperative write lease on an op subtree, file, or project scope |
+| `release_scope` | Release a held lease (expiry also handles it) |
 
 ### Logging
 
@@ -256,5 +267,5 @@ Envoy works with any MCP client:
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli)
 - [Cursor](https://www.cursor.com/)
 - [Windsurf](https://windsurf.com/)
-- [VS Code](https://code.visualstudio.com/) and [GitHub Copilot](https://github.com/features/copilot)
+- [GitHub Copilot](https://github.com/features/copilot) via [VS Code](https://code.visualstudio.com/)
 - Any other client that supports the MCP protocol

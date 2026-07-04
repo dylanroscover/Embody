@@ -1410,6 +1410,9 @@ class TestBridgeProcessManagement(EmbodyTestCase):
 
     # --- find_all_td_pids: pgrep filtering on macOS/Linux ---
 
+    # _process_is_real_td (added v6.0.80) ps-checks each candidate PID;
+    # fake test PIDs would all be dropped as not-real-TD, so stub it True.
+    @patch.object(bridge, '_process_is_real_td', new=lambda pid: True)
     @patch.object(bridge, '_is_bridge_process')
     @patch('envoy_bridge.subprocess.run')
     def test_find_all_td_pids_filters_self_and_bridges(
@@ -1464,6 +1467,7 @@ class TestBridgeProcessManagement(EmbodyTestCase):
         mock_run.return_value = fake
         self.assertEqual(bridge.find_all_td_pids(), [])
 
+    @patch.object(bridge, '_process_is_real_td', new=lambda pid: True)
     @patch.object(bridge, '_is_bridge_process', return_value=False)
     @patch.object(bridge, '_process_cmdline')
     @patch('envoy_bridge.subprocess.run')
@@ -1772,6 +1776,20 @@ class TestBridgeToolListAugmentation(EmbodyTestCase):
         self.assertIn('create_op', names)
         self.assertIn('get_td_status', names)
         self.assertIn('launch_td', names)
+
+    def test_augment_tools_list_is_idempotent(self):
+        response = {
+            'jsonrpc': '2.0',
+            'id': 1,
+            'result': {'tools': [{'name': 'create_op'}]}
+        }
+
+        bridge.augment_tools_list(response)
+        bridge.augment_tools_list(response)
+
+        names = [t['name'] for t in response['result']['tools']]
+        self.assertEqual(names.count('get_td_status'), 1)
+        self.assertEqual(names.count('launch_td'), 1)
 
     def test_augment_no_result_key(self):
         response = {'jsonrpc': '2.0', 'id': 1, 'error': {'code': -1}}
@@ -2377,6 +2395,11 @@ class TestBridgeToolsListCache(EmbodyTestCase):
         self.assertGreaterEqual(
             len(tools_list_responses), 2,
             'Expected two tools/list responses (both should succeed)')
+
+        for response in tools_list_responses:
+            names = [t['name'] for t in response['result']['tools']]
+            self.assertEqual(names.count('get_td_status'), 1)
+            self.assertEqual(names.count('launch_td'), 1)
 
         self.assertEqual(
             tools_list_forward_count[0], 1,

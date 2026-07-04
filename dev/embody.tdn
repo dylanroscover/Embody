@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 422
-generator: Embody/6.0.65
+build: 495
+generator: Embody/6.0.98
 td_build: 099.2025.32820
-source_file: Embody-6.66.toe
-exported_at: '2026-07-01T02:27:33Z'
+source_file: Embody-6.99.toe
+exported_at: '2026-07-04T14:19:12Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -73,41 +73,24 @@ operators:
     - {}
   custom_pars:
     Embody:
-    - name: Status
-      style: Str
-      readOnly: true
-      help: Current Embody status (read-only). Shows whether Embody is initialized and running.
-      value: Enabled
-    - name: Disable
+    - name: Setupwizard
       style: Pulse
-      help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
-    - name: Update
-      style: Pulse
-      label: Enable/Update
-      help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
-    - name: Refresh
-      style: Pulse
-      help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
-    - name: Performmode
-      style: Toggle
-      label: Perform Mode
-    - name: Createexternalizationstable
-      style: Pulse
-      label: Create Externalizations Table
-      startSection: true
-      help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
-    - name: Externalizations
-      style: DAT
-      label: Externalizations Table
-      help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
-      value: /embody/externalizations
-    - name: Openexternalizationstable
-      style: Pulse
-      label: Open Externalizations Table
-      help: Opens the externalizations tracking table in a floating viewer window.
+      label: Setup Wizard
+      help: Open the Embody setup wizard to review or change your mode, AI assistant, and where config files are written.
+    - name: Embodymode
+      style: Menu
+      label: Mode
+      default: auto
+      menuNames:
+      - auto
+      - advanced
+      menuLabels:
+      - Auto - manage everything
+      - Advanced - ask first
+      help: How Embody handles invasive, project-level changes (git config, .venv, MCP/AI config files, network ops). 'Auto' manages everything silently -- recommended for most users. 'Advanced' asks before each such change and keeps the footprint minimal -- for users who want full control.
     - name: Folder
       style: Folder
-      label: Externalizations Folder
+      label: Ext. Folder (Rel. to Project)
       startSection: true
       help: Root folder where externalized files are saved. All .tox, .py, .json, and other externalized files are written relative to this folder.
     - name: Externalizeproject
@@ -115,68 +98,28 @@ operators:
       label: Externalize Full Project
       startSection: true
       help: Tags all eligible operators in the entire project for externalization. COMPs get .tox tags, DATs get file-type tags based on their content.
-    - name: Detectduplicatepaths
+    - name: Disable
+      style: Pulse
+      startSection: true
+      help: 'Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable.'
+    - name: Update
+      style: Pulse
+      label: Enable / Update
+      help: 'Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table.'
+    - name: Refresh
+      style: Pulse
+      help: Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks.
+    - name: Performmode
       style: Toggle
-      label: Detect Duplicate Paths
-      help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
-      value: true
-    - name: Templatemaster
+      label: Perform Mode
+      startSection: true
+    - name: Status
       style: Str
-      label: Template Master Name
-      default: __template__
-      help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
-    - name: Localtimestamps
-      style: Toggle
-      label: Local Timestamps
-      default: true
-      help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
-    - name: Toxrestoreonstart
-      style: Toggle
-      label: Restore toxes on Start
-      help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
-      value: true
-    - name: Datrestoreonstart
-      style: Toggle
-      label: Restore DATs on Start
-      default: true
-      help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
-    - name: Filecleanup
-      style: Menu
-      label: File Cleanup
+      label: Embody Status
       startSection: true
-      default: ask
-      menuNames:
-      - ask
-      - keep
-      - delete
-      menuLabels:
-      - Ask
-      - Always Keep Files
-      - Always Delete Files
-      help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-      value: delete
-    - name: Tdndatsafety
-      style: Menu
-      label: Content Safety
-      default: ask
-      menuNames:
-      - ask
-      - externalize
-      - ignore
-      menuLabels:
-      - Ask Each Save
-      - Always Externalize
-      - Never Ask
-      help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
-    - name: Openmanager
-      style: Pulse
-      label: Open Manager
-      startSection: true
-      help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
-    - name: Closemanager
-      style: Pulse
-      label: Close Manager
-      help: Closes the Embody Manager window.
+      readOnly: true
+      help: Current Embody status (read-only). Shows whether Embody is initialized and running.
+      value: Enabled
     Tags:
     - name: Toxtags
       style: Header
@@ -361,7 +304,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 00:52:53 UTC
+      value: Saved 11:49:16 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -434,7 +377,7 @@ operators:
       - projectfolder
       - custom
       menuLabels:
-      - Git root
+      - Git repository root
       - Project folder (.toe directory)
       - Custom
       help: Where Embody writes AI config (AGENTS.md, CLAUDE.md, .claude/, .cursor/, .mcp.json, .embody/). "Git root" (default) writes at the top of the git repo. "Project folder" writes alongside the .toe -- use this when your TD project lives in a subdirectory of a larger repo and you open that subdirectory as your AI tool workspace.
@@ -451,9 +394,8 @@ operators:
     - name: Envoyport
       style: Int
       label: Envoy Port
-      default: 9876
+      default: 9870
       help: 'Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port.'
-      value: 9870
     - name: Embotenable
       style: Toggle
       label: Embot
@@ -465,6 +407,22 @@ operators:
       label: Envoy Follow
       default: true
       help: Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown.
+    - name: Autoexternalize
+      style: Menu
+      label: Auto-Externalize New Ops
+      startSection: true
+      default: neither
+      menuNames:
+      - neither
+      - dats
+      - comps
+      - both
+      menuLabels:
+      - Neither
+      - DATs
+      - COMPs
+      - DATs and COMPs
+      help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
     - name: Envoystatus
       style: Str
       label: Envoy Status
@@ -493,9 +451,18 @@ operators:
       help: Folder where log files are saved. Defaults to dev/logs/ in the project directory. Files are named <project>_YYMMDD.log.
       value: logs
     UI:
+    - name: Openmanager
+      style: Pulse
+      label: Open Manager
+      help: Opens the Embody Manager window, which provides a list view of all externalized operators with status, actions, and strategy management.
+    - name: Closemanager
+      style: Pulse
+      label: Close Manager
+      help: Closes the Embody Manager window.
     - name: Enablekeyboardshortcuts
       style: Toggle
       label: Enable Keyboard Shortcuts
+      startSection: true
       help: Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.
       value: true
     - name: Addtagshort
@@ -602,13 +569,96 @@ operators:
       label: TDN Saved Color
       help: Color indicator for TDN-strategy operators that are saved and up-to-date.
       values: [0.153552, 0.376081, 0.457, 1]
+    Advanced:
+    - name: Createexternalizationstable
+      style: Pulse
+      label: Create Externalizations Table
+      startSection: true
+      help: Creates the externalizations tracking table as a sibling operator if it does not already exist. Safe to pulse at any time — no-op if the table is already connected. Use this to recover if the table was lost after an Embody upgrade.
+    - name: Externalizations
+      style: DAT
+      label: Externalizations Table
+      help: Reference to the externalizations tracking table DAT (stored in TSV format). Lists all externalized operators with their paths, types, timestamps, and dirty state.
+      value: /embody/externalizations
+    - name: Openexternalizationstable
+      style: Pulse
+      label: Open Externalizations Table
+      help: Opens the externalizations tracking table in a floating viewer window.
+    - name: Detectduplicatepaths
+      style: Toggle
+      label: Detect Duplicate Paths
+      startSection: true
+      help: When enabled, warns if multiple operators resolve to the same externalized file path. Helps catch naming conflicts.
+      value: true
+    - name: Templatemaster
+      style: Str
+      label: Template Master Name
+      default: __template__
+      help: When duplicate external paths are detected, an operator whose path contains a folder/COMP with this exact name is auto-selected as the master (the rest are tagged as clones), with no prompt. Matches only when exactly one operator in the group contains this name. Clear this field to always choose the master manually, or set it to your own naming convention (e.g. '_master').
+    - name: Localtimestamps
+      style: Toggle
+      label: Local Timestamps
+      default: true
+      help: When enabled, timestamps in the externalizations table are displayed in your local timezone instead of UTC.
+    - name: Toxrestoreonstart
+      style: Toggle
+      label: Restore toxes on Start
+      help: When enabled, automatically restores TOX-strategy COMPs from .tox files on disk when the project opens. Useful when COMPs were externalized but the .toe was not saved.
+      value: true
+    - name: Datrestoreonstart
+      style: Toggle
+      label: Restore DATs on Start
+      default: true
+      help: When enabled, automatically restores DAT-strategy operators from externalized files on disk when the project opens. Recreates missing DATs (py, json, xml, etc.) and configures file sync. Safely excludes Embody descendants and DATs inside TOX/TDN COMPs.
+    - name: Filecleanup
+      style: Menu
+      label: File Cleanup
+      startSection: true
+      default: ask
+      menuNames:
+      - ask
+      - keep
+      - delete
+      menuLabels:
+      - Ask
+      - Always Keep Files
+      - Always Delete Files
+      help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
+      value: keep
+    - name: Toxdropexpr
+      style: Menu
+      label: Dropped .tox Expression
+      startSection: true
+      default: ask
+      menuNames:
+      - ask
+      - clean
+      - ignore
+      menuLabels:
+      - Ask
+      - Always Clean
+      - Always Ignore
+      help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+    - name: Tdndatsafety
+      style: Menu
+      label: Content Safety
+      default: ask
+      menuNames:
+      - ask
+      - externalize
+      - ignore
+      menuLabels:
+      - Ask Each Save
+      - Always Externalize
+      - Never Ask
+      help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
     About:
     - name: Version
       style: Str
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.65
+      value: 6.0.98
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -625,7 +675,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 662
+      value: 711
     - name: Github
       style: Pulse
       label: GitHub
@@ -636,7 +686,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-01 02:27:32 UTC
+      value: 2026-07-04 14:19:11 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -655,23 +705,10 @@ operators:
     _start_in_progress: true
     git_status:
       /embody/externalizations: ' M'
-      /specimen_lab/waveform_stack: ' M'
-      /specimen_lab/vertical_fibers: ' M'
-      /specimen_lab/plasma_interference: ' M'
-      /specimen_lab/murmuration: ' M'
-      /specimen_lab/mandelbulb_march: ' M'
-      /specimen_lab/kaleidoscope: ' M'
-      /specimen_lab/essence_streams: ' M'
-      /specimen_lab/crosspoint_matrix: ' M'
-      /specimen_lab: ' M'
-      /embody/unit_tests/test_claude_config: ' M'
-      /embody/unit_tests: ' M'
-      /embody/Embody/parexec: ' M'
-      /embody/Embody/EmbodyExt: ' M'
+      /embody/Embody/templates/text_rule_network_layout: ' M'
       /embody/Embody: ' M'
       /embody: ' M'
-      /embody/unit_tests/test_launch_aiclient: ??
-    _watchdog_gen: 480
+    _watchdog_gen: 734
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -813,7 +850,7 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 244
+    _clip_watch_gen: 499
     _suppress_dialogs: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn
@@ -2740,7 +2777,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 253
+    rows: 260
     cols: 11
   flags:
   - viewer

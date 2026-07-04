@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **75 test suites** and **1,751 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, the Envoy server/bridge, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **87 test suites** and **1,959 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -24,7 +24,8 @@ op.unit_tests.RunTestsDeferred()
 
 # Get results
 results = op.unit_tests.GetResults()
-# Returns: {'total': 1751, 'passed': 1751, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
+# Example after a full successful run:
+# {'total': 1940, 'passed': 1940, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
 ```
 
 ### Via MCP
@@ -38,7 +39,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 
 ## Test Coverage
 
-### Core Embody (25 suites, 408 tests)
+### Core Embody (30 suites, 458 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -55,26 +56,32 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_autosave` | 18 | Auto-save checkpoint engine (skip_cleanup, idle-settle drain, crash recovery, gates) |
 | `test_tag_lifecycle` | 17 | Tag application and removal |
 | `test_delete_cleanup` | 16 | Deletion and file cleanup |
+| `test_auto_externalize` | 16 | Auto-externalization flow and eligible operator handling |
 | `test_strategy_handlers` | 15 | TOX/TDN strategy switch, remove, DAT convert |
 | `test_issue21_safe_cell` | 14 | Safe table-cell handling |
 | `test_glsl_externalize` | 11 | GLSL shader auto-externalization |
+| `test_setup_wizard` | 10 | Setup Wizard flow and first-run prompts |
+| `test_toxdrop_expr` | 10 | Dropped `.tox` expression cleanup choices |
 | `test_layout_lint` | 10 | `execute_python` layout-warning linting |
 | `test_logging` | 10 | Logging system and ring buffer |
+| `test_advanced_guard` | 9 | Advanced-mode and guarded operation behavior |
 | `test_externalization` | 9 | Externalization lifecycle |
 | `test_file_management` | 8 | File I/O, path handling, tracked-file delete safety |
 | `test_os_label` | 8 | OS label resolution (Win10/11 build thresholds, macOS) |
-| `test_update_sync` | 7 | Sync between .toe and externalized files |
 | `test_dialog_suppression` | 8 | File-cleanup dialog suppression during tests |
+| `test_update_sync` | 7 | Sync between .toe and externalized files |
 | `test_operator_queries` | 6 | Operator discovery and queries |
+| `test_embody_mode_guard` | 5 | Mode guard behavior around Embody operations |
 | `test_settings_persistence` | 3 | Settings serialization (byte-stable, sorted keys) |
 
-### MCP Tools (15 suites, 193 tests)
+### MCP Tools (16 suites, 224 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
+| `test_envoy_tool_guards` | 29 | Envoy tool safety guards (undo blocks, parameter guards/search, rollback, docs, sample grid) |
 | `test_mcp_externalization` | 22 | Embody integration via MCP (tag, save, status) |
 | `test_mcp_operators` | 20 | Create, delete, copy, rename, query, find |
-| `test_mcp_annotations` | 19 | Creating and managing annotations |
+| `test_mcp_annotations` | 21 | Creating and managing annotations |
 | `test_mcp_dat_content` | 19 | DAT text/table ops + surgical `edit_dat_content` + wipe guards |
 | `test_mcp_diagnostics` | 16 | Error checking, class introspection, module help, log retrieval |
 | `test_mcp_flags_position` | 16 | Operator flags, positioning, and `get_network_layout` |
@@ -88,7 +95,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_mcp_extensions` | 6 | Extension creation and setup |
 | `test_mcp_performance` | 5 | Per-operator performance monitoring |
 
-### TDN Format (17 suites, 620 tests)
+### TDN Format (18 suites, 641 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -101,6 +108,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_tdn_diff_engine` | 25 | TDN structural diff engine |
 | `test_tdn_palette_catalog` | 23 | Palette-clone detection and handling |
 | `test_tdn_exclude` | 21 | `tdn_exclude` tag (app-managed subtree invisibility) |
+| `test_tdn_stability_hardening` | 21 | Import validation, DAT editability capture, flag defaults, stale cleanup, orphan shell recovery |
 | `test_tdn_mode` | 15 | Tdnmode gating (off / export / full) |
 | `test_dat_restoration` | 14 | DAT restoration from disk on startup |
 | `test_tdn_safety_guards` | 14 | At-risk storage / callback-DAT protection |
@@ -121,27 +129,32 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_collection_pure` | 14 | Pure-value-expression preservation (live-if-clean) |
 | `test_clipboard_watch` | 8 | Clipboard watcher poll + gating (incl. outbound-copy suppression) |
 
-### Envoy Server & Bridge (9 suites, 358 tests)
+### Envoy Server & Bridge (10 suites, 407 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_envoy_bridge` | 156 | STDIO bridge: forwarding, reconciler, registry, meta-tools |
-| `test_claude_config` | 83 | AI client config generation (Claude/Cursor/Copilot/Windsurf/Gemini) |
+| `test_claude_config` | 84 | AI client config generation (Claude/Codex/Gemini/Cursor/Windsurf/GitHub Copilot) |
+| `test_envoy_sessions` | 46 | Multi-session awareness, scope claims, peer advisories, destructive-operation gates |
 | `test_server_lifecycle` | 22 | Envoy MCP server start/stop |
 | `test_envoy_watchdog` | 21 | Envoy liveness watchdog (revive on dropped socket / save) |
 | `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |
+| `test_launch_aiclient` | 29 | Launch AI Client launcher (launch table, CLI resolution, `.command`/`.bat` generation, failure dialogs, env sanitization) |
 | `test_envoy_setup_environment` | 18 | MCP import verification (pydantic_core safety) |
 | `test_envoy_registry` | 17 | Instance registry and PID liveness |
-| `test_launch_aiclient` | 17 | Launch AI Client launcher (launch table, CLI resolution, `.command` generation, env sanitization) |
 | `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |
 
-### Catalog & Release (3 suites, 49 tests)
+### Install, Uninstall & Release (7 suites, 87 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_smoke_release` | 33 | Release smoke checks (extensions loaded, Envoy state) |
+| `test_install_manifest` | 12 | Generated install manifest and packaged config coverage |
+| `test_uninstall_execute` | 11 | Uninstall execution path and cleanup safety |
+| `test_uninstall_preview` | 10 | Uninstall preview plan and protected-file handling |
 | `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
 | `test_catalog_palette_scan` | 6 | Palette scan time-state snapshot/restore |
+| `test_template_sync` | 5 | Template map, disk, release-table, and orphan allowlist sync |
 
 ## Execution Modes
 

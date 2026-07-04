@@ -16,12 +16,50 @@ runner_mod = op.unit_tests.op('TestRunnerExt').module
 EmbodyTestCase = runner_mod.EmbodyTestCase
 
 
-class TestOnRefreshProcessing(EmbodyTestCase):
+class _IsolatedQueuesMixin:
+    """Swap the live MCP queues for private ones for a test's duration.
+
+    These suites fake requests and read responses directly. Doing that on
+    the LIVE queues races with real MCP traffic: an MCP-driven test run
+    always has one in-flight request (the run_tests call itself), whose
+    worker consumes unmatched responses, and draining the live request
+    queue throws away other sessions' pending calls. Private queues make
+    the suite deterministic under any transport.
+    """
+
+    def _isolateQueues(self):
+        self._live_queues = (self.envoy.request_queue,
+                             self.envoy.response_queue)
+        self.envoy.request_queue = Queue()
+        self.envoy.response_queue = Queue()
+
+    def _restoreQueues(self):
+        priv_rq = self.envoy.request_queue
+        self.envoy.request_queue, self.envoy.response_queue = \
+            self._live_queues
+        # Forward any REAL request that raced into the private queue during
+        # the swap (real payloads carry 'sid'; this file's fakes never do).
+        try:
+            while not priv_rq.empty():
+                item = priv_rq.get_nowait()
+                if isinstance(item, dict) and 'operation' in item \
+                        and 'sid' in item:
+                    self.envoy.request_queue.put(item)
+        except Exception:
+            pass
+
+
+class TestOnRefreshProcessing(_IsolatedQueuesMixin, EmbodyTestCase):
     """Test _onRefresh request processing from queue."""
 
     def setUp(self):
         super().setUp()
         self.envoy = self.embody.ext.Envoy
+        self._isolateQueues()
+
+    def tearDown(self):
+        self._restoreQueues()
+        super().tearDown()
 
     def test_processes_valid_request(self):
         """A valid get_td_info request is processed and response queued."""
@@ -215,14 +253,17 @@ class TestOnRefreshProcessing(EmbodyTestCase):
         self.assertNotIn('error', resp['result'])
 
 
-class TestSendResponse(EmbodyTestCase):
+class TestSendResponse(_IsolatedQueuesMixin, EmbodyTestCase):
     """Test _send_response queue output and log piggybacking."""
 
     def setUp(self):
         super().setUp()
         self.envoy = self.embody.ext.Envoy
-        while not self.envoy.response_queue.empty():
-            self.envoy.response_queue.get_nowait()
+        self._isolateQueues()
+
+    def tearDown(self):
+        self._restoreQueues()
+        super().tearDown()
 
     def test_response_in_queue(self):
         """_send_response puts response dict in the queue."""
@@ -243,33 +284,38 @@ class TestSendResponse(EmbodyTestCase):
         self.assertEqual(resp['result']['operators'][0]['name'], 'noise1')
 
     def test_log_piggybacking_adds_logs_key(self):
-        """If log_buffer has recent entries, they're piggybacked on response."""
-        # Generate a log entry
-        self.embody.Log('test log entry for piggybacking', 'INFO')
-
-        # Reset last_served_log_id to 0 so all logs are "new"
-        self.envoy._last_served_log_id = 0
+        """WARNING/ERROR entries logged after a session's cursor baseline ride
+        that session's next response. Cursors are PER SESSION (_log_cursors,
+        multi-session Phase 2); INFO/DEBUG never ride (token-lean contract)."""
+        sid = 'test-piggyback-sid'
+        self.envoy._log_cursors.pop(sid, None)
+        self.envoy._baselineLogCursor(sid)
+        self.embody.Log('piggyback warning fixture', 'WARNING')
 
         result = {'data': 'test'}
-        self.envoy._send_response(777, result)
+        self.envoy._send_response(777, result, sid=sid)
         resp = self.envoy.response_queue.get_nowait()
 
-        # If log buffer exists and has entries, _logs should be present
-        log_buffer = getattr(self.embody.ext.Embody, '_log_buffer', None)
-        if log_buffer and len(log_buffer) > 0:
-            self.assertDictHasKey(resp['result'], '_logs')
-            self.assertGreater(len(resp['result']['_logs']), 0)
+        self.assertDictHasKey(resp['result'], '_logs')
+        self.assertGreater(len(resp['result']['_logs']), 0)
+        self.assertTrue(
+            any('piggyback warning fixture' in e.get('message', '')
+                for e in resp['result']['_logs']),
+            'the fixture WARNING should ride the response')
 
     def test_log_piggybacking_updates_last_served_id(self):
-        """After piggybacking, _last_served_log_id advances."""
-        self.embody.Log('advance log id test', 'INFO')
-        self.envoy._last_served_log_id = 0
+        """A response advances the SESSION's log cursor past served entries
+        (replaces the retired single shared _last_served_log_id)."""
+        sid = 'test-cursor-sid'
+        self.envoy._log_cursors.pop(sid, None)
+        self.envoy._baselineLogCursor(sid)
+        before = self.envoy._log_cursors[sid]
+        self.embody.Log('advance cursor fixture', 'WARNING')
 
-        self.envoy._send_response(666, {'data': 'x'})
+        self.envoy._send_response(666, {'data': 'x'}, sid=sid)
+        self.envoy.response_queue.get_nowait()
 
-        log_buffer = getattr(self.embody.ext.Embody, '_log_buffer', None)
-        if log_buffer and len(log_buffer) > 0:
-            self.assertGreater(self.envoy._last_served_log_id, 0)
+        self.assertGreater(self.envoy._log_cursors[sid], before)
 
     def test_multiple_responses_ordered(self):
         """Multiple _send_response calls maintain FIFO order."""
@@ -283,17 +329,17 @@ class TestSendResponse(EmbodyTestCase):
         self.assertListEqual(ids, [1, 2, 3])
 
 
-class TestRequestResponseRoundTrip(EmbodyTestCase):
+class TestRequestResponseRoundTrip(_IsolatedQueuesMixin, EmbodyTestCase):
     """End-to-end: queue request, call _onRefresh, read response."""
 
     def setUp(self):
         super().setUp()
         self.envoy = self.embody.ext.Envoy
-        # Drain both queues
-        while not self.envoy.request_queue.empty():
-            self.envoy.request_queue.get_nowait()
-        while not self.envoy.response_queue.empty():
-            self.envoy.response_queue.get_nowait()
+        self._isolateQueues()
+
+    def tearDown(self):
+        self._restoreQueues()
+        super().tearDown()
 
     def test_round_trip_get_td_info(self):
         self.envoy.request_queue.put({

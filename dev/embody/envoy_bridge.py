@@ -242,6 +242,50 @@ def _init_file_logging(config_path):
 
 _MY_PID = os.getpid()
 
+# --- Session identity (multi-session awareness) ---
+# One AI client session = one bridge process. Envoy uses these headers to
+# tell concurrent sessions apart (presence registry via get_sessions,
+# per-session warning cursors). SESSION_ID is set at import; the label is
+# derived in main() once the config path (and thus the git root) is known.
+SESSION_ID = f"{_MY_PID}-{int(time.time())}-{os.urandom(2).hex()}"
+SESSION_LABEL = ""
+
+
+def _init_session_label(config_path):
+    """Derive a human label for this session: <repo dirname>@<git branch>.
+
+    EMBODY_SESSION_LABEL overrides. ASCII-sanitized (urllib encodes headers
+    latin-1; a non-ASCII label must never brick forwarding). Never raises.
+    """
+    global SESSION_LABEL
+    label = ""
+    try:
+        override = os.environ.get("EMBODY_SESSION_LABEL", "").strip()
+        if override:
+            label = override
+        else:
+            if config_path:
+                # Config is in .embody/ - git root is one level up
+                git_root = os.path.dirname(
+                    os.path.dirname(os.path.abspath(config_path)))
+            else:
+                git_root = os.getcwd()
+            name = os.path.basename(git_root)
+            branch = ""
+            try:
+                out = subprocess.run(
+                    ["git", "-C", git_root, "rev-parse", "--abbrev-ref", "HEAD"],
+                    capture_output=True, text=True, timeout=2)
+                if out.returncode == 0:
+                    branch = out.stdout.strip()
+            except Exception:
+                pass
+            label = f"{name}@{branch}" if branch else name
+    except Exception:
+        label = ""
+    label = (label or f"pid{_MY_PID}")[:80]
+    SESSION_LABEL = label.encode("ascii", "replace").decode("ascii")
+
 
 def log(msg):
     """Log to stderr (visible in Claude Code's MCP output) and to file."""
@@ -588,6 +632,43 @@ def _is_td_helper_process(pid):
     return any(marker in cmdline for marker in _TD_HELPER_MARKERS)
 
 
+def _process_is_real_td(pid):
+    """True only if PID is a LIVE TouchDesigner *application* process.
+
+    `pgrep -f TouchDesigner` matches any process whose command line merely
+    MENTIONS "TouchDesigner" -- e.g. an unrelated shell or AI-CLI job whose
+    prompt text references TD -- and also lists defunct/zombie processes.
+    Neither is a real TD.  `_process_cmdline()` reads /proc, which does not
+    exist on macOS, so the cmdline-based filters above are no-ops there; this
+    ps-based check is the reliable cross-platform guard.  Verify the process
+    is not a zombie and that its actual executable IS the TD binary.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-o", "state=", "-o", "comm=", "-p", str(pid)],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, ValueError, OSError):
+        return False
+    if result.returncode != 0:
+        return False
+    out = result.stdout.strip()
+    if not out:
+        return False
+    parts = out.split(None, 1)
+    state = parts[0] if parts else ""
+    comm = parts[1].strip() if len(parts) > 1 else ""
+    if state.upper().startswith("Z"):
+        return False  # defunct/zombie -- cannot be a live TD
+    # Real TD binary basename is exactly "TouchDesigner" (app-bundle executable
+    # on macOS, bin/TouchDesigner on Linux).  An unrelated process whose argv
+    # merely contains "TouchDesigner" has a different executable (zsh, codex,
+    # python, ...); bundled helpers are named e.g. "TouchDesigner Web Render".
+    return (os.path.basename(comm) == "TouchDesigner"
+            or comm.endswith("/Contents/MacOS/TouchDesigner")
+            or comm.endswith("/bin/TouchDesigner"))
+
+
 def find_all_td_pids():
     """Return a list of all running TouchDesigner PIDs.
 
@@ -639,6 +720,8 @@ def find_all_td_pids():
                     continue
                 if _is_td_helper_process(pid):
                     continue
+                if not _process_is_real_td(pid):
+                    continue  # unrelated process matching the cmdline, or a zombie
                 pids.append(pid)
     except (subprocess.TimeoutExpired, FileNotFoundError, ValueError):
         pass
@@ -768,7 +851,9 @@ def _touch_heartbeat(config_path):
     """Write PID + timestamp to our heartbeat file.  Best-effort, never raises."""
     try:
         path = _heartbeat_path(config_path)
-        atomic_write_json(path, {"pid": os.getpid(), "time": time.time()})
+        atomic_write_json(path, {"pid": os.getpid(), "time": time.time(),
+                                 "sid": SESSION_ID,
+                                 "label": SESSION_LABEL or f"pid{_MY_PID}"})
     except Exception:
         pass
 
@@ -782,6 +867,52 @@ def _cleanup_heartbeat(config_path):
     except Exception:
         pass
 
+
+def _list_live_sessions(config_path):
+    """Glob heartbeat files and return live bridge sessions, freshest first.
+
+    [{pid, sid, label, age_s, self}] for bridges whose heartbeat is fresh
+    and whose process is alive. Works even while TD is down (heartbeats
+    are bridge-side), so get_td_status can always show who is connected.
+    Best-effort: never raises.
+    """
+    import glob as _glob
+    sessions = []
+    try:
+        if config_path:
+            # Config is in .embody/ - git root is one level up
+            embody_dir = os.path.dirname(os.path.abspath(config_path))
+            git_root = os.path.dirname(embody_dir)
+            log_dir = os.path.join(git_root, "dev", "logs")
+        else:
+            import tempfile
+            log_dir = tempfile.gettempdir()
+        if not os.path.isdir(log_dir):
+            return sessions
+        now = time.time()
+        for path in _glob.glob(os.path.join(log_dir, "envoy-bridge-*.heartbeat")):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                pid = data.get("pid")
+                age = now - data.get("time", 0)
+                if pid is None or age > HEARTBEAT_STALE_S * 2:
+                    continue
+                if pid != os.getpid() and not is_process_alive(pid):
+                    continue
+                sessions.append({
+                    "pid": pid,
+                    "sid": data.get("sid"),
+                    "label": data.get("label"),
+                    "age_s": round(age, 1),
+                    "self": pid == os.getpid(),
+                })
+            except Exception:
+                continue
+        sessions.sort(key=lambda s: s["age_s"])
+    except Exception:
+        pass
+    return sessions
 
 def _list_stale_heartbeats(config_path, max_age_s):
     """Glob for heartbeat files and return [(pid, age)] for stale ones.
@@ -1037,6 +1168,9 @@ def handle_get_td_status(state):
         "active_instance": active_name,
         "instances": instance_status,
     }
+    sessions = _list_live_sessions(config_path)
+    if sessions:
+        status["sessions"] = sessions
     if unregistered:
         status["unregistered_td_processes"] = unregistered
     return status
@@ -1349,7 +1483,15 @@ def augment_tools_list(response):
     if (response
             and "result" in response
             and "tools" in response["result"]):
-        response["result"]["tools"].extend(BRIDGE_TOOLS)
+        tools = response["result"]["tools"]
+        existing = {
+            tool.get("name") for tool in tools
+            if isinstance(tool, dict)
+        }
+        tools.extend(
+            tool for tool in BRIDGE_TOOLS
+            if tool.get("name") not in existing
+        )
     return response
 
 
@@ -1447,6 +1589,8 @@ def forward_to_http(url, message, timeout=300):
         headers={
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            "X-Envoy-Session": SESSION_ID,
+            "X-Envoy-Label": SESSION_LABEL or f"pid{_MY_PID}",
         },
     )
     resp = urllib.request.urlopen(req, timeout=timeout)
@@ -2105,6 +2249,7 @@ def main():
     # Write initial heartbeat and register cleanup
     global _config_path_for_cleanup
     _config_path_for_cleanup = config_path
+    _init_session_label(config_path)
     _touch_heartbeat(config_path)
     import atexit
     atexit.register(_cleanup_heartbeat, config_path)

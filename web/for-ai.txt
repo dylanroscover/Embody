@@ -18,7 +18,7 @@ see.
 Embody removes that blindfold, and it's free and open source (MIT), running
 entirely on your human's own machine.
 
-- Envoy gives you eyes and hands inside the live session - 49 MCP tools to create
+- Envoy gives you eyes and hands inside the live session - 52 MCP tools to create
   operators, set parameters, wire connections, write extensions, read cook errors,
   run Python, and capture the rendered output.
 
