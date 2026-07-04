@@ -8117,47 +8117,193 @@ class EnvoyExt:
                 return None
             return Path(git_root) / '.embody' / 'envoy.json'
 
-    def _deploySettingsLocal(self, claude_dir):
-        """Deploy settings.local.json to .claude/ from the template DAT.
+    # Envoy MCP tools that only READ / query TD state -- safe to auto-approve
+    # under the 'some' tool-permissions posture. Anything that creates, edits,
+    # deletes, connects, executes, imports, or externalizes is deliberately
+    # omitted so it still prompts. Entries are the tool short-names; the
+    # permission strings written are 'mcp__envoy__<name>'.
+    READ_ONLY_TOOLS = [
+        'get_td_status', 'get_td_info', 'get_td_classes', 'get_td_class_details',
+        'get_op', 'get_op_errors', 'get_op_flags', 'get_op_position',
+        'get_op_performance', 'get_project_performance', 'get_parameter',
+        'get_connections', 'get_annotations', 'get_network_layout',
+        'get_dat_content', 'get_docs', 'get_module_help', 'get_logs',
+        'get_externalizations', 'get_externalization_status', 'get_sessions',
+        'query_network', 'find_children', 'get_enclosed_ops',
+        'read_tdn', 'diff_tdn', 'capture_top',
+    ]
 
-        Auto-allows read-only Envoy MCP tools so the user isn't prompted
-        for every query operation. Only writes if the file doesn't exist
-        yet -- never overwrites user customizations.
-        """
-        settings_path = claude_dir / 'settings.local.json'
-        if settings_path.exists():
-            self._log('settings.local.json already exists -- skipping', 'DEBUG')
-            return
-
-        settings_content = None
+    def _toolPermissionsPosture(self):
+        """The Toolpermissions param value, defensively normalized.
+        'all' | 'some' | 'prompt' | 'leave' (default 'all')."""
         try:
-            templates = self.ownerComp.op('templates')
-            settings_dat = templates.op('text_settings_local') if templates else None
-            if settings_dat:
-                settings_content = settings_dat.text
+            posture = (op.Embody.par.Toolpermissions.eval() or 'all').strip().lower()
+        except Exception:
+            posture = 'all'
+        return posture if posture in ('all', 'some', 'prompt', 'leave') else 'all'
+
+    def _tempReadDirs(self):
+        """Directories that must be readable so a capture_top PNG (saved to the
+        OS temp dir, EnvoyExt._captureTop) can be Read without a prompt. Forward
+        slashes for cross-platform JSON. Always includes /tmp as a fallback."""
+        dirs = ['/tmp']
+        try:
+            t = tempfile.gettempdir().replace('\\', '/')
+            if t and t not in dirs:
+                dirs.append(t)
         except Exception:
             pass
+        return dirs
 
-        if not settings_content:
-            self._log('text_settings_local template not found -- skipping settings deployment', 'DEBUG')
+    def _loadSettingsBaseline(self):
+        """The NON-Envoy baseline settings dict (from the template DAT if
+        present, else a built-in minimum). The Envoy allow entries + temp read
+        dirs are layered on per posture by _composeSettings, so the template no
+        longer needs to enumerate them."""
+        try:
+            templates = self.ownerComp.op('templates')
+            dat = templates.op('text_settings_local') if templates else None
+            if dat and (dat.text or '').strip():
+                cfg = json.loads(dat.text)
+                if isinstance(cfg, dict):
+                    return cfg
+        except Exception as e:
+            self._log(f'settings baseline template unreadable ({e}); '
+                      f'using built-in.', 'DEBUG')
+        return {
+            'permissions': {
+                'allow': ['Bash', 'WebFetch'],
+                'additionalDirectories': ['/tmp'],
+            },
+            'enabledMcpjsonServers': ['envoy'],
+            'enableAllProjectMcpServers': True,
+        }
+
+    def _composeSettings(self, cfg, posture):
+        """Apply a tool-permissions posture onto a settings dict IN PLACE and
+        return it. Preserves every non-Envoy key and every non-Envoy allow
+        entry; replaces only the Envoy tool entries, ensures the temp read
+        dirs, and trusts the Envoy MCP server. `posture` is never 'leave'
+        here (the caller short-circuits that)."""
+        perms = cfg.setdefault('permissions', {})
+        # Strip prior Envoy entries so we author them fresh for this posture.
+        allow = [a for a in perms.get('allow', [])
+                 if not (a == 'mcp__envoy' or a.startswith('mcp__envoy__'))]
+        if posture == 'all':
+            allow.append('mcp__envoy')          # wildcard: all current + future tools
+        elif posture == 'some':
+            allow.extend(f'mcp__envoy__{t}' for t in self.READ_ONLY_TOOLS)
+        # posture == 'prompt': no Envoy entries -> every tool prompts.
+        perms['allow'] = allow
+        add = list(perms.get('additionalDirectories', []))
+        for d in self._tempReadDirs():
+            if d not in add:
+                add.append(d)
+        perms['additionalDirectories'] = add
+        cfg['permissions'] = perms
+        # Trust the project MCP server so tools are available at all.
+        cfg['enableAllProjectMcpServers'] = True
+        servers = list(cfg.get('enabledMcpjsonServers', []))
+        if 'envoy' not in servers:
+            servers.append('envoy')
+        cfg['enabledMcpjsonServers'] = servers
+        return cfg
+
+    def _settingsSatisfies(self, cfg, posture):
+        """True if an existing settings dict already matches `posture` (so no
+        rewrite is needed). Semantic, order-insensitive -- avoids startup churn
+        from list reordering."""
+        if not isinstance(cfg, dict):
+            return False
+        perms = cfg.get('permissions', {}) or {}
+        allow = perms.get('allow', []) or []
+        envoy = [a for a in allow
+                 if a == 'mcp__envoy' or a.startswith('mcp__envoy__')]
+        add = perms.get('additionalDirectories', []) or []
+        temp_ok = all(d in add for d in self._tempReadDirs())
+        server_ok = (cfg.get('enableAllProjectMcpServers') is True
+                     or 'envoy' in (cfg.get('enabledMcpjsonServers') or []))
+        if not (temp_ok and server_ok):
+            return False
+        if posture == 'all':
+            return 'mcp__envoy' in envoy
+        if posture == 'prompt':
+            return len(envoy) == 0
+        if posture == 'some':
+            return set(envoy) == {f'mcp__envoy__{t}' for t in self.READ_ONLY_TOOLS}
+        return False
+
+    def _deploySettingsLocal(self, claude_dir):
+        """Write .claude/settings.local.json to match the Toolpermissions
+        posture, so Claude Code isn't prompted on every Envoy MCP tool call
+        (and so a captured TOP in the OS temp dir can be Read without a prompt).
+
+        Postures: all = auto-approve all Envoy tools (wildcard); some =
+        read-only tools only; prompt = none; leave = don't touch the file.
+        Merges into an existing file, preserving every non-Envoy key, and is
+        idempotent (skips when the posture is already satisfied -- no churn).
+        The user is told whether the file was created or updated.
+        """
+        import copy
+        posture = self._toolPermissionsPosture()
+        settings_path = claude_dir / 'settings.local.json'
+
+        if posture == 'leave':
+            self._log('Tool permissions: leaving .claude/settings.local.json '
+                      'untouched (your choice).', 'DEBUG')
             return
+
+        existed = settings_path.exists()
+        existing = None
+        if existed:
+            try:
+                existing = json.loads(settings_path.read_text(encoding='utf-8'))
+                if not isinstance(existing, dict):
+                    existing = None
+            except (json.JSONDecodeError, OSError) as e:
+                # Never clobber a settings.local.json we can't parse -- it may
+                # hold hand-authored user permissions.
+                self._log(f'Could not parse existing settings.local.json '
+                          f'({e}) -- leaving it untouched.', 'WARNING')
+                return
+
+        # Idempotent: an already-satisfying file is left exactly as-is.
+        if existing is not None and self._settingsSatisfies(existing, posture):
+            self._log(f'settings.local.json already matches tool permissions '
+                      f'({posture}) -- no change.', 'DEBUG')
+            return
+
+        base = copy.deepcopy(existing) if existing is not None \
+            else self._loadSettingsBaseline()
+        new_cfg = self._composeSettings(base, posture)
+        content = json.dumps(new_cfg, indent=2) + '\n'
+        verb = 'update' if existed else 'create'
 
         def _write():
             claude_dir.mkdir(parents=True, exist_ok=True)
-            settings_path.write_text(settings_content, encoding='utf-8')
-            self._log(f'Deployed settings.local.json to {settings_path}')
-            try:  # Embody created it (only writes when absent) -> safe to remove on uninstall
+            settings_path.write_text(content, encoding='utf-8')
+            self._log(f'{verb.capitalize()}d .claude/settings.local.json '
+                      f'(tool permissions: {posture}) at {settings_path}',
+                      'SUCCESS')
+            try:
                 Embody = op.Embody.ext.Embody
-                Embody._manifestRecordCreatedFile(
-                    str(Embody._findProjectRoot()), settings_path)
+                root = str(Embody._findProjectRoot())
+                if existed:  # merged into a user file -> Uninstall only reverses our unit
+                    Embody._manifestRecordAppendedFile(
+                        root, settings_path,
+                        'permissions (Envoy tools + temp read dirs)',
+                        kind='json_key')
+                else:        # Embody created it -> safe to remove on Uninstall
+                    Embody._manifestRecordCreatedFile(root, settings_path)
             except Exception:
                 pass
 
-        # Advanced: confirm before creating .claude/settings.local.json.
+        # Advanced mode confirms; Auto / consented-batch apply silently. The
+        # 'update' verb makes the disclosure honest about touching a user file.
         op.Embody.ext.Embody._guardFileWrite(
             'AI config',
-            f'create .claude/settings.local.json (pre-allows read-only Envoy '
-            f'MCP tools) in {claude_dir.parent}',
+            f'{verb} .claude/settings.local.json (tool permissions: {posture}) '
+            f'in {claude_dir.parent}',
             [str(settings_path)],
             _write)
 

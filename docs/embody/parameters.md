@@ -90,6 +90,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | Envoy Port (`Envoyport`) | Int | `9876` | Port number for the Envoy MCP server (default: 9870). Changing while running automatically restarts the server on the new port. |
 | Embot (`Embotenable`) | Toggle | On | Show the Embot builder mascot. He appears on each operator Envoy creates or edits and narrates what it does. Off hides him entirely (no character, no camera movement). |
 | Envoy Follow (`Envoyfollow`) | Toggle | On | Camera follows the operator Envoy is working on, panning the network editor to it. Works with or without the Embot character shown. |
+| Tool Permissions (`Toolpermissions`) | Menu | `all` | How much Embody pre-approves Envoy MCP tool calls in Claude Code's `.claude/settings.local.json`, so you aren't prompted on every tool use. `Don't ask (all)` auto-approves every Envoy tool (via the `mcp__envoy` wildcard). `Ask for some` auto-approves only read-only/query tools; write tools still prompt. `Ask for all` pre-approves nothing. `Leave settings alone` never creates or modifies the file. Except for "Leave", the OS temp directory is also whitelisted so captured TOP images can be read without a prompt. The setup wizard sets this; changing it here updates the file (merging, preserving your other settings). Claude Code only. |
 | Envoy Status (`Envoystatus`) | Str (read-only) | `Running on port 9870` | Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information. |
 
 ## Logs

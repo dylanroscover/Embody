@@ -1002,7 +1002,8 @@ class EmbodyExt:
         win.par.winopen.pulse()
 
     def _applyWizardSetup(self, mode='auto', assistant='claudecode',
-                          client='', root='gitroot', custom_root=''):
+                          client='', root='gitroot', custom_root='',
+                          permissions='all'):
         """Apply the setup-wizard selections and enable (or skip) Envoy.
 
         The single backend entry point the wizard's finish() calls. Because the
@@ -1019,6 +1020,11 @@ class EmbodyExt:
           client:      Aiclient menu value, used when assistant == 'other'
           root:        'gitroot' | 'projectfolder' | 'custom'
           custom_root: absolute path, used when root == 'custom'
+          permissions: 'all' | 'some' | 'prompt' | 'leave' -- how Claude Code's
+                       .claude/settings.local.json pre-approves Envoy MCP tools
+                       (the deferred Start()'s _deploySettingsLocal reads the
+                       Toolpermissions param this sets). Only meaningful for the
+                       Claude Code client; ignored when Envoy is not enabled.
         """
         # Whitelist the assistant token: an unrecognized value (a typo, a
         # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
@@ -1028,6 +1034,12 @@ class EmbodyExt:
             self.Log(f'Setup wizard: unrecognized assistant "{assistant}" -- no '
                      f'change made.', 'WARNING')
             return
+
+        # Whitelist the tool-permissions token too; an unknown value falls back
+        # to the safe default rather than corrupting the param.
+        permissions = (permissions or 'all').strip().lower()
+        if permissions not in ('all', 'some', 'prompt', 'leave'):
+            permissions = 'all'
 
         # 1. Posture.
         if mode in ('auto', 'advanced'):
@@ -1061,7 +1073,13 @@ class EmbodyExt:
                 self.Log(f'Unknown AI client "{client}" -- keeping the current '
                          f'selection.', 'WARNING')
 
-        # 4. Enable (first run) or restart-to-apply (re-run), modal-free.
+        # 4. Tool-permissions posture. Persist BEFORE enabling so the deferred
+        #    Start()'s _deploySettingsLocal reads the chosen value. The wizard
+        #    only shows this step for Claude Code; for 'other' clients it stays
+        #    at the default (harmless -- settings.local.json is Claude-specific).
+        self.my.par.Toolpermissions = permissions
+
+        # 5. Enable (first run) or restart-to-apply (re-run), modal-free.
         self._enableEnvoyResolved()
 
     def _enableEnvoyResolved(self):

@@ -10,7 +10,7 @@ When Envoy starts, it generates a complete Claude Code configuration in your pro
 | `CLAUDE.md` | Project context and critical rules | Yes |
 | `.mcp.json` | MCP server connection config | Yes |
 | `.embody/envoy-bridge.py` | STDIO-to-HTTP bridge for MCP transport | Yes |
-| `.claude/settings.local.json` | Tool permissions and MCP server config | No — written only if missing, never overwritten |
+| `.claude/settings.local.json` | Tool permissions and MCP server config | No — content follows your **Tool Permissions** choice; merges into an existing file, preserving your other keys |
 | `.claude/rules/` | Always-loaded conventions (see below) | Yes (unless edited) |
 | `.claude/skills/` | On-demand workflow guides (see below) | Yes (unless edited) |
 
@@ -111,7 +111,7 @@ You can extend the generated configuration:
 
 - **Add project-specific rules**: Create additional `.md` files in `.claude/rules/` — Claude Code loads all rules in this directory
 - **Add custom commands**: Create `.md` files in `.claude/commands/` with prompt instructions
-- **Modify permissions**: Edit `.claude/settings.local.json` to allow or restrict specific tools
+- **Modify permissions**: Set the **Tool Permissions** parameter on Embody's Envoy page (or re-run the setup wizard) to choose how much Embody auto-approves — all tools, read-only tools only, nothing, or leave the file untouched. See [MCP Tool Permissions](setup.md#mcp-tool-permissions). You can also hand-edit `.claude/settings.local.json` to allow or restrict specific tools.
 
 !!! tip
     You can edit the Envoy-generated rules and skills directly — Embody records a content hash of each generated file (`.embody/generated-hashes.json`) and won't overwrite one you've changed (it logs that it kept your edits). Pristine generated files still refresh on regeneration; delete a file to discard your changes and pull the latest template.

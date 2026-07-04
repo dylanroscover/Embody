@@ -1,5 +1,16 @@
 # Changelog
 
+## v6.0.103
+
+A "How should the AI ask permission?" step in the setup wizard so you choose your Claude Code tool-permission posture -- plus the wizard itself is now externalized to TDN.
+
+- **New wizard step: tool permissions.** When you turn on Claude Code in the setup wizard (Auto *or* Advanced mode), a new step lets you choose how much Embody pre-approves Envoy MCP tool calls in `.claude/settings.local.json`, so Claude Code stops asking on every tool use: **Don't ask** (recommended -- auto-approves all Envoy tools via the `mcp__envoy` wildcard, so new tools are covered too), **Ask for some** (read-only/query tools only; anything that creates/edits/deletes still prompts), **Ask for all** (pre-approve nothing), or **Leave settings alone** (never create or modify the file). The choice persists on a new **Tool Permissions** (`Toolpermissions`) parameter on the Envoy page. The step shows for Claude Code only, since `settings.local.json` is Claude-specific.
+- **Captured TOPs no longer prompt to read.** Every written posture also whitelists the operating-system temp directory (`tempfile.gettempdir()`, macOS and Windows) in `additionalDirectories`, so a PNG saved there by `capture_top` can be read back without a per-file permission prompt.
+- **Non-destructive settings writer.** The `settings.local.json` writer now merges into an existing file, preserving all your other keys (hooks, model, other allow patterns), only rewrites when the posture actually changes (no startup churn), and logs whether it created or updated the file. The shipped template shrank to a non-Envoy baseline; the Envoy allow entries are generated per posture in code.
+- **Setup wizard externalized to TDN.** The `wizard` COMP is now a first-class externalized artifact -- `wizard.tdn` (structure) plus `wizard/logic.py` and `wizard/clicks.py` (its hand-authored step machine and click router) -- diffable in git like Embody's other UI COMPs, and (as an Embody descendant) safely excluded from TDN reconstruction/stripping.
+- **The permissions step fits the window.** Its four options get a vertical scrollbar (with a peek of the fourth as a scroll cue) so the step never pushes the Back/Next footer off-screen.
+- New `test_tool_permissions` suite (10) covers posture -> allow-list mapping, `leave` = no write, merge-preserves-keys, and idempotency; `test_setup_wizard` gains 3 for the posture plumbing. **88 suites / 1,972 tests.**
+
 ## v6.0.99
 
 Setup-wizard layout polish and a size-aware network-spacing rule.

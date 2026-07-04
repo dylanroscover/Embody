@@ -93,11 +93,22 @@ Pristine generated files are refreshed each time Envoy starts to stay up to date
 
 ## MCP Tool Permissions
 
-When Envoy is first enabled, it deploys a `.claude/settings.local.json` file that **auto-authorizes all Envoy MCP tools** — including write operations like `create_op`, `delete_op`, `execute_python`, and `set_dat_content`. This means your AI assistant can act without per-tool confirmation prompts. The file is written **only if it doesn't already exist** — Embody never overwrites or regenerates your customizations. This file is gitignored.
+By default, Claude Code asks for confirmation every time it wants to use an MCP tool. When you turn on the AI assistant in the **setup wizard** (Claude Code only), a **"How should the AI ask permission?"** step lets you choose how much Embody pre-approves in `.claude/settings.local.json` — in both Auto and Advanced modes:
 
-If you prefer finer control, edit `.claude/settings.local.json` in your project root after setup. The `allow` array lists tool permission patterns — remove any tools you want Claude Code to prompt you for before executing.
+| Choice | Effect |
+|---|---|
+| **Don't ask** (recommended) | Auto-approves **all** Envoy tools via the `mcp__envoy` wildcard — no prompts, and new tools are covered automatically. |
+| **Ask for some** | Auto-approves only read-only/query tools (`get_*`, `query_network`, `read_tdn`, `capture_top`, …). Anything that creates, edits, deletes, or executes still prompts. |
+| **Ask for all** | Pre-approves nothing — Claude Code prompts before every tool (the built-in default behavior). |
+| **Leave settings alone** | Embody does not create or modify `settings.local.json` at all — you manage permissions yourself. |
 
-For example, to allow only read-only tools and require confirmation for write operations, keep only the `query_*` and `get_*` entries in the allow list.
+The choice is stored on the **Tool Permissions** (`Toolpermissions`) parameter on Embody's Envoy page, so you can change it anytime without re-running the wizard.
+
+Every written posture (all but *Leave*) also whitelists your operating system's temp directory in `additionalDirectories`, so a TOP captured with `capture_top` (saved to the temp dir) can be read back without a permission prompt.
+
+**Existing files are preserved.** If a `.claude/settings.local.json` already exists, Embody updates only its Envoy tool entries and keeps everything else you have set (hooks, model, other `allow` patterns) — and it only rewrites when the posture actually changes. Choose *Leave settings alone* to keep Embody entirely hands-off.
+
+You can also edit `.claude/settings.local.json` directly at any time; the `allow` array lists tool-permission patterns. This file is gitignored.
 
 ## Fresh Clones and TD Version Matching
 
