@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 695
-generator: Embody/6.0.85
+build: 696
+generator: Embody/6.0.87
 td_build: 099.2025.32820
-source_file: Embody-6.85.toe
-exported_at: '2026-07-03T22:37:24Z'
+source_file: Embody-6.88.toe
+exported_at: '2026-07-04T09:40:57Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -16,6 +16,7 @@ type_defaults:
       repocomp: =me
   textCOMP:
     parameters:
+      alignx: left
       hmode: fill
       clickthrough: true
       resizecomp: =me
@@ -25,10 +26,26 @@ type_defaults:
       fromop: =parent()
   buttonCOMP:
     parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
       hmode: fill
       resizecomp: =me
       repocomp: =me
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
       bgalpha: 1
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
       clone: =op.TDTox.op('defaultCOMPs/button')
     size: [160, 134]
   outCHOP:
@@ -295,7 +312,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 22:36:46 UTC
+    value: Saved 23:18:42 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -615,7 +632,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
+    value: keep
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -630,7 +647,6 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -650,7 +666,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.85
+    value: 6.0.87
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -667,7 +683,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 695
+    value: 696
   - name: Github
     style: Pulse
     label: GitHub
@@ -678,7 +694,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-03 22:37:24 UTC
+    value: 2026-07-04 09:40:56 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -727,21 +743,8 @@ storage:
   - /embody/base1
   expand_order: []
   _start_in_progress: true
-  git_status:
-    /embody/externalizations: ' M'
-    /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests/test_envoy_thread_comm: ' M'
-    /embody/unit_tests/test_envoy_bridge: ' M'
-    /embody/unit_tests/test_claude_config: ' M'
-    /embody/Embody/templates/text_skill_mcp_tools_reference: ' M'
-    /embody/Embody/templates/text_claude: ' M'
-    /embody/Embody/templates: ' M'
-    /embody/Embody/EnvoyExt: ' M'
-    /embody/Embody/EmbodyExt: ' M'
-    /embody/Embody: ' M'
-    /embody: ' M'
-    /embody/Embody/templates/text_skill_pop_networks: ??
-  _watchdog_gen: 661
+  git_status: {}
+  _watchdog_gen: 668
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -883,8 +886,8 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 426
-  _init_complete: true
+  _clip_watch_gen: 433
+  _suppress_dialogs: true
 operators:
 - name: help
   type: opviewerCOMP
@@ -1020,18 +1023,16 @@ operators:
     step: 0
     sel:
       mode: advanced
-    step_id: summary
+    step_id: mode
     sel_mode: auto
     sel_assistant: claudecode
-    sel_client: cursor
+    sel_client: ''
     sel_root: gitroot
   children:
   - name: hint
     type: textCOMP
     parameters:
-      text: |-
-        Mode: auto. AI assistant: on (Claude Code).
-        Nothing has changed yet - click Set up Embody to apply.
+      text: Choose one, then Next.
       type: multiline
       wordwrap: true
       callbacks: hint_callbacks
@@ -1040,10 +1041,9 @@ operators:
       fontcolorg: 0.61
       fontcolorb: 0.6
       textoffsetx: 24
-      alignx: left
       aligny: top
       w: 452
-      h: 88
+      h: 16
       alignorder: 3
       bgcolorr: 0.11
       bgcolorg: 0.12
@@ -1059,7 +1059,7 @@ operators:
   - name: title
     type: textCOMP
     parameters:
-      text: Ready to set up Embody
+      text: How should Embody manage your project?
       wordwrap: true
       callbacks: title_callbacks
       fontsize: 18
@@ -1067,7 +1067,6 @@ operators:
       fontcolorg: 0.92
       fontcolorb: 0.92
       textoffsetx: 24
-      alignx: left
       h: 30
       alignorder: 2
       bgcolorr: 0.11
@@ -1096,7 +1095,7 @@ operators:
     - name: fill
       type: containerCOMP
       parameters:
-        w: 452
+        w: 150
         h: 4
         bgcolorr: 0.24
         bgcolorg: 0.52
@@ -1107,7 +1106,7 @@ operators:
   - name: clicks
     type: panelexecuteDAT
     parameters:
-      panels: /embody/Embody/wizard/footer/btn_back /embody/Embody/wizard/footer/btn_next /embody/Embody/wizard/grp_mode/opt_auto /embody/Embody/wizard/grp_mode/opt_advanced /embody/Embody/wizard/grp_client/opt_codex /embody/Embody/wizard/grp_client/opt_cursor /embody/Embody/wizard/grp_client/opt_gemini /embody/Embody/wizard/grp_client/opt_vscode /embody/Embody/wizard/grp_client/opt_copilot /embody/Embody/wizard/grp_client/opt_windsurf /embody/Embody/wizard/grp_assistant/opt_none /embody/Embody/wizard/grp_assistant/opt_other /embody/Embody/wizard/grp_assistant/opt_claudecode /embody/Embody/wizard/grp_footprint/opt_custom /embody/Embody/wizard/grp_footprint/opt_gitroot /embody/Embody/wizard/grp_footprint/opt_projectfolder
+      panels: footer/btn_* grp_mode/opt_* grp_assistant/opt_* grp_client/opt_* grp_footprint/opt_*
       ontooff: true
     position: [240, -150]
     size: [130, 90]
@@ -1131,155 +1130,7 @@ operators:
     position: [480, -150]
     size: [160, 130]
     color: [0.67, 0.67, 0.67]
-    children:
-    - name: btn_back
-      type: buttonCOMP
-      parameters:
-        buttontype: momentary
-        h: 36
-        bgcolorr: 0.19
-        bgcolorg: 0.2
-        bgcolorb: 0.195
-      position: [25, 100]
-      children:
-      - name: out1
-        type: outCHOP
-        position: [275, 175]
-        inputs:
-        - par1
-      - name: par1
-        type: parameterCHOP
-        position: [65, 175]
-      - name: text
-        type: textCOMP
-        parameters:
-          text: Back
-          type: multiline
-          legacyfontselection: true
-          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
-          fontsize: 13
-          linespacing: =parent().par[me.curPar.name] or me.curPar.val
-          fontcolorr: 0.92
-          fontcolorg: 0.92
-          fontcolorb: 0.92
-          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
-          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
-          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
-          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          vmode: fill
-          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
-          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
-          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
-          bgalpha: 1
-          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
-          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
-          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
-          leftborder: bordera
-          rightborder: bordera
-          bottomborder: bordera
-          topborder: bordera
-          borderover: false
-        flags:
-        - viewer
-        position: [74, 26]
-        size: [113, 96]
-      - name: parexec1
-        type: parameterexecuteDAT
-        parameters:
-          pars: value0
-          onpulse: false
-          loadonstart: true
-        flags:
-        - viewer
-        position: [66, -83]
-        size: [128, 66]
-      - name: panelexec1
-        type: panelexecuteDAT
-        parameters:
-          panels: =parent()
-          panelvalue: state
-          offtoon: false
-          valuechange: true
-          defaultreadencoding: cp1252
-          loadonstart: true
-        flags:
-        - viewer
-        position: [247, -81]
-        size: [126, 62]
-    - name: btn_next
-      type: buttonCOMP
-      parameters:
-        buttontype: momentary
-        h: 36
-        bgcolorr: 0.24
-        bgcolorg: 0.52
-        bgcolorb: 0.35
-      position: [25, 100]
-      children:
-      - name: out1
-        type: outCHOP
-        position: [275, 175]
-        inputs:
-        - par1
-      - name: par1
-        type: parameterCHOP
-        position: [65, 175]
-      - name: text
-        type: textCOMP
-        parameters:
-          text: Set up Embody
-          type: multiline
-          legacyfontselection: true
-          scaletofit: =parent().par[me.curPar.name] or me.curPar.val
-          fontsize: 13
-          linespacing: =parent().par[me.curPar.name] or me.curPar.val
-          fontcolorr: 0.97
-          fontcolorg: 0.99
-          fontcolorb: 0.97
-          textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
-          textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
-          textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
-          textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          vmode: fill
-          bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
-          bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
-          bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
-          bgalpha: 1
-          borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
-          borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
-          borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
-          leftborder: bordera
-          rightborder: bordera
-          bottomborder: bordera
-          topborder: bordera
-          borderover: false
-        flags:
-        - viewer
-        position: [74, 26]
-        size: [113, 96]
-      - name: parexec1
-        type: parameterexecuteDAT
-        parameters:
-          pars: value0
-          onpulse: false
-          loadonstart: true
-        flags:
-        - viewer
-        position: [66, -83]
-        size: [128, 66]
-      - name: panelexec1
-        type: panelexecuteDAT
-        parameters:
-          panels: =parent()
-          panelvalue: state
-          offtoon: false
-          valuechange: true
-          defaultreadencoding: cp1252
-          loadonstart: true
-        flags:
-        - viewer
-        position: [247, -81]
-        size: [126, 62]
+    palette_clone: true
   - name: spacer
     type: containerCOMP
     parameters:
@@ -1314,7 +1165,6 @@ operators:
       h: 134
       hmode: fill
       alignorder: 4
-      display: false
       bgcolorr: 0.11
       bgcolorg: 0.12
       bgcolorb: 0.115
@@ -1331,23 +1181,7 @@ operators:
       type: buttonCOMP
       parameters:
         value0: true
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [25, 100]
       children:
       - name: desc
@@ -1361,7 +1195,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 24
           alignorder: 1
@@ -1392,7 +1225,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -1443,24 +1275,8 @@ operators:
     - name: opt_advanced
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
         alignorder: 1
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [25, 100]
       children:
       - name: desc
@@ -1474,7 +1290,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 24
           alignorder: 1
@@ -1505,7 +1320,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -1569,14 +1383,13 @@ operators:
   - name: steplabel
     type: textCOMP
     parameters:
-      text: Step 3 of 3
+      text: Step 1 of 3
       callbacks: steplabel_callbacks
       fontsize: 11
       fontcolorr: 0.6
       fontcolorg: 0.61
       fontcolorb: 0.6
       textoffsetx: 24
-      alignx: left
       h: 16
       bgcolorr: 0.11
       bgcolorg: 0.12
@@ -1618,24 +1431,8 @@ operators:
     - name: opt_codex
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 52
         alignorder: 2
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -200]
       children:
       - name: desc
@@ -1649,7 +1446,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 22
           alignorder: 1
@@ -1680,7 +1476,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -1731,24 +1526,7 @@ operators:
     - name: opt_cursor
       type: buttonCOMP
       parameters:
-        value0: true
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 52
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       children:
       - name: desc
         type: textCOMP
@@ -1761,7 +1539,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 22
           alignorder: 1
@@ -1792,7 +1569,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -1843,24 +1619,8 @@ operators:
     - name: opt_gemini
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 52
         alignorder: 3
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -300]
       children:
       - name: desc
@@ -1874,7 +1634,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 22
           alignorder: 1
@@ -1905,7 +1664,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -1956,24 +1714,8 @@ operators:
     - name: opt_vscode
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 52
         alignorder: 4
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -400]
       children:
       - name: desc
@@ -1987,7 +1729,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 22
           alignorder: 1
@@ -2018,7 +1759,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2069,24 +1809,8 @@ operators:
     - name: opt_copilot
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 52
         alignorder: 5
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -500]
       children:
       - name: desc
@@ -2100,7 +1824,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 22
           alignorder: 1
@@ -2131,7 +1854,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2182,24 +1904,8 @@ operators:
     - name: opt_windsurf
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 52
         alignorder: 1
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -100]
       children:
       - name: desc
@@ -2213,7 +1919,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 22
           alignorder: 1
@@ -2244,7 +1949,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2310,23 +2014,7 @@ operators:
     - name: opt_none
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -100]
       children:
       - name: desc
@@ -2340,7 +2028,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 28
           alignorder: 1
@@ -2371,7 +2058,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2422,23 +2108,7 @@ operators:
     - name: opt_other
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -200]
       children:
       - name: desc
@@ -2452,7 +2122,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 28
           alignorder: 1
@@ -2483,7 +2152,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2535,23 +2203,7 @@ operators:
       type: buttonCOMP
       parameters:
         value0: true
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       children:
       - name: desc
         type: textCOMP
@@ -2564,7 +2216,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 28
           alignorder: 1
@@ -2595,7 +2246,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2661,23 +2311,7 @@ operators:
     - name: opt_custom
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -200]
       children:
       - name: desc
@@ -2691,7 +2325,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 28
           alignorder: 1
@@ -2722,7 +2355,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2773,23 +2405,7 @@ operators:
     - name: opt_gitroot
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       children:
       - name: desc
         type: textCOMP
@@ -2802,7 +2418,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 28
           alignorder: 1
@@ -2833,7 +2448,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -2884,23 +2498,7 @@ operators:
     - name: opt_projectfolder
       type: buttonCOMP
       parameters:
-        buttontype: radiodown
-        colorr: 0.2
-        colorg: 0.42
-        colorb: 0.28
         h: 58
-        bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
-        bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
-        bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
-        borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
-        borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
-        borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
-        leftborder: bordera
-        rightborder: bordera
-        bottomborder: bordera
-        topborder: bordera
-        align: verttb
-        spacing: 1
       position: [0, -100]
       children:
       - name: desc
@@ -2914,7 +2512,6 @@ operators:
           fontcolorg: 0.63
           fontcolorb: 0.62
           textoffsetx: 16
-          alignx: left
           aligny: top
           h: 28
           alignorder: 1
@@ -2945,7 +2542,6 @@ operators:
           textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
           textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
-          alignx: left
           aligny: bottom
           h: 28
           vmode: fill
@@ -3150,8 +2746,8 @@ operators:
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -3237,7 +2833,7 @@ operators:
   - tdn
   comp_inputs:
   - manager
-  tdn_ref: embody/Embody/windowHeader.tdn
+  palette_clone: true
 - name: window_wizard
   type: windowCOMP
   parameters:

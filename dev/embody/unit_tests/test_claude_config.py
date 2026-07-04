@@ -34,6 +34,23 @@ class TestClaudeConfig(EmbodyTestCase):
 	# Group A: Template DAT integrity
 	# ------------------------------------------------------------------
 
+	def test_A00_no_absolute_paths_in_panel_watchers(self):
+		"""No panelexecuteDAT inside Embody may watch ABSOLUTE op paths.
+
+		Absolute paths only resolve at the dev project's install location
+		(/embody/Embody); in a user project the tox lands at /Embody and the
+		watcher silently resolves to nothing -- every wizard/UI click dies
+		with no error. This shipped broken in v6.0.74-87 (the setup wizard's
+		Next button did nothing in user projects) because the dev project
+		masked it. Parameter op-paths must be relative, per rules/td-python.md.
+		"""
+		offenders = []
+		for d in self.embody_ext.my.findChildren(type=panelexecuteDAT, maxDepth=8):
+			raw = d.par.panels.val
+			if any(tok.startswith('/') for tok in raw.split()):
+				offenders.append(d.path)
+		self.assertListEqual(offenders, [])
+
 	def test_A01_rules_map_has_expected_entries(self):
 		"""_TEMPLATE_MAP_RULES should have at least 3 rule entries."""
 		self.assertGreaterEqual(len(self.embody_ext._TEMPLATE_MAP_RULES), 3)

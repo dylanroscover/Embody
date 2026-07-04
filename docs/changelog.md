@@ -1,5 +1,11 @@
 # Changelog
 
+## v6.0.88
+
+Setup-wizard hotfix on top of the v6.0.87 feature release (below): the wizard's buttons were dead in every user project.
+
+- **Setup wizard clicks work in user projects again.** The wizard's Panel Execute DAT watched 16 ABSOLUTE op paths (`/embody/Embody/wizard/...`) that only resolve in the dev project; in a user project the tox lands at `/Embody`, the watcher resolved to nothing, and Next/Back silently did nothing (no errors -- the Auto option still looked selected because it is a native radio latch). Broken since the wizard shipped in v6.0.74; masked in dev and never exercised by the smoke harness, caught by the first real Windows click-through. Now uses relative patterns, verified end-to-end with simulated real clicks, and guarded by a new regression test that forbids absolute paths in any Embody panel watcher.
+
 ## v6.0.87
 
 Envoy grows to 53 MCP tools with undoable edits, official TD docs lookup, numeric TOP sampling, tighter parameter/script guardrails, explicit transport hardening, and new POP-building guidance.
