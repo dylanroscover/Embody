@@ -7,7 +7,7 @@ hide:
 
 ### Create at the speed of thought
 
-Embody puts your ideas on screen as fast as you can describe them. Describe a network in plain language and watch it appear. Want to try a different direction? Spin up a new approach in seconds. Branch off the one that works. The tool keeps up with you, instead of the other way around.
+Embody puts a team of AI builders inside your live TouchDesigner project. Describe a network in plain language and it gets built — wired, named, annotated, and laid out while you direct. Run several agents in parallel, each scoped to its own part of the network. Branch off the version that works, restore yesterday's state. The tool keeps up with you, instead of the other way around.
 
 Embody is three tools working together — *forward velocity*, *lateral velocity*, and the substrate that makes both possible.
 
@@ -17,7 +17,7 @@ Embody is three tools working together — *forward velocity*, *lateral velocity
 
     ---
 
-    An embedded [MCP](https://modelcontextprotocol.io/) server with **52 tools** that lets Claude Code, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen. Idea → network in seconds.
+    An embedded [MCP](https://modelcontextprotocol.io/) server with **52 tools** that lets Claude Code, Codex, Gemini, Cursor, Windsurf, and GitHub Copilot via VS Code talk directly to your live TouchDesigner session. Say what you want — operators, connections, parameters, extensions, fixes — and watch it happen in your live session. Small changes can land in seconds, depending on your model; a complete network is a 5-20 minute autonomous build you can hand off, parallelize across sessions, and check back on.
 
     [:octicons-arrow-right-24: Setup Envoy](envoy/setup.md)
 
@@ -48,7 +48,7 @@ You and your AI assistant, in the same session, with full context of your live n
 | | Capability | Example |
 |---|-----------|---------|
 | :material-plus-circle: | **Build entire networks from a sentence** | "Build me a noise-driven particle system." |
-| :material-refresh: | **Try a different approach in seconds** | "Actually, make it react to audio instead." |
+| :material-refresh: | **Try a different approach without starting over** | "Actually, make it react to audio instead." |
 | :material-tune: | **Read & set any parameter** | "Set the noise frequency to match the audio input." |
 | :material-code-braces: | **Write extensions** | "Create an extension class that manages scene transitions." |
 | :material-bug: | **Debug errors** | "Why is my render chain producing a black output?" |
@@ -57,7 +57,7 @@ You and your AI assistant, in the same session, with full context of your live n
 | :material-annotation: | **Document networks** | "Add annotations to group and label these operators." |
 | :material-test-tube: | **Run tests** | "Run the test suite and fix any failures." |
 
-You describe what you want. The AI works with your live network — operators, connections, parameters, hierarchy — with the whole picture. The result is a network you can read, revert, and rebuild from text.
+You describe what you want. The AI works with your live network — operators, connections, parameters, hierarchy — with the whole picture. And you don't have to run just one: [multi-session coordination](envoy/multi-session.md) lets several assistants work the same project at once, each claiming its own scope, aware of the others, gated from collisions — an entire team on your network. The result is a network you can read, revert, and rebuild from text.
 
 [:octicons-arrow-right-24: Full tool reference](envoy/tools-reference.md)
 
@@ -67,8 +67,9 @@ You describe what you want. The AI works with your live network — operators, c
 
 | | Feature | Description |
 |---|---------|-------------|
-| :material-sync: | **Automated Externalization** | Tags COMPs and DATs, keeps external files in sync — auto-restores from disk on project open |
+| :material-sync: | **Automated Externalization** | Tag COMPs and DATs — or opt in to auto-tagging what the AI builds — and Embody keeps the external files in sync, auto-restoring from disk on project open |
 | :material-robot: | **Envoy MCP Server** | 52 tools connect AI assistants to your live TD session |
+| :material-account-group: | **Multi-Session Coordination** | Run several AI sessions on one project — scoped claims, peer advisories, and gated destructive operations |
 | :material-file-document: | **TDN Format** | Export/import operator networks as diffable YAML for code review and snapshots |
 | :material-keyboard: | **Keyboard Shortcuts** | Double-tap ++lctrl++ to tag, ++ctrl+shift+u++ to save — minimal friction |
 | :material-cog: | **Parameter Tracking** | Automatically detects parameter changes and marks COMPs dirty |

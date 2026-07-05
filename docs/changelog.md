@@ -1,5 +1,18 @@
 # Changelog
 
+## v6.0.104
+
+Docked operators now hug their hosts mechanically -- dock placement moved from written guidance into the Envoy tool layer -- plus a docs transparency pass and the first Specimen brief set.
+
+- **Docked companions auto-hug their host.** `create_op` and `copy_op` now snap every docked companion an operator spawns (GLSL pixel/compute/info DATs, callback DATs) into a tight row 30 units below the host, centered, slots dock-width+20 apart (`docks_placed` in the result). `set_op_position` carries a host's docks along when you move it (`docks_moved`), so repositioning a GLSL TOP no longer strands its shader DATs -- the #1 way scattered docks actually happened. The auto-positioner also reserves the dock-row footprint, so a new host lands where its companions fit too.
+- **`execute_python` auto-fix + tighter lint.** Docks of newly-created ops left scattered by a script are auto-hugged below their host before the layout lint runs (a `LAYOUT WARNING` reports the fix); deliberate near-host placements are left alone. The scattered-dock lint threshold tightened from 500 to 350 units -- the old threshold let visibly-stranded docks (~400u away) pass silently.
+- **`get_network_layout` reports `dockedTo`.** Docked companions carry their host's name, so the layout Verify step can check "every dock hugs its host" mechanically instead of by eyeball.
+- **Skills/rules/templates synced**: the create-operator skill gains an explicit docked-companions step and Verify item, network-layout.md documents the tool-layer enforcement (manual formula now scoped to `execute_python` builds), mcp-tools-reference rows updated -- all three shipped templates regenerated and normalized to UTF-8/LF/no-BOM.
+- **Docs transparency pass**: honest build-time expectations (small changes in seconds, complete networks are 5-20 minute autonomous builds; multi-session parallelism as the real velocity story) across the landing page, manifesto, and quickstart; **Auto-Externalize New Ops** and **Tool Permissions** parameter documentation; Launch AI Client as the primary quickstart path; button-hover contrast and footer-spacing CSS fixes.
+- **Specimen briefs** land in `dev/specimen-briefs/` -- the authoring contract plus five briefs (point-line-plane, overture, digital-harmony, lumia, radiolaria) for the Specimen Collection gallery.
+- `.gitignore` now covers `.embody/` config dirs at any depth (machine-local catalogs/manifests no longer show as untracked).
+- `test_layout_lint` grows 11 -> 16 tests (hug formula, dock-follow, dock-self-move, `execute_python` auto-hug, 350 boundary). **88 suites / 1,977 tests.**
+
 ## v6.0.103
 
 A "How should the AI ask permission?" step in the setup wizard so you choose your Claude Code tool-permission posture -- plus the wizard itself is now externalized to TDN.

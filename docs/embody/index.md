@@ -11,7 +11,7 @@ A `.toe` file is a black box. You can open it in TD and change things. You can s
 - **Let an AI read it** — without Embody, your AI assistant has no way to inspect what's inside your network. It can describe what *might* be there, but it cannot see what *is*
 - **Review it in a pull request** — a changed `.toe` shows up as a binary blob. There's nothing to review.
 
-Embody solves this by externalizing your operators to files — `.py`, `.tox`, `.tdn`, `.json` — that live in a folder structure mirroring your network hierarchy. Edit those files with your editor or an AI agent instead of wrestling a binary blob. Put them under version control and you have branching, diffing, and history for your TouchDesigner network.
+Embody solves this by externalizing the operators you tag to files — `.py`, `.tox`, `.tdn`, `.json` — that live in a folder structure mirroring your network hierarchy. Edit those files with your editor or an AI agent instead of wrestling a binary blob. Put them under version control and you have branching, diffing, and history for your TouchDesigner network.
 
 ## Key Design Principles
 

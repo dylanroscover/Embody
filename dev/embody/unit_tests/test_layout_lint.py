@@ -16,9 +16,13 @@ Source contracts (EnvoyExt.py, verified):
     - docked DATs are excluded from 'main'
     - >= 2 main ops at (0,0)        -> '<N> ops stacked at (0,0): <names>'
     - AABB-overlapping main pairs   -> '<N> overlapping op pair(s)'  (only when n <= 80)
-    - docked DAT with abs(dX-hostX) > 500 OR abs(dY-hostY) > 500
+    - docked DAT with abs(dX-hostX) > 350 OR abs(dY-hostY) > 350
                                     -> '<N> docked DAT(s) scattered far from host'
-  _lintNewOps(pre_paths): finds new parents, lints each, _log(...) per issue set.
+  _lintNewOps(pre_paths): auto-hugs scattered docks of NEW ops via
+    _placeDockedOps (logs a WARNING naming the fix), then finds new parents,
+    lints each, _log(...) per issue set.
+  _placeDockedOps(host) -> int: snaps same-network docks into a row 30 below
+    the host's bottom edge, slots dock-width+20 apart, centered under the host.
   _execute_python(code): snapshots pre_paths, exec(code), _lintNewOps(pre_paths).
 
 _log signature: _log(self, message, level='INFO') -> op.Embody.Log(message, level, _depth=2)
@@ -132,7 +136,7 @@ class TestLayoutLint(EmbodyTestCase):
                          f'Clean layout should produce no issues, got {issues!r}')
 
     # -----------------------------------------------------------------
-    # _lintLayout: scattered docked DAT (> 500u boundary)
+    # _lintLayout: scattered docked DAT (> 350u boundary)
     # -----------------------------------------------------------------
 
     def _dock(self, host, dat):
@@ -145,7 +149,7 @@ class TestLayoutLint(EmbodyTestCase):
             self.skip('docking did not register dat in host.docked')
 
     def test_scattered_docked_dat_reports_scattered(self):
-        """A docked DAT forced > 500u from its host -> a 'scattered' issue."""
+        """A docked DAT forced > 350u from its host -> a 'scattered' issue."""
         host = self.sandbox.create(textDAT, 'host_scatter')
         dat = self.sandbox.create(textDAT, 'dock_scatter')
         self._place(host, 0, 0, 120, 120)
@@ -159,31 +163,148 @@ class TestLayoutLint(EmbodyTestCase):
                          f'Expected one scattered issue, got {issues!r}')
         self.assertIn('1 docked DAT(s) scattered far from host', scattered[0])
 
-    def test_scatter_boundary_500_clean(self):
-        """Boundary: dX == 500 is NOT scattered (the check is strictly > 500)."""
-        host = self.sandbox.create(textDAT, 'host_b500')
-        dat = self.sandbox.create(textDAT, 'dock_b500')
+    def test_scatter_boundary_350_clean(self):
+        """Boundary: dX == 350 is NOT scattered (the check is strictly > 350)."""
+        host = self.sandbox.create(textDAT, 'host_b350')
+        dat = self.sandbox.create(textDAT, 'dock_b350')
         self._place(host, 0, 0, 120, 120)
         self._dock(host, dat)
-        # Exactly 500u offset -> abs(dX-hostX) == 500, 500 > 500 is False -> clean.
-        self._place(dat, 500, 0, 120, 120)
+        # Exactly 350u offset -> abs(dX-hostX) == 350, 350 > 350 is False -> clean.
+        self._place(dat, 350, 0, 120, 120)
 
         issues = self.envoy._lintLayout(self.sandbox)
         self.assertEqual([s for s in issues if 'scattered far from host' in s], [],
-                         f'dX==500 must be clean, got {issues!r}')
+                         f'dX==350 must be clean, got {issues!r}')
 
-    def test_scatter_boundary_501_trips(self):
-        """Boundary: dX == 501 trips (501 > 500 is True -> scattered)."""
-        host = self.sandbox.create(textDAT, 'host_b501')
-        dat = self.sandbox.create(textDAT, 'dock_b501')
+    def test_scatter_boundary_351_trips(self):
+        """Boundary: dX == 351 trips (351 > 350 is True -> scattered)."""
+        host = self.sandbox.create(textDAT, 'host_b351')
+        dat = self.sandbox.create(textDAT, 'dock_b351')
         self._place(host, 0, 0, 120, 120)
         self._dock(host, dat)
-        self._place(dat, 501, 0, 120, 120)
+        self._place(dat, 351, 0, 120, 120)
 
         issues = self.envoy._lintLayout(self.sandbox)
         scattered = [s for s in issues if 'scattered far from host' in s]
         self.assertEqual(len(scattered), 1,
-                         f'dX==501 must trip scattered, got {issues!r}')
+                         f'dX==351 must trip scattered, got {issues!r}')
+
+    # -----------------------------------------------------------------
+    # _placeDockedOps: the hug formula
+    # -----------------------------------------------------------------
+
+    def test_place_docked_ops_hugs_single_dock_below_host(self):
+        """One dock -> centered directly below the host, 30u below its bottom edge."""
+        host = self.sandbox.create(textDAT, 'hug_host')
+        dat = self.sandbox.create(textDAT, 'hug_dock')
+        self._place(host, 400, 600, 120, 120)
+        self._dock(host, dat)
+        self._place(dat, 2000, -2000, 130, 130)   # stranded far away
+
+        n = self.envoy._placeDockedOps(host)
+
+        self.assertEqual(n, 1, 'one dock should be placed')
+        # row_y = hostY - dh - 30 = 600 - 130 - 30 = 440
+        self.assertEqual(dat.nodeY, 440,
+                         f'dock must sit 30u below host bottom, got nodeY={dat.nodeY}')
+        # centered: cx = 400 + 60 = 460; nodeX = cx - dw/2 = 460 - 65 = 395
+        self.assertEqual(dat.nodeX, 395,
+                         f'dock must be centered under host, got nodeX={dat.nodeX}')
+
+    def test_place_docked_ops_rows_two_docks_tight(self):
+        """Two docks -> one tight row, slots dw+20 apart, centered under host."""
+        host = self.sandbox.create(textDAT, 'hug2_host')
+        d1 = self.sandbox.create(textDAT, 'hug2_a')
+        d2 = self.sandbox.create(textDAT, 'hug2_b')
+        self._place(host, 0, 0, 120, 120)
+        self._dock(host, d1)
+        self._dock(host, d2)
+        self._place(d1, 900, 900, 130, 130)
+        self._place(d2, -900, -900, 130, 130)
+
+        n = self.envoy._placeDockedOps(host)
+
+        self.assertEqual(n, 2)
+        # Both in the hug row (row_y = 0 - 130 - 30 = -160), step = 150 apart.
+        self.assertEqual(d1.nodeY, -160)
+        self.assertEqual(d2.nodeY, -160)
+        self.assertEqual(abs(d2.nodeX - d1.nodeX), 150,
+                         'slots must be dock-width + 20 apart')
+        # And the row passes the scatter lint (it hugs).
+        issues = self.envoy._lintLayout(self.sandbox)
+        self.assertEqual([s for s in issues if 'scattered' in s], [],
+                         f'hugged row must not lint as scattered, got {issues!r}')
+
+    def test_place_docked_ops_no_docks_returns_zero(self):
+        """An op with no docked companions -> 0, nothing raises."""
+        host = self.sandbox.create(textDAT, 'hug0_host')
+        self._place(host, 0, 0, 120, 120)
+        self.assertEqual(self.envoy._placeDockedOps(host), 0)
+
+    # -----------------------------------------------------------------
+    # Tool paths: create_op result + set_op_position dock-follow
+    # -----------------------------------------------------------------
+
+    def test_set_op_position_carries_docks_along(self):
+        """Moving a host via _set_op_position re-hugs its docks at the new spot."""
+        host = self.sandbox.create(textDAT, 'move_host')
+        dat = self.sandbox.create(textDAT, 'move_dock')
+        self._place(host, 0, 0, 120, 120)
+        self._dock(host, dat)
+        self.envoy._placeDockedOps(host)   # hugged at the origin position
+
+        result = self.envoy._set_op_position(host.path, x=1000, y=800)
+
+        self.assertNotIn('error', result, f'set_op_position failed: {result!r}')
+        self.assertEqual(result.get('docks_moved'), 1,
+                         f'result must report docks_moved, got {result!r}')
+        self.assertEqual(dat.nodeY, 800 - dat.nodeHeight - 30,
+                         'dock must re-hug below the NEW host position')
+        self.assertLessEqual(abs(dat.nodeX - host.nodeX), 350,
+                             'dock must travel with the host horizontally')
+
+    def test_set_op_position_dock_itself_untouched(self):
+        """Moving a DOCK explicitly must not trigger any follow logic on it."""
+        host = self.sandbox.create(textDAT, 'still_host')
+        dat = self.sandbox.create(textDAT, 'still_dock')
+        self._place(host, 0, 0, 120, 120)
+        self._dock(host, dat)
+
+        result = self.envoy._set_op_position(dat.path, x=777, y=333)
+
+        self.assertNotIn('error', result)
+        self.assertNotIn('docks_moved', result,
+                         'a dock has no docks of its own; no follow expected')
+        self.assertEqual((dat.nodeX, dat.nodeY), (777, 333),
+                         'explicit dock placement must be honored')
+
+    def test_execute_python_scattered_new_dock_auto_hugged(self):
+        """execute_python creating a host + scattered dock -> dock auto-hugged
+        below the host and a WARNING names the auto-hug fix."""
+        self._patch_log()
+        sandbox_path = self.sandbox.path
+        code = (
+            "host = op('%s')\n"
+            "h = host.create(textDAT, 'ep_hug_host')\n"
+            "d = host.create(textDAT, 'ep_hug_dock')\n"
+            "h.nodeX = 200; h.nodeY = 200\n"
+            "d.dock = h\n"
+            "d.nodeX = 1400; d.nodeY = -1400\n"
+        ) % sandbox_path
+
+        result = self.envoy._execute_python(code)
+        self.assertTrue(result.get('success'),
+                        f'execute_python should succeed, got {result!r}')
+
+        h = self.sandbox.op('ep_hug_host')
+        d = self.sandbox.op('ep_hug_dock')
+        if d.path not in [x.path for x in h.docked]:
+            self.skip('docking did not register in this TD build')
+        self.assertEqual(d.nodeY, h.nodeY - d.nodeHeight - 30,
+                         f'scattered new dock must be auto-hugged, got nodeY={d.nodeY}')
+        hug_msgs = [m for m in self._warnings() if 'auto-hugged' in m]
+        self.assertGreaterEqual(len(hug_msgs), 1,
+                                f'expected an auto-hug WARNING, got {self._log_calls!r}')
 
     # -----------------------------------------------------------------
     # _lintLayout: guards

@@ -1,4 +1,4 @@
-﻿---
+---
 name: create-operator
 description: "MUST READ before calling create_op. Contains required verification, positioning, and error-checking steps."
 ---
@@ -13,12 +13,13 @@ Follow these steps every time you create operators via MCP:
 3. **Scan existing layout**: Use `get_network_layout` on the parent COMP. Note each operator's `nodeX`, `nodeY`, `nodeWidth`, and `nodeHeight` — operators vary in size (100–300+ units wide)
 4. **Plan positions BEFORE creating**: Batch-compute grid-aligned positions for ALL operators you intend to create. Signal flow is left-to-right: inputs on the left, outputs on the right. Supporting operators (DATs feeding a TOP, CHOPs feeding parameters) go to the left of or below the operator they feed. Snap all coordinates to the 200-unit grid. See the Positioning Rules section below.
 5. **Create each operator**: `create_op` with the desired type and name
-6. **Position each operator**: `set_op_position` to place it at the pre-computed grid position. Auto-placement is NOT acceptable — it produces messy, unreadable networks. You MUST explicitly position every operator you create.
-7. **Connect**: `connect_ops` to wire inputs/outputs. Wires must flow left-to-right (positive X). If a wire would go backward, the downstream op is misplaced — reposition it.
-8. **Set OP-reference parameters with relative paths**: If the operator has parameters referencing other operators (Camera, Geometry, Lights, TOP, CHOP, etc.), use sibling names (`cam`) or relative paths (`../shared/lut`) — NEVER absolute paths (`/project1/scene/cam`). See `parameters.md` § OP-Reference Parameter Values.
-9. **Verify layout**: Call `get_network_layout` again. Confirm no overlaps, grid alignment is intact, and signal flows left-to-right.
-10. **Verify errors**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete
-11. **Visual verification**: For any renderable result (a TOP chain or a render), capture the output TOP with `capture_top` and confirm it actually renders (not black) and matches intent; for a 3D render, confirm a camera, a light, and geometry display/render flags are present. For anything but a trivial op, load the `/visual-aesthetics` skill to judge composition/value/color/contrast.
+6. **Position each operator**: `set_op_position` to place it at the pre-computed grid position. Auto-placement is NOT acceptable — it produces messy, unreadable networks. You MUST explicitly position every operator you create. Moving a host via `set_op_position` carries its docked companions along (re-hugged below the new spot, reported as `docks_moved`), so position the host FIRST and any deliberately-placed dock after.
+7. **Docked companions (callback/shader/info DATs)**: `create_op`, `copy_op`, and `set_op_position` auto-hug every docked op in a tight row ~30 units below its host (`docks_placed` / `docks_moved` in the result) — do not re-plan grid slots for them. Ops created inside `execute_python` get NO such placement at create time (Envoy only auto-hugs badly scattered docks after the call, with a `LAYOUT WARNING`); if you create dock-spawning ops (GLSL TOP/MAT, execute DATs, OSC in/out) in a script, place their docks yourself per `network-layout.md` § Docked Callback DATs.
+8. **Connect**: `connect_ops` to wire inputs/outputs. Wires must flow left-to-right (positive X). If a wire would go backward, the downstream op is misplaced — reposition it.
+9. **Set OP-reference parameters with relative paths**: If the operator has parameters referencing other operators (Camera, Geometry, Lights, TOP, CHOP, etc.), use sibling names (`cam`) or relative paths (`../shared/lut`) — NEVER absolute paths (`/project1/scene/cam`). See `parameters.md` § OP-Reference Parameter Values.
+10. **Verify layout**: Call `get_network_layout` again. Confirm no overlaps, grid alignment is intact, signal flows left-to-right, and every entry carrying `dockedTo` sits in a tight row just below its named host (docked ops are the one exception to 200-grid spacing — they hug).
+11. **Verify errors**: `get_op_errors` with `recurse=true` to check for errors and warnings. Fix all errors before considering the task complete
+12. **Visual verification**: For any renderable result (a TOP chain or a render), capture the output TOP with `capture_top` and confirm it actually renders (not black) and matches intent; for a 3D render, confirm a camera, a light, and geometry display/render flags are present. For anything but a trivial op, load the `/visual-aesthetics` skill to judge composition/value/color/contrast.
 
 ## Operator Type Preferences
 
@@ -40,4 +41,5 @@ Follow these steps every time you create operators via MCP:
 - NEVER place an operator on top of another operator — always scan first
 - Never rely on `layout()` for production networks
 - New operators go near related operators, not at origin
+- Docked companions hug their host (~30 units below, never a full grid step away). The MCP tools enforce this; after any `execute_python` build, check every `dockedTo` entry in `get_network_layout` yourself
 - For current network location: `execute_python` with `result = ui.panes.current.owner.path`

@@ -432,6 +432,10 @@ class EnvoyMCPServer:
             """
             Create a new operator in TouchDesigner.
 
+            Auto-positions the new op clear of siblings, and snaps any docked
+            companions it spawns (callback/shader/info DATs) into a tight row
+            hugging the host's bottom edge (docks_placed in the result).
+
             Args:
                 parent_path: Path to parent COMP (e.g., "/project1" or "/project1/base1")
                 op_type: Operator type (e.g., "baseCOMP", "noiseTOP", "waveCHOP", "textDAT")
@@ -617,6 +621,9 @@ class EnvoyMCPServer:
         def copy_op(source_path: str, dest_parent: str, new_name: str = None) -> dict:
             """
             Copy an operator to a new location.
+
+            Auto-positions the copy clear of siblings and re-hugs its docked
+            companions below it (docks_placed in the result).
 
             Args:
                 source_path: Path to operator to copy
@@ -975,7 +982,9 @@ class EnvoyMCPServer:
 
             Returns:
                 Dict with operator path/type/nodeX/nodeY/nodeWidth/nodeHeight;
-                centers are nodeX+nodeWidth/2 and nodeY+nodeHeight/2
+                centers are nodeX+nodeWidth/2 and nodeY+nodeHeight/2. Docked
+                companions carry dockedTo (their host's name) so the Verify
+                step can confirm every dock hugs its host.
             """
             return self._execute_in_td('get_network_layout', {
                 'comp_path': comp_path,
@@ -988,6 +997,10 @@ class EnvoyMCPServer:
                            color: list = None, comment: str = None) -> dict:
             """
             Set an operator's position, size, color, or comment in the network editor.
+
+            Moving an op carries its docked companions along: they are re-hugged
+            in a tight row below the new position (docks_moved in the result).
+            Position the host FIRST if you also plan to place a dock explicitly.
 
             Args:
                 op_path: Path to the operator
@@ -5257,6 +5270,7 @@ class EnvoyExt:
             # op_type can be a string like 'baseCOMP', 'noiseTOP', etc.
             new_op = parent.create(op_type, name) if name else parent.create(op_type)
             self._find_non_overlapping_position(parent, new_op)
+            docks_placed = self._placeDockedOps(new_op)
             # Auto-externalize per the Envoy 'Autoexternalize' preference. create_op
             # is the single creation chokepoint, so tagging here removes the LLM from
             # the externalization decision entirely. Additive + boundary-scoped;
@@ -5275,6 +5289,8 @@ class EnvoyExt:
                 'nodeX': new_op.nodeX,
                 'nodeY': new_op.nodeY
             }
+            if docks_placed:
+                result['docks_placed'] = docks_placed
             if auto_tag:
                 result['externalized'] = auto_tag
             return result
@@ -5776,6 +5792,7 @@ class EnvoyExt:
         try:
             new_op = dest.copy(source, name=new_name) if new_name else dest.copy(source)
             self._find_non_overlapping_position(dest, new_op)
+            docks_placed = self._placeDockedOps(new_op)
             # Auto-externalize the COPY per the Autoexternalize preference. The
             # copied-op path clears externalization state inherited from the
             # source (tags + file refs) so the copy is externalized fresh at its
@@ -5793,6 +5810,8 @@ class EnvoyExt:
                 'nodeX': new_op.nodeX,
                 'nodeY': new_op.nodeY
             }
+            if docks_placed:
+                result['docks_placed'] = docks_placed
             if auto_tag:
                 result['externalized'] = auto_tag
             return result
@@ -5881,8 +5900,11 @@ class EnvoyExt:
                         ov += 1
             if ov:
                 issues.append('%d overlapping op pair(s)' % ov)
+        # Hug-scale threshold: a conforming dock row (network-layout.md) stays
+        # within ~350u of its host on both axes even for a 4-dock glslmultiTOP;
+        # anything past that is stranded, not docked.
         scattered = sum(1 for c in main for d in getattr(c, 'docked', ())
-                        if abs(d.nodeX - c.nodeX) > 500 or abs(d.nodeY - c.nodeY) > 500)
+                        if abs(d.nodeX - c.nodeX) > 350 or abs(d.nodeY - c.nodeY) > 350)
         if scattered:
             issues.append('%d docked DAT(s) scattered far from host' % scattered)
         return issues
@@ -5904,6 +5926,22 @@ class EnvoyExt:
                 par = o.parent()
                 if par is not None:
                     new_parents.setdefault(par.path, par)
+            # Auto-hug scattered docks of ops created by THIS call before
+            # linting: TD drops a new host's shader/callback/info DATs at
+            # arbitrary coordinates, and raw comp.create() never fixes them.
+            # Only scattered rows are touched, so a deliberate near-host
+            # placement (e.g. docks to the host's right) is left alone.
+            hugged = 0
+            for o in new_ops:
+                docks = self._sameNetworkDocks(o)
+                if docks and any(abs(d.nodeX - o.nodeX) > 350
+                                 or abs(d.nodeY - o.nodeY) > 350 for d in docks):
+                    hugged += self._placeDockedOps(o)
+            if hugged:
+                self._log(
+                    'LAYOUT: auto-hugged %d scattered docked op(s) below their '
+                    'newly-created host(s); re-run get_network_layout if you '
+                    'planned positions around them.' % hugged, 'WARNING')
             for par in new_parents.values():
                 issues = self._lintLayout(par)
                 if issues:
@@ -6773,24 +6811,85 @@ class EnvoyExt:
 
     # === Node Positioning & Layout (Main Thread Only) ===
 
+    def _sameNetworkDocks(self, host):
+        """Docked companions of `host` that live in host's OWN network (an
+        extension code DAT docked from INSIDE a COMP renders elsewhere and
+        must never be repositioned by parent-network coordinates)."""
+        try:
+            host_parent = host.parent()
+            if host_parent is None:
+                return []
+            parent_path = host_parent.path
+            return [d for d in getattr(host, 'docked', ())
+                    if d.valid and d.parent() is not None
+                    and d.parent().path == parent_path]
+        except Exception:
+            return []
+
+    def _placeDockedOps(self, host):
+        """Snap every docked companion (callback/shader/info DATs) into a
+        tight row hugging the host's bottom edge, per network-layout.md:
+        row 30 below the host, slots dock-width+20 apart, centered under
+        the host. TD spawns docked ops at arbitrary coordinates and leaves
+        them behind when their host moves, so the tool layer re-hugs them
+        instead of relying on the caller. Returns the number placed."""
+        docks = self._sameNetworkDocks(host)
+        if not docks:
+            return 0
+        try:
+            dw = max(d.nodeWidth for d in docks)
+            dh = max(d.nodeHeight for d in docks)
+            step = dw + 20
+            row_y = host.nodeY - dh - 30
+            cx = host.nodeX + host.nodeWidth / 2.0
+            n = len(docks)
+            for i, d in enumerate(docks):
+                d.nodeX = int(cx + (i - (n - 1) / 2.0) * step - dw / 2.0)
+                d.nodeY = int(row_y)
+            return n
+        except Exception:
+            return 0
+
     def _find_non_overlapping_position(self, parent, new_op):
-        """Reposition new_op so it doesn't overlap any sibling in the parent COMP."""
+        """Reposition new_op so it doesn't overlap any sibling in the parent
+        COMP. The candidate footprint is widened to include the hug row that
+        _placeDockedOps hangs below the op, so a host with docked companions
+        lands where the docks also fit."""
         MARGIN = 20
 
-        siblings = [child for child in parent.children if child.path != new_op.path]
+        own_docks = self._sameNetworkDocks(new_op)
+        own_dock_paths = {d.path for d in own_docks}
+        siblings = [child for child in parent.children
+                    if child.path != new_op.path
+                    and child.path not in own_dock_paths]
         if not siblings:
             return  # No siblings -- default position is fine
 
         w = new_op.nodeWidth
         h = new_op.nodeHeight
 
+        # Reserve the dock hug row below (and centered under) the host.
+        extra_below = 0
+        extra_side = 0
+        if own_docks:
+            dw = max(d.nodeWidth for d in own_docks)
+            dh = max(d.nodeHeight for d in own_docks)
+            extra_below = dh + 30
+            row_w = len(own_docks) * (dw + 20)
+            if row_w > w:
+                extra_side = (row_w - w) / 2.0
+
         # Collect sibling bounding rectangles
         rects = [(s.nodeX, s.nodeY, s.nodeWidth, s.nodeHeight) for s in siblings]
 
         def has_overlap(x, y):
+            x0 = x - extra_side
+            y0 = y - extra_below
+            fw = w + 2 * extra_side
+            fh = h + extra_below
             for (sx, sy, sw, sh) in rects:
-                if (x < sx + sw + MARGIN and x + w + MARGIN > sx and
-                        y < sy + sh + MARGIN and y + h + MARGIN > sy):
+                if (x0 < sx + sw + MARGIN and x0 + fw + MARGIN > sx and
+                        y0 < sy + sh + MARGIN and y0 + fh + MARGIN > sy):
                     return True
             return False
 
@@ -6798,9 +6897,9 @@ class EnvoyExt:
         if not has_overlap(new_op.nodeX, new_op.nodeY):
             return
 
-        # Grid scan: cell size = op dimensions + margin
-        step_x = w + MARGIN
-        step_y = h + MARGIN
+        # Grid scan: cell size = op footprint + margin
+        step_x = w + 2 * extra_side + MARGIN
+        step_y = h + extra_below + MARGIN
 
         # Start from top-left corner of existing layout
         origin_x = min(r[0] for r in rects)
@@ -6858,6 +6957,15 @@ class EnvoyExt:
                     'nodeWidth': child.nodeWidth,
                     'nodeHeight': child.nodeHeight,
                 }
+                # Surface dock relationships so the layout Verify step can
+                # check "every docked op hugs its host" mechanically.
+                try:
+                    dock_host = child.dock
+                    if (dock_host is not None and dock_host.parent() is not None
+                            and dock_host.parent().path == parent_op.path):
+                        entry['dockedTo'] = dock_host.name
+                except Exception:
+                    pass
                 operators.append(entry)
                 min_x = min(min_x, child.nodeX)
                 min_y = min(min_y, child.nodeY)
@@ -6925,15 +7033,27 @@ class EnvoyExt:
             if comment is not None:
                 target.comment = comment
 
+            # Docked companions follow their host: re-hug them below the new
+            # position so a repositioned GLSL TOP / callback host never leaves
+            # its shader/callback/info DATs stranded at the old spot.
+            docks_moved = 0
+            if x is not None or y is not None:
+                docks_moved = self._placeDockedOps(target)
+
             result = self._get_op_position(op_path)
+            if docks_moved:
+                result['docks_moved'] = docks_moved
 
             # Check for overlaps with siblings after repositioning
             if (x is not None or y is not None) and target.parent():
                 MARGIN = 20
                 overlaps = []
+                own_dock_paths = {d.path for d in self._sameNetworkDocks(target)}
                 tx, ty, tw, th = target.nodeX, target.nodeY, target.nodeWidth, target.nodeHeight
                 for sibling in target.parent().children:
                     if sibling.path == target.path:
+                        continue
+                    if sibling.path in own_dock_paths:
                         continue
                     sx, sy, sw, sh = sibling.nodeX, sibling.nodeY, sibling.nodeWidth, sibling.nodeHeight
                     if (tx < sx + sw + MARGIN and tx + tw + MARGIN > sx and

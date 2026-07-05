@@ -56,13 +56,14 @@ Clicked **Skip**, or want to turn Envoy off later? Toggle the **Envoy Enable** p
 
 ## Step 5 — Open your AI assistant and start talking
 
-**Keep TouchDesigner open** — your AI assistant talks to the live session. Now open your AI assistant in the **same folder as your `.toe`** and start a new chat:
+**Keep TouchDesigner open** — your AI assistant talks to the live session.
+
+The easiest way in is the **Launch AI Client** button: on the Embody component's **Envoy** parameter page, set the **AI Client** menu to your assistant, then click **Launch AI Client**. Embody opens the client (an editor as a workspace, or a CLI in a new terminal) already pointed at your project root — and if the client isn't installed yet, it prompts you with instructions to install it first.
+
+Prefer to open it yourself? Open your AI assistant in the **same folder as your `.toe`** and start a new chat:
 
 - **Claude Code** (the fully auto-configured path): open that folder — `File → Open Folder` in the desktop or VS Code app, or `cd` into it and run `claude` in a terminal — then start a session. It detects the `.mcp.json` Envoy generated and connects on its own.
 - **Cursor or Windsurf**: open the same folder; you may need to point it at the generated `.mcp.json` yourself — see [Envoy Setup](envoy/setup.md#manual-configuration).
-
-!!! tip "One-click launch"
-    Set the **AI Client** menu on the Embody component to your assistant, then pulse the **Launch AI Client** parameter — Embody opens the client (an editor as a workspace, or a CLI in a new terminal) already pointed at your project root.
 
 Now just say what you want. Try this:
 
@@ -78,6 +79,9 @@ Now make it react to audio, slow it down, and add a bloom on the final output.
 
 You're not getting a screenshot or a code snippet to paste. You're getting the **actual network**, in front of you, ready to play with.
 
+!!! info "How long does a build take?"
+    Small things — a parameter change, a fix, a question about your network — can land in seconds. A complete network is a real build: the AI reads your project, plans, creates, wires, and verifies its work, which typically takes **5-20 minutes** of autonomous effort, depending on your model and compute. You don't have to watch it, and you don't have to run just one: Envoy [coordinates multiple AI sessions](envoy/multi-session.md) on the same project, each scoped to its own part of the network. Less like waiting on a genie, more like directing a team.
+
 !!! tip "Confirm the connection"
     If your assistant doesn't seem to see TouchDesigner, ask it to *"list all operators in the project."* If that comes back empty or errors, check that **Envoy Enable** is on and that you started the AI session **after** enabling it. Still stuck? See [Envoy Troubleshooting](envoy/troubleshooting.md).
 
@@ -85,11 +89,16 @@ You're not getting a screenshot or a code snippet to paste. You're getting the *
 
 ## What you got for free
 
-While you were building, Embody was quietly doing the other half of its job: **every operator can be saved to disk as readable text**. That means every version of your network is something you can diff, review, restore, and hand back to the AI later — no binary black box, no lock-in.
+Embody's other job is making your network **version-controllable**: any COMP or DAT can be saved to disk as readable text — something you can diff, review, restore, and hand back to the AI later. No binary black box, no lock-in.
 
-To tag an operator for externalization, select it and press ++lctrl++ twice. To save your changes, press ++ctrl+shift+u++. On the next project open, everything restores from disk automatically.
+Externalization is **opt-in** — nothing is written to disk until you choose. Two ways to opt in:
 
-That's the whole loop — generate, compare, revert, branch — and it all runs at the speed of typing.
+- **Tag operators yourself**: select one and press ++lctrl++ twice.
+- **Auto-externalize what the AI builds**: set the **Auto-Externalize New Ops** parameter (Embody component → **Envoy** page) to `DATs`, `COMPs`, or `DATs and COMPs`. New operators your assistant creates through Envoy are then tagged and externalized automatically. The default is `Neither`.
+
+To save your changes, press ++ctrl+shift+u++. On the next project open, everything tagged restores from disk automatically.
+
+That's the whole loop — generate, compare, revert, branch. The lateral moves run at the speed of typing; the generating you delegate and come back to.
 
 !!! tip "Here for version control, not AI?"
     You can skip Envoy entirely and use Embody as a pure externalization engine — every operator diffable on disk, no AI involved. See [Getting Started](embody/getting-started.md) for that workflow.
