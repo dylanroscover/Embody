@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 721
-generator: Embody/6.0.104
+build: 740
+generator: Embody/6.0.105
 td_build: 099.2025.32820
-source_file: Embody-6.104.toe
-exported_at: '2026-07-06T04:45:05Z'
+source_file: Embody-6.105.toe
+exported_at: '2026-07-06T08:20:21Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -266,7 +266,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 04:45:04 UTC
+    value: Saved 08:17:06 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -406,7 +406,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-    value: Running on port 9870
+    value: Starting...
   Logs:
   - name: Verbose
     style: Toggle
@@ -601,7 +601,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: keep
+    value: delete
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -616,6 +616,7 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
+    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -635,7 +636,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.104
+    value: 6.0.105
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -652,7 +653,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 721
+    value: 740
   - name: Github
     style: Pulse
     label: GitHub
@@ -663,7 +664,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-06 04:19:23 UTC
+    value: 2026-07-06 08:20:21 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -714,15 +715,10 @@ storage:
   _start_in_progress: true
   git_status:
     /embody/externalizations: ' M'
-    /embody/Embody/EnvoyExt: ' M'
+    /embody/unit_tests/test_sandbox: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
-    /embody/Embody/envoy_layout: ??
-    /embody/Embody/envoy_viz: ??
-    /embody/Embody/envoy_ops: ??
-    /embody/Embody/envoy_read: ??
-    /embody/Embody/envoy_setup: ??
-  _watchdog_gen: 761
+  _watchdog_gen: 794
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -864,7 +860,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 526
+  _clip_watch_gen: 559
   _init_complete: true
 operators:
 - name: help
@@ -917,7 +913,7 @@ operators:
     callbacks: fifo1_callbacks
     fromop: =parent()
     maxlines: 100
-  position: [-700, 400]
+  position: [-275, 200]
   size: [130, 90]
   color: [0.67, 0.67, 0.67]
 - name: null2
@@ -933,7 +929,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/TDNExt.py
-  position: [-300, 400]
+  position: [-700, 600]
   tags:
   - py
 - name: tagger
@@ -1011,7 +1007,7 @@ operators:
     language: input
   flags:
   - display
-  position: [-300, 200]
+  position: [-700, 200]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1052,7 +1048,7 @@ operators:
     defaultreadencoding: cp1252
     syncfile: true
     language: input
-  position: [-300, 100]
+  position: [-700, 100]
   size: [130, 90]
   color: [0.9, 0.3, 0.4]
   tags:
@@ -1115,7 +1111,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/EnvoyExt.py
-  position: [-300, 500]
+  position: [-700, 700]
   tags:
   - TDExtension
   - py
@@ -1134,7 +1130,7 @@ operators:
     file: embody/Embody/EmbodyExt.py
     defaultreadencoding: cp1252
     extension: py
-  position: [-300, 600]
+  position: [-700, 800]
   tags:
   - py
 - name: envoy_ops
@@ -1345,7 +1341,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/fifo1_callbacks.py
-  position: [-700, 300]
+  position: [-275, 100]
   tags:
   - py
   dock: fifo1
@@ -1367,7 +1363,7 @@ operators:
   type: textDAT
   parameters:
     file: embody/Embody/CatalogManagerExt.py
-  position: [-300, 300]
+  position: [-700, 500]
   tags:
   - py
 - name: divergent_defaults
@@ -1437,7 +1433,7 @@ annotations:
   title: Logic
   text: Core extensions (Embody, Envoy, TDN), lifecycle callbacks, parameter handlers, logging, and CLAUDE.md template.
   position: [-770, 30]
-  size: [670, 830]
+  size: [670, 968]
   color: [0.485, 0.0, 0.2748]
   opacity: 0.9
 - name: annotation_tagging
