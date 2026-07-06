@@ -115,7 +115,10 @@ def onValueChange(par, prev):
 def onPulse(par):
 	if par.name == 'Disable':
 		parent.Embody.DisableHandler()
-		
+
+	elif par.name == 'Uninstall':
+		parent.Embody.UninstallHandler()
+
 	elif par.name == 'Update':
 		parent.Embody.UpdateHandler()
 

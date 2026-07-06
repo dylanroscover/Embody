@@ -1700,6 +1700,11 @@ class EmbodyExt:
             self, confirm=confirm, include_review=include_review,
             target_dir=target_dir)
 
+    def UninstallHandler(self, target_dir=None):
+        """Uninstall pulse handler: preview the footprint, confirm via
+        ui.messageBox, then run Uninstall on Yes. See embody_admin."""
+        return mod.embody_admin.uninstall_handler(self, target_dir=target_dir)
+
     # AI-client tokens -> the config files _extractAIConfig writes for them (on
     # top of AGENTS.md, which is always written). Used to list the exact files
     # in the Advanced-mode confirm.

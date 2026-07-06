@@ -420,6 +420,76 @@ def uninstall(ext, confirm=False, include_review=False, target_dir=None):
     return summary
 
 
+def uninstall_handler(ext, target_dir=None):
+    """Interactive Uninstall (the Uninstall pulse handler). Computes the
+    NON-DESTRUCTIVE plan, explains it in a ui.messageBox, and only reverses
+    the footprint when the user confirms. 'review' items (files you edited,
+    an unrecorded venv) are KEPT. Uses ext._messageBox so a save/test context
+    gets the safe Cancel default (-1) instead of a modal freeze."""
+    plan = compute_uninstall_plan(ext, target_dir)
+    n_del = len(plan['delete'])
+    n_strip = len(plan['strip'])
+    n_unset = len(plan['unset'])
+    n_review = len(plan['review'])
+
+    if not (n_del or n_strip or n_unset):
+        ext._messageBox(
+            'Embody -- Uninstall',
+            'Nothing to uninstall: no Embody-generated files, git config, or '
+            'MCP / AI-assistant config were found at this project root:\n'
+            f'{plan["root"]}',
+            buttons=['OK'])
+        ext.Log('Uninstall: nothing to remove at '
+                f'{plan["root"]}.', 'INFO')
+        return {'ran': False, 'reason': 'nothing to uninstall'}
+
+    lines = ['Remove Embody from this project?',
+             f'Root: {plan["root"]}',
+             '',
+             'Only files Embody created are removed -- your own files are '
+             'never deleted.',
+             '']
+    if n_del:
+        lines.append(
+            f'- REMOVE {n_del} Embody-generated item(s): AI-assistant config '
+            "(CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody's "
+            '.venv, and the .embody/ state folder.')
+    if n_strip:
+        lines.append(
+            f'- MODIFY {n_strip} shared file(s) -- strip ONLY Embody\'s block '
+            '/ key (.gitignore, .gitattributes, .mcp.json). Your content is '
+            'kept.')
+    if n_unset:
+        lines.append(
+            f'- UN-SET {n_unset} git config key(s) (the .tdn diff driver).')
+    if n_review:
+        lines.append(
+            f'- KEEP {n_review} item(s) you may have edited (flagged, left '
+            'untouched).')
+    lines += ['',
+              'Your externalized .tox / .tdn / .py files and the Embody COMP '
+              'itself are NOT removed. This cannot be undone.']
+
+    choice = ext._messageBox(
+        'Embody -- Uninstall', '\n'.join(lines),
+        buttons=['Cancel', 'Uninstall'])
+    if choice != 1:
+        ext.Log('Uninstall cancelled -- nothing was changed.', 'INFO')
+        return {'ran': False, 'reason': 'cancelled'}
+
+    summary = uninstall(ext, confirm=True, target_dir=target_dir)
+    ext._messageBox(
+        'Embody -- Uninstall Complete',
+        f'Removed {summary.get("deleted", 0)} item(s), stripped '
+        f'{summary.get("stripped", 0)} shared file(s), un-set '
+        f'{summary.get("unset", 0)} git key(s), kept '
+        f'{summary.get("kept_review", 0)} flagged item(s).\n\n'
+        "Embody's project footprint has been removed. Delete the Embody COMP "
+        'to finish removing it from this .toe.',
+        buttons=['OK'])
+    return summary
+
+
 # ==========================================================================
 # SETTINGS PERSISTENCE (C9)
 # ==========================================================================
