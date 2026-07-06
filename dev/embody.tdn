@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 533
+build: 534
 generator: Embody/6.0.105
 td_build: 099.2025.32820
 source_file: Embody-6.105.toe
-exported_at: '2026-07-06T08:20:22Z'
+exported_at: '2026-07-06T08:21:53Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -304,7 +304,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 08:17:06 UTC
+      value: Saved 08:21:42 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -444,7 +444,7 @@ operators:
       startSection: true
       readOnly: true
       help: Current status of the Envoy MCP server (read-only). Shows Running, Stopped, or error information.
-      value: Starting...
+      value: Running on port 9870
     Logs:
     - name: Verbose
       style: Toggle
@@ -639,7 +639,7 @@ operators:
       - Always Keep Files
       - Always Delete Files
       help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-      value: delete
+      value: keep
     - name: Toxdropexpr
       style: Menu
       label: Dropped .tox Expression
@@ -654,7 +654,6 @@ operators:
       - Always Clean
       - Always Ignore
       help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-      value: ignore
     - name: Tdndatsafety
       style: Menu
       label: Content Safety
@@ -691,7 +690,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 740
+      value: 741
     - name: Github
       style: Pulse
       label: GitHub
@@ -702,7 +701,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-06 08:20:21 UTC
+      value: 2026-07-06 08:21:52 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -2793,7 +2792,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 268
+    rows: 269
     cols: 11
   flags:
   - viewer

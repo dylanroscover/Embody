@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 636
+build: 637
 generator: Embody/6.0.105
 td_build: 099.2025.32820
 source_file: Embody-6.105.toe
-exported_at: '2026-07-06T08:20:22Z'
+exported_at: '2026-07-06T08:21:51Z'
 network_path: /embody/unit_tests/test_sandbox
 options:
   include_dat_content: false
@@ -12,6 +12,9 @@ options:
 type_defaults:
   baseCOMP:
     size: [160, 130]
+    color: [0.3, 0.5, 0.9]
+    tags:
+    - tdn
 par_templates:
   creds:
   - label: Private Key
@@ -36,69 +39,29 @@ color: [0.3, 0.5, 0.9]
 tags:
 - tdn
 operators:
-- name: sandbox_test_smoke_release
-  type: baseCOMP
-  color: [0.67, 0.67, 0.67]
-  children:
-  - name: v6_glsl_host
-    type: baseCOMP
-    color: [0.67, 0.67, 0.67]
-    children:
-    - name: shader
-      type: textDAT
-      parameters:
-        file: embody/unit_tests/test_sandbox/sandbox_test_smoke_release/v6_glsl_host/shader.glsl
-        syncfile: true
-        language: glsl
-      size: [130, 90]
-      color: [0.9, 0.3, 0.4]
 - name: sandbox_test_custom_parameters
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters.tdn
 - name: sandbox_test_custom_parameters1
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters1.tdn
 - name: sandbox_test_custom_parameters2
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters2.tdn
 - name: sandbox_test_custom_parameters3
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters3.tdn
 - name: sandbox_test_custom_parameters4
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters4.tdn
 - name: sandbox_test_custom_parameters5
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters5.tdn
 - name: sandbox_test_custom_parameters6
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters6.tdn
 - name: sandbox_test_custom_parameters7
   type: baseCOMP
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_custom_parameters7.tdn
 - name: sandbox_test_tdn_reconstruction
   type: baseCOMP
@@ -109,9 +72,6 @@ operators:
       $t: test
     Config:
       $t: config
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction.tdn
 - name: sandbox_test_tdn_reconstruction1
   type: baseCOMP
@@ -122,7 +82,4 @@ operators:
       $t: test
     Config:
       $t: config
-  color: [0.3, 0.5, 0.9]
-  tags:
-  - tdn
   tdn_ref: embody/unit_tests/test_sandbox/sandbox_test_tdn_reconstruction1.tdn
