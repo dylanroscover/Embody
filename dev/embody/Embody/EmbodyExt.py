@@ -147,8 +147,8 @@ class EmbodyExt:
     # process: ELECTRON_RUN_AS_NODE=1 makes Electron editors (VS Code, Cursor,
     # Windsurf) run headless-as-Node and quit instantly ("dock icon bounces,
     # then closes"); LD_LIBRARY_PATH/DYLD_* and PYTHON* point into TD's bundle
-    # and can mis-link or mis-route other tools. _launchEnv() strips these so a
-    # launched app/terminal gets a clean environment (see _launchEnv).
+    # and can mis-link or mis-route other tools. launch_env (embody_launch
+    # module DAT) strips these so a launched app/terminal starts clean.
     _LAUNCH_ENV_STRIP = frozenset({
         'ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS',
         'LD_LIBRARY_PATH', 'LD_PRELOAD',
@@ -602,10 +602,24 @@ class EmbodyExt:
 
     def _checkMCPUpdate(self, installed: str):
         """Check PyPI for a newer MCP version in a background thread. Logs a
-        notice if an update is available - never blocks the main thread."""
+        notice if an update is available - never blocks the main thread.
+
+        The worker touches NO TouchDesigner object: it publishes its result to
+        a plain instance attribute (``self._mcp_update_notice``) and a
+        main-thread poll (``_pollMCPUpdate``, scheduled via run() below) reads
+        it and logs. The worker must NOT call run() itself -- run() raises
+        tdError off the main thread, and the old code did exactly that inside
+        the worker, so its except-clause swallowed the error and the update
+        notice never logged. This mirrors EnvoyExt._beginAsyncBootstrap's
+        attribute-publish + main-thread-poll marshal (self._bootstrap_result /
+        _pollBootstrap).
+        """
         import threading
 
-        owner_path = self.my.path
+        # Sentinel: None = worker still in flight; '' = done, no update (or the
+        # network failed); a truthy string = the notice to log. Reset before
+        # spawning so a stale value from a prior check can't be read.
+        self._mcp_update_notice = None
 
         def _check():
             try:
@@ -619,21 +633,56 @@ class EmbodyExt:
                     data = json.loads(resp.read())
                 latest = data['info']['version']
                 if tuple(int(x) for x in latest.split('.')) > tuple(int(x) for x in installed.split('.')):
-                    msg = (
+                    # Plain attribute write -- NOT a TD object. Read + logged on
+                    # the main thread by _pollMCPUpdate.
+                    self._mcp_update_notice = (
                         f'MCP update available: {installed} -> {latest}. '
                         f'Update EmbodyExt.MCP_MIN_VERSION '
                         f'and delete dev/.venv to upgrade.'
                     )
-                    # self.Log() touches TD objects (FIFO DAT, parameters,
-                    # absTime.frame). Marshal to the main thread via run().
-                    # Guarded so a rename/move between spawn and fire becomes
-                    # a silent no-op rather than a None.Log() script error.
-                    run("o = op(args[0])\nif o: o.Log(args[1], 'WARNING')",
-                        owner_path, msg, delayFrames=1)
+                else:
+                    self._mcp_update_notice = ''  # up to date -- stop polling
             except Exception:
-                pass  # Network unavailable, not critical
+                self._mcp_update_notice = ''  # network unavailable, not critical
 
         threading.Thread(target=_check, daemon=True).start()
+        # Drain the worker's result on the main thread (self.Log is illegal off
+        # the main thread). Re-arms while the request is in flight; bounded so a
+        # worker that never publishes (e.g. daemon killed at shutdown) can't
+        # re-schedule forever.
+        run('args[0]._pollMCPUpdate(args[1])', self, 0, delayFrames=30)
+
+    def _pollMCPUpdate(self, attempts: int):
+        """Main-thread drain for _checkMCPUpdate's background PyPI check.
+
+        Reads the notice the worker published on ``self._mcp_update_notice``
+        and logs it via self.Log (which touches TD objects and so may only run
+        here, on the main thread). Re-arms a bounded number of times while the
+        worker is still in flight, then gives up silently.
+        """
+        # Stale-instance guard (parity with EnvoyExt._pollBootstrap): if the
+        # ext reinitialized since this chain was armed, drop the stale chain --
+        # the fresh instance re-arms its own on the next check.
+        try:
+            if self.my.ext.Embody is not self:
+                return
+        except Exception:
+            return
+        notice = getattr(self, '_mcp_update_notice', None)
+        if notice is None:
+            # Worker still running -- check again shortly (bounded; 40 x 30
+            # frames ~= 20s at 60fps, covering a slow DNS resolve that
+            # urlopen's socket timeout does not bound).
+            if attempts < 40:
+                run('args[0]._pollMCPUpdate(args[1])',
+                    self, attempts + 1, delayFrames=30)
+            return
+        self._mcp_update_notice = None
+        if notice:
+            try:
+                self.Log(notice, 'WARNING')
+            except Exception:
+                pass  # ext reinitialized between spawn and drain -- silent no-op
 
     # ==========================================================================
     # PROPERTIES

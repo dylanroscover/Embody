@@ -161,3 +161,37 @@ class TestAsyncBootstrap(EmbodyTestCase):
         # The synchronous entry point survives for the venv-recreate recovery
         # path; in the dev project the env is already healthy so it returns True.
         self.assertTrue(self.embody.ext.Embody._setupEnvironment())
+
+    def test_mcp_update_marshal_drains_and_logs(self):
+        # WP7b fix: the update-check worker publishes to a plain attribute and
+        # the MAIN-thread poll drains + logs it (the worker must never call
+        # run()). Exercise the drain half end-to-end with a captured Log.
+        emb = self.embody.ext.Embody
+        captured = []
+        original = emb.Log
+        emb.Log = lambda msg, level='INFO', **kw: captured.append((msg, level))
+        try:
+            emb._mcp_update_notice = 'MCP update available: t -> t2 (test)'
+            emb._pollMCPUpdate(0)
+        finally:
+            emb.Log = original
+        self.assertEqual(len(captured), 1,
+                         f'drain must log exactly once, got {captured!r}')
+        self.assertEqual(captured[0][1], 'WARNING')
+        self.assertIsNone(getattr(emb, '_mcp_update_notice', 'unset'),
+                          'sentinel must clear after drain')
+
+    def test_mcp_update_empty_sentinel_logs_nothing(self):
+        # '' means done-without-notice (up to date, or network failed): the
+        # poll must clear it silently and log nothing.
+        emb = self.embody.ext.Embody
+        captured = []
+        original = emb.Log
+        emb.Log = lambda msg, level='INFO', **kw: captured.append(msg)
+        try:
+            emb._mcp_update_notice = ''
+            emb._pollMCPUpdate(0)
+        finally:
+            emb.Log = original
+        self.assertEqual(captured, [], 'empty sentinel must not log')
+        self.assertIsNone(getattr(emb, '_mcp_update_notice', 'unset'))
