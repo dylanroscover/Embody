@@ -1641,19 +1641,11 @@ class EmbodyExt:
         return self._guard(f'Embody - {category}', msg, apply_fn, mode='advanced')
 
     # === Uninstall / Deinit ==================================================
-    # A reversible teardown of Embody's project footprint. This is the
-    # NON-DESTRUCTIVE planner: _computeUninstallPlan reads the install manifest
-    # (precise) plus a marker-scan fallback (pre-manifest installs) and returns
-    # exactly what a full Uninstall WOULD do -- nothing is removed here. The
-    # executor (built next) consumes THIS plan, so the preview can never drift
-    # from what runs. Conservative: anything not provably Embody-owned is
-    # classed 'review' (KEPT + flagged), never silently deleted.
-    # See dev/embody/plan-init-deinit-wizard.md sec 5.
-
-    _UNINSTALL_MARKER_FILES = ('AGENTS.md', 'CLAUDE.md', 'ENVOY.md', 'GEMINI.md')
-    _UNINSTALL_MARKER_TREES = ('.claude/rules', '.claude/skills', '.cursor/rules',
-                               '.github/instructions', '.windsurf/rules')
-    _UNINSTALL_MARKER_SINGLES = ('.github/copilot-instructions.md',)
+    # Reversible teardown of Embody's project footprint. The planner/executor
+    # (compute_uninstall_plan .. uninstall) + the _UNINSTALL_MARKER_* constants
+    # live in embody_admin (WP7c); only _uninstallClassifyMarker (marker + hash
+    # classification, shared with the AI-config hash manifest) stays on the
+    # facade. See dev/embody/plan-init-deinit-wizard.md sec 5.
 
     def _uninstallClassifyMarker(self, path, root, hashes):
         """Classify a candidate file: 'delete' (Embody-generated + unmodified),
@@ -1675,353 +1667,38 @@ class EmbodyExt:
         return 'review'  # user edited a generated file -> preserve it
 
     def _computeUninstallPlan(self, target_dir=None):
-        """NON-DESTRUCTIVE. Return exactly what Uninstall would remove/strip so
-        it can be reviewed before any deletion. Manifest-driven, with a
-        marker-scan fallback for pre-manifest installs.
-
-        Plan dict:
-          root, sources[list],
-          delete  [{path,kind,why}]        provably Embody's -> remove
-          strip   [{path,kind,marker,why}] git block / .mcp.json key -> reverse only that
-          unset   [keys]                   repo git config to un-set
-          review  [{path,why}]             exists, not provably ours -> KEPT, flagged
-          missing [paths]                  recorded but already gone
-        """
-        root = (Path(target_dir).resolve() if target_dir
-                else Path(self._findProjectRoot()).resolve())
-        m = self._loadInstallManifest(str(root))
-        hashes = self._loadHashManifest(str(root))
-        plan = {'root': str(root), 'sources': [],
-                'delete': [], 'strip': [], 'unset': [], 'review': [], 'missing': []}
-        seen = set()
-
-        def _abs(stored):
-            p = Path(stored)
-            return p if p.is_absolute() else (root / p)
-
-        def _rel(p):
-            try:
-                return p.resolve().relative_to(root).as_posix()
-            except Exception:
-                return str(p)
-
-        def _add(bucket, p, **kw):
-            rp = str(p.resolve() if hasattr(p, 'resolve') else p)
-            if rp in seen:
-                return False
-            seen.add(rp)
-            entry = {'path': _rel(p)}
-            entry.update(kw)
-            plan[bucket].append(entry)
-            return True
-
-        def _add_strip(p, kind, marker, why):
-            rp = str(p.resolve())
-            if any(s['path'] == _rel(p) for s in plan['strip']):
-                return
-            seen.add(rp)
-            plan['strip'].append({'path': _rel(p), 'kind': kind,
-                                  'marker': marker, 'why': why})
-
-        def _classify_into(p):
-            cls = self._uninstallClassifyMarker(p, root, hashes)
-            if cls == 'delete':
-                _add('delete', p, kind='file', why='Embody-generated, unmodified')
-            elif cls == 'review':
-                _add('review', p, why='you edited this generated file -- kept')
-
-        # ---- manifest (precise) ----
-        if any((m.get('files_created'), m.get('files_appended'),
-                m.get('git_config'), m.get('venv'))):
-            plan['sources'].append('manifest')
-
-        for stored in m.get('files_created', []):
-            p = _abs(stored)
-            if p.name == '.mcp.json':
-                if p.exists():
-                    _add_strip(p, 'json_key', 'mcpServers.envoy',
-                               'remove Embody server; delete file only if none remain')
-                continue
-            if not p.exists():
-                plan['missing'].append(stored); continue
-            if p.name == 'settings.local.json':
-                _add('review', p,
-                     why='created by Embody but may hold your permission edits -- kept')
-                continue
-            _classify_into(p)
-
-        for e in m.get('files_appended', []):
-            p = _abs(e['path'])
-            if not p.exists():
-                plan['missing'].append(e['path']); continue
-            _add_strip(p, e.get('kind', 'block'), e.get('marker', ''),
-                       "strip only Embody's block/key -- your file is kept")
-
-        plan['unset'] = list(m.get('git_config', []))
-
-        v = m.get('venv')
-        if v:
-            p = _abs(v['path'])
-            if p.exists():
-                _add('delete', p, kind='dir', why='Embody-created virtual environment')
-            else:
-                plan['missing'].append(v['path'])
-
-        # ---- marker-scan FALLBACK (pre-manifest installs / anything missed) ----
-        before = sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset'])
-        for name in self._UNINSTALL_MARKER_FILES:
-            p = root / name
-            if p.is_file():
-                _classify_into(p)
-        for sub in self._UNINSTALL_MARKER_TREES:
-            d = root / sub
-            if d.is_dir():
-                for p in d.rglob('*'):
-                    if p.is_file():
-                        _classify_into(p)
-        for single in self._UNINSTALL_MARKER_SINGLES:
-            p = root / single
-            if p.is_file():
-                _classify_into(p)
-        mcp = root / '.mcp.json'
-        if mcp.is_file() and str(mcp.resolve()) not in seen:
-            try:
-                if 'envoy' in json.loads(
-                        mcp.read_text(encoding='utf-8')).get('mcpServers', {}):
-                    _add_strip(mcp, 'json_key', 'mcpServers.envoy',
-                               'remove Embody server; delete file only if none remain')
-            except Exception:
-                pass
-        for gname, marker in (('.gitignore', '# Embody / Envoy'),
-                              ('.gitattributes', 'Embody / Envoy')):
-            gp = root / gname
-            if gp.is_file() and str(gp.resolve()) not in seen:
-                try:
-                    if marker in gp.read_text(encoding='utf-8'):
-                        _add_strip(gp, 'block', marker,
-                                   "strip only Embody's block -- your file is kept")
-                except Exception:
-                    pass
-        # git config (read-only query) for pre-manifest installs
-        if not plan['unset']:
-            for key in ('diff.tdn.textconv', 'diff.tdn.cachetextconv'):
-                try:
-                    r = subprocess.run(['git', 'config', '--get', key],
-                                       cwd=str(root), capture_output=True,
-                                       text=True, timeout=5,
-                                       stdin=subprocess.DEVNULL)
-                    if r.returncode == 0 and (r.stdout or '').strip():
-                        plan['unset'].append(key)
-                except Exception:
-                    pass
-        # venv not captured by the manifest -> flag for review (can't prove
-        # Embody created it without the record, so never auto-delete it). Prefer
-        # the authoritative venv location (under project.folder) -- which can sit
-        # in a subdir of the manifest root -- but ONLY when it falls under the
-        # root being planned, so a plan for an unrelated root (a test/other
-        # project) never picks up the LIVE project's venv.
-        venv_dir = root / '.venv'
-        try:
-            cand = Path(self._venvPaths()['venv_dir']).resolve()
-            cand.relative_to(root)  # raises if not under this root
-            venv_dir = cand
-        except Exception:
-            pass
-        if venv_dir.is_dir() and str(venv_dir.resolve()) not in seen:
-            _add('review', venv_dir, kind='dir',
-                 why="looks like Embody's virtualenv but was not recorded -- review before removing")
-        if sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset']) > before:
-            plan['sources'].append('fallback')
-
-        # ---- .embody/ (Embody-owned state) removable wholesale ----
-        embody_dir = root / '.embody'
-        if embody_dir.is_dir():
-            _add('delete', embody_dir, kind='dir',
-                 why='Embody runtime state (manifest, bridge, config, hashes)')
-
-        return plan
+        """NON-DESTRUCTIVE uninstall plan (delete/strip/unset/review/missing) -- see embody_admin."""
+        return mod.embody_admin.compute_uninstall_plan(self, target_dir)
 
     def PreviewUninstall(self, target_dir=None):
         """Log + return a NON-DESTRUCTIVE preview of a full Uninstall. Nothing is
-        removed. Use this to review the reversal plan before running Uninstall."""
-        plan = self._computeUninstallPlan(target_dir)
-        src = ', '.join(plan['sources']) or 'none -- nothing recorded/found'
-        lines = [f'Uninstall preview for {plan["root"]} (sources: {src})']
-        if plan['delete']:
-            lines.append(f'  REMOVE ({len(plan["delete"])}):')
-            for a in plan['delete']:
-                lines.append(f'    - {a["path"]}  [{a.get("kind","file")}] -- {a["why"]}')
-        if plan['strip']:
-            lines.append(f'  MODIFY ({len(plan["strip"])}) -- your file kept, only Embody\'s part reversed:')
-            for a in plan['strip']:
-                lines.append(f'    ~ {a["path"]}  ({a["kind"]}: {a["marker"]})')
-        if plan['unset']:
-            lines.append(f'  GIT CONFIG un-set: {", ".join(plan["unset"])}')
-        if plan['review']:
-            lines.append(f'  REVIEW ({len(plan["review"])}) -- KEPT (may hold your edits):')
-            for a in plan['review']:
-                lines.append(f'    ? {a["path"]} -- {a["why"]}')
-        if plan['missing']:
-            lines.append(f'  already gone: {len(plan["missing"])}')
-        self.Log('\n'.join(lines), 'INFO')
-        return plan
-
-    # ---- executor (destructive) -- consumes a plan from _computeUninstallPlan --
+        removed. Use this to review the reversal plan before running Uninstall.
+        See embody_admin."""
+        return mod.embody_admin.preview_uninstall(self, target_dir)
 
     def _removeTreeWithin(self, path, root):
-        """Recursively remove a directory, but ONLY if it resolves INSIDE root
-        (guard against a catastrophic path). Bottom-up unlink + rmdir -- a
-        scoped, explicit walk, never a blind rmtree of an arbitrary path.
-        Returns files removed."""
-        path = Path(path).resolve()
-        root = Path(root).resolve()
-        try:
-            path.relative_to(root)  # raises if path is not under root
-        except ValueError:
-            self.Log(f'Uninstall: refusing to remove {path} -- outside {root}',
-                     'WARNING')
-            return 0
-        if not path.is_dir():
-            return 0
-        removed = 0
-        # deepest-first so a dir is empty by the time we rmdir it
-        for child in sorted(path.rglob('*'),
-                            key=lambda p: len(p.parts), reverse=True):
-            try:
-                if child.is_file() or child.is_symlink():
-                    child.unlink(); removed += 1
-                elif child.is_dir():
-                    child.rmdir()
-            except OSError as e:
-                self.Log(f'Uninstall: could not remove {child}: {e}', 'DEBUG')
-        try:
-            path.rmdir()
-        except OSError as e:
-            self.Log(f'Uninstall: could not remove {path}: {e}', 'DEBUG')
-        return removed
+        """Recursively remove a directory only if it resolves inside root -- see embody_admin."""
+        return mod.embody_admin.remove_tree_within(self, path, root)
 
     def _stripMarkedBlock(self, text, marker):
-        """Return text with Embody's marked comment block removed -- the header
-        comment line containing `marker` plus its consecutive non-blank entry
-        lines (and a single preceding blank separator). User content is kept."""
-        lines = text.split('\n')
-        out = []
-        i, n = 0, len(lines)
-        while i < n:
-            if marker in lines[i] and lines[i].lstrip().startswith('#'):
-                if out and out[-1] == '':
-                    out.pop()               # drop the blank separator we added
-                i += 1
-                while i < n and lines[i].strip() != '':
-                    i += 1                  # skip the block's entry lines
-                continue
-            out.append(lines[i]); i += 1
-        return '\n'.join(out)
+        """Return text with Embody's marked comment block removed -- see embody_admin."""
+        return mod.embody_admin.strip_marked_block(self, text, marker)
 
     def _stripMcpEnvoy(self, path):
-        """Remove only the 'envoy' server from a .mcp.json. Delete the file only
-        if that leaves no servers AND no other top-level keys -- the user's other
-        servers/keys are always preserved."""
-        try:
-            cfg = json.loads(path.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, OSError):
-            return
-        servers = cfg.get('mcpServers', {})
-        servers.pop('envoy', None)
-        other_keys = [k for k in cfg if k != 'mcpServers']
-        if servers:
-            cfg['mcpServers'] = servers
-            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
-        elif other_keys:
-            cfg['mcpServers'] = {}
-            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
-        else:
-            path.unlink()  # the file held only Embody's server -> remove it
+        """Remove only the 'envoy' server from a .mcp.json -- see embody_admin."""
+        return mod.embody_admin.strip_mcp_envoy(self, path)
 
     def _executeUninstallPlan(self, plan, include_review=False):
-        """Execute a plan from _computeUninstallPlan. Filesystem + git only.
-        'review' items are KEPT unless include_review=True. Returns a summary
-        dict. This is the one place that actually removes/modifies files."""
-        root = Path(plan['root'])
-
-        def _abs(rel):
-            p = Path(rel)
-            return p if p.is_absolute() else (root / p)
-
-        summary = {'deleted': 0, 'stripped': 0, 'unset': 0,
-                   'kept_review': 0, 'errors': 0}
-
-        def _remove(entry):
-            p = _abs(entry['path'])
-            try:
-                if entry.get('kind') == 'dir':
-                    if p.is_dir():
-                        self._removeTreeWithin(p, root)
-                        summary['deleted'] += 1
-                elif p.exists():
-                    p.unlink(); summary['deleted'] += 1
-            except OSError as e:
-                summary['errors'] += 1
-                self.Log(f'Uninstall: could not remove {p}: {e}', 'WARNING')
-
-        for entry in plan['delete']:
-            _remove(entry)
-
-        for a in plan['strip']:
-            p = _abs(a['path'])
-            if not p.exists():
-                continue
-            try:
-                if a['kind'] == 'json_key':
-                    self._stripMcpEnvoy(p)
-                else:
-                    p.write_text(
-                        self._stripMarkedBlock(
-                            p.read_text(encoding='utf-8'), a['marker']),
-                        encoding='utf-8')
-                summary['stripped'] += 1
-            except OSError as e:
-                summary['errors'] += 1
-                self.Log(f'Uninstall: could not strip {p}: {e}', 'WARNING')
-
-        for key in plan['unset']:
-            try:
-                subprocess.run(['git', 'config', '--unset', key],
-                               cwd=str(root), capture_output=True, text=True,
-                               timeout=5, stdin=subprocess.DEVNULL)
-                summary['unset'] += 1
-            except Exception as e:
-                self.Log(f'Uninstall: could not un-set {key}: {e}', 'DEBUG')
-
-        if include_review:
-            for entry in plan['review']:
-                _remove(entry)
-        else:
-            summary['kept_review'] = len(plan['review'])
-
-        return summary
+        """Execute a plan from _computeUninstallPlan (destructive) -- see embody_admin."""
+        return mod.embody_admin.execute_uninstall_plan(self, plan, include_review=include_review)
 
     def Uninstall(self, confirm=False, include_review=False, target_dir=None):
         """Reverse Embody's project footprint. DESTRUCTIVE -- requires
-        confirm=True (review PreviewUninstall() first). Stops Envoy, then
-        removes/strips per the plan. 'review' items (files you edited, an
-        unrecorded venv) are KEPT unless include_review=True; user files are
-        never deleted -- only Embody's own additions."""
-        if not confirm:
-            self.Log('Uninstall is destructive. Review PreviewUninstall() first, '
-                     'then call Uninstall(confirm=True). Nothing was changed.',
-                     'WARNING')
-            return {'ran': False, 'reason': 'confirm required'}
-        plan = self._computeUninstallPlan(target_dir)
-        try:  # stop Envoy so its venv/config aren't in use during removal
-            if self.my.par.Envoyenable.eval():
-                self.my.par.Envoyenable = 0
-        except Exception:
-            pass
-        summary = self._executeUninstallPlan(plan, include_review=include_review)
-        summary['ran'] = True
-        self.Log(f'Uninstall complete: {summary}', 'SUCCESS')
-        return summary
+        confirm=True (review PreviewUninstall() first). 'review' items are KEPT
+        unless include_review=True; user files are never deleted. See embody_admin."""
+        return mod.embody_admin.uninstall(
+            self, confirm=confirm, include_review=include_review,
+            target_dir=target_dir)
 
     # AI-client tokens -> the config files _extractAIConfig writes for them (on
     # top of AGENTS.md, which is always written). Used to list the exact files
@@ -2320,309 +1997,37 @@ class EmbodyExt:
     # ==========================================================================
 
     def _settingsPath(self) -> Path:
-        """Path to .embody/config.json -- consistent with _findProjectRoot()."""
-        return self._findProjectRoot() / '.embody' / 'config.json'
+        """Path to .embody/config.json -- see embody_admin."""
+        return mod.embody_admin.settings_path(self)
 
     def _findSettingsFile(self) -> Optional[Path]:
-        """Locate .embody/config.json, checking both Aiprojectroot candidate
-        roots.
-
-        At TD launch, _restoreSettings() runs before any param values have
-        been restored -- so Aiprojectroot sits at its baked-in default
-        ('gitroot'). If the user previously flipped to 'projectfolder',
-        their config.json lives at the project folder, not git root. The
-        canonical _settingsPath() lookup would miss it and silently bail,
-        losing every persisted setting on every restart.
-
-        This helper resolves that chicken-and-egg by trying both candidate
-        roots before declaring the file absent. Returns the path if found,
-        else None.
-        """
-        canonical = self._settingsPath()
-        if canonical.is_file():
-            return canonical
-        # Try the alternate predefined modes (gitroot, projectfolder).
-        for mode in ('gitroot', 'projectfolder'):
-            alt = self._rootForMode(mode) / '.embody' / 'config.json'
-            if alt != canonical and alt.is_file():
-                self.Log(
-                    f'config.json found at alternate root (Aiprojectroot '
-                    f'will be restored from saved value): {alt}',
-                    'INFO')
-                return alt
-        # Last-resort walk-up from project.folder. Catches the 'custom'
-        # mode chicken-and-egg: the saved custom path lives in
-        # config.json which we haven't read yet, so we can't compute the
-        # canonical custom path. Walking up from the .toe finds any
-        # .embody/config.json a user previously put on the tree.
-        project_dir = Path(project.folder).resolve()
-        for parent_dir in project_dir.parents:
-            candidate = parent_dir / '.embody' / 'config.json'
-            if candidate == canonical:
-                continue
-            if candidate.is_file():
-                self.Log(
-                    f'config.json found by ancestor walk-up: {candidate}',
-                    'INFO')
-                return candidate
-        return None
+        """Locate .embody/config.json across candidate roots -- see embody_admin."""
+        return mod.embody_admin.find_settings_file(self)
 
     def _projectJsonPath(self) -> Path:
-        """Path to .embody/project.json -- committed project metadata.
-
-        Unlike .embody/config.json (user-local settings) and .embody/envoy.json
-        (live runtime registry), project.json is intended to be checked into git
-        so the same metadata travels with the repo to every machine.
-        """
-        return self._findProjectRoot() / '.embody' / 'project.json'
+        """Path to .embody/project.json (committed project metadata) -- see embody_admin."""
+        return mod.embody_admin.project_json_path(self)
 
     def _writeProjectJson(self) -> None:
-        """Pin the current TouchDesigner build into .embody/project.json.
-
-        The Envoy bridge reads td_build to pick a matching TD install when
-        launching on a fresh clone, where envoy.json is gitignored and its
-        td_executable path may not exist locally. Idempotent -- skips the
-        write when td_build is already current.
-        """
-        import json, os
-        path = self._projectJsonPath()
-        # app.build is the build proper (e.g. '2025.32460'). app.version is
-        # the long-lived major branch ('099') and would only be noise here.
-        current_build = app.build
-
-        existing = {}
-        if path.is_file():
-            try:
-                loaded = json.loads(path.read_text(encoding='utf-8'))
-                if isinstance(loaded, dict):
-                    existing = loaded
-            except (json.JSONDecodeError, OSError):
-                pass  # Treat unreadable as empty -- we'll overwrite.
-
-        if existing.get('td_build') == current_build:
-            return
-
-        existing['td_build'] = current_build
-
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = Path(str(path) + '.tmp')
-            content = json.dumps(existing, indent=2) + '\n'
-            for attempt in range(3):
-                try:
-                    tmp.write_text(content, encoding='utf-8')
-                    os.replace(str(tmp), str(path))
-                    self.Log(
-                        f'Pinned td_build={current_build} in '
-                        f'.embody/project.json',
-                        'DEBUG')
-                    return
-                except PermissionError:
-                    if attempt < 2:
-                        import time as _time
-                        _time.sleep(0.1)
-                    else:
-                        raise
-        except Exception as e:
-            self.Log(f'Failed to write project.json: {e}', 'WARNING')
+        """Pin the current TouchDesigner build into .embody/project.json -- see embody_admin."""
+        return mod.embody_admin.write_project_json(self)
 
     def _saveSettings(self) -> None:
-        """Persist whitelisted parameter values to .embody/config.json."""
-        self._settings_save_pending = False
-        params = {}
-        # Sort names so JSON output is stable across TD sessions. _PERSISTED_PARAMS
-        # is a frozenset, and Python's hash randomization gives each process a
-        # different iteration order -- producing noisy diffs on every save.
-        for name in sorted(self._PERSISTED_PARAMS):
-            par = getattr(self.my.par, name, None)
-            if par is None:
-                continue
-            entry = {'val': par.eval()}
-            if par.mode != ParMode.CONSTANT:
-                entry['mode'] = str(par.mode)
-                if par.expr:
-                    entry['expr'] = par.expr
-                if par.bindExpr:
-                    entry['bindExpr'] = par.bindExpr
-            params[name] = entry
-        data = {'version': 1, 'params': params}
-        try:
-            import json, os
-            path = self._settingsPath()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = Path(str(path) + '.tmp')
-            content = json.dumps(data, indent=2, sort_keys=True) + '\n'
-            for attempt in range(3):
-                try:
-                    tmp.write_text(content, encoding='utf-8')
-                    os.replace(str(tmp), str(path))
-                    return
-                except PermissionError:
-                    if attempt < 2:
-                        import time as _time
-                        _time.sleep(0.1)
-                    else:
-                        raise
-        except Exception as e:
-            self.Log(f'Failed to save settings: {e}', 'WARNING')
+        """Persist whitelisted parameter values to .embody/config.json -- see embody_admin."""
+        return mod.embody_admin.save_settings(self)
 
     def _deferSaveSettings(self) -> None:
-        """Schedule a settings save on the next frame. Coalesces rapid changes."""
-        if not getattr(self, '_settings_save_pending', False):
-            self._settings_save_pending = True
-            run(f"op('{self.my}').ext.Embody._saveSettings()", delayFrames=1)
+        """Schedule a settings save on the next frame (coalesces) -- see embody_admin."""
+        return mod.embody_admin.defer_save_settings(self)
 
     def _restoreSettings(self, kick_envoy: bool = False) -> bool:
-        """Restore parameter values from .embody/config.json. Returns True if restored.
-        Sets _restoring_settings flag to suppress onValueChange side effects.
-
-        Also stores _init_complete when done -- init() no longer stores it because
-        TD defers onValueChange callbacks to the next cook, and storing _init_complete
-        in init() allowed parexec to process init()'s Envoyenable=False change.
-
-        kick_envoy: if True and Envoyenable is restored to True, defer Start().
-        Only set this on the onStart() path -- Verify() owns startup on onCreate()."""
-        # _findSettingsFile handles the Aiprojectroot chicken-and-egg: at
-        # this point Aiprojectroot is at its baked-in default, so a saved
-        # value of 'projectfolder' wouldn't resolve via _settingsPath alone.
-        path = self._findSettingsFile()
-        if path is None:
-            # Migrate: check old root-level .embody.json
-            canonical = self._settingsPath()
-            old_path = self._findProjectRoot() / '.embody.json'
-            if old_path.is_file():
-                try:
-                    canonical.parent.mkdir(parents=True, exist_ok=True)
-                    import shutil
-                    shutil.move(str(old_path), str(canonical))
-                    self.Log('Migrated .embody.json -> .embody/config.json', 'INFO')
-                    path = canonical
-                except Exception as e:
-                    self.Log(f'Could not migrate .embody.json: {e}', 'WARNING')
-                    self.my.store('_init_complete', True)
-                    return False
-            else:
-                self.my.store('_init_complete', True)
-                return False
-        try:
-            import json
-            data = json.loads(path.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, OSError) as e:
-            self.Log(f'Settings file corrupt or unreadable: {e}', 'WARNING')
-            self.my.store('_init_complete', True)
-            return False
-        if not isinstance(data, dict) or 'params' not in data:
-            self.my.store('_init_complete', True)
-            return False
-        params = data['params']
-        restored = 0
-        self._restoring_settings = True
-        try:
-            for name, entry in params.items():
-                par = getattr(self.my.par, name, None)
-                if par is None or name not in self._PERSISTED_PARAMS:
-                    continue
-                try:
-                    mode = entry.get('mode')
-                    if mode and 'expr' in entry:
-                        par.expr = entry['expr']
-                    elif mode and 'bindExpr' in entry:
-                        par.bindExpr = entry['bindExpr']
-                    else:
-                        par.val = entry['val']
-                    restored += 1
-                except Exception:
-                    pass
-        finally:
-            self._restoring_settings = False
-        # Signal parexec that init + restore is complete -- safe to process
-        # param changes.  Must be stored AFTER _restoring_settings is cleared
-        # so deferred onValueChange callbacks from init() are still suppressed.
-        self.my.store('_init_complete', True)
-        self.Log(f'Restored {restored} settings from config.json', 'INFO')
-        # TDN mode migration detection: an upgrading user will have
-        # 'Tdnenable' in their persisted params but not 'Tdnmode'. Defer
-        # the nudge dialog so init can complete cleanly first.
-        # Guarded by a schedule-time flag so a second _restoreSettings in
-        # the same session (e.g. onCreate then onStart) can't queue a
-        # second dialog before the first one fires.
-        already_scheduled = self.my.fetch(
-            '_tdn_migration_scheduled', False, search=False)
-        if ('Tdnenable' in params and 'Tdnmode' not in params
-                and not already_scheduled):
-            prev_tdn_enable = bool(params.get('Tdnenable', {}).get('val', True))
-            self.my.store('_tdn_migration_prev_enable', prev_tdn_enable)
-            self.my.store('_tdn_migration_scheduled', True)
-            run(f"op('{self.my}').ext.Embody._showTDNMigrationNudge()",
-                delayFrames=60)
-        # If Envoyenable was restored to True, kick Start() -- parexec was
-        # suppressed during restore so onValueChange never fired.
-        # Only set this on the onStart() path (kick_envoy=True).
-        # Verify() owns Envoy startup on the onCreate() path.
-        if kick_envoy and self.my.par.Envoyenable.eval():
-            run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=3)
-        return restored > 0
+        """Restore parameter values from .embody/config.json (returns True if
+        restored; sets _restoring_settings during the write). See embody_admin."""
+        return mod.embody_admin.restore_settings(self, kick_envoy=kick_envoy)
 
     def _showTDNMigrationNudge(self) -> None:
-        """One-time dialog after upgrading from the binary Tdnenable toggle.
-
-        Fires when a user opens a project previously saved with the old
-        Tdnenable toggle and no Tdnmode selection yet. Offers a choice
-        between restoring Full bidirectional sync (their prior behavior)
-        or adopting the new Export-on-Save default (recommended).
-
-        Guarded by _tdn_mode_migration_shown so it only fires once per
-        project across sessions (the flag is persisted via param write
-        into config.json on next save).
-        """
-        if self.my.fetch('_tdn_mode_migration_shown', False, search=False):
-            return
-        prev_enable = self.my.fetch('_tdn_migration_prev_enable', True,
-                                    search=False)
-        self.my.unstore('_tdn_migration_prev_enable')
-
-        tdn_comps = []
-        try:
-            tdn_comps = self._getTDNStrategyComps()
-        except Exception:
-            pass
-
-        if not tdn_comps:
-            # No TDN COMPs tracked -- silently accept the new default.
-            self.my.store('_tdn_mode_migration_shown', True)
-            return
-
-        prev_label = ('Full (bidirectional)' if prev_enable
-                      else 'Off (TDN disabled)')
-        msg = (
-            f'TDN default changed in this release.\n\n'
-            f'Your project was previously saved with the legacy Tdnenable '
-            f'toggle ({prev_label}). The new system has three modes:\n\n'
-            f'  \u2022 Off -- no TDN runtime\n'
-            f'  \u2022 Export-on-Save -- recommended; .toe is truth, '
-            f'.tdn files are rewritten on save\n'
-            f'  \u2022 Roundtrip (Experimental) -- bidirectional '
-            f'strip/restore on save and reconstruction on open (previous '
-            f'behavior)\n\n'
-            f'Currently set to Export-on-Save. Your {len(tdn_comps)} '
-            f'tracked TDN COMP(s) will stop round-tripping on save.\n\n'
-            f'Keep the new default, or restore Full?'
-        )
-        choice = self._messageBox(
-            'Embody - TDN Mode Changed',
-            msg,
-            buttons=['Keep Export-on-Save (recommended)',
-                     'Restore Full (previous behavior)'])
-        if choice == 1:
-            try:
-                self.my.par.Tdnmode = 'full'
-                self._applyTdnModeGating()
-                self.Log('TDN mode restored to Full per user choice', 'INFO')
-            except Exception as e:
-                self.Log(f'Could not restore Full mode: {e}', 'WARNING')
-        else:
-            self.Log('TDN mode kept at Export-on-Save (new default)', 'INFO')
-        self.my.store('_tdn_mode_migration_shown', True)
+        """One-time dialog after upgrading from the binary Tdnenable toggle -- see embody_admin."""
+        return mod.embody_admin.show_tdn_migration_nudge(self)
 
     def Verify(self) -> None:
         """Initialize or reconnect Embody on install or update.
