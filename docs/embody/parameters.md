@@ -13,6 +13,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 |---|---|---|---|
 | `Status` | Str (read-only) | `Enabled` | Current Embody status (read-only). Shows whether Embody is initialized and running. |
 | `Disable` | Pulse | - | Disables Embody: removes all externalization tags from operators and stops tracking. Use Update to re-enable. |
+| `Uninstall` | Pulse | - | Removes Embody from this project (asks for confirmation first): deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), the Embody .venv, and .embody/ state; strips only Embody's block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdn git diff driver. Your own files, externalized .tox / .tdn / .py, and the Embody COMP are NOT removed. See [Removing Embody](getting-started.md#removing-embody). |
 | Enable/Update (`Update`) | Pulse | - | Initializes Embody if not yet running, or triggers a full update cycle: scans all tagged operators, checks continuity, and syncs the externalizations table. |
 | `Refresh` | Pulse | - | Refreshes the externalizations table by re-scanning tagged operators without triggering saves or continuity checks. |
 | Perform Mode (`Performmode`) | Toggle | - | - |

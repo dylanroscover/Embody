@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **87 test suites** and **1,959 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **89 test suites** and **1,985 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -144,7 +144,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_envoy_registry` | 17 | Instance registry and PID liveness |
 | `test_envoy_lifecycle_hardening` | 4 | Save/reinit lifecycle hardening |
 
-### Install, Uninstall & Release (7 suites, 87 tests)
+### Install, Uninstall & Release (8 suites, 92 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
@@ -152,6 +152,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_install_manifest` | 12 | Generated install manifest and packaged config coverage |
 | `test_uninstall_execute` | 11 | Uninstall execution path and cleanup safety |
 | `test_uninstall_preview` | 10 | Uninstall preview plan and protected-file handling |
+| `test_uninstall_handler` | 5 | Uninstall pulse confirm gate (cancel/suppress/confirm/review) |
 | `test_catalog_bootstrap_palette` | 10 | Bootstrap palette table parsing + build coverage |
 | `test_catalog_palette_scan` | 6 | Palette scan time-state snapshot/restore |
 | `test_template_sync` | 5 | Template map, disk, release-table, and orphan allowlist sync |

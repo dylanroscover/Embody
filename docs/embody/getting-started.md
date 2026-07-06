@@ -74,3 +74,33 @@ Once set up, Embody works in the background:
 - **Automatic restoration**: On project open, Embody restores externalized operators from the files on disk. TOX-strategy COMPs are always restored from `.tox` files, and DATs always sync via TouchDesigner's native file parameter. TDN-strategy COMPs are reconstructed from `.tdn` files **only in Roundtrip mode** — the recommended Export-on-Save mode keeps the `.toe` as the source of truth and skips reconstruction on open. See [TDN Mode](externalization.md#tdn-mode-master-switch) for the tradeoffs.
 - **Parameter tracking**: Embody tracks all parameter values on externalized COMPs. When any parameter changes (not just network edits), that COMP is automatically marked dirty with a "Par" indicator.
 - **Cross-platform**: All file paths are normalized to forward slashes (`/`), so teams on mixed Windows/macOS platforms can collaborate without path-related merge conflicts.
+
+## Removing Embody
+
+There are two different "off switches", and they do different things:
+
+- **Disable** (Embody page) removes Embody's externalization **tags** from your operators and stops tracking them. Your externalized files stay on disk. This is reversible — pulse **Enable / Update** to start tracking again. Use it to pause Embody, not to remove it.
+- **Uninstall** (Embody page, right below Disable) reverses Embody's **install footprint** — the files and settings Embody added to your project when you set it up. Use it when you want Embody gone from a repo.
+
+### The Uninstall button
+
+Pulsing **Uninstall** first shows a confirmation dialog that spells out exactly what will happen before anything is touched:
+
+- **Removed** — Embody-generated AI-assistant config (`CLAUDE.md` / `AGENTS.md` / `.claude/` / `.cursor/` / …), the Embody `.venv`, and the `.embody/` state folder.
+- **Modified** — shared files where Embody only *strips its own block or key*, leaving your content intact: `.gitignore`, `.gitattributes`, and the `envoy` server entry in `.mcp.json` (your other MCP servers are kept).
+- **Un-set** — the git config keys for the `.tdn` diff driver.
+- **Kept** — anything Embody can't prove it owns: a generated file you edited, `settings.local.json`, an unrecorded-looking venv. These are flagged and left untouched.
+
+It only proceeds when you confirm. Cancelling — or triggering it during a save or a test run — does nothing.
+
+**What Uninstall never touches:** your externalized `.tox` / `.tdn` / `.py` files, and the Embody COMP itself. To finish removing Embody from a `.toe`, delete the Embody COMP after uninstalling (run **Disable** first if you also want the externalized files reabsorbed into the `.toe`).
+
+### Previewing without removing anything
+
+To see the full reversal plan without changing anything, call `PreviewUninstall()` from a Textport or via Envoy — it logs the same **remove / modify / un-set / keep** breakdown the dialog shows, but deletes nothing:
+
+```python
+op.Embody.PreviewUninstall()
+```
+
+The scriptable, non-interactive form is `op.Embody.Uninstall(confirm=True)` (it refuses without `confirm=True`); pass `include_review=True` to also remove the flagged "kept" items.

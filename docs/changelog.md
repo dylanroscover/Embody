@@ -1,5 +1,14 @@
 # Changelog
 
+## v6.0.108
+
+A one-click **Uninstall** for removing Embody from a project -- guarded by a confirmation dialog that spells out exactly what will be removed before anything is touched.
+
+- **New Uninstall pulse** (Embody page, right after Disable). It computes the same NON-DESTRUCTIVE plan as `PreviewUninstall()`, then shows a `ui.messageBox` describing precisely what will happen -- how many Embody-generated items are **removed** (AI-assistant config like `CLAUDE.md` / `AGENTS.md` / `.claude` / `.cursor`, Embody's `.venv`, the `.embody/` state folder), which shared files are **modified** by stripping only Embody's block/key (`.gitignore`, `.gitattributes`, `.mcp.json`), which git config keys are **un-set** (the `.tdn` diff driver), and which items are **kept** (files you edited, an unrecorded venv). It runs the teardown ONLY when you confirm; Cancel -- or a suppressed save/test context -- is a no-op, so nothing is ever removed silently. Your externalized `.tox` / `.tdn` / `.py` files and the Embody COMP itself are never touched.
+- **Wiring**: `UninstallHandler` (promoted) delegates to `embody_admin.uninstall_handler`, dispatched from the `Uninstall` pulse via `parexec`. The destructive `Uninstall(confirm=True)` API is unchanged underneath; the pulse just adds the interactive confirm gate on top.
+- **Distinct from Disable**: Disable removes externalization *tags* and stops tracking (re-enable with Update); Uninstall reverses Embody's *install footprint* on disk (config, venv, git wiring, `.embody/` state). See the "Removing Embody" section in Getting Started.
+- New `test_uninstall_handler` suite (5): the cancel path removes nothing, a suppressed save/test context defers instead of uninstalling, an empty root reports nothing-to-do, confirm removes exactly the footprint, and an edited generated file survives via the review bucket. The confirm-path tests seal `parexec` so `uninstall()` toggling Envoyenable off never stops the live server. **89 suites / 1,985 tests.**
+
 ## v6.0.106
 
 The ext diet: EnvoyExt and EmbodyExt split into thin facades plus focused module DATs -- ~5,900 lines relocated with zero functional change, byte-identical MCP tool schemas, and three latent bugs fixed along the way.
