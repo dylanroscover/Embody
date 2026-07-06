@@ -476,6 +476,70 @@ def get_dat_content(ext, op_path: str, format: str = "auto") -> dict:
         return {'error': f'Failed to get DAT content: {e}'}
 
 
+def _frame_quality(arr) -> dict:
+    """Compute a token-lean 'is this frame actually renderable' verdict from a
+    float32 [H,W,C] texture array (post-flip, values nominally in [0,1]).
+
+    Answers the question the debug-operator skill and CLAUDE.md keep asking --
+    "never declare a visual task done on a black or empty frame" -- as machine-
+    checkable data, so the agent can branch WITHOUT spending vision tokens or
+    trusting an eyeballed JPEG. is_black / fully_transparent are failures;
+    is_flat (a uniform fill) is advisory, not a failure (a solid colour is a
+    valid render). Alpha is the last channel when C is 2 (lum+alpha) or 4."""
+    import numpy as np
+
+    a = arr
+    if a.ndim == 2:
+        a = a[:, :, np.newaxis]
+    if a.ndim != 3:
+        return {}
+    h, w, c = a.shape
+    if h <= 0 or w <= 0 or c <= 0:
+        return {}
+
+    rgb = a[:, :, :3] if c >= 3 else np.repeat(a[:, :, :1], 3, axis=2)
+    rgb = np.clip(rgb.astype(np.float32), 0.0, 1.0)
+    lum = 0.2126 * rgb[:, :, 0] + 0.7152 * rgb[:, :, 1] + 0.0722 * rgb[:, :, 2]
+    max_l = float(lum.max())
+    mean_l = float(lum.mean())
+    std_l = float(lum.std())
+
+    has_alpha = c in (2, 4)
+    mean_a = None
+    opaque_frac = None
+    if has_alpha:
+        alpha = np.clip(a[:, :, -1].astype(np.float32), 0.0, 1.0)
+        mean_a = float(alpha.mean())
+        opaque_frac = float((alpha > 0.5).mean())
+
+    # Thresholds: nearly-unlit, near-uniform, near-invisible.
+    is_black = max_l < 0.02
+    is_flat = std_l < 0.01
+    fully_transparent = has_alpha and mean_a < 0.01
+
+    reasons = []
+    if is_black:
+        reasons.append('black_frame')
+    if fully_transparent:
+        reasons.append('fully_transparent')
+    if is_flat and not is_black:
+        reasons.append('flat_frame')
+
+    verdict = {
+        'is_black': is_black,
+        'is_flat': is_flat,
+        'max_luminance': round(max_l, 4),
+        'mean_luminance': round(mean_l, 4),
+        'std_luminance': round(std_l, 4),
+        'pass': (not is_black) and (not fully_transparent),
+        'fail_reasons': reasons,
+    }
+    if has_alpha:
+        verdict['mean_alpha'] = round(mean_a, 4)
+        verdict['opaque_fraction'] = round(opaque_frac, 4)
+    return verdict
+
+
 def capture_top(ext, op_path: str, format: str = 'jpeg',
                 quality: float = 0.8, max_resolution: int = 640,
                 inline: bool = False, sample_grid: int = 0) -> dict:
@@ -517,6 +581,14 @@ def capture_top(ext, op_path: str, format: str = 'jpeg',
 
         # Flip vertically (TD textures are bottom-up)
         arr = np.flipud(arr)
+
+        # Verdict computed from the FLOAT array (full res, pre-resize) so the
+        # black/flat/transparent judgment reflects true pixel values, not the
+        # quantized/downsampled JPEG. Never let it break a capture.
+        try:
+            quality_verdict = _frame_quality(arr)
+        except Exception:
+            quality_verdict = {}
 
         # Convert float32 [0,1] to uint8 [0,255]
         arr = (np.clip(arr, 0.0, 1.0) * 255.0).astype(np.uint8)
@@ -562,6 +634,7 @@ def capture_top(ext, op_path: str, format: str = 'jpeg',
             'original_height': original_h,
             'format': format,
             'size_bytes': len(image_data),
+            'quality': quality_verdict,
         }
     except Exception as e:
         return {'error': f'Failed to capture TOP: {e}'}

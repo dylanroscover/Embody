@@ -74,6 +74,95 @@ _PATH_PARAM_KEYS = ('op_path', 'parent_path', 'source_path', 'dest_path',
                     'target_path', 'comp_path', 'root_path')
 
 
+# --- Recovery hints: reactive guidance on error envelopes ---
+#
+# When a tool returns {'error': ...}, match the message against this small
+# curated table and ride a 'recovery_hints' list back on the envelope so the
+# agent's NEXT step is steered instead of a blind retry of the same failing
+# call. Purely additive -- a match adds a hint, a miss changes nothing, and a
+# fault here never touches the response (the caller wraps it in try/except).
+# The reactive cousin of the .claude skills: the same hard-won knowledge,
+# delivered at the moment of failure rather than relying on a pre-loaded doc.
+#
+# Each entry is (compiled_regex, cause, action, next_tools). Keep it small and
+# tuned to errors an agent ACTUALLY hits -- noise here trains the agent to
+# ignore the block. `next_tools` are real Envoy tool names.
+_RECOVERY_HINT_RULES = [
+    (re.compile(r'(operator|parent|source|destination|comp|op) not found'
+                r'|does not exist|no operator at', re.IGNORECASE),
+     'the operator path does not resolve',
+     "Never guess paths. Call query_network on the parent COMP (or '/') to "
+     "list real children, or find_children to search by name, then retry with "
+     "a verified path. The active network is "
+     "execute_python: result = ui.panes.current.owner.path.",
+     ['query_network', 'find_children', 'get_op']),
+
+    (re.compile(r'parameter not found|no parameter', re.IGNORECASE),
+     'no parameter by that name on the operator',
+     "List the operator's real parameters with get_op (or read_tdn for a TDN "
+     "COMP) before setting. Custom-parameter names are Capitalized; built-in "
+     "names are lowercase.",
+     ['get_op', 'get_parameter']),
+
+    (re.compile(r'is not a top|is not a comp|\(family:|wrong family',
+                re.IGNORECASE),
+     'the operator is the wrong family for this tool',
+     "Check the operator's family with get_op. capture_top needs a TOP; "
+     "connect_ops needs compatible families; annotations need a COMP.",
+     ['get_op', 'query_network']),
+
+    (re.compile(r'no pixel data available', re.IGNORECASE),
+     'the TOP produced an empty texture (zero resolution or never cooked)',
+     "Check the TOP's resolution and whether it cooked "
+     "(get_op_performance -> cookedThisFrame), verify a Null terminates the "
+     "chain and no bypass flag is set, then force a cook and retry. See the "
+     "debug-operator skill.",
+     ['get_op_performance', 'get_op_errors', 'get_op']),
+
+    (re.compile(r'thread conflict|outside the main thread|main-thread',
+                re.IGNORECASE),
+     'a TD object was touched off the main thread, or a raw op was returned',
+     "Don't return raw op()/parent() objects from execute_python -- assign "
+     "strings instead (result = op('x').path). Resolve any values on the main "
+     "thread before returning.",
+     ['execute_python']),
+
+    (re.compile(r'unknown (op|operator) type|not a valid operator'
+                r"|has no attribute '\w+(TOP|CHOP|SOP|DAT|COMP|MAT|POP)'",
+                re.IGNORECASE),
+     'the operator type name is misspelled or unavailable in this build',
+     "Operator type names are exact (e.g. noiseTOP, not noise). Confirm the "
+     "spelling and availability via get_docs before create_op.",
+     ['get_docs', 'get_td_classes']),
+
+    (re.compile(r'timed out after|operation timed out', re.IGNORECASE),
+     'the operation exceeded the MCP timeout (main-thread work too heavy)',
+     "Break the work into smaller steps; check get_project_performance for a "
+     "cook stall, and prefer batch_operations over many single calls.",
+     ['get_project_performance', 'batch_operations']),
+]
+
+
+def _recovery_hints_for(message: str) -> list:
+    """Return recovery-hint dicts for an error message (empty if none match).
+
+    Pure and side-effect free so it is unit-testable without TD. Collects
+    every matching rule, capped at 2 to stay token-lean."""
+    if not message:
+        return []
+    hints = []
+    for pattern, cause, action, next_tools in _RECOVERY_HINT_RULES:
+        if pattern.search(message):
+            hints.append({
+                'cause': cause,
+                'action': action,
+                'next_tools': list(next_tools),
+            })
+            if len(hints) >= 2:
+                break
+    return hints
+
+
 def _scope_overlaps(a: str, b: str) -> bool:
     """True when two scopes denote overlapping territory.
 
@@ -1477,6 +1566,12 @@ class EnvoyMCPServer:
             sample_grid>=2 returns an NxN RGBA grid instead, clamped 2..32 with
             row 0 at image top-left; image format args are ignored.
 
+            The returned text carries a Quality verdict computed from the raw
+            pixels (luminance stats, alpha coverage): a FAIL flags a
+            black / flat / fully-transparent frame so you can tell an empty
+            render from a real one WITHOUT reading the image. Never declare a
+            visual task done on a FAIL verdict.
+
             Args:
                 op_path: Path to a TOP operator
                 format: "jpeg" or "png"
@@ -1486,7 +1581,8 @@ class EnvoyMCPServer:
                 sample_grid: >=2 returns an RGBA sample grid
 
             Returns:
-                Saved path text, inline image content, or sample-grid dict
+                Saved path text (with a Quality verdict line), inline image
+                content, or sample-grid dict
             """
             import base64
             import os
@@ -1524,6 +1620,24 @@ class EnvoyMCPServer:
             info = (f"TOP capture: {result['original_width']}x{result['original_height']}"
                     f" -> {result['width']}x{result['height']} {result['format'].upper()}"
                     f" ({size_kb:.1f} KB)\nSaved to: {file_path}")
+
+            # Surface the black/empty-frame verdict as text so the agent can
+            # branch on it WITHOUT reading the image -- enforces the
+            # "never declare a visual task done on a black frame" rule.
+            q = result.get('quality') or {}
+            if q:
+                if q.get('pass'):
+                    info += (f"\nQuality: OK (max_lum={q.get('max_luminance')}, "
+                             f"std={q.get('std_luminance')})")
+                else:
+                    info += (f"\nQuality: FAIL {q.get('fail_reasons')} "
+                             f"(max_lum={q.get('max_luminance')}, "
+                             f"mean_lum={q.get('mean_luminance')}"
+                             + (f", mean_alpha={q['mean_alpha']}"
+                                if 'mean_alpha' in q else '') + ") -- the frame "
+                             f"is likely black/empty/transparent. Do NOT declare "
+                             f"the task done; load /debug-operator and fix the "
+                             f"chain, then re-capture.")
 
             # Inline base64 images are token-heavy, so only embed when the caller
             # explicitly asks (inline=True) and the image is small. By default
@@ -3675,8 +3789,25 @@ class EnvoyExt:
         if notable:
             result['_logs'] = notable[-8:]
 
+    def _attachRecoveryHints(self, result):
+        """On an error envelope, attach curated next-step guidance keyed off
+        the message so the agent recovers instead of retrying blindly. Never
+        raises -- an ergonomics layer must not be able to break a response."""
+        try:
+            if not isinstance(result, dict):
+                return
+            message = result.get('error')
+            if not isinstance(message, str) or 'recovery_hints' in result:
+                return
+            hints = _recovery_hints_for(message)
+            if hints:
+                result['recovery_hints'] = hints
+        except Exception:
+            pass
+
     def _send_response(self, request_id, result, sid=None):
         """Send a response back to the worker thread (token-lean log piggyback)."""
+        self._attachRecoveryHints(result)
         self._attachNotableLogs(result, sid)
 
         self.response_queue.put({

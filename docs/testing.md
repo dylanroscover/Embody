@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **89 test suites** and **1,986 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **90 test suites** and **2,005 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -74,11 +74,12 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_embody_mode_guard` | 5 | Mode guard behavior around Embody operations |
 | `test_settings_persistence` | 3 | Settings serialization (byte-stable, sorted keys) |
 
-### MCP Tools (16 suites, 224 tests)
+### MCP Tools (17 suites, 243 tests)
 
 | Suite | Tests | Coverage |
 |-------|-------|----------|
 | `test_envoy_tool_guards` | 29 | Envoy tool safety guards (undo blocks, parameter guards/search, rollback, docs, sample grid) |
+| `test_recovery_hints` | 15 | Recovery-hint match table vs. real error strings + the additive `_attachRecoveryHints` decorator |
 | `test_mcp_externalization` | 22 | Embody integration via MCP (tag, save, status) |
 | `test_mcp_operators` | 20 | Create, delete, copy, rename, query, find |
 | `test_mcp_annotations` | 21 | Creating and managing annotations |
@@ -87,7 +88,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_mcp_flags_position` | 16 | Operator flags, positioning, and `get_network_layout` |
 | `test_mcp_project_performance` | 14 | Project-level FPS, memory, hotspots |
 | `test_mcp_parameters` | 11 | Get/set parameters, modes, expressions |
-| `test_mcp_top_capture` | 11 | TOP image capture (format, quality, resolution) |
+| `test_mcp_top_capture` | 15 | TOP image capture (format, quality, resolution) + black/flat/transparent quality verdict |
 | `test_mcp_tdn_tools` | 10 | `read_tdn`, `export_network`/`import_network` round-trip |
 | `test_mcp_batch` | 9 | Batched multi-operation requests |
 | `test_mcp_connections` | 8 | Wiring operators together |

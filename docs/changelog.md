@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.109
+
+Two agent-ergonomics wins adapted from a competitor review: reactive recovery hints on failed tool calls, and a black/empty-frame verdict on `capture_top`.
+
+- **Recovery hints on error envelopes**: when an Envoy tool returns an `error`, a `recovery_hints` list now rides back on the response -- each entry is `{cause, action, next_tools}`, matched by a small curated table (`_recovery_hints_for`) against the real error strings Envoy emits (path-not-found -> `query_network`/`find_children`, parameter-not-found -> `get_op`, wrong family, empty capture -> `get_op_performance`, thread conflict, timeout -> `get_project_performance`). Attached centrally in `_send_response` via `_attachRecoveryHints`: additive, never clobbers an existing block, never raises. It steers the agent's next step instead of a blind retry of the same failing call -- the reactive cousin of the `.claude` skills.
+- **`capture_top` quality verdict**: every capture now computes a token-lean verdict from the raw float pixels (`_frame_quality`) -- luminance + alpha stats yielding `is_black` / `is_flat` / `fully_transparent` / `pass` / `fail_reasons`. It surfaces as a `Quality: OK|FAIL` line in the returned text, so the agent can tell an empty render from a real one WITHOUT reading the image -- enforcing the "never declare a visual task done on a black frame" rule as machine-checkable data. A uniform fill is advisory (`flat_frame`), not a failure; black and fully-transparent are failures.
+- New `test_recovery_hints` suite (15): the match table against real Envoy error strings (including a live `get_op` failure) plus the additive/no-clobber/never-raise decorator behavior. 4 new `test_mcp_top_capture` quality-verdict tests (black -> FAIL, noise -> OK, solid-colour -> flat-but-pass, transparent -> FAIL). Verified live from the release `.tox` in a throwaway instance: both features shipped in the packaged v6.0.109 build and work end-to-end (black capture -> `Quality: FAIL ['black_frame']`, bad path -> `recovery_hints`), extensions up, Envoy running, no script errors. **90 suites / 2,005 tests.**
+
 ## v6.0.108
 
 A one-click **Uninstall** for removing Embody from a project -- guarded by a confirmation dialog that spells out exactly what will be removed before anything is touched.

@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.108-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.109-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -158,7 +158,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **89 test suites** (1,986 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **90 test suites** (2,005 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -189,6 +189,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.109**: Two agent-ergonomics wins from a competitor review -- **recovery hints** ride back on any tool `error` (`{cause, action, next_tools}`, matched to Envoy's real error strings) so the agent recovers instead of retrying blind, and `capture_top` now returns a **Quality verdict** (`is_black`/`is_flat`/`fully_transparent`/`pass`/`fail_reasons`) computed from raw pixels so an empty render is caught as data without reading the image. New `test_recovery_hints` suite (15) + 4 capture-verdict tests; both verified live from the release `.tox`. **90 suites / 2,005 tests**.
 - **6.0.108**: A one-click **Uninstall** for removing Embody from a project, guarded by a confirmation dialog. The new Uninstall pulse (Embody page, below Disable) computes the same non-destructive plan as `PreviewUninstall()`, shows a `ui.messageBox` spelling out exactly what will be removed (Embody-generated AI config, the `.venv`, `.embody/` state), modified (only Embody's block/key stripped from `.gitignore` / `.gitattributes` / `.mcp.json`), un-set (the `.tdn` git diff driver), and kept (files you edited) -- and only proceeds on confirm; Cancel or a save/test context is a no-op. Your externalized `.tox` / `.tdn` / `.py` and the Embody COMP are never touched. Distinct from Disable (which only removes externalization tags). New `test_uninstall_handler` (5) + a `test_smoke_release` assertion (fresh-install-verified live from the release `.tox`). **89 suites / 1,986 tests**.
 - **6.0.106**: The ext diet -- EnvoyExt (9,221 -> 5,110 lines) and EmbodyExt (10,217 -> 8,817) split into thin facades + eight focused module DATs with zero functional change and byte-identical MCP tool schemas; worker-thread code correctly kept on the facades; three latent bugs fixed (MCP-update notice never logged, a never-raises dispatch contract, annotations repelling the auto-position scan). Every package adversarially reviewed + live-gated. **88 suites / 1,979 tests**.
 - **6.0.104**: Docked operators hug their hosts mechanically -- `create_op`/`copy_op` place a new op's docked callback/shader/info DATs in a tight row under it, `set_op_position` carries docks along when a host moves, `execute_python` auto-hugs scattered docks of new ops (with a `LAYOUT WARNING`), the scattered-dock lint tightens 500 -> 350 units, and `get_network_layout` reports `dockedTo` for mechanical verification. Plus a docs transparency pass (honest build times, Auto-Externalize + Tool Permissions docs) and the Specimen brief set. **88 suites / 1,977 tests**.
