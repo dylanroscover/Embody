@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 716
-generator: Embody/6.0.100
+build: 721
+generator: Embody/6.0.104
 td_build: 099.2025.32820
-source_file: Embody-6.101.toe
-exported_at: '2026-07-04T20:26:17Z'
+source_file: Embody-6.104.toe
+exported_at: '2026-07-06T04:45:05Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -266,7 +266,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 17:30:27 UTC
+    value: Saved 04:45:04 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -635,7 +635,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.100
+    value: 6.0.104
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -652,7 +652,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 716
+    value: 721
   - name: Github
     style: Pulse
     label: GitHub
@@ -663,7 +663,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-04 20:26:16 UTC
+    value: 2026-07-06 04:19:23 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -714,15 +714,15 @@ storage:
   _start_in_progress: true
   git_status:
     /embody/externalizations: ' M'
-    /embody/Embody/templates/text_settings_local: ' M'
     /embody/Embody/EnvoyExt: ' M'
-    /embody/Embody/EmbodyExt: ' M'
     /embody/Embody: ' M'
     /embody: ' M'
-    /embody/Embody/wizard/logic: ??
-    /embody/Embody/wizard/clicks: ??
-    /embody/Embody/wizard: ??
-  _watchdog_gen: 743
+    /embody/Embody/envoy_layout: ??
+    /embody/Embody/envoy_viz: ??
+    /embody/Embody/envoy_ops: ??
+    /embody/Embody/envoy_read: ??
+    /embody/Embody/envoy_setup: ??
+  _watchdog_gen: 761
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -864,8 +864,8 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 508
-  _suppress_dialogs: true
+  _clip_watch_gen: 526
+  _init_complete: true
 operators:
 - name: help
   type: opviewerCOMP
@@ -990,7 +990,7 @@ operators:
     step: 0
     sel:
       mode: advanced
-    step_id: permissions
+    step_id: mode
     sel_mode: auto
     sel_assistant: claudecode
     sel_client: ''
@@ -1137,6 +1137,20 @@ operators:
   position: [-300, 600]
   tags:
   - py
+- name: envoy_ops
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_ops.py
+  position: [-500, 400]
+  tags:
+  - py
+- name: envoy_viz
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_viz.py
+  position: [-500, 600]
+  tags:
+  - py
 - name: templates
   type: baseCOMP
   position: [-400, -1200]
@@ -1156,6 +1170,20 @@ operators:
   tags:
   - tdn
   tdn_ref: embody/Embody/Collection.tdn
+- name: envoy_read
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_read.py
+  position: [-500, 800]
+  tags:
+  - py
+- name: envoy_setup
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_setup.py
+  position: [-500, 700]
+  tags:
+  - py
 - name: keyboardin1
   type: keyboardinDAT
   parameters:
@@ -1164,6 +1192,13 @@ operators:
     fromop: =parent()
   position: [-325, -275]
   size: [130, 90]
+- name: envoy_layout
+  type: textDAT
+  parameters:
+    file: embody/Embody/envoy_layout.py
+  position: [-500, 500]
+  tags:
+  - py
 - name: windowHeader
   type: containerCOMP
   parameters:
