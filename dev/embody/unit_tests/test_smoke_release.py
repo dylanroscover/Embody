@@ -192,6 +192,23 @@ class TestSmokeRelease(EmbodyTestCase):
             par = getattr(self.embody.par, par_name, None)
             self.assertIsNotNone(par, f'Parameter {par_name} missing')
 
+    def test_v6_uninstall_pulse_and_handler_present(self):
+        """v6.0.108: the release .tox ships the Uninstall pulse (ordered right
+        after Disable) plus the promoted UninstallHandler / Uninstall /
+        PreviewUninstall API. Read-only -- never fires the pulse."""
+        un = getattr(self.embody.par, 'Uninstall', None)
+        self.assertIsNotNone(un, 'Uninstall param missing from the release build')
+        self.assertEqual(un.style, 'Pulse', 'Uninstall must be a Pulse parameter')
+        dis = getattr(self.embody.par, 'Disable', None)
+        self.assertIsNotNone(dis, 'Disable param missing')
+        self.assertGreater(un.order, dis.order,
+            'Uninstall should be ordered after Disable on the Embody page')
+        for method_name in ['UninstallHandler', 'Uninstall', 'PreviewUninstall']:
+            method = getattr(self.embody, method_name, None)
+            self.assertIsNotNone(method,
+                f'Promoted method {method_name} missing from the release build')
+            self.assertTrue(callable(method), f'{method_name} should be callable')
+
     def test_log_buffer_initialized(self):
         """Internal log buffer is initialized and operational."""
         buffer = self.embody_ext._log_buffer
