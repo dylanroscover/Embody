@@ -138,6 +138,14 @@ def onPulse(par):
 		webbrowser.open('https://github.com/dylanroscover/Embody')
 
 	elif par.name == 'Help':
+		# text_help is the synced template (carries a {{VERSION}} token);
+		# render it into the non-synced display DAT with the live version so
+		# the header can never drift, then open the opviewer panel.
+		tpl = op('help/text_help')
+		view = op('help/text_help_display')
+		if tpl is not None and view is not None:
+			ver = str(parent.Embody.par.Version.eval())
+			view.text = tpl.text.replace('{{VERSION}}', ver)
 		op('help').openViewer()
 
 	elif par.name == 'Openexternalizationstable':
