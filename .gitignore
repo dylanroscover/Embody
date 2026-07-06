@@ -30,8 +30,8 @@ site/
 Backup/
 logs/
 .tdn_backup/
-.embody/*
-!.embody/project.json
+**/.embody/*
+!**/.embody/project.json
 .envoy-tools-cache.json
 
 # Other AI clients' generated configs. This repo's own AI client is Claude Code
@@ -67,3 +67,8 @@ tmp/
 marketing/
 dev/marketing_lab/
 dev/_promo*
+
+# Embody / Envoy (auto-managed)
+.embody/*
+!.embody/project.json
+dev/embody/ext-diet-baseline/

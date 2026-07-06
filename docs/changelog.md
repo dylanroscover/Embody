@@ -1,5 +1,51 @@
 # Changelog
 
+## v6.0.108
+
+A one-click **Uninstall** for removing Embody from a project -- guarded by a confirmation dialog that spells out exactly what will be removed before anything is touched.
+
+- **New Uninstall pulse** (Embody page, right after Disable). It computes the same NON-DESTRUCTIVE plan as `PreviewUninstall()`, then shows a `ui.messageBox` describing precisely what will happen -- how many Embody-generated items are **removed** (AI-assistant config like `CLAUDE.md` / `AGENTS.md` / `.claude` / `.cursor`, Embody's `.venv`, the `.embody/` state folder), which shared files are **modified** by stripping only Embody's block/key (`.gitignore`, `.gitattributes`, `.mcp.json`), which git config keys are **un-set** (the `.tdn` diff driver), and which items are **kept** (files you edited, an unrecorded venv). It runs the teardown ONLY when you confirm; Cancel -- or a suppressed save/test context -- is a no-op, so nothing is ever removed silently. Your externalized `.tox` / `.tdn` / `.py` files and the Embody COMP itself are never touched.
+- **Wiring**: `UninstallHandler` (promoted) delegates to `embody_admin.uninstall_handler`, dispatched from the `Uninstall` pulse via `parexec`. The destructive `Uninstall(confirm=True)` API is unchanged underneath; the pulse just adds the interactive confirm gate on top.
+- **Distinct from Disable**: Disable removes externalization *tags* and stops tracking (re-enable with Update); Uninstall reverses Embody's *install footprint* on disk (config, venv, git wiring, `.embody/` state). See the "Removing Embody" section in Getting Started.
+- New `test_uninstall_handler` suite (5): the cancel path removes nothing, a suppressed save/test context defers instead of uninstalling, an empty root reports nothing-to-do, confirm removes exactly the footprint, and an edited generated file survives via the review bucket. The confirm-path tests seal `parexec` so `uninstall()` toggling Envoyenable off never stops the live server. A `test_smoke_release` assertion also confirms the release `.tox` ships the Uninstall pulse + handler (verified live: a fresh v6.0.108 build loaded from the release `.tox` in a throwaway instance -- extensions up, Envoy running, no script errors, Uninstall param/handler present). **89 suites / 1,986 tests.**
+
+## v6.0.106
+
+The ext diet: EnvoyExt and EmbodyExt split into thin facades plus focused module DATs -- ~5,900 lines relocated with zero functional change, byte-identical MCP tool schemas, and three latent bugs fixed along the way.
+
+- **EnvoyExt: 9,221 -> 5,110 lines (-45%)** across five module DATs: `envoy_layout` (network lint + dock-hug + auto-position geometry), `envoy_viz` (the entire Embot + camera-follow subsystem, 29 methods), `envoy_ops` (19 mutating tool handlers), `envoy_read` (26 read/introspection handlers), `envoy_setup` (MCP/registry/git config, 21 methods). Every moved method keeps a delegating stub, so the public API, dispatch table, undo wrapping, and all monkeypatch seams are unchanged.
+- **EmbodyExt: 10,217 -> 8,817 lines** across three module DATs: `embody_launch` (AI-client launcher), `embody_git` (AI-config/template/manifest generation + git status + InitEnvoy/InitGit/Reset), `embody_admin` (uninstall + settings persistence). The save/continuity/restoration engine core stays on the facade deliberately -- it is one interwoven subsystem, and splitting it would add risk without adding clarity.
+- **Thread-safety rules enforced mechanically**: worker-executed code (the docs lookup, the env/venv installer core, the git-status worker) stays on the facade because `mod.*` is a TD object and off-limits off the main thread; the git-status worker now captures its parser as a plain module function resolved on the main thread. The env cluster's extraction was evaluated and correctly refused after thread classification.
+- **Three real bugs fixed**: `_checkMCPUpdate` called `run()` from its worker thread, so the MCP-update notice never logged (now an attribute-publish + bounded main-thread poll, with regression tests); a never-raises contract at the dispatch chokepoint was restored; the operator auto-position scan and overlap warning no longer treat annotations as obstacles.
+- **Verification discipline**: each package passed an adversarial review panel (AST-verified byte fidelity including every generated-template string literal, worker-closure audits, and a test-contract lens proving no suite went vacuous) plus live gates in the running TD session. Full suite green (the lone reported failure is the test-runner's own Status override, verified 33/33 via the direct runner).
+- **Module DATs ship in lockstep with the .toe** so a fresh clone can never open a .toe whose extensions reference not-yet-restored module DATs (settings restore fires at frame 5; DAT restoration at frame 50).
+- test_server_lifecycle grows to 24 tests (MCP-update marshal coverage). **88 suites / 1,979 tests.**
+- TDNExt's split (shared serialization/fileio/refs modules, then export/import/clipboard) is mapped and deferred to a follow-up -- see dev/embody/plan-ext-diet.md and the boundary map for the full extraction plan.
+
+## v6.0.104
+
+Docked operators now hug their hosts mechanically -- dock placement moved from written guidance into the Envoy tool layer -- plus a docs transparency pass and the first Specimen brief set.
+
+- **Docked companions auto-hug their host.** `create_op` and `copy_op` now snap every docked companion an operator spawns (GLSL pixel/compute/info DATs, callback DATs) into a tight row 30 units below the host, centered, slots dock-width+20 apart (`docks_placed` in the result). `set_op_position` carries a host's docks along when you move it (`docks_moved`), so repositioning a GLSL TOP no longer strands its shader DATs -- the #1 way scattered docks actually happened. The auto-positioner also reserves the dock-row footprint, so a new host lands where its companions fit too.
+- **`execute_python` auto-fix + tighter lint.** Docks of newly-created ops left scattered by a script are auto-hugged below their host before the layout lint runs (a `LAYOUT WARNING` reports the fix); deliberate near-host placements are left alone. The scattered-dock lint threshold tightened from 500 to 350 units -- the old threshold let visibly-stranded docks (~400u away) pass silently.
+- **`get_network_layout` reports `dockedTo`.** Docked companions carry their host's name, so the layout Verify step can check "every dock hugs its host" mechanically instead of by eyeball.
+- **Skills/rules/templates synced**: the create-operator skill gains an explicit docked-companions step and Verify item, network-layout.md documents the tool-layer enforcement (manual formula now scoped to `execute_python` builds), mcp-tools-reference rows updated -- all three shipped templates regenerated and normalized to UTF-8/LF/no-BOM.
+- **Docs transparency pass**: honest build-time expectations (small changes in seconds, complete networks are 5-20 minute autonomous builds; multi-session parallelism as the real velocity story) across the landing page, manifesto, and quickstart; **Auto-Externalize New Ops** and **Tool Permissions** parameter documentation; Launch AI Client as the primary quickstart path; button-hover contrast and footer-spacing CSS fixes.
+- **Specimen briefs** land in `dev/specimen-briefs/` -- the authoring contract plus five briefs (point-line-plane, overture, digital-harmony, lumia, radiolaria) for the Specimen Collection gallery.
+- `.gitignore` now covers `.embody/` config dirs at any depth (machine-local catalogs/manifests no longer show as untracked).
+- `test_layout_lint` grows 11 -> 16 tests (hug formula, dock-follow, dock-self-move, `execute_python` auto-hug, 350 boundary). **88 suites / 1,977 tests.**
+
+## v6.0.103
+
+A "How should the AI ask permission?" step in the setup wizard so you choose your Claude Code tool-permission posture -- plus the wizard itself is now externalized to TDN.
+
+- **New wizard step: tool permissions.** When you turn on Claude Code in the setup wizard (Auto *or* Advanced mode), a new step lets you choose how much Embody pre-approves Envoy MCP tool calls in `.claude/settings.local.json`, so Claude Code stops asking on every tool use: **Don't ask** (recommended -- auto-approves all Envoy tools via the `mcp__envoy` wildcard, so new tools are covered too), **Ask for some** (read-only/query tools only; anything that creates/edits/deletes still prompts), **Ask for all** (pre-approve nothing), or **Leave settings alone** (never create or modify the file). The choice persists on a new **Tool Permissions** (`Toolpermissions`) parameter on the Envoy page. The step shows for Claude Code only, since `settings.local.json` is Claude-specific.
+- **Captured TOPs no longer prompt to read.** Every written posture also whitelists the operating-system temp directory (`tempfile.gettempdir()`, macOS and Windows) in `additionalDirectories`, so a PNG saved there by `capture_top` can be read back without a per-file permission prompt.
+- **Non-destructive settings writer.** The `settings.local.json` writer now merges into an existing file, preserving all your other keys (hooks, model, other allow patterns), only rewrites when the posture actually changes (no startup churn), and logs whether it created or updated the file. The shipped template shrank to a non-Envoy baseline; the Envoy allow entries are generated per posture in code.
+- **Setup wizard externalized to TDN.** The `wizard` COMP is now a first-class externalized artifact -- `wizard.tdn` (structure) plus `wizard/logic.py` and `wizard/clicks.py` (its hand-authored step machine and click router) -- diffable in git like Embody's other UI COMPs, and (as an Embody descendant) safely excluded from TDN reconstruction/stripping.
+- **The permissions step fits the window.** Its four options get a vertical scrollbar (with a peek of the fourth as a scroll cue) so the step never pushes the Back/Next footer off-screen.
+- New `test_tool_permissions` suite (10) covers posture -> allow-list mapping, `leave` = no write, merge-preserves-keys, and idempotency; `test_setup_wizard` gains 3 for the posture plumbing. **88 suites / 1,972 tests.**
+
 ## v6.0.99
 
 Setup-wizard layout polish and a size-aware network-spacing rule.

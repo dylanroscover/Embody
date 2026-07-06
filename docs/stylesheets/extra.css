@@ -42,6 +42,9 @@
   --md-accent-fg-color: #6ee668;
   --md-accent-fg-color--transparent: #6ee6681a;
   --md-typeset-a-color: #6ee668;
+  /* Ink used ON accent-colored fills (button hover, etc.) -- must be
+   * dark, since the accent itself is bright green */
+  --md-accent-bg-color: #181e1e;
 
   /* Code blocks */
   --md-code-bg-color: #161e1a;
@@ -80,6 +83,16 @@
   color: #a0f09c;
 }
 
+/* Buttons: on hover/focus Material fills them with the bright green
+ * accent; the generic link-hover color above would sit green-on-green,
+ * so force dark ink (and the matching fill) explicitly */
+[data-md-color-scheme="slate"] .md-typeset .md-button:hover,
+[data-md-color-scheme="slate"] .md-typeset .md-button:focus {
+  color: #181e1e;
+  background-color: #6ee668;
+  border-color: #6ee668;
+}
+
 /* Nav/sidebar links use subtler color */
 [data-md-color-scheme="slate"] .md-nav__link {
   color: var(--md-default-fg-color--light);
@@ -88,6 +101,11 @@
 [data-md-color-scheme="slate"] .md-nav__link--active,
 [data-md-color-scheme="slate"] .md-nav__link:hover {
   color: #6ee668;
+}
+
+/* Breathing room between the last content section and the footer */
+.md-content {
+  padding-bottom: 2.8rem;
 }
 
 /* Octicons/emoji icon vertical alignment */

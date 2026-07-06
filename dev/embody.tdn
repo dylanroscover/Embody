@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 495
-generator: Embody/6.0.98
+build: 549
+generator: Embody/6.0.108
 td_build: 099.2025.32820
-source_file: Embody-6.99.toe
-exported_at: '2026-07-04T14:19:12Z'
+source_file: Embody-6.108.toe
+exported_at: '2026-07-06T19:48:43Z'
 network_path: /embody
 options:
   include_dat_content: false
@@ -304,7 +304,7 @@ operators:
       label: Auto-Save Status
       readOnly: true
       help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-      value: Saved 11:49:16 UTC
+      value: Saved 10:20:09 UTC
     - name: Tdnstriponsave
       style: Toggle
       label: Strip on Save
@@ -423,6 +423,21 @@ operators:
       - COMPs
       - DATs and COMPs
       help: 'Auto-tag operators that Envoy creates via create_op for externalization to version-control-friendly files. Neither = off. DATs = externalize created DATs (source files). COMPs = externalize created COMPs (TDN). DATs and COMPs = both. Only ops at an externalization boundary are tagged -- never ops already inside an externalized COMP, palette clones, or Embody itself. Additive only: it never deletes files or removes tags.'
+    - name: Toolpermissions
+      style: Menu
+      label: Tool Permissions
+      default: all
+      menuNames:
+      - all
+      - some
+      - prompt
+      - leave
+      menuLabels:
+      - Don't prompt for any tool
+      - Prompt for some tools (read-only auto-approved)
+      - Prompt for all tools
+      - Leave settings file alone
+      help: Whether Embody pre-approves Envoy MCP tool calls in .claude/settings.local.json so Claude Code isn't prompted on every tool use. all = pre-approve all Envoy tools (no prompts). some = pre-approve read-only/query tools only; tools that create/edit/delete/execute still prompt. prompt = pre-approve nothing; every tool prompts. leave = never create or modify settings.local.json. Except for 'leave', Embody also whitelists the OS temp directory so captured TOP images can be read without a prompt. The setup wizard sets this; you can change it here anytime.
     - name: Envoystatus
       style: Str
       label: Envoy Status
@@ -652,13 +667,17 @@ operators:
       - Always Externalize
       - Never Ask
       help: What to do when TDN COMPs contain DATs or storage that will be lost on save. 'Ask Each Save' prompts on each save (recommended), 'Always Externalize' auto-externalizes at-risk DATs without asking, 'Never Ask' suppresses the check entirely. Prefer 'Ask' or 'Always Externalize' -- 'Never Ask' is an opt-in escape hatch for power users who accept the risk.
+    - name: Uninstall
+      style: Pulse
+      startSection: true
+      help: 'Removes Embody from this project: deletes Embody-generated config (CLAUDE.md / AGENTS.md / .claude / .cursor / ...), Embody''s .venv, and .embody/ state; strips only Embody''s block from shared files (.gitignore, .gitattributes, .mcp.json); un-sets the .tdn git diff driver. Your own files, externalized .tox / .tdn / .py, and the Embody COMP are NOT removed. Asks for confirmation first.'
     About:
     - name: Version
       style: Str
       startSection: true
       readOnly: true
       help: Embody version string (read-only).
-      value: 6.0.98
+      value: 6.0.108
     - name: Touchbuild
       style: Str
       label: Touch Build
@@ -675,7 +694,7 @@ operators:
       label: Build Number
       readOnly: true
       help: Embody build number (read-only). Incremented with each release.
-      value: 711
+      value: 752
     - name: Github
       style: Pulse
       label: GitHub
@@ -686,7 +705,7 @@ operators:
       label: Build Date
       readOnly: true
       help: Date of this Embody build (read-only).
-      value: 2026-07-04 14:19:11 UTC
+      value: 2026-07-06 19:48:37 UTC
     - name: Help
       style: Pulse
       help: Opens the Embody help documentation.
@@ -705,10 +724,10 @@ operators:
     _start_in_progress: true
     git_status:
       /embody/externalizations: ' M'
-      /embody/Embody/templates/text_rule_network_layout: ' M'
+      /embody/unit_tests/test_sandbox: ' M'
       /embody/Embody: ' M'
       /embody: ' M'
-    _watchdog_gen: 734
+    _watchdog_gen: 819
     _suite_proof_progress:
       todo:
       - test_ancestor_rename
@@ -850,8 +869,8 @@ operators:
           tot: 33
           fail: 1
       pending_after: absent
-    _clip_watch_gen: 499
-    _suppress_dialogs: true
+    _clip_watch_gen: 584
+    _init_complete: true
   tdn_ref: embody/Embody.tdn
 - name: base_tdn
   type: baseCOMP
@@ -2777,7 +2796,7 @@ operators:
   parameters:
     file: embody/externalizations.tsv
     syncfile: true
-    rows: 260
+    rows: 271
     cols: 11
   flags:
   - viewer

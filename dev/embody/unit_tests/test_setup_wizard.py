@@ -29,7 +29,7 @@ EmbodyTestCase = runner_mod.EmbodyTestCase
 class TestSetupWizard(EmbodyTestCase):
 
     _PARAMS = ('Embodymode', 'Aiprojectroot', 'Aiprojectrootcustom',
-               'Aiclient', 'Envoyenable', 'Envoystatus')
+               'Aiclient', 'Envoyenable', 'Envoystatus', 'Toolpermissions')
 
     def setUp(self):
         self._emb = op.Embody
@@ -85,6 +85,28 @@ class TestSetupWizard(EmbodyTestCase):
                         'first-run claudecode must enable Envoy')
         self.assertEqual(self._extract_calls, [1],
                          'first run must write AI config exactly once')
+
+    # ----- tool-permissions posture (settings.local.json) -----------------
+
+    def test_permissions_plumbs_to_param(self):
+        # The wizard's permissions step passes a posture token; _applyWizardSetup
+        # must persist it on Toolpermissions (read later by _deploySettingsLocal).
+        self._ext._applyWizardSetup(mode='auto', assistant='claudecode',
+                                    permissions='some')
+        self.assertEqual(self._emb.par.Toolpermissions.eval(), 'some',
+                         'the chosen posture must land on the Toolpermissions param')
+
+    def test_permissions_defaults_to_all(self):
+        self._emb.par.Toolpermissions = 'prompt'   # prove the default overrides it
+        self._ext._applyWizardSetup(mode='auto', assistant='claudecode')
+        self.assertEqual(self._emb.par.Toolpermissions.eval(), 'all',
+                         "an omitted posture must default to 'all'")
+
+    def test_unknown_permissions_falls_back_to_all(self):
+        self._ext._applyWizardSetup(mode='auto', assistant='claudecode',
+                                    permissions='bogus')
+        self.assertEqual(self._emb.par.Toolpermissions.eval(), 'all',
+                         "an unrecognized posture token must fall back to 'all'")
 
     # ----- assistant = other ----------------------------------------------
 

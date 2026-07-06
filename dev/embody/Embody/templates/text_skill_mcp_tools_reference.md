@@ -12,10 +12,10 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`) |
+| `create_op` | `parent_path`, `op_type`, `name?` | Create a new operator (e.g., `baseCOMP`, `noiseTOP`, `textDAT`, `gridPOP`). Auto-positions it and hugs any docked companions below it (`docks_placed`) |
 | `create_extension` | `parent_path`, `class_name`, `name?`, `code?`, `promote?`, `ext_name?`, `ext_index?`, `existing_comp?` | Create a TD extension: baseCOMP + text DAT + extension wiring |
 | `delete_op` | `op_path` | Delete an operator |
-| `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location |
+| `copy_op` | `source_path`, `dest_parent`, `new_name?` | Copy operator to new location. Auto-positions the copy and hugs its docked companions (`docks_placed`) |
 | `rename_op` | `op_path`, `new_name` | Rename an operator |
 | `get_op` | `op_path`, `include_defaults?` | Returns NON-DEFAULT parameters by default (`include_defaults=True` for all); parameter-heavy COMPs are expensive (~3k+ tokens full) -- prefer `read_tdn` for structure reads |
 | `query_network` | `parent_path?`, `recursive?`, `op_type?`, `include_utility?` | Compact operator list: path/type/family/depth; name = last path segment. Set `include_utility=True` to include annotations |
@@ -49,8 +49,8 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 | Tool | Parameters | Description |
 |------|-----------|-------------|
 | `get_op_position` | `op_path` | Get position, size, color, and comment |
-| `get_network_layout` | `comp_path`, `include_annotations?` | Compact layout for all children in a COMP: path/type/nodeX/nodeY/nodeWidth/nodeHeight plus bounding_box. Centers are `nodeX+nodeWidth/2`; annotation text is capped at 160 chars. Use instead of repeated `get_op_position` calls |
-| `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set position, size, color (`[r,g,b]` 0-1), or comment |
+| `get_network_layout` | `comp_path`, `include_annotations?` | Compact layout for all children in a COMP: path/type/nodeX/nodeY/nodeWidth/nodeHeight plus bounding_box; docked ops carry `dockedTo` (host name). Centers are `nodeX+nodeWidth/2`; annotation text is capped at 160 chars. Use instead of repeated `get_op_position` calls |
+| `set_op_position` | `op_path`, `x?`, `y?`, `width?`, `height?`, `color?`, `comment?` | Set position, size, color (`[r,g,b]` 0-1), or comment. Moving a host re-hugs its docked companions below the new spot (`docks_moved`); position the host before any explicitly-placed dock |
 | `layout_children` | `op_path` | Auto-layout all children in a COMP |
 
 ## Annotations

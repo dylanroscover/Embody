@@ -16,10 +16,8 @@ import os
 import re
 import subprocess
 import sys
-import shlex
 import shutil
 import inspect
-import hashlib
 import json
 from collections import deque
 from datetime import datetime
@@ -148,8 +146,8 @@ class EmbodyExt:
     # process: ELECTRON_RUN_AS_NODE=1 makes Electron editors (VS Code, Cursor,
     # Windsurf) run headless-as-Node and quit instantly ("dock icon bounces,
     # then closes"); LD_LIBRARY_PATH/DYLD_* and PYTHON* point into TD's bundle
-    # and can mis-link or mis-route other tools. _launchEnv() strips these so a
-    # launched app/terminal gets a clean environment (see _launchEnv).
+    # and can mis-link or mis-route other tools. launch_env (embody_launch
+    # module DAT) strips these so a launched app/terminal starts clean.
     _LAUNCH_ENV_STRIP = frozenset({
         'ELECTRON_RUN_AS_NODE', 'NODE_OPTIONS',
         'LD_LIBRARY_PATH', 'LD_PRELOAD',
@@ -603,10 +601,24 @@ class EmbodyExt:
 
     def _checkMCPUpdate(self, installed: str):
         """Check PyPI for a newer MCP version in a background thread. Logs a
-        notice if an update is available - never blocks the main thread."""
+        notice if an update is available - never blocks the main thread.
+
+        The worker touches NO TouchDesigner object: it publishes its result to
+        a plain instance attribute (``self._mcp_update_notice``) and a
+        main-thread poll (``_pollMCPUpdate``, scheduled via run() below) reads
+        it and logs. The worker must NOT call run() itself -- run() raises
+        tdError off the main thread, and the old code did exactly that inside
+        the worker, so its except-clause swallowed the error and the update
+        notice never logged. This mirrors EnvoyExt._beginAsyncBootstrap's
+        attribute-publish + main-thread-poll marshal (self._bootstrap_result /
+        _pollBootstrap).
+        """
         import threading
 
-        owner_path = self.my.path
+        # Sentinel: None = worker still in flight; '' = done, no update (or the
+        # network failed); a truthy string = the notice to log. Reset before
+        # spawning so a stale value from a prior check can't be read.
+        self._mcp_update_notice = None
 
         def _check():
             try:
@@ -620,21 +632,56 @@ class EmbodyExt:
                     data = json.loads(resp.read())
                 latest = data['info']['version']
                 if tuple(int(x) for x in latest.split('.')) > tuple(int(x) for x in installed.split('.')):
-                    msg = (
+                    # Plain attribute write -- NOT a TD object. Read + logged on
+                    # the main thread by _pollMCPUpdate.
+                    self._mcp_update_notice = (
                         f'MCP update available: {installed} -> {latest}. '
                         f'Update EmbodyExt.MCP_MIN_VERSION '
                         f'and delete dev/.venv to upgrade.'
                     )
-                    # self.Log() touches TD objects (FIFO DAT, parameters,
-                    # absTime.frame). Marshal to the main thread via run().
-                    # Guarded so a rename/move between spawn and fire becomes
-                    # a silent no-op rather than a None.Log() script error.
-                    run("o = op(args[0])\nif o: o.Log(args[1], 'WARNING')",
-                        owner_path, msg, delayFrames=1)
+                else:
+                    self._mcp_update_notice = ''  # up to date -- stop polling
             except Exception:
-                pass  # Network unavailable, not critical
+                self._mcp_update_notice = ''  # network unavailable, not critical
 
         threading.Thread(target=_check, daemon=True).start()
+        # Drain the worker's result on the main thread (self.Log is illegal off
+        # the main thread). Re-arms while the request is in flight; bounded so a
+        # worker that never publishes (e.g. daemon killed at shutdown) can't
+        # re-schedule forever.
+        run('args[0]._pollMCPUpdate(args[1])', self, 0, delayFrames=30)
+
+    def _pollMCPUpdate(self, attempts: int):
+        """Main-thread drain for _checkMCPUpdate's background PyPI check.
+
+        Reads the notice the worker published on ``self._mcp_update_notice``
+        and logs it via self.Log (which touches TD objects and so may only run
+        here, on the main thread). Re-arms a bounded number of times while the
+        worker is still in flight, then gives up silently.
+        """
+        # Stale-instance guard (parity with EnvoyExt._pollBootstrap): if the
+        # ext reinitialized since this chain was armed, drop the stale chain --
+        # the fresh instance re-arms its own on the next check.
+        try:
+            if self.my.ext.Embody is not self:
+                return
+        except Exception:
+            return
+        notice = getattr(self, '_mcp_update_notice', None)
+        if notice is None:
+            # Worker still running -- check again shortly (bounded; 40 x 30
+            # frames ~= 20s at 60fps, covering a slow DNS resolve that
+            # urlopen's socket timeout does not bound).
+            if attempts < 40:
+                run('args[0]._pollMCPUpdate(args[1])',
+                    self, attempts + 1, delayFrames=30)
+            return
+        self._mcp_update_notice = None
+        if notice:
+            try:
+                self.Log(notice, 'WARNING')
+            except Exception:
+                pass  # ext reinitialized between spawn and drain -- silent no-op
 
     # ==========================================================================
     # PROPERTIES
@@ -1002,7 +1049,8 @@ class EmbodyExt:
         win.par.winopen.pulse()
 
     def _applyWizardSetup(self, mode='auto', assistant='claudecode',
-                          client='', root='gitroot', custom_root=''):
+                          client='', root='gitroot', custom_root='',
+                          permissions='all'):
         """Apply the setup-wizard selections and enable (or skip) Envoy.
 
         The single backend entry point the wizard's finish() calls. Because the
@@ -1019,6 +1067,11 @@ class EmbodyExt:
           client:      Aiclient menu value, used when assistant == 'other'
           root:        'gitroot' | 'projectfolder' | 'custom'
           custom_root: absolute path, used when root == 'custom'
+          permissions: 'all' | 'some' | 'prompt' | 'leave' -- how Claude Code's
+                       .claude/settings.local.json pre-approves Envoy MCP tools
+                       (the deferred Start()'s _deploySettingsLocal reads the
+                       Toolpermissions param this sets). Only meaningful for the
+                       Claude Code client; ignored when Envoy is not enabled.
         """
         # Whitelist the assistant token: an unrecognized value (a typo, a
         # mis-cased 'None') must be a safe no-op, never fall through to ENABLING
@@ -1028,6 +1081,12 @@ class EmbodyExt:
             self.Log(f'Setup wizard: unrecognized assistant "{assistant}" -- no '
                      f'change made.', 'WARNING')
             return
+
+        # Whitelist the tool-permissions token too; an unknown value falls back
+        # to the safe default rather than corrupting the param.
+        permissions = (permissions or 'all').strip().lower()
+        if permissions not in ('all', 'some', 'prompt', 'leave'):
+            permissions = 'all'
 
         # 1. Posture.
         if mode in ('auto', 'advanced'):
@@ -1061,7 +1120,13 @@ class EmbodyExt:
                 self.Log(f'Unknown AI client "{client}" -- keeping the current '
                          f'selection.', 'WARNING')
 
-        # 4. Enable (first run) or restart-to-apply (re-run), modal-free.
+        # 4. Tool-permissions posture. Persist BEFORE enabling so the deferred
+        #    Start()'s _deploySettingsLocal reads the chosen value. The wizard
+        #    only shows this step for Claude Code; for 'other' clients it stays
+        #    at the default (harmless -- settings.local.json is Claude-specific).
+        self.my.par.Toolpermissions = permissions
+
+        # 5. Enable (first run) or restart-to-apply (re-run), modal-free.
         self._enableEnvoyResolved()
 
     def _enableEnvoyResolved(self):
@@ -1576,19 +1641,11 @@ class EmbodyExt:
         return self._guard(f'Embody - {category}', msg, apply_fn, mode='advanced')
 
     # === Uninstall / Deinit ==================================================
-    # A reversible teardown of Embody's project footprint. This is the
-    # NON-DESTRUCTIVE planner: _computeUninstallPlan reads the install manifest
-    # (precise) plus a marker-scan fallback (pre-manifest installs) and returns
-    # exactly what a full Uninstall WOULD do -- nothing is removed here. The
-    # executor (built next) consumes THIS plan, so the preview can never drift
-    # from what runs. Conservative: anything not provably Embody-owned is
-    # classed 'review' (KEPT + flagged), never silently deleted.
-    # See dev/embody/plan-init-deinit-wizard.md sec 5.
-
-    _UNINSTALL_MARKER_FILES = ('AGENTS.md', 'CLAUDE.md', 'ENVOY.md', 'GEMINI.md')
-    _UNINSTALL_MARKER_TREES = ('.claude/rules', '.claude/skills', '.cursor/rules',
-                               '.github/instructions', '.windsurf/rules')
-    _UNINSTALL_MARKER_SINGLES = ('.github/copilot-instructions.md',)
+    # Reversible teardown of Embody's project footprint. The planner/executor
+    # (compute_uninstall_plan .. uninstall) + the _UNINSTALL_MARKER_* constants
+    # live in embody_admin (WP7c); only _uninstallClassifyMarker (marker + hash
+    # classification, shared with the AI-config hash manifest) stays on the
+    # facade. See dev/embody/plan-init-deinit-wizard.md sec 5.
 
     def _uninstallClassifyMarker(self, path, root, hashes):
         """Classify a candidate file: 'delete' (Embody-generated + unmodified),
@@ -1610,353 +1667,43 @@ class EmbodyExt:
         return 'review'  # user edited a generated file -> preserve it
 
     def _computeUninstallPlan(self, target_dir=None):
-        """NON-DESTRUCTIVE. Return exactly what Uninstall would remove/strip so
-        it can be reviewed before any deletion. Manifest-driven, with a
-        marker-scan fallback for pre-manifest installs.
-
-        Plan dict:
-          root, sources[list],
-          delete  [{path,kind,why}]        provably Embody's -> remove
-          strip   [{path,kind,marker,why}] git block / .mcp.json key -> reverse only that
-          unset   [keys]                   repo git config to un-set
-          review  [{path,why}]             exists, not provably ours -> KEPT, flagged
-          missing [paths]                  recorded but already gone
-        """
-        root = (Path(target_dir).resolve() if target_dir
-                else Path(self._findProjectRoot()).resolve())
-        m = self._loadInstallManifest(str(root))
-        hashes = self._loadHashManifest(str(root))
-        plan = {'root': str(root), 'sources': [],
-                'delete': [], 'strip': [], 'unset': [], 'review': [], 'missing': []}
-        seen = set()
-
-        def _abs(stored):
-            p = Path(stored)
-            return p if p.is_absolute() else (root / p)
-
-        def _rel(p):
-            try:
-                return p.resolve().relative_to(root).as_posix()
-            except Exception:
-                return str(p)
-
-        def _add(bucket, p, **kw):
-            rp = str(p.resolve() if hasattr(p, 'resolve') else p)
-            if rp in seen:
-                return False
-            seen.add(rp)
-            entry = {'path': _rel(p)}
-            entry.update(kw)
-            plan[bucket].append(entry)
-            return True
-
-        def _add_strip(p, kind, marker, why):
-            rp = str(p.resolve())
-            if any(s['path'] == _rel(p) for s in plan['strip']):
-                return
-            seen.add(rp)
-            plan['strip'].append({'path': _rel(p), 'kind': kind,
-                                  'marker': marker, 'why': why})
-
-        def _classify_into(p):
-            cls = self._uninstallClassifyMarker(p, root, hashes)
-            if cls == 'delete':
-                _add('delete', p, kind='file', why='Embody-generated, unmodified')
-            elif cls == 'review':
-                _add('review', p, why='you edited this generated file -- kept')
-
-        # ---- manifest (precise) ----
-        if any((m.get('files_created'), m.get('files_appended'),
-                m.get('git_config'), m.get('venv'))):
-            plan['sources'].append('manifest')
-
-        for stored in m.get('files_created', []):
-            p = _abs(stored)
-            if p.name == '.mcp.json':
-                if p.exists():
-                    _add_strip(p, 'json_key', 'mcpServers.envoy',
-                               'remove Embody server; delete file only if none remain')
-                continue
-            if not p.exists():
-                plan['missing'].append(stored); continue
-            if p.name == 'settings.local.json':
-                _add('review', p,
-                     why='created by Embody but may hold your permission edits -- kept')
-                continue
-            _classify_into(p)
-
-        for e in m.get('files_appended', []):
-            p = _abs(e['path'])
-            if not p.exists():
-                plan['missing'].append(e['path']); continue
-            _add_strip(p, e.get('kind', 'block'), e.get('marker', ''),
-                       "strip only Embody's block/key -- your file is kept")
-
-        plan['unset'] = list(m.get('git_config', []))
-
-        v = m.get('venv')
-        if v:
-            p = _abs(v['path'])
-            if p.exists():
-                _add('delete', p, kind='dir', why='Embody-created virtual environment')
-            else:
-                plan['missing'].append(v['path'])
-
-        # ---- marker-scan FALLBACK (pre-manifest installs / anything missed) ----
-        before = sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset'])
-        for name in self._UNINSTALL_MARKER_FILES:
-            p = root / name
-            if p.is_file():
-                _classify_into(p)
-        for sub in self._UNINSTALL_MARKER_TREES:
-            d = root / sub
-            if d.is_dir():
-                for p in d.rglob('*'):
-                    if p.is_file():
-                        _classify_into(p)
-        for single in self._UNINSTALL_MARKER_SINGLES:
-            p = root / single
-            if p.is_file():
-                _classify_into(p)
-        mcp = root / '.mcp.json'
-        if mcp.is_file() and str(mcp.resolve()) not in seen:
-            try:
-                if 'envoy' in json.loads(
-                        mcp.read_text(encoding='utf-8')).get('mcpServers', {}):
-                    _add_strip(mcp, 'json_key', 'mcpServers.envoy',
-                               'remove Embody server; delete file only if none remain')
-            except Exception:
-                pass
-        for gname, marker in (('.gitignore', '# Embody / Envoy'),
-                              ('.gitattributes', 'Embody / Envoy')):
-            gp = root / gname
-            if gp.is_file() and str(gp.resolve()) not in seen:
-                try:
-                    if marker in gp.read_text(encoding='utf-8'):
-                        _add_strip(gp, 'block', marker,
-                                   "strip only Embody's block -- your file is kept")
-                except Exception:
-                    pass
-        # git config (read-only query) for pre-manifest installs
-        if not plan['unset']:
-            for key in ('diff.tdn.textconv', 'diff.tdn.cachetextconv'):
-                try:
-                    r = subprocess.run(['git', 'config', '--get', key],
-                                       cwd=str(root), capture_output=True,
-                                       text=True, timeout=5,
-                                       stdin=subprocess.DEVNULL)
-                    if r.returncode == 0 and (r.stdout or '').strip():
-                        plan['unset'].append(key)
-                except Exception:
-                    pass
-        # venv not captured by the manifest -> flag for review (can't prove
-        # Embody created it without the record, so never auto-delete it). Prefer
-        # the authoritative venv location (under project.folder) -- which can sit
-        # in a subdir of the manifest root -- but ONLY when it falls under the
-        # root being planned, so a plan for an unrelated root (a test/other
-        # project) never picks up the LIVE project's venv.
-        venv_dir = root / '.venv'
-        try:
-            cand = Path(self._venvPaths()['venv_dir']).resolve()
-            cand.relative_to(root)  # raises if not under this root
-            venv_dir = cand
-        except Exception:
-            pass
-        if venv_dir.is_dir() and str(venv_dir.resolve()) not in seen:
-            _add('review', venv_dir, kind='dir',
-                 why="looks like Embody's virtualenv but was not recorded -- review before removing")
-        if sum(len(plan[b]) for b in ('delete', 'review', 'strip')) + len(plan['unset']) > before:
-            plan['sources'].append('fallback')
-
-        # ---- .embody/ (Embody-owned state) removable wholesale ----
-        embody_dir = root / '.embody'
-        if embody_dir.is_dir():
-            _add('delete', embody_dir, kind='dir',
-                 why='Embody runtime state (manifest, bridge, config, hashes)')
-
-        return plan
+        """NON-DESTRUCTIVE uninstall plan (delete/strip/unset/review/missing) -- see embody_admin."""
+        return mod.embody_admin.compute_uninstall_plan(self, target_dir)
 
     def PreviewUninstall(self, target_dir=None):
         """Log + return a NON-DESTRUCTIVE preview of a full Uninstall. Nothing is
-        removed. Use this to review the reversal plan before running Uninstall."""
-        plan = self._computeUninstallPlan(target_dir)
-        src = ', '.join(plan['sources']) or 'none -- nothing recorded/found'
-        lines = [f'Uninstall preview for {plan["root"]} (sources: {src})']
-        if plan['delete']:
-            lines.append(f'  REMOVE ({len(plan["delete"])}):')
-            for a in plan['delete']:
-                lines.append(f'    - {a["path"]}  [{a.get("kind","file")}] -- {a["why"]}')
-        if plan['strip']:
-            lines.append(f'  MODIFY ({len(plan["strip"])}) -- your file kept, only Embody\'s part reversed:')
-            for a in plan['strip']:
-                lines.append(f'    ~ {a["path"]}  ({a["kind"]}: {a["marker"]})')
-        if plan['unset']:
-            lines.append(f'  GIT CONFIG un-set: {", ".join(plan["unset"])}')
-        if plan['review']:
-            lines.append(f'  REVIEW ({len(plan["review"])}) -- KEPT (may hold your edits):')
-            for a in plan['review']:
-                lines.append(f'    ? {a["path"]} -- {a["why"]}')
-        if plan['missing']:
-            lines.append(f'  already gone: {len(plan["missing"])}')
-        self.Log('\n'.join(lines), 'INFO')
-        return plan
-
-    # ---- executor (destructive) -- consumes a plan from _computeUninstallPlan --
+        removed. Use this to review the reversal plan before running Uninstall.
+        See embody_admin."""
+        return mod.embody_admin.preview_uninstall(self, target_dir)
 
     def _removeTreeWithin(self, path, root):
-        """Recursively remove a directory, but ONLY if it resolves INSIDE root
-        (guard against a catastrophic path). Bottom-up unlink + rmdir -- a
-        scoped, explicit walk, never a blind rmtree of an arbitrary path.
-        Returns files removed."""
-        path = Path(path).resolve()
-        root = Path(root).resolve()
-        try:
-            path.relative_to(root)  # raises if path is not under root
-        except ValueError:
-            self.Log(f'Uninstall: refusing to remove {path} -- outside {root}',
-                     'WARNING')
-            return 0
-        if not path.is_dir():
-            return 0
-        removed = 0
-        # deepest-first so a dir is empty by the time we rmdir it
-        for child in sorted(path.rglob('*'),
-                            key=lambda p: len(p.parts), reverse=True):
-            try:
-                if child.is_file() or child.is_symlink():
-                    child.unlink(); removed += 1
-                elif child.is_dir():
-                    child.rmdir()
-            except OSError as e:
-                self.Log(f'Uninstall: could not remove {child}: {e}', 'DEBUG')
-        try:
-            path.rmdir()
-        except OSError as e:
-            self.Log(f'Uninstall: could not remove {path}: {e}', 'DEBUG')
-        return removed
+        """Recursively remove a directory only if it resolves inside root -- see embody_admin."""
+        return mod.embody_admin.remove_tree_within(self, path, root)
 
     def _stripMarkedBlock(self, text, marker):
-        """Return text with Embody's marked comment block removed -- the header
-        comment line containing `marker` plus its consecutive non-blank entry
-        lines (and a single preceding blank separator). User content is kept."""
-        lines = text.split('\n')
-        out = []
-        i, n = 0, len(lines)
-        while i < n:
-            if marker in lines[i] and lines[i].lstrip().startswith('#'):
-                if out and out[-1] == '':
-                    out.pop()               # drop the blank separator we added
-                i += 1
-                while i < n and lines[i].strip() != '':
-                    i += 1                  # skip the block's entry lines
-                continue
-            out.append(lines[i]); i += 1
-        return '\n'.join(out)
+        """Return text with Embody's marked comment block removed -- see embody_admin."""
+        return mod.embody_admin.strip_marked_block(self, text, marker)
 
     def _stripMcpEnvoy(self, path):
-        """Remove only the 'envoy' server from a .mcp.json. Delete the file only
-        if that leaves no servers AND no other top-level keys -- the user's other
-        servers/keys are always preserved."""
-        try:
-            cfg = json.loads(path.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, OSError):
-            return
-        servers = cfg.get('mcpServers', {})
-        servers.pop('envoy', None)
-        other_keys = [k for k in cfg if k != 'mcpServers']
-        if servers:
-            cfg['mcpServers'] = servers
-            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
-        elif other_keys:
-            cfg['mcpServers'] = {}
-            path.write_text(json.dumps(cfg, indent=2) + '\n', encoding='utf-8')
-        else:
-            path.unlink()  # the file held only Embody's server -> remove it
+        """Remove only the 'envoy' server from a .mcp.json -- see embody_admin."""
+        return mod.embody_admin.strip_mcp_envoy(self, path)
 
     def _executeUninstallPlan(self, plan, include_review=False):
-        """Execute a plan from _computeUninstallPlan. Filesystem + git only.
-        'review' items are KEPT unless include_review=True. Returns a summary
-        dict. This is the one place that actually removes/modifies files."""
-        root = Path(plan['root'])
-
-        def _abs(rel):
-            p = Path(rel)
-            return p if p.is_absolute() else (root / p)
-
-        summary = {'deleted': 0, 'stripped': 0, 'unset': 0,
-                   'kept_review': 0, 'errors': 0}
-
-        def _remove(entry):
-            p = _abs(entry['path'])
-            try:
-                if entry.get('kind') == 'dir':
-                    if p.is_dir():
-                        self._removeTreeWithin(p, root)
-                        summary['deleted'] += 1
-                elif p.exists():
-                    p.unlink(); summary['deleted'] += 1
-            except OSError as e:
-                summary['errors'] += 1
-                self.Log(f'Uninstall: could not remove {p}: {e}', 'WARNING')
-
-        for entry in plan['delete']:
-            _remove(entry)
-
-        for a in plan['strip']:
-            p = _abs(a['path'])
-            if not p.exists():
-                continue
-            try:
-                if a['kind'] == 'json_key':
-                    self._stripMcpEnvoy(p)
-                else:
-                    p.write_text(
-                        self._stripMarkedBlock(
-                            p.read_text(encoding='utf-8'), a['marker']),
-                        encoding='utf-8')
-                summary['stripped'] += 1
-            except OSError as e:
-                summary['errors'] += 1
-                self.Log(f'Uninstall: could not strip {p}: {e}', 'WARNING')
-
-        for key in plan['unset']:
-            try:
-                subprocess.run(['git', 'config', '--unset', key],
-                               cwd=str(root), capture_output=True, text=True,
-                               timeout=5, stdin=subprocess.DEVNULL)
-                summary['unset'] += 1
-            except Exception as e:
-                self.Log(f'Uninstall: could not un-set {key}: {e}', 'DEBUG')
-
-        if include_review:
-            for entry in plan['review']:
-                _remove(entry)
-        else:
-            summary['kept_review'] = len(plan['review'])
-
-        return summary
+        """Execute a plan from _computeUninstallPlan (destructive) -- see embody_admin."""
+        return mod.embody_admin.execute_uninstall_plan(self, plan, include_review=include_review)
 
     def Uninstall(self, confirm=False, include_review=False, target_dir=None):
         """Reverse Embody's project footprint. DESTRUCTIVE -- requires
-        confirm=True (review PreviewUninstall() first). Stops Envoy, then
-        removes/strips per the plan. 'review' items (files you edited, an
-        unrecorded venv) are KEPT unless include_review=True; user files are
-        never deleted -- only Embody's own additions."""
-        if not confirm:
-            self.Log('Uninstall is destructive. Review PreviewUninstall() first, '
-                     'then call Uninstall(confirm=True). Nothing was changed.',
-                     'WARNING')
-            return {'ran': False, 'reason': 'confirm required'}
-        plan = self._computeUninstallPlan(target_dir)
-        try:  # stop Envoy so its venv/config aren't in use during removal
-            if self.my.par.Envoyenable.eval():
-                self.my.par.Envoyenable = 0
-        except Exception:
-            pass
-        summary = self._executeUninstallPlan(plan, include_review=include_review)
-        summary['ran'] = True
-        self.Log(f'Uninstall complete: {summary}', 'SUCCESS')
-        return summary
+        confirm=True (review PreviewUninstall() first). 'review' items are KEPT
+        unless include_review=True; user files are never deleted. See embody_admin."""
+        return mod.embody_admin.uninstall(
+            self, confirm=confirm, include_review=include_review,
+            target_dir=target_dir)
+
+    def UninstallHandler(self, target_dir=None):
+        """Uninstall pulse handler: preview the footprint, confirm via
+        ui.messageBox, then run Uninstall on Yes. See embody_admin."""
+        return mod.embody_admin.uninstall_handler(self, target_dir=target_dir)
 
     # AI-client tokens -> the config files _extractAIConfig writes for them (on
     # top of AGENTS.md, which is always written). Used to list the exact files
@@ -1970,270 +1717,40 @@ class EmbodyExt:
     }
 
     def _extractAIConfig(self):
-        """Extract AI coding assistant config files based on par.Aiclient."""
-        target_dir = self._findProjectRoot()
-        client = self.my.par.Aiclient.eval()
-
-        def _write():
-            # Always: AGENTS.md (universal standard, read by all major AI tools)
-            self._writeAgentsMd(target_dir)
-            if client == 'claudecode':
-                self._writeClaudeCodeConfig(target_dir)
-            elif client == 'cursor':
-                self._writeCursorRules(target_dir)
-            elif client == 'copilot':
-                self._writeCopilotInstructions(target_dir)
-            elif client == 'windsurf':
-                self._writeWindsurfRules(target_dir)
-            elif client == 'gemini':
-                self._writeGeminiConfig(target_dir)
-            # 'codex', 'none': AGENTS.md only (Codex reads AGENTS.md;
-            # Copilot config is its own token).
-
-        # Advanced mode: confirm before (re)writing AI assistant config files.
-        details = [f'{target_dir}/AGENTS.md'] + [
-            f'{target_dir}/{f}' for f in self._AI_CONFIG_FILES.get(client, [])]
-        self._guardFileWrite(
-            'AI config',
-            f'write AI assistant config for {self._aiClientLabel()} in '
-            f'{target_dir}',
-            details, _write)
+        """Extract AI coding assistant config files based on par.Aiclient -- see embody_git."""
+        return mod.embody_git.extract_ai_config(self)
 
     def _writeAgentsMd(self, target_dir):
-        """Write AGENTS.md -- universal AI instructions read by all major AI tools."""
-        templates_comp = self.my.op('templates')
-        agents_md_dat = templates_comp.op('text_agents_md') if templates_comp else None
-
-        if agents_md_dat and agents_md_dat.text:
-            content = agents_md_dat.text
-        else:
-            # Assemble from the 3 rule templates as a fallback
-            self.Log('text_agents_md DAT not found -- assembling AGENTS.md from rules', 'DEBUG')
-            parts = ['<!-- Generated by Embody/Envoy -- do not edit manually -->\n']
-            parts.append('# Embody + Envoy -- AI Instructions\n\n')
-            parts.append(
-                'This project uses [Embody](https://github.com/dylanroscover/Embody) '
-                '(TouchDesigner externalization) and Envoy (MCP server for AI coding tools).\n\n'
-                '---\n\n'
-            )
-            if templates_comp:
-                for dat_name in self._TEMPLATE_MAP_RULES:
-                    dat = templates_comp.op(dat_name)
-                    if dat and dat.text:
-                        # Strip frontmatter from each rule before embedding
-                        parts.append(self._stripFrontmatter(dat.text).strip())
-                        parts.append('\n\n---\n\n')
-            content = ''.join(parts)
-
-        self._writeTemplate(target_dir, 'AGENTS.md', content)
+        """Write AGENTS.md -- universal AI instructions for all major AI tools -- see embody_git."""
+        return mod.embody_git.write_agents_md(self, target_dir)
 
     def _writeClaudeCodeConfig(self, target_dir):
-        """Write Claude Code config: CLAUDE.md + .claude/rules/ + .claude/skills/"""
-        # 1. CLAUDE.md (with ENVOY.md fallback if user already has one)
-        self._writeClaudeMd(target_dir)
-
-        # 2. .claude/rules/ and .claude/skills/ from template DATs
-        templates_comp = self.my.op('templates')
-        if not templates_comp:
-            self.Log('Templates COMP not found -- skipping .claude/ generation', 'DEBUG')
-            return
-
-        written = 0
-        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
-            template_dat = templates_comp.op(dat_name)
-            if not template_dat or not template_dat.text:
-                continue
-            # Claude Code doesn't use YAML frontmatter -- strip it.
-            # Keep the generated-by marker for overwrite protection.
-            content = self._stripFrontmatter(template_dat.text)
-            if self._writeTemplate(target_dir, f'.claude/rules/{slug}.md', content):
-                written += 1
-
-        for dat_name, slug in self._TEMPLATE_MAP_SKILLS.items():
-            template_dat = templates_comp.op(dat_name)
-            if not template_dat or not template_dat.text:
-                continue
-            if self._writeTemplate(target_dir, f'.claude/skills/{slug}/SKILL.md', template_dat.text):
-                written += 1
-
-        if written > 0:
-            self.Log(f'Generated {written} .claude/ files at {target_dir}', 'SUCCESS')
+        """Write Claude Code config: CLAUDE.md + .claude/rules/ + .claude/skills/ -- see embody_git."""
+        return mod.embody_git.write_claude_code_config(self, target_dir)
 
     def _stripFrontmatter(self, content):
-        """Strip leading YAML frontmatter (---...---) from content if present.
-
-        Returns the content after the closing --- block, with leading whitespace
-        trimmed. Handles BOM-prefixed content.
-        """
-        # Strip BOM that TD may add to externalized files
-        content = content.lstrip('\ufeff')
-        if not content.startswith('---\n'):
-            return content
-        close_idx = content.find('\n---\n', 4)
-        if close_idx == -1:
-            return content
-        return content[close_idx + 5:].lstrip('\n')
+        """Strip leading YAML frontmatter (---...---) from content -- see embody_git."""
+        return mod.embody_git.strip_frontmatter(self, content)
 
     def _writeCursorRules(self, target_dir):
-        """Write Cursor rules: .cursor/rules/{slug}.mdc with YAML frontmatter.
-
-        Templates already embed a 'description:' field. This injects 'globs: []'
-        and 'alwaysApply: true' into the existing frontmatter rather than
-        prepending a duplicate block.
-        """
-        templates_comp = self.my.op('templates')
-        if not templates_comp:
-            self.Log('Templates COMP not found -- skipping .cursor/ generation', 'DEBUG')
-            return
-
-        written = 0
-        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
-            template_dat = templates_comp.op(dat_name)
-            if not template_dat or not template_dat.text:
-                continue
-            raw = template_dat.text.lstrip('\ufeff')
-            # Inject globs/alwaysApply into existing frontmatter
-            SEP = '\n---\n'
-            if raw.startswith('---\n') and SEP in raw[4:]:
-                close_idx = raw.find(SEP, 4)
-                fm_lines = raw[4:close_idx]
-                rest = raw[close_idx + len(SEP):]
-                if 'alwaysApply:' not in fm_lines:
-                    fm_lines += '\nglobs: []\nalwaysApply: true'
-                content = '---\n' + fm_lines + SEP + rest
-            else:
-                # No frontmatter -- build one from first H1
-                description = slug.replace('-', ' ').title()
-                for line in raw.splitlines():
-                    if line.startswith('# '):
-                        description = line[2:].strip()
-                        break
-                content = (
-                    f'---\ndescription: "{description}"\n'
-                    f'globs: []\nalwaysApply: true\n---\n\n{raw}'
-                )
-            if self._writeTemplate(target_dir, f'.cursor/rules/{slug}.mdc', content):
-                written += 1
-
-        if written > 0:
-            self.Log(f'Generated {written} .cursor/rules/ files at {target_dir}', 'SUCCESS')
+        """Write Cursor rules: .cursor/rules/{slug}.mdc with frontmatter -- see embody_git."""
+        return mod.embody_git.write_cursor_rules(self, target_dir)
 
     def _writeCopilotInstructions(self, target_dir):
-        """Write GitHub Copilot config: combined instructions + per-rule files."""
-        templates_comp = self.my.op('templates')
-        if not templates_comp:
-            self.Log('Templates COMP not found -- skipping .github/ generation', 'DEBUG')
-            return
-
-        written = 0
-        rule_parts = ['<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n']
-        individual_contents = {}
-
-        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
-            template_dat = templates_comp.op(dat_name)
-            if not template_dat or not template_dat.text:
-                continue
-            # Strip template frontmatter -- Copilot uses its own applyTo format
-            rule_content = self._stripFrontmatter(template_dat.text).strip()
-            # Extract heading for section label
-            heading = slug.replace('-', ' ').title()
-            for line in rule_content.splitlines():
-                if line.startswith('# '):
-                    heading = line[2:].strip()
-                    break
-            rule_parts.append(f'## {heading}\n\n{rule_content}\n\n---\n\n')
-            # Individual file with applyTo frontmatter + generated marker
-            individual_contents[slug] = (
-                f'---\n'
-                f'applyTo: "**"\n'
-                f'---\n\n'
-                f'<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n'
-                f'{rule_content}'
-            )
-
-        # Combined file (.github/copilot-instructions.md)
-        combined = ''.join(rule_parts)
-        if self._writeTemplate(target_dir, '.github/copilot-instructions.md', combined):
-            written += 1
-
-        # Individual per-rule files (.github/instructions/{slug}.instructions.md)
-        for slug, content in individual_contents.items():
-            if self._writeTemplate(target_dir, f'.github/instructions/{slug}.instructions.md', content):
-                written += 1
-
-        if written > 0:
-            self.Log(f'Generated {written} .github/ files at {target_dir}', 'SUCCESS')
+        """Write GitHub Copilot config: combined + per-rule files -- see embody_git."""
+        return mod.embody_git.write_copilot_instructions(self, target_dir)
 
     def _writeWindsurfRules(self, target_dir):
-        """Write Windsurf rules: .windsurf/rules/{slug}.md (plain markdown)."""
-        templates_comp = self.my.op('templates')
-        if not templates_comp:
-            self.Log('Templates COMP not found -- skipping .windsurf/ generation', 'DEBUG')
-            return
-
-        written = 0
-        for dat_name, slug in self._TEMPLATE_MAP_RULES.items():
-            template_dat = templates_comp.op(dat_name)
-            if not template_dat or not template_dat.text:
-                continue
-            if self._writeTemplate(target_dir, f'.windsurf/rules/{slug}.md', template_dat.text):
-                written += 1
-
-        if written > 0:
-            self.Log(f'Generated {written} .windsurf/rules/ files at {target_dir}', 'SUCCESS')
+        """Write Windsurf rules: .windsurf/rules/{slug}.md -- see embody_git."""
+        return mod.embody_git.write_windsurf_rules(self, target_dir)
 
     def _writeGeminiConfig(self, target_dir):
-        """Write Gemini CLI config: a thin GEMINI.md that imports AGENTS.md.
-
-        Gemini reads GEMINI.md (not AGENTS.md), so GEMINI.md pulls in the
-        always-written AGENTS.md via Gemini's @import syntax -- no content
-        duplication. See docs: gemini-cli/docs/cli/gemini-md.md (@file imports).
-        """
-        content = (
-            '<!-- Generated by Embody/Envoy -- do not edit manually -->\n\n'
-            '# Project Context for Gemini CLI\n\n'
-            'This project uses Embody (TouchDesigner externalization) and Envoy\n'
-            '(MCP server for AI coding tools). The full instructions live in\n'
-            'AGENTS.md, imported below.\n\n'
-            '@AGENTS.md\n'
-        )
-        if self._writeTemplate(target_dir, 'GEMINI.md', content):
-            self.Log(f'Generated GEMINI.md at {target_dir}', 'SUCCESS')
+        """Write Gemini CLI config: GEMINI.md importing AGENTS.md -- see embody_git."""
+        return mod.embody_git.write_gemini_config(self, target_dir)
 
     def _writeClaudeMd(self, target_dir):
-        """Write CLAUDE.md from the text_claude template DAT."""
-        templates_comp = self.my.op('templates')
-        template_dat = templates_comp.op('text_claude') if templates_comp else None
-        if not template_dat:
-            self.Log('CLAUDE.md template DAT not found inside Embody/templates', 'WARNING')
-            return None
-
-        content = template_dat.text
-        if not content:
-            self.Log('CLAUDE.md template DAT is empty', 'WARNING')
-            return None
-
-        claude_md_path = target_dir / 'CLAUDE.md'
-
-        if claude_md_path.exists():
-            existing = claude_md_path.read_text(encoding='utf-8')
-            if '<!-- Generated by Embody/Envoy' in existing:
-                claude_md_path.write_text(content, encoding='utf-8')
-                self.Log(f'Updated CLAUDE.md at {claude_md_path}', 'SUCCESS')
-            else:
-                fallback = target_dir / 'ENVOY.md'
-                fallback.write_text(content, encoding='utf-8')
-                self.Log(
-                    f'CLAUDE.md already exists (not generated by Embody). '
-                    f'Wrote MCP reference to {fallback} instead.',
-                    'WARNING'
-                )
-                return fallback
-        else:
-            claude_md_path.write_text(content, encoding='utf-8')
-            self.Log(f'Created CLAUDE.md at {claude_md_path}', 'SUCCESS')
-
-        return claude_md_path
+        """Write CLAUDE.md from the text_claude template DAT -- see embody_git."""
+        return mod.embody_git.write_claude_md(self, target_dir)
 
     # Sidecar manifest of {rel_path: sha256(generated content)} recorded under the
     # project root. It lets _writeTemplate tell "untouched since we wrote it"
@@ -2243,23 +1760,16 @@ class EmbodyExt:
     _HASH_MANIFEST = '.embody/generated-hashes.json'
 
     def _contentHash(self, content):
-        """Stable 16-hex SHA-256 of a generated file's content."""
-        return hashlib.sha256(content.encode('utf-8')).hexdigest()[:16]
+        """Stable 16-hex SHA-256 of a generated file's content -- see embody_git."""
+        return mod.embody_git.content_hash(self, content)
 
     def _loadHashManifest(self, target_dir):
-        path = Path(target_dir) / self._HASH_MANIFEST
-        if path.exists():
-            try:
-                return json.loads(path.read_text(encoding='utf-8'))
-            except Exception:
-                return {}
-        return {}
+        """Load the sidecar generated-file hash manifest -- see embody_git."""
+        return mod.embody_git.load_hash_manifest(self, target_dir)
 
     def _saveHashManifest(self, target_dir, manifest):
-        path = Path(target_dir) / self._HASH_MANIFEST
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(manifest, indent=2, sort_keys=True), encoding='utf-8')
+        """Save the sidecar generated-file hash manifest -- see embody_git."""
+        return mod.embody_git.save_hash_manifest(self, target_dir, manifest)
 
     # --- Install manifest -----------------------------------------------------
     # Records Embody's project footprint so Uninstall/Deinit can reverse it
@@ -2269,301 +1779,70 @@ class EmbodyExt:
     _INSTALL_MANIFEST = '.embody/manifest.json'
 
     def _installManifestSkeleton(self):
-        return {'version': 1, 'files_created': [], 'files_appended': [],
-                'git_config': [], 'venv': None, 'network_ops': []}
+        """Empty install-manifest structure -- see embody_git."""
+        return mod.embody_git.install_manifest_skeleton(self)
 
     def _loadInstallManifest(self, target_dir):
-        path = Path(target_dir) / self._INSTALL_MANIFEST
-        if path.exists():
-            try:
-                data = json.loads(path.read_text(encoding='utf-8'))
-                skel = self._installManifestSkeleton()
-                if isinstance(data, dict):
-                    skel.update(data)  # tolerate older/partial manifests
-                return skel
-            except Exception:
-                pass
-        return self._installManifestSkeleton()
+        """Load the install manifest (footprint record) -- see embody_git."""
+        return mod.embody_git.load_install_manifest(self, target_dir)
 
     def _saveInstallManifest(self, target_dir, manifest):
-        path = Path(target_dir) / self._INSTALL_MANIFEST
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(manifest, indent=2, sort_keys=True), encoding='utf-8')
+        """Save the install manifest -- see embody_git."""
+        return mod.embody_git.save_install_manifest(self, target_dir, manifest)
 
     def _manifestRelPath(self, target_dir, path):
-        """Stored form for a footprint path: POSIX-relative to the manifest root
-        when the path lives under it, else an absolute POSIX path (so files
-        outside the project root -- e.g. a repo .gitignore when the project is a
-        subdir -- still record cleanly). Accepts a path already relative to
-        target_dir OR an absolute path."""
-        try:
-            base = Path(target_dir).resolve()
-            p = Path(path)
-            if not p.is_absolute():
-                p = base / p
-            p = p.resolve()
-            try:
-                return p.relative_to(base).as_posix()
-            except ValueError:
-                return p.as_posix()
-        except Exception:
-            return str(path).replace('\\', '/')
+        """Stored (relative/absolute POSIX) form for a footprint path -- see embody_git."""
+        return mod.embody_git.manifest_rel_path(self, target_dir, path)
 
     def _manifestRecordCreatedFile(self, target_dir, path):
-        """Record a file Embody CREATED (did not previously exist) so Uninstall
-        can safely remove ONLY Embody's own additions. Best-effort; never raises."""
-        try:
-            rel = self._manifestRelPath(target_dir, path)
-            m = self._loadInstallManifest(target_dir)
-            if rel not in m['files_created']:
-                m['files_created'].append(rel)
-                self._saveInstallManifest(target_dir, m)
-        except Exception as e:
-            self.Log(f'Install-manifest record failed for {path}: {e}', 'DEBUG')
+        """Record a file Embody CREATED (best-effort) -- see embody_git."""
+        return mod.embody_git.manifest_record_created_file(self, target_dir, path)
 
     def _manifestRecordAppendedFile(self, target_dir, path, marker, kind='block'):
-        """Record a SHARED file Embody modified in place -- a git file it
-        appended a marked BLOCK to (kind='block', marker = block header), or a
-        JSON file it added a KEY to (kind='json_key', marker = the dotted key,
-        e.g. 'mcpServers.envoy'). Uninstall reverses ONLY that unit; it NEVER
-        deletes the user's file. Best-effort; never raises."""
-        try:
-            rel = self._manifestRelPath(target_dir, path)
-            m = self._loadInstallManifest(target_dir)
-            if not any(e.get('path') == rel for e in m['files_appended']):
-                m['files_appended'].append(
-                    {'path': rel, 'marker': marker, 'kind': kind})
-                self._saveInstallManifest(target_dir, m)
-        except Exception as e:
-            self.Log(f'Install-manifest append record failed for {path}: {e}',
-                     'DEBUG')
+        """Record a SHARED file Embody modified in place -- see embody_git."""
+        return mod.embody_git.manifest_record_appended_file(self, target_dir, path, marker, kind)
 
     def _manifestRecordVenv(self, target_dir, venv_path):
-        """Record that Embody CREATED the venv (safe to remove on uninstall)."""
-        try:
-            rel = self._manifestRelPath(target_dir, venv_path)
-            m = self._loadInstallManifest(target_dir)
-            if not m.get('venv'):
-                m['venv'] = {'path': rel, 'created': True}
-                self._saveInstallManifest(target_dir, m)
-        except Exception as e:
-            self.Log(f'Install-manifest venv record failed: {e}', 'DEBUG')
+        """Record that Embody CREATED the venv -- see embody_git."""
+        return mod.embody_git.manifest_record_venv(self, target_dir, venv_path)
 
     def _manifestRecordGitConfig(self, target_dir, keys):
-        """Record git config keys Embody set (un-set on uninstall)."""
-        try:
-            if isinstance(keys, str):
-                keys = [keys]
-            m = self._loadInstallManifest(target_dir)
-            changed = False
-            for k in keys:
-                if k not in m['git_config']:
-                    m['git_config'].append(k)
-                    changed = True
-            if changed:
-                self._saveInstallManifest(target_dir, m)
-        except Exception as e:
-            self.Log(f'Install-manifest git-config record failed: {e}', 'DEBUG')
+        """Record git config keys Embody set -- see embody_git."""
+        return mod.embody_git.manifest_record_git_config(self, target_dir, keys)
 
     def _writeTemplate(self, target_dir, rel_path, content):
-        """Write a single template file, respecting the Embody/Envoy marker.
-
-        Overwrite policy, in order:
-          - no marker             -> user-authored, never touched (skip).
-          - marker + edited since
-            we wrote it           -> the user changed a generated file; their
-                                     edits win (skip + log; delete it to refresh).
-          - marker + untouched    -> regenerate (live hash matches what we stored).
-          - legacy marker (no
-            tracked hash)         -> regenerate once, then it is tracked and
-                                     edit-protected from here on.
-
-        Edit-detection uses a sidecar hash manifest (_HASH_MANIFEST) so generated
-        files stay byte-identical to their templates.
-
-        Returns True if the file was written, False if skipped.
-        """
-        target_path = Path(target_dir) / rel_path
-        was_new = not target_path.exists()  # pre-existence -> install-manifest safe-delete record
-        manifest = self._loadHashManifest(target_dir)
-        if target_path.exists():
-            existing = target_path.read_text(encoding='utf-8')
-            if self._EMBODY_MARKER not in existing:
-                return False
-            stored = manifest.get(rel_path)
-            if stored is not None and self._contentHash(existing) != stored:
-                self.Log(
-                    f'Kept your edits to {rel_path} '
-                    f'(delete the file to regenerate it from the template).',
-                    'INFO')
-                return False
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_text(content, encoding='utf-8')
-        manifest[rel_path] = self._contentHash(content)
-        self._saveHashManifest(target_dir, manifest)
-        if was_new:
-            self._manifestRecordCreatedFile(target_dir, rel_path)
-        return True
+        """Write one template file, respecting the Embody/Envoy marker -- see embody_git."""
+        return mod.embody_git.write_template(self, target_dir, rel_path, content)
 
     def _upgradeEnvoy(self):
-        """Restore AI config on open if Envoy is enabled but files are missing.
-
-        Auto restores silently (the managed default). Advanced defers with a
-        breadcrumb: _extractAIConfig runs under _startup_config_pass so its guard
-        DEFERS instead of popping a modal that would block the restore chain."""
-        if not self.my.par.Envoyenable.eval():
-            return
-        target_dir = self._findProjectRoot()
-        client = self.my.par.Aiclient.eval()
-        agents_md_missing = not (target_dir / 'AGENTS.md').exists()
-        if not (agents_md_missing or self._clientFilesMissing(target_dir, client)):
-            return
-        prior = self._startup_config_pass
-        self._startup_config_pass = True
-        try:
-            self._extractAIConfig()
-        finally:
-            self._startup_config_pass = prior
+        """Restore AI config on open if Envoy is enabled but files are missing -- see embody_git."""
+        return mod.embody_git.upgrade_envoy(self)
 
     def _clientFilesMissing(self, target_dir, client):
-        """Return True if the primary config files for the selected client are absent."""
-        checks = {
-            'claudecode': lambda d: (
-                not (d / 'CLAUDE.md').exists() and not (d / 'ENVOY.md').exists()
-            ) or not (d / '.claude' / 'rules').exists(),
-            'cursor':     lambda d: not (d / '.cursor' / 'rules').exists(),
-            'copilot':    lambda d: not (d / '.github' / 'copilot-instructions.md').exists(),
-            'windsurf':   lambda d: not (d / '.windsurf' / 'rules').exists(),
-            'gemini':     lambda d: not (d / 'GEMINI.md').exists(),
-            'none':       lambda d: False,
-        }
-        return checks.get(client, lambda d: False)(target_dir)
+        """True if the primary config files for the selected client are absent -- see embody_git."""
+        return mod.embody_git.client_files_missing(self, target_dir, client)
 
     def _aiClientLabel(self):
-        """Human label of the SELECTED Aiclient option (e.g. 'Claude Code') --
-        NOT the parameter's own label ('AI Client')."""
-        p = self.my.par.Aiclient
-        try:
-            return p.menuLabels[p.menuIndex]
-        except Exception:
-            return p.eval()
+        """Human label of the SELECTED Aiclient option (e.g. 'Claude Code') -- see embody_git."""
+        return mod.embody_git.ai_client_label(self)
 
     def InitEnvoy(self) -> None:
-        """(Re)generate all Envoy and AI client config files.
-
-        Writes MCP config (.mcp.json, .embody/envoy.json, bridge script,
-        settings.local.json) and AI client files (CLAUDE.md, AGENTS.md,
-        .claude/rules/, .claude/skills/, or equivalent for Cursor/Copilot/
-        Windsurf) to the git root or project folder.
-
-        Safe to call at any time -- idempotent. Use this after initializing
-        a git repo, changing the AI client setting, or updating Embody to
-        refresh generated files.
-
-        Requires Envoy to be enabled (par.Envoyenable = True).
-        """
-        if not self.my.par.Envoyenable.eval():
-            self.Log('Envoy is not enabled. Set Envoyenable = True first.', 'WARNING')
-            return
-
-        target_dir = self._findProjectRoot()
-
-        # MCP config (port comes from the running server, or the parameter)
-        envoy = self.my.ext.Envoy
-        if self.my.fetch('envoy_running', False):
-            # Extract port from current status string
-            status = str(self.my.par.Envoystatus.eval())
-            import re
-            match = re.search(r'port\s+(\d+)', status)
-            port = int(match.group(1)) if match else self.my.par.Envoyport.eval()
-        else:
-            port = self.my.par.Envoyport.eval()
-
-        # ONE combined Advanced-mode confirm for the whole config regen (MCP +
-        # AI); the sub-calls apply silently under _consent_bulk so this never
-        # fragments into a dialog per file.
-        client_label = self._aiClientLabel()
-
-        def _apply():
-            prior = self._consent_bulk
-            self._consent_bulk = True
-            try:
-                envoy._configureMCPClient(port, target_dir=target_dir)
-                self._extractAIConfig()  # AI client config
-            finally:
-                self._consent_bulk = prior
-            self.Log(
-                f'Envoy config regenerated for {client_label} at {target_dir}',
-                'SUCCESS')
-
-        self._guardFileWrite(
-            'AI & MCP config',
-            f'(re)write MCP + AI client config for {client_label} in {target_dir}',
-            [f'{target_dir}/.mcp.json', f'{target_dir}/AGENTS.md',
-             f'{target_dir}/ (rules/instructions for {client_label})'],
-            _apply)
+        """(Re)generate all Envoy + AI client config files (idempotent). Requires
+        Envoy enabled (par.Envoyenable = True). See embody_git."""
+        return mod.embody_git.init_envoy(self)
 
     def InitGit(self) -> None:
-        """Initialize or reconnect to a git repository, then generate
-        git-related config files (.gitignore, .gitattributes).
-
-        If no git repo exists, prompts the user to initialize one.
-        After git is available, also regenerates MCP and AI client config
-        so paths point to the git root.
-
-        Safe to call at any time. Use this after creating a git repo
-        manually, or to refresh .gitignore/.gitattributes entries.
-
-        Requires Envoy to be enabled (par.Envoyenable = True).
-        """
-        if not self.my.par.Envoyenable.eval():
-            self.Log('Envoy is not enabled. Set Envoyenable = True first.', 'WARNING')
-            return
-
-        envoy = self.my.ext.Envoy
-        git_root = envoy._checkOrInitGitRepo()
-
-        if git_root is None:
-            return  # User cancelled
-
-        if git_root == 'no-git':
-            self.Log('No git repo -- .gitignore/.gitattributes skipped.', 'INFO')
-            return
-
-        # Store git root so Envoy can find it later (e.g. for deregistration)
-        self.my.store('_git_root', git_root)
-
-        # Git-specific config -- ONE combined Advanced-mode confirm (sub-calls
-        # apply silently under _consent_bulk so this doesn't fragment per file).
-        def _apply():
-            prior = self._consent_bulk
-            self._consent_bulk = True
-            try:
-                envoy._configureGitignore(git_root)
-                envoy._configureGitattributes(git_root)
-            finally:
-                self._consent_bulk = prior
-            self.Log(f'Git config generated at {git_root}', 'SUCCESS')
-
-        self._guardFileWrite(
-            'Git config', f'update git config in {git_root}',
-            [f'{git_root}/.gitignore', f'{git_root}/.gitattributes'],
-            _apply)
-
-        # Regenerate MCP + AI config so paths point to git root (own confirm)
-        self.InitEnvoy()
+        """Initialize/reconnect a git repo, then regenerate git + MCP + AI config so
+        paths point to the git root. Requires Envoy enabled. See embody_git."""
+        return mod.embody_git.init_git(self)
 
     # ==========================================================================
     # INITIALIZATION & RESET
     # ==========================================================================
 
     def Reset(self, removeTags: bool = False) -> None:
-        """Reset Embody to initial state."""
-        parent.Embody.Disable(False, removeTags)
-        run(f"op('{self.my}').UpdateHandler()", delayFrames=10)
-        self.createExternalizationsTable()
-        self.my.par.externaltox = ''
+        """Reset Embody to initial state -- see embody_git."""
+        return mod.embody_git.reset(self, removeTags)
 
     def createExternalizationsTable(self) -> None:
         """Create or reset the externalizations tracking table."""
@@ -2723,309 +2002,37 @@ class EmbodyExt:
     # ==========================================================================
 
     def _settingsPath(self) -> Path:
-        """Path to .embody/config.json -- consistent with _findProjectRoot()."""
-        return self._findProjectRoot() / '.embody' / 'config.json'
+        """Path to .embody/config.json -- see embody_admin."""
+        return mod.embody_admin.settings_path(self)
 
     def _findSettingsFile(self) -> Optional[Path]:
-        """Locate .embody/config.json, checking both Aiprojectroot candidate
-        roots.
-
-        At TD launch, _restoreSettings() runs before any param values have
-        been restored -- so Aiprojectroot sits at its baked-in default
-        ('gitroot'). If the user previously flipped to 'projectfolder',
-        their config.json lives at the project folder, not git root. The
-        canonical _settingsPath() lookup would miss it and silently bail,
-        losing every persisted setting on every restart.
-
-        This helper resolves that chicken-and-egg by trying both candidate
-        roots before declaring the file absent. Returns the path if found,
-        else None.
-        """
-        canonical = self._settingsPath()
-        if canonical.is_file():
-            return canonical
-        # Try the alternate predefined modes (gitroot, projectfolder).
-        for mode in ('gitroot', 'projectfolder'):
-            alt = self._rootForMode(mode) / '.embody' / 'config.json'
-            if alt != canonical and alt.is_file():
-                self.Log(
-                    f'config.json found at alternate root (Aiprojectroot '
-                    f'will be restored from saved value): {alt}',
-                    'INFO')
-                return alt
-        # Last-resort walk-up from project.folder. Catches the 'custom'
-        # mode chicken-and-egg: the saved custom path lives in
-        # config.json which we haven't read yet, so we can't compute the
-        # canonical custom path. Walking up from the .toe finds any
-        # .embody/config.json a user previously put on the tree.
-        project_dir = Path(project.folder).resolve()
-        for parent_dir in project_dir.parents:
-            candidate = parent_dir / '.embody' / 'config.json'
-            if candidate == canonical:
-                continue
-            if candidate.is_file():
-                self.Log(
-                    f'config.json found by ancestor walk-up: {candidate}',
-                    'INFO')
-                return candidate
-        return None
+        """Locate .embody/config.json across candidate roots -- see embody_admin."""
+        return mod.embody_admin.find_settings_file(self)
 
     def _projectJsonPath(self) -> Path:
-        """Path to .embody/project.json -- committed project metadata.
-
-        Unlike .embody/config.json (user-local settings) and .embody/envoy.json
-        (live runtime registry), project.json is intended to be checked into git
-        so the same metadata travels with the repo to every machine.
-        """
-        return self._findProjectRoot() / '.embody' / 'project.json'
+        """Path to .embody/project.json (committed project metadata) -- see embody_admin."""
+        return mod.embody_admin.project_json_path(self)
 
     def _writeProjectJson(self) -> None:
-        """Pin the current TouchDesigner build into .embody/project.json.
-
-        The Envoy bridge reads td_build to pick a matching TD install when
-        launching on a fresh clone, where envoy.json is gitignored and its
-        td_executable path may not exist locally. Idempotent -- skips the
-        write when td_build is already current.
-        """
-        import json, os
-        path = self._projectJsonPath()
-        # app.build is the build proper (e.g. '2025.32460'). app.version is
-        # the long-lived major branch ('099') and would only be noise here.
-        current_build = app.build
-
-        existing = {}
-        if path.is_file():
-            try:
-                loaded = json.loads(path.read_text(encoding='utf-8'))
-                if isinstance(loaded, dict):
-                    existing = loaded
-            except (json.JSONDecodeError, OSError):
-                pass  # Treat unreadable as empty -- we'll overwrite.
-
-        if existing.get('td_build') == current_build:
-            return
-
-        existing['td_build'] = current_build
-
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = Path(str(path) + '.tmp')
-            content = json.dumps(existing, indent=2) + '\n'
-            for attempt in range(3):
-                try:
-                    tmp.write_text(content, encoding='utf-8')
-                    os.replace(str(tmp), str(path))
-                    self.Log(
-                        f'Pinned td_build={current_build} in '
-                        f'.embody/project.json',
-                        'DEBUG')
-                    return
-                except PermissionError:
-                    if attempt < 2:
-                        import time as _time
-                        _time.sleep(0.1)
-                    else:
-                        raise
-        except Exception as e:
-            self.Log(f'Failed to write project.json: {e}', 'WARNING')
+        """Pin the current TouchDesigner build into .embody/project.json -- see embody_admin."""
+        return mod.embody_admin.write_project_json(self)
 
     def _saveSettings(self) -> None:
-        """Persist whitelisted parameter values to .embody/config.json."""
-        self._settings_save_pending = False
-        params = {}
-        # Sort names so JSON output is stable across TD sessions. _PERSISTED_PARAMS
-        # is a frozenset, and Python's hash randomization gives each process a
-        # different iteration order -- producing noisy diffs on every save.
-        for name in sorted(self._PERSISTED_PARAMS):
-            par = getattr(self.my.par, name, None)
-            if par is None:
-                continue
-            entry = {'val': par.eval()}
-            if par.mode != ParMode.CONSTANT:
-                entry['mode'] = str(par.mode)
-                if par.expr:
-                    entry['expr'] = par.expr
-                if par.bindExpr:
-                    entry['bindExpr'] = par.bindExpr
-            params[name] = entry
-        data = {'version': 1, 'params': params}
-        try:
-            import json, os
-            path = self._settingsPath()
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = Path(str(path) + '.tmp')
-            content = json.dumps(data, indent=2, sort_keys=True) + '\n'
-            for attempt in range(3):
-                try:
-                    tmp.write_text(content, encoding='utf-8')
-                    os.replace(str(tmp), str(path))
-                    return
-                except PermissionError:
-                    if attempt < 2:
-                        import time as _time
-                        _time.sleep(0.1)
-                    else:
-                        raise
-        except Exception as e:
-            self.Log(f'Failed to save settings: {e}', 'WARNING')
+        """Persist whitelisted parameter values to .embody/config.json -- see embody_admin."""
+        return mod.embody_admin.save_settings(self)
 
     def _deferSaveSettings(self) -> None:
-        """Schedule a settings save on the next frame. Coalesces rapid changes."""
-        if not getattr(self, '_settings_save_pending', False):
-            self._settings_save_pending = True
-            run(f"op('{self.my}').ext.Embody._saveSettings()", delayFrames=1)
+        """Schedule a settings save on the next frame (coalesces) -- see embody_admin."""
+        return mod.embody_admin.defer_save_settings(self)
 
     def _restoreSettings(self, kick_envoy: bool = False) -> bool:
-        """Restore parameter values from .embody/config.json. Returns True if restored.
-        Sets _restoring_settings flag to suppress onValueChange side effects.
-
-        Also stores _init_complete when done -- init() no longer stores it because
-        TD defers onValueChange callbacks to the next cook, and storing _init_complete
-        in init() allowed parexec to process init()'s Envoyenable=False change.
-
-        kick_envoy: if True and Envoyenable is restored to True, defer Start().
-        Only set this on the onStart() path -- Verify() owns startup on onCreate()."""
-        # _findSettingsFile handles the Aiprojectroot chicken-and-egg: at
-        # this point Aiprojectroot is at its baked-in default, so a saved
-        # value of 'projectfolder' wouldn't resolve via _settingsPath alone.
-        path = self._findSettingsFile()
-        if path is None:
-            # Migrate: check old root-level .embody.json
-            canonical = self._settingsPath()
-            old_path = self._findProjectRoot() / '.embody.json'
-            if old_path.is_file():
-                try:
-                    canonical.parent.mkdir(parents=True, exist_ok=True)
-                    import shutil
-                    shutil.move(str(old_path), str(canonical))
-                    self.Log('Migrated .embody.json -> .embody/config.json', 'INFO')
-                    path = canonical
-                except Exception as e:
-                    self.Log(f'Could not migrate .embody.json: {e}', 'WARNING')
-                    self.my.store('_init_complete', True)
-                    return False
-            else:
-                self.my.store('_init_complete', True)
-                return False
-        try:
-            import json
-            data = json.loads(path.read_text(encoding='utf-8'))
-        except (json.JSONDecodeError, OSError) as e:
-            self.Log(f'Settings file corrupt or unreadable: {e}', 'WARNING')
-            self.my.store('_init_complete', True)
-            return False
-        if not isinstance(data, dict) or 'params' not in data:
-            self.my.store('_init_complete', True)
-            return False
-        params = data['params']
-        restored = 0
-        self._restoring_settings = True
-        try:
-            for name, entry in params.items():
-                par = getattr(self.my.par, name, None)
-                if par is None or name not in self._PERSISTED_PARAMS:
-                    continue
-                try:
-                    mode = entry.get('mode')
-                    if mode and 'expr' in entry:
-                        par.expr = entry['expr']
-                    elif mode and 'bindExpr' in entry:
-                        par.bindExpr = entry['bindExpr']
-                    else:
-                        par.val = entry['val']
-                    restored += 1
-                except Exception:
-                    pass
-        finally:
-            self._restoring_settings = False
-        # Signal parexec that init + restore is complete -- safe to process
-        # param changes.  Must be stored AFTER _restoring_settings is cleared
-        # so deferred onValueChange callbacks from init() are still suppressed.
-        self.my.store('_init_complete', True)
-        self.Log(f'Restored {restored} settings from config.json', 'INFO')
-        # TDN mode migration detection: an upgrading user will have
-        # 'Tdnenable' in their persisted params but not 'Tdnmode'. Defer
-        # the nudge dialog so init can complete cleanly first.
-        # Guarded by a schedule-time flag so a second _restoreSettings in
-        # the same session (e.g. onCreate then onStart) can't queue a
-        # second dialog before the first one fires.
-        already_scheduled = self.my.fetch(
-            '_tdn_migration_scheduled', False, search=False)
-        if ('Tdnenable' in params and 'Tdnmode' not in params
-                and not already_scheduled):
-            prev_tdn_enable = bool(params.get('Tdnenable', {}).get('val', True))
-            self.my.store('_tdn_migration_prev_enable', prev_tdn_enable)
-            self.my.store('_tdn_migration_scheduled', True)
-            run(f"op('{self.my}').ext.Embody._showTDNMigrationNudge()",
-                delayFrames=60)
-        # If Envoyenable was restored to True, kick Start() -- parexec was
-        # suppressed during restore so onValueChange never fired.
-        # Only set this on the onStart() path (kick_envoy=True).
-        # Verify() owns Envoy startup on the onCreate() path.
-        if kick_envoy and self.my.par.Envoyenable.eval():
-            run(f"op('{self.my}').ext.Envoy.Start()", delayFrames=3)
-        return restored > 0
+        """Restore parameter values from .embody/config.json (returns True if
+        restored; sets _restoring_settings during the write). See embody_admin."""
+        return mod.embody_admin.restore_settings(self, kick_envoy=kick_envoy)
 
     def _showTDNMigrationNudge(self) -> None:
-        """One-time dialog after upgrading from the binary Tdnenable toggle.
-
-        Fires when a user opens a project previously saved with the old
-        Tdnenable toggle and no Tdnmode selection yet. Offers a choice
-        between restoring Full bidirectional sync (their prior behavior)
-        or adopting the new Export-on-Save default (recommended).
-
-        Guarded by _tdn_mode_migration_shown so it only fires once per
-        project across sessions (the flag is persisted via param write
-        into config.json on next save).
-        """
-        if self.my.fetch('_tdn_mode_migration_shown', False, search=False):
-            return
-        prev_enable = self.my.fetch('_tdn_migration_prev_enable', True,
-                                    search=False)
-        self.my.unstore('_tdn_migration_prev_enable')
-
-        tdn_comps = []
-        try:
-            tdn_comps = self._getTDNStrategyComps()
-        except Exception:
-            pass
-
-        if not tdn_comps:
-            # No TDN COMPs tracked -- silently accept the new default.
-            self.my.store('_tdn_mode_migration_shown', True)
-            return
-
-        prev_label = ('Full (bidirectional)' if prev_enable
-                      else 'Off (TDN disabled)')
-        msg = (
-            f'TDN default changed in this release.\n\n'
-            f'Your project was previously saved with the legacy Tdnenable '
-            f'toggle ({prev_label}). The new system has three modes:\n\n'
-            f'  \u2022 Off -- no TDN runtime\n'
-            f'  \u2022 Export-on-Save -- recommended; .toe is truth, '
-            f'.tdn files are rewritten on save\n'
-            f'  \u2022 Roundtrip (Experimental) -- bidirectional '
-            f'strip/restore on save and reconstruction on open (previous '
-            f'behavior)\n\n'
-            f'Currently set to Export-on-Save. Your {len(tdn_comps)} '
-            f'tracked TDN COMP(s) will stop round-tripping on save.\n\n'
-            f'Keep the new default, or restore Full?'
-        )
-        choice = self._messageBox(
-            'Embody - TDN Mode Changed',
-            msg,
-            buttons=['Keep Export-on-Save (recommended)',
-                     'Restore Full (previous behavior)'])
-        if choice == 1:
-            try:
-                self.my.par.Tdnmode = 'full'
-                self._applyTdnModeGating()
-                self.Log('TDN mode restored to Full per user choice', 'INFO')
-            except Exception as e:
-                self.Log(f'Could not restore Full mode: {e}', 'WARNING')
-        else:
-            self.Log('TDN mode kept at Export-on-Save (new default)', 'INFO')
-        self.my.store('_tdn_mode_migration_shown', True)
+        """One-time dialog after upgrading from the binary Tdnenable toggle -- see embody_admin."""
+        return mod.embody_admin.show_tdn_migration_nudge(self)
 
     def Verify(self) -> None:
         """Initialize or reconnect Embody on install or update.
@@ -4577,179 +3584,27 @@ class EmbodyExt:
     # for TOX/TDN/DAT alike. Self-disables outside a git repo.
 
     def _findGitRootSync(self):
-        """Walk up from project.folder for a .git dir. Returns Path or 'no-git'.
-
-        No subprocess and no prompt -- safe to call on the main-thread refresh
-        sweep. Mirrors EnvoyExt._findGitRoot so the two never disagree.
-        """
-        project_dir = Path(project.folder).resolve()
-        try:
-            home_dir = Path.home().resolve()
-        except Exception:
-            home_dir = None
-        home_is_ancestor = bool(
-            home_dir and (home_dir == project_dir or home_dir in project_dir.parents))
-        for parent in [project_dir] + list(project_dir.parents):
-            if home_is_ancestor and parent == home_dir:
-                break
-            if (parent / '.git').exists():
-                return parent
-        return 'no-git'
+        """Walk up from project.folder for a .git dir; Path or 'no-git' -- see embody_git."""
+        return mod.embody_git.find_git_root_sync(self)
 
     @staticmethod
     def _parseGitPorcelain(output: str) -> dict:
-        """Parse `git status --porcelain -z` output into {repo_rel_posix: code}.
-
-        `-z` means NUL-separated records and NO path quoting, so paths with
-        spaces/unicode are handled cleanly. A rename/copy record (X or Y in
-        R/C) is followed by an extra NUL-separated origin path; both the new and
-        origin paths are recorded (membership tests only ever hit the one that
-        currently exists on disk). Untracked entries (`??`) count as changed.
-        """
-        result = {}
-        tokens = output.split('\0')
-        i, n = 0, len(tokens)
-        while i < n:
-            tok = tokens[i]
-            if not tok or len(tok) < 3 or tok[2] != ' ':
-                i += 1
-                continue
-            code, path = tok[:2], tok[3:]
-            if path:
-                result[path] = code
-            if code[0] in ('R', 'C'):
-                i += 1
-                if i < n and tokens[i]:
-                    result[tokens[i]] = code
-            i += 1
-        return result
+        """Parse `git status --porcelain -z` into {repo_rel_posix: code} -- see embody_git."""
+        return mod.embody_git.parse_git_porcelain(output)
 
     @staticmethod
     def _mapChangedToOps(changed, project_prefix, rows):
-        """Map a git {repo_rel_posix: code} set to {op_path: code} for externalized
-        rows.
-
-        `project_prefix` is project.folder relative to the git root as a posix
-        prefix ('' or e.g. 'dev/'); `rows` is an iterable of
-        (op_path, rel_file_path). Pure string math -- no filesystem and no TD
-        access -- so it is both fast (no per-row Path.resolve) and unit-testable.
-        """
-        out = {}
-        if not changed:
-            return out
-        for path, rel in rows:
-            if not path or not rel or path == '/':
-                continue
-            code = changed.get(project_prefix + rel.replace('\\', '/'))
-            if code:
-                out[path] = code
-        return out
+        """Map a git {repo_rel_posix: code} set to {op_path: code} -- see embody_git."""
+        return mod.embody_git.map_changed_to_ops(changed, project_prefix, rows)
 
     @staticmethod
     def _rowHasChanges(dirty_val, uncommitted) -> bool:
-        """Whether a manager row has pending changes on EITHER axis: unsaved
-        (`dirty`/`Par`) or git-uncommitted. Single source of truth for the
-        manager's "changed" filter keyword (used by inject_parents)."""
-        is_unsaved = str(dirty_val) in ('True', 'true', '1', 'Par')
-        return is_unsaved or bool(uncommitted)
+        """Whether a manager row has pending changes on either axis -- see embody_git."""
+        return mod.embody_git.row_has_changes(dirty_val, uncommitted)
 
     def _updateGitStatus(self) -> None:
-        """Kick off an ASYNC git-uncommitted scan on a worker thread; never blocks
-        the refresh frame.
-
-        The `git status` subprocess (tens of ms) and parsing run off the main
-        thread; the cheap, string-based mapping + store happen back on the main
-        thread in the SuccessHook closure, which then refreshes the manager
-        badges. Runtime-only via store('git_status', ...) (never touches
-        externalizations.tsv). No git repo, thread-pool exhaustion, or any failure
-        -> empty/unchanged map; the orange indicator simply does not show.
-
-        Each scan carries a generation id captured in its hooks, and its result
-        state is task-local (closure, not a shared attribute). Only the LATEST
-        generation publishes or clears the in-flight flag -- so a stale task that
-        finally fires after a re-arm is a no-op and cannot clobber a newer scan.
-        """
-        import time
-        now = time.monotonic()
-        # Coalesce: one scan in flight at a time. Re-arm only if a prior scan has
-        # been "running" implausibly long (worker died without a hook firing).
-        if getattr(self, '_git_check_running', False) and \
-                (now - getattr(self, '_git_check_started', 0)) < 10:
-            return
-        # Bump the generation: this supersedes any still-pending stale task.
-        gen = getattr(self, '_git_gen', 0) + 1
-        self._git_gen = gen
-        git_root = self._findGitRootSync()
-        if git_root == 'no-git':
-            self._git_check_running = False
-            self.my.store('git_status', {})
-            return
-        proj = str(Path(project.folder).resolve())
-        git_root_s = str(git_root)
-        clean_env = {
-            k: v for k, v in os.environ.items()
-            if k not in ('GIT_DIR', 'GIT_WORK_TREE',
-                         'GIT_INDEX_FILE', 'GIT_CEILING_DIRECTORIES')}
-        # Never take the optional index lock -- a background status must not
-        # contend with the user's (or an agent's) concurrent git add/commit.
-        clean_env['GIT_OPTIONAL_LOCKS'] = '0'
-        state = {'changed': None}
-        self._git_check_running = True
-        self._git_check_started = now
-
-        # Worker runs on a pool thread -- captures only locals + a pure static, so
-        # it touches NO TD objects (the one sanctioned main->worker handoff).
-        parse = EmbodyExt._parseGitPorcelain
-
-        def worker():
-            try:
-                # --no-optional-locks: never write .git/index (no lock contention).
-                # --untracked-files=all: enumerate files inside new dirs (not `?? dir/`).
-                r = subprocess.run(
-                    ['git', '--no-optional-locks', 'status', '--porcelain', '-z',
-                     '--untracked-files=all', '--', proj],
-                    cwd=git_root_s, capture_output=True, text=True,
-                    env=clean_env, stdin=subprocess.DEVNULL, timeout=5, check=False)
-                state['changed'] = parse(r.stdout or '') if r.returncode == 0 else {}
-            except Exception:
-                state['changed'] = {}
-
-        def done():
-            # Only the latest generation publishes / clears the flag.
-            if gen != getattr(self, '_git_gen', None):
-                return
-            self._git_check_running = False
-            try:
-                prefix = Path(proj).relative_to(Path(git_root_s)).as_posix()
-                prefix = (prefix + '/') if prefix and prefix != '.' else ''
-            except Exception:
-                prefix = ''
-            rows = []
-            table = self.Externalizations
-            if table is not None:
-                for r in range(1, table.numRows):
-                    rows.append((self._cellVal(r, 'path'),
-                                 self._cellVal(r, 'rel_file_path')))
-            self.my.store('git_status',
-                          self._mapChangedToOps(state['changed'] or {}, prefix, rows))
-            # Refresh the manager so the orange badges reflect the new git state.
-            try:
-                self.my.op('list/inject_parents').cook(force=True)
-                self.lister.reset()
-            except Exception:
-                pass
-
-        def failed(e):
-            if gen != getattr(self, '_git_gen', None):
-                return
-            self._git_check_running = False
-            self.Log(f"Git status worker failed: {e}", "DEBUG")
-
-        tm = op.TDResources.ThreadManager
-        task = tm.TDTask(target=worker, SuccessHook=done, ExceptHook=failed)
-        if tm.EnqueueTask(task, standalone=True) is None:
-            # Thread pool at capacity -- abandon; the next refresh retries.
-            self._git_check_running = False
+        """Kick off an ASYNC git-uncommitted scan on a worker thread -- see embody_git."""
+        return mod.embody_git.update_git_status(self)
 
     def dirtyHandler(self, update: bool) -> list[str]:
         """Check and optionally update dirty COMPs (both TOX and TDN)."""
@@ -9634,271 +8489,39 @@ class EmbodyExt:
     def LaunchAIClient(self) -> None:
         """Open the AI client selected in the Aiclient menu at the project root.
 
-        Editors (Cursor, Windsurf; Copilot -> VS Code) open the root as
-        a workspace. CLI tools (Claude, Codex, Gemini) open in a new terminal at
-        the root. Driven by the _AICLIENT_LAUNCH table. Launch CWD is
-        _findProjectRoot() (honors Aiprojectroot). Fire-and-forget: opens a
-        window, does not block or confirm the tool actually ran.
+        Editors (Cursor, Windsurf; Copilot -> VS Code) open the root as a
+        workspace; CLI tools (Claude, Codex, Gemini) open in a new terminal at
+        the root. Fire-and-forget button callback -- see embody_launch.
         """
-        # Whole body inside try: par eval and _findProjectRoot() can raise, and
-        # this is a button callback -- a launch problem must log, never crash TD.
-        try:
-            client = self.my.par.Aiclient.eval()
-            label = self._aiClientLabel()
-            spec = self._AICLIENT_LAUNCH.get(client)
-            cwd = self._findProjectRoot()
-            title = 'Embody -- Launch AI Client'
-            if spec is None:
-                msg = f'No launcher is wired for "{label}". Open your AI tool manually at {cwd}.'
-                self.Log(f'No launcher for "{label}". Open it manually at {cwd}.', 'INFO')
-                self._messageBox(title, msg, ['OK'])
-                return
-            if spec['kind'] == 'editor':
-                if self._launchEditor(
-                        cwd, spec['app'], bundle_id=spec.get('bundle'),
-                        win_exe_candidates=spec.get('win_exe', ()),
-                        win_shim=spec.get('win_shim'), mac_cli=spec.get('mac_cli'),
-                        mac_alt_names=spec.get('alt_names', ()),
-                        install=spec.get('install')):
-                    self.Log(f'Launched {label} at {cwd}', 'SUCCESS')
-                else:
-                    msg = f'Could not open {label}. Is it installed?'
-                    if spec.get('install'):
-                        msg += f'\n\nInstall: {spec.get("install")}'
-                    msg += f'\n\nProject root: {cwd}'
-                    self._messageBox(title, msg, ['OK'])
-            elif self._launchTerminal(cwd, spec['cli'], install=spec.get('install')):
-                self.Log(f'Opened a terminal for {label} at {cwd}', 'INFO')
-            else:
-                msg = f'Could not open a terminal for {label}. Is it installed?'
-                if spec.get('install'):
-                    msg += f'\n\nInstall: {spec.get("install")}'
-                msg += f'\n\nProject root: {cwd}'
-                self._messageBox(title, msg, ['OK'])
-        except Exception as e:
-            self.Log(f'Failed to launch AI client: {e}', 'ERROR')
-            self._messageBox('Embody -- Launch AI Client', str(e), ['OK'])
+        return mod.embody_launch.launch_ai_client(self)
 
     def _resolveCliAbs(self, cli: str) -> Optional[str]:
-        """Absolute path to a CLI via fast filesystem probes, or None.
-
-        No subprocess -- safe on the main thread. When None, the caller lets the
-        new terminal's own login shell resolve the CLI (which is what defeats the
-        Dock-truncated PATH on macOS, where ~/.local/bin is not on TD's PATH).
-        """
-        if sys.platform.startswith('win'):
-            cands = [
-                # Native installers (claude's recommended install.ps1 lands here
-                # -- the Windows twin of ~/.local/bin below).
-                os.path.expandvars(rf'%USERPROFILE%\.local\bin\{cli}.exe'),
-                os.path.expandvars(rf'%APPDATA%\npm\{cli}.cmd'),
-                os.path.expandvars(rf'%USERPROFILE%\.bun\bin\{cli}.exe'),
-                os.path.expandvars(rf'%LOCALAPPDATA%\Programs\{cli}\{cli}.exe'),
-            ]
-        else:
-            home = Path.home()
-            cands = [
-                home / '.local' / 'bin' / cli,
-                Path('/opt/homebrew/bin') / cli,
-                Path('/usr/local/bin') / cli,
-                home / '.bun' / 'bin' / cli,
-            ]
-        for c in cands:
-            try:
-                if Path(c).exists():
-                    return str(c)
-            except OSError:
-                continue
-        return None
+        """Absolute path to a CLI via fast filesystem probes, or None -- see embody_launch."""
+        return mod.embody_launch.resolve_cli_abs(self, cli)
 
     def _launchEnv(self) -> dict:
-        """A copy of the process environment with TouchDesigner's injected
-        variables removed, so externally launched apps/terminals get a clean env.
-
-        TD sets ELECTRON_RUN_AS_NODE=1 -- which makes a freshly launched Electron
-        editor (Cursor, Windsurf, or Copilot's VS Code) run headless-as-Node and quit instantly
-        (the "dock icon bounces, then closes" bug) -- plus LD_LIBRARY_PATH/DYLD_*
-        and PYTHON* pointing into TD's own bundle. `open` forwards the caller's
-        environment to the launched app, so these must be stripped here.
-        """
-        return {k: v for k, v in os.environ.items()
-                if k not in self._LAUNCH_ENV_STRIP and not k.startswith('DYLD_')}
+        """Process environment with TouchDesigner's injected vars stripped -- see embody_launch."""
+        return mod.embody_launch.launch_env(self)
 
     def _launchEditor(self, cwd, app_name, bundle_id=None, win_exe_candidates=(),
                       win_shim=None, mac_cli=None, mac_alt_names=(), install=None) -> bool:
-        """Open a GUI editor with cwd as its workspace. Returns True on a launched
-        window. macOS uses LaunchServices (PATH-independent); Windows launches the
-        real .exe from known install dirs. Never a hijackable PATH shim unless
-        nothing else resolves (logged). Mirrors OpenSaveFolder's OS split.
-        """
-        d = str(cwd)
-        # Clean env: TD's ELECTRON_RUN_AS_NODE would make a fresh Electron editor
-        # quit instantly ("bounce then close"); DYLD/PYTHON vars can mis-link it.
-        env = self._launchEnv()
-        if sys.platform.startswith('darwin'):
-            # /usr/bin/open: absolute path so it resolves even if TD's PATH lacks
-            # /usr/bin. -a/-b MANDATORY: a bare `open <dir>` opens Finder, not the
-            # editor. Each attempt returns non-zero WITHOUT launching if that app
-            # is absent, so exit-code gating (subprocess.call, ~ms since open hands
-            # off to LaunchServices and exits) doubles as install detection.
-            _open = '/usr/bin/open'
-            attempts = [[_open, '-a', app_name, d]]
-            if bundle_id:
-                attempts.append([_open, '-b', bundle_id, d])
-            attempts += [[_open, '-a', n, d] for n in mac_alt_names]
-            if mac_cli and Path(mac_cli).exists():
-                attempts.append([mac_cli, d])   # app-own CLI, not a hijackable shim
-            for cmd in attempts:
-                try:
-                    if subprocess.call(cmd, stdin=subprocess.DEVNULL, env=env) == 0:
-                        return True
-                except OSError:
-                    continue
-            msg = f'Could not open {app_name} at {d}; is it installed?'
-            if install:
-                msg += f' Install: {install}'
-            self.Log(msg, 'WARNING')
-            return False
-        if sys.platform.startswith('win'):
-            try:
-                for cand in win_exe_candidates:
-                    exe = os.path.expandvars(cand)
-                    if Path(exe).exists():
-                        # argv (no shell): spaces/&/trailing-sep in the dir are safe.
-                        subprocess.Popen([exe, d], stdin=subprocess.DEVNULL, env=env)
-                        return True
-                if win_shim:
-                    # Resolve FIRST so a missing shim returns False (no false SUCCESS
-                    # -- shell=True with a list could "succeed" launching cmd.exe
-                    # with the editor absent).
-                    resolved = shutil.which(win_shim)
-                    if resolved:
-                        self.Log(f'{app_name}: launching via PATH "{win_shim}" ({resolved}) '
-                                 '-- may resolve to a different editor build.', 'WARNING')
-                        # .cmd/.bat shims run through cmd; the doubled-quote form
-                        # (""prog" "arg"") keeps program+dir literally quoted so a
-                        # metachar (& | etc.) in the dir is not re-parsed by cmd.
-                        subprocess.Popen(f'cmd /c ""{resolved}" "{d}""',
-                                         stdin=subprocess.DEVNULL, env=env)
-                        return True
-            except OSError as e:
-                self.Log(f'{app_name}: launch failed ({e}).', 'WARNING')
-                return False
-            msg = f'Could not locate {app_name}.'
-            if install:
-                msg += f' Install: {install}'
-            self.Log(msg, 'WARNING')
-            return False
-        self.Log(f'Editor launch unsupported on {sys.platform}.', 'INFO')
-        return False
+        """Open a GUI editor with cwd as its workspace -- see embody_launch."""
+        return mod.embody_launch.launch_editor(
+            self, cwd, app_name, bundle_id=bundle_id,
+            win_exe_candidates=win_exe_candidates, win_shim=win_shim,
+            mac_cli=mac_cli, mac_alt_names=mac_alt_names, install=install)
 
     def _buildTerminalScript(self, cwd, cli, abs_cli, install=None) -> str:
-        """Return the macOS .command script text that cd's to cwd and runs <cli>.
-
-        Pure (no I/O) so the correctness-critical content is unit-testable.
-        abs_cli: the CLI's resolved absolute path, or None to defer to the new
-        terminal's own login-shell PATH (with a visible install guard if truly
-        absent). install: the how-to-install hint shown in that guard.
-        """
-        q = str(cwd).replace("'", "'\\''")        # single-quote-escape the dir
-        lines = ['#!/bin/zsh -l',
-                 f"cd '{q}' || {{ echo \"launch dir missing\"; exec \"${{SHELL:-/bin/zsh}}\" -il; }}"]
-        if abs_cli:
-            lines.append(f'exec {shlex.quote(abs_cli)}')
-        else:
-            # Not found by fast probe -- let the login shell resolve it. If truly
-            # absent, print install guidance and keep the window open.
-            hint = (install or 'see the tool website').replace('"', "'").replace('$', '').replace('`', '')
-            lines.append(f'if ! command -v {cli} >/dev/null 2>&1; then')
-            lines.append(f'  echo "{cli} not found on PATH."')
-            lines.append(f'  echo "Install:  {hint}"')
-            lines.append('  echo "Then close this window and press Launch AI Client again."')
-            lines.append('  exec "${SHELL:-/bin/zsh}" -i')
-            lines.append('fi')
-            lines.append(f'exec "${{SHELL:-/bin/zsh}}" -ilc {shlex.quote(cli)}')
-        return '\n'.join(lines) + '\n'
+        """macOS .command script text that cd's to cwd and runs <cli> -- see embody_launch."""
+        return mod.embody_launch.build_terminal_script(self, cwd, cli, abs_cli, install)
 
     def _buildTerminalScriptWin(self, cwd, cli, abs_cli, install=None) -> str:
-        """Windows twin of _buildTerminalScript: the .bat run via cmd /K.
-        Pure (no I/O) so the correctness-critical content is unit-testable."""
-        d = str(cwd).replace('"', '')
-        lines = ['@echo off',
-                 f'cd /d "{d}"',
-                 'if errorlevel 1 echo launch dir missing.']
-        if abs_cli:
-            lines.append(f'"{str(abs_cli).replace(chr(34), "")}"')
-        else:
-            hint = ''.join(c for c in (install or 'see the tool website')
-                           if re.match(r"[A-Za-z0-9 ._:/@()+=,'-]", c))
-            hint = ' '.join(hint.split()) or 'see the tool website'
-            lines += [
-                f'where {cli} >nul 2>nul',
-                'if errorlevel 1 goto :missing',
-                cli,
-                'goto :done',
-                ':missing',
-                f'echo {cli} not found on PATH.',
-                f'echo Install:  {hint}',
-                'echo Then close this window and press Launch AI Client again.',
-                ':done',
-            ]
-        return '\r\n'.join(lines) + '\r\n'
+        """Windows twin of _buildTerminalScript: the .bat run via cmd /K -- see embody_launch."""
+        return mod.embody_launch.build_terminal_script_win(self, cwd, cli, abs_cli, install)
 
     def _launchTerminal(self, cwd, cli, install=None) -> bool:
-        """Open a new terminal at cwd running <cli>. Returns True if a terminal was
-        launched, False on failure or an unsupported OS (so the caller only logs
-        success when a window actually opened).
-
-        macOS: write a .command and hand it to `open` -- the terminal app's login
-        shell rebuilds the real PATH. NEVER execute the script directly from TD
-        (that re-inherits TD's truncated PATH). Windows: `cmd /K` in a new console.
-        The CLI's absolute path is resolved first so it works even when the CLI
-        lives in ~/.local/bin, invisible to a Dock-launched TD.
-        """
-        d = str(cwd)
-        env = self._launchEnv()   # strip TD's injected vars from the terminal too
-        try:
-            if sys.platform.startswith('darwin'):
-                body = self._buildTerminalScript(cwd, cli, self._resolveCliAbs(cli), install)
-                scripts_dir = Path(cwd) / '.embody'
-                scripts_dir.mkdir(parents=True, exist_ok=True)
-                script = scripts_dir / f'launch_{cli}.command'
-                script.write_text(body, encoding='utf-8')
-                script.chmod(0o755)
-                # Do NOT delete: `open` returns before the terminal reads the file.
-                # /usr/bin/open: absolute so it resolves even if PATH lacks /usr/bin.
-                if subprocess.call(['/usr/bin/open', str(script)],
-                                   stdin=subprocess.DEVNULL, env=env) != 0:
-                    self.Log(f'Failed to open a terminal for {cli}.', 'WARNING')
-                    return False
-                return True
-            if sys.platform.startswith('win'):
-                body = self._buildTerminalScriptWin(cwd, cli, self._resolveCliAbs(cli), install)
-                scripts_dir = Path(cwd) / '.embody'
-                scripts_dir.mkdir(parents=True, exist_ok=True)
-                script = scripts_dir / f'launch_{cli}.bat'
-                script.write_text(body, encoding='utf-8', newline='')
-                # Do NOT delete: cmd /K returns after starting the console, and
-                # the console reads this file after Popen returns.
-                #
-                # NO std-handle redirection here. The CLIs are interactive
-                # Ink/Node TUIs (claude/codex/gemini) that need a real console
-                # TTY on stdin -- claude's OAuth login especially. Passing
-                # stdin=DEVNULL sets STARTF_USESTDHANDLES, which (a) pins the
-                # child's stdin to NUL so Ink cannot enter raw mode, and (b) from
-                # a GUI parent like TD -- which has no valid console handles --
-                # also hands the child bogus stdout/stderr. That combination is
-                # exactly the "blank terminal, login browser flashes then closes"
-                # bug on Windows. With CREATE_NEW_CONSOLE and no redirection, the
-                # fresh console owns fully-working stdin/stdout/stderr.
-                subprocess.Popen(f'cmd /K ""{script}""', cwd=d,
-                                 creationflags=subprocess.CREATE_NEW_CONSOLE, env=env)
-                return True
-        except OSError as e:
-            self.Log(f'Failed to open a terminal for {cli}: {e}', 'WARNING')
-            return False
-        self.Log(f'Terminal launch unsupported on {sys.platform}.', 'INFO')
-        return False
+        """Open a new terminal at cwd running <cli> -- see embody_launch."""
+        return mod.embody_launch.launch_terminal(self, cwd, cli, install)
 
     def OpenTable(self) -> None:
         """Open externalizations table viewer."""

@@ -1,0 +1,2421 @@
+format: tdn
+version: '2.0'
+build: 2
+generator: Embody/6.0.100
+td_build: 099.2025.32820
+source_file: Embody-6.101.toe
+exported_at: '2026-07-04T20:26:07Z'
+network_path: /embody/Embody/wizard
+options:
+  include_dat_content: false
+  include_storage: true
+type_defaults:
+  textCOMP:
+    parameters:
+      clickthrough: true
+      resizecomp: =me
+      repocomp: =me
+  textDAT:
+    parameters:
+      language: python
+  containerCOMP:
+    parameters:
+      resizecomp: =me
+      repocomp: =me
+    size: [160, 130]
+    color: [0.67, 0.67, 0.67]
+  panelexecuteDAT:
+    parameters:
+      fromop: =parent()
+  buttonCOMP:
+    parameters:
+      hmode: fill
+      resizecomp: =me
+      repocomp: =me
+      bgalpha: 1
+      clone: =op.TDTox.op('defaultCOMPs/button')
+    size: [160, 134]
+  outCHOP:
+    parameters:
+      label: =me.name
+      autoexportroot: =parent()
+    flags:
+    - viewer
+    size: [130, 90]
+  parameterCHOP:
+    parameters:
+      parameters: value0
+      custom: false
+      builtin: true
+      renameto: v1
+      autoexportroot: =parent()
+    flags:
+    - viewer
+    size: [130, 90]
+  parameterexecuteDAT:
+    parameters:
+      fromop: =parent()
+      op: ..
+      pars: value0
+      onpulse: false
+      defaultreadencoding: cp1252
+      loadonstart: true
+    flags:
+    - viewer
+    size: [128, 66]
+type: containerCOMP
+parameters:
+  w: 500
+  h: 440
+  resizecomp: =me
+  repocomp: =me
+  bgcolorr: 0.11
+  bgcolorg: 0.12
+  bgcolorb: 0.115
+  bgalpha: 1
+  align: verttb
+  spacing: 10
+color: [0.3, 0.5, 0.9]
+tags:
+- tdn
+storage:
+  step: 0
+  sel:
+    mode: advanced
+  step_id: permissions
+  sel_mode: auto
+  sel_assistant: claudecode
+  sel_client: ''
+  sel_root: gitroot
+  sel_permissions: all
+operators:
+- name: hint
+  type: textCOMP
+  parameters:
+    text: |-
+      Claude Code asks before each AI tool by default. Pick how much to auto-approve (changeable later on the Envoy parameters).
+      A settings.local.json already exists -- Embody edits only its Envoy entries, keeping the rest.
+    type: multiline
+    wordwrap: true
+    callbacks: hint_callbacks
+    fontsize: 11
+    fontcolorr: 0.6
+    fontcolorg: 0.61
+    fontcolorb: 0.6
+    textoffsetx: 24
+    textpaddingr: 20
+    alignx: left
+    aligny: top
+    w: 452
+    h: 60
+    alignorder: 3
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+- name: logic
+  type: textDAT
+  parameters:
+    file: embody/Embody/wizard/logic.py
+    syncfile: true
+  position: [240, 0]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: title
+  type: textCOMP
+  parameters:
+    text: How should the AI ask permission?
+    wordwrap: true
+    callbacks: title_callbacks
+    fontsize: 18
+    fontcolorr: 0.92
+    fontcolorg: 0.92
+    fontcolorb: 0.92
+    textoffsetx: 24
+    alignx: left
+    h: 30
+    hmode: fill
+    alignorder: 2
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+  position: [480, 0]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+- name: track
+  type: containerCOMP
+  parameters:
+    h: 4
+    hmode: fill
+    alignorder: 1
+    bgcolorr: 0.2
+    bgcolorg: 0.21
+    bgcolorb: 0.205
+    bgalpha: 1
+    marginl: 24
+    marginr: 24
+  position: [0, -150]
+  children:
+  - name: fill
+    type: containerCOMP
+    parameters:
+      w: 339
+      h: 4
+      bgcolorr: 0.24
+      bgcolorg: 0.52
+      bgcolorb: 0.35
+      bgalpha: 1
+- name: clicks
+  type: panelexecuteDAT
+  parameters:
+    panels: footer/btn_* grp_mode/opt_* grp_assistant/opt_* grp_client/opt_* grp_permissions/opt_* grp_footprint/opt_*
+    ontooff: true
+    file: embody/Embody/wizard/clicks.py
+    syncfile: true
+  position: [240, -150]
+  size: [130, 90]
+  color: [0.9, 0.3, 0.4]
+  tags:
+  - py
+- name: footer
+  type: containerCOMP
+  parameters:
+    h: 40
+    hmode: fill
+    bottomanchor: 0.923
+    alignorder: 5
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+    align: horizlr
+    spacing: 10
+    marginl: 24
+    marginr: 24
+    margint: 4
+  position: [250, -700]
+  children:
+  - name: btn_back
+    type: buttonCOMP
+    parameters:
+      buttontype: momentary
+      h: 36
+      bgcolorr: 0.19
+      bgcolorg: 0.2
+      bgcolorb: 0.195
+    children:
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Back
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 13
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.92
+        fontcolorg: 0.92
+        fontcolorb: 0.92
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        bgalpha: 1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+  - name: btn_next
+    type: buttonCOMP
+    parameters:
+      buttontype: momentary
+      h: 36
+      bgcolorr: 0.24
+      bgcolorg: 0.52
+      bgcolorb: 0.35
+    position: [400, 0]
+    children:
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Next
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 13
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.97
+        fontcolorg: 0.99
+        fontcolorb: 0.97
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        bgalpha: 1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        leftborder: bordera
+        rightborder: bordera
+        bottomborder: bordera
+        topborder: bordera
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+- name: spacer
+  type: containerCOMP
+  parameters:
+    hmode: fill
+    vmode: fill
+    alignorder: 4.5
+    display: false
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+  position: [0, -300]
+- name: divider
+  type: containerCOMP
+  parameters:
+    h: 1
+    hmode: fill
+    alignorder: 4.9
+    bgcolorr: 0.24
+    bgcolorg: 0.25
+    bgcolorb: 0.245
+    bgalpha: 1
+    marginl: 24
+    marginr: 24
+  position: [240, -300]
+- name: grp_mode
+  type: containerCOMP
+  parameters:
+    h: 235
+    hmode: fill
+    alignorder: 4
+    display: false
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+    align: verttb
+    spacing: 8
+    marginl: 24
+    marginr: 24
+  position: [450, -800]
+  children:
+  - name: opt_auto
+    type: buttonCOMP
+    parameters:
+      value0: true
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Manages everything on its own. Recommended for most projects.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 24
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Auto
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_advanced
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      alignorder: 1
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -200]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Asks before touching git, your Python env, config files, or your network.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 24
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Advanced
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+- name: botspacer
+  type: containerCOMP
+  parameters:
+    h: 26
+    hmode: fill
+    alignorder: 6
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+  position: [0, -450]
+- name: steplabel
+  type: textCOMP
+  parameters:
+    text: Step 3 of 4
+    callbacks: steplabel_callbacks
+    fontsize: 11
+    fontcolorr: 0.6
+    fontcolorg: 0.61
+    fontcolorb: 0.6
+    textoffsetx: 24
+    alignx: left
+    h: 16
+    hmode: fill
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+    margint: 6
+  position: [225, 200]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+- name: topspacer
+  type: containerCOMP
+  parameters:
+    h: 14
+    hmode: fill
+    alignorder: -1
+    bgcolorr: 0.11
+    bgcolorg: 0.12
+    bgcolorb: 0.115
+    bgalpha: 1
+  position: [480, -450]
+- name: grp_client
+  type: containerCOMP
+  parameters:
+    w: 473
+    h: 235
+    alignorder: 4
+    display: false
+    align: verttb
+    spacing: 8
+    marginl: 24
+    marginr: 5
+    pvscrollbar: 'on'
+  position: [935, -800]
+  children:
+  - name: opt_codex
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 52
+      alignorder: 2
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -400]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Generates Codex / AGENTS config.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 22
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Codex
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_cursor
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 52
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Generates .cursor config.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 22
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Cursor
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_gemini
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 52
+      alignorder: 3
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -600]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Generates GEMINI.md.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 22
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Gemini
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_vscode
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 52
+      alignorder: 4
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -800]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Generates VS Code MCP config.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 22
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: VS Code
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_copilot
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 52
+      alignorder: 5
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -1000]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Generates Copilot config.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 22
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: GitHub Copilot
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_windsurf
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 52
+      alignorder: 1
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -200]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Generates Windsurf config.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 22
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Windsurf
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+- name: grp_assistant
+  type: containerCOMP
+  parameters:
+    h: 235
+    hmode: fill
+    alignorder: 4
+    display: false
+    align: verttb
+    spacing: 8
+    marginl: 24
+    marginr: 24
+  position: [675, -800]
+  children:
+  - name: opt_none
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -200]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: No .venv, server, or config. Embody still keeps your project diff-friendly.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        textoffsety: -4
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: None - externalization only
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textoffsety: -4
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [225, 25]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_other
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -400]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Cursor, Windsurf, Codex, Gemini, VS Code, or Copilot.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        textoffsety: -4
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Other AI tool
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textoffsety: -4
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [250, 25]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_claudecode
+    type: buttonCOMP
+    parameters:
+      value0: true
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Recommended. Generates .mcp.json plus .claude rules and skills.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        textoffsety: -4
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Claude Code
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textoffsety: -4
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [250, 25]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+- name: grp_footprint
+  type: containerCOMP
+  parameters:
+    h: 191
+    hmode: fill
+    alignorder: 4
+    display: false
+    align: verttb
+    spacing: 8
+    marginl: 24
+    marginr: 24
+  position: [1195, -800]
+  children:
+  - name: opt_custom
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Pick a folder next.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Custom folder
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_gitroot
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -200]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Write config at the top of the git repo.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Git root (recommended)
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_projectfolder
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -400]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Use when the .toe is a subfolder you open as your workspace.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Project folder
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [74, 26]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [66, -83]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [247, -81]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -160]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+- name: hint_callbacks
+  type: textDAT
+  flags:
+  - viewer
+  position: [0, -600]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+  dock: hint
+- name: grp_permissions
+  type: containerCOMP
+  parameters:
+    h: 205
+    hmode: fill
+    alignorder: 4
+    align: verttb
+    spacing: 8
+    marginl: 24
+    marginr: 24
+    pvscrollbar: auto
+    scrolloverlay: ignore
+  position: [1455, -800]
+  children:
+  - name: opt_all
+    type: buttonCOMP
+    parameters:
+      value0: true
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Auto-approve all Envoy tools. No permission prompts.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Don't ask (recommended)
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [225, 25]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [180, -180]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [330, -180]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -180]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_some
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      alignorder: 1
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -200]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Auto-approve read-only tools; prompt before changes.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Ask for some
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [225, 25]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [180, -180]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [330, -180]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -180]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_leave
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      alignorder: 3
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -600]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Don't create or modify .claude/settings.local.json.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Leave settings alone
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [225, 25]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [180, -180]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [330, -180]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -180]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+  - name: opt_prompt
+    type: buttonCOMP
+    parameters:
+      buttontype: radiodown
+      colorr: 0.2
+      colorg: 0.42
+      colorb: 0.28
+      h: 58
+      alignorder: 2
+      bgcolorr: =0.16 + 0.35*int(me.par.value0)*(me.par.colorr - 0.16) + 0.03*me.panel.rollover
+      bgcolorg: =0.17 + 0.35*int(me.par.value0)*(me.par.colorg - 0.17) + 0.03*me.panel.rollover
+      bgcolorb: =0.165 + 0.35*int(me.par.value0)*(me.par.colorb - 0.165) + 0.03*me.panel.rollover
+      borderar: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorr + .2
+      borderag: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorg + .2
+      borderab: =[c/.5 for c in [.23, .4, .3, .6]][me.par.value0 + 2*me.panel.rollover] * me.par.colorb + .2
+      leftborder: bordera
+      rightborder: bordera
+      bottomborder: bordera
+      topborder: bordera
+      align: verttb
+      spacing: 1
+    position: [0, -400]
+    children:
+    - name: desc
+      type: textCOMP
+      parameters:
+        text: Prompt before every Envoy tool. Most cautious.
+        type: multiline
+        wordwrap: true
+        callbacks: desc_callbacks
+        fontsize: 11
+        fontcolorr: 0.62
+        fontcolorg: 0.63
+        fontcolorb: 0.62
+        textoffsetx: 18
+        alignx: left
+        aligny: top
+        h: 28
+        hmode: fill
+        alignorder: 1
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+    - name: out1
+      type: outCHOP
+      position: [275, 175]
+      inputs:
+      - par1
+    - name: par1
+      type: parameterCHOP
+      position: [65, 175]
+    - name: text
+      type: textCOMP
+      parameters:
+        text: Ask for all
+        type: multiline
+        legacyfontselection: true
+        scaletofit: =parent().par[me.curPar.name] or me.curPar.val
+        fontsize: 14
+        linespacing: =parent().par[me.curPar.name] or me.curPar.val
+        fontcolorr: 0.93
+        fontcolorg: 0.93
+        fontcolorb: 0.93
+        textoffsetx: 16
+        textpaddingl: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingr: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingb: =parent().par[me.curPar.name] or me.curPar.val
+        textpaddingt: =parent().par[me.curPar.name] or me.curPar.val
+        alignx: left
+        aligny: bottom
+        h: 28
+        hmode: fill
+        vmode: fill
+        bgcolorr: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorr + r * 0.1
+        bgcolorg: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorg + r * 0.1
+        bgcolorb: =[c/.5 for c in [.2, .4, .15, .35]][parent().par.value0 + 2*(r:=parent().panel.rollover)] * parent().par.colorb + r * 0.1
+        borderar: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorr + .2
+        borderag: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorg + .2
+        borderab: =[c/.5 for c in [.23, .4, .3, .6]][parent().par.value0 + 2*parent().panel.rollover] * parent().par.colorb + .2
+        borderover: false
+      flags:
+      - viewer
+      position: [225, 25]
+      size: [113, 96]
+    - name: parexec1
+      type: parameterexecuteDAT
+      position: [180, -180]
+    - name: panelexec1
+      type: panelexecuteDAT
+      parameters:
+        panels: =parent()
+        panelvalue: state
+        offtoon: false
+        valuechange: true
+        defaultreadencoding: cp1252
+        loadonstart: true
+      flags:
+      - viewer
+      position: [330, -180]
+      size: [126, 62]
+    - name: desc_callbacks
+      type: textDAT
+      flags:
+      - viewer
+      position: [0, -180]
+      size: [160, 130]
+      color: [0.67, 0.67, 0.67]
+      dock: desc
+- name: title_callbacks
+  type: textDAT
+  flags:
+  - viewer
+  position: [240, -600]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+  dock: title
+- name: steplabel_callbacks
+  type: textDAT
+  flags:
+  - viewer
+  position: [465, 50]
+  size: [160, 130]
+  color: [0.67, 0.67, 0.67]
+  dock: steplabel
