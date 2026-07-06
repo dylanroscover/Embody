@@ -1,5 +1,18 @@
 # Changelog
 
+## v6.0.106
+
+The ext diet: EnvoyExt and EmbodyExt split into thin facades plus focused module DATs -- ~5,900 lines relocated with zero functional change, byte-identical MCP tool schemas, and three latent bugs fixed along the way.
+
+- **EnvoyExt: 9,221 -> 5,110 lines (-45%)** across five module DATs: `envoy_layout` (network lint + dock-hug + auto-position geometry), `envoy_viz` (the entire Embot + camera-follow subsystem, 29 methods), `envoy_ops` (19 mutating tool handlers), `envoy_read` (26 read/introspection handlers), `envoy_setup` (MCP/registry/git config, 21 methods). Every moved method keeps a delegating stub, so the public API, dispatch table, undo wrapping, and all monkeypatch seams are unchanged.
+- **EmbodyExt: 10,217 -> 8,817 lines** across three module DATs: `embody_launch` (AI-client launcher), `embody_git` (AI-config/template/manifest generation + git status + InitEnvoy/InitGit/Reset), `embody_admin` (uninstall + settings persistence). The save/continuity/restoration engine core stays on the facade deliberately -- it is one interwoven subsystem, and splitting it would add risk without adding clarity.
+- **Thread-safety rules enforced mechanically**: worker-executed code (the docs lookup, the env/venv installer core, the git-status worker) stays on the facade because `mod.*` is a TD object and off-limits off the main thread; the git-status worker now captures its parser as a plain module function resolved on the main thread. The env cluster's extraction was evaluated and correctly refused after thread classification.
+- **Three real bugs fixed**: `_checkMCPUpdate` called `run()` from its worker thread, so the MCP-update notice never logged (now an attribute-publish + bounded main-thread poll, with regression tests); a never-raises contract at the dispatch chokepoint was restored; the operator auto-position scan and overlap warning no longer treat annotations as obstacles.
+- **Verification discipline**: each package passed an adversarial review panel (AST-verified byte fidelity including every generated-template string literal, worker-closure audits, and a test-contract lens proving no suite went vacuous) plus live gates in the running TD session. Full suite green (the lone reported failure is the test-runner's own Status override, verified 33/33 via the direct runner).
+- **Module DATs ship in lockstep with the .toe** so a fresh clone can never open a .toe whose extensions reference not-yet-restored module DATs (settings restore fires at frame 5; DAT restoration at frame 50).
+- test_server_lifecycle grows to 24 tests (MCP-update marshal coverage). **88 suites / 1,979 tests.**
+- TDNExt's split (shared serialization/fileio/refs modules, then export/import/clipboard) is mapped and deferred to a follow-up -- see dev/embody/plan-ext-diet.md and the boundary map for the full extraction plan.
+
 ## v6.0.104
 
 Docked operators now hug their hosts mechanically -- dock placement moved from written guidance into the Envoy tool layer -- plus a docs transparency pass and the first Specimen brief set.
