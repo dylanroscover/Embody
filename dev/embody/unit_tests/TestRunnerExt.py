@@ -18,22 +18,14 @@ from __future__ import annotations
 
 import time
 from collections import deque
-
-
-# =============================================================================
-# SKIP TEST EXCEPTION
-# =============================================================================
-
-class SkipTest(Exception):
-    """Raise inside a test method to skip it."""
-    pass
+from unittest import SkipTest, TestCase
 
 
 # =============================================================================
 # BASE TEST CASE
 # =============================================================================
 
-class EmbodyTestCase:
+class EmbodyTestCase(TestCase):
     """
     Base class for all Embody test suites.
 
@@ -42,6 +34,7 @@ class EmbodyTestCase:
     """
 
     def __init__(self, sandbox, embody, runner):
+        super().__init__()
         self.sandbox = sandbox          # baseCOMP to create temp operators in
         self.embody = embody            # op.Embody reference (the Embody COMP)
         self.runner = runner            # TestRunner instance
@@ -57,82 +50,14 @@ class EmbodyTestCase:
         """
         return self.embody.ext.Embody
 
-    def setUp(self):
-        """Called before each test method. Override for per-test setup."""
-        pass
-
     def tearDown(self):
-        """Called after each test method. Destroys all sandbox children."""
-        for child in list(self.sandbox.children):
-            try:
-                child.destroy()
-            except Exception:
-                pass
+        if self.sandbox is not None:
+            for child in list(self.sandbox.children):
+                try:
+                    child.destroy()
+                except Exception:
+                    pass
 
-    # -----------------------------------------------------------------
-    # Assertion helpers
-    # -----------------------------------------------------------------
-
-    def assertEqual(self, a, b, msg=None):
-        if a != b:
-            raise AssertionError(msg or f'Expected {repr(a)} == {repr(b)}')
-
-    def assertNotEqual(self, a, b, msg=None):
-        if a == b:
-            raise AssertionError(msg or f'Expected {repr(a)} != {repr(b)}')
-
-    def assertTrue(self, val, msg=None):
-        if not val:
-            raise AssertionError(msg or f'Expected truthy, got {repr(val)}')
-
-    def assertFalse(self, val, msg=None):
-        if val:
-            raise AssertionError(msg or f'Expected falsy, got {repr(val)}')
-
-    def assertIsNone(self, val, msg=None):
-        if val is not None:
-            raise AssertionError(msg or f'Expected None, got {repr(val)}')
-
-    def assertIsNotNone(self, val, msg=None):
-        if val is None:
-            raise AssertionError(msg or 'Expected not None')
-
-    def assertIs(self, a, b, msg=None):
-        if a is not b:
-            raise AssertionError(msg or f'Expected {repr(a)} is {repr(b)}')
-
-    def assertIsNot(self, a, b, msg=None):
-        if a is b:
-            raise AssertionError(msg or f'Expected {repr(a)} is not {repr(b)}')
-
-    def assertIn(self, item, container, msg=None):
-        if item not in container:
-            raise AssertionError(msg or f'{repr(item)} not in {repr(container)}')
-
-    def assertNotIn(self, item, container, msg=None):
-        if item in container:
-            raise AssertionError(msg or f'{repr(item)} unexpectedly in {repr(container)}')
-
-    def assertIsInstance(self, obj, cls, msg=None):
-        if not isinstance(obj, cls):
-            raise AssertionError(
-                msg or f'Expected instance of {cls.__name__}, got {type(obj).__name__}')
-
-    def assertGreater(self, a, b, msg=None):
-        if not (a > b):
-            raise AssertionError(msg or f'Expected {repr(a)} > {repr(b)}')
-
-    def assertGreaterEqual(self, a, b, msg=None):
-        if not (a >= b):
-            raise AssertionError(msg or f'Expected {repr(a)} >= {repr(b)}')
-
-    def assertLess(self, a, b, msg=None):
-        if not (a < b):
-            raise AssertionError(msg or f'Expected {repr(a)} < {repr(b)}')
-
-    def assertLessEqual(self, a, b, msg=None):
-        if not (a <= b):
-            raise AssertionError(msg or f'Expected {repr(a)} <= {repr(b)}')
 
     def assertStartsWith(self, s, prefix, msg=None):
         if not str(s).startswith(prefix):
@@ -142,16 +67,6 @@ class EmbodyTestCase:
         if not str(s).endswith(suffix):
             raise AssertionError(msg or f'{repr(s)} does not end with {repr(suffix)}')
 
-    def assertAlmostEqual(self, first, second, places=7, msg=None, delta=None):
-        if delta is not None:
-            if abs(first - second) > delta:
-                raise AssertionError(
-                    msg or f'{first} != {second} within delta {delta}')
-        else:
-            if round(abs(first - second), places) != 0:
-                raise AssertionError(
-                    msg or f'{first} != {second} within {places} places')
-
     def assertApproxEqual(self, a, b, tolerance=1e-6, msg=None):
         if abs(a - b) > tolerance:
             raise AssertionError(msg or f'{a} != {b} (tolerance {tolerance})')
@@ -160,24 +75,6 @@ class EmbodyTestCase:
         if key not in d:
             raise AssertionError(msg or f'Key {repr(key)} not in dict')
 
-    def assertDictEqual(self, a, b, msg=None):
-        if a != b:
-            raise AssertionError(msg or f'Dicts differ:\n  {repr(a)}\n  vs\n  {repr(b)}')
-
-    def assertListEqual(self, a, b, msg=None):
-        if list(a) != list(b):
-            raise AssertionError(msg or f'Lists differ:\n  {repr(list(a))}\n  vs\n  {repr(list(b))}')
-
-    def assertRaises(self, exc_type, fn, *args, **kwargs):
-        try:
-            fn(*args, **kwargs)
-        except exc_type:
-            return
-        except Exception as e:
-            raise AssertionError(
-                f'Expected {exc_type.__name__}, got {type(e).__name__}: {e}')
-        raise AssertionError(f'Expected {exc_type.__name__} but no exception raised')
-
     def assertLen(self, container, expected_len, msg=None):
         actual = len(container)
         if actual != expected_len:
@@ -185,7 +82,8 @@ class EmbodyTestCase:
                 msg or f'Expected length {expected_len}, got {actual}')
 
     def skip(self, reason=''):
-        raise SkipTest(reason)
+        """Historical alias for unittest.TestCase.skipTest."""
+        self.skipTest(reason)
 
 
 # =============================================================================
