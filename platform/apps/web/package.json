@@ -17,7 +17,7 @@
     "@embody/scanner-ts": "*",
     "@embody/tdn-viewer": "*",
     "@lezer/highlight": "^1.2.3",
-    "astro": "^6.4.4",
+    "astro": "^7.0.7",
     "better-auth": "^1.6.18",
     "html2canvas-pro": "^2.0.4",
     "kysely": "^0.29.2",
