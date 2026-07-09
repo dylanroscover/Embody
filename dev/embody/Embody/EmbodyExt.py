@@ -203,7 +203,7 @@ class EmbodyExt:
             self.my.par.Logfolder = 'logs'
         if not self.my.par.Logtofile:
             self.my.par.Logtofile = True
-        
+
         # Supported operator types for DAT externalization
         self.supported_dat_types = [
             'text', 'table', 'execute', 'parexec', 'pargroupexec',
@@ -793,7 +793,7 @@ class EmbodyExt:
         """
         if externalizationsFolder is None or externalizationsFolder is False:
             externalizationsFolder = self.ExternalizationsFolder
-        
+
         # Normalize folder path
         if externalizationsFolder:
             externalizationsFolder = self.normalizePath(externalizationsFolder)
@@ -825,13 +825,13 @@ class EmbodyExt:
         filename = opToExternalize.name + file_extension
         parent_path = str(opToExternalize.parent().path).strip('/')
         parent_components = [p for p in parent_path.split('/') if p]
-        
+
         # Combine folder and parent components
         path_parts = []
         if externalizationsFolder:
             path_parts.append(externalizationsFolder)
         path_parts.extend(parent_components)
-        
+
         if path_parts:
             rel_directory = '/'.join(path_parts)
             rel_file_path = f'{rel_directory}/{filename}'
@@ -839,17 +839,17 @@ class EmbodyExt:
             # Root-level operator with no externalizations folder
             rel_directory = ''
             rel_file_path = filename
-        
+
         abs_folder_path = Path(project.folder) / rel_directory if rel_directory else Path(project.folder)
         save_file_path = Path(project.folder) / rel_file_path
-        
+
         if self.debug_mode:
             self.Log(f"getOpPaths for {opToExternalize.path}:", "INFO")
             self.Log(f"  rel_directory: {rel_directory}", "INFO")
             self.Log(f"  rel_file_path: {rel_file_path}", "INFO")
             self.Log(f"  abs_folder_path: {abs_folder_path}", "INFO")
             self.Log(f"  save_file_path: {save_file_path}", "INFO")
-        
+
         return abs_folder_path, save_file_path, rel_directory, rel_file_path
 
     # ==========================================================================
@@ -2119,10 +2119,10 @@ class EmbodyExt:
             set: Absolute Path objects of all tracked files
         """
         tracked = set()
-        
+
         if not self.Externalizations:
             return tracked
-            
+
         for i in range(1, self.Externalizations.numRows):
             rel_file_path = self._cellVal(i, 'rel_file_path')
             if rel_file_path:
@@ -2143,7 +2143,7 @@ class EmbodyExt:
         """
         if isinstance(file_path, str):
             file_path = Path(file_path)
-        
+
         resolved = file_path.resolve()
         return resolved in self.getTrackedFilePaths()
 
@@ -2160,16 +2160,16 @@ class EmbodyExt:
         """
         if isinstance(file_path, str):
             file_path = Path(file_path)
-        
+
         resolved = file_path.resolve()
-        
+
         if not resolved.is_file():
             return False
-        
+
         if not force and not self.isTrackedFile(resolved):
             self.Log(f"SAFETY: Refusing to delete untracked file: {resolved}", "WARNING")
             return False
-        
+
         try:
             resolved.unlink()
             self.Log(f"Deleted tracked file: {resolved}", "INFO")
@@ -2191,14 +2191,14 @@ class EmbodyExt:
         """
         if isinstance(folder_path, str):
             folder_path = Path(folder_path)
-        
+
         if not folder_path.exists():
             return (0, 0)
-        
+
         tracked_files = self.getTrackedFilePaths()
         deleted = 0
         skipped = 0
-        
+
         # Walk through folder and delete only tracked files
         for file_path in folder_path.rglob('*'):
             if file_path.is_file():
@@ -2212,10 +2212,10 @@ class EmbodyExt:
                         self.Log(f"Error deleting: {resolved}", "ERROR", str(e))
                 else:
                     skipped += 1
-        
+
         if skipped > 0:
             self.Log(f"SAFETY: Preserved {skipped} untracked file(s) in {folder_path}", "INFO")
-        
+
         return (deleted, skipped)
 
     # ==========================================================================
@@ -2233,11 +2233,11 @@ class EmbodyExt:
             folder = project.folder
 
         tags = self.getTags()
-        
+
         # Collect all tracked file paths BEFORE clearing operator references
         tracked_files = self.getTrackedFilePaths()
         self.Log(f"Disable: Found {len(tracked_files)} tracked file(s) to clean up", "INFO")
-        
+
         # Clear COMP externalizations
         for oper in self.getExternalizedOps(COMP):
             oper.par.externaltox = ''
@@ -2280,7 +2280,7 @@ class EmbodyExt:
                     deleted_count += 1
                 except Exception as e:
                     self.Log(f"Error deleting tracked file: {tracked_file}", "ERROR", str(e))
-        
+
         if deleted_count > 0:
             self.Log(f"Deleted {deleted_count} tracked file(s)", "SUCCESS")
 
@@ -2314,7 +2314,7 @@ class EmbodyExt:
         """
         if not folder:
             return
-            
+
         # Remove empty top-level comp directories (skip SCM dirs)
         for comp in self.root.findChildren(depth=1, type=COMP):
             if comp.name in self._SCM_DIRS or comp.name in ['local', 'perform']:
@@ -2377,7 +2377,7 @@ class EmbodyExt:
             self.Log("Enabled", "SUCCESS")
             self.my.par.Status = 'Enabled'
             self.param_tracker.initializeTracking(self)
-            
+
             # Create externalization folder (makedirs handles missing parents)
             folder = self.getProjectFolder()
             try:
@@ -2402,7 +2402,7 @@ class EmbodyExt:
         """Normalize all paths in table and on operators for cross-platform support."""
         if not self.Externalizations:
             return
-            
+
         paths_fixed = 0
         for i in range(1, self.Externalizations.numRows):
             rel_file_path = self._cellVal(i, 'rel_file_path')
@@ -2419,7 +2419,7 @@ class EmbodyExt:
                 current = self.getExternalPath(oper)
                 if current and current != self.normalizePath(current):
                     self.setExternalPath(oper, self.normalizePath(current))
-        
+
         if paths_fixed > 0:
             self.Log(f"Normalized {paths_fixed} path(s) for cross-platform compatibility", "SUCCESS")
 
@@ -2567,12 +2567,12 @@ class EmbodyExt:
         self.my.op('list/inject_parents').cook(force=True)
         self.lister.reset()
         self.checkOpsForContinuity(self.ExternalizationsFolder)
-        
+
         if self.my.par.Detectduplicatepaths:
             self.checkForDuplicates()
-        
+
         self.Debug("Refreshed")
-        
+
         if not me.time.play:
             self.Log("ALERT! TIMELINE IS PAUSED. RESUME FOR EMBODY TO FUNCTION", "ERROR")
 
@@ -2699,16 +2699,16 @@ class EmbodyExt:
         """Check if an operator can be externalized."""
         if oper.family == 'COMP':
             return True
-        
+
         if oper.type not in self.supported_dat_types:
             return False
-            
+
         dat_tags = self.getTags('DAT')
         has_tag = any(tag in oper.tags for tag in dat_tags)
-        
+
         if not has_tag:
             return False
-            
+
         return True
 
     def isOpProcessable(self, oper: OP) -> bool:
@@ -3517,7 +3517,7 @@ class EmbodyExt:
         if self._performMode:
             return
         current_comp = None
-        
+
         try:
             pane = ui.panes.current
             if pane and pane.owner:
@@ -3525,11 +3525,11 @@ class EmbodyExt:
         except Exception as e:
             self.Log(f"Failed to get current pane: {e}", "DEBUG")
             pass
-        
+
         if not current_comp:
             self.Log("Could not determine current COMP", "WARNING")
             return
-        
+
         # Check if this COMP is externalized
         comp_path = current_comp.path
         match = self._findExternalizedComp(comp_path)
@@ -3690,7 +3690,7 @@ class EmbodyExt:
             except Exception as e:
                 self.Log(f"Failed to update path for {oper.path}: {e}", "WARNING")
                 pass
-            
+
             if oper.family == 'COMP' and self.param_tracker.compareParameters(oper):
                 param_changes.append(oper.path)
                 self.Externalizations[oper.path, 'dirty'] = 'Par'
@@ -3839,7 +3839,7 @@ class EmbodyExt:
         build_page = next((p for p in oper.customPages if p.name == 'Build Info'), None)
         if not build_page:
             build_page = oper.appendCustomPage('About')
-        
+
         current_build = 1
         if hasattr(oper.par, 'Build'):
             current_build = oper.par.Build.eval()
@@ -3852,18 +3852,18 @@ class EmbodyExt:
                         self.Log(f"Failed to parse build number for {oper.path}: {e}", "DEBUG")
                         pass
                     break
-        
+
         self.setupBuildParameters(oper, build_page, current_build, app.build)
-        
+
         # Set external path
         if not oper.par.externaltox.eval():
             oper.par.externaltox = rel_file_path
         else:
             oper.par.externaltox = self.normalizePath(oper.par.externaltox.eval())
-        
+
         oper.par.externaltox.readOnly = True
         oper.par.enableexternaltox = True
-        
+
         # Save file
         save_path_str = str(save_file_path)
         try:
@@ -3881,13 +3881,13 @@ class EmbodyExt:
             oper.par.file = str(rel_file_path)
         else:
             oper.par.file = self.normalizePath(oper.par.file.eval())
-        
+
         oper.par.syncfile = True
         op_path = str(oper)
         run(lambda: self._safeSyncFile(op_path, False), delayFrames=1)
         run(lambda: self._safeSyncFile(op_path, True), delayFrames=2)
         oper.par.file.readOnly = True
-        
+
         save_path_str = str(save_file_path)
         try:
             oper.save(save_path_str)
@@ -3967,14 +3967,14 @@ class EmbodyExt:
             build_par = build_page.appendInt('Build', label='Build Number')
             build_par.readOnly = True
         build_par.val = build_num
-        
+
         # Date
         date_par = next((p for p in oper.customPars if p.name == 'Date'), None)
         if not date_par:
             date_par = build_page.appendStr('Date', label='Build Date')
             date_par.readOnly = True
         date_par.val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-        
+
         # Touch Build
         touch_par = next((p for p in oper.customPars if p.name == 'Touchbuild'), None)
         if not touch_par:
@@ -4299,7 +4299,7 @@ class EmbodyExt:
         """Update timestamp for an operator from file system."""
         if oper.family != 'COMP':
             return
-            
+
         save_file_path = self.getOpPaths(oper, self.ExternalizationsFolder)[1]
         try:
             last_modified = int(Path(save_file_path).stat().st_mtime)
@@ -4321,7 +4321,7 @@ class EmbodyExt:
                 self.updateMovedOp(potential_op, old_op_path, rel_file_path, externalizationsFolder)
                 processed_ops.add(potential_op.path)
                 return True
-        
+
         # Search all DATs for one with matching file path
         for potential_op in self.root.findChildren(type=DAT):
             if not hasattr(potential_op.par, 'file'):
@@ -4332,7 +4332,7 @@ class EmbodyExt:
                 self.updateMovedOp(potential_op, old_op_path, rel_file_path, externalizationsFolder)
                 processed_ops.add(potential_op.path)
                 return True
-        
+
         return False
 
     def _findMovedTDNOp(self, old_op_path: str, old_rel_file_path: str,
@@ -4944,12 +4944,12 @@ class EmbodyExt:
         normalized = self.normalizePath(old_rel_file_path)
         old_file = self.buildAbsolutePath(normalized)
         old_folder = old_file.parent
-        
+
         if old_file.is_file():
             try:
                 old_file.unlink()
                 self.Log(f"Removed old file: {normalized}", "INFO")
-                
+
                 # Remove empty directories only (safe operation)
                 try:
                     if old_folder.exists() and not any(old_folder.iterdir()):
@@ -5449,8 +5449,8 @@ class EmbodyExt:
             return
 
         if self.isReplicant(oper) or self.isClone(oper) or self.isInsideClone(oper):
-            ui.messageBox('Embody Warning', 
-                f"'{oper.path}' is a replicant or clone and cannot be externalized.", 
+            ui.messageBox('Embody Warning',
+                f"'{oper.path}' is a replicant or clone and cannot be externalized.",
                 buttons=['Ok'])
             return
 
@@ -6603,19 +6603,19 @@ class EmbodyExt:
         When delete_file=False, the table row and tags are removed but the file is preserved on disk.
         """
         is_clone = False
-        
+
         try:
             oper = op(op_path)
             if oper:
                 if 'clone' in oper.tags:
                     is_clone = True
                     self.Log(f"Skipping file deletion for clone: {op_path}", "INFO")
-                
+
                 # Remove tags
                 for tag in self.getTags():
                     if tag in oper.tags:
                         oper.tags.remove(tag)
-                
+
                 # Clear parameters
                 if oper.family == 'COMP':
                     oper.par.externaltox = ''
@@ -6624,7 +6624,7 @@ class EmbodyExt:
                     oper.par.syncfile = False
                     oper.par.file = ''
                     oper.par.file.readOnly = False
-                
+
                 oper.cook(force=True)
                 self.resetOpColor(oper)
                 self.param_tracker.removeComp(op_path)
@@ -6642,7 +6642,7 @@ class EmbodyExt:
         # 4. It's a file we're tracking (implicit - we got rel_file_path from our table)
         if delete_file and normalized_path and not other_references and not is_clone:
             full_path = self.buildAbsolutePath(normalized_path).resolve()
-            
+
             def _do_delete():
                 try:
                     if full_path.is_file():
@@ -6688,17 +6688,17 @@ class EmbodyExt:
         """Check if any other operators reference a file path."""
         if not normalized_path:
             return False
-            
+
         for comp in self.root.findChildren(type=COMP, parName='externaltox'):
             if comp.path != op_path and self.normalizePath(comp.par.externaltox.eval()) == normalized_path:
                 self.Log(f"File still referenced by '{comp.path}'", "INFO")
                 return True
-        
+
         for dat in self.root.findChildren(type=DAT, parName='file'):
             if dat.path != op_path and self.normalizePath(dat.par.file.eval()) == normalized_path:
                 self.Log(f"File still referenced by '{dat.path}'", "INFO")
                 return True
-        
+
         return False
 
     def RemoveTDNEntry(self, op_path: str) -> None:
@@ -8745,7 +8745,7 @@ class ParameterTracker:
     def __init__(self, ownerComp):
         self.my = ownerComp
         self.param_store = {}
-        
+
     def captureParameters(self, comp):
         """Capture the AUTHORED state of a COMP's parameters.
 
@@ -8780,24 +8780,24 @@ class ParameterTracker:
                     'mode': mode
                 }
         return params
-    
+
     def updateParamStore(self, comp):
         """Update stored parameters for a COMP."""
         self.param_store[comp.path] = self.captureParameters(comp)
-        
+
     def compareParameters(self, comp):
         """Compare current parameters with stored. Returns True if changed."""
         if comp.path not in self.param_store:
             self.updateParamStore(comp)
             return False
-            
+
         stored = self.param_store[comp.path]
         current = self.captureParameters(comp)
-        
+
         # Check for additions/removals
         if set(current.keys()) != set(stored.keys()):
             return True
-        
+
         # Check values
         for name in stored:
             if name not in current:
@@ -8807,9 +8807,9 @@ class ParameterTracker:
                 stored[name].get('bindExpr') != current[name].get('bindExpr') or
                 stored[name]['mode'] != current[name]['mode']):
                 return True
-        
+
         return False
-    
+
     def removeComp(self, comp_path):
         """Remove a COMP from tracking."""
         self.param_store.pop(comp_path, None)

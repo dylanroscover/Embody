@@ -2,14 +2,14 @@
 # par - the Par object that has changed
 # val - the current value
 # prev - the previous value
-# 
+#
 # Make sure the corresponding toggle is enabled in the Parameter Execute DAT.
 
 def onValueChange(par, prev):
 	# use par.eval() to get current value
-	
+
 	op('container_right').par.display = 0 if par.eval() <= 960 else 1
-		
+
 	return
 
 # Called at end of frame with complete list of individual parameter changes.
@@ -35,4 +35,3 @@ def onEnableChange(par, val, prev):
 
 def onModeChange(par, val, prev):
 	return
-	

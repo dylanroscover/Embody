@@ -1,5 +1,5 @@
 # me - this DAT
-# 
+#
 # comp - the replicator component which is cooking
 # allOps - a list of all replicants, created or existing
 # newOps - the subset that were just created

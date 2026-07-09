@@ -1,5 +1,5 @@
 # me - This DAT
-# 
+#
 # dat - The DAT that received the key event
 # key - The name of the key attached to the event.
 #		This tries to be consistent regardless of which language
@@ -76,4 +76,3 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 
 def onShortcut(dat, shortcutName, time):
 	return;
-	
