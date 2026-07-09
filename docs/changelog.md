@@ -1,5 +1,13 @@
 # Changelog
 
+## v6.0.111
+
+Deterministic COMP placement for AI agents -- build where the user already works instead of a different network each run -- plus a geometryCOMP default-torus trap documented at the point every agent hits it. Skills and templates only; no source or test change.
+
+- **Deterministic COMP placement via Embody-association.** The `/create-operator` "choose the parent network" step is rewritten so a new COMP lands in the SAME home every run instead of `/` one time and `/project1` the next. The default home is now the container that holds the `Embody` COMP (`op.Embody.parent().path`) -- the level the user chose by placing Embody there -- with a deliberately-opened content pane (`ui.panes.current.owner.path`) as a guarded override that is IGNORED when it sits at the bare root `/`. Container names are still discovered with `query_network`, never hardcoded to `/project1`. CLAUDE.md rules 3/5 (and the shipped `text_claude.md`) were realigned to this default so the always-loaded north-star no longer contradicts the skill.
+- **geometryCOMP: delete the default torus.** A new `/create-operator` section (promoted from `/pop-networks` so it fires for SOP and imported geometry too, not just POP builds) documents that a fresh `geometryCOMP` ships with a `torus1` SOP whose RENDER flag is ON: the moment you add your own geometry, delete `torus1` (or turn off its render flag), or the Render TOP draws BOTH your geometry and a phantom torus. The trap is easy to miss because adding your own SOP auto-clears the torus's exclusive DISPLAY flag (viewer looks clean) while its non-exclusive RENDER flag keeps drawing -- so it bites only live `create_op` builds (TDN import already strips these auto-defaults).
+- **Docs**: the never-before-released v6.0.109 features are now documented on the Envoy pages -- recovery hints in `docs/envoy/architecture.md` + `tools-reference.md`, and the `capture_top` Quality verdict in `tools-reference.md` + `index.md`. `/pop-networks` gains a cross-ref to the canonical create-operator torus rule. Suite unchanged at **90 suites / 2,005 tests**.
+
 ## v6.0.109
 
 Two agent-ergonomics wins adapted from a competitor review: reactive recovery hints on failed tool calls, and a black/empty-frame verdict on `capture_top`.

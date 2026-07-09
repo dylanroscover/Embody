@@ -128,7 +128,7 @@ Single-parameter mode returns `path`, `parameter`, `value`, `mode`, `label`, mod
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP's output as an image. Saves to a temp file and returns the path -- Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. Pass `sample_grid>=2` to return a downsampled NxN RGBA grid instead of an image: row 0 is the top of the image, stats are computed over the full-resolution texture, the requested grid clamps to 2..32, the returned `grid` is further capped to the TOP's width/height and can drop below 2 on tiny textures, and image params are ignored. Channel padding: RG -> b=0/a=1, mono -> replicated/a=1, monoalpha -> replicated + real alpha; `channels` reports the raw plane count. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP's output as an image. Saves to a temp file and returns the path -- Read that path to view it. Inline base64 previews are token-heavy, so they are **off by default** (`inline=False`); pass `inline=True` to also embed a small preview. Small images (<20 KB) include the inline MCP `ImageContent` preview when requested. Default: JPEG at 80% quality, max 640px long edge. Pass `sample_grid>=2` to return a downsampled NxN RGBA grid instead of an image: row 0 is the top of the image, stats are computed over the full-resolution texture, the requested grid clamps to 2..32, the returned `grid` is further capped to the TOP's width/height and can drop below 2 on tiny textures, and image params are ignored. Channel padding: RG -> b=0/a=1, mono -> replicated/a=1, monoalpha -> replicated + real alpha; `channels` reports the raw plane count. Every capture also returns a **Quality verdict** from the raw float pixels (`is_black` / `is_flat` / `fully_transparent` / `pass` + `fail_reasons`), surfaced as a `Quality: OK\|FAIL` line so you can tell an empty/black/transparent render from a real one without reading the image (black and fully-transparent are failures; a uniform fill is advisory, `flat_frame`). |
 
 ## Multi-Session Awareness
 
@@ -155,6 +155,9 @@ Concurrent AI sessions (multiple Claude Code windows, other MCP clients) working
 
 !!! info "Auto-piggybacked logs"
     When a tool call generates `WARNING` or `ERROR` entries since the previous call, the response carries a `_logs` field with up to the last 8 of them. `INFO`/`DEBUG`/`SUCCESS` history does not ride along — fetch it on demand with `get_logs`. Warning cursors are tracked per session, so concurrent AI sessions each receive their own copy — one session polling first no longer consumes a warning meant for everyone.
+
+!!! info "Auto-attached recovery hints"
+    When a tool returns an `error`, Envoy attaches a `recovery_hints` list — each entry `{cause, action, next_tools}`, matched to the real error string (path-not-found -> `query_network`/`find_children`, parameter-not-found -> `get_op`, wrong family, empty capture -> `get_op_performance`, thread conflict, timeout -> `get_project_performance`). Additive, never clobbers, never raises — follow the hint instead of retrying the same failing call.
 
 ## Bridge Meta-Tools
 
