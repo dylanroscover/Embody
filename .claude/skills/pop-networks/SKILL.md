@@ -187,7 +187,7 @@ Verification is visual and structural:
 ## Trap List
 
 - `rectanglePOP` size parameters are `sizeu` and `sizev`, not `sizex` or `sizey`. Setting `sizex`/`sizey` silently does nothing. General rule: verify live parameters with `get_parameter` before trusting type-level help or component names.
-- The default torus inside a new `geometryCOMP` will render if you leave it there. Delete it before building the POP chain.
+- The default torus inside a new `geometryCOMP` will render if you leave it there. Delete it before building the POP chain -- this is the general geometryCOMP rule; see `/create-operator` -> "Geometry COMP: delete the default torus" for the render-flag detail.
 - No display/render flags on the output `nullPOP` means the render is empty.
 - Points without point primitives do not render.
 - POP render color is `Color` (`float4`), not SOP-style `Cd`.

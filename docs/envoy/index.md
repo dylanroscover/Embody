@@ -181,7 +181,7 @@ Read any COMP's live network as `.tdn` (no disk I/O), export it to disk, or impo
 
 `capture_top` downloads a TOP's current frame output as an image the AI can actually *see* — not a description of it (by default the image is written to a temp file the AI reads; see below). This closes the visual feedback loop: the AI builds a compositing chain, captures the output, examines what's rendering, and iterates — without you describing the result in words.
 
-By default (`inline=False`) the image is saved to a temp file and the path is returned — the AI reads that path to view it, since inline base64 previews are token-heavy. Pass `inline=True` to also embed a small base64 preview in the response. JPEG (default, 80% quality) and PNG are supported, with configurable maximum resolution (default: 640px long edge).
+By default (`inline=False`) the image is saved to a temp file and the path is returned — the AI reads that path to view it, since inline base64 previews are token-heavy. Pass `inline=True` to also embed a small base64 preview in the response. JPEG (default, 80% quality) and PNG are supported, with configurable maximum resolution (default: 640px long edge). Every capture also returns a **Quality verdict** from the raw pixels (`is_black` / `is_flat` / `fully_transparent` / `pass`), surfaced as a `Quality: OK|FAIL` line so the AI can tell an empty or black render from a real one without reading the image.
 
 | Tool | Description |
 |---|---|

@@ -181,5 +181,6 @@ Envoy handles two error categories:
 
 1. **Protocol errors** (JSON-RPC level) — unknown tools, invalid arguments, or server errors. FastMCP handles these automatically.
 2. **Tool execution errors** — returned in tool results via `{'error': str(e)}` dicts. These indicate the tool ran but encountered a problem (missing operator, invalid path, etc.).
+3. **Recovery hints** — when a tool returns an `{'error': ...}` result, Envoy auto-attaches a `recovery_hints` list (each entry `{cause, action, next_tools}`), matched against the real error string by a small curated table (path-not-found -> `query_network`/`find_children`; parameter-not-found -> `get_op`; wrong family; empty capture -> `get_op_performance`; thread conflict; timeout -> `get_project_performance`). Attached centrally in `_send_response` — additive, never clobbers an existing block, never raises — it steers the agent's next call instead of a blind retry of the same failing tool.
 
 All tool handlers validate inputs before passing to TD operations and return structured error information rather than raising exceptions.

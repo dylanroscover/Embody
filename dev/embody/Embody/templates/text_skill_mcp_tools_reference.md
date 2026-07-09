@@ -136,7 +136,7 @@ Mutating TD-authoring operations are wrapped in TD undo blocks (one batch_operat
 
 | Tool | Parameters | Description |
 |------|-----------|-------------|
-| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP output. Returns a temp file path by default; `inline=True` embeds a small preview. `sample_grid>=2` returns numeric NxN RGBA cells + channel stats instead of an image, clamped 2..32 with origin at top-left. |
+| `capture_top` | `op_path`, `format?`, `quality?`, `max_resolution?`, `inline?`, `sample_grid?` | Capture a TOP output. Returns a temp file path by default; `inline=True` embeds a small preview. `sample_grid>=2` returns numeric NxN RGBA cells + channel stats instead of an image, clamped 2..32 with origin at top-left. The returned text carries a **Quality verdict** from the raw pixels (luminance + alpha stats): a `Quality: FAIL` flags a black / flat / fully-transparent frame so you can tell an empty render from a real one WITHOUT reading the image. Never declare a visual task done on a FAIL. |
 
 For visual work, success is verified by capturing and judging the output TOP, not by a clean network alone; see `/visual-aesthetics`.
 
@@ -151,6 +151,8 @@ For visual work, success is verified by capturing and judging the output TOP, no
 **Auto-piggybacked peer advisories**: a `_peers` field rides along when your request touches territory another session modified recently (last ~10 min) -- one entry per peer: `{label, scope, tool, age_s, conflict}`. `conflict: true` means a peer WROTE an overlapping scope within the last minute AND your operation is also a write -- **treat it as a hard stop**: check `get_sessions`, coordinate (or divide work by COMP subtree), and only then proceed. Non-conflict advisories are informational and deduped per (peer, scope) for ~5 min; conflicts always ride.
 
 **Destructive-op gate**: `delete_op`, `import_network` with `clear_first=True`, `run_tests`, and batches containing them are REFUSED (`MULTI-SESSION GATE` error naming the holder/peer) while a live peer session claims the scope or wrote it within the last minute. Pass `override=True` only when certain, and say so. Call `get_logs` for the full history, or read the log files in Embody's logs directory (see the `Logfolder` parameter on the Embody COMP).
+
+**Auto-attached recovery hints**: when a tool returns an `error`, a `recovery_hints` list may ride along -- each entry is `{cause, action, next_tools}` keyed off the error message (path-not-found, wrong family, empty capture, thread conflict, timeout, ...). It tells you the likely cause and which tool to call next, so recover by following it rather than retrying the same failing call verbatim.
 
 ## Bridge Meta-Tools
 
