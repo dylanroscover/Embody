@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  # GitHub Actions across all workflows (.github/workflows/*). Dependabot bumps
+  # the pinned commit SHA and its trailing "# vX.Y.Z" comment together. All
+  # action bumps are grouped into a single weekly PR (like the manual #34).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: ci
+
+  # Node dependencies for the platform monorepo (Astro web app + workspaces),
+  # resolved from the root lockfile at platform/package-lock.json. Minor/patch
+  # bumps are grouped; majors (e.g. wrangler v4 -> v5) open their own PR so the
+  # breaking-change review stays isolated.
+  - package-ecosystem: npm
+    directory: /platform
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: deps
