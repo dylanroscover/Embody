@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Astro Worker app for embody.tools.",
   "dependencies": {
-    "@astrojs/cloudflare": "^13.6.1",
+    "@astrojs/cloudflare": "^14.1.2",
     "@astrojs/react": "^5.0.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-yaml": "^6.1.3",
