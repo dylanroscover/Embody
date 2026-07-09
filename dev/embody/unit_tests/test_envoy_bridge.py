@@ -2485,5 +2485,3 @@ class TestBridgeStdoutSerialization(EmbodyTestCase):
             bad_lines, [],
             f'{len(bad_lines)} corrupt lines (lock not serializing stdout writes): '
             f'{bad_lines[:5]}')
-
-

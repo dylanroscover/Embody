@@ -82,4 +82,3 @@ Batch-encoding a set of file sequences (PNG sequence, `.mov`, image sequence) th
 
 - **Realtime recording (Realtime ON) dropped frames** -> set `project.realTime = False` and re-render.
 - **Deterministic / non-realtime path dropped frames** -> Realtime is already OFF, so "re-render with realtime off" is a no-op. The cause is elsewhere: the source TOP was not force-cooked to completion before the pulse, a GLSL/compile error produced the fallback image, or the encoder stalled. Confirm each frame the source cooked uniquely (`cookedThisFrame` True, `totalCooks` incremented, no errors, `last_frames_written == 1`) before pulsing.
-
