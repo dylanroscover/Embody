@@ -711,9 +711,9 @@ class TestTDNFileIO(EmbodyTestCase):
 			data = yaml.safe_load(f)
 		entry = [o for o in data['operators'] if o['name'] == 'colored'][0]
 		self.assertIn('color', entry)
-		self.assertApproxEqual(entry['color'][0], 1.0)
-		self.assertApproxEqual(entry['color'][1], 0.0)
-		self.assertApproxEqual(entry['color'][2], 0.0)
+		self.assertAlmostEqual(entry['color'][0], 1.0)
+		self.assertAlmostEqual(entry['color'][1], 0.0)
+		self.assertAlmostEqual(entry['color'][2], 0.0)
 
 	def test_export_file_preserves_tags(self):
 		"""Operator tags should be in the exported file."""

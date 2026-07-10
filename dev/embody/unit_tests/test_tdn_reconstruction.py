@@ -84,14 +84,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def _assertParamEqual(self, val1, val2, msg=''):
 		"""Float-tolerant parameter comparison."""
 		if isinstance(val1, float) and isinstance(val2, float):
-			self.assertApproxEqual(val1, val2, msg=msg)
+			self.assertAlmostEqual(val1, val2, msg=msg)
 		elif isinstance(val1, str) and isinstance(val2, str):
 			self.assertEqual(val1, val2, msg)
 		else:
 			# Try numeric comparison
 			try:
 				f1, f2 = float(val1), float(val2)
-				self.assertApproxEqual(f1, f2, msg=msg)
+				self.assertAlmostEqual(f1, f2, msg=msg)
 			except (TypeError, ValueError):
 				self.assertEqual(val1, val2, msg)
 
@@ -192,7 +192,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			if orig_color is not None:
 				self.assertIsNotNone(reimp_color, f'{name}: missing color')
 				for i in range(3):
-					self.assertApproxEqual(
+					self.assertAlmostEqual(
 						orig_color[i], reimp_color[i],
 						msg=f'{name}: color[{i}] mismatch')
 
@@ -637,10 +637,10 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
 		self.assertIsNotNone(rc)
-		self.assertApproxEqual(rc.par.Speed.eval(), 3.14)
+		self.assertAlmostEqual(rc.par.Speed.eval(), 3.14)
 		self.assertTrue(rc.par.Speed.clampMin)
 		self.assertTrue(rc.par.Speed.clampMax)
-		self.assertApproxEqual(rc.par.Speed.max, 10.0)
+		self.assertAlmostEqual(rc.par.Speed.max, 10.0)
 
 	def test_C02_int_custom_par(self):
 		"""Int custom par round-trip."""
@@ -696,9 +696,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Tintb = 0.2
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Tintr.eval(), 1.0)
-		self.assertApproxEqual(rc.par.Tintg.eval(), 0.5)
-		self.assertApproxEqual(rc.par.Tintb.eval(), 0.2)
+		self.assertAlmostEqual(rc.par.Tintr.eval(), 1.0)
+		self.assertAlmostEqual(rc.par.Tintg.eval(), 0.5)
+		self.assertAlmostEqual(rc.par.Tintb.eval(), 0.2)
 
 	def test_C07_xyz_custom_par(self):
 		"""XYZ (3-component) custom par round-trip."""
@@ -710,9 +710,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Posz = 30.0
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Posx.eval(), 10.0)
-		self.assertApproxEqual(rc.par.Posy.eval(), 20.0)
-		self.assertApproxEqual(rc.par.Posz.eval(), 30.0)
+		self.assertAlmostEqual(rc.par.Posx.eval(), 10.0)
+		self.assertAlmostEqual(rc.par.Posy.eval(), 20.0)
+		self.assertAlmostEqual(rc.par.Posz.eval(), 30.0)
 
 	def test_C08_readonly_custom_par(self):
 		"""readOnly custom par round-trip."""
@@ -756,7 +756,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Author = 'Test'
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Speed.eval(), 2.0)
+		self.assertAlmostEqual(rc.par.Speed.eval(), 2.0)
 		self.assertEqual(rc.par.Author.eval(), 'Test')
 
 	def test_C12_custom_par_expression_mode(self):
@@ -981,9 +981,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n.color = (1.0, 0.0, 0.5)
 		self._roundTrip(self.sandbox)
 		rn = self.sandbox.op('n')
-		self.assertApproxEqual(rn.color[0], 1.0)
-		self.assertApproxEqual(rn.color[1], 0.0)
-		self.assertApproxEqual(rn.color[2], 0.5)
+		self.assertAlmostEqual(rn.color[0], 1.0)
+		self.assertAlmostEqual(rn.color[1], 0.0)
+		self.assertAlmostEqual(rn.color[2], 0.5)
 
 	def test_F05_comment(self):
 		"""Operator comment round-trip."""
@@ -1018,7 +1018,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(rn.nodeY, 200)
 		self.assertEqual(rn.nodeWidth, 180)
 		self.assertEqual(rn.nodeHeight, 120)
-		self.assertApproxEqual(rn.color[0], 0.5)
+		self.assertAlmostEqual(rn.color[0], 0.5)
 		self.assertEqual(rn.comment, 'Combined metadata test')
 		self.assertIn('test', rn.tags)
 
@@ -1218,7 +1218,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(4):
 			rn = self.sandbox.op(f'n{i}')
 			self.assertEqual(int(rn.par.seed.eval()), 100)
-			self.assertApproxEqual(rn.par.amp.eval(), 0.5)
+			self.assertAlmostEqual(rn.par.amp.eval(), 0.5)
 
 	def test_I07_operator_override(self):
 		"""Individual op can override type_defaults value."""
@@ -1233,7 +1233,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n3.par.amp = 0.5
 		self._roundTrip(self.sandbox)
 		rn2 = self.sandbox.op('n2')
-		self.assertApproxEqual(rn2.par.amp.eval(), 0.8)
+		self.assertAlmostEqual(rn2.par.amp.eval(), 0.8)
 
 	def test_I08_flags_hoisted_to_type_defaults(self):
 		"""Flags unanimously shared across ops of a type are hoisted."""
@@ -1323,9 +1323,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.assertTrue(rn.viewer)
 			self.assertEqual(rn.nodeWidth, 250)
 			self.assertEqual(rn.nodeHeight, 120)
-			self.assertApproxEqual(rn.color[0], 0.3)
-			self.assertApproxEqual(rn.color[1], 0.6)
-			self.assertApproxEqual(rn.color[2], 0.9)
+			self.assertAlmostEqual(rn.color[0], 0.3)
+			self.assertAlmostEqual(rn.color[1], 0.6)
+			self.assertAlmostEqual(rn.color[2], 0.9)
 			self.assertEqual(sorted(rn.tags), ['fx', 'test'])
 
 	def test_I14_partial_flags_not_hoisted(self):
@@ -1441,7 +1441,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self._roundTrip(self.sandbox)
 		for i in range(3):
 			rc = self.sandbox.op(f'c{i}')
-			self.assertApproxEqual(rc.par.Speed.eval(), float(i))
+			self.assertAlmostEqual(rc.par.Speed.eval(), float(i))
 			expected_mode = 'b' if i % 2 else 'a'
 			self.assertEqual(rc.par.Mode.eval(), expected_mode)
 
@@ -1483,7 +1483,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Speed = 3.14
 		self._simulateReconstruction(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Speed.eval(), 3.14)
+		self.assertAlmostEqual(rc.par.Speed.eval(), 3.14)
 
 	def test_K05_dat_content_through_reconstruction(self):
 		"""DAT content preserved through strip + reimport."""
@@ -1629,7 +1629,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(result.get('success'))
 
 		self.assertTrue(hasattr(self.sandbox.par, 'Threshold'))
-		self.assertApproxEqual(self.sandbox.par.Threshold.eval(), 0.75)
+		self.assertAlmostEqual(self.sandbox.par.Threshold.eval(), 0.75)
 
 	def test_K13_backward_compat_no_container_fields(self):
 		"""Import of TDN without top-level custom_pars/parameters must not error."""
@@ -2338,7 +2338,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.store('speed', 3.14)
 		self._roundTrip(self.sandbox)
 		result = self.sandbox.op('c').fetch('speed', None, search=False)
-		self.assertApproxEqual(result, 3.14)
+		self.assertAlmostEqual(result, 3.14)
 
 	def test_Q03_string_storage_roundtrip(self):
 		"""String storage value round-trips."""

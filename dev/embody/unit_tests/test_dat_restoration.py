@@ -128,9 +128,9 @@ class TestDATRestoration(EmbodyTestCase):
         expected_r = self.embody.par.Dattagcolorr.eval()
         expected_g = self.embody.par.Dattagcolorg.eval()
         expected_b = self.embody.par.Dattagcolorb.eval()
-        self.assertApproxEqual(restored.color[0], expected_r)
-        self.assertApproxEqual(restored.color[1], expected_g)
-        self.assertApproxEqual(restored.color[2], expected_b)
+        self.assertAlmostEqual(restored.color[0], expected_r)
+        self.assertAlmostEqual(restored.color[1], expected_g)
+        self.assertAlmostEqual(restored.color[2], expected_b)
 
     # =================================================================
     # RestoreDATs - skip conditions

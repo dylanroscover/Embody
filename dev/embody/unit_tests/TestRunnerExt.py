@@ -67,9 +67,6 @@ class EmbodyTestCase(TestCase):
         if not str(s).endswith(suffix):
             raise AssertionError(msg or f'{repr(s)} does not end with {repr(suffix)}')
 
-    def assertApproxEqual(self, a, b, tolerance=1e-6, msg=None):
-        self.assertAlmostEqual(a, b, delta=tolerance, msg=msg)
-
     def assertDictHasKey(self, d, key, msg=None):
         if key not in d:
             raise AssertionError(msg or f'Key {repr(key)} not in dict')

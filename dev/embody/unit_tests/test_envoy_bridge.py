@@ -452,11 +452,11 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
         # Should have retried using all RETRY_INTERVALS entries
         self.assertGreater(len(sleeps), 0, 'Should have retried at least once')
         # First sleep should match RETRY_INTERVALS[0]
-        self.assertApproxEqual(sleeps[0], bridge.RETRY_INTERVALS[0], tolerance=0.01)
+        self.assertAlmostEqual(sleeps[0], bridge.RETRY_INTERVALS[0], delta=0.01)
         # Verify several intervals match the schedule
         for i, expected in enumerate(bridge.RETRY_INTERVALS):
             if i < len(sleeps):
-                self.assertApproxEqual(sleeps[i], expected, tolerance=0.01)
+                self.assertAlmostEqual(sleeps[i], expected, delta=0.01)
 
     def test_retry_clamps_sleep_to_remaining_time(self):
         """Sleep duration is clamped to time remaining before deadline."""
@@ -514,8 +514,8 @@ class TestBridgeWaitForEnvoy(EmbodyTestCase):
         # Past the end of RETRY_INTERVALS, sleeps should cap at the last value
         self.assertGreater(len(sleeps), len(bridge.RETRY_INTERVALS))
         tail_sleep = sleeps[len(bridge.RETRY_INTERVALS)]
-        self.assertApproxEqual(
-            tail_sleep, bridge.RETRY_INTERVALS[-1], tolerance=0.01)
+        self.assertAlmostEqual(
+            tail_sleep, bridge.RETRY_INTERVALS[-1], delta=0.01)
 
 
 # =====================================================================

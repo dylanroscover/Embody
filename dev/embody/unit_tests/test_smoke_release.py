@@ -657,9 +657,9 @@ class TestSmokeRelease(EmbodyTestCase):
         speed = getattr(rf.par, 'Speed', None)
         self.assertIsNotNone(speed,
             'Custom Float parameter Speed was lost on import')
-        self.assertApproxEqual(speed.default, 2.5,
+        self.assertAlmostEqual(speed.default, 2.5,
             msg='Custom Float default value was not preserved')
-        self.assertApproxEqual(speed.eval(), 2.5,
+        self.assertAlmostEqual(speed.eval(), 2.5,
             msg='Custom Float live value (== default) was not preserved')
 
         # (3) Nested excluded COMP round-tripped with its exclude tag.
