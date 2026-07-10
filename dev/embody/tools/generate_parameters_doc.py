@@ -13,6 +13,7 @@ Regenerate after changing Embody's parameters (then commit the result):
 It writes docs/embody/parameters.md. ASCII punctuation only (repo rule).
 """
 import os
+import re
 import sys
 
 try:
@@ -82,12 +83,31 @@ def fmt_desc(par):
     return " ".join(parts) if parts else "-"
 
 
+def par_anchor(par):
+    """Stable, unique per-parameter anchor slug (parameter names are unique
+    on the COMP). Namespaced with 'par-' so it can never collide with a page
+    heading's own toc-generated id."""
+    name = re.sub(r"[^a-z0-9]+", "-", par.get("name", "").lower()).strip("-")
+    return "par-%s" % name
+
+
 def par_name_cell(par):
     name = esc(par.get("name", ""))
     label = par.get("label")
     if label and label != par.get("name"):
-        return "%s (`%s`)" % (esc(label), name)
-    return "`%s`" % name
+        display = "%s (`%s`)" % (esc(label), name)
+    else:
+        display = "`%s`" % name
+    # Wrap the name in a self-referencing anchor so each parameter is directly
+    # linkable (e.g. .../parameters/#par-aiclient). The inline code inside the
+    # anchor is still rendered by Markdown (md_in_html). Styled in extra.css:
+    # looks like plain text, reveals a link affordance on hover.
+    anchor = par_anchor(par)
+    return '<a class="par-anchor" id="%s" href="#%s">%s</a>' % (
+        anchor,
+        anchor,
+        display,
+    )
 
 
 def main():
