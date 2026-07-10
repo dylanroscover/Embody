@@ -2360,7 +2360,11 @@ class TDNExt:
 		# externalized children produce shells that look like normal
 		# leaf COMPs and the importer cannot tell them apart.
 		if hasattr(target, 'children'):
-			is_palette = self._isPaletteClone(target)
+			# Blackbox eligibility = classified AND restorable. A palette
+			# clone whose master is disabled/unresolvable exports fully --
+			# there is nothing to re-clone from on rebuild.
+			is_palette = (self._isPaletteClone(target)
+						  and self._cloneRestorable(target))
 			handling = self._resolvePaletteHandling(target) if is_palette else None
 			if is_palette and handling == 'blackbox':
 				data['palette_clone'] = True
@@ -2377,13 +2381,13 @@ class TDNExt:
 					if 'parameters' not in data:
 						data['parameters'] = {}
 					data['parameters'].update(clone_source_params)
-				# Strip clone/enablecloning -- TD plumbing that
-				# parent.create() auto-sets on rebuild.
-				if 'parameters' in data:
-					for skip_par in _PALETTE_CLONE_SKIP_PARAMS:
-						data['parameters'].pop(skip_par, None)
-					if not data['parameters']:
-						del data['parameters']
+				# clone/enablecloning are KEPT in the export: a blackboxed
+				# entry has no children in the .tdn, so a rebuilt shell can
+				# only refill itself by re-cloning -- stripping the clone
+				# reference (as older versions did) left rebuilds empty.
+				# The import side applies them only when the created op
+				# didn't auto-set its own clone (see _applyPaletteCloneRef),
+				# which keeps stale references in old files harmless.
 			elif self._hasTDNTag(target) and not options.get('embed_all'):
 				# Child's network managed by its own .tdn file.
 				# Write a tdn_ref pointer for cross-validation.
@@ -2902,6 +2906,15 @@ class TDNExt:
 		# Size for multi-component parameters (Float/Int with size > 1)
 		if len(group) > 1 and style in ('Float', 'Int'):
 			par_def['size'] = len(group)
+		else:
+			# Suffix styles: TD reports style 'RGBA' for both RGB (3) and
+			# RGBA (4) groups, and 'XYZW' for XY/XYZ/XYZW. Record the true
+			# arity when it differs from the style's full component count
+			# so the importer appends the right variant even when the
+			# group has no exported values.
+			style_suffixes = STYLE_SUFFIXES.get(style)
+			if style_suffixes and len(group) != len(style_suffixes):
+				par_def['size'] = len(group)
 
 		# Section break
 		if first_par.startSection:
@@ -3595,6 +3608,16 @@ class TDNExt:
 					f'Failed to create {op_type} "{name}": {e}', 'WARNING')
 				continue
 
+			# NOTE on ENABLED clones with diverged children (e.g. a lister
+			# whose config diverges from its /sys master): TD fires a
+			# clone-establishment sync whenever clone/enablecloning is SET
+			# programmatically, and that sync deletes non-master children
+			# -- regardless of ordering (verified: establish-then-import,
+			# import-then-establish, and enable-last all wipe). Only TD's
+			# native .toe/.tox loader restores a diverged enabled clone,
+			# so such COMPs belong in TOX strategy (or tdn_exclude), not
+			# TDN. The export is still faithful; the limit is rebuild.
+
 			# Recurse into children for COMPs
 			children = op_def.get('children', [])
 			tdn_ref = op_def.get('tdn_ref')
@@ -3683,6 +3706,32 @@ class TDNExt:
 			return flat
 		return []
 
+	@staticmethod
+	def _customParGroupBase(par_def, par_name, suffixes):
+		"""Resolve a suffix-style custom par def to (base_name, arity).
+
+		Spec: 'name' is the group base name; arity comes from 'size'
+		(written when it differs from the style's full count), else the
+		values array, else the style's full component count.
+
+		Legacy compat: pre-'size' exports wrote the FIRST COMPONENT's
+		name for PARTIAL-arity groups ('Anchorx' for an XY group,
+		'Tintr' for RGB) -- full-arity groups were exported correctly.
+		Detectable as: no 'size', values prove partial arity, and the
+		name ends with the first suffix. Only then is the suffix
+		stripped, so spec-correct base names that merely END in a
+		suffix letter ('Labelbgcolor') are never mangled.
+		"""
+		comp_count = (par_def.get('size')
+					  or len(par_def.get('values', []))
+					  or len(suffixes))
+		base_name = par_name
+		if ('size' not in par_def
+				and 0 < len(par_def.get('values', [])) < len(suffixes)
+				and par_name.endswith(suffixes[0])):
+			base_name = par_name[:-len(suffixes[0])]
+		return base_name, comp_count
+
 	def _createCustomParsOnOp(self, target, custom_par_defs):
 		"""Create custom parameters on a single operator.
 
@@ -3734,25 +3783,25 @@ class TDNExt:
 					f'Unknown par style "{style}" for {par_name}', 'WARNING')
 				continue
 
-			# Multi-component styles: strip first suffix from par name
-			# (e.g., 'Tintr' -> 'Tint' for RGB, 'Posx' -> 'Pos' for XYZ)
+			# Spec: 'name' is the GROUP base name without any component
+			# suffix -- use it as-is. (An older blanket heuristic
+			# stripped a trailing suffix letter, mangling legitimate
+			# base names like 'Labelbgcolor' -> 'Labelbgcolo' + r/g/b.)
 			actual_par_name = par_name
 			suffixes = STYLE_SUFFIXES.get(style, [])
 			if suffixes:
-				first_suffix = suffixes[0]
-				if par_name.endswith(first_suffix):
-					actual_par_name = par_name[:-len(first_suffix)]
-
-				# TD reports 'RGBA' for both RGB (3) and RGBA (4),
-				# 'XYZW' for both XYZ (3) and XYZW (4). Infer from
-				# the values array length.
-				values_count = len(par_def.get('values', []))
-				if style == 'RGBA' and values_count <= 3:
+				actual_par_name, comp_count = self._customParGroupBase(
+					par_def, par_name, suffixes)
+				# TD reports style 'RGBA' for both RGB (3) and RGBA (4)
+				# groups, and 'XYZW' for XY/XYZ/XYZW -- pick the append
+				# variant from the true arity, never a silent downgrade
+				# to RGB for a values-less RGBA group.
+				if style == 'RGBA' and comp_count <= 3:
 					method_name = 'appendRGB'
 				elif style == 'XYZW':
-					if values_count <= 2:
+					if comp_count <= 2:
 						method_name = 'appendXY'
-					elif values_count <= 3:
+					elif comp_count <= 3:
 						method_name = 'appendXYZ'
 
 			append_method = getattr(page, method_name, None)
@@ -3957,10 +4006,18 @@ class TDNExt:
 
 			# Built-in parameters
 			is_palette_clone = op_def.get('palette_clone', False)
+			if is_palette_clone:
+				# A blackboxed entry carries no children -- content comes
+				# back ONLY by re-cloning. Apply the exported clone
+				# reference FIRST (master content populates), so the
+				# explicit parameter values below overwrite master values
+				# (the buttontype problem) instead of the reverse.
+				self._applyPaletteCloneRef(target, op_def)
 			for par_name, value in op_def.get('parameters', {}).items():
-				# Skip clone/enablecloning on palette clones -- these
-				# are auto-set by parent.create() and should not be
-				# overwritten. Old TDN files may still contain them.
+				# clone/enablecloning were handled by
+				# _applyPaletteCloneRef above for palette clones -- never
+				# set them again mid-loop, where a re-established clone
+				# cook would clobber values already applied.
 				if is_palette_clone and par_name in _PALETTE_CLONE_SKIP_PARAMS:
 					continue
 				self._setParValue(target, par_name, value)
@@ -3974,6 +4031,44 @@ class TDNExt:
 			children = op_def.get('children', [])
 			if children and target.isCOMP:
 				self._setParameters(target, children)
+
+	def _applyPaletteCloneRef(self, target, op_def):
+		"""Re-establish a blackboxed palette clone's link to its master.
+
+		A palette_clone entry carries no children in the .tdn -- the
+		rebuilt shell refills itself only by re-cloning, so the exported
+		clone reference must be applied. It is applied FIRST and the op
+		force-cooked, so the master's content (children, custom pars,
+		par values) lands before the explicit parameter values -- those
+		then overwrite master values, not the reverse.
+
+		The exported reference is used only when the created op did not
+		auto-set its own RESOLVING clone (native widgets do:
+		create(buttonCOMP) clones from /sys/TDTox/defaultCOMPs), so a
+		stale reference in an old .tdn never overwrites a healthy
+		auto-set link.
+		"""
+		params = op_def.get('parameters', {})
+		clone_val = params.get('clone')
+		if clone_val is None:
+			return  # pre-fix .tdn (reference was stripped) -- nothing to apply
+		clone_par = getattr(target.par, 'clone', None)
+		if clone_par is None:
+			return
+		try:
+			existing = clone_par.eval()
+			if existing is not None and hasattr(existing, 'path'):
+				return  # auto-set by create() and resolving -- keep it
+		except Exception:
+			pass  # broken auto-set value -- replace with the exported one
+		enable_val = params.get('enablecloning')
+		if enable_val is not None:
+			self._setParValue(target, 'enablecloning', enable_val)
+		self._setParValue(target, 'clone', clone_val)
+		try:
+			target.cook(force=True)
+		except Exception:
+			pass
 
 	def _setCustomParValues(self, target, flat_defs):
 		"""Set custom parameter values on a single operator from flat defs.
@@ -4009,13 +4104,11 @@ class TDNExt:
 				values = par_def['values']
 
 				if suffixes:
-					# Strip first suffix from par_name to get base
-					# (e.g., 'Tintr' -> 'Tint' for RGBA)
-					base_name = par_name
-					first_suffix = suffixes[0]
-					if par_name.endswith(first_suffix):
-						base_name = par_name[:-len(first_suffix)]
-
+					# 'name' is the group base name (spec) -- components
+					# are base+suffix, e.g. 'Labelbgcolor' + 'r'. Same
+					# legacy-compat resolution as creation.
+					base_name, _ = self._customParGroupBase(
+						par_def, par_name, suffixes)
 					# TD reports 'RGBA' for both RGB and RGBA;
 					# use values count to pick correct suffixes
 					actual_suffixes = suffixes[:len(values)]
@@ -4604,8 +4697,9 @@ class TDNExt:
 			# Recurse into COMPs (but skip palette clone children
 			# and TDN-tagged COMP children unless embed_all)
 			if hasattr(child, 'children'):
-				if self._isPaletteClone(child) and (
-						self._resolvePaletteHandling(child) == 'blackbox'):
+				if (self._isPaletteClone(child)
+						and self._cloneRestorable(child)
+						and self._resolvePaletteHandling(child) == 'blackbox'):
 					continue
 				if not embed_all and self._hasTDNTag(child):
 					continue
@@ -4987,6 +5081,8 @@ class TDNExt:
 		if not target.isCOMP:
 			return False
 
+		classified = False
+
 		# --- Strategy 1: catalog lookup ---
 		if self._palette_catalog:
 			entry = self._palette_catalog.get(target.name)
@@ -5004,7 +5100,7 @@ class TDNExt:
 					# Threshold is half the scanned count (tolerates user mods).
 					floor = max(1, min_children // 2) if min_children > 0 else 0
 					if floor == 0 or len(target.children) >= floor:
-						return True
+						classified = True
 
 		# --- Strategy 2: clone expression heuristic ---
 		# Exclude /sys/TDTox/defaultCOMPs/* - these are TD's native-operator
@@ -5012,28 +5108,69 @@ class TDNExt:
 		# by default). Not palette components; internals are minimal and
 		# export cleanly. Treated like any other normal COMP.
 		clone_par = getattr(target.par, 'clone', None)
-		if not clone_par:
+		# 'is None', never truthiness: bool(Par) EVALUATES the parameter,
+		# so a broken clone expression (e.g. a widget master that no
+		# longer exists) raises tdError outside any guard and aborts the
+		# whole export.
+		if clone_par is None:
 			return False
 		try:
 			clone_op = clone_par.eval()
-			if clone_op and hasattr(clone_op, 'path'):
-				cpath = clone_op.path
-				if cpath.startswith('/sys/TDTox/defaultCOMPs/'):
-					return False
-				if cpath.startswith('/sys/'):
-					return True
-			if clone_par.mode == ParMode.EXPRESSION:
-				expr = clone_par.expr
-				if 'defaultCOMPs' in expr:
-					return False
-				if any(s in expr for s in (
-						'TDBasicWidgets', 'TDResources', 'TDTox')):
-					return True
+		except Exception as e:
+			# Broken clone expression (e.g. a widget master that no longer
+			# exists). NOT a palette clone even if the expr names a palette
+			# source: blackboxing omits children on the promise the master
+			# restores them, and a missing master cannot -- full export is
+			# the only faithful serialization.
+			self._log(
+				f'Broken clone expression on {target.path} -- '
+				f'exporting fully: {e}', 'DEBUG')
+			return False
+		try:
+			if not classified:
+				if clone_op and hasattr(clone_op, 'path'):
+					cpath = clone_op.path
+					if cpath.startswith('/sys/TDTox/defaultCOMPs/'):
+						return False
+					if cpath.startswith('/sys/'):
+						classified = True
+				if not classified and clone_par.mode == ParMode.EXPRESSION:
+					expr = clone_par.expr
+					if 'defaultCOMPs' in expr:
+						return False
+					if any(s in expr for s in (
+							'TDBasicWidgets', 'TDResources', 'TDTox')):
+						classified = True
 		except Exception as e:
 			self._log(
 				f'Error checking palette clone for {target.path}: {e}',
 				'DEBUG')
-		return False
+			return False
+
+		return classified
+
+	def _cloneRestorable(self, target):
+		"""True when TD's cloning can refill this COMP from its master.
+
+		Blackboxing omits children/custom pars on the promise that
+		re-cloning restores them on rebuild. That promise requires
+		cloning to be ON and the master to resolve LIVE right now. A
+		disabled or unresolvable clone (e.g. TauCeti widgets whose expr
+		is "op.TDBasicWidgets... if hasattr(...) else ''") holds local
+		authored content that only a full export preserves -- gate every
+		blackbox decision on this, never on classification alone.
+		"""
+		try:
+			clone_par = getattr(target.par, 'clone', None)
+			if clone_par is None:
+				return False
+			enable_par = getattr(target.par, 'enablecloning', None)
+			if enable_par is not None and not enable_par.eval():
+				return False
+			clone_op = clone_par.eval()
+			return clone_op is not None and hasattr(clone_op, 'path')
+		except Exception:
+			return False
 
 	@staticmethod
 	def _isInsideAnimationCOMP(target):
@@ -5057,7 +5194,9 @@ class TDNExt:
 		so they survive the strip/restore rebuild cycle.
 		"""
 		clone_par = getattr(target.par, 'clone', None)
-		if not clone_par:
+		# 'is None', never truthiness -- bool(Par) evaluates the parameter
+		# and a broken clone expression raises (see _isPaletteClone).
+		if clone_par is None:
 			return {}
 		try:
 			clone_source = clone_par.eval()
@@ -5413,8 +5552,12 @@ class TDNExt:
 		style = first_par.style
 		suffixes = STYLE_SUFFIXES.get(style)
 
-		if suffixes and len(group) == len(suffixes):
-			# Strip the known suffix (e.g., 'x' from 'Posx')
+		# Strip the first component's suffix (e.g., 'x' from 'Posx').
+		# Partial-arity groups count too: TD reports style 'RGBA' for an
+		# RGB group and 'XYZW' for XY/XYZ, so requiring full arity here
+		# made partial groups export the COMPONENT name ('Anchorx',
+		# 'Tintr') instead of the base -- the spec requires the base.
+		if suffixes and 2 <= len(group) <= len(suffixes):
 			suffix = suffixes[0]
 			name = first_par.name
 			if name.endswith(suffix):

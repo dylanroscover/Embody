@@ -132,6 +132,246 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 			'TDBasicWidgets clone expression must be detected')
 
 	# =================================================================
+	# D2. Broken Clone Expressions (issue #46)
+	# =================================================================
+	# A clone expression that RAISES on eval (e.g. a widget master that
+	# no longer exists) must never abort detection or export. bool(Par)
+	# evaluates the parameter, so even a truthiness check can raise.
+
+	def test_D02_broken_clone_expr_no_crash(self):
+		"""Raising clone expression -> _isPaletteClone returns False, no raise."""
+		self.tdn._palette_catalog = {}
+		comp = self.sandbox.create(containerCOMP, 'brokenClone')
+		# op() returns None -> .path raises -> par eval raises tdError
+		comp.par.clone.expr = "op('nonexistent_widget_master').path"
+		self.assertFalse(self.tdn._isPaletteClone(comp),
+			'Broken non-widget clone expression must return False, not raise')
+
+	def test_D03_broken_widget_clone_not_palette(self):
+		"""Raising expr naming TDBasicWidgets -> NOT a palette clone.
+
+		Blackboxing omits children on the promise the clone master
+		restores them. A broken clone means the master is missing, so
+		the only faithful serialization is a full export.
+		"""
+		self.tdn._palette_catalog = {}
+		comp = self.sandbox.create(containerCOMP, 'brokenWidgetClone')
+		comp.par.clone.expr = "op('TDBasicWidgets_missing_master').path"
+		self.assertFalse(self.tdn._isPaletteClone(comp),
+			'Broken clone must export fully, never blackbox')
+
+	def test_D04_clone_source_diffs_broken_clone(self):
+		"""_getCloneSourceDiffs on a broken clone -> empty dict, no raise."""
+		comp = self.sandbox.create(containerCOMP, 'brokenDiffs')
+		comp.par.clone.expr = "op('nonexistent_widget_master').path"
+		self.assertEqual(self.tdn._getCloneSourceDiffs(comp), {},
+			'Broken clone expression must yield no clone-source diffs')
+
+	def test_D05_broken_clone_export_succeeds_with_children(self):
+		"""Export containing a broken-clone COMP succeeds and keeps children."""
+		holder = self.sandbox.create(containerCOMP, 'issue46')
+		child = holder.create(containerCOMP, 'rollover')
+		child.par.enablecloning = True
+		# Widget-substring expr: even matching the palette heuristic,
+		# a broken clone must serialize its children.
+		child.par.clone.expr = "op('TDBasicWidgets_missing_master').path"
+		inner = child.create(textDAT, 'guts')
+		inner.text = 'local content the missing master cannot restore'
+		result = self.tdn.ExportNetwork(root_path=holder.path)
+		self.assertTrue(result.get('success'),
+			f"Export must succeed despite broken clone: {result.get('error')}")
+		ops = result.get('tdn', {}).get('operators', [])
+		rollover = next((o for o in ops if o.get('name') == 'rollover'), None)
+		self.assertIsNotNone(rollover,
+			'Broken-clone COMP must still be serialized')
+		self.assertEqual(
+			rollover.get('parameters', {}).get('clone'),
+			"=op('TDBasicWidgets_missing_master').path",
+			'Clone expression must round-trip as text, never evaluated')
+		self.assertFalse(rollover.get('palette_clone', False),
+			'Broken clone must not carry the palette_clone marker')
+		child_names = [o.get('name') for o in rollover.get('children', [])]
+		self.assertIn('guts', child_names,
+			'Broken-clone COMP children must be serialized (no blackbox)')
+
+	def test_D06_broken_clone_roundtrip(self):
+		"""Broken-clone network survives export -> import intact."""
+		holder = self.sandbox.create(containerCOMP, 'issue46_rt')
+		child = holder.create(containerCOMP, 'rollover')
+		child.par.enablecloning = True
+		child.par.clone.expr = "op('TDBasicWidgets_missing_master').path"
+		inner = child.create(textDAT, 'guts')
+		inner.text = 'survive me'
+		exported = self.tdn.ExportNetwork(
+			root_path=holder.path, include_dat_content=True)
+		self.assertTrue(exported.get('success'))
+
+		dest = self.sandbox.create(containerCOMP, 'issue46_rt_dest')
+		imported = self.tdn.ImportNetwork(dest.path, exported['tdn'])
+		self.assertTrue(imported.get('success'),
+			f"Import must succeed: {imported.get('error')}")
+		new_rollover = dest.op('rollover')
+		self.assertIsNotNone(new_rollover, 'rollover must be rebuilt')
+		self.assertEqual(new_rollover.par.clone.expr,
+			"op('TDBasicWidgets_missing_master').path",
+			'Broken clone expression must be restored as text')
+		new_guts = new_rollover.op('guts')
+		self.assertIsNotNone(new_guts, 'children must be rebuilt')
+		self.assertEqual(new_guts.text, 'survive me',
+			'child content must survive the round-trip')
+
+	def test_D07_cloning_disabled_exports_fully(self):
+		"""Catalog-classified COMP with cloning OFF -> full export.
+
+		The TauCeti widgets: enablecloning=False, local authored
+		children. Classification may say palette, but the restorability
+		gate must force a full export -- blackboxing would gut them.
+		"""
+		self.tdn._palette_catalog = {
+			'gatedWidget': {'type': 'containerCOMP', 'min_children': 0},
+		}
+		master = self.sandbox.create(containerCOMP, 'gated_master')
+		comp = self.sandbox.create(containerCOMP, 'gatedWidget')
+		comp.par.clone = 'gated_master'
+		comp.par.enablecloning = False
+		local = comp.create(textDAT, 'local_guts')
+		local.text = 'authored content'
+		self.assertTrue(self.tdn._isPaletteClone(comp),
+			'Classification (catalog) must still match')
+		self.assertFalse(self.tdn._cloneRestorable(comp),
+			'Disabled cloning must fail the restorability gate')
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		entry = next(o for o in result['tdn']['operators']
+			if o.get('name') == 'gatedWidget')
+		self.assertFalse(entry.get('palette_clone', False),
+			'Unrestorable clone must not carry the blackbox marker')
+		child_names = [o.get('name') for o in entry.get('children', [])]
+		self.assertIn('local_guts', child_names,
+			'Local children must be serialized when cloning is off')
+
+	def test_D08_unresolvable_master_exports_fully(self):
+		"""Defensive non-raising widget expr with no master -> full export.
+
+		The exact TauCeti fadetime shape:
+		"op.TDBasicWidgets.op(...) if hasattr(op, ...) else ''" --
+		evaluates to None without raising, classification matches the
+		string heuristic, but nothing can restore a blackboxed shell.
+		"""
+		self.tdn._palette_catalog = {}
+		comp = self.sandbox.create(containerCOMP, 'defensiveWidget')
+		comp.par.enablecloning = False
+		comp.par.clone.expr = (
+			"op.TDBasicWidgets.op('sliderHorz') "
+			"if hasattr(op, 'TDBasicWidgets_never') else ''")
+		local = comp.create(textDAT, 'local_guts')
+		local.text = 'authored content'
+		self.assertTrue(self.tdn._isPaletteClone(comp),
+			'String heuristic must classify the widget expr')
+		self.assertFalse(self.tdn._cloneRestorable(comp),
+			'Unresolvable master must fail the restorability gate')
+		result = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+		self.assertTrue(result.get('success'))
+		entry = next(o for o in result['tdn']['operators']
+			if o.get('name') == 'defensiveWidget')
+		self.assertFalse(entry.get('palette_clone', False),
+			'Unrestorable clone must not carry the blackbox marker')
+		child_names = [o.get('name') for o in entry.get('children', [])]
+		self.assertIn('local_guts', child_names,
+			'Local children must be serialized when master is missing')
+
+	def test_D09_restorable_blackbox_roundtrip(self):
+		"""True palette clone blackbox: clone ref kept, rebuild re-clones.
+
+		The exported .tdn must carry the clone reference (older versions
+		stripped it, leaving rebuilds empty), the rebuilt shell must
+		refill from the master, and explicit exported values must win
+		over master values (the buttontype problem).
+		"""
+		self.tdn._palette_catalog = {
+			'trueClone': {'type': 'containerCOMP', 'min_children': 0},
+		}
+		master = self.sandbox.create(containerCOMP, 'true_master')
+		payload = master.create(textDAT, 'payload')
+		payload.text = 'from master'
+		master.par.w = 250
+		clone = self.sandbox.create(containerCOMP, 'trueClone')
+		clone.par.enablecloning = True
+		clone.par.clone = 'true_master'
+		clone.cook(force=True)
+		self.assertGreater(len(clone.children), 0,
+			'Live clone must have populated from master')
+		clone.par.w = 333  # user customization, differs from master
+
+		exported = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		self.assertTrue(exported.get('success'))
+		entry = next(o for o in exported['tdn']['operators']
+			if o.get('name') == 'trueClone')
+		self.assertTrue(entry.get('palette_clone', False),
+			'Restorable palette clone must blackbox')
+		self.assertNotIn('children', entry,
+			'Blackboxed entry must omit children')
+		self.assertIn('clone', entry.get('parameters', {}),
+			'Clone reference must be KEPT so the rebuilt shell can '
+			're-clone (stripping it left rebuilds empty)')
+
+		dest = self.sandbox.create(containerCOMP, 'd09_dest')
+		imported = self.tdn.ImportNetwork(dest.path, exported['tdn'])
+		self.assertTrue(imported.get('success'),
+			f"Import must succeed: {imported.get('error')}")
+		rebuilt = dest.op('trueClone')
+		self.assertIsNotNone(rebuilt)
+		rebuilt.cook(force=True)
+		self.assertIsNotNone(rebuilt.op('payload'),
+			'Rebuilt shell must refill children by re-cloning')
+		self.assertEqual(int(rebuilt.par.w.eval()), 333,
+			'Explicit exported value must win over the master value')
+
+	def test_D10_divergent_enabled_clone_export_faithful(self):
+		"""Diverged ENABLED clone: export is faithful; rebuild is bounded.
+
+		TD fires a clone-establishment sync whenever clone/enablecloning
+		is set programmatically, and that sync deletes non-master
+		children regardless of import ordering (verified empirically:
+		establish-then-import, import-then-establish, and enable-last
+		all wipe). Only TD's native .toe/.tox loader restores a
+		diverged enabled clone -- such COMPs belong in TOX strategy or
+		tdn_exclude. TDN's contract: the .tdn itself must capture the
+		divergence faithfully, and the import must succeed with the
+		master-derived content intact.
+		"""
+		master = self.sandbox.create(containerCOMP, 'd10_master')
+		master.create(textDAT, 'base_a')
+		clone = self.sandbox.create(containerCOMP, 'd10_clone')
+		clone.par.enablecloning = True
+		clone.par.clone = 'd10_master'
+		clone.cook(force=True)
+		extra = clone.create(textDAT, 'diverged_b')
+		extra.text = 'local divergence'
+
+		exported = self.tdn.ExportNetwork(
+			root_path=self.sandbox.path, include_dat_content=True)
+		self.assertTrue(exported.get('success'))
+		entry = next(o for o in exported['tdn']['operators']
+			if o.get('name') == 'd10_clone')
+		child_names = [c.get('name') for c in entry.get('children', [])]
+		self.assertIn('diverged_b', child_names,
+			'Diverged child must be serialized in the export')
+		self.assertIn('base_a', child_names,
+			'Master-derived child must be serialized in the export')
+
+		dest = self.sandbox.create(containerCOMP, 'd10_dest')
+		imported = self.tdn.ImportNetwork(dest.path, exported['tdn'])
+		self.assertTrue(imported.get('success'),
+			f"Import must succeed: {imported.get('error')}")
+		rebuilt = dest.op('d10_clone')
+		self.assertIsNotNone(rebuilt)
+		rebuilt.cook(force=True)
+		self.assertIsNotNone(rebuilt.op('base_a'),
+			'Master-derived child must be present after round-trip')
+
+	# =================================================================
 	# E. animationCOMP DAT Content Preservation
 	# =================================================================
 
@@ -214,11 +454,21 @@ class TestTDNPaletteCatalog(EmbodyTestCase):
 	# =================================================================
 
 	def _fakePalette(self, name='myPalette', typ=containerCOMP):
-		"""Create a COMP that the catalog recognizes as a palette."""
+		"""Create a COMP that the catalog recognizes as a palette clone.
+
+		Blackbox eligibility requires a RESTORABLE clone (cloning on +
+		resolving master), so the fixture wires one to a sandbox master.
+		"""
 		self.tdn._palette_catalog = {
 			name: {'type': typ.__name__, 'min_children': 0},
 		}
-		return self.sandbox.create(typ, name)
+		master_name = f'{name}_master'
+		if self.sandbox.op(master_name) is None:
+			self.sandbox.create(typ, master_name)
+		comp = self.sandbox.create(typ, name)
+		comp.par.enablecloning = True
+		comp.par.clone = master_name
+		return comp
 
 	def test_G01_storage_override_blackbox(self):
 		"""Per-COMP storage 'blackbox' wins over any par value."""

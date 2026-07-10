@@ -395,7 +395,7 @@ The `$t` field names the template. Other keys are parameter value overrides (par
 | `name` | string | Always | Base name of the parameter. For multi-component parameters, this is the group name without any suffix (e.g., `"Pos"` for a group of `Posx`, `Posy`, `Posz`). |
 | `label` | string | If different from `name` | Display label shown in the parameter dialog. Omitted when the label matches the parameter name. |
 | `style` | string | Always | Parameter style. See [Supported Styles](#supported-styles). |
-| `size` | integer | Multi-component `Float`/`Int` only | Number of components when > 1 (e.g., `3` for a 3-component float). |
+| `size` | integer | Multi-component `Float`/`Int`; suffix-style groups with non-full arity | Number of components when > 1 (e.g., `3` for a 3-component float). Also written for suffix-style groups (`RGBA`, `XYZW`, …) whose component count differs from the style's full size — TouchDesigner reports style `RGBA` for both RGB (3) and RGBA (4) groups, and `XYZW` for XY/XYZ/XYZW, so `size` disambiguates (e.g. `3` for an RGB group). When omitted on a suffix-style group, importers use the `values` length, else the style's full component count. |
 | `default` | any | If non-standard | Default value. Omitted when the default is a standard value (`0`, `0.0`, `""`, or `false`). |
 | `min` | number | If != `0` | Minimum value. |
 | `max` | number | If != `1` | Maximum value. |
