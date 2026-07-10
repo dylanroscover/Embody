@@ -80,7 +80,7 @@ You describe what you want. The AI works with your live network — operators, c
 
 ## Requirements
 
-- **TouchDesigner 2025.32280** or later (Windows / macOS)
+- **TouchDesigner 2025.32820** or later (Windows / macOS)
 - A **git repository** is optional. Embody works in any project folder; if you happen to use git, every change is also a clean diff for free.
 
 ---

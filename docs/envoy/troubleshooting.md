@@ -11,7 +11,27 @@
    ```
    On Windows, also add `"pywin32>=306"`.
 3. **Port already in use:** If another process is using port 9870 (the default), the server will fail to bind. Change the **Envoy Port** parameter on the Embody COMP to a different port (e.g., 9871).
-4. **TD version too old:** Envoy requires TouchDesigner **2025.32280** or later.
+4. **TD version too old:** Envoy requires TouchDesigner **2025.32820** or later.
+
+## Restart Loop: "Unable to configure formatter 'default'"
+
+**Symptoms:** Envoy never comes up; the Textport repeats a traceback ending in
+
+```
+AttributeError: 'Logger' object has no attribute 'isatty'
+ValueError: Unable to configure formatter 'default'
+```
+
+every ~10–25 seconds, with noticeable freezes or frame drops as the watchdog keeps restarting the server.
+
+**Cause:** TouchDesigner replaces `sys.stdout` with a Textport catcher object, and some TD builds (confirmed on **2025.32460** on Windows) ship one **without an `isatty()` method**. uvicorn's default log formatter probes `sys.stdout.isatty()` during server construction, so startup dies before the socket ever binds — and Envoy's liveness watchdog restarts the dead server indefinitely.
+
+**Fix:**
+
+1. **Update Embody** to v6.0.116 or later — Envoy now passes `use_colors=False` to uvicorn, which skips the `isatty()` probe entirely.
+2. **Or update TouchDesigner** to 2025.32820 or later (the documented minimum) — those builds ship a stdout catcher that implements `isatty()`.
+
+Do **not** patch `.venv/.../uvicorn/logging.py` by hand — the edit is lost whenever the virtual environment is rebuilt (TD upgrades, dependency floor bumps, venv repair).
 
 ## Claude Code Can't Connect
 

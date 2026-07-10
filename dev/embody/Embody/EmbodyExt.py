@@ -3799,7 +3799,15 @@ class EmbodyExt:
             if self.my.par.Tdncascade.eval():
                 self._cascadeTDNTag(oper)
         else:
-            self.Log(f"TDN export failed for {oper.path}: {result.get('error')}", "ERROR")
+            # Roll back the just-applied tag: a tagged-but-untracked COMP is
+            # a dead end -- applyTagToOperator no-ops while the tag is
+            # present, so every retry would silently do nothing until the
+            # user strips the tag by hand.
+            oper.tags.discard(self.my.par.Tdntag.val)
+            self.Log(
+                f"TDN export failed for {oper.path}: {result.get('error')} "
+                f"-- tag rolled back, fix the error and re-tag to retry",
+                "ERROR")
 
     def _cascadeTDNTag(self, parent_comp: OP) -> None:
         """Auto-tag direct child COMPs for TDN externalization.
@@ -3962,22 +3970,25 @@ class EmbodyExt:
     def setupBuildParameters(self, oper: COMP, build_page: Any, build_num: int, touch_build: Union[str, int]) -> None:
         """Setup build tracking parameters on a COMP."""
         # Build Number
+        # 'is None' checks throughout: truthiness on a Par EVALUATES it, so
+        # a user par named 'Build' holding 0 (or a broken expression) would
+        # wrongly append a duplicate (or raise) under 'if not par'.
         build_par = next((p for p in oper.customPars if p.name == 'Build'), None)
-        if not build_par:
+        if build_par is None:
             build_par = build_page.appendInt('Build', label='Build Number')
             build_par.readOnly = True
         build_par.val = build_num
-        
+
         # Date
         date_par = next((p for p in oper.customPars if p.name == 'Date'), None)
-        if not date_par:
+        if date_par is None:
             date_par = build_page.appendStr('Date', label='Build Date')
             date_par.readOnly = True
         date_par.val = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-        
+
         # Touch Build
         touch_par = next((p for p in oper.customPars if p.name == 'Touchbuild'), None)
-        if not touch_par:
+        if touch_par is None:
             touch_par = build_page.appendStr('Touchbuild', label='Touch Build')
             touch_par.readOnly = True
         touch_par.val = touch_build
@@ -6420,8 +6431,8 @@ class EmbodyExt:
         tdn_tag = self.my.par.Tdntag.val
 
         if tdn_tag in oper.tags:
+            # RemoveTDNEntry strips the tags itself (issue #48)
             self.RemoveTDNEntry(oper.path)
-            oper.tags.discard(tdn_tag)
         elif tox_tag in oper.tags:
             rel_fp = self.getExternalPath(oper)
             self.RemoveListerRow(oper.path, rel_fp)
@@ -6702,7 +6713,26 @@ class EmbodyExt:
         return False
 
     def RemoveTDNEntry(self, op_path: str) -> None:
-        """Remove a TDN strategy entry and delete the .tdn file from disk."""
+        """Remove a TDN strategy entry and delete the .tdn file from disk.
+
+        Also strips the operator's externalization tags, resets its color,
+        and drops its parameter-tracker entry (mirroring RemoveListerRow).
+        Leaving the tdn tag in place turns removal into resurrection: the
+        Update sweep that runs on every save re-externalizes any
+        tagged-but-untracked COMP, restoring the row and .tdn file the user
+        just deleted (issue #48). Tolerates a missing operator -- Full
+        Project entries track paths (e.g. '/') that carry no tag.
+        """
+        try:
+            oper = op(op_path)
+            if oper:
+                for tag in self.getTags():
+                    if tag in oper.tags:
+                        oper.tags.remove(tag)
+                self.resetOpColor(oper)
+                self.param_tracker.removeComp(op_path)
+        except Exception as e:
+            self.Log(f"Error handling operator '{op_path}'", "ERROR", str(e))
         self._removeTDNStrategy(op_path)
         self.lister.reset()
 

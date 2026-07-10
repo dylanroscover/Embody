@@ -1,5 +1,5 @@
 """Pure-logic tests for EmbodyExt's git-uncommitted status helpers
-(_parseGitPorcelain, _gitRelPath, _rowHasChanges). These drive the static
+(_parseGitPorcelain, _mapChangedToOps, _rowHasChanges). These drive the static
 methods directly with fixtures -- no git repo, no sandbox operators --
 referencing the extension inline per the no-ext-caching rule.
 """

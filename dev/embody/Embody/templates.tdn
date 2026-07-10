@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 20
-generator: Embody/6.0.90
+build: 21
+generator: Embody/6.0.113
 td_build: 099.2025.32820
-source_file: Embody-6.90.toe
-exported_at: '2026-07-04T11:48:45Z'
+source_file: Embody-6.114.toe
+exported_at: '2026-07-10T16:24:56Z'
 network_path: /embody/Embody/templates
 options:
   include_dat_content: false
@@ -217,12 +217,12 @@ operators:
 - name: text_rule_refresh_after_commit
   type: textDAT
   parameters:
-    file: embody/Embody/templates/text_rule_refresh_after_commit.py
+    file: embody/Embody/templates/text_rule_refresh_after_commit.md
     write: true
-    language: python
+    extension: md
   position: [1800, 400]
   tags:
-  - py
+  - md
 - name: text_skill_mcp_tools_reference
   type: textDAT
   parameters:

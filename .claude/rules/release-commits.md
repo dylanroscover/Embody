@@ -38,7 +38,12 @@ Each bullet should describe the change clearly enough that a user who didn't wri
 
 ## 3. Update README.md
 
-- **Version badge**: Update `version-X.Y.Z-blue` in the shield URL.
+- **Version badge + minimum-build statements are AUTOMATED**: `project.save()`
+  (via `execute_src_ctrl.updateVersionDocs`) rewrites the README version badge
+  from `par.Version` and the minimum-TD-build lines in README.md,
+  docs/index.md, and CONTRIBUTING.md from the running `app.build` (the build
+  we save with IS the support floor). Verify they match rather than editing by
+  hand; the `test_version_sync` suite fails on any drift.
 - **Release history**: Add a one-line entry at the top of the "Recent releases" list.
 - **Test suite count**: Update the count if new test files were added (count `dev/embody/unit_tests/test_*.py`).
 

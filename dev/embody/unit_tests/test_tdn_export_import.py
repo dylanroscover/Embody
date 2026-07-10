@@ -568,3 +568,93 @@ class TestTDNExportImport(EmbodyTestCase):
             imported.fetch('count', None, search=False), 42)
         self.assertEqual(
             imported.fetch('version', None, search=False), 1)
+
+    # --- Suffix-style custom parameter groups (RGBA/XYZW arity + naming) ---
+
+    def test_rgba_group_base_ending_in_suffix_letter(self):
+        """RGBA group whose base name ends in 'r' round-trips unmangled.
+
+        'Bordercolor' ends with the first RGBA suffix letter; the old
+        import stripped it and rebuilt 'Bordercolo' + r/g/b.
+        """
+        src = self.sandbox.create(containerCOMP, 'rgba_src')
+        page = src.appendCustomPage('Look')
+        grp = page.appendRGBA('Bordercolor', label='Border Color')
+        src.par.Bordercolorr = 0.1
+        src.par.Bordercolorg = 0.2
+        src.par.Bordercolorb = 0.3
+        src.par.Bordercolora = 0.9
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        self.assertTrue(export.get('success'))
+
+        target = self.sandbox.create(containerCOMP, 'rgba_dst')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        rebuilt = target.op('rgba_src')
+        self.assertIsNotNone(rebuilt)
+        names = [p.name for p in rebuilt.customPars]
+        self.assertIn('Bordercolorr', names, f'components mangled: {names}')
+        self.assertIn('Bordercolora', names, 'alpha component missing')
+        self.assertNotIn('Bordercolog', names, 'mangled g component present')
+        self.assertAlmostEqual(
+            float(rebuilt.par.Bordercolora.eval()), 0.9, places=4)
+
+    def test_rgba_group_all_default_keeps_alpha(self):
+        """Values-less RGBA group (all defaults) keeps 4 components.
+
+        With no exported values the old import downgraded RGBA to RGB,
+        silently dropping alpha (the TauCeti widget color pars).
+        """
+        src = self.sandbox.create(containerCOMP, 'rgba_dflt_src')
+        page = src.appendCustomPage('Look')
+        page.appendRGBA('Fillcolor')
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        entry = next(o for o in export['tdn']['operators']
+                     if o.get('name') == 'rgba_dflt_src')
+        target = self.sandbox.create(containerCOMP, 'rgba_dflt_dst')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        rebuilt = target.op('rgba_dflt_src')
+        names = [p.name for p in rebuilt.customPars]
+        for comp in ('Fillcolorr', 'Fillcolorg', 'Fillcolorb', 'Fillcolora'):
+            self.assertIn(comp, names,
+                f'{comp} missing -- RGBA downgraded: {names}')
+
+    def test_rgb_group_stays_three_components(self):
+        """A 3-component RGB group (TD reports style RGBA) stays RGB.
+
+        The export records size=3 so the importer appends RGB, not RGBA.
+        """
+        src = self.sandbox.create(containerCOMP, 'rgb_src')
+        page = src.appendCustomPage('Look')
+        page.appendRGB('Tint')
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        entry = next(o for o in export['tdn']['operators']
+                     if o.get('name') == 'rgb_src')
+        par_defs = entry.get('custom_pars', {}).get('Look', [])
+        tint = next(d for d in par_defs if d.get('name') == 'Tint')
+        self.assertEqual(tint.get('size'), 3,
+            'RGB group must export size=3 to disambiguate from RGBA')
+        target = self.sandbox.create(containerCOMP, 'rgb_dst')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        rebuilt = target.op('rgb_src')
+        names = [p.name for p in rebuilt.customPars]
+        self.assertIn('Tintb', names)
+        self.assertNotIn('Tinta', names,
+            'RGB group must not grow an alpha component')
+
+    def test_xy_group_roundtrip(self):
+        """A 2-component XY group (TD reports style XYZW) stays XY."""
+        src = self.sandbox.create(containerCOMP, 'xy_src')
+        page = src.appendCustomPage('Look')
+        page.appendXY('Anchor')
+        src.par.Anchorx = 0.25
+        export = self.tdn.ExportNetwork(root_path=self.sandbox.path)
+        target = self.sandbox.create(containerCOMP, 'xy_dst')
+        self.tdn.ImportNetwork(target_path=target.path, tdn=export['tdn'])
+        rebuilt = target.op('xy_src')
+        names = [p.name for p in rebuilt.customPars]
+        self.assertIn('Anchorx', names)
+        self.assertIn('Anchory', names)
+        self.assertNotIn('Anchorz', names,
+            'XY group must not grow z/w components')
+        self.assertAlmostEqual(
+            float(rebuilt.par.Anchorx.eval()), 0.25, places=4)

@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 3
-generator: Embody/6.0.83
+generator: Embody/6.0.113
 td_build: 099.2025.32820
-source_file: Embody-6.83.toe
-exported_at: '2026-07-03T19:34:12Z'
+source_file: Embody-6.113.toe
+exported_at: '2026-07-10T13:53:50Z'
 network_path: /specimen_lab/noise_terrain
 options:
   include_dat_content: true
@@ -58,6 +58,7 @@ par_templates:
   - label: Position
     name: Posx
     sequence: pt
+    size: 3
     style: XYZW
 type: baseCOMP
 custom_pars:

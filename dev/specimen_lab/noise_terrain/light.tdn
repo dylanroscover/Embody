@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
 build: 1
-generator: Embody/6.0.82
+generator: Embody/6.0.112
 td_build: 099.2025.32820
-source_file: Embody-6.83.toe
-exported_at: '2026-07-03T19:34:11Z'
+source_file: Embody-6.113.toe
+exported_at: '2026-07-10T13:53:49Z'
 network_path: /specimen_lab/noise_terrain/light
 options:
   include_dat_content: false
@@ -43,6 +43,7 @@ par_templates:
   - label: Position
     name: Posx
     sequence: pt
+    size: 3
     style: XYZW
 type: lightCOMP
 parameters:
