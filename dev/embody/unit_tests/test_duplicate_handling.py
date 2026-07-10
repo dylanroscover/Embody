@@ -29,7 +29,7 @@ class TestDuplicateHandling(EmbodyTestCase):
         # Get any existing externalized op path
         table = self.embody_ext.Externalizations
         if not table or table.numRows <= 1:
-            self.skip('No externalizations to check')
+            self.skipTest('No externalizations to check')
         existing_path = table[1, 'path'].val
         result = self.embody_ext.cleanupDuplicateRows(existing_path)
         # Should return 0 (no duplicates to clean) or None
@@ -41,7 +41,7 @@ class TestDuplicateHandling(EmbodyTestCase):
     def test_cleanup_preserves_table_row_count(self):
         table = self.embody_ext.Externalizations
         if not table:
-            self.skip('No externalizations table')
+            self.skipTest('No externalizations table')
         initial_rows = table.numRows
         self.embody_ext.cleanupAllDuplicateRows()
         # Row count should be same or less (never more)
@@ -207,7 +207,7 @@ class TestReplicantHandling(EmbodyTestCase):
         # Filter to only actual replicants (not the table DAT)
         replicants = [c for c in replicants if self.embody_ext.isReplicant(c)]
         if not replicants:
-            self.skip('Replicator did not produce replicants (timing?)')
+            self.skipTest('Replicator did not produce replicants (timing?)')
 
         result = self.embody_ext._buildPathGroups()
         # None of the replicants should appear in the groups

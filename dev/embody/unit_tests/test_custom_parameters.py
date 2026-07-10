@@ -410,7 +410,7 @@ class TestCustomParameters(EmbodyTestCase):
             # is reported by the resilience layer until bind is reconfirmed).
             if any(s in status for s in ('Waiting', 'Starting', 'Stopping',
                                          'Restarting', 'reinit')):
-                self.skip(f'Server in transitional state: {status}')
+                self.skipTest(f'Server in transitional state: {status}')
             self.assertIn('Running', status)
         else:
             # Server not running - just verify the par exists
@@ -430,7 +430,7 @@ class TestCustomParameters(EmbodyTestCase):
         """Verbose controls whether DEBUG messages go to FIFO."""
         fifo = self.embody_ext._fifo
         if not fifo:
-            self.skip('FIFO DAT not available')
+            self.skipTest('FIFO DAT not available')
 
         # With Verbose OFF, Debug should NOT go to FIFO
         parexec = self.embody.op('parexec')

@@ -169,9 +169,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 ## Test Framework Features
 
 - **Sandbox isolation**: Each suite gets a fresh `baseCOMP` for test fixtures
-- **20+ assertion methods**: `assertEqual`, `assertTrue`, `assertIn`, `assertIsInstance`, etc.
-- **Lifecycle hooks**: `setUp`/`tearDown` per test, `setUpSuite`/`tearDownSuite` per suite
-- **Skip support**: `self.skip(reason)` to conditionally skip tests
+- **unittest-based**: Supports all assertions, lifecycle hooks and other features unittest supports
 - **Results tracking**: Table DAT with pass/fail/error/skip counts and durations
 
 ## Writing New Tests

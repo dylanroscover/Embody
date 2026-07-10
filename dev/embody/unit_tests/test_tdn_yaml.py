@@ -73,7 +73,7 @@ class TestTDNYaml(EmbodyTestCase):
         loads back equal, and re-dumps byte-identical (determinism)."""
         root = _specimen_root()
         if root is None:
-            self.skip('specimens/ folder not found')
+            self.skipTest('specimens/ folder not found')
         names = [
             'generative/reaction-diffusion.tdn',
             'compositing/kaleidoscope.tdn',
@@ -95,7 +95,7 @@ class TestTDNYaml(EmbodyTestCase):
             self.assertEqual(self.tdn.tdn_dump(doc), dumped,
                 f'{rel}: re-dump not byte-identical')
         if checked == 0:
-            self.skip('no specimen files present')
+            self.skipTest('no specimen files present')
 
     # =================================================================
     # Block-scalar losslessness (headless, no TD)
@@ -369,9 +369,9 @@ class TestTDNYaml(EmbodyTestCase):
         and degrades to raw passthrough when yaml is unavailable."""
         mod = self._load_textconv()
         if mod is None:
-            self.skip('textconv template not found')
+            self.skipTest('textconv template not found')
         if not getattr(mod, '_HAVE_YAML', False):
-            self.skip('PyYAML unavailable in textconv module')
+            self.skipTest('PyYAML unavailable in textconv module')
 
         # Same network, two on-disk forms.
         v15 = {
@@ -450,9 +450,9 @@ class TestTDNYaml(EmbodyTestCase):
         glsl = self.sandbox.create(glslTOP, 'glsl_omit')
         compute = glsl.op(f'{glsl.name}_compute')
         if compute is None:
-            self.skip('glslTOP does not dock a <name>_compute DAT here')
+            self.skipTest('glslTOP does not dock a <name>_compute DAT here')
         if compute.dock is None or compute.dock.path != glsl.path:
-            self.skip('compute DAT is not docked to the glslTOP')
+            self.skipTest('compute DAT is not docked to the glslTOP')
 
         default_text = compute.text
 

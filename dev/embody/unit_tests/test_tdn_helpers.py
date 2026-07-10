@@ -37,7 +37,7 @@ class TestTDNHelpers(EmbodyTestCase):
 
     def test_serializeValue_float_decimal_preserved(self):
         result = self.tdn._serializeValue(3.14)
-        self.assertApproxEqual(result, 3.14)
+        self.assertAlmostEqual(result, 3.14)
 
     def test_serializeValue_string_unchanged(self):
         self.assertEqual(self.tdn._serializeValue('hello'), 'hello')
@@ -144,7 +144,7 @@ class TestTDNHelpers(EmbodyTestCase):
 
     def test_serializeStorageValue_float(self):
         result = self.tdn._serializeStorageValue(3.14)
-        self.assertApproxEqual(result, 3.14)
+        self.assertAlmostEqual(result, 3.14)
 
     def test_serializeStorageValue_string(self):
         self.assertEqual(self.tdn._serializeStorageValue('hello'), 'hello')
