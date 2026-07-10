@@ -256,7 +256,7 @@ class TestSmokeRelease(EmbodyTestCase):
     def test_envoy_server_running_if_enabled(self):
         """If Envoyenable is True, the MCP server should be running."""
         if not self.embody.par.Envoyenable.eval():
-            self.skip('Envoy not enabled in this session')
+            self.skipTest('Envoy not enabled in this session')
         # Check status parameter (survives extension reinit) rather than
         # envoy_running store (reset to False on every __init__).
         status = str(self.embody.par.Envoystatus.eval())
@@ -421,7 +421,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """Collection sub-COMP has scanner + safe_import DATs and CollectionExt."""
         collection = self.embody.op('Collection')
         if collection is None:
-            self.skip('Collection sub-COMP not present on the release .tox')
+            self.skipTest('Collection sub-COMP not present on the release .tox')
         self.assertIsNotNone(collection.op('scanner'),
             'Collection/scanner DAT must exist')
         self.assertIsNotNone(collection.op('safe_import'),
@@ -523,9 +523,9 @@ class TestSmokeRelease(EmbodyTestCase):
         """A glsl-language textDAT externalizes with the glsl tag to a .glsl file."""
         envoy = self.embody.ext.Envoy
         if envoy is None:
-            self.skip('Envoy extension not loaded on the release .tox')
+            self.skipTest('Envoy extension not loaded on the release .tox')
         if not hasattr(envoy, '_externalize_op'):
-            self.skip('Envoy._externalize_op not available on this .tox')
+            self.skipTest('Envoy._externalize_op not available on this .tox')
 
         glsl_tag = self.embody.par.Glsltag.eval()
         dat = self._make_sandbox_comp('v6_glsl_host').create(textDAT, 'shader')
@@ -565,7 +565,7 @@ class TestSmokeRelease(EmbodyTestCase):
         """The watchdog tick / revive / probe methods exist on the Envoy ext."""
         envoy = self.embody.ext.Envoy
         if envoy is None:
-            self.skip('Envoy extension not loaded on the release .tox')
+            self.skipTest('Envoy extension not loaded on the release .tox')
         for name in ('_watchdogTick', '_reviveDeadServer', '_probeAlive'):
             method = getattr(envoy, name, None)
             self.assertIsNotNone(method,
@@ -581,7 +581,7 @@ class TestSmokeRelease(EmbodyTestCase):
         instance armed its self-healing loop on init.
         """
         if self.embody.ext.Envoy is None:
-            self.skip('Envoy extension not loaded on the release .tox')
+            self.skipTest('Envoy extension not loaded on the release .tox')
         gen = self.embody.fetch('_watchdog_gen', 0)
         self.assertGreater(int(gen), 0,
             'Envoy watchdog generation must be > 0 (no loop was armed)')
@@ -612,7 +612,7 @@ class TestSmokeRelease(EmbodyTestCase):
             xform = src.create(transformPOP, 'pop_transform')
             grid.outputConnectors[0].connect(xform.inputConnectors[0])
         except Exception:
-            self.skip('POPs not available in this TD build')
+            self.skipTest('POPs not available in this TD build')
             return
 
         # (2) A custom Float left at its (non-zero) default value. The default

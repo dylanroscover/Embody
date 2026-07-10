@@ -1958,7 +1958,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			t = self.sandbox.create(transformPOP, 'pt')
 			g.outputConnectors[0].connect(t.inputConnectors[0])
 		except Exception:
-			self.skip('POPs not available in this TD version')
+			self.skipTest('POPs not available in this TD version')
 			return
 		self._roundTrip(self.sandbox)
 		rg = self.sandbox.op('pg')
@@ -1974,7 +1974,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(gridPOP, 'pop1')
 		except Exception:
-			self.skip('POPs not available in this TD version')
+			self.skipTest('POPs not available in this TD version')
 			return
 		self._roundTrip(self.sandbox)
 		self.assertIsNotNone(self.sandbox.op('top1'))
@@ -3452,12 +3452,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			g = self.sandbox.create(glslTOP, 'glsl1')
 		except Exception:
-			self.skip('glslTOP not available')
+			self.skipTest('glslTOP not available')
 			return
 
 		pixel_dat = self.sandbox.op('glsl1_pixel')
 		if pixel_dat is None:
-			self.skip('glslTOP did not create pixel companion')
+			self.skipTest('glslTOP did not create pixel companion')
 			return
 
 		pixel_dat.text = '// custom pixel shader\nvoid main() {}'
@@ -3473,12 +3473,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			g = self.sandbox.create(glslTOP, 'glsl1')
 		except Exception:
-			self.skip('glslTOP not available')
+			self.skipTest('glslTOP not available')
 			return
 
 		info_dat = self.sandbox.op('glsl1_info')
 		if info_dat is None:
-			self.skip('glslTOP did not create info companion')
+			self.skipTest('glslTOP did not create info companion')
 			return
 
 		orig = self.tdn.ExportNetwork(
@@ -3508,12 +3508,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			t = self.sandbox.create(timerCHOP, 'timer1')
 		except Exception:
-			self.skip('timerCHOP not available')
+			self.skipTest('timerCHOP not available')
 			return
 
 		cb_dat = self.sandbox.op('timer1_callbacks')
 		if cb_dat is None:
-			self.skip('timerCHOP did not create callbacks companion')
+			self.skipTest('timerCHOP did not create callbacks companion')
 			return
 
 		cb_dat.text = '# custom callbacks\ndef onStart():\n\tpass'
@@ -3530,12 +3530,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(timerCHOP, 'timer1')
 		except Exception:
-			self.skip('timerCHOP not available')
+			self.skipTest('timerCHOP not available')
 			return
 
 		cb_dat = self.sandbox.op('timer1_callbacks')
 		if cb_dat is None:
-			self.skip('timerCHOP did not create callbacks companion')
+			self.skipTest('timerCHOP did not create callbacks companion')
 			return
 
 		self._roundTrip(self.sandbox)
@@ -3552,12 +3552,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			g = self.sandbox.create(glslPOP, 'glsl1')
 		except Exception:
-			self.skip('glslPOP not available')
+			self.skipTest('glslPOP not available')
 			return
 
 		compute_dat = self.sandbox.op('glsl1_compute')
 		if compute_dat is None:
-			self.skip('glslPOP did not create compute companion')
+			self.skipTest('glslPOP did not create compute companion')
 			return
 
 		compute_dat.text = '// custom compute shader\nvoid main() {}'
@@ -3574,7 +3574,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glslTOP, 'glsl1')
 		except Exception:
-			self.skip('glslTOP not available')
+			self.skipTest('glslTOP not available')
 			return
 
 		orig = self.tdn.ExportNetwork(
@@ -3592,12 +3592,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glslmultiTOP, 'glsl1')
 		except Exception:
-			self.skip('glslmultiTOP not available')
+			self.skipTest('glslmultiTOP not available')
 			return
 
 		pixel_dat = self.sandbox.op('glsl1_pixel')
 		if pixel_dat is None:
-			self.skip('glslmultiTOP did not create pixel companion')
+			self.skipTest('glslmultiTOP did not create pixel companion')
 			return
 		pixel_dat.text = '// custom multi pixel\nvoid main() {}'
 
@@ -3620,12 +3620,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glsladvancedPOP, 'glsl1')
 		except Exception:
-			self.skip('glsladvancedPOP not available')
+			self.skipTest('glsladvancedPOP not available')
 			return
 
 		compute_dat = self.sandbox.op('glsl1_compute')
 		if compute_dat is None:
-			self.skip('glsladvancedPOP did not create compute companion')
+			self.skipTest('glsladvancedPOP did not create compute companion')
 			return
 		compute_dat.text = '// custom advanced compute\nvoid main() {}'
 
@@ -3646,12 +3646,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glslcopyPOP, 'glsl1')
 		except Exception:
-			self.skip('glslcopyPOP not available')
+			self.skipTest('glslcopyPOP not available')
 			return
 
 		pt_dat = self.sandbox.op('glsl1_ptCompute')
 		if pt_dat is None:
-			self.skip('glslcopyPOP did not create ptCompute companion')
+			self.skipTest('glslcopyPOP did not create ptCompute companion')
 			return
 		pt_dat.text = '// custom copy pt compute\nvoid main() {}'
 
@@ -3674,12 +3674,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(rampTOP, 'ramp1')
 		except Exception:
-			self.skip('rampTOP not available')
+			self.skipTest('rampTOP not available')
 			return
 
 		keys_dat = self.sandbox.op('ramp1_keys')
 		if keys_dat is None:
-			self.skip('rampTOP did not create keys companion')
+			self.skipTest('rampTOP did not create keys companion')
 			return
 
 		# Modify the keys table
@@ -3705,12 +3705,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(scriptCHOP, 'script1')
 		except Exception:
-			self.skip('scriptCHOP not available')
+			self.skipTest('scriptCHOP not available')
 			return
 
 		cb_dat = self.sandbox.op('script1_callbacks')
 		if cb_dat is None:
-			self.skip('scriptCHOP did not create callbacks companion')
+			self.skipTest('scriptCHOP did not create callbacks companion')
 			return
 		cb_dat.text = '# custom script chop callbacks'
 
@@ -3731,12 +3731,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(scriptSOP, 'script1')
 		except Exception:
-			self.skip('scriptSOP not available')
+			self.skipTest('scriptSOP not available')
 			return
 
 		cb_dat = self.sandbox.op('script1_callbacks')
 		if cb_dat is None:
-			self.skip('scriptSOP did not create callbacks companion')
+			self.skipTest('scriptSOP did not create callbacks companion')
 			return
 		cb_dat.text = '# custom script sop callbacks'
 
@@ -3757,12 +3757,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(scriptDAT, 'script1')
 		except Exception:
-			self.skip('scriptDAT not available')
+			self.skipTest('scriptDAT not available')
 			return
 
 		cb_dat = self.sandbox.op('script1_callbacks')
 		if cb_dat is None:
-			self.skip('scriptDAT did not create callbacks companion')
+			self.skipTest('scriptDAT did not create callbacks companion')
 			return
 		cb_dat.text = '# custom script dat callbacks'
 
@@ -3803,7 +3803,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				pass  # Skip unavailable types
 
 		if len(created) < 3:
-			self.skip('Too few companion-creating ops available')
+			self.skipTest('Too few companion-creating ops available')
 			return
 
 		# Snapshot companion names before round-trip

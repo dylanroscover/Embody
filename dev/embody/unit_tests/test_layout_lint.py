@@ -144,9 +144,9 @@ class TestLayoutLint(EmbodyTestCase):
         try:
             dat.dock = host
         except Exception as e:
-            self.skip(f'cannot set .dock in this TD build: {e}')
+            self.skipTest(f'cannot set .dock in this TD build: {e}')
         if dat.path not in [d.path for d in host.docked]:
-            self.skip('docking did not register dat in host.docked')
+            self.skipTest('docking did not register dat in host.docked')
 
     def test_scattered_docked_dat_reports_scattered(self):
         """A docked DAT forced > 350u from its host -> a 'scattered' issue."""
@@ -299,7 +299,7 @@ class TestLayoutLint(EmbodyTestCase):
         h = self.sandbox.op('ep_hug_host')
         d = self.sandbox.op('ep_hug_dock')
         if d.path not in [x.path for x in h.docked]:
-            self.skip('docking did not register in this TD build')
+            self.skipTest('docking did not register in this TD build')
         self.assertEqual(d.nodeY, h.nodeY - d.nodeHeight - 30,
                          f'scattered new dock must be auto-hugged, got nodeY={d.nodeY}')
         hug_msgs = [m for m in self._warnings() if 'auto-hugged' in m]

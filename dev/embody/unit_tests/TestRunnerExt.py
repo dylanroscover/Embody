@@ -81,10 +81,6 @@ class EmbodyTestCase(TestCase):
             raise AssertionError(
                 msg or f'Expected length {expected_len}, got {actual}')
 
-    def skip(self, reason=''):
-        """Historical alias for unittest.TestCase.skipTest."""
-        self.skipTest(reason)
-
 
 # =============================================================================
 # TEST RUNNER EXTENSION
