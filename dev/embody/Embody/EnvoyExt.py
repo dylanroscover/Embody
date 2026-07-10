@@ -2257,6 +2257,15 @@ class EnvoyMCPServer:
             host="127.0.0.1",
             port=self.port,
             log_level="warning",
+            # TD replaces sys.stdout with a Textport catcher, and some builds
+            # (e.g. 2025.32460 on Windows) ship one WITHOUT isatty(). uvicorn's
+            # default log formatter probes sys.stdout.isatty() when use_colors
+            # is unset, so Config() itself raises ("Unable to configure
+            # formatter 'default'") before the socket ever binds -- and the
+            # liveness watchdog then restarts the dead worker forever. An
+            # explicit False skips the probe entirely (ANSI color codes would
+            # be garbage in the Textport anyway).
+            use_colors=False,
         )
         uvi_server = uvicorn.Server(config)
 

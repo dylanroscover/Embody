@@ -1,14 +1,21 @@
 # me - this DAT
-# 
+#
 # frame - the current frame
 # state - True if the timeline is paused
-# 
+#
 # Make sure the corresponding toggle is enabled in the Execute DAT.
 
+import re
 from pathlib import Path
 
 comp = op.Embody
-readme = Path(project.folder).parents[0] / 'README.md'
+root = Path(project.folder).parents[0]
+
+# TD build pattern, e.g. 2025.32820. Only ever substituted on ANCHORED lines
+# (startswith match below) -- never file-wide -- so changelog/version-history
+# mentions of older builds are left alone.
+BUILD_RE = re.compile(r'\b\d{4}\.\d{3,6}\b')
+
 
 def version(version):
     # get current versions
@@ -20,24 +27,68 @@ def version(version):
     comp.par.Version.val = new_version
     return new_version
 
-def updateReadme(build, version):
-    # README contains emoji; pin UTF-8 so locale-default codecs don't crash.
-    with open(readme, 'r', encoding='utf-8') as f:
-        file_content = f.readlines()
 
-    with open(readme, 'w', encoding='utf-8') as writer:
-        for line in file_content:
-            # We search for the correct section
-            build_pre = '#### :floppy_disk: TouchDesigner'
-            version_pre = '#### :floppy_disk: version'
+def _rewriteText(text, transforms):
+    """Pure line rewriter: transforms is [(startswith_anchor, fn), ...] where
+    fn(line) -> new line. The first matching anchor wins per line. Returns
+    (new_text, changed)."""
+    lines = text.splitlines(keepends=True)
+    changed = False
+    for i, line in enumerate(lines):
+        for anchor, fn in transforms:
+            if line.startswith(anchor):
+                new_line = fn(line)
+                if new_line != line:
+                    lines[i] = new_line
+                    changed = True
+                break
+    return ''.join(lines), changed
 
-            if line.startswith(build_pre):
-                line = f"{build_pre} {build} (Windows/macOS)\n"
-            elif line.startswith(version_pre):
-                line = f"{version_pre} {version}\n"
 
-            # Re-write the file at each iteration
-            writer.write(line)
+def _rewriteFile(path, transforms):
+    """Apply _rewriteText to a file in place. UTF-8 pinned (README contains
+    emoji; locale-default codecs crash on Windows). Returns True if written."""
+    with open(path, 'r', encoding='utf-8') as f:
+        text = f.read()
+    new_text, changed = _rewriteText(text, transforms)
+    if changed:
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(new_text)
+    return changed
+
+
+def updateVersionDocs(build, new_version):
+    """Keep every user-facing version / minimum-build statement in lock-step
+    with this save. The build we save with IS the minimum supported build
+    (TD files do not open in older builds), so README, docs/index.md, and
+    CONTRIBUTING.md restate the running build; the README badges restate
+    par.Version and the build's year. Each file is guarded so a missing or
+    unwritable doc can never abort a project save."""
+    year = str(build).split('.')[0]
+    targets = [
+        (root / 'README.md', [
+            ('[![Version](https://img.shields.io/badge/version-',
+             lambda l: re.sub(r'version-[0-9][0-9.]*-', f'version-{new_version}-', l, count=1)),
+            ('[![TouchDesigner](https://img.shields.io/badge/TouchDesigner-',
+             lambda l: re.sub(r'TouchDesigner-\d{4}-', f'TouchDesigner-{year}-', l, count=1)),
+            ('**Requirements:** TouchDesigner',
+             lambda l: BUILD_RE.sub(build, l, count=1)),
+        ]),
+        (root / 'docs' / 'index.md', [
+            ('- **TouchDesigner ',
+             lambda l: BUILD_RE.sub(build, l, count=1)),
+        ]),
+        (root / 'CONTRIBUTING.md', [
+            ('- **TouchDesigner ',
+             lambda l: BUILD_RE.sub(build, l, count=1)),
+        ]),
+    ]
+    for path, transforms in targets:
+        try:
+            _rewriteFile(path, transforms)
+        except Exception as e:
+            debug(f'version-doc bump skipped for {path.name}: {e}')
+
 
 def onStart():
     return
@@ -64,12 +115,16 @@ def onProjectPreSave():
     # set page for component
     comp.currentPage = 'Embody'
 
-    build = project.saveBuild
+    # app.build, not project.saveBuild: pre-save, saveBuild still reports the
+    # PREVIOUS save's build, so after a TD upgrade it would understate the
+    # floor. The running build is what this save writes.
+    build = str(app.build)
     old_version = comp.par.Version.val
     new_version = version(old_version)
 
-    # version up (dev)
-    updateReadme(build, new_version)
+    # version up (dev): README badges + minimum-build statements in
+    # README / docs/index.md / CONTRIBUTING.md
+    updateVersionDocs(build, new_version)
 
     # update build
     comp.par.Touchbuild = build

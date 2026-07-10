@@ -7,6 +7,8 @@ Covers the manage-mode UI code paths that were missing test coverage:
   - HandleStrategySwitch converts TOX<->TDN
   - _dispatchTaggerButton routes by label text
   - Regression: Remove does NOT convert to the other strategy
+  - Regression (issue #48): RemoveTDNEntry (lister X button) strips the
+    tdn tag so the save-time Update sweep cannot resurrect the entry
 """
 
 try:
@@ -121,6 +123,85 @@ class TestRemoveExternalization(EmbodyTestCase):
         default_color = (0.55, 0.55, 0.55)
         close = all(abs(a - b) < 0.02 for a, b in zip(comp.color, default_color))
         self.assertTrue(close, f'Color should reset, got {comp.color}')
+
+
+class TestRemoveTDNEntry(EmbodyTestCase):
+    """RemoveTDNEntry is the lister X button's TDN removal path (issue #48).
+
+    It must fully de-externalize the COMP -- strip the tag, remove the row,
+    reset the color -- because the Update sweep that runs on every save
+    re-externalizes any tagged-but-untracked COMP, resurrecting the row and
+    .tdn file the user just removed.
+    """
+
+    def setUp(self):
+        self.workspace = self.sandbox.create(baseCOMP, 'workspace')
+
+    def tearDown(self):
+        for i in range(self.embody_ext.Externalizations.numRows - 1, 0, -1):
+            path = self.embody_ext.Externalizations[i, 'path'].val
+            if path.startswith(self.sandbox.path):
+                self.embody_ext.Externalizations.deleteRow(i)
+        super().tearDown()
+
+    def _externalizedTDN(self, name):
+        """Create a TDN-externalized COMP with a live table row."""
+        comp = self.workspace.create(baseCOMP, name)
+        tdn_tag = self.embody.par.Tdntag.val
+        self.embody_ext.applyTagToOperator(comp, tdn_tag)
+        self.assertIn(tdn_tag, comp.tags, 'Precondition: comp must be tagged')
+        return comp, tdn_tag
+
+    def test_remove_tdn_entry_strips_tag(self):
+        """REGRESSION (issue #48): RemoveTDNEntry must strip the tdn tag."""
+        comp, tdn_tag = self._externalizedTDN('x_strip_tag')
+        self.embody_ext.RemoveTDNEntry(comp.path)
+        self.assertNotIn(tdn_tag, comp.tags,
+            'RemoveTDNEntry must strip the tdn tag or the next Update '
+            'sweep resurrects the externalization')
+
+    def test_remove_tdn_entry_removes_row(self):
+        """RemoveTDNEntry must delete the tracking row."""
+        comp, _ = self._externalizedTDN('x_remove_row')
+        self.embody_ext.RemoveTDNEntry(comp.path)
+        rows = [self.embody_ext.Externalizations[i, 'path'].val
+                for i in range(1, self.embody_ext.Externalizations.numRows)]
+        self.assertNotIn(comp.path, rows)
+
+    def test_remove_tdn_entry_resets_color(self):
+        """RemoveTDNEntry must reset the operator color to default."""
+        comp, _ = self._externalizedTDN('x_reset_color')
+        self.embody_ext.RemoveTDNEntry(comp.path)
+        default_color = (0.55, 0.55, 0.55)
+        close = all(abs(a - b) < 0.02
+                    for a, b in zip(comp.color, default_color))
+        self.assertTrue(close, f'Color should reset, got {comp.color}')
+
+    def test_remove_tdn_entry_stops_resurrection(self):
+        """REGRESSION (issue #48): the save-time sweep must not re-add.
+
+        The Update additions sweep re-externalizes any op returned by
+        getOpsToExternalize that has no table row. After RemoveTDNEntry the
+        COMP must no longer be a sweep candidate.
+        """
+        comp, _ = self._externalizedTDN('x_no_resurrect')
+        candidates = [o.path for o in self.embody_ext.getOpsToExternalize(COMP)]
+        self.assertIn(comp.path, candidates,
+            'Precondition: tagged comp must be a sweep candidate')
+
+        self.embody_ext.RemoveTDNEntry(comp.path)
+        candidates = [o.path for o in self.embody_ext.getOpsToExternalize(COMP)]
+        self.assertNotIn(comp.path, candidates,
+            'A removed COMP must not be re-externalized by the next '
+            'Update sweep (issue #48)')
+
+    def test_remove_tdn_entry_missing_op_safe(self):
+        """RemoveTDNEntry must tolerate a path with no live operator.
+
+        Full Project entries track paths (e.g. '/') that carry no tag, and
+        stale rows can outlive their operators.
+        """
+        self.embody_ext.RemoveTDNEntry('/nonexistent_issue48_probe')
 
 
 class TestHandleStrategySwitch(EmbodyTestCase):

@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.113-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.116-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -41,6 +41,8 @@ Embody puts your ideas on screen as fast as you can describe them. Operators, co
 ---
 
 ## Quick Start
+
+**Requirements:** TouchDesigner **2025.32820 or later** (Windows / macOS). No Python setup needed — Envoy installs its own dependencies on first enable.
 
 ### 1. Project Setup
 
@@ -158,7 +160,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **90 test suites** (2,019 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **91 test suites** (2,032 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -189,6 +191,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.116**: Two field-reported fixes -- removing a TDN externalization now **sticks** ([#48](https://github.com/dylanroscover/Embody/issues/48)): the manager's X button strips the `tdn` tag / color / tracker entry so the save-time Update sweep can no longer resurrect the row and `.tdn` file it just deleted; and Envoy no longer **restart-loops** on TD builds whose Textport stdout lacks `isatty()` (confirmed 2025.32460 on Windows) -- `uvicorn.Config` now gets `use_colors=False` so the formatter never probes it. Plus self-rewriting version/minimum-build doc statements on every save (guarded by a new `test_version_sync` suite), a CONTRIBUTING.md for TD-mediated contributions, and five new specimen briefs (Riley, Rutt-Etra, Molnar, Calder, Ikeda). Fresh-install smoke-tested from the shipped `.tox`. **91 suites / 2,032 tests**.
 - **6.0.113**: TDN export survives broken widget clones ([#46](https://github.com/dylanroscover/Embody/issues/46)) -- a clone expression referencing a missing master aborted the whole export via Par truthiness; palette-clone blackboxing is now **restorability-gated** (disabled/unresolvable clones export in full instead of rebuilding empty) and blackboxed entries keep their clone reference so rebuilt shells actually restore; a failed initial TDN export **rolls the tag back** so re-tagging retries; RGBA/XYZW custom par groups round-trip without name mangling or dropped alpha (spec gains true-arity `size`). Verified end-to-end against the TauCeti preset manager (1,107 ops): fadetime 7/7 children + 124/124 custom pars. **90 suites / 2,019 tests**.
 - **6.0.111**: Deterministic COMP placement for AI agents -- the create-operator skill now anchors a new COMP's home on the container that holds the `Embody` COMP (`op.Embody.parent().path`), the level you chose, so builds land in the SAME network every run instead of `/` one time and `/project1` the next (a deliberately-opened pane overrides it; a bare-root `/` pane is ignored). Plus a **delete-the-default-torus** rule: a fresh `geometryCOMP`'s `torus1` keeps its RENDER flag on even after its DISPLAY flag auto-clears, so it renders a phantom torus behind your scene unless deleted. CLAUDE.md rules 3/5 realigned to the new default; the previously-unreleased v6.0.109 Envoy features (recovery hints, `capture_top` Quality verdict) are now documented on the Envoy pages. Docs-only -- **90 suites / 2,005 tests**.
 - **6.0.109**: Two agent-ergonomics wins from a competitor review -- **recovery hints** ride back on any tool `error` (`{cause, action, next_tools}`, matched to Envoy's real error strings) so the agent recovers instead of retrying blind, and `capture_top` now returns a **Quality verdict** (`is_black`/`is_flat`/`fully_transparent`/`pass`/`fail_reasons`) computed from raw pixels so an empty render is caught as data without reading the image. New `test_recovery_hints` suite (15) + 4 capture-verdict tests; both verified live from the release `.tox`. **90 suites / 2,005 tests**.
@@ -284,6 +287,8 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 ## Contributors
 
 Originally derived from [External Tox Saver](https://github.com/franklin113/External-Tox-Saver) by [Tim Franklin](https://github.com/franklin113/). Refactored entirely by Dylan Roscover, with inspiration and guidance from Elburz Sorkhabi, Matthew Ragan and Wieland Hilker.
+
+Want to help? Start with [CONTRIBUTING.md](CONTRIBUTING.md) — this repo works differently from a typical Python project (TouchDesigner writes many of the files), and that page explains what is safe to change and how to run the tests.
 
 ## License
 

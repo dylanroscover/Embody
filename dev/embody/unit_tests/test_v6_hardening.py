@@ -34,10 +34,18 @@ test_tdn_fingerprint.py). Each class targets one seam:
       EmbodyExt._computeTDNFingerprint -- an excluded child is omitted (vs
       included differs only by that child), and a tdn_paths-referenced child
       is recorded structurally so inner param edits do NOT dirty the parent.
+
+  TestUvicornStdoutIsattyGuard
+      EnvoyExt's uvicorn.Config must pass use_colors=False so uvicorn never
+      probes sys.stdout.isatty() -- TD builds exist (2025.32460 Windows)
+      whose Textport stdout catcher lacks isatty(), turning server startup
+      into a Config()-time ValueError and a watchdog restart loop.
 """
 
 import importlib.util
 import os
+import re
+import sys
 import tempfile
 from pathlib import Path
 
@@ -501,3 +509,79 @@ class TestTDNFingerprintExclusionAndRefs(EmbodyTestCase):
         after = self._fp(parent, tdn_paths=None, exclude_tag=None)
         self.assertNotEqual(before, after,
             'inner param edits of an EMBEDDED child must dirty the parent')
+
+
+# =============================================================================
+# uvicorn logging config vs TD's replaced sys.stdout (isatty regression)
+# =============================================================================
+
+class TestUvicornStdoutIsattyGuard(EmbodyTestCase):
+    """EnvoyExt must build uvicorn.Config with use_colors=False.
+
+    TD replaces sys.stdout with a Textport catcher, and some builds
+    (2025.32460 on Windows, field report 2026-07-10) ship one WITHOUT
+    isatty(). uvicorn's ColourizedFormatter probes sys.stdout.isatty()
+    whenever use_colors is unset, so uvicorn.Config() itself raises
+    ("Unable to configure formatter 'default'") before the socket binds --
+    and the liveness watchdog then restarts the dead worker forever.
+    Passing use_colors=False short-circuits the probe (uvicorn's documented
+    escape hatch); these tests pin both the source and the behavior.
+    """
+
+    def _envoySource(self):
+        """EnvoyExt source, preferring the on-disk file over the DAT text
+        (syncfile refreshes the DAT asynchronously, so a just-edited file
+        can be ahead of the live DAT within the same frame)."""
+        dat = self.embody.op('EnvoyExt')
+        file_path = dat.par.file.eval()
+        if file_path and os.path.isfile(file_path):
+            with open(file_path, encoding='utf-8') as f:
+                return f.read()
+        return dat.text
+
+    def test_envoy_config_passes_use_colors_false(self):
+        """The uvicorn.Config(...) call in EnvoyExt carries use_colors=False."""
+        src = self._envoySource()
+        idx = src.find('uvicorn.Config(')
+        self.assertTrue(idx >= 0, 'uvicorn.Config( call not found in EnvoyExt')
+        window = src[idx:idx + 1200]
+        self.assertIn('use_colors=False', window,
+            'uvicorn.Config must pass use_colors=False -- without it, TD '
+            'builds whose stdout catcher lacks isatty() crash Config() and '
+            'the watchdog restart-loops the server')
+
+    def test_config_survives_stdout_without_isatty(self):
+        """uvicorn.Config(use_colors=False) builds cleanly when sys.stdout
+        lacks isatty() -- the exact TD 2025.32460 failure environment."""
+        try:
+            import uvicorn
+        except ImportError:
+            self.skip('uvicorn not importable (Envoy venv not on sys.path)')
+
+        class _NoIsattyStdout:
+            # Deliberately NO isatty() -- mimics the 2025.32460 Logger stdout.
+            def write(self, s):
+                pass
+
+            def flush(self):
+                pass
+
+        async def _noop_app(scope, receive, send):
+            return
+
+        real_stdout = sys.stdout
+        sys.stdout = _NoIsattyStdout()
+        try:
+            uvicorn.Config(_noop_app, host='127.0.0.1', port=0,
+                           log_level='warning', use_colors=False)
+        finally:
+            sys.stdout = real_stdout
+            # dictConfig binds uvicorn's access handler to whatever
+            # sys.stdout was at Config() time -- rebuild once with the real
+            # stdout restored so the live server's logging is not left
+            # pointing at the throwaway object.
+            try:
+                uvicorn.Config(_noop_app, host='127.0.0.1', port=0,
+                               log_level='warning', use_colors=False)
+            except Exception:
+                pass
