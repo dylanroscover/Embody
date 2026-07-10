@@ -196,7 +196,7 @@ class TestTDNBlockScalarFileIO(EmbodyTestCase):
         dat.text = 'line one\nline two\n\n'
         src_text = dat.text
         if not src_text.endswith('\n\n'):
-            self.skip('TD trimmed the second trailing newline on this build')
+            self.skipTest('TD trimmed the second trailing newline on this build')
 
         fp = str(Path(self._temp_dir) / 'two_nl.tdn')
         self._export_dat(dat, fp)
@@ -262,9 +262,9 @@ class TestTDNBoilerplateNegativeGuards(EmbodyTestCase):
         try:
             dat.dock = host
         except Exception as e:
-            self.skip(f'DAT docking not supported on this build: {e}')
+            self.skipTest(f'DAT docking not supported on this build: {e}')
         if dat.dock is None or dat.dock.path != host.path:
-            self.skip('dock assignment did not take effect')
+            self.skipTest('dock assignment did not take effect')
         # Name is 'wrongname', not 'myhost_compute' -> condition 2 fails.
         self.assertNotEqual(dat.name, f'{host.name}_compute',
             'precondition: name must differ from the companion pattern')
@@ -312,9 +312,9 @@ class TestTDNTextconvDegrade(EmbodyTestCase):
         still diffs (unfiltered) rather than breaking git."""
         mod = self._load_textconv()
         if mod is None:
-            self.skip('textconv template not found')
+            self.skipTest('textconv template not found')
         if not getattr(mod, '_HAVE_YAML', False):
-            self.skip('PyYAML unavailable in textconv module')
+            self.skipTest('PyYAML unavailable in textconv module')
 
         # Brace-prefixed, invalid as BOTH JSON and YAML -> _parse raises ->
         # normalize returns raw.
@@ -326,9 +326,9 @@ class TestTDNTextconvDegrade(EmbodyTestCase):
         """A non-brace, invalid-YAML blob also degrades to raw passthrough."""
         mod = self._load_textconv()
         if mod is None:
-            self.skip('textconv template not found')
+            self.skipTest('textconv template not found')
         if not getattr(mod, '_HAVE_YAML', False):
-            self.skip('PyYAML unavailable in textconv module')
+            self.skipTest('PyYAML unavailable in textconv module')
         blob = 'foo: |\n\tbad tab block\n'
         self.assertEqual(mod.normalize(blob), blob,
             'invalid-YAML blob must pass through normalize() unchanged')
@@ -556,7 +556,7 @@ class TestUvicornStdoutIsattyGuard(EmbodyTestCase):
         try:
             import uvicorn
         except ImportError:
-            self.skip('uvicorn not importable (Envoy venv not on sys.path)')
+            self.skipTest('uvicorn not importable (Envoy venv not on sys.path)')
 
         class _NoIsattyStdout:
             # Deliberately NO isatty() -- mimics the 2025.32460 Logger stdout.

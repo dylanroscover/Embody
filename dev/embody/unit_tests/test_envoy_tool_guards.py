@@ -126,7 +126,7 @@ class TestEnvoyToolGuards(EmbodyTestCase):
     def test_create_op_dispatch_is_undoable(self):
         undo = getattr(ui, 'undo', None)
         if undo is None or not hasattr(undo, 'undo'):
-            self.skip('ui.undo is not available in this harness')
+            self.skipTest('ui.undo is not available in this harness')
 
         name = self._unique('undo_text')
         result = op.Embody.ext.Envoy._execute_operation('create_op', {
@@ -141,22 +141,22 @@ class TestEnvoyToolGuards(EmbodyTestCase):
         try:
             undo.undo()
         except Exception as e:
-            self.skip('ui.undo.undo failed in this harness: {}'.format(e))
+            self.skipTest('ui.undo.undo failed in this harness: {}'.format(e))
 
         if op(created_path) is not None:
-            self.skip('ui.undo did not remove the Envoy-created op')
+            self.skipTest('ui.undo did not remove the Envoy-created op')
 
         if not hasattr(undo, 'redo'):
-            self.skip('ui.undo.redo is not available in this harness')
+            self.skipTest('ui.undo.redo is not available in this harness')
         try:
             undo.redo()
         except Exception as e:
-            self.skip('ui.undo.redo failed in this harness: {}'.format(e))
+            self.skipTest('ui.undo.redo failed in this harness: {}'.format(e))
         self.assertIsNotNone(op(created_path))
         try:
             undo.undo()
         except Exception as e:
-            self.skip('ui.undo final undo failed in this harness: {}'.format(e))
+            self.skipTest('ui.undo final undo failed in this harness: {}'.format(e))
         self.assertIsNone(op(created_path))
 
     def test_first_peer_advisory_carries_etiquette_hint_once(self):
@@ -225,13 +225,13 @@ class TestEnvoyToolGuards(EmbodyTestCase):
                 self.assertIn(name, result['error'])
                 self.assertEqual(par.eval(), before)
                 return
-        self.skip('noiseTOP type menu labels match menuNames in this TD build')
+        self.skipTest('noiseTOP type menu labels match menuNames in this TD build')
 
     def test_valid_menu_name_still_sets_value(self):
         noise = self.sandbox.create(noiseTOP, 'menu_valid_noise')
         menu_names = list(noise.par.type.menuNames)
         if not menu_names:
-            self.skip('noiseTOP type has no menuNames in this TD build')
+            self.skipTest('noiseTOP type has no menuNames in this TD build')
         value = menu_names[-1]
 
         result = op.Embody.ext.Envoy._set_parameter(
@@ -243,7 +243,7 @@ class TestEnvoyToolGuards(EmbodyTestCase):
     def test_strmenu_value_is_not_menu_guard_rejected(self):
         target, par = self._find_strmenu_parameter()
         if target is None:
-            self.skip('No writable StrMenu parameter found in this TD build')
+            self.skipTest('No writable StrMenu parameter found in this TD build')
 
         value = 'not_a_registered_strmenu_choice'
         result = op.Embody.ext.Envoy._set_parameter(
@@ -391,7 +391,7 @@ class TestEnvoyToolGuards(EmbodyTestCase):
     def test_get_parameter_compact_and_details_modes(self):
         noise = self.sandbox.create(noiseTOP, 'compact_get_parameter')
         if not getattr(noise.par.type, 'isMenu', False):
-            self.skip('noiseTOP type is not a Menu parameter in this TD build')
+            self.skipTest('noiseTOP type is not a Menu parameter in this TD build')
 
         compact = op.Embody.ext.Envoy._get_parameter(
             noise.path, par_name='type')
@@ -484,7 +484,7 @@ class TestCaptureTopSampleGrid(EmbodyTestCase):
     def _set_constant_color(self, top, r, g, b, a):
         for par_name in ('colorr', 'colorg', 'colorb', 'alpha'):
             if not hasattr(top.par, par_name):
-                self.skip('constantTOP missing {} parameter'.format(par_name))
+                self.skipTest('constantTOP missing {} parameter'.format(par_name))
         top.par.colorr = r
         top.par.colorg = g
         top.par.colorb = b
@@ -493,7 +493,7 @@ class TestCaptureTopSampleGrid(EmbodyTestCase):
     def _set_top_resolution(self, top, width, height):
         for par_name in ('outputresolution', 'resolutionw', 'resolutionh'):
             if not hasattr(top.par, par_name):
-                self.skip('TOP missing {} parameter'.format(par_name))
+                self.skipTest('TOP missing {} parameter'.format(par_name))
         top.par.outputresolution = 'custom'
         top.par.resolutionw = width
         top.par.resolutionh = height
@@ -522,7 +522,7 @@ class TestCaptureTopSampleGrid(EmbodyTestCase):
         try:
             top = self.sandbox.create(rampTOP, 'grid_ramp')
         except Exception:
-            self.skip('rampTOP not available')
+            self.skipTest('rampTOP not available')
             return
 
         result = op.Embody.ext.Envoy._capture_top(top.path, sample_grid=4)

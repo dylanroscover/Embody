@@ -84,14 +84,14 @@ class TestTDNReconstruction(EmbodyTestCase):
 	def _assertParamEqual(self, val1, val2, msg=''):
 		"""Float-tolerant parameter comparison."""
 		if isinstance(val1, float) and isinstance(val2, float):
-			self.assertApproxEqual(val1, val2, msg=msg)
+			self.assertAlmostEqual(val1, val2, msg=msg)
 		elif isinstance(val1, str) and isinstance(val2, str):
 			self.assertEqual(val1, val2, msg)
 		else:
 			# Try numeric comparison
 			try:
 				f1, f2 = float(val1), float(val2)
-				self.assertApproxEqual(f1, f2, msg=msg)
+				self.assertAlmostEqual(f1, f2, msg=msg)
 			except (TypeError, ValueError):
 				self.assertEqual(val1, val2, msg)
 
@@ -192,7 +192,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			if orig_color is not None:
 				self.assertIsNotNone(reimp_color, f'{name}: missing color')
 				for i in range(3):
-					self.assertApproxEqual(
+					self.assertAlmostEqual(
 						orig_color[i], reimp_color[i],
 						msg=f'{name}: color[{i}] mismatch')
 
@@ -637,10 +637,10 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
 		self.assertIsNotNone(rc)
-		self.assertApproxEqual(rc.par.Speed.eval(), 3.14)
+		self.assertAlmostEqual(rc.par.Speed.eval(), 3.14)
 		self.assertTrue(rc.par.Speed.clampMin)
 		self.assertTrue(rc.par.Speed.clampMax)
-		self.assertApproxEqual(rc.par.Speed.max, 10.0)
+		self.assertAlmostEqual(rc.par.Speed.max, 10.0)
 
 	def test_C02_int_custom_par(self):
 		"""Int custom par round-trip."""
@@ -696,9 +696,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Tintb = 0.2
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Tintr.eval(), 1.0)
-		self.assertApproxEqual(rc.par.Tintg.eval(), 0.5)
-		self.assertApproxEqual(rc.par.Tintb.eval(), 0.2)
+		self.assertAlmostEqual(rc.par.Tintr.eval(), 1.0)
+		self.assertAlmostEqual(rc.par.Tintg.eval(), 0.5)
+		self.assertAlmostEqual(rc.par.Tintb.eval(), 0.2)
 
 	def test_C07_xyz_custom_par(self):
 		"""XYZ (3-component) custom par round-trip."""
@@ -710,9 +710,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Posz = 30.0
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Posx.eval(), 10.0)
-		self.assertApproxEqual(rc.par.Posy.eval(), 20.0)
-		self.assertApproxEqual(rc.par.Posz.eval(), 30.0)
+		self.assertAlmostEqual(rc.par.Posx.eval(), 10.0)
+		self.assertAlmostEqual(rc.par.Posy.eval(), 20.0)
+		self.assertAlmostEqual(rc.par.Posz.eval(), 30.0)
 
 	def test_C08_readonly_custom_par(self):
 		"""readOnly custom par round-trip."""
@@ -756,7 +756,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Author = 'Test'
 		self._roundTrip(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Speed.eval(), 2.0)
+		self.assertAlmostEqual(rc.par.Speed.eval(), 2.0)
 		self.assertEqual(rc.par.Author.eval(), 'Test')
 
 	def test_C12_custom_par_expression_mode(self):
@@ -981,9 +981,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n.color = (1.0, 0.0, 0.5)
 		self._roundTrip(self.sandbox)
 		rn = self.sandbox.op('n')
-		self.assertApproxEqual(rn.color[0], 1.0)
-		self.assertApproxEqual(rn.color[1], 0.0)
-		self.assertApproxEqual(rn.color[2], 0.5)
+		self.assertAlmostEqual(rn.color[0], 1.0)
+		self.assertAlmostEqual(rn.color[1], 0.0)
+		self.assertAlmostEqual(rn.color[2], 0.5)
 
 	def test_F05_comment(self):
 		"""Operator comment round-trip."""
@@ -1018,7 +1018,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertEqual(rn.nodeY, 200)
 		self.assertEqual(rn.nodeWidth, 180)
 		self.assertEqual(rn.nodeHeight, 120)
-		self.assertApproxEqual(rn.color[0], 0.5)
+		self.assertAlmostEqual(rn.color[0], 0.5)
 		self.assertEqual(rn.comment, 'Combined metadata test')
 		self.assertIn('test', rn.tags)
 
@@ -1218,7 +1218,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		for i in range(4):
 			rn = self.sandbox.op(f'n{i}')
 			self.assertEqual(int(rn.par.seed.eval()), 100)
-			self.assertApproxEqual(rn.par.amp.eval(), 0.5)
+			self.assertAlmostEqual(rn.par.amp.eval(), 0.5)
 
 	def test_I07_operator_override(self):
 		"""Individual op can override type_defaults value."""
@@ -1233,7 +1233,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		n3.par.amp = 0.5
 		self._roundTrip(self.sandbox)
 		rn2 = self.sandbox.op('n2')
-		self.assertApproxEqual(rn2.par.amp.eval(), 0.8)
+		self.assertAlmostEqual(rn2.par.amp.eval(), 0.8)
 
 	def test_I08_flags_hoisted_to_type_defaults(self):
 		"""Flags unanimously shared across ops of a type are hoisted."""
@@ -1323,9 +1323,9 @@ class TestTDNReconstruction(EmbodyTestCase):
 			self.assertTrue(rn.viewer)
 			self.assertEqual(rn.nodeWidth, 250)
 			self.assertEqual(rn.nodeHeight, 120)
-			self.assertApproxEqual(rn.color[0], 0.3)
-			self.assertApproxEqual(rn.color[1], 0.6)
-			self.assertApproxEqual(rn.color[2], 0.9)
+			self.assertAlmostEqual(rn.color[0], 0.3)
+			self.assertAlmostEqual(rn.color[1], 0.6)
+			self.assertAlmostEqual(rn.color[2], 0.9)
 			self.assertEqual(sorted(rn.tags), ['fx', 'test'])
 
 	def test_I14_partial_flags_not_hoisted(self):
@@ -1441,7 +1441,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self._roundTrip(self.sandbox)
 		for i in range(3):
 			rc = self.sandbox.op(f'c{i}')
-			self.assertApproxEqual(rc.par.Speed.eval(), float(i))
+			self.assertAlmostEqual(rc.par.Speed.eval(), float(i))
 			expected_mode = 'b' if i % 2 else 'a'
 			self.assertEqual(rc.par.Mode.eval(), expected_mode)
 
@@ -1483,7 +1483,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.par.Speed = 3.14
 		self._simulateReconstruction(self.sandbox)
 		rc = self.sandbox.op('c')
-		self.assertApproxEqual(rc.par.Speed.eval(), 3.14)
+		self.assertAlmostEqual(rc.par.Speed.eval(), 3.14)
 
 	def test_K05_dat_content_through_reconstruction(self):
 		"""DAT content preserved through strip + reimport."""
@@ -1629,7 +1629,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		self.assertTrue(result.get('success'))
 
 		self.assertTrue(hasattr(self.sandbox.par, 'Threshold'))
-		self.assertApproxEqual(self.sandbox.par.Threshold.eval(), 0.75)
+		self.assertAlmostEqual(self.sandbox.par.Threshold.eval(), 0.75)
 
 	def test_K13_backward_compat_no_container_fields(self):
 		"""Import of TDN without top-level custom_pars/parameters must not error."""
@@ -1958,7 +1958,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 			t = self.sandbox.create(transformPOP, 'pt')
 			g.outputConnectors[0].connect(t.inputConnectors[0])
 		except Exception:
-			self.skip('POPs not available in this TD version')
+			self.skipTest('POPs not available in this TD version')
 			return
 		self._roundTrip(self.sandbox)
 		rg = self.sandbox.op('pg')
@@ -1974,7 +1974,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(gridPOP, 'pop1')
 		except Exception:
-			self.skip('POPs not available in this TD version')
+			self.skipTest('POPs not available in this TD version')
 			return
 		self._roundTrip(self.sandbox)
 		self.assertIsNotNone(self.sandbox.op('top1'))
@@ -2338,7 +2338,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		c.store('speed', 3.14)
 		self._roundTrip(self.sandbox)
 		result = self.sandbox.op('c').fetch('speed', None, search=False)
-		self.assertApproxEqual(result, 3.14)
+		self.assertAlmostEqual(result, 3.14)
 
 	def test_Q03_string_storage_roundtrip(self):
 		"""String storage value round-trips."""
@@ -3452,12 +3452,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			g = self.sandbox.create(glslTOP, 'glsl1')
 		except Exception:
-			self.skip('glslTOP not available')
+			self.skipTest('glslTOP not available')
 			return
 
 		pixel_dat = self.sandbox.op('glsl1_pixel')
 		if pixel_dat is None:
-			self.skip('glslTOP did not create pixel companion')
+			self.skipTest('glslTOP did not create pixel companion')
 			return
 
 		pixel_dat.text = '// custom pixel shader\nvoid main() {}'
@@ -3473,12 +3473,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			g = self.sandbox.create(glslTOP, 'glsl1')
 		except Exception:
-			self.skip('glslTOP not available')
+			self.skipTest('glslTOP not available')
 			return
 
 		info_dat = self.sandbox.op('glsl1_info')
 		if info_dat is None:
-			self.skip('glslTOP did not create info companion')
+			self.skipTest('glslTOP did not create info companion')
 			return
 
 		orig = self.tdn.ExportNetwork(
@@ -3508,12 +3508,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			t = self.sandbox.create(timerCHOP, 'timer1')
 		except Exception:
-			self.skip('timerCHOP not available')
+			self.skipTest('timerCHOP not available')
 			return
 
 		cb_dat = self.sandbox.op('timer1_callbacks')
 		if cb_dat is None:
-			self.skip('timerCHOP did not create callbacks companion')
+			self.skipTest('timerCHOP did not create callbacks companion')
 			return
 
 		cb_dat.text = '# custom callbacks\ndef onStart():\n\tpass'
@@ -3530,12 +3530,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(timerCHOP, 'timer1')
 		except Exception:
-			self.skip('timerCHOP not available')
+			self.skipTest('timerCHOP not available')
 			return
 
 		cb_dat = self.sandbox.op('timer1_callbacks')
 		if cb_dat is None:
-			self.skip('timerCHOP did not create callbacks companion')
+			self.skipTest('timerCHOP did not create callbacks companion')
 			return
 
 		self._roundTrip(self.sandbox)
@@ -3552,12 +3552,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			g = self.sandbox.create(glslPOP, 'glsl1')
 		except Exception:
-			self.skip('glslPOP not available')
+			self.skipTest('glslPOP not available')
 			return
 
 		compute_dat = self.sandbox.op('glsl1_compute')
 		if compute_dat is None:
-			self.skip('glslPOP did not create compute companion')
+			self.skipTest('glslPOP did not create compute companion')
 			return
 
 		compute_dat.text = '// custom compute shader\nvoid main() {}'
@@ -3574,7 +3574,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glslTOP, 'glsl1')
 		except Exception:
-			self.skip('glslTOP not available')
+			self.skipTest('glslTOP not available')
 			return
 
 		orig = self.tdn.ExportNetwork(
@@ -3592,12 +3592,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glslmultiTOP, 'glsl1')
 		except Exception:
-			self.skip('glslmultiTOP not available')
+			self.skipTest('glslmultiTOP not available')
 			return
 
 		pixel_dat = self.sandbox.op('glsl1_pixel')
 		if pixel_dat is None:
-			self.skip('glslmultiTOP did not create pixel companion')
+			self.skipTest('glslmultiTOP did not create pixel companion')
 			return
 		pixel_dat.text = '// custom multi pixel\nvoid main() {}'
 
@@ -3620,12 +3620,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glsladvancedPOP, 'glsl1')
 		except Exception:
-			self.skip('glsladvancedPOP not available')
+			self.skipTest('glsladvancedPOP not available')
 			return
 
 		compute_dat = self.sandbox.op('glsl1_compute')
 		if compute_dat is None:
-			self.skip('glsladvancedPOP did not create compute companion')
+			self.skipTest('glsladvancedPOP did not create compute companion')
 			return
 		compute_dat.text = '// custom advanced compute\nvoid main() {}'
 
@@ -3646,12 +3646,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(glslcopyPOP, 'glsl1')
 		except Exception:
-			self.skip('glslcopyPOP not available')
+			self.skipTest('glslcopyPOP not available')
 			return
 
 		pt_dat = self.sandbox.op('glsl1_ptCompute')
 		if pt_dat is None:
-			self.skip('glslcopyPOP did not create ptCompute companion')
+			self.skipTest('glslcopyPOP did not create ptCompute companion')
 			return
 		pt_dat.text = '// custom copy pt compute\nvoid main() {}'
 
@@ -3674,12 +3674,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(rampTOP, 'ramp1')
 		except Exception:
-			self.skip('rampTOP not available')
+			self.skipTest('rampTOP not available')
 			return
 
 		keys_dat = self.sandbox.op('ramp1_keys')
 		if keys_dat is None:
-			self.skip('rampTOP did not create keys companion')
+			self.skipTest('rampTOP did not create keys companion')
 			return
 
 		# Modify the keys table
@@ -3705,12 +3705,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(scriptCHOP, 'script1')
 		except Exception:
-			self.skip('scriptCHOP not available')
+			self.skipTest('scriptCHOP not available')
 			return
 
 		cb_dat = self.sandbox.op('script1_callbacks')
 		if cb_dat is None:
-			self.skip('scriptCHOP did not create callbacks companion')
+			self.skipTest('scriptCHOP did not create callbacks companion')
 			return
 		cb_dat.text = '# custom script chop callbacks'
 
@@ -3731,12 +3731,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(scriptSOP, 'script1')
 		except Exception:
-			self.skip('scriptSOP not available')
+			self.skipTest('scriptSOP not available')
 			return
 
 		cb_dat = self.sandbox.op('script1_callbacks')
 		if cb_dat is None:
-			self.skip('scriptSOP did not create callbacks companion')
+			self.skipTest('scriptSOP did not create callbacks companion')
 			return
 		cb_dat.text = '# custom script sop callbacks'
 
@@ -3757,12 +3757,12 @@ class TestTDNReconstruction(EmbodyTestCase):
 		try:
 			self.sandbox.create(scriptDAT, 'script1')
 		except Exception:
-			self.skip('scriptDAT not available')
+			self.skipTest('scriptDAT not available')
 			return
 
 		cb_dat = self.sandbox.op('script1_callbacks')
 		if cb_dat is None:
-			self.skip('scriptDAT did not create callbacks companion')
+			self.skipTest('scriptDAT did not create callbacks companion')
 			return
 		cb_dat.text = '# custom script dat callbacks'
 
@@ -3803,7 +3803,7 @@ class TestTDNReconstruction(EmbodyTestCase):
 				pass  # Skip unavailable types
 
 		if len(created) < 3:
-			self.skip('Too few companion-creating ops available')
+			self.skipTest('Too few companion-creating ops available')
 			return
 
 		# Snapshot companion names before round-trip

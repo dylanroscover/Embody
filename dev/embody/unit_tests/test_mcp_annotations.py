@@ -108,7 +108,7 @@ class TestMCPAnnotations(EmbodyTestCase):
         )
         self.assertTrue(result.get('success'))
         ann = op(result['path'])
-        self.assertApproxEqual(ann.par.Backcolorr.eval(), 0.8, tolerance=0.01)
+        self.assertAlmostEqual(ann.par.Backcolorr.eval(), 0.8, delta=0.01)
 
     # =========================================================================
     # _create_annotation - errors
