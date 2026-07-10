@@ -108,6 +108,34 @@
   padding-bottom: 2.8rem;
 }
 
+/* ============================================
+ * Parameter Reference: per-parameter deep links
+ * Each parameter name in parameters.md is a self-anchor (id + href="#par-...")
+ * so any single parameter is directly linkable. Render it as plain text;
+ * reveal a link affordance on hover, like a heading's permalink. The
+ * scroll-margin keeps the row clear of the sticky header on #anchor jumps.
+ * ============================================ */
+.md-typeset a.par-anchor {
+  color: inherit;
+  text-decoration: none;
+  scroll-margin-top: 4rem;
+}
+
+.md-typeset a.par-anchor:hover {
+  color: var(--md-accent-fg-color);
+  text-decoration: underline;
+}
+
+/* Dark scheme forces a bright-green color on ALL links; keep the parameter
+ * self-links reading as plain text there too (hover still shows the accent). */
+[data-md-color-scheme="slate"] .md-typeset a.par-anchor {
+  color: inherit;
+}
+
+[data-md-color-scheme="slate"] .md-typeset a.par-anchor:hover {
+  color: #6ee668;
+}
+
 /* Octicons/emoji icon vertical alignment */
 .md-typeset .twemoji svg,
 .md-typeset .emojione svg {
