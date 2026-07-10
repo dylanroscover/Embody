@@ -68,8 +68,7 @@ class EmbodyTestCase(TestCase):
             raise AssertionError(msg or f'{repr(s)} does not end with {repr(suffix)}')
 
     def assertApproxEqual(self, a, b, tolerance=1e-6, msg=None):
-        if abs(a - b) > tolerance:
-            raise AssertionError(msg or f'{a} != {b} (tolerance {tolerance})')
+        self.assertAlmostEqual(a, b, delta=tolerance, msg=msg)
 
     def assertDictHasKey(self, d, key, msg=None):
         if key not in d:
