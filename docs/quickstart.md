@@ -12,7 +12,7 @@ Embody itself is free, open source (MIT), and runs entirely on your own machine 
 
 You need two things installed before you start:
 
-- **TouchDesigner 2025.32280 or later** — Windows or macOS. [Download from Derivative](https://derivative.ca/download).
+- **TouchDesigner 2025.32820 or later** — Windows or macOS. [Download from Derivative](https://derivative.ca/download).
 - **An AI assistant that speaks [MCP](https://modelcontextprotocol.io/)** (the open standard that lets AI tools drive other apps) — [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (recommended), [Codex](https://github.com/openai/codex), [Gemini](https://github.com/google-gemini/gemini-cli), [Cursor](https://www.cursor.com/), [Windsurf](https://windsurf.com/), or GitHub Copilot via VS Code.
 
 !!! note "Never used an AI coding tool?"
@@ -93,7 +93,7 @@ Embody's other job is making your network **version-controllable**: any COMP or 
 
 Externalization is **opt-in** — nothing is written to disk until you choose. Two ways to opt in:
 
-- **Tag operators yourself**: select one and press ++lctrl++ twice.
+- **Tag operators yourself**: hover one and press ++lctrl++ twice.
 - **Auto-externalize what the AI builds**: set the **Auto-Externalize New Ops** parameter (Embody component → **Envoy** page) to `DATs`, `COMPs`, or `DATs and COMPs`. New operators your assistant creates through Envoy are then tagged and externalized automatically. The default is `Neither`.
 
 To save your changes, press ++ctrl+shift+u++. On the next project open, everything tagged restores from disk automatically.

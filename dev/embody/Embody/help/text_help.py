@@ -15,9 +15,9 @@ manage your externalizations -- all over a local connection.
 The core loop
 -------------
 1. Tag an operator for externalization -- hover it and press
-   left-control twice (lctrl-lctrl).
-2. Update -- press ctrl-shift-u. Embody walks your project and
-   writes every tagged operator to disk.
+   {{TAGGERTAP}}.
+2. Update -- press {{SC:Shortcutupdateall}}. Embody walks your
+   project and writes every tagged operator to disk.
 3. Work as normal. The externalized files on disk are the
    source of truth; the .toe is just a container. Everything
    tagged is recoverable from the files, even without saving.
@@ -34,15 +34,10 @@ op.Embody.InitEnvoy(); set up git with op.Embody.InitGit().
 
 Getting around
 --------------
-- lctrl-lctrl   Tag the operator under the cursor (or, if it
-                is already tagged, open its Actions menu).
-- ctrl-shift-o  Open the Manager -- a live list of every
-                externalized operator, its dirty state, and
-                its files. Click to navigate, reveal, refresh.
-- ctrl-shift-u  Update all externalizations.
-- ctrl-alt-u    Update only the COMP you are currently inside.
-- ctrl-shift-e  Export the whole project to .tdn.
-- ctrl-alt-e    Export just the current network to .tdn.
+{{SHORTCUTS}}
+Every shortcut is editable on the Embody COMP's Shortcuts
+parameter page -- type a combo, or pulse Record and press
+the keys. Leave a binding empty to disable it.
 
 This panel is a quick orientation, not the manual. For the
 full reference -- supported formats, folder configuration,

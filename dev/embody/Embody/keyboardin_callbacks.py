@@ -1,20 +1,31 @@
-# me - This DAT
-# 
-# dat - The DAT that received the key event
-# key - The name of the key attached to the event.
-#		This tries to be consistent regardless of which language
-#		the keyboard is set to. The values will be the english/ASCII
-#		values that most closely match the key pressed.
-#		This is what should be used for shortcuts instead of 'character'.
-# character - The unicode character generated.
-# alt - True if the alt modifier is pressed
-# ctrl - True if the ctrl modifier is pressed
-# shift - True if the shift modifier is pressed
-# state - True if the event is a key press event
-# time - The time when the event came in milliseconds
-# cmd - True if the cmd modifier is pressed
+# Embody keyboard shortcuts (issue #50): par-driven dispatch + recorder.
+#
+# Bindings are the Str pars on the Embody COMP's Shortcuts page; the combo
+# format, normalization, validation, and recording live in the shortcuts
+# module DAT. TD's generated onKey signature (17 args, incl. cmd/lCmd/rCmd
+# -- the wiki's 14-arg signature is stale): 'key' is the layout-normalized
+# key name and is what shortcuts match on; 'state' is True for key-down.
 
 
+def _runAction(par_name):
+	e = parent.Embody
+	if par_name == 'Shortcutmanager':
+		e.Manager('open')
+	elif par_name == 'Shortcutupdateall':
+		e.UpdateHandler()
+	elif par_name == 'Shortcutupdatecomp':
+		e.SaveCurrentComp()
+	elif par_name == 'Shortcutrefresh':
+		e.Refresh()
+	elif par_name == 'Shortcutexportproject':
+		e.ext.TDN.ExportProjectTDNInteractive()
+	elif par_name == 'Shortcutexportcomp':
+		pane = ui.panes.current
+		if pane and pane.owner:
+			e.ext.TDN.ExportNetworkAsync(
+				root_path=pane.owner.path, output_file='auto')
+	elif par_name == 'Shortcutcopytdn':
+		e.ext.TDN.CopySelectedToClipboard()
 
 
 def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShift, rShift, state, time, cmd, lCmd, rCmd):
@@ -23,52 +34,33 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 	if parent.Embody.par.Performmode.eval():
 		return
 
-	# Combine ctrl and cmd for cross-platform compatibility
-	ctrl_or_cmd = ctrl or cmd
+	sc = mod.shortcuts
 
-	# view externalizations
-	if state and key == 'o' and ctrl_or_cmd and lShift:
-		parent.Embody.Manager('open')
+	# An armed recorder consumes every key event until commit/cancel/timeout.
+	if sc.handleRecordingKey(parent.Embody, key, ctrl, alt, shift, cmd, state):
+		return
 
-	# add tox/dat tag
-	elif state and key == 'lctrl':
+	if not state:
+		return
+
+	# Tagger double-tap (configurable modifier -- not expressible as a combo;
+	# Cmd folds onto Ctrl so the stored key works on both platforms)
+	tap_key = str(parent.Embody.par.Shortcuttagger.eval())
+	if sc.taggerKeyMatches(tap_key, key):
 		timer = op('timer1')
 		if timer['running']:
 			run(f"op('{parent.Embody}').TagGetter()", delayFrames=6)
 
 		timer.par.active = 1
 		timer.par.start.pulse()
+		return
 
-	# initialize/update externalizations
-	elif state and key == 'u' and ctrl_or_cmd and lShift:
-		parent.Embody.UpdateHandler()
+	if key in sc.MODIFIER_KEYS:
+		return
 
-	# Refresh tracking state
-	elif state and key == 'r' and ctrl_or_cmd and lShift:
-		parent.Embody.Refresh()
-
-	# Update current COMP only
-	elif state and key == 'u' and ctrl_or_cmd and alt:
-	    parent.Embody.SaveCurrentComp()
-
-	# Export project network to .tdn
-	elif state and key == 'e' and ctrl_or_cmd and lShift:
-		parent.Embody.ext.TDN.ExportProjectTDNInteractive()
-
-	# Export current COMP to .tdn
-	elif state and key == 'e' and ctrl_or_cmd and alt:
-		pane = ui.panes.current
-		if pane and pane.owner:
-			parent.Embody.ext.TDN.ExportNetworkAsync(
-				root_path=pane.owner.path, output_file='auto')
-
-	# Copy the selected COMP's network to the clipboard as portable TDN
-	# (copy special; PASTE is now an automatic clipboard prompt -- no shortcut,
-	# since TD's native Cmd/Ctrl+V paste can't be suppressed. See TDNExt
-	# _clipboardWatchPoll.)
-	elif state and key == 'c' and ctrl_or_cmd and lShift:
-		parent.Embody.ext.TDN.CopySelectedToClipboard()
-
+	par_name = sc.actionForEvent(parent.Embody, key, ctrl, alt, shift, cmd)
+	if par_name:
+		_runAction(par_name)
 
 	return
 
@@ -76,4 +68,3 @@ def onKey(dat, key, character, alt, lAlt, rAlt, ctrl, lCtrl, rCtrl, shift, lShif
 
 def onShortcut(dat, shortcutName, time):
 	return;
-	

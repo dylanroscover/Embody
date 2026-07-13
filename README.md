@@ -6,7 +6,7 @@
 
 **create at the speed of thought.**
 
-[![Version](https://img.shields.io/badge/version-6.0.116-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
+[![Version](https://img.shields.io/badge/version-6.0.124-6ee668?style=flat-square&labelColor=181e1e)](https://github.com/dylanroscover/Embody/releases/latest)
 [![TouchDesigner](https://img.shields.io/badge/TouchDesigner-2025-6ee668?style=flat-square&labelColor=181e1e)](https://derivative.ca/)
 [![MCP Tools](https://img.shields.io/badge/MCP_tools-53-6ee668?style=flat-square&labelColor=181e1e)](https://modelcontextprotocol.io/)
 [![License](https://img.shields.io/badge/license-MIT-6ee668?style=flat-square&labelColor=181e1e)](LICENSE)
@@ -78,6 +78,8 @@ my-project/              ← project folder (optionally a git repo)
 | `ctrl + shift + c` | Copy the selected COMP to the clipboard as a portable TDN envelope |
 | `ctrl + shift + e` | Export entire project to `.tdn` file |
 | `ctrl + alt + e` | Export current COMP to `.tdn` file |
+
+These are the defaults — every shortcut is editable on the Embody COMP's **Shortcuts** parameter page (type a combo, or pulse **Record** and press the keys; empty disables it). See [Keyboard Shortcuts](https://dylanroscover.github.io/Embody/embody/keyboard-shortcuts/).
 
 For supported formats, folder configuration, duplicate handling, Manager UI, and more — see the [Embody docs](https://dylanroscover.github.io/Embody/embody/).
 
@@ -160,7 +162,7 @@ op.Embody.Error('Something broke')
 <details>
 <summary><strong>Testing</strong></summary>
 
-Embody includes **91 test suites** (2,032 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
+Embody includes **92 test suites** (2,080 tests) covering core externalization, MCP tools, TDN format, the Envoy server/bridge, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation. Destructive whole-project suites are segregated and run only via the save-gated `RunDestructiveTests`.
 
 ```python
 op.unit_tests.RunTests()                              # All tests (non-blocking)
@@ -191,6 +193,7 @@ See the [full changelog](https://dylanroscover.github.io/Embody/changelog/) for 
 
 **Recent releases:**
 
+- **6.0.123**: Editable keyboard shortcuts ([#50](https://github.com/dylanroscover/Embody/issues/50)) -- every binding is now a Str par on a new **Shortcuts** page: type a combo or pulse **Record** and press the keys (first non-modifier keydown commits, Esc cancels, 10s auto-disarm); empty disables; conflicts with other Embody bindings or TD built-ins warn without blocking; the tagger double-tap key is a menu; bindings persist across upgrades; `ctrl` and `cmd` are distinct physical keys on macOS while Mac-authored `cmd` bindings fold to Ctrl on PC (values never rewritten -- portable both ways); duplicates are blocked. **92 suites / 2,080 tests**.
 - **6.0.116**: Two field-reported fixes -- removing a TDN externalization now **sticks** ([#48](https://github.com/dylanroscover/Embody/issues/48)): the manager's X button strips the `tdn` tag / color / tracker entry so the save-time Update sweep can no longer resurrect the row and `.tdn` file it just deleted; and Envoy no longer **restart-loops** on TD builds whose Textport stdout lacks `isatty()` (confirmed 2025.32460 on Windows) -- `uvicorn.Config` now gets `use_colors=False` so the formatter never probes it. Plus self-rewriting version/minimum-build doc statements on every save (guarded by a new `test_version_sync` suite), a CONTRIBUTING.md for TD-mediated contributions, and five new specimen briefs (Riley, Rutt-Etra, Molnar, Calder, Ikeda). Fresh-install smoke-tested from the shipped `.tox`. **91 suites / 2,032 tests**.
 - **6.0.113**: TDN export survives broken widget clones ([#46](https://github.com/dylanroscover/Embody/issues/46)) -- a clone expression referencing a missing master aborted the whole export via Par truthiness; palette-clone blackboxing is now **restorability-gated** (disabled/unresolvable clones export in full instead of rebuilding empty) and blackboxed entries keep their clone reference so rebuilt shells actually restore; a failed initial TDN export **rolls the tag back** so re-tagging retries; RGBA/XYZW custom par groups round-trip without name mangling or dropped alpha (spec gains true-arity `size`). Verified end-to-end against the TauCeti preset manager (1,107 ops): fadetime 7/7 children + 124/124 custom pars. **90 suites / 2,019 tests**.
 - **6.0.111**: Deterministic COMP placement for AI agents -- the create-operator skill now anchors a new COMP's home on the container that holds the `Embody` COMP (`op.Embody.parent().path`), the level you chose, so builds land in the SAME network every run instead of `/` one time and `/project1` the next (a deliberately-opened pane overrides it; a bare-root `/` pane is ignored). Plus a **delete-the-default-torus** rule: a fresh `geometryCOMP`'s `torus1` keeps its RENDER flag on even after its DISPLAY flag auto-clears, so it renders a phantom torus behind your scene unless deleted. CLAUDE.md rules 3/5 realigned to the new default; the previously-unreleased v6.0.109 Envoy features (recovery hints, `capture_top` Quality verdict) are now documented on the Envoy pages. Docs-only -- **90 suites / 2,005 tests**.

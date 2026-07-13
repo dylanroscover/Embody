@@ -67,6 +67,9 @@ For DATs, the format is determined by the DAT's content type — a Python DAT ex
     - ++ctrl+shift+o++ — Open the Embody manager window
     - ++ctrl+shift+e++ — Export the entire project network to a `.tdn` file
 
+    These are the defaults — every binding is editable (or disableable) on the
+    Embody COMP's **Shortcuts** parameter page. See [Keyboard Shortcuts](keyboard-shortcuts.md).
+
 === "Python API"
 
     ```python

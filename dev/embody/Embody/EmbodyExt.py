@@ -85,6 +85,11 @@ class EmbodyExt:
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
+        # Keyboard shortcuts (issue #50)
+        'Enablekeyboardshortcuts',
+        'Shortcutmanager', 'Shortcutupdateall', 'Shortcutupdatecomp',
+        'Shortcutrefresh', 'Shortcutexportproject', 'Shortcutexportcomp',
+        'Shortcutcopytdn', 'Shortcuttagger',
     })
 
     # Aiclient token -> how the Launchaiclient button opens it at the project
@@ -2048,7 +2053,10 @@ class EmbodyExt:
         # Restore saved settings from a previous install before any dialogs.
         settings_restored = self._restoreSettings()
 
-        embodies = op('/').findChildren(name='Embody', parName='Addtagshort')
+        # Toxtag is the fingerprint custom par: present on every Embody build
+        # (the old marker, Addtagshort, was removed with the editable-shortcuts
+        # redesign in 6.0.117 -- issue #50).
+        embodies = op('/').findChildren(name='Embody', parName='Toxtag')
         other_embody = next((e for e in embodies if e != self.my), None)
 
         if other_embody:
@@ -6534,13 +6542,18 @@ class EmbodyExt:
         """Externalize all compatible COMPs and DATs in project."""
         if self._performMode:
             return
+        # Render the live export binding (remappable; empty when disabled)
+        # instead of hardcoding a combo that may be wrong for the platform.
+        export_combo = str(self.my.par.Shortcutexportproject.eval()).strip()
+        export_hint = (f' ({mod.shortcuts.display(export_combo)})'
+                       if export_combo else '')
         choice = ui.messageBox('Embody -- Externalize Full Project',
             'Add all compatible COMPs and DATs to Embody?\n'
             '(Palette components, clones, and replicants will be ignored)\n\n'
             '  TOX: Externalize each COMP as a .tox file.\n'
             '  TDN: Externalize each COMP as a .tdn file.\n\n'
             'Optionally, also export a single project-wide .tdn\n'
-            'snapshot of your entire network (Ctrl+Shift+E).',
+            f'snapshot of your entire network{export_hint}.',
             buttons=['Cancel', 'TOX', 'TDN', 'TOX + Project TDN',
                      'TDN + Project TDN'])
 

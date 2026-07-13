@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 769
-generator: Embody/6.0.116
+build: 778
+generator: Embody/6.0.124
 td_build: 099.2025.32820
-source_file: Embody-6.116.toe
-exported_at: '2026-07-10T23:15:01Z'
+source_file: Embody-6.124.toe
+exported_at: '2026-07-13T11:44:51Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -269,7 +269,7 @@ custom_pars:
     label: Auto-Save Status
     readOnly: true
     help: 'Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled.'
-    value: Saved 23:14:13 UTC
+    value: Saved 11:20:53 UTC
   - name: Tdnstriponsave
     style: Toggle
     label: Strip on Save
@@ -439,50 +439,6 @@ custom_pars:
     style: Pulse
     label: Close Manager
     help: Closes the Embody Manager window.
-  - name: Enablekeyboardshortcuts
-    style: Toggle
-    label: Enable Keyboard Shortcuts
-    startSection: true
-    help: Enables/disables all Embody keyboard shortcuts. Turn off if shortcuts conflict with other tools.
-    value: true
-  - name: Addtagshort
-    style: Str
-    label: Add Externalization Tag
-    startSection: true
-    readOnly: true
-    help: 'Keyboard shortcut for adding an externalization tag to the selected operator(s). Default: double-press Left Ctrl.'
-    value: lctrl-lctrl (lclick op & press 2x)
-  - name: Openmanagershort
-    style: Str
-    label: Open Manager
-    readOnly: true
-    help: Keyboard shortcut for opening the Embody Manager window.
-    value: ctrl/cmd + lshift + o
-  - name: Initializeupdateshort
-    style: Str
-    label: Initialize/Update All
-    readOnly: true
-    help: Keyboard shortcut for triggering Initialize/Update All (Ctrl+Shift+U). Saves all dirty externalized operators to disk.
-    value: ctrl/cmd + lshift + u
-  - name: Saveshort
-    style: Str
-    label: Update Current COMP
-    readOnly: true
-    help: Keyboard shortcut for updating/saving the current COMP to its externalized file.
-    value: ctrl/cmd + alt + u
-  - name: Exportprojecttdn
-    style: Str
-    label: Export Project to TDN
-    startSection: true
-    default: ctrl/cmd + lshift + e
-    readOnly: true
-    help: Export the entire project network to a single .tdn file at your project root.
-  - name: Exportcomptdn
-    style: Str
-    label: Export Current COMP to TDN
-    default: ctrl/cmd + alt + e
-    readOnly: true
-    help: Export the current COMP network to a .tdn file.
   - name: Textcolor
     style: RGBA
     label: Text Color
@@ -549,6 +505,101 @@ custom_pars:
     label: TDN Saved Color
     help: Color indicator for TDN-strategy operators that are saved and up-to-date.
     values: [0.153552, 0.376081, 0.457, 1]
+  Shortcuts:
+  - name: Enablekeyboardshortcuts
+    style: Toggle
+    label: Enable Keyboard Shortcuts
+    default: true
+    help: Master switch for Embody's keyboard shortcuts. When off, the Keyboard In DAT is disabled and no Embody shortcut (including the tagger double-tap) fires.
+  - name: Shortcutmanager
+    style: Str
+    label: Open Manager
+    startSection: true
+    default: ctrl+shift+o
+    help: 'Keyboard shortcut for Open Manager. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+o
+  - name: Recordmanager
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Open Manager: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutupdateall
+    style: Str
+    label: Update All Externalizations
+    startSection: true
+    default: ctrl+shift+u
+    help: 'Keyboard shortcut for Update All Externalizations. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+u
+  - name: Recordupdateall
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Update All Externalizations: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutupdatecomp
+    style: Str
+    label: Update Current COMP
+    startSection: true
+    default: ctrl+alt+u
+    help: 'Keyboard shortcut for Update Current COMP. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+alt+u
+  - name: Recordupdatecomp
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Update Current COMP: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutrefresh
+    style: Str
+    label: Refresh Tracking
+    startSection: true
+    default: ctrl+shift+r
+    help: 'Keyboard shortcut for Refresh Tracking. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+r
+  - name: Recordrefresh
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Refresh Tracking: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutexportproject
+    style: Str
+    label: Export Project to TDN
+    startSection: true
+    default: ctrl+shift+e
+    help: 'Keyboard shortcut for Export Project to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+e
+  - name: Recordexportproject
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Export Project to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutexportcomp
+    style: Str
+    label: Export Current COMP to TDN
+    startSection: true
+    default: ctrl+alt+e
+    help: 'Keyboard shortcut for Export Current COMP to TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+alt+e
+  - name: Recordexportcomp
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Export Current COMP to TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcutcopytdn
+    style: Str
+    label: Copy Selected COMP as TDN
+    startSection: true
+    default: ctrl+shift+c
+    help: 'Keyboard shortcut for Copy Selected COMP as TDN. Lowercase combo like ''cmd+shift+o'' or ''ctrl+shift+o'': modifiers joined with ''+'' plus one trigger key. ctrl and cmd are distinct keys on macOS (matched exactly); on Windows/Linux, which has no Cmd key, a cmd binding fires via Ctrl. Each combo may be assigned to only one action. Leave empty to disable. Edit by hand or pulse Record below.'
+    value: cmd+shift+c
+  - name: Recordcopytdn
+    style: Pulse
+    label: Record
+    help: 'Arm the shortcut recorder for Copy Selected COMP as TDN: press the desired key combo -- the first non-modifier key commits it with whatever modifiers are held. If the combo already drives another action, a dialog explains and recording continues. Esc cancels; times out after 10 seconds.'
+  - name: Shortcuttagger
+    style: Menu
+    label: Tagger Double-Tap Key
+    startSection: true
+    default: lctrl
+    menuSource: op('./shortcuts').module.taggerMenu()
+    help: 'Modifier key that opens the tagger for the operator under the cursor when double-tapped (two presses within half a second). Entries are physical keys and adapt per platform: macOS offers Left Ctrl plus left/right Cmd (Apple keyboards have no right Ctrl); Windows/Linux offers left/right Ctrl (no Cmd key). A choice a platform''s keyboard lacks falls back to its closest key -- the saved value is never rewritten, so it round-trips between platforms intact. Off disables the tagger shortcut.'
+  - name: Resetshortcuts
+    style: Pulse
+    label: Reset Shortcuts to Defaults
+    startSection: true
+    help: Restore all keyboard shortcuts (and the tagger double-tap key) to factory defaults.
   Advanced:
   - name: Createexternalizationstable
     style: Pulse
@@ -604,7 +655,7 @@ custom_pars:
     - Always Keep Files
     - Always Delete Files
     help: 'When a deleted operator''s external file still exists on disk: Ask prompts each time, Always Keep removes the tracking entry but leaves files on disk, Always Delete removes both the entry and the file.'
-    value: delete
+    value: keep
   - name: Toxdropexpr
     style: Menu
     label: Dropped .tox Expression
@@ -619,7 +670,6 @@ custom_pars:
     - Always Clean
     - Always Ignore
     help: 'How to handle the default expression TouchDesigner writes into a COMP''s External .tox when a .tox is dragged in (me.parent().fileFolder + ''/'' + ...). Ask: prompt when detected (the dialog''s Always buttons set this parameter). Always Clean: silently clear the expression. Always Ignore: silently leave it. Embody''s own descendants are always cleaned regardless.'
-    value: ignore
   - name: Tdndatsafety
     style: Menu
     label: Content Safety
@@ -643,7 +693,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.116
+    value: 6.0.124
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -660,7 +710,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 769
+    value: 778
   - name: Github
     style: Pulse
     label: GitHub
@@ -671,7 +721,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-10 23:15:01 UTC
+    value: 2026-07-13 11:44:48 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -721,19 +771,9 @@ storage:
   expand_order: []
   _start_in_progress: true
   git_status:
-    /embody/externalizations: ' M'
-    /embody/unit_tests/test_strategy_handlers: ' M'
-    /embody/unit_tests/test_sandbox: ' M'
-    /embody/unit_tests: ' M'
-    /embody/execute_src_ctrl: ' M'
-    /embody/Embody/templates/text_rule_refresh_after_commit: ??
-    /embody/Embody/templates: ' M'
-    /embody/Embody/EnvoyExt: ' M'
+    /embody/Embody/TDNExt: ' M'
     /embody/Embody/EmbodyExt: ' M'
-    /embody/Embody: ' M'
-    /embody: ' M'
-    /embody/unit_tests/test_git_status: ' M'
-  _watchdog_gen: 861
+  _watchdog_gen: 883
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -875,7 +915,8 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 626
+  _clip_watch_gen: 648
+  _shortcut_rec_gen: 139
   _init_complete: true
 operators:
 - name: help
@@ -1001,7 +1042,7 @@ operators:
     step: 0
     sel:
       mode: advanced
-    step_id: mode
+    step_id: summary
     sel_mode: auto
     sel_assistant: claudecode
     sel_client: ''
@@ -1128,8 +1169,8 @@ operators:
     file: embody/Embody/EnvoyExt.py
   position: [-700, 700]
   tags:
-  - py
   - TDExtension
+  - py
 - name: mousein1
   type: mouseinCHOP
   parameters:
@@ -1160,6 +1201,13 @@ operators:
   parameters:
     file: embody/Embody/envoy_viz.py
   position: [-500, 600]
+  tags:
+  - py
+- name: shortcuts
+  type: textDAT
+  parameters:
+    file: embody/Embody/shortcuts.py
+  position: [-500, -375]
   tags:
   - py
 - name: templates

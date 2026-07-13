@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 42
-generator: Embody/6.0.116
+build: 44
+generator: Embody/6.0.121
 td_build: 099.2025.32820
-source_file: Embody-6.116.toe
-exported_at: '2026-07-10T23:08:07Z'
+source_file: Embody-6.122.toe
+exported_at: '2026-07-13T11:13:31Z'
 network_path: /embody/unit_tests
 options:
   include_dat_content: false
@@ -1917,7 +1917,7 @@ operators:
   parameters:
     file: embody/unit_tests/results.tsv
     syncfile: true
-    rows: 21
+    rows: 49
     cols: 5
   flags:
   - viewer
@@ -1961,6 +1961,11 @@ operators:
   flags:
   - viewer
   position: [800, -1600]
+- name: test_shortcuts
+  type: textDAT
+  parameters:
+    file: embody/unit_tests/test_shortcuts.py
+  position: [200, -3600]
 - name: test_git_status
   type: textDAT
   parameters:

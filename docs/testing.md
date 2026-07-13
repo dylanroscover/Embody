@@ -1,6 +1,6 @@
 # Testing
 
-Embody includes a comprehensive automated test suite with **90 test suites** and **2,005 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
+Embody includes a comprehensive automated test suite with **92 test suites** and **2,080 test methods** covering core externalization, MCP tools, TDN format, the community/Collection safe-import path, the auto-save checkpoint engine, Envoy server/session coordination, launch/config generation, install/uninstall paths, and palette catalogs. Tests run inside TouchDesigner using a custom test runner with sandbox isolation.
 
 ## Running Tests
 
@@ -25,7 +25,7 @@ op.unit_tests.RunTestsDeferred()
 # Get results
 results = op.unit_tests.GetResults()
 # Example after a full successful run:
-# {'total': 1940, 'passed': 1940, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
+# {'total': 2080, 'passed': 2080, 'failed': 0, 'errors': 0, 'skipped': 0, 'results': [...]}
 ```
 
 ### Via MCP
@@ -57,6 +57,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_tag_lifecycle` | 17 | Tag application and removal |
 | `test_delete_cleanup` | 16 | Deletion and file cleanup |
 | `test_auto_externalize` | 16 | Auto-externalization flow and eligible operator handling |
+| `test_shortcuts` | 48 | Editable keyboard shortcuts: combo normalization, dispatch, TD reserved-list parsing, duplicate blocking, recorder state machine, parexec handlers, persistence whitelist |
 | `test_strategy_handlers` | 15 | TOX/TDN strategy switch, remove, DAT convert |
 | `test_issue21_safe_cell` | 14 | Safe table-cell handling |
 | `test_glsl_externalize` | 11 | GLSL shader auto-externalization |
@@ -139,6 +140,7 @@ run_tests(suite_name='test_path_utils')  # Run one suite
 | `test_envoy_sessions` | 46 | Multi-session awareness, scope claims, peer advisories, destructive-operation gates |
 | `test_server_lifecycle` | 22 | Envoy MCP server start/stop |
 | `test_envoy_watchdog` | 21 | Envoy liveness watchdog (revive on dropped socket / save) |
+| `test_version_sync` | 6 | Version badge / minimum-build statements stay in lock-step with `par.Version` and `app.build` |
 | `test_envoy_thread_comm` | 20 | Worker/main thread queues and throttling |
 | `test_launch_aiclient` | 29 | Launch AI Client launcher (launch table, CLI resolution, `.command`/`.bat` generation, failure dialogs, env sanitization) |
 | `test_envoy_setup_environment` | 18 | MCP import verification (pydantic_core safety) |
