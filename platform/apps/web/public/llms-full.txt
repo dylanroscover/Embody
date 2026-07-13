@@ -111,7 +111,7 @@ You're not getting a screenshot or a code snippet to paste. You're getting the *
 
 While you were building, Embody was quietly doing the other half of its job: **every operator can be saved to disk as readable text**. That means every version of your network is something you can diff, review, restore, and hand back to the AI later - no binary black box, no lock-in.
 
-To tag an operator for externalization, select it and press ++lctrl++ twice. To save your changes, press ++ctrl+shift+u++. On the next project open, everything restores from disk automatically.
+To tag an operator for externalization, hover it and press ++lctrl++ twice. To save your changes, press ++ctrl+shift+u++. On the next project open, everything restores from disk automatically.
 
 That's the whole loop - generate, compare, revert, branch - and it all runs at the speed of typing.
 

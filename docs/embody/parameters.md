@@ -61,7 +61,7 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 | <a class="par-anchor" id="par-embedstorageintdns" href="#par-embedstorageintdns">Embed Storage (default) (`Embedstorageintdns`)</a> | Toggle | On | Include Python storage entries in TDN exports. Disable for COMPs with large storage to reduce file size. Can be overridden per-COMP from the tagging menu. |
 | <a class="par-anchor" id="par-autosave" href="#par-autosave">Auto-Save Checkpoints (`Autosave`)</a> | Toggle | On | When on, after the agent (or you) goes idle Embody writes changed TDN COMPs to disk as a cheap ~6ms .tdn checkpoint -- NO full project save, no strip/restore, no freeze -- so a crash loses little unsaved work. Checkpointed COMPs are rebuilt on next open. Skips during Perform Mode and project saves. |
 | <a class="par-anchor" id="par-tdncreateonstart" href="#par-tdncreateonstart">TDN Create on Start (`Tdncreateonstart`)</a> | Toggle | On | When enabled, reconstructs TDN-strategy COMP children from .tdn files on disk when the project opens. Required for TDN round-trip workflow where children are stripped on save. |
-| <a class="par-anchor" id="par-autosavestatus" href="#par-autosavestatus">Auto-Save Status (`Autosavestatus`)</a> | Str (read-only) | `Saved 11:14:44 UTC` | Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled. |
+| <a class="par-anchor" id="par-autosavestatus" href="#par-autosavestatus">Auto-Save Status (`Autosavestatus`)</a> | Str (read-only) | `Saved 11:20:53 UTC` | Read-only auto-save state: Idle / Saving / Bypassed (Perform Mode) / Disabled. |
 | <a class="par-anchor" id="par-tdnstriponsave" href="#par-tdnstriponsave">Strip on Save (`Tdnstriponsave`)</a> | Toggle | On | When enabled, strips children from TDN-strategy COMPs during project save. Children are recreated on next open via TDN Create on Start. Keeps .toe files minimal. |
 | <a class="par-anchor" id="par-tdnpalettehandling" href="#par-tdnpalettehandling">Palette Handling (`Tdnpalettehandling`)</a> | Menu | `ask` | How to handle TD palette COMPs (e.g. abletonLink, Widget components) during TDN export. Ask: prompt on first encounter per COMP. Black Box: reference the palette and skip internal children -- the correct choice for stock palette components. Full Export: export all internals -- use when the palette COMP has been heavily customized internally. Options: `Ask`, `Black Box`, `Full Export`. |
 | <a class="par-anchor" id="par-tdnfile" href="#par-tdnfile">TDN File (`Tdnfile`)</a> | File | - | Path to a .tdn file to import. Select a file, set the Network Path target, then pulse Import TDN. |
@@ -156,10 +156,10 @@ Complete reference for every custom parameter on the **Embody** COMP, grouped by
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.123` | Embody version string (read-only). |
+| <a class="par-anchor" id="par-version" href="#par-version">`Version`</a> | Str (read-only) | `6.0.124` | Embody version string (read-only). |
 | <a class="par-anchor" id="par-touchbuild" href="#par-touchbuild">Touch Build (`Touchbuild`)</a> | Str (read-only) | `2025.32820` | TouchDesigner build number this version was developed on (read-only). |
 | <a class="par-anchor" id="par-author" href="#par-author">`Author`</a> | Str (read-only) | `Dylan Roscover` | Embody author (read-only). |
-| <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | `777` | Embody build number (read-only). Incremented with each release. |
+| <a class="par-anchor" id="par-build" href="#par-build">Build Number (`Build`)</a> | Int (read-only) | `778` | Embody build number (read-only). Incremented with each release. |
 | <a class="par-anchor" id="par-github" href="#par-github">GitHub (`Github`)</a> | Pulse | - | Opens the Embody GitHub repository in your web browser. |
-| <a class="par-anchor" id="par-date" href="#par-date">Build Date (`Date`)</a> | Str (read-only) | `2026-07-13 11:20:51 UTC` | Date of this Embody build (read-only). |
+| <a class="par-anchor" id="par-date" href="#par-date">Build Date (`Date`)</a> | Str (read-only) | `2026-07-13 11:44:48 UTC` | Date of this Embody build (read-only). |
 | <a class="par-anchor" id="par-help" href="#par-help">`Help`</a> | Pulse | - | Opens the Embody help documentation. |

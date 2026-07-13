@@ -10,7 +10,7 @@
   "docs": "https://dylanroscover.github.io/Embody/",
   "repository": "https://github.com/dylanroscover/Embody",
   "download": "https://github.com/dylanroscover/Embody/releases/latest",
-  "version": "6.0.83",
+  "version": "6.0.123",
   "requirements": "TouchDesigner 2025.32280 or later. Windows or macOS.",
   "ai_clients": [
     "Claude Code (recommended; auto-configured)",
@@ -61,7 +61,7 @@
     "Drag it into the TouchDesigner project. That's the install.",
     "When prompted, click Enable Envoy (installs deps, starts the local server, writes the AI config files).",
     "Open your AI assistant in the same folder as the .toe and start talking.",
-    "Tag operators for externalization by double-tapping lCtrl; save dirty ops with Ctrl+Shift+U."
+    "Tag operators for externalization by double-tapping lCtrl; save dirty ops with Ctrl+Shift+U (Cmd+Shift+U on macOS; every binding is remappable on the Embody COMP's Shortcuts page)."
   ],
   "links": {
     "llms_txt": "https://embody.tools/llms.txt",

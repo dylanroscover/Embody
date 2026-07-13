@@ -6542,13 +6542,18 @@ class EmbodyExt:
         """Externalize all compatible COMPs and DATs in project."""
         if self._performMode:
             return
+        # Render the live export binding (remappable; empty when disabled)
+        # instead of hardcoding a combo that may be wrong for the platform.
+        export_combo = str(self.my.par.Shortcutexportproject.eval()).strip()
+        export_hint = (f' ({mod.shortcuts.display(export_combo)})'
+                       if export_combo else '')
         choice = ui.messageBox('Embody -- Externalize Full Project',
             'Add all compatible COMPs and DATs to Embody?\n'
             '(Palette components, clones, and replicants will be ignored)\n\n'
             '  TOX: Externalize each COMP as a .tox file.\n'
             '  TDN: Externalize each COMP as a .tdn file.\n\n'
             'Optionally, also export a single project-wide .tdn\n'
-            'snapshot of your entire network (Ctrl+Shift+E).',
+            f'snapshot of your entire network{export_hint}.',
             buttons=['Cancel', 'TOX', 'TDN', 'TOX + Project TDN',
                      'TDN + Project TDN'])
 

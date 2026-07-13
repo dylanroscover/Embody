@@ -7,7 +7,8 @@ properties are stored, keeping the output minimal.
 
 This extension lives on the Embody COMP and is callable via:
   - MCP tools (export_network / import_network) through Envoy
-  - TD UI (keyboard shortcut Ctrl+Shift+N, pulse parameters)
+  - TD UI (the Shortcuts-page export bindings, default ctrl+shift+e /
+    ctrl+alt+e -- cmd on macOS -- plus pulse parameters)
   - Direct Python: op.Embody.ext.TDN.ExportNetwork(...)
 """
 
@@ -6248,10 +6249,11 @@ class TDNExt:
 		return {'ok': True, 'name': comp.name, 'op_count': op_count, 'sha256': env['sha256']}
 
 	def CopySelectedToClipboard(self) -> dict:
-		"""Ctrl+Shift+C handler: copy the COMP selected in the current network
-		to the OS clipboard as a portable _embody_tdn envelope. Mirror of
-		PasteNetworkAsNewComp (Ctrl+Shift+V). No-op (logged) when the current
-		network has no single COMP selected.
+		"""Copy-TDN shortcut handler (Shortcutcopytdn binding, default
+		ctrl+shift+c / cmd+shift+c): copy the COMP selected in the current
+		network to the OS clipboard as a portable _embody_tdn envelope.
+		Mirror of PasteNetworkAsNewComp (clipboard auto-paste). No-op
+		(logged) when the current network has no single COMP selected.
 		"""
 		pane = ui.panes.current
 		owner = pane.owner if pane else None
@@ -6387,7 +6389,8 @@ class TDNExt:
 			pass
 
 	def PasteNetworkAsNewComp(self) -> dict:
-		"""Ctrl+Shift+V handler: create a new COMP at the current network and
+		"""Clipboard auto-paste handler (no key binding -- the watcher prompts
+		on inbound TDN): create a new COMP at the current network and
 		paste the clipboard TDN into it, named after the TDN (its network_path
 		basename, else slug). Accepts an Embody envelope or a bare .tdn
 		document. No-op (logged) when the clipboard holds neither.

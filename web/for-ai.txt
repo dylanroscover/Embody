@@ -65,7 +65,8 @@ INSTALL (FOR THE HUMAN - ABOUT FIVE MINUTES)
    writes the AI config files).
 4. Open your AI assistant in the same folder as the `.toe` and start talking.
 5. Tag operators for externalization by double-tapping lCtrl; save dirty ops with
-   Ctrl+Shift+U.
+   Ctrl+Shift+U (Cmd+Shift+U on macOS; every binding is remappable on the
+   Embody COMP's Shortcuts page).
 
 Full Quickstart: https://dylanroscover.github.io/Embody/quickstart/
 

@@ -61,6 +61,13 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 - **Auto-Save Checkpoints** — When ON (default), a beat after the agent (or you) goes idle Embody writes any changed TDN COMP to disk as a frame-cheap `.tdn` checkpoint (~3-6 ms, no full project save, no strip/restore, no freeze) so an accidental crash loses little unsaved work — the checkpointed COMPs rebuild on next open. Also fires a synchronous pre-checkpoint before a destructive `delete_op` inside a tracked COMP. Bypassed in Perform Mode and during saves, and perf-gated so it never piles onto a hot frame. `execute_python` is deliberately not a trigger. See [Crash Recovery](externalization.md#crash-recovery).
 - **Auto-Save Status** — Read-only readout of the auto-save engine's state: *Idle* / *Saved &lt;time&gt;* / *Bypassed* (Perform Mode) / *Disabled*.
 
+### Shortcuts
+
+Every Embody keyboard shortcut is remappable here — type a combo or pulse
+**Record** and press the keys; empty disables a binding. Includes the
+Tagger Double-Tap Key menu and a reset pulse. Full details:
+[Keyboard Shortcuts](keyboard-shortcuts.md#customizing-shortcuts).
+
 ### Logs
 
 - **Verbose (Debug)** — Enable debug-level logging
@@ -74,7 +81,7 @@ Embody automatically saves your parameter settings to a `config.json` file in th
 - **Location**: `.embody/` folder at the AI Project Root (next to `.mcp.json`) — the git root by default, or the project folder / a custom directory per the **AI Project Root** parameter (see [Envoy](#envoy) above)
 - **When saved**: Automatically on every parameter change (debounced to 1 frame)
 - **When restored**: On every project open (frame 5), and on fresh install after dropping in a new `.tox`
-- **What's saved**: Folder path, Envoy config, tag names, tag colors, TDN settings, logging options, and other user-configurable parameters. Read-only status fields and runtime state are excluded
+- **What's saved**: Folder path, Envoy config, tag names, tag colors, TDN settings, logging options, keyboard shortcut bindings (the Shortcuts page, including the tagger double-tap key and the master toggle), and other user-configurable parameters. Read-only status fields and runtime state are excluded
 
 The file is created on your first parameter change — no `.embody/config.json` exists until you customize something. If the file is missing or corrupt, Embody uses its built-in defaults.
 
