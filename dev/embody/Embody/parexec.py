@@ -107,6 +107,47 @@ def onValueChange(par, prev):
 		state = 'enabled' if par.eval() else 'disabled'
 		parent.Embody.ext.Embody.Log(f'TDN cascade {state}', 'INFO')
 
+	elif par.name in mod.shortcuts.SHORTCUT_PARS:
+		# Normalize hand-typed combos to the canonical form; revert invalid
+		# input. Rewriting par.val re-fires this handler once -- the second
+		# pass is a no-op because normalize() is idempotent.
+		sc = mod.shortcuts
+		raw = str(par.eval())
+		norm = sc.normalize(raw)
+		if norm is None:
+			ui.status = (f"Embody: invalid shortcut '{raw}' for {par.label} "
+				"(use e.g. ctrl+shift+o) -- reverted")
+			parent.Embody.Log(
+				f"Invalid shortcut '{raw}' for {par.label} -- reverted", 'WARNING')
+			# The revert target must itself be normalize-stable, or two
+			# invalid values would ping-pong through this handler forever
+			# (prev can be garbage if a corrupted config was restored while
+			# this handler was suppressed). Fall back to the factory default.
+			fallback = sc.normalize(prev) if prev is not None else None
+			if fallback is None:
+				fallback = sc.normalize(sc.DEFAULTS.get(par.name, '')) or ''
+			par.val = fallback
+		elif norm != raw:
+			par.val = norm
+		else:
+			# A combo may drive only ONE action: reject duplicates outright.
+			dup = sc.duplicateOf(parent.Embody, par.name, norm)
+			if dup is not None:
+				ui.status = (f'Embody: {sc.display(norm)} is already assigned '
+					f"to '{sc.actionLabel(dup)}' -- reverted")
+				parent.Embody.Log(
+					f'Duplicate shortcut {norm} for {par.label} '
+					f'(held by {sc.actionLabel(dup)}) -- reverted', 'WARNING')
+				fallback = sc.normalize(prev) if prev is not None else ''
+				if fallback is None or (fallback and
+						sc.duplicateOf(parent.Embody, par.name, fallback)):
+					fallback = ''
+				par.val = fallback
+			else:
+				for w in sc.validate(parent.Embody, par.name, norm):
+					ui.status = f'Embody: {w}'
+					parent.Embody.Log(f'Shortcut warning ({par.label}): {w}', 'WARNING')
+
 	if par.name in parent.Embody.ext.Embody._PERSISTED_PARAMS:
 		parent.Embody.ext.Embody._deferSaveSettings()
 
@@ -147,8 +188,17 @@ def onPulse(par):
 		tpl = op('help/text_help')
 		view = op('help/text_help_display')
 		if tpl is not None and view is not None:
+			import re
+			sc = mod.shortcuts
 			ver = str(parent.Embody.par.Version.eval())
-			view.text = tpl.text.replace('{{VERSION}}', ver)
+			text = tpl.text.replace('{{VERSION}}', ver)
+			text = text.replace('{{SHORTCUTS}}', sc.helpBlock(parent.Embody))
+			text = text.replace('{{TAGGERTAP}}',
+				sc.taggerTapDisplay(parent.Embody))
+			text = re.sub(r'\{\{SC:(\w+)\}\}',
+				lambda mt: sc.display(parent.Embody.par[mt.group(1)].eval()),
+				text)
+			view.text = text
 		op('help').openViewer()
 
 	elif par.name == 'Openexternalizationstable':
@@ -160,8 +210,11 @@ def onPulse(par):
 	elif par.name == 'Externalizeproject':
 		parent.Embody.ExternalizeProject()
 
-	elif par.name == 'Exportprojecttdn':
-		parent.Embody.ext.TDN.ExportProjectTDNInteractive()
+	elif par.name in mod.shortcuts.RECORD_PARS:
+		mod.shortcuts.arm(parent.Embody, mod.shortcuts.RECORD_PARS[par.name])
+
+	elif par.name == 'Resetshortcuts':
+		mod.shortcuts.resetDefaults(parent.Embody)
 
 	elif par.name == 'Importtdn':
 		file_path = parent.Embody.par.Tdnfile.eval()

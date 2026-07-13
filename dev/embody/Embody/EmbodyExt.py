@@ -85,6 +85,11 @@ class EmbodyExt:
         'Embeddatsintdns', 'Embedstorageintdns', 'Tdndatsafety',
         'Tdncascade', 'Tdncreateonstart', 'Tdnstriponsave',
         'Toxrestoreonstart', 'Datrestoreonstart', 'Filecleanup',
+        # Keyboard shortcuts (issue #50)
+        'Enablekeyboardshortcuts',
+        'Shortcutmanager', 'Shortcutupdateall', 'Shortcutupdatecomp',
+        'Shortcutrefresh', 'Shortcutexportproject', 'Shortcutexportcomp',
+        'Shortcutcopytdn', 'Shortcuttagger',
     })
 
     # Aiclient token -> how the Launchaiclient button opens it at the project
@@ -2048,7 +2053,10 @@ class EmbodyExt:
         # Restore saved settings from a previous install before any dialogs.
         settings_restored = self._restoreSettings()
 
-        embodies = op('/').findChildren(name='Embody', parName='Addtagshort')
+        # Toxtag is the fingerprint custom par: present on every Embody build
+        # (the old marker, Addtagshort, was removed with the editable-shortcuts
+        # redesign in 6.0.117 -- issue #50).
+        embodies = op('/').findChildren(name='Embody', parName='Toxtag')
         other_embody = next((e for e in embodies if e != self.my), None)
 
         if other_embody:

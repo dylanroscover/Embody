@@ -1,6 +1,6 @@
 # Manager UI
 
-Press ++ctrl+shift+o++ to open the Embody Manager window.
+Press ++ctrl+shift+o++ (default — remappable on the [Shortcuts page](keyboard-shortcuts.md#customizing-shortcuts)) to open the Embody Manager window.
 
 ## Features
 

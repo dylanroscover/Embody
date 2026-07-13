@@ -95,6 +95,7 @@ class ToolbarExt:
 					tooltip_text = config[btn.name, 'tooltip'].val
 				except:
 					tooltip_text = ''
+				tooltip_text = self._resolveShortcutTokens(tooltip_text)
 				if tooltip_text and tooltip_text != '-':
 					self._showTooltip(btn, tooltip_text, container)
 				else:
@@ -118,6 +119,27 @@ class ToolbarExt:
 		self._clearPressed(restore_hover=False)
 
 	# -- Tooltip ------------------------------------------------------
+
+	def _resolveShortcutTokens(self, text):
+		"""Replace [Shortcutxxx] tokens with the live binding (issue #50).
+
+		'... [Shortcutupdateall]' renders as '... (Ctrl+Shift+U)' from the
+		current par value; an unassigned (empty) binding drops the token so
+		the tooltip never shows a stale combo.
+		"""
+		if '[Shortcut' not in text:
+			return text
+		import re
+		sc = parent.Embody.op('shortcuts').module
+
+		def sub(match):
+			try:
+				combo = str(parent.Embody.par[match.group(1)].eval()).strip()
+			except Exception:
+				return ''
+			return f'({sc.display(combo)})' if combo else ''
+
+		return re.sub(r'\[(Shortcut[a-z]+)\]', sub, text).strip()
 
 	def _measureTextWidth(self, text):
 		"""Measure text pixel width using a textTOP with matching font."""

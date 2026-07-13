@@ -2,13 +2,13 @@
 status	left	label		Dirty externalization count	Open Sans	11	80	-100	-					str(parent.Embody.DirtyCount()) + ' dirty' if parent.Embody.extensionsReady and parent.Embody.DirtyCount() else ''	3
 perform	left	button	󱐅	Toggle Perform Mode	Material Design Icons	11	36	-50	toggle_perform		0.50 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()	0.25 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()	0.05 if parent.Embody.par.Performmode.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()		0
 disable	left	button	󰐥	Toggle externalization	Material Design Icons	11	36	0	toggle_disable		0.13 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorr.eval()	0.22 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorg.eval()	0.15 if parent.Embody.par.Status.eval() == 'Enabled' else parent.Embody.par.Buttonbackgroundcolorb.eval()		0
-initialize	left	button	󰓦	Update externalizations (Ctrl+Shift+U)	Material Design Icons	11	36	600	UpdateHandler						0
-save_comp	left	button	󰆓	Update current COMP (Ctrl+Alt+U)	Material Design Icons	11	36	650	SaveCurrentComp						0
-refresh	left	button	󰑐	Refresh tracking state (Ctrl+Shift+R)	Material Design Icons	11	36	400	Refresh	parent.Embody.par.Status.eval() != 'Disabled'					0
+initialize	left	button	󰓦	Update externalizations [Shortcutupdateall]	Material Design Icons	11	36	600	UpdateHandler						0
+save_comp	left	button	󰆓	Update current COMP [Shortcutupdatecomp]	Material Design Icons	11	36	650	SaveCurrentComp						0
+refresh	left	button	󰑐	Refresh tracking state [Shortcutrefresh]	Material Design Icons	11	36	400	Refresh	parent.Embody.par.Status.eval() != 'Disabled'					0
 save_folder	left	button		Open save folder	Open Sans	9	100	700	OpenSaveFolder					f'/{parent.Embody.par.Folder}'	0
 import_tdn	left	button	󰋺	Import TDN file	Material Design Icons	11	36	925	ImportTDNFromDialog						10
-export_comp_tdn	left	button	󰈝	Export current COMP TDN (Ctrl+Alt+E)	Material Design Icons	11	36	950	export_comp_tdn						0
-export_tdn	left	button	󰈇	Export project TDN (Ctrl+Shift+E)	Material Design Icons	11	36	1000	export_tdn						0
+export_comp_tdn	left	button	󰈝	Export current COMP TDN [Shortcutexportcomp]	Material Design Icons	11	36	950	export_comp_tdn						0
+export_tdn	left	button	󰈇	Export project TDN [Shortcutexportproject]	Material Design Icons	11	36	1000	export_tdn						0
 envoy_toggle	left	button	Envoy	Toggle Envoy MCP server	Open Sans	9	65	1050	toggle_envoy		0.13 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorr.eval()	0.22 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorg.eval()	0.15 if parent.Embody.par.Envoyenable.eval() else parent.Embody.par.Buttonbackgroundcolorb.eval()		10
 pars	right	button	Pars	Open Embody parameters	Open Sans	11	51	350	openParameters						10
 filter	right	input		Filter by name	Open Sans	11	170	25	filter_changed						0
