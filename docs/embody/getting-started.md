@@ -45,13 +45,13 @@ Embody initializes automatically over the next several frames:
     - **Fresh install** (empty table): Embody runs quietly with no dialogs.
     - **Upgrade** (table has prior data): Embody prompts you to re-scan and validate tracked operators.
 
-After verification, if Envoy is not yet enabled, Embody prompts you to set it up. Accepting will:
+After verification, if Envoy is not yet enabled, the [Setup Wizard](setup-wizard.md) opens — a few quick screens covering Embody's mode, the AI assistant, and where config files go. Finishing it with an assistant selected will:
 
 - Install Python MCP dependencies (~30 MB via `uv`)
 - Start a local MCP server on the configured port
 - Generate AI config files in your project root: `.mcp.json`, an always-written `AGENTS.md` (the universal standard read by all major AI tools), and client-specific config for the AI Client you select. For Claude Code that is `CLAUDE.md` plus a `.claude/` directory with [coding rules, skills, and slash commands](../envoy/claude-code.md); other clients get their own file (`.cursor/rules`, `.github/copilot-instructions.md`, `.windsurf/rules`, `GEMINI.md`, etc.)
 
-You can skip this and enable Envoy later from the **Envoy** tab.
+You can close the wizard with **Not now** (nothing is changed) and re-open it anytime via the **Setup Wizard** parameter on the Embody page — or enable Envoy directly from the **Envoy** parameter page.
 
 Embody is a self-contained component — no external dependencies are needed for the core externalization features.
 

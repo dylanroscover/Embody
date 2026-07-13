@@ -75,6 +75,7 @@ nav:
   - Embody:
     - embody/index.md
     - Getting Started: embody/getting-started.md
+    - Setup Wizard: embody/setup-wizard.md
     - Externalization: embody/externalization.md
     - Keyboard Shortcuts: embody/keyboard-shortcuts.md
     - Manager UI: embody/manager-ui.md

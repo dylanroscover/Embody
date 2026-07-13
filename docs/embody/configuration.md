@@ -6,6 +6,8 @@ Embody is configured through parameters on the Embody COMP itself. Key parameter
 
 ### Embody
 
+- **Setup Wizard** — Pulse to re-open the [Setup Wizard](setup-wizard.md) and review or change your mode, AI assistant, tool permissions, and config-file location. Nothing is applied until you confirm the summary screen.
+- **Mode** — How Embody handles invasive, project-level changes (git config, `.venv`, MCP/AI config files, network ops). *Auto* (default) manages everything silently — recommended for most users. *Advanced* asks before each such change and keeps the footprint minimal.
 - **Externalizations Folder** — The externalization folder path (static or expression mode)
 - **Disable** — Disable Embody (stops all externalization tracking)
 - **Enable/Update** — Initialize or update all externalizations

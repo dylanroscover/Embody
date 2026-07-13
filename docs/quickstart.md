@@ -36,18 +36,18 @@ Embody initializes itself automatically over the next couple of frames. The core
 
 ## Step 4 — Say yes to Envoy, the AI bridge
 
-As soon as Embody finishes initializing, it asks whether you want to set up **Envoy** — its AI bridge. A dialog appears asking **"Enable Envoy?"** with two buttons, **Skip** and **Enable Envoy**. Click **Enable Envoy**.
+As soon as Embody finishes initializing, its [setup wizard](embody/setup-wizard.md) opens — a few quick screens, one decision each. For the fast path, take the recommended option on every screen: **Auto** mode, **Claude Code** as the assistant, **Don't ask** for permissions — then click **Set up Embody** on the summary. Nothing changes until that final click.
 
-That single click does everything for you:
+That single confirmation does everything for you:
 
-- Installs the MCP server's Python dependencies (~30 MB — TouchDesigner goes unresponsive for a few seconds while this runs)
+- Installs the MCP server's Python dependencies (~30 MB, in the background — TouchDesigner stays responsive)
 - Starts a local server on `localhost:9870`
 - Writes the AI config files into your project root — `CLAUDE.md`, `AGENTS.md`, `.mcp.json`, and a `.claude/` folder of rules and skills — so your assistant knows how to talk to TouchDesigner
 
-Clicked **Skip**, or want to turn Envoy off later? Toggle the **Envoy Enable** parameter on the Embody component anytime.
+Clicked **Not now**, or want to change a choice later? Pulse the **Setup Wizard** parameter on the Embody component to re-run it anytime, or toggle **Envoy Enable** directly.
 
-!!! note "If it asks about git"
-    Don't use version control? After you click Enable Envoy, you may see a second dialog recommending a git repo. Among its options, click **Start Without Git** (avoid **Cancel** — that stops the setup). The AI config files are generated either way, and everything works the same.
+!!! note "No git? No problem"
+    The wizard doesn't require version control. The AI config files are generated either way — with a git repo Embody also adds its `.gitignore` / `.gitattributes` entries; without one it simply skips them.
 
 !!! info "Local and private by default"
     Envoy only listens on your own computer (`127.0.0.1`) — it's not reachable from the internet or your network. Every Envoy tool is pre-authorized, too, so you're not stuck clicking through permission prompts.
