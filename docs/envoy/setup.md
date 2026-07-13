@@ -93,7 +93,7 @@ Pristine generated files are refreshed each time Envoy starts to stay up to date
 
 ## MCP Tool Permissions
 
-By default, Claude Code asks for confirmation every time it wants to use an MCP tool. When you turn on the AI assistant in the **setup wizard** (Claude Code only), a **"How should the AI ask permission?"** step lets you choose how much Embody pre-approves in `.claude/settings.local.json` — in both Auto and Advanced modes:
+By default, Claude Code asks for confirmation every time it wants to use an MCP tool. When you turn on the AI assistant in the [setup wizard](../embody/setup-wizard.md) (Claude Code only), a **"How should the AI ask permission?"** step lets you choose how much Embody pre-approves in `.claude/settings.local.json` — in both Auto and Advanced modes:
 
 | Choice | Effect |
 |---|---|
