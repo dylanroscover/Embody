@@ -33,4 +33,3 @@ For references needing shortcuts or complex resolution, use expression mode inst
 | Global shortcut | `op.Assets.op('texture1')` |
 
 With `set_parameter`: use `value="cam"` for siblings, or `expr="parent.Scene.op('cam')"` for shortcut-based references.
-

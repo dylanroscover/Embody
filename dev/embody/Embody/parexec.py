@@ -2,7 +2,7 @@
 # par - the Par object that has changed
 # val - the current value
 # prev - the previous value
-# 
+#
 # Make sure the corresponding toggle is enabled in the Parameter Execute DAT.
 
 import webbrowser
@@ -133,7 +133,7 @@ def onPulse(par):
 
 	elif par.name == 'Closemanager':
 		parent.Embody.Manager('close')
-				
+
 	elif par.name == 'Launchaiclient':
 		parent.Embody.LaunchAIClient()
 
@@ -184,4 +184,3 @@ def onEnableChange(par, val, prev):
 
 def onModeChange(par, val, prev):
 	return
-	
