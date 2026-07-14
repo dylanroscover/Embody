@@ -643,7 +643,7 @@ flags:
 
     **This is by design, not a bug.** Storing binary data would defeat TDN's purpose as a diffable, version-control-friendly format. A single locked 4K TOP could add over 100 MB to a `.tdn` file.
 
-    Embody warns you at save time if your network contains locked non-DAT operators.
+    Embody warns you at save time if your network contains locked non-DAT operators. The warning covers only operators the export itself serializes — locked content inside a nested tox/tdn-tagged child COMP (exported separately as its own boundary) or an exclude-tagged subtree does not trigger it.
 
 The `lock` flag applies to **all** operator families — DATs, TOPs, CHOPs, and SOPs — freezing their cooked output so it no longer updates from inputs or parameters. However, TDN only persists the frozen data for DATs.
 

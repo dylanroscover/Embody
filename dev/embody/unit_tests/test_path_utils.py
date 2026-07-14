@@ -65,6 +65,19 @@ class TestPathUtils(EmbodyTestCase):
         result = self.embody_ext.getExternalPath(comp)
         self.assertFalse(result)
 
+    def test_getExternalPath_non_file_dat_returns_empty(self):
+        # selectDAT has no 'file' parameter -- a tracked path can resolve
+        # to one after a delete/rename swap (issue #54). Must return '',
+        # not raise AttributeError.
+        dat = self.sandbox.create(selectDAT, 'test_select')
+        result = self.embody_ext.getExternalPath(dat)
+        self.assertEqual(result, '')
+
+    def test_setExternalPath_non_file_dat_is_noop(self):
+        dat = self.sandbox.create(selectDAT, 'test_select')
+        # Must not raise -- refuses with a WARNING log.
+        self.embody_ext.setExternalPath(dat, 'some/path.py')
+
     # --- setExternalPath ---
 
     def test_setExternalPath_comp_sets_externaltox(self):

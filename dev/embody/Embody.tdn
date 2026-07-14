@@ -1,10 +1,10 @@
 format: tdn
 version: '2.0'
-build: 778
-generator: Embody/6.0.124
+build: 784
+generator: Embody/6.0.126
 td_build: 099.2025.32820
-source_file: Embody-6.124.toe
-exported_at: '2026-07-13T11:44:51Z'
+source_file: Embody-6.126.toe
+exported_at: '2026-07-14T20:02:20Z'
 network_path: /embody/Embody
 options:
   include_dat_content: false
@@ -693,7 +693,7 @@ custom_pars:
     startSection: true
     readOnly: true
     help: Embody version string (read-only).
-    value: 6.0.124
+    value: 6.0.126
   - name: Touchbuild
     style: Str
     label: Touch Build
@@ -710,7 +710,7 @@ custom_pars:
     label: Build Number
     readOnly: true
     help: Embody build number (read-only). Incremented with each release.
-    value: 778
+    value: 784
   - name: Github
     style: Pulse
     label: GitHub
@@ -721,7 +721,7 @@ custom_pars:
     label: Build Date
     readOnly: true
     help: Date of this Embody build (read-only).
-    value: 2026-07-13 11:44:48 UTC
+    value: 2026-07-14 20:02:19 UTC
   - name: Help
     style: Pulse
     help: Opens the Embody help documentation.
@@ -771,9 +771,13 @@ storage:
   expand_order: []
   _start_in_progress: true
   git_status:
-    /embody/Embody/TDNExt: ' M'
+    /embody/externalizations: ' M'
+    /embody/unit_tests/test_sandbox: ' M'
+    /embody/unit_tests/test_delete_cleanup: ' M'
     /embody/Embody/EmbodyExt: ' M'
-  _watchdog_gen: 883
+    /embody/Embody: ' M'
+    /embody: ' M'
+  _watchdog_gen: 893
   _suite_proof_progress:
     todo:
     - test_ancestor_rename
@@ -915,7 +919,7 @@ storage:
         tot: 33
         fail: 1
     pending_after: absent
-  _clip_watch_gen: 648
+  _clip_watch_gen: 658
   _shortcut_rec_gen: 139
   _init_complete: true
 operators:
@@ -1169,8 +1173,8 @@ operators:
     file: embody/Embody/EnvoyExt.py
   position: [-700, 700]
   tags:
-  - TDExtension
   - py
+  - TDExtension
 - name: mousein1
   type: mouseinCHOP
   parameters:

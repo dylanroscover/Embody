@@ -6134,13 +6134,7 @@ class TDNExt:
 			root_op: The COMP to scan (recursively)
 			context: 'export' shows ui.messageBox + log; 'import' logs only
 		"""
-		locked = []
-		for child in root_op.findChildren():
-			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
-				if self._isInsideCloneOrReplicant(child, root_op):
-					continue
-				locked.append(child)
-
+		locked = self._findLockedNonDATs(root_op)
 		if not locked:
 			return
 
@@ -6178,6 +6172,23 @@ class TDNExt:
 				f'in {root_op.path}: {summary} -- these operators have no '
 				f'frozen data and should be unlocked to re-cook', 'WARNING')
 
+	def _findLockedNonDATs(self, root_op):
+		"""Collect locked TOP/CHOP/SOP ops this export is responsible for.
+
+		Skips ops inside clone/replicant interiors and ops below a nested
+		externalization boundary -- only locked content that THIS root's
+		TDN export would actually serialize (and lose) is reported.
+		"""
+		locked = []
+		for child in root_op.findChildren():
+			if child.lock and child.family in ('TOP', 'CHOP', 'SOP'):
+				if self._isInsideCloneOrReplicant(child, root_op):
+					continue
+				if self._isInsideNestedExternalization(child, root_op):
+					continue
+				locked.append(child)
+		return locked
+
 	def _isInsideCloneOrReplicant(self, child, root_op):
 		"""True if child is a descendant of a clone or replicant COMP.
 
@@ -6198,6 +6209,27 @@ class TDNExt:
 						return True
 				except Exception:
 					pass
+			p = p.parent()
+		return False
+
+	def _isInsideNestedExternalization(self, child, root_op):
+		"""True if child sits below a nested boundary this export skips.
+
+		Mirrors the exporter's recursion stops (_collectAllPaths /
+		_exportSingleOp): a tox/tdn-tagged COMP nested under root_op
+		owns its own export -- the exporter writes a tox_ref/tdn_ref
+		pointer instead of embedding its content. Locked data there is
+		that boundary's concern: a TOX-strategy COMP preserves locked
+		TOP/CHOP/SOP data fine in its own .tox, and a nested TDN-tagged
+		COMP raises this same warning when it exports itself. An
+		exclude-tagged subtree is invisible to TDN entirely, so its
+		locked content is the owning application's concern (issue #53).
+		"""
+		p = child.parent()
+		while p is not None and p is not root_op and p.path != '/':
+			if (self._hasTDNTag(p) or self._hasTOXTag(p)
+					or self._hasExcludeTag(p)):
+				return True
 			p = p.parent()
 		return False
 
