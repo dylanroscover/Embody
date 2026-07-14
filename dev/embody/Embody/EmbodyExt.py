@@ -769,6 +769,12 @@ class EmbodyExt:
         if oper.family == 'COMP':
             return self.normalizePath(oper.par.externaltox.eval())
         elif oper.family == 'DAT':
+            # Not every DAT is file-backed (selectDAT, mergeDAT, ...) --
+            # a tracked path can resolve to one after a delete/rename
+            # swap, and callers need '' ("no external path"), not an
+            # AttributeError (issue #54).
+            if not hasattr(oper.par, 'file'):
+                return ''
             return self.normalizePath(oper.par.file.eval())
         return ''
 
@@ -780,6 +786,11 @@ class EmbodyExt:
             oper.par.externaltox = normalized
             oper.par.externaltox.readOnly = readonly
         elif oper.family == 'DAT':
+            if not hasattr(oper.par, 'file'):
+                self.Log(
+                    f"Cannot set external path on {oper.path} -- "
+                    f"'{oper.type}' DATs have no file parameter", "WARNING")
+                return
             oper.par.file.readOnly = False
             oper.par.file = normalized
             oper.par.file.readOnly = readonly
@@ -3683,6 +3694,14 @@ class EmbodyExt:
             # fingerprint, so there is no separate compareParameters() pass
             # here. Skip them to avoid overwriting the .tdn path with "".
             if oper.family == 'COMP' and self._getCompStrategy(oper) == 'tdn':
+                continue
+
+            # A tracked DAT path can resolve to a non-file-backed DAT
+            # (selectDAT, mergeDAT, ...) after a delete/rename swap
+            # (issue #54). Leave the row for checkOpsForContinuity to
+            # reconcile as "replaced" -- syncing here would blank
+            # rel_file_path and erase the recovery pointer.
+            if oper.family == 'DAT' and not hasattr(oper.par, 'file'):
                 continue
 
             current_path = self.getExternalPath(oper)
@@ -6645,9 +6664,14 @@ class EmbodyExt:
                     oper.par.externaltox = ''
                     oper.par.externaltox.readOnly = False
                 elif oper.family == 'DAT':
-                    oper.par.syncfile = False
-                    oper.par.file = ''
-                    oper.par.file.readOnly = False
+                    # The op at a tracked path may be a non-file-backed DAT
+                    # (e.g. a selectDAT after a type swap, issue #54); it has
+                    # no file/syncfile pars to clear, and touching them would
+                    # abort the color reset and tracker removal below.
+                    if hasattr(oper.par, 'file'):
+                        oper.par.syncfile = False
+                        oper.par.file = ''
+                        oper.par.file.readOnly = False
                 
                 oper.cook(force=True)
                 self.resetOpColor(oper)

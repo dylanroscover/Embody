@@ -156,6 +156,8 @@ The preference is stored in the **Content Safety** parameter (`Tdndatsafety`) an
 !!! warning "Locked TOPs, CHOPs, and SOPs lose their frozen data"
     TDN cannot store frozen pixel, channel, or geometry data. If your network contains locked non-DAT operators, their lock flag is preserved but their content will be **empty after reload** when using Roundtrip mode. Use **TOX strategy** instead of TDN for COMPs that contain locked TOPs, CHOPs, or SOPs. See [Lock Flag Limitation](../tdn/specification.md#lock-flag-limitation) for details.
 
+    The save-time warning covers only locked operators the TDN export itself serializes. Locked content inside a **nested externalization boundary** — a child COMP with its own TOX or TDN tag, or an exclude-tagged subtree — is that boundary's own concern and does not trigger the parent's warning: a nested TOX-strategy COMP preserves its locked content in its own `.tox`, which is exactly the recommended remedy.
+
 ### Why TDN
 
 TDN isn't just a different file format — it unlocks workflows that binary `.toe`/`.tox` files can't support.

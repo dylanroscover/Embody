@@ -187,6 +187,27 @@ class TestDeleteCleanup(EmbodyTestCase):
         self.embody_ext.RemoveListerRow(old_path, old_rel)
         self.assertEqual(dat.par.file.eval(), '')
 
+    def test_removeListerRow_non_file_dat_completes_cleanup(self):
+        """RemoveListerRow on a non-file-backed DAT at a tracked path (a
+        type-swapped selectDAT, issue #54) must complete the whole cleanup
+        -- tag removed AND color reset -- instead of aborting on the
+        missing syncfile/file parameters."""
+        dat, old_path, old_rel = self._externalize_dat(self.workspace, 'rm_swap')
+        py_tag = self.embody.par.Pytag.val
+        swapped = dat.changeType(selectDAT)
+        self.assertIn(py_tag, swapped.tags, 'tag should survive the type swap')
+
+        self.embody_ext.RemoveListerRow(old_path, old_rel, delete_file=False)
+
+        self.assertNotIn(py_tag, swapped.tags, 'tag must be removed')
+        # Color reset runs AFTER the par-clearing that used to raise --
+        # it completing proves the cleanup no longer aborts mid-way.
+        default_color = (0.55, 0.55, 0.55)
+        close = all(abs(a - b) < 0.02
+                    for a, b in zip(swapped.color, default_color))
+        self.assertTrue(close,
+            f'Color should reset to default, got {swapped.color}')
+
     def test_removeListerRow_dat_removes_table_row(self):
         """RemoveListerRow should remove the DAT row from the table."""
         dat, old_path, old_rel = self._externalize_dat(self.workspace, 'rm_dat_row')
