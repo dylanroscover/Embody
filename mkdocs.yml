@@ -6,6 +6,8 @@ repo_name: Embody
 
 theme:
   name: material
+  logo: assets/embody-logo.svg
+  favicon: assets/embody-mark.svg
   font:
     text: Open Sans
     code: Roboto Mono
