@@ -482,6 +482,7 @@ code, kbd, pre {
   display: flex;
   flex-direction: column;
   gap: 0;
+  margin: 0 -1.25rem;
   border-top: 1px solid var(--border-faint);
 }
 .practice__row {
@@ -489,7 +490,7 @@ code, kbd, pre {
   grid-template-columns: 1.3fr 1fr;
   gap: 2.5rem;
   align-items: baseline;
-  padding: 1.4rem 0;
+  padding: 1.4rem 1.25rem;
   border-bottom: 1px solid var(--border-faint);
   transition: background 160ms ease;
 }
@@ -1055,7 +1056,7 @@ code, kbd, pre {
   .practice__row {
     grid-template-columns: 1fr;
     gap: 0.5rem;
-    padding: 1.2rem 0;
+    padding: 1.2rem 1.25rem;
   }
   .compare {
     grid-template-columns: 1fr;

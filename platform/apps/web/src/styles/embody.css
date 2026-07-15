@@ -1618,6 +1618,7 @@ pre {
   display: flex;
   flex-direction: column;
   gap: 0;
+  margin: 0 -1.25rem;
   border-top: 1px solid var(--border-faint);
 }
 .practice__row {
@@ -1625,7 +1626,7 @@ pre {
   grid-template-columns: 1.3fr 1fr;
   gap: 2.5rem;
   align-items: baseline;
-  padding: 1.4rem 0;
+  padding: 1.4rem 1.25rem;
   border-bottom: 1px solid var(--border-faint);
   transition: background 160ms ease;
 }
@@ -1870,7 +1871,7 @@ body.is-app-shell .footer {
 /* Landing tablet reflow, aligned to the nav hamburger boundary (was 820). */
 @media (max-width: 860px) {
   .tdn__grid { grid-template-columns: 1fr; gap: 2rem; }
-  .practice__row { grid-template-columns: 1fr; gap: 0.5rem; padding: 1.2rem 0; }
+  .practice__row { grid-template-columns: 1fr; gap: 0.5rem; padding: 1.2rem 1.25rem; }
   .footer__inner { grid-template-columns: 1fr 1fr; gap: 2.5rem; }
   .footer__col--brand { grid-column: 1 / -1; }
 }
